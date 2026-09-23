@@ -394,7 +394,7 @@ export async function createScene(
   }
   }
   ({ manifest: piercingManifest, error: piercingError } = await loadPiercingResources(
-    "/assets/piercings/manifest.json", "xfs/local-vanilla-piercings-1", 24 * 1024 * 1024));
+    "/assets/piercings/manifest.json", "xfs/local-vanilla-piercings-2", 24 * 1024 * 1024));
   ({ manifest: prcManifest, error: prcError } = await loadPiercingResources(
     "/assets/prc/manifest.json", "xfs/local-prc-piercings-1", 4 * 1024 * 1024));
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
@@ -536,7 +536,7 @@ export async function createScene(
     if (!selected) return;
     for (const part of selected.choice.parts) for (const mesh of piercingMeshes.get(part.mesh) ?? []) {
       mesh.visible = chunkEnabled(part.mask, mesh.userData.piercingChunk);
-      (mesh.material as THREE.MeshStandardMaterial).color.set(selected.choice.swatch);
+      (mesh.material as THREE.MeshStandardMaterial).color.set(selected.choice.previewColor);
     }
   }
   function setPiercings(enabled: boolean) { piercingEnabled = enabled; refreshPiercings(); }

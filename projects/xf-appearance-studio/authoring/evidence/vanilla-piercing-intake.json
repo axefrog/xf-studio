@@ -59,6 +59,336 @@
       "sha256": "3011bca94ba70f6fbe084b8d71dffa99188632d592d7494f28887a8b864bb6e8"
     }
   ],
+  "materialResources": [
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\i1_000_pwa_c__basehead_earring_01.mesh",
+      "sha256": "91a5e82e4b2d6af44af90d0f0068dd9069d00004997171d4343b752a267aba8b"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__silver.mi",
+      "sha256": "1c850a674e8cca808fdd97e4fe1f58cca9adaf62f80beea3c6f48073a0f8a4bf"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_silver.mlsetup",
+      "sha256": "cdea5ce02554d7eace56ddf2f186aec1ec9d1fa02fa7a650282f805e898953a2"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\silver\\silver_brushed_01_300.mltemplate",
+      "sha256": "5c2aee281cfe1790e6e17a71fc6f47068b4e2551a7dc57d0ae00a3ddb741f5ec"
+    },
+    {
+      "path": "base\\surfaces\\materials\\paint\\paint_fine\\paint_fine_clean_01_300.mltemplate",
+      "sha256": "373fa93235c9a41a12d57e0063d67e02bcfb51120c78279d9f8722cbab014c3b"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\i1_000_pwa_c__basehead_earring_02.mesh",
+      "sha256": "4b174e33bf1c371e57fdcc3c666e18352aa813b0c71a865c15ff76b88a7324fe"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__silver.mi",
+      "sha256": "fa021788ddb3dba9faf2705737144b2efcdda3cb66d59618c1306d5fe37eb040"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\i1_000_pwa_c__basehead_earring_03.mesh",
+      "sha256": "c5e8d20000793a6a97ba660a679ef7a53f66f7176b948835dd9d81df1523fa77"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__silver.mi",
+      "sha256": "49834a9323bc28473d74a22d795172182ccd015806cb37891b00329e77763143"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__gold.mi",
+      "sha256": "396ce74ae6b5ad8e6ece3edf1dd513b8556539fdcfef28678a58e342a916afe3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_gold.mlsetup",
+      "sha256": "732d11fee5c05f3bf52518390eb31dfb1696d544ffade6e0d32f0635e21a0eee"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\gold\\gold_brushed_01_300.mltemplate",
+      "sha256": "0fc87e15370ade6cda6b8b6ec905cc3197a26d583a513bbf156c7a53fc450f38"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__gold.mi",
+      "sha256": "501d1123776e4b28c3a2e9c1918f2cc372eee62e1dac462a57f05caeff7d27b5"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__gold.mi",
+      "sha256": "71a65df9587a3505dda4e0629146e2590fa54ea6c2c2c321375a5d553295cff1"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__pearl.mi",
+      "sha256": "5dcd3abf79c5e3db9ada2e3e661b559aeb891ba4805e17844e914bcb4677af23"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_pearl.mlsetup",
+      "sha256": "5f32164df3e978d8db531012c6ddb9065e1ecb8241cea2d1dd02a1baede34c9e"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\steel\\steel_bare_annodised_01_300.mltemplate",
+      "sha256": "b1123936c8aa5c4b68ce93f6f68de3e2db5c0d94e42217bb6712dea8b451e084"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\metal_generic_hq\\metal_generic_hq_01_30.mltemplate",
+      "sha256": "71a4d1dc470c6c274b9459ce56bd844e070206227b85435a8f48e453c59380eb"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__pearl.mi",
+      "sha256": "6416f458013f84243921d0279207523b7a92ae987f1f78ef3ebb49cd40a30cb4"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__pearl.mi",
+      "sha256": "3103bd1d9e7608bf8b2c46ac0d90088f56cd41288ce20f4d0d7ccf03713a584f"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__cooper.mi",
+      "sha256": "3b4a7340ec3dac71d969003988ce3766c07d29eb76ac2c6d6d48ecb2f909b5dd"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_cooper.mlsetup",
+      "sha256": "96cf93527223d2057138965337c7e8a8031f16e7b39b95352956d79eb331fe23"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\copper\\copper_brushed_01_300.mltemplate",
+      "sha256": "1e65f49ff2fd16e979958ed53e9d5860d0b79fd549d44e557e71cfbc740b71a4"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__cooper.mi",
+      "sha256": "609f2d71c6d642612a948718fdeb8b1bad02928f36de92305b992a033ad9fce3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__cooper.mi",
+      "sha256": "bd4cf9e94fc78bed696c6773d42927b0839dbe9e17406b3744d28c8aca2bdb73"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__plastic_red.mi",
+      "sha256": "129bbf9f86def5f9282209f5966e8fa4dba456f67e3b6b09b68f0f65e16deb57"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_plastic_red.mlsetup",
+      "sha256": "cb5e6f7054d3a3679a0a705a891bd41519d942fb6ab85dd6c55449f1734a9c9d"
+    },
+    {
+      "path": "base\\surfaces\\materials\\plastic\\plastic_pattern\\plastic_pattern_smooth_01_30.mltemplate",
+      "sha256": "8c5ae42d02a6ed22660233a18b4ce91775cce635006e72e6990e9cc019be0619"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__plastic_red.mi",
+      "sha256": "9fb7b79e501214efa0dab3350113c7ee5a6aa2a2486afb4cb9cca4db755f9f8d"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__plastic_red.mi",
+      "sha256": "7e263091ddfdaf448e5f96f96908e1814fb8ff8d119df7a2c10eff3d5ff7620a"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__plastic_pink.mi",
+      "sha256": "c777d93fde438251bb10092cd3f2386fec288c898e2e165083c7b031b4a9105c"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_plastic_pink.mlsetup",
+      "sha256": "2f8320e74488a233c4eeeda66308fa65490441cf17e2995ee90d3f020b7f1320"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__plastic_pink.mi",
+      "sha256": "0f4551b2bc9358bffe51c0e77661140bcc5b6b35364abd8dd4a650b339584cfd"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__plastic_pink.mi",
+      "sha256": "9d7ca3a8e16a7d679ab6f4bfcf5113a751d27a707283d01f54ec4e368be2619d"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__plastic_black.mi",
+      "sha256": "024534019cb7a9cf16f2653a0d115dfc90a26b02a9280a902676983c1a057eaf"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_plastic_black.mlsetup",
+      "sha256": "f73c0e6c170eab421ac72ee02a0c5b5d24e133fdc22797d308e762bf9d632cb3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__plastic_black.mi",
+      "sha256": "4ec3a0cb2500188e4d98487c6e07d346ea03229ad23c0337fa128c0ea271e513"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__plastic_black.mi",
+      "sha256": "eb48b9b646de7b0c481f0ce54a1ce810abdb5602a74c72d58c294b939dc5f667"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__blue.mi",
+      "sha256": "3ddd98a1a17aeb94021f5d4fbb5af5e7f5ba67a7fcdd159195667b2d214a6518"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_blue.mlsetup",
+      "sha256": "b048749913937e6e752e6ee619d34d98f66ff7f161109f8d7bb8ec52eded5b4b"
+    },
+    {
+      "path": "base\\surfaces\\materials\\paint\\car_paint\\car_paint_metallic_01.mltemplate",
+      "sha256": "3dae0ca8d8c8a840cbd7d3dcfc0d89dd95d6882e0617855e47152e51ebedd43b"
+    },
+    {
+      "path": "base\\surfaces\\materials\\plastic\\plastic_hq\\plastic_tech_hq_01_30.mltemplate",
+      "sha256": "aa4fad2730f1abb1e1817c2c6ab7155148b104783c87053566be701f9acf9d01"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__blue.mi",
+      "sha256": "e52a1c0dcb9e7aac890e4eab7155b55adb33ea739b1f0481ba199fe557a616c5"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__blue.mi",
+      "sha256": "595642e66208634bf331f838486912c939af7447b985712b65ebeeda3ae76718"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__mixed.mi",
+      "sha256": "64e0f93359dba46a286c7c207acfb3adadcba13f4ff541a1939dc244cbe07ef2"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_mixed.mlsetup",
+      "sha256": "6e2609a81e117c986217ea10baad6c7d27c12273962c1e85ff8cfa9c650cc825"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__mixed.mi",
+      "sha256": "ae6ebc4ac0ee6df177bf9db414f639b8976415b4d3bfc4cfbdb8500906730efa"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__mixed.mi",
+      "sha256": "b3cbbdda723959794b2e4ee40ca13995cee1d8ed784cc099d53a9d5f9f1fbcbb"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__mixed2.mi",
+      "sha256": "912c0a56db5e8b09aaefdb72cde90674ce1de152ba9d2e268bdc0a1cee1c34e1"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_mixed2.mlsetup",
+      "sha256": "079956cef9983d766b758c21faf68b9a1d9deb6cee998ec3a3d98377c3161fe6"
+    },
+    {
+      "path": "base\\surfaces\\materials\\plaster\\plaster_exterior\\plaster_exterior_rough_01_300.mltemplate",
+      "sha256": "87fa4d24c66d181434d29a763dae39f3398a863807076351897c2c49c59e7e84"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__mixed2.mi",
+      "sha256": "590a85cc18f3660c0348b051ee2e0534bf28ece743ef9a8fc8efeb985c9b448d"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__mixed2.mi",
+      "sha256": "9f9534b10d1021caad117418af8123d0aaea3a979989fa8462e69f33af5f17c6"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__neon_teal.mi",
+      "sha256": "34100dd8d5e13e84d97fadde9e274d92fe9ff9a68d1bccb47211c9b837124e10"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_neon_teal.mlsetup",
+      "sha256": "618e0c7efaf40ba6bba695ea88d7ee42400dbc61d6510a98773a8ab342a841ae"
+    },
+    {
+      "path": "base\\surfaces\\materials\\custom\\characters\\latex_neon_01_30.mltemplate",
+      "sha256": "4b5a50c9b09587988c81f28640746ffb6e0f9d006de35f52a861e9b08367623a"
+    },
+    {
+      "path": "base\\surfaces\\materials\\custom\\characters\\plastic_tech_neon_01_300.mltemplate",
+      "sha256": "b67970a932be355ca54ad369a8f77c2fac58a295ca889b448f99012567eac1d3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__neon_teal.mi",
+      "sha256": "7e76edc340a990c2dfa4f6946db41036b84504bf3621fb4fe35ebff3e0d01458"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__neon_teal.mi",
+      "sha256": "36edac378766cf5c7979b2e3f69e960728b88c0fa5934bd684a87a1c98c77647"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__pink_metalic.mi",
+      "sha256": "b7f614c907ed1bff6e15858c48692fafe84d023795384f771fbbbdd1dcdbb87d"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_pink_metalic.mlsetup",
+      "sha256": "dcfde73f492cc78441ab0ff84f10730c725fd90a04fb06d872e8cccd6a0b8b3f"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__pink_metalic.mi",
+      "sha256": "c2ddda9ec013d1e69fd9cf1ac1f5f2e7e2b78a83ba8e838f7fc6092dac390430"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__pink_metalic.mi",
+      "sha256": "c4827be69afd387f6792b3092f0b693602b854f2287ce23367f39bd4743a8b48"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__rainbow.mi",
+      "sha256": "1267792595dc983ab0e7048fba57255e44e9036eda11e66cc1d67252f4fd0767"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_rainbow.mlsetup",
+      "sha256": "2a6d78eae0f3cf9a1f59000d5d93fdc28af80b5cb266387a4fba51d7c065b6c3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__rainbow.mi",
+      "sha256": "9980c546e859446b31b4e6976d64981de5e518a3969a606bc903d7a5e32f8206"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__rainbow.mi",
+      "sha256": "e4f62bdf42519aebd38807ba8315ef8b96a451b7d830fd9b0570a42b3339f07f"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__rose_gold.mi",
+      "sha256": "77e3e55e76c44820876e4322027db74d81f1a8f26beb93e7d0b428c5f9c3a342"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_rose_gold.mlsetup",
+      "sha256": "89c2039b807bbda460994fc3bdd3895b50f43f8b49f81131ef8359061d8be8cd"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__rose_gold.mi",
+      "sha256": "cdd05428ea40c247583ace80fb653f68fa41823c46ef6670107722374b225db3"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__rose_gold.mi",
+      "sha256": "3a255a7d232ac450fe5484aeecce71e60aa3249b28d1fb10efa11c7a8b4e3bf6"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__steel.mi",
+      "sha256": "60cd1bc18c1b5813bb7a78aaeeb55e0b4b2997c5991773966690d6d0580a250d"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_steel.mlsetup",
+      "sha256": "6dfaaff292b2cb60bb21fbaa566f4e8a45ea814a9ac5f3c716a4842f08376cef"
+    },
+    {
+      "path": "base\\surfaces\\materials\\metal\\steel_hq\\steel_hq_milled_01_10.mltemplate",
+      "sha256": "24b90b624754d22641bc8563faba56f4572eca3dbf48bc5d9fb14fa3568aff52"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__steel.mi",
+      "sha256": "f75fdf7e02be23f650c53c73a654645d6c2fa27ff97a1a05f7505575e4b92b98"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__steel.mi",
+      "sha256": "bfe67dda10c4df5577832055e76b4e148be752f3fc5b6b48dce901442b292111"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_01__wood.mi",
+      "sha256": "3170fdcfceba5726f8b8da113ba64897de99d2aa0b99abc51a81b9a085f64c10"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_wood.mlsetup",
+      "sha256": "b1e34d3248abe1c9eeda7351b3c958f5264c439c1240754dc36323f4f2c4bec0"
+    },
+    {
+      "path": "base\\surfaces\\materials\\wood\\wood_hq\\wood_hq_burl_01_30.mltemplate",
+      "sha256": "afad5cc24191538b0c3117b477e28de8119a0b1943a0c85ba03990b0182f77a2"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_02__wood.mi",
+      "sha256": "bd001037bc004c2e4d275d680a2c12770c1db7a7d39366f67f7a294ec1457853"
+    },
+    {
+      "path": "base\\characters\\common\\character_customisation_items\\earrings\\i1_000_base_03__wood.mi",
+      "sha256": "0c6529b14fe66157827c09c11da46c05d12686a201a14ad6a9272d1e20d1e00b"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\i1_000_pwa_c__basehead_earring_04.mesh",
+      "sha256": "66281cc1508f9c5789d067be324c8c4602644d07441c010d0b070025f6b9f909"
+    }
+  ],
   "assetDigests": [
     {
       "id": "i1_000_pwa__morphs_earring_01",

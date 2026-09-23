@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes } from "../src/piercing-preview";
+import { piercingPaletteColor } from "../src/piercing-palette";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import type { SavedV } from "../src/save-reader";
 
-const source = { schema: "xfs/local-vanilla-piercings-1", source: "current game resources",
+const source = { schema: "xfs/local-vanilla-piercings-2", source: "current game resources",
   assets: [{ id: "i1_000_pwa__morphs_earring_01", url: "/assets/piercings/part.glb", sha256: "a".repeat(64) }],
   styles: [{ id: "piercings_01", index: 1, label: "Piercing 01", resourceHash: "13134131550013307257",
-    choices: [{ definition: "i0_000_pwa__earring__01_silver", index: 1, label: "Silver", swatch: "#ffffff",
+    choices: [{ definition: "i0_000_pwa__earring__01_silver", index: 1, label: "Silver", swatch: "#ffffff", previewColor: "#ffffff",
       parts: [{ mesh: "i1_000_pwa__morphs_earring_01", mask: "18446744073709549572" }] }] }] };
 
 test("vanilla piercing manifest preserves 64-bit masks and exact appearance identity", () => {
@@ -24,6 +25,8 @@ test("vanilla piercing manifest preserves 64-bit masks and exact appearance iden
 });
 
 test("local piercing input rejects unsafe assets, invalid masks and duplicate definitions", async () => {
+  expect(() => parsePiercingManifest({ ...source, schema: "xfs/local-vanilla-piercings-1" })).toThrow();
+  expect(() => parsePiercingManifest({ ...source, styles: [{ ...source.styles[0], choices: [{ ...source.styles[0]!.choices[0], previewColor: "invalid" }] }] })).toThrow();
   expect(() => parsePiercingManifest({ ...source, assets: [{ ...source.assets[0], url: "https://remote.invalid/part.glb" }] })).toThrow();
   expect(() => parsePiercingManifest({ ...source, styles: [source.styles[0], source.styles[0]] })).toThrow();
   expect(() => parsePiercingManifest({ ...source, styles: [{ ...source.styles[0], choices: [
@@ -46,6 +49,13 @@ test("private PRC slot uses its own bounded local asset namespace", () => {
   expect(() => parsePiercingManifest({ ...prc, assets: source.assets })).toThrow();
   expect(() => parsePiercingManifest({ ...source, assets: prc.assets })).toThrow();
   expect(() => parsePiercingManifest({ ...prc, assets: [{ ...prc.assets[0], url: "https://example.invalid/slot.glb" }] })).toThrow();
+});
+
+test("visible source palette layers produce a nonblack linear-to-display preview tint", () => {
+  expect(piercingPaletteColor([{ rgb: [1, 0, 0], opacity: 1 }])).toBe("#ff0000");
+  expect(piercingPaletteColor([{ rgb: [0, .5, 1], opacity: 1 }, { rgb: [0, 1, .5], opacity: 1 }]))
+    .toBe("#00e1e1");
+  expect(() => piercingPaletteColor([{ rgb: [0, 0, 0], opacity: 0 }])).toThrow();
 });
 
 test("viewport-only piercing selection and visibility persist without changing saved V", () => {

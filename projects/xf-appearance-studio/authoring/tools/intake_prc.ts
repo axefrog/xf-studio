@@ -68,7 +68,7 @@ const manifest: PiercingManifest = {
   assets: [{ id: "prc_fpm72", url: "/assets/prc/prc_fpm72.glb", sha256: digest(glbBytes) }],
   styles: [{ id: "prc_fpm72", index: 72, label: "PRC · front nostril ring (slot 72)",
     resourceHash: fnv64(appDepot), choices: [{ definition: "i0_000_pwa__earring__01_silver",
-      index: 1, label: "Silver (approx.)", swatch: "#d6d5d3",
+      index: 1, label: "Silver (approx.)", swatch: "#d6d5d3", previewColor: "#d6d5d3",
       parts: [{ mesh: "prc_fpm72", mask: component.chunkMask }] }] }],
 };
 parsePiercingManifest(manifest);

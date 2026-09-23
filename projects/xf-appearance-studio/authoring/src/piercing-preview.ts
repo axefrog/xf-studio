@@ -2,14 +2,14 @@ import type { SavedV } from "./save-reader";
 
 export type PiercingPart = { mesh: string; mask: string };
 export type PiercingChoice = {
-  definition: string; index: number; label: string; swatch: string; parts: PiercingPart[];
+  definition: string; index: number; label: string; swatch: string; previewColor: string; parts: PiercingPart[];
 };
 export type PiercingStyle = {
   id: string; index: number; label: string; resourceHash: string; choices: PiercingChoice[];
 };
 export type PiercingAsset = { id: string; url: string; sha256: string };
 export type PiercingManifest = {
-  schema: "xfs/local-vanilla-piercings-1" | "xfs/local-prc-piercings-1"; source: string;
+  schema: "xfs/local-vanilla-piercings-2" | "xfs/local-prc-piercings-1"; source: string;
   assets: PiercingAsset[]; styles: PiercingStyle[];
 };
 const hash = (v: unknown): v is string =>
@@ -20,7 +20,7 @@ const text = (v: unknown, length = 128): v is string => typeof v === "string" &&
 
 export function parsePiercingManifest(value: unknown): PiercingManifest {
   const m = value as PiercingManifest;
-  if (!m || !["xfs/local-vanilla-piercings-1", "xfs/local-prc-piercings-1"].includes(m.schema) || !text(m.source, 200) ||
+  if (!m || !["xfs/local-vanilla-piercings-2", "xfs/local-prc-piercings-1"].includes(m.schema) || !text(m.source, 200) ||
     !Array.isArray(m.assets) || m.assets.length < 1 || m.assets.length > 8 ||
     !Array.isArray(m.styles) || m.styles.length < 1 || m.styles.length > 32)
     throw Error("Unsupported local piercing manifest");
@@ -42,6 +42,7 @@ export function parsePiercingManifest(value: unknown): PiercingManifest {
     for (const c of s.choices) {
       if (!c || !text(c.definition) || definitions.has(c.definition) || !Number.isSafeInteger(c.index) ||
         c.index < 1 || !text(c.label) || !/^#[0-9a-f]{6}$/i.test(c.swatch) ||
+        !/^#[0-9a-f]{6}$/i.test(c.previewColor) ||
         !Array.isArray(c.parts) || c.parts.length < 1 || c.parts.length > 8 ||
         c.parts.some(p => !p || !assets.has(p.mesh) || !uint64(p.mask)))
         throw Error("Invalid local piercing appearance");
