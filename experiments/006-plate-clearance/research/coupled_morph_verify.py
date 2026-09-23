@@ -1,6 +1,7 @@
 """Independent 107-shape / 73-pose reconstruction of coupled morph edits."""
 import hashlib
 import json
+import argparse
 from pathlib import Path
 import sys
 
@@ -37,6 +38,13 @@ def pair_rows(pairs, source_faces, plate_faces):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--candidate', type=Path, help='Alternate ignored numeric candidate relative to workspace')
+    parser.add_argument('--sha256', help='Expected SHA-256 of alternate candidate')
+    parser.add_argument('--output', type=Path, help='Separate summary path for alternate candidate')
+    args = parser.parse_args()
+    if args.candidate and (not args.sha256 or not args.output):
+        parser.error('--candidate requires --sha256 and --output')
     self_test()
     trial = json.loads((HERE / 'coupled_morph_opt_summary.json').read_text())
     previous_path = HERE / 'finite_pair_search_summary.json'
@@ -44,8 +52,9 @@ def main():
     previous = json.loads(previous_path.read_text())
     source_numeric = WORKSPACE / previous['numericResult']
     assert sha(source_numeric) == previous['numericResultSha256'] == trial['startingNumericSha256']
-    candidate_path = WORKSPACE / trial['combinedNumericResult']
-    assert sha(candidate_path) == trial['combinedNumericSha256']
+    candidate_path = WORKSPACE / args.candidate if args.candidate else WORKSPACE / trial['combinedNumericResult']
+    expected_sha = args.sha256 if args.candidate else trial['combinedNumericSha256']
+    assert sha(candidate_path) == expected_sha
     data = np.load(candidate_path)
     source_report = json.loads((HERE/'morph_aware_rescue_summary.json').read_text())
     for item in source_report['inputs']:
@@ -112,7 +121,8 @@ def main():
              'allStaticNewNonadjacentFree': not any(r['newNonadjacent'] for r in static),
              'allPosedNewNonadjacentFree': not any(r['newNonadjacent'] for r in posed),
              'candidateResourceRoundtripAndNativeSkinBytes': False}
-    result = {'numericCandidate': trial['combinedNumericResult'], 'sha256': trial['combinedNumericSha256'],
+    result = {'numericCandidate': str(args.candidate) if args.candidate else trial['combinedNumericResult'],
+              'sha256': expected_sha,
               'staticCases': static, 'poseCases': posed, 'gates': gates,
               'summary': {'staticNewNonadjacent': sum(r['newNonadjacent'] for r in static),
                           'posedNewNonadjacent': sum(r['newNonadjacent'] for r in posed),
@@ -124,7 +134,8 @@ def main():
               'acceptedForImport': all(v for k, v in gates.items() if k != 'candidateResourceRoundtripAndNativeSkinBytes'),
               'limits': ['Numeric arrays only; no candidate resource or native-skin audit exists.',
                          'Sampled contact checks do not prove continuous animation or game rendering.']}
-    (HERE / 'coupled_morph_verify_summary.json').write_text(json.dumps(result, indent=2) + '\n')
+    output = args.output if args.output else HERE / 'coupled_morph_verify_summary.json'
+    output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'gates': gates, 'summary': result['summary']}))
 
 
