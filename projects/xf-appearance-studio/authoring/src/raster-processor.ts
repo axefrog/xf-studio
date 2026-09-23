@@ -1,11 +1,12 @@
 import { createRasterJob, type Layer } from "./recipe";
 import { createFlakeJob, defaultFlakes, isIrregular, type FlakeMaps } from "./finish";
-import { createFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob } from "./flake-field";
-import { maskAlphaKey, irregularCatalogueKey, irregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
+import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob,
+  FLAKE_LIMITS, STUDIO_FINE_REGIONS } from "./flake-field";
+import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
 
 export type RasterRequest = { i: number; version: number; layer: Layer; size: number; bakeOptics?: boolean };
 export type RasterResponse = { i: number; version: number } & (
-  { cancelled: true } | { cancelled?: false; size: number; data: Uint8ClampedArray<ArrayBuffer>;
+  { cancelled: true; error?: string } | { cancelled?: false; size: number; data: Uint8ClampedArray<ArrayBuffer>;
     optics?: FlakeMaps; albedo?: {key:string; data:Uint8Array<ArrayBuffer>}; ms: number }
 );
 
@@ -55,16 +56,36 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
         let optics: FlakeMaps | undefined, albedo: {key:string;data:Uint8Array<ArrayBuffer>} | undefined;
         if (!token.cancelled && irregular) {
           const settings=candidate as import("./flake-field").IrregularFlakes;
-          const catalogueKey=irregularCatalogueKey(settings), opticalKey=irregularOpticalKey(catalogueKey,size);
+          const opticalKey=studioIrregularOpticalKey(settings,size), fine=settings.count>FLAKE_LIMITS.count;
+          if (fine) {
+            // Fixed atlas scope keeps the optical key independent of shape.
+            // Check every painted pixel before using a clipped catalogue, even
+            // on a cache hit after a shape edit.
+            let pixel=0, outside=false;
+            await drain({get done(){return pixel===size*size || outside;},advance(work:number){
+              const end=Math.min(size*size,pixel+work);
+              for(;pixel<end;pixel++)if(data[pixel*4+3]){
+                const x=pixel%size,y=Math.floor(pixel/size);
+                if(!STUDIO_FINE_REGIONS.some(r=>x/size>=r.minU&&(x+1)/size<=r.maxU &&
+                  y/size>=r.minV&&(y+1)/size<=r.maxV)){outside=true;break;}
+              }
+              return pixel===size*size || outside;
+            }},4096);
+            if (!token.cancelled && outside) {
+              post({i:token.i,version:token.version,cancelled:true,error:"Fine Glitter supports the eye UV area; move or narrow this shape before previewing it."});
+              return;
+            }
+          }
           let coverage = cachedCoverage?.key===opticalKey && cachedCoverage.size===size ? cachedCoverage.data : undefined;
           if (snapshot.bakeOptics || !coverage) {
             await pause();
             if (!token.cancelled) {
-              const catalogueJob=createFlakeCatalogueJob(settings);
+              const catalogueJob=fine ? createRegionFlakeCatalogueJob(settings,STUDIO_FINE_REGIONS)
+                : createFlakeCatalogueJob(settings);
               await drain(catalogueJob,128);
               await pause();
               if (!token.cancelled) {
-                const optical=createFlakeBakeJob(catalogueJob.catalogue!,size);
+                const optical=createFlakeBakeJob(catalogueJob.catalogue!,size,4,"covered-average");
                 await drain(optical,256);
                 if (!token.cancelled) {
                   optics={size,normal:optical.normal,surface:optical.surface};

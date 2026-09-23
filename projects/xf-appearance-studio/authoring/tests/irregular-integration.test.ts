@@ -2,7 +2,7 @@ import {expect,test} from "bun:test";
 import * as THREE from "three";
 import {initialRecipe,parseRecipe,raster} from "../src/recipe";
 import {defaultFlakes} from "../src/finish";
-import {defaultIrregularFlakes} from "../src/flake-field";
+import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/flake-field";
 import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
 import {createMakeupStack} from "../src/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
@@ -64,6 +64,27 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   if(second.cancelled)return;
   expect(second.optics).toBeUndefined();expect(second.albedo?.key).not.toBe(first.albedo?.key);
   expect(second.data).toEqual(first.data);
+});
+
+test("fine studio default covers the eye densely within a bounded region",async()=>{
+  const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes=defaultStudioIrregularFlakes();
+  const results:RasterResponse[]=[];
+  const worker=createRasterProcessor(r=>results.push(r));
+  await worker.start({i:0,version:1,layer,size:512,bakeOptics:true});
+  const result=results[0];expect(result.cancelled).not.toBe(true);
+  if(result.cancelled)return;
+  expect(result.albedo?.data.length).toBe(512*512*4);
+  let painted=0,coverage=0;
+  for(let i=0;i<result.data.length;i+=4)if(result.data[i+3]){
+    painted++;coverage+=result.optics!.surface[i]!/255;
+  }
+  expect(painted).toBeGreaterThan(1000);
+  expect(coverage/painted).toBeGreaterThan(.06);
+  expect(coverage/painted).toBeLessThan(.2);
+  const outside={...layer,points:layer.points.map(p=>({...p,u:p.u-.2}))};
+  await worker.start({i:0,version:2,layer:outside,size:512,bakeOptics:false});
+  expect(results).toHaveLength(2);
+  expect(results[1]).toEqual({i:0,version:2,cancelled:true,error:expect.stringContaining("Fine Glitter supports the eye UV area")});
 });
 
 test("cancelled candidate work never publishes a partial mask or albedo",async()=>{

@@ -1,7 +1,7 @@
 import type { Layer } from "./recipe";
 import type { RasterRequest, RasterResponse } from "./raster-processor";
 import {isIrregular} from "./finish";
-import {maskAlphaKey,irregularCatalogueKey,irregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
+import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
 
 export type RasterPort = {
   onmessage: ((event: MessageEvent<RasterResponse>) => void) | null;
@@ -25,7 +25,7 @@ function validResult(data: Completed, request: RasterRequest): boolean {
     !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
   if (irregular) {
     const candidate=settings as import("./flake-field").IrregularFlakes;
-    const optical=irregularOpticalKey(irregularCatalogueKey(candidate),request.size);
+    const optical=studioIrregularOpticalKey(candidate,request.size);
     const expected=irregularAlbedoKey(optical,maskAlphaKey(request.layer,request.size),request.layer.color,candidate.color);
     if (!data.albedo || data.albedo.key!==expected || !(data.albedo.data instanceof Uint8Array) || data.albedo.data.length!==length) return false;
   } else if (data.albedo) return false;
@@ -36,7 +36,7 @@ function validResult(data: Completed, request: RasterRequest): boolean {
  * Versions never reset, so an old message cannot apply to a replacement preset.
  */
 export function createRasterClient(makeWorker: () => RasterPort,
-  publish: (result: Completed) => void, failed: () => void, size = 1024) {
+  publish: (result: Completed) => void, failed: (reason?: string) => void, size = 1024) {
   const queue = new Map<number, RasterRequest>(), versions = new Map<number, number>();
   let running: RasterRequest | undefined, cancelSent = false, sequence = 0;
   let cancellations = 0, completed = 0, discarded = 0, failures = 0;
@@ -76,6 +76,11 @@ export function createRasterClient(makeWorker: () => RasterPort,
       if (port !== worker || !running) return;
       if (!data || typeof data !== "object") {recover(port); return;}
       if (running.version !== data.version || running.i !== data.i) return;
+      if ("error" in data) {
+        if (typeof data.error !== "string" || !data.error || data.error.length > 200) {recover(port);return;}
+        running=undefined;cancelSent=false;failures++;
+        failed(data.error);dispatch();return;
+      }
       if (!data.cancelled && !validResult(data,running)) {recover(port); return;}
       running = undefined; cancelSent = false;
       if (!data.cancelled && versions.get(data.i) === data.version) {

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { extendSkin } from "./skin";
 import { canonicalFinish, defaultFlakes, isIrregular } from "./finish";
-import {maskAlphaKey,irregularCatalogueKey,irregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
+import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
 import type { Layer } from "./recipe";
 
 export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> };
@@ -18,10 +18,10 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   let wireframe = false;
   const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish));
   const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? irregularOpticalKey(irregularCatalogueKey(layer.flakes),size)
+    ? studioIrregularOpticalKey(layer.flakes,size)
     : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
   const albedoKeyFor = (layer:Layer,size:number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? irregularAlbedoKey(irregularOpticalKey(irregularCatalogueKey(layer.flakes),size),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
+    ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
     : undefined;
   function maskTexture(canvas: HTMLCanvasElement) {
     const texture = new THREE.CanvasTexture(canvas);
@@ -80,6 +80,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     if (!material) return;
     if (!layer.enabled) { clearFlakes(material); plates[i].visible = false; return; }
     const size = (textures[i].image as HTMLCanvasElement).width;
+    if (size<32 && layer.finish==="glitter" && isIrregular(layer.flakes)) return;
     const useMaps = textured(layer), key = keyFor(layer, size);
     const candidateKey=albedoKeyFor(layer,size);
     if (candidateKey && (!albedo || albedo.key!==candidateKey || albedo.data.length!==size*size*4)) return;

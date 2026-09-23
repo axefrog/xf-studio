@@ -1,5 +1,6 @@
 import { defaultFlakes, type LegacyFlakes } from "./finish";
-import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
+import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
+  STUDIO_FINE_REGIONS, validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
 
 /** Pure preparation for future material scheduling, not yet wired into the
@@ -79,6 +80,16 @@ export function irregularOpticalKey(catalogue: CatalogueKey, size: number, sampl
     sampleAxis === 2 ? FLAKE_SUBSAMPLES : FLAKE_SUBSAMPLES_16,
     [FLAKE_MATERIAL.baseRoughness, FLAKE_MATERIAL.flakeRoughness, FLAKE_MATERIAL.baseMetalness, FLAKE_MATERIAL.flakeMetalness],
     ...(normalMode === "surface-average" ? [] : [["normal-mode", normalMode] as Value])]);
+}
+
+/** Main editor's 16-sample optical contract. High-count catalogues are valid
+ * only in the fixed eye regions; the scope is part of the exact cache key. */
+export function studioIrregularOpticalKey(settings: IrregularFlakes,size:number): OpticalKey {
+  if (!validStudioIrregularSettings(settings)) throw Error("Invalid studio Glitter settings.");
+  const catalogue=settings.count<=FLAKE_LIMITS.count ? irregularCatalogueKey(settings)
+    : key("catalogue",["eye-region-global-ids-1",settings.model,settings.count,settings.radius,
+      settings.spread,settings.tilt,settings.seed,STUDIO_FINE_REGIONS.map(r=>[r.minU,r.minV,r.maxU,r.maxV])]);
+  return irregularOpticalKey(catalogue,size,4,"studio-planar-16-covered-1","covered-average");
 }
 
 /** Missing legacy settings mean the existing exact defaults; legacy shimmer

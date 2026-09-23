@@ -1,7 +1,7 @@
 import { convertToBezier, tessellateBezier, interpolatedFeather, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
-import { FLAKE_LIMITS } from "./flake-field";
+import { validStudioIrregularSettings } from "./flake-field";
 import type {IrregularFlakes} from "./flake-field";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
@@ -130,13 +130,7 @@ export function parseRecipe(value: unknown): Recipe {
       const f = l.flakes;
       if (!f || typeof f !== "object" || Array.isArray(f)) throw Error("Invalid flake settings.");
       if ("model" in f) {
-        if (r.schema !== "xfs/recipe-7" || l.finish !== "glitter" || f.model !== "irregular-planar-1" ||
-          Object.keys(f).sort().join() !== "color,count,model,radius,seed,spread,tilt" ||
-          !Number.isInteger(f.count) || !num(f.count, 0, FLAKE_LIMITS.count) ||
-          !num(f.radius, FLAKE_LIMITS.minRadius, FLAKE_LIMITS.maxRadius) ||
-          !num(f.spread, 0, 1) || !num(f.tilt, 0, 1) ||
-          !Number.isInteger(f.seed) || !num(f.seed, 0, FLAKE_LIMITS.maxSeed) ||
-          typeof f.color !== "string" || !/^#[0-9a-f]{6}$/i.test(f.color))
+        if (r.schema !== "xfs/recipe-7" || l.finish !== "glitter" || !validStudioIrregularSettings(f))
           throw Error("Invalid irregular flake settings.");
       } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) ||
         !num(f.density, 0, 1) || !num(f.tilt, 0, 1) ||

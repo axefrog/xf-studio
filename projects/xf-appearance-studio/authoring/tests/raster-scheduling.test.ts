@@ -89,6 +89,20 @@ test("worker failures recover queued edits and ignore the terminated worker", ()
   client.request(0, layer); expect((ports[1].sent.at(-1) as RasterRequest).version).toBe(3);
 });
 
+test("expected fine Glitter region errors stay visible without killing the worker", () => {
+  const port=new Port(), errors:string[]=[], published:RasterResponse[]=[];
+  const client=createRasterClient(()=>port,r=>published.push(r),reason=>errors.push(reason??"unknown"),1);
+  const layer=initialRecipe().layers[0];
+  client.request(0,layer);
+  port.reply({i:0,version:1,cancelled:true,error:"Fine Glitter supports the eye UV area."});
+  expect(errors).toEqual(["Fine Glitter supports the eye UV area."]);
+  expect(port.terminated).toBe(false);
+  expect(client.diagnostics().running).toBeNull();
+  client.request(0,layer);
+  port.reply(complete(2));
+  expect(published.map(r=>r.version)).toEqual([2]);
+});
+
 test("a preempted failing snapshot is not retried from the queue", () => {
   const ports: Port[] = [], published: RasterResponse[] = [];
   const client = createRasterClient(() => { const port = new Port(); ports.push(port); return port; },

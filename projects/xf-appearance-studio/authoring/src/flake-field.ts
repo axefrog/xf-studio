@@ -5,13 +5,36 @@ export type IrregularFlakes = {
   tilt: number; seed: number; color: string;
 };
 export const FLAKE_LIMITS = Object.freeze({count: 32768, minRadius: .0004, maxRadius: .003, maxSeed: 2147483647, minSize: 32, maxSize: 4096});
-export const REGION_FLAKE_STUDY_LIMITS=Object.freeze({count:500000,minRadius:.00025,maxRadius:.0006,maxRegions:2,maxArea:.12,maxRetained:80000});
+export const REGION_FLAKE_STUDY_LIMITS=Object.freeze({count:500000,minRadius:.00025,maxRadius:.0006,maxRegions:2,maxArea:.16,maxRetained:80000});
 export const FLAKE_MATERIAL = Object.freeze({baseRoughness: .7, flakeRoughness: .2, baseMetalness: 0, flakeMetalness: .95});
 export const FLAKE_TILE_SIZE = 32;
 export const FLAKE_SUBSAMPLES = Object.freeze([Object.freeze([.25, .25]), Object.freeze([.75, .25]), Object.freeze([.25, .75]), Object.freeze([.75, .75])]);
 export const FLAKE_SUBSAMPLES_16 = Object.freeze(Array.from({length: 16}, (_, i) => Object.freeze([(i % 4 + .5) / 4, (Math.floor(i / 4) + .5) / 4])));
 export type FlakeNormalStudyMode="surface-average"|"covered-average";
 export const defaultIrregularFlakes = (): IrregularFlakes => ({model: "irregular-planar-1", count: 16000, radius: .0012, spread: .7, tilt: .35, seed: 2077, color: "#f5df9f"});
+/** Browser-editor default, calibrated to the bounded fine-eye experiment. The
+ * legacy 16k study default above remains reproducible as a separate fixture. */
+export const defaultStudioIrregularFlakes = (): IrregularFlakes => ({model:"irregular-planar-1",count:350000,
+  radius:.00045,spread:.7,tilt:.35,seed:2077,color:"#d6b69e"});
+/** The two regions cover the authored eye plate with margin. They are a
+ * deliberate operational scope, not an image-space crop or a procedural tile. */
+export const STUDIO_FINE_REGIONS: readonly FlakeRegion[] = Object.freeze([
+  Object.freeze({minU:.20,maxU:.50,minV:.12,maxV:.36}),
+  Object.freeze({minU:.50,maxU:.80,minV:.12,maxV:.36}),
+]);
+export function validStudioIrregularSettings(value: unknown): value is IrregularFlakes {
+  if (!value || typeof value!=="object" || Array.isArray(value)) return false;
+  const p=value as IrregularFlakes;
+  const fine=Number.isInteger(p.count) && p.count>FLAKE_LIMITS.count;
+  return Object.keys(p).sort().join()==="color,count,model,radius,seed,spread,tilt" &&
+    p.model==="irregular-planar-1" && Number.isInteger(p.count) && p.count>=0 &&
+    p.count<=REGION_FLAKE_STUDY_LIMITS.count && Number.isFinite(p.radius) &&
+    p.radius >= (fine?REGION_FLAKE_STUDY_LIMITS.minRadius:FLAKE_LIMITS.minRadius) &&
+    p.radius <= (fine?REGION_FLAKE_STUDY_LIMITS.maxRadius:FLAKE_LIMITS.maxRadius) &&
+    Number.isFinite(p.spread) && p.spread>=0 && p.spread<=1 &&
+    Number.isFinite(p.tilt) && p.tilt>=0 && p.tilt<=1 &&
+    Number.isInteger(p.seed) && p.seed>=0 && p.seed<=FLAKE_LIMITS.maxSeed && validHex(p.color);
+}
 export type Flake = Readonly<{
   id: number; u: number; v: number; radius: number; aspect: number; angle: number;
   normal: readonly [number, number, number];

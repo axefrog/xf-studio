@@ -36,8 +36,8 @@ import {
   finishLabel,
   finishDescription,
 } from "./finish";
-import {defaultIrregularFlakes} from "./flake-field";
-import {irregularCatalogueKey,irregularOpticalKey} from "./makeup-dependencies";
+import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
+import {studioIrregularOpticalKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const input = (id: string) => $<HTMLInputElement>(id);
@@ -55,7 +55,7 @@ type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optic
 type PreviewAlbedo = NonNullable<Extract<RasterResponse, {data: unknown}>["albedo"]>;
 let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo } | undefined)[] = [];
 const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-  ? irregularOpticalKey(irregularCatalogueKey(layer.flakes),size)
+  ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
 let fieldSelection: FieldSelection = workspace.fieldSelection;
@@ -223,6 +223,10 @@ function sync() {
       id === "cells" ? String(legacy[id]) : `${Math.round(legacy[id] * 100)}%`;
   }
   if (isIrregular(flakes)) for (const id of ["count","radius","spread","tilt","color"] as const) {
+    if(id==="radius") {
+      input("irregular-radius").min=flakes.count>FLAKE_LIMITS.count?".00025":".0004";
+      input("irregular-radius").max=flakes.count>FLAKE_LIMITS.count?".0006":".003";
+    }
     input("irregular-"+id).value=String(flakes[id]);
     if(id!=="color") $("irregular-"+id+"-value").textContent=id==="count"?String(flakes[id]):id==="radius"?`${(flakes[id]*100).toFixed(3)}% UV`:`${Math.round(flakes[id]*100)}%`;
   }
@@ -264,7 +268,7 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
     drawUV();
     refreshQuality?.();
     status(`Live makeup · ${size}² · ${Math.round(ms)} ms · layer ${i + 1}`);
-  }, () => { qualityBlocked = true; qualityError = "Texture calculation failed. Rebuild the preview or edit again to retry."; status(qualityError); refreshQuality?.(); });
+  }, reason => { qualityBlocked = true; qualityError = reason ?? "Texture calculation failed. Rebuild the preview or edit again to retry."; status(qualityError); refreshQuality?.(); });
 function qualityAssessment(size = textureSize) {
   return assessPreviewQuality(recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
 }
@@ -376,7 +380,7 @@ for (const id of ["cells", "density", "tilt"] as const) {
 }
 $("flake-opt-in").onclick = () => {
   const l=current(); if (!l || l.finish!=="glitter" || isIrregular(l.flakes)) return;
-  checkpoint(); l.flakes=defaultIrregularFlakes(); render();
+  checkpoint(); l.flakes=defaultStudioIrregularFlakes(); render();
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
@@ -384,8 +388,12 @@ for (const id of ["count","radius","spread","tilt","color"] as const) {
   control.addEventListener("keydown",checkpoint);
   control.oninput=()=>{
     const l=current(); if(!l || !isIrregular(l.flakes))return;
-    if(id==="color") l.flakes.color=control.value;
-    else l.flakes[id]=+control.value;
+    const next={...l.flakes};
+    if(id==="color") next.color=control.value;
+    else next[id]=+control.value;
+    try {parseRecipe({...recipe,layers:recipe.layers.map(layer=>layer===l?{...layer,flakes:next}:layer)});}
+    catch {status("This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount.");sync();return;}
+    l.flakes=next;
     schedule();
   };
 }
@@ -657,7 +665,7 @@ try {
     surface.setEnabled(input("surface-controls").checked);
   for (let i = 0; i < recipe.layers.length; i++) {
     const stored = initialOptics[i];
-    if (initialQuality.accepted)
+    if (initialQuality.accepted && !(recipe.layers[i].finish==="glitter" && isIrregular(recipe.layers[i].flakes) && canvases[i].width<32))
       viewer.updateLayer(i, recipe.layers[i], stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.data : undefined,
         stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.albedo : undefined);
     initialOptics[i] = undefined;
