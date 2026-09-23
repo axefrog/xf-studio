@@ -1,0 +1,45 @@
+# One-selector authored preset collection
+
+Two editable authored looks, **Violet ink** and **Copper edge**, compile into an actual local archive plus ArchiveXL registration. Each combines two overlapping layers. One character-creator appearance control lists **Off**, Violet ink and Copper edge. This is an offline-verified fixture, not a deployed or render-verified release.
+
+## What was built
+
+- One shared mesh/morph pair containing the owned neutral expanded plate and all 105 facial customization shapes.
+- One embedded `@preset` material template using the authoritative `mesh_decal.mt`; no modified material-priority template.
+- Six textures: diffuse/coverage, roughness and metalness for each authored look. Only selected combinations are compiled.
+- Two `.app` definitions: an exact empty Off appearance and a shared morph-skinned component template. ArchiveXL expands requested stable preset suffixes into that template.
+- Two lightweight mesh appearance entries: one provides the shared chunk template and the other expands it. Explicit stubs avoid depending on unproven native missing-appearance fallback; they do not duplicate material instances.
+- One `.inkcharcustomization` control with three options and one `.xl` customization/scope registration.
+
+The validated archive is **831,488 bytes**, containing 10 resources. Its paired `.archive.xl` is outside the archive, in the standard `archive/pc/mod` package layout. [Result and hashes](result.json), [latest local build pointer](latest-build.json), [editable fixture](collection.json). Generated binaries/texture exports remain under ignored `generated/`; nothing was installed or pushed as game payload.
+
+## Reproduce
+
+Requires the current locally built experiment 004 plate, WolvenKit CLI 8.17.4, Bun and Python/Pillow/NumPy. Paths are explicit in the scripts. From HQ:
+
+```powershell
+python experiments/005-preset-collection/build.py
+python experiments/005-preset-collection/verify.py
+```
+
+`build.py --collection <collection.json>` accepts another validated `xfas/collection-1` collection. Each build gets a new output directory, preserving prior outputs. The independent verifier follows the latest successfully completed build. No runtime install action is part of either command.
+
+`create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-appearance-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-appearance-studio/authoring/tools/bake_collection.ts) writes the material inputs. UI/database integration remains to implement.
+
+## Evidence and limits
+
+The verifier inspects **round-tripped binary resources**, including the compiled component package and its hard-transform/skinning bindings. It checks an empty Off, a named override, one enabled selector, definitions/labels, dynamic Soft resource paths, texture dimensions/gamma/mip/compression settings, unchanged mesh/morph buffers and all 105 targets. It then unpacks the final archive and compares every depot path and SHA-256 to the source payload.
+
+Decoded base-mip textures are checked against the compiled inputs in the shader's destination encoding. Mean premultiplied colour error is about 0.0021 on a 0–1 scale; 95th-percentile coverage error is about 0.0156. Maximum coverage error reaches 0.1665 at individual texels, so this is not a lossless import or proof that sharp edges look identical. Compression choices and lower mip filtering deserve further comparisons before release.
+
+Stable UUID-based appearance/resource names survive renaming, revision updates and collection reordering in unit tests. ArchiveXL regenerates option indexes; **actual game save behaviour across reorder/removal still needs runtime proof**. One collection currently creates one selector; combining multiple independently exported packs into one shared selector is not implemented.
+
+Other open work: controlled plate clearance after packing, posed intersections, game A → B → Off clearing, appearance persistence and external conflicts, mixed-finish adapters (shimmer/glitter/gloss/colour shift), richer collection/layer authoring and export UI. Matte/satin/metallic parameters are provisional. No runtime success is inferred from a source-derived resolver model or a valid archive.
+
+## Community provenance
+
+[ArchiveXL](https://github.com/psiberx/cp2077-archive-xl/tree/5474e34d56112f5d8843ae863e1e72ff510957c0), by psiberx and contributors, supplies the source-grounded expansion rules. Its garment hook calls customization fallback only when an appearance was not found, enabling a direct empty Off. The customization component fix reads the first override array; both generated definitions therefore contain that array, with no component overrides for Off. A named override on the shared template avoids the special single-unnamed-override path.
+
+WolvenKit's appearance preprocessor/writer establishes how fresh component definitions become a binary RedPackage; actual CLI conversion confirms the resulting package and bindings. One initial conversion failed because new appearance handles collided with preserved mesh-buffer handles; generated handles now use a distinct range. The scripts inspect conversion logs as well as exit codes.
+
+These lessons extend the [community credits](../../docs/community-credits.md). Historical Eye Artistry was a schema research reference; it is not an input to this clean build. Geometry derives from Nathan's owned plate pipeline and underlying CDPR head assets.

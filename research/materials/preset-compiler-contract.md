@@ -1,6 +1,6 @@
 # First merged-preset material adapter
 
-23 September 2026. [Pure compiler](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts), adapter `mesh-decal-flat-v1`, follows the inspected [mesh-decal shader contract](mesh-decal-shader-contract.md). It is not yet connected to export UI, XBM import or a CCXL selector package.
+23 September 2026. [Pure compiler](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts), adapter `mesh-decal-flat-v1`, follows the inspected [mesh-decal shader contract](mesh-decal-shader-contract.md). [Experiment 005](../../experiments/005-preset-collection/README.md) now connects it to XBM import and a one-selector CCXL package. User-facing export UI is still pending.
 
 The compiler composites authored layers in bottom-to-top order in the game's destination-channel encoding: square-root linear colour, linear roughness and linear metalness. It accumulates premultiplied coverage, then derives one conditional material sample and total coverage. The output diffuse RGB is converted back to sRGB; alpha stores square-root coverage to compensate for this shader's squared colour mask. Scalar maps use the red channel. Normal contribution is disabled in this adapter.
 
@@ -8,4 +8,4 @@ Currently accepts Matte, Satin (`regular`) and Metallic as provisional flat fini
 
 Tests verify equivalence to ordered destination blending over arbitrary background values, actual overlapping raster output and layer order, unsupported-finish rejection, bounds and source immutability. This establishes texel-centre arithmetic, not filtered/compressed game output or optical parity with the browser's separately lit transparent surfaces. Filtering, mipmaps, XBM compression and mixed optical finishes require further comparison/adapters.
 
-Next: compile two authored presets plus Off, import the three map channels, assemble one scoped CCXL selector with stable `xfas_` identities, verify local resource dependencies, and prepare a batched runtime test. One selector can switch a small coordinated component set if faithful finish composition requires it; a single merged material remains preferred where it preserves the intended appearance.
+Two authored presets plus Off now have imported maps, a scoped CCXL selector, stable `xfas_` identities, verified local dependencies and an unpacked archive payload check. Next: resolve plate clearance, lower-mip filtering and the remaining optical adapters, integrate editable SQLite collections/export UI, and prepare a batched runtime test. One selector can switch a small coordinated component set if faithful finish composition requires it; a single merged material remains preferred where it preserves the intended appearance.

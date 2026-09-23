@@ -1,0 +1,421 @@
+{
+  "schema": "xfas/collection-1",
+  "id": "11ea932b-7ce9-4d40-a284-47c307009137",
+  "name": "XFAS preset proof",
+  "presets": [
+    {
+      "id": "193f4397-e313-4409-b842-a333307dece3",
+      "name": "Violet ink",
+      "revision": 1,
+      "recipe": {
+        "schema": "eye-artistry/recipe-1",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "layer-1",
+            "name": "Petal wash",
+            "enabled": true,
+            "color": "#905774",
+            "finish": "regular",
+            "opacity": 0.68,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-2",
+            "name": "Fine wing",
+            "enabled": true,
+            "color": "#201b29",
+            "finish": "matte",
+            "opacity": 0.85,
+            "feather": 0.0015,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.31,
+                "v": 0.241,
+                "weight": 1
+              },
+              {
+                "u": 0.36,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.423,
+                "v": 0.242,
+                "weight": 1
+              },
+              {
+                "u": 0.454,
+                "v": 0.255,
+                "weight": 1
+              },
+              {
+                "u": 0.392,
+                "v": 0.249,
+                "weight": 1
+              },
+              {
+                "u": 0.345,
+                "v": 0.246,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-3",
+            "name": "Inner light",
+            "enabled": false,
+            "color": "#d4ae86",
+            "finish": "regular",
+            "opacity": 0.85,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-4",
+            "name": "Accent",
+            "enabled": false,
+            "color": "#328c94",
+            "finish": "matte",
+            "opacity": 0.85,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "6bf9f1e3-a9fa-4882-a87c-fbdc346464ea",
+      "name": "Copper edge",
+      "revision": 1,
+      "recipe": {
+        "schema": "eye-artistry/recipe-1",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "layer-1",
+            "name": "Petal wash",
+            "enabled": true,
+            "color": "#b96632",
+            "finish": "metallic",
+            "opacity": 0.74,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-2",
+            "name": "Fine wing",
+            "enabled": true,
+            "color": "#342329",
+            "finish": "matte",
+            "opacity": 0.93,
+            "feather": 0.0015,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.31,
+                "v": 0.241,
+                "weight": 1
+              },
+              {
+                "u": 0.36,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.423,
+                "v": 0.242,
+                "weight": 1
+              },
+              {
+                "u": 0.454,
+                "v": 0.255,
+                "weight": 1
+              },
+              {
+                "u": 0.392,
+                "v": 0.249,
+                "weight": 1
+              },
+              {
+                "u": 0.345,
+                "v": 0.246,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-3",
+            "name": "Inner light",
+            "enabled": false,
+            "color": "#d4ae86",
+            "finish": "regular",
+            "opacity": 0.85,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          },
+          {
+            "id": "layer-4",
+            "name": "Accent",
+            "enabled": false,
+            "color": "#328c94",
+            "finish": "matte",
+            "opacity": 0.85,
+            "feather": 0.012,
+            "symmetry": true,
+            "points": [
+              {
+                "u": 0.303,
+                "v": 0.231,
+                "weight": 1
+              },
+              {
+                "u": 0.33,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.378,
+                "v": 0.206,
+                "weight": 1
+              },
+              {
+                "u": 0.427,
+                "v": 0.229,
+                "weight": 1
+              },
+              {
+                "u": 0.439,
+                "v": 0.253,
+                "weight": 1
+              },
+              {
+                "u": 0.369,
+                "v": 0.235,
+                "weight": 1
+              }
+            ],
+            "field": {
+              "u": 0.342,
+              "v": 0.223,
+              "du": 0,
+              "dv": 0,
+              "radius": 0.07
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

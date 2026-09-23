@@ -1,0 +1,99 @@
+{
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790130339455979000",
+  "presetCount": 2,
+  "selectorCount": 1,
+  "selectorOptionCount": 3,
+  "appDefinitions": 2,
+  "compiledComponentTemplates": 1,
+  "meshAppearances": 2,
+  "materialTemplates": 1,
+  "textureCount": 6,
+  "archiveBytes": 831488,
+  "archiveSha256": "4b03e398f5c5d35720cfcc3b6bbbc4505368b2377c4b072a2e289de2801ccec6",
+  "unpackedFilesVerified": 10,
+  "preservedMorphs": 105,
+  "modelBuffersUnchanged": true,
+  "resolvedDynamicPaths": [
+    {
+      "appearance": "xfas_c11ea932b7ce94d40a28447c307009137__xfas_p193f4397e3134409b842a333307dece3",
+      "chunkMaterial": "xfas_p193f4397e3134409b842a333307dece3@preset",
+      "textures": {
+        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_metalness.xbm"
+      }
+    },
+    {
+      "appearance": "xfas_c11ea932b7ce94d40a28447c307009137__xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea",
+      "chunkMaterial": "xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea@preset",
+      "textures": {
+        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_metalness.xbm"
+      }
+    }
+  ],
+  "decodedPixelChecks": [
+    {
+      "preset": "Violet ink",
+      "coveredTexels": 12688,
+      "coverageError": {
+        "mean": 0.004098198238818807,
+        "p95": 0.015378700499807718,
+        "max": 0.16650519031141875
+      },
+      "premultipliedEncodedColourError": {
+        "mean": 0.002043065586798817,
+        "p95": 0.007743982909988317,
+        "max": 0.054604959774288406
+      },
+      "premultipliedSurfaceError": {
+        "roughness": {
+          "mean": 0.0026831923528809996,
+          "p95": 0.011442235640892258,
+          "max": 0.12577424972295737
+        },
+        "metalness": {
+          "mean": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    {
+      "preset": "Copper edge",
+      "coveredTexels": 12700,
+      "coverageError": {
+        "mean": 0.0045655511054197824,
+        "p95": 0.015624759707804636,
+        "max": 0.14371395617070348
+      },
+      "premultipliedEncodedColourError": {
+        "mean": 0.0020766111313885844,
+        "p95": 0.00861521386039571,
+        "max": 0.07330876180606727
+      },
+      "premultipliedSurfaceError": {
+        "roughness": {
+          "mean": 0.0027195756979254727,
+          "p95": 0.010306684457712434,
+          "max": 0.12624284777348072
+        },
+        "metalness": {
+          "mean": 0.002244982679967096,
+          "p95": 0.008769839654431622,
+          "max": 0.05152190334034412
+        }
+      }
+    }
+  ],
+  "installed": false,
+  "gameRenderingVerified": false,
+  "limits": [
+    "Dynamic resolution is a source-derived model, not executed ArchiveXL.",
+    "A/B/Off component clearing and save persistence need runtime evidence.",
+    "Base-mip compression checked; lower mip filtering not yet compared.",
+    "Zero-offset plate control; outward clearance candidate still required.",
+    "Flat matte/satin/metallic adapter only; other optical finishes remain required work."
+  ]
+}

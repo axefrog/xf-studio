@@ -24,6 +24,8 @@ The customization, mesh and garment extension source established exactly how CCX
 
 **Use:** source-grounded learning and intended runtime dependency; not a claim that ArchiveXL source has been incorporated into our implementation. [Strategy and pinned source evidence](../research/archive-xl/eye-artistry-strategy.md) record functions, limits and unresolved game checks.
 
+The [first one-selector fixture](../experiments/005-preset-collection/README.md) additionally uses the garment hook's missing-appearance guard to preserve an exact empty Off, a named component override for cloned presets, and shared material expansion with lightweight mesh stubs. Inspecting the first-override-array assumption informed the generated empty Off structure. Its source-derived checks remain distinct from game execution.
+
 ### WolvenKit — the WolvenKit team and contributors
 
 [Repository](https://github.com/WolvenKit/WolvenKit). Save-format research used commit `11720772f1e20581301b3dec88a59f7b5ee05675`; conversion experiments use installed CLI 8.17.4. Do not conflate these revisions.
@@ -31,6 +33,8 @@ The customization, mesh and garment extension source established exactly how CCX
 Its save parser supplied format facts for our narrow read-only TypeScript appearance reader. Shader-cache structures made the cache index/disassembly investigation possible. Mesh/morph and animation conversion exposed packing, bone-map, shading-delta and float-track details, while its CLI and libraries enabled extraction, serialization, round-trip verification and animation export. Facial-setup readers provided the first map of the game's pose/corrective data.
 
 **Use:** learning plus executed tools and referenced .NET libraries. Evidence: [save reader research](../research/eye-artistry/save-import.md), [shader investigation](../research/materials/glitter-shader-investigation.md), and [plate conversion](../experiments/004-plate-import/README.md). Animation intake is ongoing. Any distributed dependency must retain its own applicable license/notices; this record is not a license inventory.
+
+Its appearance preprocessor and RedPackage writer also taught us how newly authored component definitions become compiled `.app` data. [Experiment 005](../experiments/005-preset-collection/README.md) verifies that actual conversion, independent handle identities, packed resources and decoded texture channels rather than relying only on our generated JSON.
 
 ### Cyberpunk Blender Add-on / IO Suite — its authors and RED Modding maintainers
 

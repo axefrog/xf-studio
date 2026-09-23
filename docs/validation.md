@@ -13,11 +13,13 @@ Principle: answer structural and deterministic questions offline, instrument the
 
 Source-derived models are useful for exhaustive naming/path checks. They cannot prove ArchiveXL hooks executed, GPU blending order, visual deformation or game save compatibility. Blender renders can expose holes/intersections and UV mistakes, but do not reproduce REDengine's decal shader.
 
-## Layer ordering: the main unresolved rendering hypothesis
+## Preset compilation and optional geometric layering
 
-Four normal-offset meshes may solve coplanar interference. However the inspected decal template has depth writes disabled, so the geometry alone does not establish which translucent/decal draw is blended last. Test selection order and camera movement as well as static overlap. Keep the standard material template as baseline. Do not add new shader-priority tricks just to force a result.
+Current product direction is one selector for complete authored looks. [Experiment 005](../experiments/005-preset-collection/README.md) already merges compatible flat finishes into one material per selected look, using a single shared dynamic template. Its archive is verified offline, but selection clearing, rendered appearance and save persistence are not. Geometry offsets are still relevant for skin clearance and for any coordinated stack needed by optical finishes that cannot be merged faithfully.
 
-If offsets fail, investigate actual renderer component/pass ordering, existing decal controls and whether a supported ordering hook exists. Offline texture compositing is a fallback with a different UI/runtime cost model, not an automatic return to pre-generating every layered combination. Record why each alternative succeeds/fails.
+The historical proposal of several normal-offset meshes may solve coplanar interference. However the inspected decal template has depth writes disabled, so the geometry alone does not establish which translucent/decal draw is blended last. Test component/selection order and camera movement as well as static overlap when a stack is needed. Keep the standard material template as baseline. Do not add new shader-priority tricks just to force a result.
+
+If offsets fail, investigate actual renderer component/pass ordering, existing decal controls and whether a supported ordering hook exists. Offline texture compositing is now the preferred compatible-finish path; it compiles only authored combinations. Record why each alternative succeeds/fails.
 
 ## Instrumentation to prepare
 
@@ -32,10 +34,10 @@ If offsets fail, investigate actual renderer component/pass ordering, existing d
 **Not ready to run yet:** no diagnostic mod or final plate build has been deployed. Fill in exact mod/profile/build IDs and capture controls when the small implementation slice is ready.
 
 1. Launch the prepared profile once. Open the appearance editor using the agreed save/location; the logger records versions and test build ID.
-2. Select the two high-contrast test designs on each layer. Test OFF/ON and reverse the order of selecting the layers. Use the provided fixed selector checklist so results are comparable.
+2. On the ONE XFAS eye-makeup selector, switch Off → Violet ink → Copper edge → Violet ink → Off. Repeat in reverse order and verify each complete look replaces the previous one with no residual components or makeup. Names may be updated when the prepared diagnostic fixture changes; record its exact build ID.
 3. Cycle labelled offset alternatives if the diagnostic build exposes them. Capture front, oblique and side views, plus close/normal camera distance. Check soft edges, glitter/specular behavior and visible intersection/floating edges.
 4. Cycle a short set of facial presets/eye shapes selected from offline stress checks; blink/express/pose where available. Confirm makeup stays attached and retains coverage.
-5. Test palette navigation and rapid alternating choices, then leave/re-enter the editor and inspect in photo mode/gameplay. Save to a designated test slot if needed; reload within the same process to check persistence, then restore the working selection.
+5. Alternate preset choices, then leave/re-enter the editor and inspect in photo mode/gameplay. Save to a designated test slot if needed; reload within the same process to check persistence, then restore the working selection. Test collection reorder/removal only with a prepared update and recoverable test save.
 6. Finish the session. Capture logs/screenshots with matching test labels; report only the visible outcomes the logs cannot establish.
 
 A second cold-start session is justified only if first-load/cache/save persistence or a reproducible failure demands it. Batch follow-up questions and code changes before asking for another run. Existing logs can be mined while Nathan plays normally; a special session should buy multiple concrete answers.
