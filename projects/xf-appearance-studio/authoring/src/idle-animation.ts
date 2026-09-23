@@ -57,6 +57,10 @@ export class IdleAnimation {
       b.bone.updateWorldMatrix(false,false);
     }
   }
+  seek(seconds: number) {
+    this.elapsed = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    this.update(0);
+  }
   update(seconds: number) {
     if (!this.enabled) return;
     this.elapsed += Math.max(0, Math.min(seconds, .1));

@@ -55,6 +55,10 @@ The documentation and native facial solver provide a concrete route from animati
 
 **Use:** learning and research leads. These guides inform hypotheses; current source/resource checks establish which claims apply to our specific assets and versions.
 
+### Three.js — mrdoob and contributors
+
+[Repository](https://github.com/mrdoob/three.js), installed version 0.186.0. The local `PerspectiveCamera` source explicitly defines FOV as vertical degrees; this informed the studio's labelled camera control and projection updates. OrbitControls' camera/target model underpins restoring orbit and distance, and the library's loaders, skinning, materials and animation mixers enable our browser preview. [Workspace and renderer implementation](../projects/xf-appearance-studio/authoring/README.md) records our custom adapters and limits. **Use:** executed dependency and API/source learning; this does not imply visual parity with REDengine shaders. Preserve the dependency's upstream license/notices when distributing the application.
+
 ## Other foundational contributions and unresolved attribution
 
 - **CD PROJEKT RED:** the original game art, rigs, facial setups, animation and materials underpin our local preview and experiments. These remain game-derived references, not original XFAS art. CDPR's technical-art explanation in [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) contributed the rationale for shared surfaces, masks and a calibrated external preview; see the multilayered assessment above.

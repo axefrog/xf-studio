@@ -141,6 +141,27 @@ export type SavedV = {
     decompressedBytes: number;
   };
 };
+/** Validate decoded browser storage without retaining raw save bytes. */
+export function parseSavedV(value: unknown): SavedV {
+  const v = value as SavedV;
+  const text = (x: unknown): x is string => typeof x === "string" && x.length <= 65536;
+  const uint = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 0xffffffff;
+  const array = <T>(x: unknown, valid: (item: T) => boolean): x is T[] =>
+    Array.isArray(x) && x.length <= 4096 && x.every(item => item && valid(item));
+  const group = (g: CustomizationGroup) => text(g.name) &&
+    array<Appearance>(g.appearances, a => text(a.resourceHash) && /^\d{1,20}$/.test(a.resourceHash) &&
+      text(a.definition) && text(a.name) && uint(a.censorFlag) && uint(a.censorAction)) &&
+    array<Morph>(g.morphs, m => text(m.region) && text(m.target) && uint(m.censorFlag) && uint(m.censorAction));
+  if (!v || v.schema !== "eye-artistry/saved-v-1" || !uint(v.saveVersion) || !uint(v.gameVersion) ||
+    !uint(v.presetVersion) || typeof v.isMale !== "boolean" || typeof v.brainIsMale !== "boolean" ||
+    !v.groups || ![v.groups.head, v.groups.arms, v.groups.body].every(x => array(x, group)) ||
+    !array<SavedV["perspectives"][number]>(v.perspectives, p => text(p.name) && text(p.fpp) && text(p.tpp)) ||
+    !Array.isArray(v.tags) || v.tags.length > 4096 || !v.tags.every(text) || !v.evidence ||
+    !text(v.evidence.nodeName) || ![v.evidence.nodeBytes, v.evidence.bytesRead, v.evidence.trailingBytes,
+      v.evidence.chunks, v.evidence.decompressedBytes].every(uint))
+    throw Error("Invalid stored V appearance");
+  return structuredClone(v);
+}
 export function readSavedV(bytes: Uint8Array): SavedV {
   if (bytes.length < 40 || bytes.length > 128 * 1024 * 1024)
     throw Error("Unsupported save size");

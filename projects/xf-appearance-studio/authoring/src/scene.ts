@@ -7,6 +7,7 @@ import type { Layer } from "./recipe";
 import type { SavedV } from "./save-reader";
 import { bakeFlakes, canonicalFinish, defaultFlakes } from "./finish";
 import { IdleAnimation } from "./idle-animation";
+import type { CameraState } from "./workspace-state";
 
 export async function createScene(
   host: HTMLElement,
@@ -32,7 +33,7 @@ export async function createScene(
   function front() {
     const distance = Math.max(
       0.55,
-      0.13 / (Math.tan(Math.PI / 12) * (host.clientWidth / host.clientHeight)),
+      0.13 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (host.clientWidth / host.clientHeight)),
     );
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
@@ -465,6 +466,20 @@ export async function createScene(
     applySavedV,
     details,
     idle,
+    // Store the orbit in neutral head space; enabling idle adds its framing offset once.
+    cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
+      target: controls.target.clone().sub(idleFrameOffset).toArray(), fov: camera.fov }),
+    restoreCamera: (state: CameraState) => {
+      camera.fov = state.fov;
+      camera.position.fromArray(state.position).add(idleFrameOffset);
+      controls.target.fromArray(state.target).add(idleFrameOffset);
+      camera.updateProjectionMatrix();
+      controls.update();
+    },
+    setFov: (degrees: number) => {
+      camera.fov = THREE.MathUtils.clamp(degrees, 10, 90);
+      camera.updateProjectionMatrix();
+    },
     setIdle: (enabled: boolean) => {
       if (!idle) return;
       animation = false; amount = 0; blink(0);

@@ -10,6 +10,7 @@ import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { setupLibrary } from "./library-ui";
 import { readSavedV, type SavedV } from "./save-reader";
+import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 import {
   canonicalFinish,
   defaultFlakes,
@@ -22,20 +23,12 @@ const input = (id: string) => $<HTMLInputElement>(id);
 const status = (text: string) => {
   $("status").textContent = text;
 };
-// Stable draft keys preserve existing work across the XF Appearance Studio rename.
-const storageKey = new URLSearchParams(location.search).has("verify")
-  ? "eye-artistry.verification.v1"
-  : "eye-artistry.recipe.v1";
-let recipe = initialRecipe(),
-  active = 0,
-  selected = 0;
-try {
-  const saved = localStorage.getItem(storageKey);
-  if (saved) recipe = parseRecipe(JSON.parse(saved));
-} catch {
-  status("Saved draft could not be loaded; using a fresh study.");
-}
-const history: string[] = [];
+const verification = new URLSearchParams(location.search).has("verify");
+const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
+const workspace = restored.state;
+let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
+const history: string[] = workspace.history.map(r => JSON.stringify(r));
+let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
 function checkpoint() {
   const s = JSON.stringify(recipe);
   if (history.at(-1) !== s) history.push(s);
@@ -54,16 +47,58 @@ const region = { u: 0.25, v: 0.17, w: 0.5, h: 0.215 };
 const px = (u: number) => ((u - region.u) / region.w) * uv.width,
   py = (v: number) => ((v - region.v) / region.h) * uv.height;
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
-let savedV: SavedV | undefined;
+let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
-function persist() {
+const panel = document.querySelector<HTMLElement>(".properties")!;
+const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
+function snapshot(): WorkspaceState {
+  // Editing/recipe autosave still works if preview assets fail or are still loading.
+  const editing = { recipe, active, selected, history: history.map(s => JSON.parse(s)), savedV,
+    library: lookLibrary.snapshot() };
+  if (!previewRestored) return { ...workspace, ...editing };
+  return {
+    schema: "xfas/workspace-1", ...editing,
+    preview: {
+      camera: viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
+      surface: input("surface-controls").checked, wire: input("wire").checked,
+      brows: input("brows").checked, lashes: input("lashes").checked, normals: input("normals").checked,
+      exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
+      blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
+      idle: input("cc-idle").checked, idleTime: viewer?.idle?.time ?? 0,
+    },
+    panels: { lighting: $<HTMLDetailsElement>("lighting-panel").open,
+      layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
+  };
+}
+function flushWorkspace() {
+  clearTimeout(persistTimer);
+  if (!workspaceReady) return;
+  if (!restored.writable) {
+    $("save-state").textContent = `${restored.error}. Original storage kept; export your recipe before closing.`;
+    return;
+  }
   try {
-    localStorage.setItem(storageKey, JSON.stringify(recipe));
-    $("save-state").textContent = "Draft saved in this browser";
+    localStorage.setItem(workspaceKeys(verification).workspace, JSON.stringify(snapshot()));
+    $("save-state").textContent = "Workspace saved in this browser";
   } catch {
     $("save-state").textContent = "Browser storage unavailable — save a recipe";
   }
 }
+function persist() {
+  if (!workspaceReady) return;
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(flushWorkspace, 180);
+}
+window.addEventListener("pagehide", flushWorkspace);
+window.addEventListener("scroll", persist);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushWorkspace(); });
+// UI adapters trigger one snapshot after their own handlers update state.
+document.addEventListener("input", persist);
+document.addEventListener("change", persist);
+document.addEventListener("click", persist);
+$("lighting-panel").addEventListener("toggle", persist);
+panel.addEventListener("scroll", persist);
+layersPanel.addEventListener("scroll", persist);
 function drawUV() {
   ctx.clearRect(0, 0, uv.width, uv.height);
   ctx.fillStyle = "#253132";
@@ -181,6 +216,7 @@ function layerCards() {
       selected = 0;
       sync();
       drawUV();
+      persist();
     };
     const toggle = document.createElement("input");
     toggle.type = "checkbox";
@@ -386,6 +422,7 @@ uv.onpointerdown = (e) => {
   uv.setPointerCapture(e.pointerId);
   sync();
   drawUV();
+  persist();
 };
 uv.onpointermove = (e) => {
   if (!drag) return;
@@ -435,7 +472,7 @@ const lookLibrary = setupLibrary(() => recipe, (next) => {
   recipe = next;
   selected = 0;
   for (let i = 0; i < 4; i++) render(i);
-});
+}, workspace.library, persist);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
   if (!file) return;
@@ -502,19 +539,11 @@ input("v-file").onchange = async () => {
       throw Error("Save is larger than the supported limit.");
     status("Reading saved appearance locally…");
     const v = readSavedV(new Uint8Array(await file.arrayBuffer()));
-    const result = viewer.applySavedV(v);
-    savedV = v;
-    $("v-details").textContent =
-      result.matchedDetails.length === 2
-        ? "Brows and lashes match the saved resource references; colours are approximate."
-        : "Brows and lashes are reference styles, not a resolved match for this save.";
-    $("v-card").hidden = false;
-    $("v-summary").textContent =
-      `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
-    const eye = v.groups.head
-      .find((g) => g.name === "character_customization")
-      ?.morphs.find((m) => m.region === "eyes");
+    showSavedV(v);
+    const group = v.groups.head.find(g => g.name === "character_customization") ?? v.groups.head.find(g => g.name === "TPP");
+    const eye = group?.morphs.find(m => m.region === "eyes");
     if (eye) shape.value = String(Math.floor(Number(eye.target.slice(1)) / 10));
+    persist();
     status(
       "Saved facial shape applied. Remaining appearance assets still need resolving.",
     );
@@ -523,6 +552,17 @@ input("v-file").onchange = async () => {
   }
   input("v-file").value = "";
 };
+function showSavedV(v: SavedV) {
+  const result = viewer!.applySavedV(v);
+  savedV = v;
+  $("v-details").textContent =
+    result.matchedDetails.length === 2
+      ? "Brows and lashes match the saved resource references; colours are approximate."
+      : "Brows and lashes are reference styles, not a resolved match for this save.";
+  $("v-card").hidden = false;
+  $("v-summary").textContent =
+    `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
+}
 $("v-export").onclick = () => {
   if (savedV)
     download(
@@ -535,13 +575,29 @@ for (let i = 0; i <= 21; i++) {
   const o = document.createElement("option");
   o.value = String(i);
   o.textContent = i ? `Eye shape ${String(i).padStart(2, "0")}` : "Base mesh";
-  o.selected = i === 9;
+  o.selected = i === workspace.preview.eyeShape;
   shape.append(o);
 }
 for (let i = 0; i < 4; i++) render(i);
 sync();
+workspaceReady = true;
 try {
   viewer = await createScene($("viewport"), canvases);
+  if (savedV) showSavedV(savedV);
+  const preview = workspace.preview;
+  for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
+    brows: preview.brows, lashes: preview.lashes, normals: preview.normals })) input(id).checked = checked;
+  input("blink").value = String(preview.blink);
+  input("exposure").value = String(preview.exposure);
+  input("light-angle").value = String(preview.lightAngle);
+  input("fov").value = String(preview.camera?.fov ?? 30);
+  $("fov-value").textContent = `${input("fov").value}°`;
+  viewer.eyeShape(+shape.value);
+  viewer.setWire(preview.wire);
+  viewer.setNormals(preview.normals);
+  viewer.setExposure(preview.exposure);
+  viewer.setLightAngle(preview.lightAngle);
+  $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
   const surface = createSurfaceEditor(viewer, {
     layer: current,
     selected: () => selected,
@@ -549,6 +605,7 @@ try {
       selected = i;
       sync();
       drawUV();
+      persist();
     },
     begin: checkpoint,
     change: schedule,
@@ -565,7 +622,8 @@ try {
   input("wire").onchange = () => viewer!.setWire(input("wire").checked);
   for (const name of ["brows", "lashes"]) {
     input(name).disabled = !viewer.details[name];
-    input(name).checked = !!viewer.details[name];
+    input(name).checked &&= !!viewer.details[name];
+    viewer.setDetail(name, input(name).checked);
     input(name).onchange = () => viewer!.setDetail(name, input(name).checked);
   }
   if (viewer.evidence.detailErrors.length)
@@ -602,6 +660,28 @@ try {
     viewer!.setLightAngle(+input("light-angle").value);
   input("normals").onchange = () =>
     viewer!.setNormals(input("normals").checked);
+  input("fov").oninput = () => {
+    viewer!.setFov(+input("fov").value);
+    $("fov-value").textContent = `${input("fov").value}°`;
+  };
+  // Restore motion before the neutral-space camera so its framing offset is applied once.
+  input("cc-idle").checked = preview.idle && viewer.evidence.idle.available;
+  input("cc-idle").dispatchEvent(new Event("change"));
+  if (input("cc-idle").checked) viewer.idle?.seek(preview.idleTime);
+  else {
+    input("blink").value = String(preview.blink);
+    viewer.setBlink(preview.blink);
+    viewer.animateBlink(preview.blinkPlaying);
+    $("play").setAttribute("aria-pressed", String(preview.blinkPlaying));
+    $("play").textContent = preview.blinkPlaying ? "Ⅱ Pause" : "▶ Blink";
+  }
+  if (preview.camera) viewer.restoreCamera(preview.camera);
+  viewer.controls.addEventListener("change", persist);
+  layersPanel.scrollTop = workspace.panels.layersScroll;
+  panel.scrollTop = workspace.panels.propertiesScroll;
+  window.scrollTo(workspace.panels.pageX, workspace.panels.pageY);
+  previewRestored = true;
+  flushWorkspace();
   viewer.renderer.domElement.addEventListener(
     "pointerdown",
     (e) => {
@@ -622,6 +702,7 @@ try {
   Object.assign(window, {
     eyeArtistryDiagnostics: () => ({
       ready: true,
+      workspace: snapshot(),
       surface: surface.diagnostics(),
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,
@@ -672,4 +753,5 @@ try {
   $("loading").textContent = `Preview unavailable: ${(error as Error).message}`;
   status("Asset or renderer error — see the preview message.");
   console.error(error);
+  flushWorkspace();
 }

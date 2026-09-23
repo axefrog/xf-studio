@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-23",
+  "scope": "Local authoring workspace; isolated ?verify=1 page and verification SQLite library",
+  "automated": {
+    "testsPassed": 32,
+    "testsFailed": 0,
+    "expectations": 388808,
+    "typecheck": "passed",
+    "browserBuild": "passed",
+    "coverage": [
+      "Legacy recipe migration and separate verification keys",
+      "Unreadable/future workspace protection; bounded state validation",
+      "Recipe, undo, camera, panel and library revision round-trip",
+      "Private saved-V decode/restore without changing authored makeup",
+      "Idle seek across both body and facial loop boundaries"
+    ]
+  },
+  "browser": {
+    "engine": "Codex in-app browser",
+    "userDraftUntouched": true,
+    "savedVImport": "5 facial regions, 13 character-customization appearance references",
+    "reload": [
+      "Decoded V and recipe identical before/after reload",
+      "Selected third layer and third control point retained; point weight 0.63 retained",
+      "Vertical FOV 47 degrees, exposure 0.95 and light angle 112 retained",
+      "Hidden brows and surface controls retained; lashes retained visible",
+      "Camera position and target identical across settled idle reload",
+      "Lighting panel and both panel scroll offsets, plus page scroll retained",
+      "Manual eye-shape 05 overrides imported eye-shape 09 after reload; other four saved morphs retained",
+      "Idle enabled state and phase resumed; turning it off restored neutral camera framing",
+      "Exploratory blink playing state retained on a separate reload",
+      "Library selected look, unfinished title and revision 2 retained without replacing draft",
+      "Save look after reload continued the same test look to revision 3",
+      "Undo after reload restored the recipe from before Open look"
+    ],
+    "warningsOrErrors": [],
+    "notes": "Real chooser import, UI controls, orbit drag and reloads; read-only page diagnostics used for comparisons. Test library gained a revision; main library and user browser tab were untouched."
+  },
+  "limitations": [
+    "No game launch or mod deployment",
+    "Actual modded eye texture and SSS/skin/eye shader fidelity remain unresolved",
+    "Game/photo-mode FOV convention has not been calibrated",
+    "Workspace is browser/origin-local; portable recipe and SQLite look records remain makeup-only",
+    "Autosave is debounced with pagehide/visibility flushing; abrupt process termination can lose the last unsaved edit"
+  ]
+}

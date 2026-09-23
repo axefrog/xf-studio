@@ -1,14 +1,20 @@
 import { parseRecipe, type Recipe } from "./recipe";
 import type { LookSummary, StoredLook } from "./library-store";
+import type { LibraryState } from "./workspace-state";
 
-export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recipe) => void) {
+export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recipe) => void,
+  restored: LibraryState, changed: () => void) {
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const select = byId<HTMLSelectElement>("library-looks"), name = byId<HTMLInputElement>("look-name");
   const note = byId("library-state"), save = byId<HTMLButtonElement>("library-save");
   const copy = byId<HTMLButtonElement>("library-copy"), open = byId<HTMLButtonElement>("library-open");
   const refresh = byId<HTMLButtonElement>("library-refresh");
   const endpoint = new URLSearchParams(location.search).has("verify") ? "/api/verification/looks" : "/api/looks";
-  let current: LookSummary | undefined;
+  let current = restored.current;
+  let selected = restored.selected;
+  name.value = restored.name;
+  name.addEventListener("input", changed);
+  select.onchange = () => { selected = select.value; changed(); };
   async function api<T>(path = "", data?: unknown, method = "GET"): Promise<T> {
     const response = await fetch(endpoint + path, {
       method, headers: data ? { "Content-Type": "application/json" } : undefined,
@@ -20,18 +26,19 @@ export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recip
     if (!response.ok) throw Error(value.error ?? "Library request failed.");
     return value as T;
   }
-  async function list(selected = select.value) {
+  async function list(selection = selected) {
     const looks = await api<LookSummary[]>();
     select.replaceChildren(new Option(looks.length ? "Choose a saved look…" : "No saved looks yet", ""));
     for (const look of looks) select.add(new Option(`${look.name} · v${look.revision}`, look.id));
-    select.value = selected;
+    select.value = selection;
     if (select.selectedIndex < 0) select.value = "";
+    selected = select.value;
   }
   async function action(task: () => Promise<void>) {
     for (const button of [save, copy, open, refresh]) button.disabled = true;
     try { await task(); }
     catch (error) { note.textContent = (error as Error).message; }
-    finally { for (const button of [save, copy, open, refresh]) button.disabled = false; }
+    finally { for (const button of [save, copy, open, refresh]) button.disabled = false; changed(); }
   }
   function store(asCopy: boolean) {
     // Freeze the submitted snapshot; edits made while saving remain in the browser draft.
@@ -41,7 +48,7 @@ export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recip
       const saved = await api<StoredLook>(previous ? `/${previous.id}` : "", {
         name: title, recipe: snapshot, revision: previous?.revision,
       }, previous ? "PUT" : "POST");
-      current = saved;
+      current = { id: saved.id, revision: saved.revision };
       note.textContent = `Saved “${saved.name}” · revision ${saved.revision}. Further edits stay in the draft until saved.`;
       await list(saved.id);
     });
@@ -52,7 +59,7 @@ export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recip
     if (!select.value) throw Error("Choose a saved look first.");
     const look = await api<StoredLook>(`/${select.value}`);
     openRecipe(parseRecipe(look.recipe));
-    current = look;
+    current = { id: look.id, revision: look.revision };
     name.value = look.name;
     note.textContent = `Opened “${look.name}” · revision ${look.revision}. Undo can recover the previous draft.`;
   });
@@ -62,13 +69,19 @@ export function setupLibrary(getRecipe: () => Recipe, openRecipe: (recipe: Recip
   });
   void action(async () => {
     await list();
-    note.textContent = "Save a named look to your local library. Your existing draft is unchanged.";
+    note.textContent = current
+      ? `Draft restored for library revision ${current.revision}. Save look checks for newer revisions before writing.`
+      : "Save a named look to your local library. Your existing draft is unchanged.";
   });
   return {
+    snapshot(): LibraryState { return { selected, name: name.value, current: current ? { ...current } : undefined }; },
     detach() {
       current = undefined;
+      selected = "";
+      select.value = "";
       name.value = "Imported look";
       note.textContent = "Imported recipe — Save look creates a new library entry.";
+      changed();
     },
   };
 }

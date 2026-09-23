@@ -16,6 +16,9 @@ test("facial movement composes before head rotation, with its own clock and exac
   for(let i=0;i<7;i++) idle.update(.1);
   expect(target.position.x).toBeCloseTo(0,6);
   expect(target.position.y).toBeCloseTo(1.7,6); // Face does not reset at body's .4s loop.
+  idle.seek(4.7); // Restore a workspace well beyond either loop's first cycle.
+  expect(idle.time).toBe(4.7);
+  expect(target.position.y).toBeCloseTo(1.7,6);
   idle.setEnabled(false);
   expect(target.position.toArray()).toEqual([1,0,0]);
   expect(target.quaternion.toArray()).toEqual([0,0,0,1]);

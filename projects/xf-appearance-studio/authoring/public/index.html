@@ -240,8 +240,11 @@
           Arkhe brows 18 · Soft Natural lashes<br />Reference styles ·
           approximate colours
         </p>
-        <details>
+        <details id="lighting-panel">
           <summary>Head &amp; lighting</summary>
+          <label class="control">Field of view (vertical) <output id="fov-value">30°</output>
+            <input id="fov" aria-label="Field of view (vertical)" type="range" min="10" max="90" step="1" value="30" /></label>
+          <p class="help">For photo comparisons, match camera distance as well as the lens angle. Game FOV numbers may use a different convention.</p>
           <label>Eye shape<select id="eye-shape"></select></label
           ><label class="control"
             >Exposure<input
