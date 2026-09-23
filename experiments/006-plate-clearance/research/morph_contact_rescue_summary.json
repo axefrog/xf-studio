@@ -1,0 +1,99 @@
+{
+  "purpose": "Local finite-contact perturbation on numeric morph-aware candidate; never imported.",
+  "sourceSummarySha256": "d61ea0c6c1c5903313e123966805beb4c7d5efac85117d413e1d3b98edb3cb00",
+  "numericResult": "experiments/006-plate-clearance/generated/morph-aware/contact-rescue.npz",
+  "numericResultSha256": "d4cc1b84b0948c6366c395ede007d667f54dbce588a9c515bf2d79f9bfb61d86",
+  "criticalFrames": [
+    25,
+    100,
+    104,
+    120,
+    169,
+    170,
+    180,
+    190,
+    480,
+    490
+  ],
+  "criticalStaticCases": [
+    "h031_eyes",
+    "h141_eyes",
+    "h171_eyes",
+    "h201_eyes"
+  ],
+  "history": [
+    {
+      "iteration": 0,
+      "criticalContacts": 83,
+      "byContext": {
+        "h031_eyes": 2,
+        "h141_eyes": 1,
+        "h171_eyes": 5,
+        "h201_eyes": 2,
+        "frame-25": 14,
+        "frame-100": 3,
+        "frame-104": 3,
+        "frame-120": 13,
+        "frame-169": 14,
+        "frame-170": 14,
+        "frame-180": 3,
+        "frame-190": 3,
+        "frame-480": 3,
+        "frame-490": 3
+      },
+      "maximumDisplacement": 9.743698908371334e-05,
+      "maximumGap": 4.201343429795934e-05,
+      "overEdgeBudget": 0,
+      "acceptedScale": 1.0
+    },
+    {
+      "iteration": 1,
+      "criticalContacts": 66,
+      "byContext": {
+        "h031_eyes": 2,
+        "h141_eyes": 1,
+        "h171_eyes": 4,
+        "h201_eyes": 0,
+        "frame-25": 14,
+        "frame-100": 0,
+        "frame-104": 0,
+        "frame-120": 15,
+        "frame-169": 14,
+        "frame-170": 13,
+        "frame-180": 0,
+        "frame-190": 0,
+        "frame-480": 0,
+        "frame-490": 3
+      },
+      "maximumDisplacement": 9.17194054345116e-05,
+      "maximumGap": 4.412334639622413e-05,
+      "overEdgeBudget": 0,
+      "acceptedScale": 0.5
+    },
+    {
+      "iteration": 2,
+      "criticalContacts": 55,
+      "byContext": {
+        "h031_eyes": 2,
+        "h141_eyes": 1,
+        "h171_eyes": 4,
+        "h201_eyes": 0,
+        "frame-25": 14,
+        "frame-100": 0,
+        "frame-104": 0,
+        "frame-120": 10,
+        "frame-169": 14,
+        "frame-170": 10,
+        "frame-180": 0,
+        "frame-190": 0,
+        "frame-480": 0,
+        "frame-490": 0
+      },
+      "maximumDisplacement": 9.422576101216501e-05,
+      "maximumGap": 4.508677081713426e-05,
+      "overEdgeBudget": 0,
+      "stopped": "No tested local step improved finite contacts without breaking shape gates."
+    }
+  ],
+  "warning": "Critical-context improvement alone cannot pass the 73-pose and 107-static complete gates; rerun those before import."
+}
