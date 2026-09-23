@@ -4,6 +4,8 @@ Scope expanded by Nathan on 2026-09-23: this is now XF Studio, with other appear
 
 Persistent user requests, 23 September 2026. Read this across context changes; conversation history is not the only record.
 
+**Execution order, 23 September:** complete the makeup tasks, then investigate eyebrow shape and correct brow/lash colours (including the newly reported missing brow-area idle motion), then add optional hair-mesh rendering. Other queue items follow. These are preview improvements; later feature authoring still requires discussion.
+
 **Latest product decision:** [complete authored presets, SQLite library, one eye-makeup selector](../../projects/xf-appearance-studio/data/product-direction.md). First explicit SQLite save/open/copy/revision slice is implemented. Collection export, mixed-finish material compilation and one-selector runtime proof are next. Later features are ordered: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, full-body tattoos. Discuss each with Nathan before building it. Desktop Electron/Electrobun assessment is [recorded](../authoring/desktop-packaging.md); no wrapper chosen yet.
 
 | Priority | Requested outcome | Current state / acceptance criterion |

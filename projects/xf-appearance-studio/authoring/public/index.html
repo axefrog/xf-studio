@@ -33,10 +33,6 @@
     <main>
       <aside class="layers-panel" id="layers-panel">
         <div class="eyebrow">COMPOSITION</div>
-        <h1>A study in<br />expression.</h1>
-        <p class="intro">
-          Shape the makeup.<br />Keep every decision editable.
-        </p>
         <section class="collection-card">
           <label>Collection name<input id="collection-name" maxlength="120" value="Makeup collection" /></label>
           <div class="small-actions"><button id="preset-add">Add preset</button><button id="preset-restore">Restore removed preset</button></div>
@@ -140,14 +136,21 @@
           <span>UV control points</span
           ><span id="point-label">Point 1 / 6</span>
         </div>
+        <div class="uv-toolbar" role="group" aria-label="UV view">
+          <button id="uv-both" aria-pressed="true">Both eyes</button>
+          <button id="uv-single" aria-pressed="false">Single eye</button>
+          <button id="uv-other" disabled>Other eye</button>
+          <button id="uv-fit">Fit shape</button>
+        </div>
         <canvas
           id="uv"
           width="720"
           height="310"
           aria-label="Editable makeup shape on the head UV map"
         ></canvas>
+        <p class="help uv-view-note" id="uv-view-note"></p>
         <p class="help">
-          Drag a point to reshape. Double-click to add.<br />Drag the mint arrow
+          Drag either eye's points to reshape. Double-click to add at the nearest path section.<br />Drag the mint arrow
           to bend the field. Face and UV guides show the control curve before
           the field bends it.
         </p>

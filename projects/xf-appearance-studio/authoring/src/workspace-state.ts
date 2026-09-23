@@ -1,6 +1,7 @@
 import { initialRecipe, parseRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
+import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -14,6 +15,7 @@ export type PreviewState = {
 export type WorkspaceState = {
   schema: "xfas/workspace-1";
   recipe: Recipe; active: number; selected: number; history: Recipe[];
+  uvView: UVView;
   savedV?: SavedV;
   preview: PreviewState;
   library: LibraryState;
@@ -24,6 +26,7 @@ export type WorkspaceState = {
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
+    uvView: defaultUVView(),
     preview: { eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
       normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
@@ -40,6 +43,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   const v = value as WorkspaceState;
   if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
+  state.uvView = parseUVView(v.uvView);
   if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active;
   if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {

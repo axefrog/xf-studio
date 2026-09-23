@@ -1,7 +1,6 @@
 import {
   MAX_LAYERS,
   parseRecipe,
-  curve,
   clamp,
   type Recipe,
   type Layer,
@@ -11,6 +10,7 @@ import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
+import { createUVEditor } from "./uv-editor";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
 import { readSavedV, type SavedV } from "./save-reader";
@@ -44,13 +44,6 @@ const canvases = Array.from({ length: recipe.layers.length }, () => {
   c.width = c.height = 1024;
   return c;
 });
-const tinted = document.createElement("canvas");
-tinted.width = tinted.height = 1024;
-const uv = $<HTMLCanvasElement>("uv"),
-  ctx = uv.getContext("2d")!;
-const region = { u: 0.25, v: 0.17, w: 0.5, h: 0.215 };
-const px = (u: number) => ((u - region.u) / region.w) * uv.width,
-  py = (v: number) => ((v - region.v) / region.h) * uv.height;
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
@@ -59,7 +52,7 @@ const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { recipe, active, selected, history: history.map(s => JSON.parse(s)), savedV,
+  const editing = { recipe, active, selected, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
     library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, panels: { ...workspace.panels, ...sidebars.snapshot() } };
   return {
@@ -109,102 +102,8 @@ document.addEventListener("click", persist);
 $("lighting-panel").addEventListener("toggle", persist);
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
-function drawUV() {
-  ctx.clearRect(0, 0, uv.width, uv.height);
-  ctx.fillStyle = "#253132";
-  ctx.fillRect(0, 0, uv.width, uv.height);
-  if (viewer) {
-    const im = viewer.albedo.image as HTMLImageElement;
-    ctx.globalAlpha = 0.55;
-    ctx.drawImage(
-      im,
-      region.u * im.width,
-      region.v * im.height,
-      region.w * im.width,
-      region.h * im.height,
-      0,
-      0,
-      uv.width,
-      uv.height,
-    );
-    ctx.globalAlpha = 1;
-  }
-  for (let i = 0; i < recipe.layers.length; i++)
-    if (recipe.layers[i].enabled) {
-      const t = tinted.getContext("2d")!;
-      t.clearRect(0, 0, 1024, 1024);
-      t.globalCompositeOperation = "source-over";
-      t.drawImage(canvases[i], 0, 0);
-      t.globalCompositeOperation = "source-in";
-      t.fillStyle = recipe.layers[i].color;
-      t.fillRect(0, 0, 1024, 1024);
-      t.globalCompositeOperation = "source-over";
-      ctx.drawImage(
-        tinted,
-        region.u * 1024,
-        region.v * 1024,
-        region.w * 1024,
-        region.h * 1024,
-        0,
-        0,
-        uv.width,
-        uv.height,
-      );
-    }
-  ctx.setLineDash([5, 7]);
-  ctx.strokeStyle = "#c4ddca55";
-  ctx.beginPath();
-  ctx.moveTo(px(0.5), 0);
-  ctx.lineTo(px(0.5), uv.height);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  const l = current();
-  if (!l) return;
-  const path = curve(l.points);
-  for (const mirrored of l.symmetry ? [false, true] : [false]) {
-    ctx.strokeStyle = mirrored ? "#ead1e877" : "#f1dbee";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    path.forEach((p, i) => {
-      const x = px(mirrored ? 1 - p.u : p.u),
-        y = py(p.v);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    });
-    ctx.closePath();
-    ctx.stroke();
-    if (!mirrored)
-      l.points.forEach((p, i) => {
-        ctx.beginPath();
-        ctx.arc(px(p.u), py(p.v), i === selected ? 7 : 5, 0, Math.PI * 2);
-        ctx.fillStyle = i === selected ? "#fff4fb" : "#a17d97";
-        ctx.fill();
-        ctx.strokeStyle = "#2b2a34";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      });
-  }
-  const f = l.field,
-    x = px(f.u),
-    y = py(f.v),
-    tx = px(f.u + f.du),
-    ty = py(f.v + f.dv);
-  ctx.strokeStyle = "#b1ebc9";
-  ctx.fillStyle = "#b1ebc9";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x, y, 6, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(tx, ty);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.rect(tx - 5, ty - 5, 10, 10);
-  ctx.fill();
-  ctx.font = "18px Segoe UI";
-  ctx.fillStyle = "#c6e2d0";
-  ctx.fillText("FIELD", x + 12, y + 5);
-}
+let uvEditor: ReturnType<typeof createUVEditor> | undefined;
+function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
   rename(i) { active = i; selected = 0; sync(); drawUV(); persist(); input("layer-name").focus(); input("layer-name").select(); },
@@ -398,72 +297,14 @@ $("remove").onclick = () => {
   selected = Math.min(selected, current().points.length - 1);
   render();
 };
-const coord = (e: PointerEvent | MouseEvent) => {
-  const b = uv.getBoundingClientRect();
-  return {
-    u: region.u + ((e.clientX - b.left) / b.width) * region.w,
-    v: region.v + ((e.clientY - b.top) / b.height) * region.h,
-  };
-};
-let drag: "point" | "field" | "origin" | undefined;
-uv.onpointerdown = (e) => {
-  if (!current()) return;
-  const p = coord(e),
-    l = current(),
-    f = l.field;
-  let nearest = Infinity,
-    index = 0;
-  l.points.forEach((q, i) => {
-    const d = Math.hypot(px(q.u) - px(p.u), py(q.v) - py(p.v));
-    if (d < nearest) {
-      nearest = d;
-      index = i;
-    }
-  });
-  if (nearest < 22) {
-    selected = index;
-    drag = "point";
-  } else if (
-    Math.hypot(px(p.u) - px(f.u + f.du), py(p.v) - py(f.v + f.dv)) < 25
-  )
-    drag = "field";
-  else if (Math.hypot(px(p.u) - px(f.u), py(p.v) - py(f.v)) < 22)
-    drag = "origin";
-  else return;
-  checkpoint();
-  uv.setPointerCapture(e.pointerId);
-  sync();
-  drawUV();
-  persist();
-};
-uv.onpointermove = (e) => {
-  if (!drag || !current()) return;
-  const p = coord(e),
-    l = current();
-  if (drag === "point") {
-    l.points[selected].u = clamp(l.symmetry && p.u > 0.5 ? 1 - p.u : p.u);
-    l.points[selected].v = clamp(p.v);
-  } else if (drag === "origin") {
-    l.field.u = clamp(p.u);
-    l.field.v = clamp(p.v);
-  } else {
-    l.field.du = clamp(p.u - l.field.u, -0.1, 0.1);
-    l.field.dv = clamp(p.v - l.field.v, -0.1, 0.1);
-  }
-  schedule();
-};
-uv.onpointerup = () => (drag = undefined);
-uv.onpointercancel = () => (drag = undefined);
-uv.ondblclick = (e) => {
-  if (!current()) return;
-  const l = current();
-  if (l.points.length >= 24) return;
-  checkpoint();
-  const p = coord(e);
-  l.points.splice(selected + 1, 0, { u: clamp(p.u), v: clamp(p.v), weight: 1 });
-  selected++;
-  render();
-};
+uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
+  both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
+}, {
+  recipe: () => recipe, layer: current, selected: () => selected, canvases: () => canvases,
+  albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
+  select: index => { selected = index; sync(); }, begin: checkpoint, change: schedule,
+  cancel: undo, persist, message: status,
+}, workspace.uvView);
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
     a = document.createElement("a");
@@ -682,6 +523,7 @@ try {
       ready: true,
       workspace: snapshot(),
       surface: surface.diagnostics(),
+      uv: uvEditor!.diagnostics(),
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,
       eyeAppearance: viewer!.eyeAppearance(),

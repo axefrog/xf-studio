@@ -20,6 +20,10 @@ Trace the saved appearance through the effective MO2 winners, app/mesh/material/
 
 Preserved comparison: ignored `research/consumers/preview-fidelity/raw/brow-comparison.png`; source path and verified SHA-256 are in [the reference manifest](preview-fidelity-references.json). Original supplied file remains unchanged. Cause and correction are still unverified.
 
+## Missing brow-area idle movement — reported 23 September
+
+Nathan observes movement above the eyes in the game idle that appears absent from the studio. Treat this as a reported fidelity gap, not proof of a missing bone track. Compare brow/accessory rig transport, face-bake bone motion, facial correctives, scale channels and wrinkle/material effects. First establish what the current extracted clip actually contains and what the preview applies; exact game graph/clip selection remains unverified. Queue the correction with the brow fidelity pass after makeup, with bounded offline tracing allowed now. Record observed motion versus hypotheses and batch any needed game comparison.
+
 ## Earlier references and renderer lead
 
 ## Matte flicker at narrow FOV / distant zoom

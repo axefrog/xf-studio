@@ -96,6 +96,10 @@ Additional Three.js learning, 23 September 2026: the official [camera guide](htt
 
 Other installed or surveyed frameworks/mods are not automatically claimed as studied influences. Add TweakXL, Codeware, RED4ext, redscript, CET or another source here when a concrete lesson is drawn from it, recording that lesson rather than merely copying the inventory. Runtime/package dependencies also need their own appropriate acknowledgements and notices when distributed.
 
+### SciPy and NumPy developers
+
+[SciPy](https://scipy.org/) 1.18.1 and [NumPy](https://numpy.org/) 2.5.3, used 23 September 2026, enabled the [fixed plate-correction feasibility study](../experiments/006-plate-clearance/fixed_feasibility.md). NumPy supplies matrix arithmetic; SciPy supplies SLSQP proposals, nonnegative least squares and HiGHS linear programming through public APIs. **Use:** executed research dependencies in an ignored local target directory; no upstream optimizer implementation was copied or bundled with the application. The constraint construction and independent certificate verifier are project code. Installed package metadata retains developer attribution, licenses and bundled solver notices; preserve applicable notices if any tooling is later distributed.
+
 ## Entry checklist
 
 For each new contribution record: **source/mod/repository and link; author/contributors or an explicit attribution gap; inspected version/commit/date; what it taught or enabled; where we used it; learning/tool/code/asset use; relevant reuse terms if applicable.** Amend existing entries when new lessons emerge. Keep unresolved leads visibly separate from completed study, and never erase credit because the eventual implementation took a different form.

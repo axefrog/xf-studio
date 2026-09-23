@@ -2,9 +2,11 @@
 
 | Priority | Work item | Status / trigger |
 |---|---|---|
-| 1 | XF Studio makeup material/mesh proof | Next implementation slice; see project README and validation plan |
-| 2 | [CCXL and character-creator capability map](ccxl-character-creator-capabilities.md) | Explicitly requested by Nathan on 2026-09-23; queued. Pull forward its palette/UI findings when they unblock XF Studio. |
-| 3 | Photo Mode Tools engine/API audit | After XF Studio's first makeup completion milestone; see project README |
+| 1 | Complete XF Studio makeup tasks | Editor, materials, plate and export work remain first. |
+| 2 — after makeup | [Eyebrow shape and brow/lash colours](preview-fidelity.md) | Investigate thinner in-game brows and reproduce the saved colours. Explicit next priority. |
+| 3 — after brows/lashes | Optional hair-mesh preview | Resolve the saved hairstyle and colour, with a visibility toggle. Preview is authorized; hair authoring remains a later discussion. |
+| Thereafter | [CCXL and character-creator capability map](ccxl-character-creator-capabilities.md) | Pull forward findings when they unblock current makeup work. |
+| Thereafter | Photo Mode Tools engine/API audit | Other queued work after the above priorities; see project README. |
 | Required for XF Studio | [Makeup finish families and glitter](glitter-material.md) | Seven recognizable finish families; prove mixed-finish preset compilation and game/browser effects. |
 | Current product | [Preset library and compiler](../../projects/xf-appearance-studio/data/product-direction.md) | Editable SQLite collections and portable export implemented; one-selector archive verified offline. Plate clearance, optical adapters and runtime proof remain. Later feature categories require discussion before building. |
 | Requested; no assigned priority | [Preview fidelity and persistent workspace](preview-fidelity.md) | Actual modded eyes, adjustable FOV, all UI/camera state, imported-V reload fix, and SSS/material artifact investigation. Screenshot references preserved locally. |
