@@ -30,4 +30,6 @@ The zero-offset plate has no intentional clearance from its source head. Compari
 
 Closed/open eyelid clearance, posed overlap/intersections, deterministic material layering and actual in-game shading remain to prove. Some eye morphs rotate narrow faces through more than 90 degrees; this also comes from the parent head and is not alone evidence of broken geometry. One dropped secondary vertex-colour set also requires semantic review. Serialization and numeric agreement do not prove runtime rendering.
 
+[Experiment 006](../006-plate-clearance/README.md) now builds two normal-offset strategies and samples the converted surfaces through the idle, including eyelid extrema. It confirms all 3,010 plate triangles correspond exactly to the head. Offsets reduce overlap greatly, but residual crease/corner contacts remain and a larger offset can introduce new contacts. No release offset has been selected; the neutral master remains the control.
+
 No topology edits have been justified yet. Nathan authorizes necessary remediation while preserving source art and design intent.

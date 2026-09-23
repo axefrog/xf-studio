@@ -11,7 +11,8 @@ using WolvenKit.Modkit.RED4;
 using WolvenKit.RED4.CR2W;
 
 var exportOnly = args.Length == 3 && args[0] == "--export";
-if (args.Length != 4 && !exportOnly) throw new ArgumentException("Expected: base-mesh.archive input.glb target.morphtarget output-base-path; or --export input.morphtarget output-base-path");
+var exportBound = args.Length == 4 && args[0] == "--export-bound";
+if (args.Length != 4 && !exportOnly) throw new ArgumentException("Expected: base-mesh.archive input.glb target.morphtarget output-base-path; or --export input.morphtarget output-base-path; or --export-bound base-mesh.archive input.morphtarget output-base-path");
 if (!Oodle.Load()) throw new Exception("WolvenKit compression library unavailable.");
 ImportExportArgs.IsCLI = true;
 var cli = Assembly.Load("WolvenKit.CLI");
@@ -20,10 +21,11 @@ using var host = ((IHostBuilder)factory.Invoke(null, new object[] { Array.Empty<
 var archives = host.Services.GetRequiredService<IArchiveManager>();
 var tools = (ModTools)host.Services.GetRequiredService<IModTools>();
 var parser = host.Services.GetRequiredService<Red4ParserService>();
-if (exportOnly) {
-    using var source = File.OpenRead(args[1]);
+if (exportOnly || exportBound) {
+    if (exportBound) archives.LoadModArchive(Path.GetFullPath(args[1]), false);
+    using var source = File.OpenRead(args[exportBound ? 2 : 1]);
     var resource = parser.ReadRed4File(source) ?? throw new Exception("Could not parse morph resource.");
-    if (!tools.ExportMorphTargets(resource, new FileInfo(args[2]), true, false)) throw new Exception("Morph export failed.");
+    if (!tools.ExportMorphTargets(resource, new FileInfo(args[exportBound ? 3 : 2]), true, false)) throw new Exception("Morph export failed.");
     Console.WriteLine("Read-only morph export completed.");
     return;
 }

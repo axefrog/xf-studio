@@ -36,6 +36,8 @@ Its save parser supplied format facts for our narrow read-only TypeScript appear
 
 Its appearance preprocessor and RedPackage writer also taught us how newly authored component definitions become compiled `.app` data. [Experiment 005](../experiments/005-preset-collection/README.md) verifies that actual conversion, independent handle identities, packed resources and decoded texture channels rather than relying only on our generated JSON.
 
+[Experiment 006](../experiments/006-plate-clearance/README.md) extends the resolver lesson to read-only head morph export: the original base mesh archive is needed to recover skin weights/bones, as well as for morph import. Its packing behavior also exposes the small nonzero lighting delta produced when newly introduced morph records encode an intended zero in the shifted 10-bit format. We separately record that quantization rather than claiming exact shading preservation for those new records.
+
 ### Cyberpunk Blender Add-on / IO Suite — its authors and RED Modding maintainers
 
 [Repository](https://github.com/WolvenKit/Cyberpunk-Blender-add-on), intake commit `7a4ee793c36d9615946fe87ec9d42cde7568021d`, inspected 23 September 2026. Credit the [upstream author list](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/blob/7a4ee793c36d9615946fe87ec9d42cde7568021d/i_scene_cp77_gltf/__init__.py) and contributors collectively; individual authorship of the facial solver has not yet been established. The manifest declares `GPL-3.0-or-later`.

@@ -1,0 +1,1606 @@
+{
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+  "zeroControlWorstSignedDistance": -1.551687388271753e-05,
+  "casesPerCandidate": 107,
+  "candidates": [
+    {
+      "name": "geometry-0.00005000",
+      "offset": 5e-05,
+      "attributes": {
+        "POSITION": {
+          "max": 3.7433755243827617e-06,
+          "mean": 2.1793187775526143e-06,
+          "p95": 3.204043404001061e-06
+        },
+        "NORMAL": {
+          "max": 0.0014997787377273248,
+          "mean": 0.0002322463041523554,
+          "p95": 0.0010714597625725117
+        },
+        "TANGENT": {
+          "max": 0.0015246347446159216,
+          "mean": 0.00025838238237887393,
+          "p95": 0.0011019509202975248
+        },
+        "TEXCOORD_0": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        },
+        "TEXCOORD_1": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        },
+        "COLOR_0": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        }
+      },
+      "morphMaxError": {
+        "POSITION": 1.2363161254609305e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "bindMaxError": 1.1920930376163597e-07,
+      "weightMaxError": 0.004329085350036621,
+      "newlyQuantizedZeroShadingRecords": 10458,
+      "clearance": [
+        {
+          "case": "Basis",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h011_eyes",
+          "minSignedDistance": 1.2908073005604575e-05,
+          "maxSignedDistance": 5.893694264821522e-05,
+          "maxTangentialDisplacement": 4.512653965899794e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h012_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.439282192282898e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h013_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h014_jaw",
+          "minSignedDistance": 1.623072817510448e-05,
+          "maxSignedDistance": 5.352316680260821e-05,
+          "maxTangentialDisplacement": 4.571156711433363e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h015_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h021_eyes",
+          "minSignedDistance": 1.455724083462218e-06,
+          "maxSignedDistance": 5.6773162952095116e-05,
+          "maxTangentialDisplacement": 5.2401251508852605e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h022_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.379205892024275e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h023_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h024_jaw",
+          "minSignedDistance": 1.7866966003091173e-05,
+          "maxSignedDistance": 5.3624680575799696e-05,
+          "maxTangentialDisplacement": 4.591777929653929e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h025_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h031_eyes",
+          "minSignedDistance": -5.178634357686015e-05,
+          "maxSignedDistance": 5.790265002571632e-05,
+          "maxTangentialDisplacement": 4.993211949812312e-05,
+          "verticesBehindHeadPlane": 10
+        },
+        {
+          "case": "h032_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.485038109976926e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h033_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h034_jaw",
+          "minSignedDistance": 1.7504313331495594e-05,
+          "maxSignedDistance": 5.3367226818527806e-05,
+          "maxTangentialDisplacement": 4.5824668205386504e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h035_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h041_eyes",
+          "minSignedDistance": -4.3703601768219244e-06,
+          "maxSignedDistance": 5.651357013765557e-05,
+          "maxTangentialDisplacement": 4.9570648351326695e-05,
+          "verticesBehindHeadPlane": 2
+        },
+        {
+          "case": "h042_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3596595965126675e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h043_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h044_jaw",
+          "minSignedDistance": 1.9165706912373016e-05,
+          "maxSignedDistance": 5.3959248379355145e-05,
+          "maxTangentialDisplacement": 4.5752020181034725e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h045_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h051_eyes",
+          "minSignedDistance": 2.526919099785035e-05,
+          "maxSignedDistance": 5.682477208834803e-05,
+          "maxTangentialDisplacement": 4.0759537524152115e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h052_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3914799866433896e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h053_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h054_jaw",
+          "minSignedDistance": 1.980333227175485e-05,
+          "maxSignedDistance": 5.362024051901063e-05,
+          "maxTangentialDisplacement": 4.505731204977003e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h055_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h061_eyes",
+          "minSignedDistance": 2.072021912842044e-06,
+          "maxSignedDistance": 5.827063119993784e-05,
+          "maxTangentialDisplacement": 5.439195894352638e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h062_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.408899120326863e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h063_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h064_jaw",
+          "minSignedDistance": 1.954042034211311e-05,
+          "maxSignedDistance": 5.3426197172861805e-05,
+          "maxTangentialDisplacement": 4.623902531395455e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h065_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h071_eyes",
+          "minSignedDistance": 1.6476489509989173e-05,
+          "maxSignedDistance": 5.7385251192420414e-05,
+          "maxTangentialDisplacement": 4.3461813907526665e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h072_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h073_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h074_jaw",
+          "minSignedDistance": 1.7253780967885385e-05,
+          "maxSignedDistance": 5.4076278998263405e-05,
+          "maxTangentialDisplacement": 4.534962411051304e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h075_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h081_eyes",
+          "minSignedDistance": 1.3190847590052117e-05,
+          "maxSignedDistance": 5.700442764285966e-05,
+          "maxTangentialDisplacement": 4.6414255106545765e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h082_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.329413845337208e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h083_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h084_jaw",
+          "minSignedDistance": 2.0624952634008127e-05,
+          "maxSignedDistance": 5.388592815189414e-05,
+          "maxTangentialDisplacement": 4.458033152996198e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h085_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h091_eyes",
+          "minSignedDistance": 1.2642543299216166e-05,
+          "maxSignedDistance": 6.0268465934973356e-05,
+          "maxTangentialDisplacement": 4.648433574135889e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h092_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.477971120045376e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h093_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h094_jaw",
+          "minSignedDistance": 1.9340505710879376e-05,
+          "maxSignedDistance": 5.404429241189278e-05,
+          "maxTangentialDisplacement": 4.438788246966793e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h095_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h101_eyes",
+          "minSignedDistance": 2.029645415158975e-05,
+          "maxSignedDistance": 5.817169572425072e-05,
+          "maxTangentialDisplacement": 4.136586483380878e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h102_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.515297001465106e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h103_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h104_jaw",
+          "minSignedDistance": 2.1062910747170262e-05,
+          "maxSignedDistance": 5.3343721798253715e-05,
+          "maxTangentialDisplacement": 4.3181658799695175e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h105_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h111_eyes",
+          "minSignedDistance": 9.593331620715596e-06,
+          "maxSignedDistance": 5.783956065435356e-05,
+          "maxTangentialDisplacement": 5.1686946859145716e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h112_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.453267815324675e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h113_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h114_jaw",
+          "minSignedDistance": 2.0321171961577235e-05,
+          "maxSignedDistance": 5.420264155307691e-05,
+          "maxTangentialDisplacement": 4.4932849616656755e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h115_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h121_eyes",
+          "minSignedDistance": 2.318628920814926e-05,
+          "maxSignedDistance": 5.7459217776879036e-05,
+          "maxTangentialDisplacement": 4.2082576097625796e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h122_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.370163706573512e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h123_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h124_jaw",
+          "minSignedDistance": 1.9062208529929525e-05,
+          "maxSignedDistance": 5.3811152209335275e-05,
+          "maxTangentialDisplacement": 4.624295532375566e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h125_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h131_eyes",
+          "minSignedDistance": 2.3546984397469722e-05,
+          "maxSignedDistance": 5.6958876678388005e-05,
+          "maxTangentialDisplacement": 4.2170928248148415e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h132_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.4260379930466223e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h133_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h134_jaw",
+          "minSignedDistance": 2.23083925523316e-05,
+          "maxSignedDistance": 5.3639438329787817e-05,
+          "maxTangentialDisplacement": 4.3956260439500414e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h135_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h141_eyes",
+          "minSignedDistance": -1.2214461070420754e-05,
+          "maxSignedDistance": 5.607629597333886e-05,
+          "maxTangentialDisplacement": 4.840371436732709e-05,
+          "verticesBehindHeadPlane": 2
+        },
+        {
+          "case": "h142_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.4071910252089555e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h143_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h144_jaw",
+          "minSignedDistance": 1.8895982296476792e-05,
+          "maxSignedDistance": 5.417927222501823e-05,
+          "maxTangentialDisplacement": 4.573097978214073e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h145_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h151_eyes",
+          "minSignedDistance": -4.3663187892478505e-05,
+          "maxSignedDistance": 5.744344862369322e-05,
+          "maxTangentialDisplacement": 5.045050808914012e-05,
+          "verticesBehindHeadPlane": 4
+        },
+        {
+          "case": "h152_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.433559864168932e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h153_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h154_jaw",
+          "minSignedDistance": 1.8036270068871063e-05,
+          "maxSignedDistance": 5.365095237134581e-05,
+          "maxTangentialDisplacement": 4.5327243669517115e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h155_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h161_eyes",
+          "minSignedDistance": 1.730808713132939e-05,
+          "maxSignedDistance": 5.83943790902779e-05,
+          "maxTangentialDisplacement": 4.367680389532519e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h162_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.379707007759282e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h163_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h164_jaw",
+          "minSignedDistance": 1.9393672038469865e-05,
+          "maxSignedDistance": 5.382413305931138e-05,
+          "maxTangentialDisplacement": 4.4989446060700264e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h165_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h171_eyes",
+          "minSignedDistance": -2.4297593986544773e-05,
+          "maxSignedDistance": 5.796936417930334e-05,
+          "maxTangentialDisplacement": 5.7651186605977063e-05,
+          "verticesBehindHeadPlane": 3
+        },
+        {
+          "case": "h172_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h173_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h174_jaw",
+          "minSignedDistance": 2.3390329429087943e-05,
+          "maxSignedDistance": 5.4152876064769705e-05,
+          "maxTangentialDisplacement": 4.335742957006287e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h175_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h181_eyes",
+          "minSignedDistance": 1.737104085723496e-05,
+          "maxSignedDistance": 5.675017809107992e-05,
+          "maxTangentialDisplacement": 4.478389840035967e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h182_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.38941325029458e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h183_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h184_jaw",
+          "minSignedDistance": 1.8650015270345036e-05,
+          "maxSignedDistance": 5.408751556749502e-05,
+          "maxTangentialDisplacement": 4.5104469325411115e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h185_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.328663465074651e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h191_eyes",
+          "minSignedDistance": 1.762019857678412e-05,
+          "maxSignedDistance": 5.6759662182193826e-05,
+          "maxTangentialDisplacement": 4.309351911764553e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h192_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.443811547053968e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h193_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h194_jaw",
+          "minSignedDistance": 1.839432885107758e-05,
+          "maxSignedDistance": 5.36241607882719e-05,
+          "maxTangentialDisplacement": 4.524928967239118e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h195_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h201_eyes",
+          "minSignedDistance": 1.9530012861894107e-05,
+          "maxSignedDistance": 5.7681042421499546e-05,
+          "maxTangentialDisplacement": 4.463337019949969e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h202_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.4654167356320556e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h203_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h204_jaw",
+          "minSignedDistance": 2.0773626836492816e-05,
+          "maxSignedDistance": 5.3856561303595814e-05,
+          "maxTangentialDisplacement": 4.438592324618823e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h205_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h211_eyes",
+          "minSignedDistance": 1.405300013690713e-05,
+          "maxSignedDistance": 5.608833788129405e-05,
+          "maxTangentialDisplacement": 4.405321834909084e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h212_nose",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.419480117775856e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h213_mouth",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h214_jaw",
+          "minSignedDistance": 2.3002303143484976e-05,
+          "maxSignedDistance": 5.3558292875058926e-05,
+          "maxTangentialDisplacement": 4.283247052914602e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h215_ear",
+          "minSignedDistance": 2.0363685077536185e-05,
+          "maxSignedDistance": 5.3284058221340035e-05,
+          "maxTangentialDisplacement": 4.471915525546442e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "saved_v",
+          "minSignedDistance": 1.2097673393832662e-05,
+          "maxSignedDistance": 6.064688350379726e-05,
+          "maxTangentialDisplacement": 4.6854145734306014e-05,
+          "verticesBehindHeadPlane": 0
+        }
+      ],
+      "worstSignedDistance": -5.178634357686015e-05,
+      "roundtripSha256": "9bf34292f5f9a8612fde3bcf106c58755e285792f1ec83fba6125ddbe21e36b2"
+    },
+    {
+      "name": "geometry-0.00010000",
+      "offset": 0.0001,
+      "attributes": {
+        "POSITION": {
+          "max": 3.7410800355087667e-06,
+          "mean": 2.207953812014348e-06,
+          "p95": 3.188387362381118e-06
+        },
+        "NORMAL": {
+          "max": 0.0014997787377273248,
+          "mean": 0.0002322463041523554,
+          "p95": 0.0010714597625725117
+        },
+        "TANGENT": {
+          "max": 0.0015246347446159216,
+          "mean": 0.00025838238237887393,
+          "p95": 0.0011019509202975248
+        },
+        "TEXCOORD_0": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        },
+        "TEXCOORD_1": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        },
+        "COLOR_0": {
+          "max": 0.0,
+          "mean": 0.0,
+          "p95": 0.0
+        }
+      },
+      "morphMaxError": {
+        "POSITION": 1.2342369650689205e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "bindMaxError": 1.1920930376163597e-07,
+      "weightMaxError": 0.004329085350036621,
+      "newlyQuantizedZeroShadingRecords": 10458,
+      "clearance": [
+        {
+          "case": "Basis",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h011_eyes",
+          "minSignedDistance": 2.636910585073514e-05,
+          "maxSignedDistance": 0.00010830779994898275,
+          "maxTangentialDisplacement": 9.616693074527003e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h012_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010396743141885317,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h013_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h014_jaw",
+          "minSignedDistance": 3.8564065537910594e-05,
+          "maxSignedDistance": 0.0001035803149252003,
+          "maxTangentialDisplacement": 9.193773639723274e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h015_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h021_eyes",
+          "minSignedDistance": 9.314732928825283e-06,
+          "maxSignedDistance": 0.00010620762588134649,
+          "maxTangentialDisplacement": 9.850919555100032e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h022_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010597179470503324,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h023_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h024_jaw",
+          "minSignedDistance": 4.0055816902060084e-05,
+          "maxSignedDistance": 0.00010340606660267881,
+          "maxTangentialDisplacement": 9.29204769851216e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h025_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h031_eyes",
+          "minSignedDistance": -0.00010394859873978865,
+          "maxSignedDistance": 0.00010712052330978596,
+          "maxTangentialDisplacement": 9.77311129172447e-05,
+          "verticesBehindHeadPlane": 13
+        },
+        {
+          "case": "h032_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010467856626779804,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h033_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h034_jaw",
+          "minSignedDistance": 3.6785134182087975e-05,
+          "maxSignedDistance": 0.00010350082366826011,
+          "maxTangentialDisplacement": 9.380529189565476e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h035_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h041_eyes",
+          "minSignedDistance": -9.020815569226755e-06,
+          "maxSignedDistance": 0.00010622893407924871,
+          "maxTangentialDisplacement": 9.903014177369508e-05,
+          "verticesBehindHeadPlane": 2
+        },
+        {
+          "case": "h042_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010336277515278294,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h043_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h044_jaw",
+          "minSignedDistance": 4.028726019102248e-05,
+          "maxSignedDistance": 0.00010411643107664693,
+          "maxTangentialDisplacement": 9.319635891517217e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h045_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h051_eyes",
+          "minSignedDistance": 5.548270500222984e-05,
+          "maxSignedDistance": 0.0001068740495921171,
+          "maxTangentialDisplacement": 8.156050720878911e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h052_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010375404948172382,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h053_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h054_jaw",
+          "minSignedDistance": 4.147090557716958e-05,
+          "maxSignedDistance": 0.00010349366351306862,
+          "maxTangentialDisplacement": 9.2263415291332e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h055_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h061_eyes",
+          "minSignedDistance": 4.186856361176492e-06,
+          "maxSignedDistance": 0.0001071003813298101,
+          "maxTangentialDisplacement": 0.00010676232865591382,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h062_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.0001041401504973049,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h063_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h064_jaw",
+          "minSignedDistance": 3.726058182550501e-05,
+          "maxSignedDistance": 0.00010328676283737932,
+          "maxTangentialDisplacement": 9.330076030638903e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h065_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h071_eyes",
+          "minSignedDistance": 4.690164725951639e-05,
+          "maxSignedDistance": 0.00010749273916238731,
+          "maxTangentialDisplacement": 8.937828624556287e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h072_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010346070803903998,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h073_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h074_jaw",
+          "minSignedDistance": 4.103324419590304e-05,
+          "maxSignedDistance": 0.00010385842041693008,
+          "maxTangentialDisplacement": 9.155867666940075e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h075_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h081_eyes",
+          "minSignedDistance": 3.781985245213239e-05,
+          "maxSignedDistance": 0.00010738890013399543,
+          "maxTangentialDisplacement": 8.551392887028241e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h082_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010465121553344044,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h083_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h084_jaw",
+          "minSignedDistance": 4.335432325079895e-05,
+          "maxSignedDistance": 0.00010332430995113979,
+          "maxTangentialDisplacement": 9.11714978094175e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h085_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h091_eyes",
+          "minSignedDistance": 4.012981971442851e-05,
+          "maxSignedDistance": 0.00010999693645035023,
+          "maxTangentialDisplacement": 8.987333678255906e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h092_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010414154958374747,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h093_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h094_jaw",
+          "minSignedDistance": 4.356858363863287e-05,
+          "maxSignedDistance": 0.00010356068075756053,
+          "maxTangentialDisplacement": 9.197544277690978e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h095_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h101_eyes",
+          "minSignedDistance": 5.068071627184461e-05,
+          "maxSignedDistance": 0.00010675359470791734,
+          "maxTangentialDisplacement": 8.417379315843423e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h102_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010607001783036768,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h103_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h104_jaw",
+          "minSignedDistance": 4.767150030848195e-05,
+          "maxSignedDistance": 0.00010317498501219812,
+          "maxTangentialDisplacement": 8.820274595590873e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h105_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h111_eyes",
+          "minSignedDistance": 2.4648591622474645e-05,
+          "maxSignedDistance": 0.00010812977354989481,
+          "maxTangentialDisplacement": 9.807668752453477e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h112_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010406621111242397,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h113_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h114_jaw",
+          "minSignedDistance": 3.928648548348086e-05,
+          "maxSignedDistance": 0.00010460988620412509,
+          "maxTangentialDisplacement": 9.24955640596641e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h115_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h121_eyes",
+          "minSignedDistance": 4.022987448710957e-05,
+          "maxSignedDistance": 0.00010723587302331667,
+          "maxTangentialDisplacement": 8.886619964234698e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h122_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010354684282767831,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h123_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h124_jaw",
+          "minSignedDistance": 3.8003798771595554e-05,
+          "maxSignedDistance": 0.00010365891312204894,
+          "maxTangentialDisplacement": 9.409938388980575e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h125_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h131_eyes",
+          "minSignedDistance": 4.929357833928395e-05,
+          "maxSignedDistance": 0.00010738904477092611,
+          "maxTangentialDisplacement": 8.626667889171614e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h132_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.0001035824777900099,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h133_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h134_jaw",
+          "minSignedDistance": 4.699346486363106e-05,
+          "maxSignedDistance": 0.00010334423097619686,
+          "maxTangentialDisplacement": 8.87051304298927e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h135_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h141_eyes",
+          "minSignedDistance": -2.7251658166471777e-05,
+          "maxSignedDistance": 0.00010637526047837107,
+          "maxTangentialDisplacement": 9.549862476661792e-05,
+          "verticesBehindHeadPlane": 2
+        },
+        {
+          "case": "h142_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010414467512926064,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h143_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h144_jaw",
+          "minSignedDistance": 3.8495946933385914e-05,
+          "maxSignedDistance": 0.00010396292809189514,
+          "maxTangentialDisplacement": 9.328441896969684e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h145_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h151_eyes",
+          "minSignedDistance": -8.093798334491847e-05,
+          "maxSignedDistance": 0.00010676434802516589,
+          "maxTangentialDisplacement": 9.606404721112797e-05,
+          "verticesBehindHeadPlane": 4
+        },
+        {
+          "case": "h152_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010443776650366228,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h153_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h154_jaw",
+          "minSignedDistance": 3.3777362529449615e-05,
+          "maxSignedDistance": 0.00010332219080214342,
+          "maxTangentialDisplacement": 9.372128210958909e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h155_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h161_eyes",
+          "minSignedDistance": 3.700374219462604e-05,
+          "maxSignedDistance": 0.00010914338799090081,
+          "maxTangentialDisplacement": 9.016770478875864e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h162_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010342881465796873,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h163_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h164_jaw",
+          "minSignedDistance": 4.1046534605406323e-05,
+          "maxSignedDistance": 0.00010342135282268633,
+          "maxTangentialDisplacement": 9.192423178257375e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h165_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h171_eyes",
+          "minSignedDistance": -4.5458109813488636e-05,
+          "maxSignedDistance": 0.00010763563784147215,
+          "maxTangentialDisplacement": 0.00010336390518644576,
+          "verticesBehindHeadPlane": 3
+        },
+        {
+          "case": "h172_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.0001041285967992394,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h173_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h174_jaw",
+          "minSignedDistance": 4.97729872468422e-05,
+          "maxSignedDistance": 0.00010358385159494208,
+          "maxTangentialDisplacement": 8.891082659262093e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h175_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h181_eyes",
+          "minSignedDistance": 4.275282889408672e-05,
+          "maxSignedDistance": 0.00010701107658172705,
+          "maxTangentialDisplacement": 8.645453737952876e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h182_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010357775985817652,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h183_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h184_jaw",
+          "minSignedDistance": 4.2814208904003295e-05,
+          "maxSignedDistance": 0.00010335422101599874,
+          "maxTangentialDisplacement": 9.127794233358349e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h185_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h191_eyes",
+          "minSignedDistance": 4.426125452386375e-05,
+          "maxSignedDistance": 0.00010730814221633591,
+          "maxTangentialDisplacement": 8.561818573025684e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h192_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010456971073302877,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h193_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h194_jaw",
+          "minSignedDistance": 4.226390760420429e-05,
+          "maxSignedDistance": 0.000103555306273692,
+          "maxTangentialDisplacement": 9.127894632328925e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h195_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h201_eyes",
+          "minSignedDistance": 4.429192884354855e-05,
+          "maxSignedDistance": 0.00010796602431196476,
+          "maxTangentialDisplacement": 8.731909926570741e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h202_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010456023528275121,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h203_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h204_jaw",
+          "minSignedDistance": 4.529925160293757e-05,
+          "maxSignedDistance": 0.00010339964264161099,
+          "maxTangentialDisplacement": 9.021205864816404e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h205_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h211_eyes",
+          "minSignedDistance": 4.124225598476581e-05,
+          "maxSignedDistance": 0.00010633481143137544,
+          "maxTangentialDisplacement": 9.097094951219632e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h212_nose",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010410026312686702,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h213_mouth",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h214_jaw",
+          "minSignedDistance": 5.05407741795009e-05,
+          "maxSignedDistance": 0.00010307203408573106,
+          "maxTangentialDisplacement": 8.81942799714449e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "h215_ear",
+          "minSignedDistance": 4.57415717520676e-05,
+          "maxSignedDistance": 0.00010322724108769289,
+          "maxTangentialDisplacement": 9.032494460026298e-05,
+          "verticesBehindHeadPlane": 0
+        },
+        {
+          "case": "saved_v",
+          "minSignedDistance": 4.036804751293127e-05,
+          "maxSignedDistance": 0.0001102590620453346,
+          "maxTangentialDisplacement": 9.267197418763916e-05,
+          "verticesBehindHeadPlane": 0
+        }
+      ],
+      "worstSignedDistance": -0.00010394859873978865,
+      "roundtripSha256": "e95538e8aeb290ae20c2af2c54c89ed0a075909770de5f2d09e7e15c9cd3f8c1"
+    }
+  ],
+  "limitations": [
+    "Corresponding tangent planes only; triangle contacts and animated poses checked separately.",
+    "All single morphs and one saved combination do not cover every possible morph combination.",
+    "Original shading retained; offset curvature is a geometric approximation, not a game render proof."
+  ]
+}

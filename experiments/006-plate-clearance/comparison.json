@@ -1,0 +1,99 @@
+{
+  "candidates": [
+    {
+      "method": "shading",
+      "offset": 5e-05,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "roundtripSha256": "4471a82f4c78e1d8bcc1761e412f7c5aa09b36b6c0671d197dd4c6e9324e9fa4",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": 3.588677949666965e-05,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 3.0290019215048226e-05,
+      "maxContactPairs": 182,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 32,
+      "morphMaxError": {
+        "POSITION": 1.2331048255270107e-05,
+        "NORMAL": 0.0,
+        "TANGENT": 0.0
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "d1758fa979b2b262536acd657023cfdf7cde3d198d7b071e2f82ed1a1a8f69ac",
+        "posed-clearance.json": "0f44686bb4d2137397d143c88fd85aab45797389dd9b4ee9a3b78428772c1cad"
+      }
+    },
+    {
+      "method": "shading",
+      "offset": 0.0001,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "roundtripSha256": "c14968b8dcafcad28d1425caeefa706d38b9d726190af8b249729f3289687b13",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": 8.597579745576057e-05,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 7.771913792517522e-05,
+      "maxContactPairs": 196,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 21,
+      "morphMaxError": {
+        "POSITION": 1.2133415924870126e-05,
+        "NORMAL": 0.0,
+        "TANGENT": 0.0
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "d1758fa979b2b262536acd657023cfdf7cde3d198d7b071e2f82ed1a1a8f69ac",
+        "posed-clearance.json": "0f44686bb4d2137397d143c88fd85aab45797389dd9b4ee9a3b78428772c1cad"
+      }
+    },
+    {
+      "method": "geometry",
+      "offset": 5e-05,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "roundtripSha256": "9bf34292f5f9a8612fde3bcf106c58755e285792f1ec83fba6125ddbe21e36b2",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": -5.178634357686015e-05,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 1.0062346654328037e-05,
+      "maxContactPairs": 169,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 6,
+      "morphMaxError": {
+        "POSITION": 1.2363161254609305e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "337cc8fbc69219cdce16c261e7697a7fc466ce3fbedabd032fb2e9e4d09cf79a",
+        "posed-clearance.json": "1ad4c5afac19141f711a01211b520ad07fcb9d6ca15ff71eb11bac7e3b79fd1c"
+      }
+    },
+    {
+      "method": "geometry",
+      "offset": 0.0001,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "roundtripSha256": "e95538e8aeb290ae20c2af2c54c89ed0a075909770de5f2d09e7e15c9cd3f8c1",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": -0.00010394859873978865,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 3.563440389626926e-05,
+      "maxContactPairs": 163,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 6,
+      "morphMaxError": {
+        "POSITION": 1.2342369650689205e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "337cc8fbc69219cdce16c261e7697a7fc466ce3fbedabd032fb2e9e4d09cf79a",
+        "posed-clearance.json": "1ad4c5afac19141f711a01211b520ad07fcb9d6ca15ff71eb11bac7e3b79fd1c"
+      }
+    }
+  ],
+  "releaseCandidateSelected": false,
+  "conclusion": "Both methods clear most of the expanded plate. Neither is contact-free in the sampled eyelid motion. Geometry normals reduce the open-eye crease contacts but can oppose lighting normals in some individual eye morphs. A blanket larger offset is not a validated repair.",
+  "next": [
+    "Classify render-visible versus occluded crease/corner contacts across sampled poses.",
+    "Investigate a local constrained correction or safe boundary treatment while preserving makeup coverage.",
+    "Keep game depth/blending validation separate and batch it with material/selector tests."
+  ]
+}

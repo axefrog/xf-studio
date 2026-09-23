@@ -1,0 +1,12 @@
+{
+  "root": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+  "validated": false,
+  "checksCompleted": [
+    "resource-roundtrip",
+    "static-vertex-planes",
+    "sampled-idle",
+    "triangle-contact-analysis"
+  ],
+  "clearanceAccepted": false,
+  "reason": "Residual eyelid triangle contacts; no release offset selected"
+}
