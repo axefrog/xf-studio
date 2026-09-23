@@ -3,7 +3,7 @@
   "date": "2026-09-23",
   "originalsUnchanged": true,
   "use": "Local visual research only; no redistribution permission established.",
-  "authorship": "Photographers and makeup artists unresolved. Reference 4 has a visible Xiaohongshu watermark reading yangyangbabyi; this is an attribution lead, not verified authorship.",
+  "authorship": "Photographers and makeup artists unresolved. Reference 4 has a visible Xiaohongshu watermark reading yangyangbabyi; reference 5 has a visible @HYEEMZZ1 watermark. These are attribution leads, not verified authorship.",
   "references": [
     {
       "label": "studio-glitter",
@@ -39,6 +39,34 @@
       "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-4.jpg",
       "sha256": "98aa5a1e9ae115e290a2070a276c4a44b5aa5825ac57402d7f5661ede0b45a68",
       "bytes": 94104
+    },
+    {
+      "label": "studio-polygon-reference-2026-09-23",
+      "source": "C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-2f76e186-c397-471f-a735-a253812c8690.png",
+      "localCopy": "research/consumers/glitter-reference/raw/studio-polygon-reference-2026-09-23.png",
+      "sha256": "41380886ba13dd5283897e3a4afad43bbaf573bf00d72be24bae2a388bff0c84",
+      "bytes": 554351
+    },
+    {
+      "label": "glitter-reference-5",
+      "source": "F:/Games/RedModding/General/references/eye makeup/f789d1073bc89d94ca49f0e52eea5b99.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-5.jpg",
+      "sha256": "df872e1b8c1fc55f717c65efaa7548cb87135e7547d124262886ff0c31aa3841",
+      "bytes": 93118
+    },
+    {
+      "label": "glitter-reference-6",
+      "source": "F:/Games/RedModding/General/references/eye makeup/b06462da7523c638187b755c3408cb77.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-6.jpg",
+      "sha256": "c77d48076e15f947fa195dea098efdab0ffcfd731b9c9a678f391e1923e48002",
+      "bytes": 96360
+    },
+    {
+      "label": "glitter-reference-7",
+      "source": "F:/Games/RedModding/General/references/eye makeup/b2cf80cb0dde801b8557c2facd60c8ac.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-7.jpg",
+      "sha256": "d87d41fe3a72c3e1e6a9f224b9324900c47839823b6849973d4fecdba0d21456",
+      "bytes": 60032
     }
   ]
 }

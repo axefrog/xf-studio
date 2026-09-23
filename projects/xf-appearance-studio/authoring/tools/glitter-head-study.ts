@@ -7,14 +7,14 @@ import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
 
 const SIZE=new URLSearchParams(location.search).get("size")==="2048"?2048:1024,
-  BASE="#592640",variants=["legacy","sparse","default","default-16sample","dense","maximum","fine160k","fine350k","fine350k-covered","uv-cell-glints"] as const;
+  BASE="#592640",variants=["legacy","sparse","default","default-16sample","dense","maximum","fine160k","fine350k","fine350k-covered","uv-cell-glints","uv-cell-polygons"] as const;
 type Variant=typeof variants[number];
 type Asset={url:string;sha256:string;data:Uint8Array<ArrayBuffer>;width:number;height:number};
 const element=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const status=element<HTMLParagraphElement>("status"),controls=element<HTMLFieldSetElement>("controls"),
   variantInput=element<HTMLSelectElement>("variant"),normalInput=element<HTMLInputElement>("zero-normal"),
   mixtureInput=element<HTMLInputElement>("mixture"),
-  roughnessInput=element<HTMLInputElement>("flake-roughness"),environmentInput=element<HTMLInputElement>("environment"),glintStrengthInput=element<HTMLInputElement>("glint-strength"),glintPowerInput=element<HTMLInputElement>("glint-power"),
+  roughnessInput=element<HTMLInputElement>("flake-roughness"),environmentInput=element<HTMLInputElement>("environment"),glintStrengthInput=element<HTMLInputElement>("glint-strength"),glintPowerInput=element<HTMLInputElement>("glint-power"),glintSeedInput=element<HTMLInputElement>("glint-seed"),glintDensityInput=element<HTMLInputElement>("glint-density"),glintFineInput=element<HTMLInputElement>("glint-fine"),
   metalInput=element<HTMLInputElement>("zero-metalness"),lightInput=element<HTMLInputElement>("light"),
   blinkInput=element<HTMLInputElement>("blink"),idleInput=element<HTMLInputElement>("idle"),pauseInput=element<HTMLInputElement>("pause");
 let viewer:Awaited<ReturnType<typeof createScene>>|undefined,active:Variant|undefined,requested:Variant="default",
@@ -32,10 +32,10 @@ Object.defineProperty(window,"glitterStudyDiagnostics",{value:()=>({
   study:"isolated-irregular-glitter-lit-head",ready:!!viewer&&!!active&&!loading&&!error,
   activeVariant:active,requestedVariant:requested,loading,error,
   size:SIZE,base:BASE,fixedLayer:structuredClone(fixed),maskSha256:maskHash,sources:structuredClone(sources),sourceManifest:structuredClone(manifest),fineManifest:structuredClone(fineManifest),coveredManifest:structuredClone(coveredManifest),
-  camera:viewer?.cameraState(),lightAngle:Number(lightInput.value),environmentIntensity:Number(environmentInput.value),flakeRoughness:Number(roughnessInput.value),glintStrength:Number(glintStrengthInput.value),glintAngularPower:Number(glintPowerInput.value),
+  camera:viewer?.cameraState(),lightAngle:Number(lightInput.value),environmentIntensity:Number(environmentInput.value),flakeRoughness:Number(roughnessInput.value),glintStrength:Number(glintStrengthInput.value),glintAngularPower:Number(glintPowerInput.value),glintSeed:Number(glintSeedInput.value),glintDensity:Number(glintDensityInput.value)/100,glintFineShare:Number(glintFineInput.value)/100,
   pose:{importedSave:false,eyeShape:"scene-default",blink:Number(blinkInput.value),idle:viewer?.idle?.enabled??false,
     idlePaused:viewer?.idle?.paused??false,idleTime:viewer?.idle?.time??0},
-  diagnosticOverrides:{zeroNormal:normalInput.checked,zeroMetalness:metalInput.checked,twoBRDFMixture:mixtureInput.checked&&active!=="legacy"&&active!=="uv-cell-glints",uvCellGlints:active==="uv-cell-glints"},
+  diagnosticOverrides:{zeroNormal:normalInput.checked,zeroMetalness:metalInput.checked,twoBRDFMixture:mixtureInput.checked&&active!=="legacy"&&active!=="uv-cell-glints"&&active!=="uv-cell-polygons",uvCellGlints:active==="uv-cell-glints"||active==="uv-cell-polygons",uvCellShape:active==="uv-cell-polygons"?"polygon":"circle"},
   frameCallbacks:frames,renderCount:viewer?.renderer.info.render.frame,
   material:viewer?{normalScale:viewer.materials[0]!.normalScale.toArray(),metalness:viewer.materials[0]!.metalness,
     roughness:viewer.materials[0]!.roughness,color:viewer.materials[0]!.color.getHexString(),
@@ -69,7 +69,7 @@ function texture(data:Uint8Array<ArrayBuffer>,colour=false){
 function applyOverrides(){
   if(!viewer||!active)return;
   const material=viewer.materials[0]!;
-  const procedural=active==="uv-cell-glints";
+  const procedural=active==="uv-cell-glints"||active==="uv-cell-polygons";
   material.normalMap=normalTexture!;material.normalScale.setScalar(normalInput.checked?0:1);
   material.roughnessMap=material.metalnessMap=procedural?null:surfaceTexture!;
   material.roughness=procedural ? .7 : 1;material.metalness=procedural ? 0 : metalInput.checked ? 0 : 1;
@@ -77,26 +77,32 @@ function applyOverrides(){
   mixtureInput.disabled=active==="legacy"||procedural;
   roughnessInput.disabled=active==="legacy"||procedural;
   normalInput.disabled=procedural;metalInput.disabled=procedural;
-  glintStrengthInput.disabled=!procedural;glintPowerInput.disabled=!procedural;
+  glintStrengthInput.disabled=!procedural;glintPowerInput.disabled=!procedural;glintSeedInput.disabled=!procedural;
+  glintDensityInput.disabled=active!=="uv-cell-polygons";
+  glintFineInput.disabled=active!=="uv-cell-polygons";
   mixture?.setSurface(surfaceTexture!);mixture?.setFlakeMetalness(metalInput.checked?0:.95);
   mixture?.setFlakeRoughness(Number(roughnessInput.value));
   mixture?.setEnabled(mixtureInput.checked&&active!=="legacy"&&!procedural);
-  glint?.setStrength(Number(glintStrengthInput.value));glint?.setPower(Number(glintPowerInput.value));glint?.setEnabled(procedural);
+  glint?.setStrength(Number(glintStrengthInput.value));glint?.setPower(Number(glintPowerInput.value));
+  glint?.setSeed(Number(glintSeedInput.value));glint?.setShape(active==="uv-cell-polygons"?"polygon":"circle");glint?.setEnabled(procedural);
+  glint?.setDensity(Number(glintDensityInput.value)/100);
+  glint?.setFineShare(Number(glintFineInput.value)/100);
 }
 async function selectVariant(variant:Variant,alpha:Uint8ClampedArray<ArrayBuffer>){
   const token=++generation;requested=variant;loading=true;error="";
   status.textContent=`Loading ${variant} - retaining the previous complete material...`;
   try{
-    const sourceVariant=variant==="uv-cell-glints"?"fine350k":variant;
+    const procedural=variant==="uv-cell-glints"||variant==="uv-cell-polygons";
+    const sourceVariant=procedural?"fine350k":variant;
     const [normal,surface,colour]=await Promise.all([loadAsset(sourceVariant,"normal"),loadAsset(sourceVariant,"surface"),loadAsset(sourceVariant,"color")]);
     if(token!==generation)return;
     // The candidate colour image was composed in linear light by the pure study
     // baker. Only copy authoritative alpha here; Canvas source-over is not used.
-    const rgba=variant==="legacy"||variant==="uv-cell-glints"?new Uint8Array(alpha):colour.data;
+    const rgba=variant==="legacy"||procedural?new Uint8Array(alpha):colour.data;
     for(let i=3;i<rgba.length;i+=4)rgba[i]=alpha[i]!;
     const next=[texture(rgba,true),texture(normal.data),texture(surface.data)],material=viewer!.materials[0]!;
     material.map=next[0]!;normalTexture=next[1];surfaceTexture=next[2];
-    material.color.set(variant==="legacy"||variant==="uv-cell-glints"?BASE:"#ffffff");material.opacity=1;
+    material.color.set(variant==="legacy"||procedural?BASE:"#ffffff");material.opacity=1;
     material.clearcoat=0;material.iridescence=0;material.needsUpdate=true;viewer!.plates[0]!.visible=true;
     const previous=owned;owned=next;active=variant;applyOverrides();for(const t of previous)t.dispose();
     sources=Object.fromEntries([["normal",normal],["surface",surface],["color",colour]].map(([name,value])=>{
@@ -126,7 +132,14 @@ async function main(){
   mixtureInput.addEventListener("change",applyOverrides);
   roughnessInput.addEventListener("input",applyOverrides);
   glintStrengthInput.addEventListener("input",applyOverrides);
+  glintDensityInput.addEventListener("input",()=>{element("glint-density-value").textContent=`${glintDensityInput.value}%`;applyOverrides();});
+  glintFineInput.addEventListener("input",()=>{element("glint-fine-value").textContent=`${glintFineInput.value}%`;applyOverrides();});
   glintPowerInput.addEventListener("input",applyOverrides);
+  glintSeedInput.addEventListener("change",()=>{
+    const proposed=Number(glintSeedInput.value);
+    glintSeedInput.value=String(Number.isFinite(proposed)?Math.max(0,Math.min(65535,Math.round(proposed))):0);
+    applyOverrides();
+  });
   environmentInput.addEventListener("input",()=>{viewer!.scene.environmentIntensity=Number(environmentInput.value);});
   lightInput.addEventListener("input",()=>{viewer!.setLightAngle(Number(lightInput.value));element("light-value").textContent=`${lightInput.value}°`;});
   element("front").addEventListener("click",()=>viewer!.front());

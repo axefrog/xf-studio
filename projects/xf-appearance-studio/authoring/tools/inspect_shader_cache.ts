@@ -45,7 +45,7 @@ for(let i=0;i<extraCount;i++){
 if(at!==paramsStart)throw Error('Compilation-info region not consumed exactly');
 const output=resolve(root,'research/consumers/glitter/raw/shaders');mkdirSync(output,{recursive:true});
 const extracted:any[]=[];
-const extractCompilations = selected.filter(x=>/glitter/i.test(x.template) || (x.template==='mesh_decal' && x.info.includes("VF: MeshSkinned]") && x.info.includes("Pass 'renderstage_post_gbuffer'")));
+const extractCompilations = selected.filter(x=>/glitter/i.test(x.template) || ((x.template==='mesh_decal' || x.template==='mesh_decal_wet_character') && x.info.includes("VF: MeshSkinned]") && x.info.includes("Pass 'renderstage_post_gbuffer'")));
 for(const guid of new Set(extractCompilations.flatMap(x=>[x.firstShader,x.secondShader]))){
   const s=shaders.get(guid);if(!s)continue;const b=bytes.subarray(s.offset,s.offset+s.size),file=`${guid}.dxbc`;writeFileSync(resolve(output,file),b);
   extracted.push({guid,file,...s,parameters:parameters.get(s.params),sha256:createHash('sha256').update(b).digest('hex')});

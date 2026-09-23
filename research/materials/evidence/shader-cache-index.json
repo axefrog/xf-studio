@@ -24395,6 +24395,60 @@
       "sha256": "ab8de3bd314851251b5bcc17cec1aba43858b8d789717949dc3713f8e38dcd7c"
     },
     {
+      "guid": "7037176062922522222",
+      "file": "7037176062922522222.dxbc",
+      "offset": 65004091,
+      "size": 7446,
+      "params": "16416599359281384743",
+      "chunks": [
+        "SFI0",
+        "ISG1",
+        "OSG1",
+        "PSV0",
+        "HASH",
+        "DXIL"
+      ],
+      "stage": "vertex",
+      "parameters": {
+        "flags": 8704,
+        "params": [
+          {
+            "name": "MatMod_DismParams",
+            "unknown1": 1,
+            "unknown2": 1
+          }
+        ]
+      },
+      "sha256": "1ca296ae7f4f3e206edcd00fe0926f752838d331cfbfd0a394937af5c7a55783"
+    },
+    {
+      "guid": "17388524518779931857",
+      "file": "17388524518779931857.dxbc",
+      "offset": 96772982,
+      "size": 6125,
+      "params": "3178920133197385616",
+      "chunks": [
+        "SFI0",
+        "ISG1",
+        "OSG1",
+        "PSV0",
+        "HASH",
+        "DXIL"
+      ],
+      "stage": "pixel",
+      "parameters": {
+        "flags": 8704,
+        "params": [
+          {
+            "name": "MatMod_MaterialParam0IDSlot",
+            "unknown1": 2,
+            "unknown2": 1
+          }
+        ]
+      },
+      "sha256": "e8c589f5453f33113ce4bbd3b8de55b4d176e4c132a42231a9617c9ea4641135"
+    },
+    {
       "guid": "5654519965144548019",
       "file": "5654519965144548019.dxbc",
       "offset": 114934814,
