@@ -1,0 +1,952 @@
+{
+  "date": "2026-09-23",
+  "status": "pure prototype; not production renderer or game integration",
+  "runtime": {
+    "bun": "1.4.2",
+    "numpy": "2.5.2",
+    "pillow": "12.3.0"
+  },
+  "bakes": [
+    {
+      "name": "legacy",
+      "size": 1024,
+      "settings": {
+        "cells": 128,
+        "density": 0.65,
+        "tilt": 0.65,
+        "seed": 2077
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 0.0002999999999993008,
+      "radiusQuantiles": null,
+      "bakeMs": 49.080000000000005,
+      "maxSliceMs": 2.0671,
+      "slices": 260,
+      "diagnostics": null,
+      "files": [
+        {
+          "name": "legacy-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "c9043a0555b1b82b03034cd1b22de88f9d38005214b7cc91a47df10dd95aab5c"
+        },
+        {
+          "name": "legacy-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "d2b47dc60757dc6adbe4ddb62d8422130b8b3c8f6ff123ab3347ba2d50dc58f5"
+        },
+        {
+          "name": "legacy-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "ef22f33edad08b368f59809ada9cddfe964af39983166a9928979e4f50817052"
+        }
+      ]
+    },
+    {
+      "name": "legacy",
+      "size": 2048,
+      "settings": {
+        "cells": 128,
+        "density": 0.65,
+        "tilt": 0.65,
+        "seed": 2077
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 0.0002999999999993008,
+      "radiusQuantiles": null,
+      "bakeMs": 127.7658,
+      "maxSliceMs": 0.609499999999997,
+      "slices": 1028,
+      "diagnostics": null,
+      "files": [
+        {
+          "name": "legacy-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "615b4f613cdd149077e9d835fc0889edce9da81a252998169c06edfb7d9dd8d3"
+        },
+        {
+          "name": "legacy-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "a3d7d29f90cdd6e4d926d39eee5e854fb8d1081e9af9b018dab6e5bdbc6e1f92"
+        },
+        {
+          "name": "legacy-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "7309fb470dd805277a3fadd34decd2c84e28e45aaaf298b71cff565f4d41c3a8"
+        }
+      ]
+    },
+    {
+      "name": "sparse",
+      "size": 1024,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 6000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 14.702100000000002,
+      "radiusQuantiles": [
+        0.0005280000951732701,
+        0.0005446079088133658,
+        0.0009246843960338212,
+        0.0017601797223954952,
+        0.002039196015310193
+      ],
+      "bakeMs": 61.51339999999999,
+      "maxSliceMs": 1.0756000000000085,
+      "slices": 270,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 49582,
+        "subsampleTests": 198328,
+        "coveredSamples": 60520,
+        "pixels": 1048576,
+        "tiles": 1024,
+        "indexedFlakes": 6000,
+        "slices": 270,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "sparse-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "6f0b67a0409988081ae3bcd3b66a742bfcbd7c4c88b34419c933b0666993d1f5"
+        },
+        {
+          "name": "sparse-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "07e073e91c923078f49c9f6029fba27644b66ca2fbebe4dbb9e2f7f7540c0748"
+        },
+        {
+          "name": "sparse-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "bf139b630f1e92afa6b757465285771ca1e0d63ebcdb6111a90d8804a8260de0"
+        }
+      ]
+    },
+    {
+      "name": "sparse",
+      "size": 2048,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 6000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 14.702100000000002,
+      "radiusQuantiles": [
+        0.0005280000951732701,
+        0.0005446079088133658,
+        0.0009246843960338212,
+        0.0017601797223954952,
+        0.002039196015310193
+      ],
+      "bakeMs": 221.71450000000004,
+      "maxSliceMs": 0.7468000000000075,
+      "slices": 1061,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 137739,
+        "subsampleTests": 550956,
+        "coveredSamples": 242208,
+        "pixels": 4194304,
+        "tiles": 4096,
+        "indexedFlakes": 6000,
+        "slices": 1061,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "sparse-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "7abab7faeea05e5c1db9559c87a158e9b352e12ee8452e01e95026f10d53e603"
+        },
+        {
+          "name": "sparse-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "10fc597bbec1e30594463eef1f8f786e38685f775f18670bea5184c2d1b4107c"
+        },
+        {
+          "name": "sparse-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "9a8a29face11bab194fbb9a8467d10665aa87c36295e84e3d905eab0557d9eba"
+        }
+      ]
+    },
+    {
+      "name": "default",
+      "size": 1024,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 16000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 33.006200000000035,
+      "radiusQuantiles": [
+        0.0005280000618078578,
+        0.0005440352172874259,
+        0.0009117304644063025,
+        0.001762906299123246,
+        0.0020399233217461617
+      ],
+      "bakeMs": 102.8501,
+      "maxSliceMs": 0.5383000000000493,
+      "slices": 293,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 131273,
+        "subsampleTests": 525092,
+        "coveredSamples": 158413,
+        "pixels": 1048576,
+        "tiles": 1024,
+        "indexedFlakes": 16000,
+        "slices": 293,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "default-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "db191b6a63e79ea5152dfc50a49dc43523c0c6d8e3289900bb299affaa737300"
+        },
+        {
+          "name": "default-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "b262125ebd70dc4a5e6ad170b3ba2990ed07dcea7e82ddc5a7c87d65bf15d822"
+        },
+        {
+          "name": "default-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "2d9590ab3de0dab9a1bdde7f01d68a2d50547153f0524f166b96639aed682dca"
+        }
+      ]
+    },
+    {
+      "name": "default",
+      "size": 2048,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 16000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 33.006200000000035,
+      "radiusQuantiles": [
+        0.0005280000618078578,
+        0.0005440352172874259,
+        0.0009117304644063025,
+        0.001762906299123246,
+        0.0020399233217461617
+      ],
+      "bakeMs": 310.10800000000006,
+      "maxSliceMs": 1.2997000000000298,
+      "slices": 1118,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 364656,
+        "subsampleTests": 1458624,
+        "coveredSamples": 633071,
+        "pixels": 4194304,
+        "tiles": 4096,
+        "indexedFlakes": 16000,
+        "slices": 1118,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "default-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "4424dde085d1d2ef90dd1491da453f7201795ed17f8abd8cdca8fd0ef0ef76b7"
+        },
+        {
+          "name": "default-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "a71cd698ad300c9c79b3c65f37bdc62f2cd94e78c228e0c0a185905cb8a49fee"
+        },
+        {
+          "name": "default-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "d01862d3f3941986eaf2da1cea2930d46c1aacd8a3decd5149414afdf27b7150"
+        }
+      ]
+    },
+    {
+      "name": "default-16sample",
+      "size": 1024,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 16000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 4,
+      "base": "#592640",
+      "catalogueMs": 28.595600000000104,
+      "radiusQuantiles": [
+        0.0005280000618078578,
+        0.0005440352172874259,
+        0.0009117304644063025,
+        0.001762906299123246,
+        0.0020399233217461617
+      ],
+      "bakeMs": 274.70550000000003,
+      "maxSliceMs": 1.418999999999869,
+      "slices": 293,
+      "diagnostics": {
+        "sampleCount": 16,
+        "candidateVisits": 131273,
+        "subsampleTests": 2100368,
+        "coveredSamples": 633071,
+        "pixels": 1048576,
+        "tiles": 1024,
+        "indexedFlakes": 16000,
+        "slices": 293,
+        "scratchBytes": 65536
+      },
+      "files": [
+        {
+          "name": "default-16sample-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "f0bd4539d6a972a775db21c611a634b8770fde16d30416d81a2dc2f092dc62eb"
+        },
+        {
+          "name": "default-16sample-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "12ff6bcb006053c003bc59689d1d3a6e8a18f012689d77dbe5abc5a1c0b67f86"
+        },
+        {
+          "name": "default-16sample-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "5eea6e8caaf0a66fd188affe6792ee225fbf8c9c751634c4331258bcee8074dc"
+        }
+      ]
+    },
+    {
+      "name": "default-16sample",
+      "size": 2048,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 16000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 4,
+      "base": "#592640",
+      "catalogueMs": 28.595600000000104,
+      "radiusQuantiles": [
+        0.0005280000618078578,
+        0.0005440352172874259,
+        0.0009117304644063025,
+        0.001762906299123246,
+        0.0020399233217461617
+      ],
+      "bakeMs": 857.8072999999999,
+      "maxSliceMs": 1.7559000000001106,
+      "slices": 1118,
+      "diagnostics": {
+        "sampleCount": 16,
+        "candidateVisits": 364656,
+        "subsampleTests": 5834496,
+        "coveredSamples": 2532382,
+        "pixels": 4194304,
+        "tiles": 4096,
+        "indexedFlakes": 16000,
+        "slices": 1118,
+        "scratchBytes": 65536
+      },
+      "files": [
+        {
+          "name": "default-16sample-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "ae22d0e400b35def54b102d52e1893ba65160c12bd4fb86562b7be8df44bfd46"
+        },
+        {
+          "name": "default-16sample-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "778510091e9a2255fed188acb0a5b7bd4f98157e8cc6d9564ef81a85ea8dd64b"
+        },
+        {
+          "name": "default-16sample-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "62dc83264b9fe2e0c12fd91f9dcb3dd6d55c04a60346879c79920b9c99428aad"
+        }
+      ]
+    },
+    {
+      "name": "dense",
+      "size": 1024,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 30000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 62.41390000000001,
+      "radiusQuantiles": [
+        0.0005280000506923322,
+        0.0005438870852403928,
+        0.000910586533544521,
+        0.0017601797223954952,
+        0.0020399233217461617
+      ],
+      "bakeMs": 169.4029999999998,
+      "maxSliceMs": 0.7493999999996959,
+      "slices": 324,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 245933,
+        "subsampleTests": 983732,
+        "coveredSamples": 291124,
+        "pixels": 1048576,
+        "tiles": 1024,
+        "indexedFlakes": 30000,
+        "slices": 324,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "dense-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "419bfaae325a50c1f1d1305fa3ad2dbc12011fa41da94ec5feb5dffcb234a906"
+        },
+        {
+          "name": "dense-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "62a693006f1d6214263037c733761fabc105f882798a673e5aa8daef3e7ebc5b"
+        },
+        {
+          "name": "dense-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "6609bc67702022a8dc505e27dde66e7e571dc4c32b546a02cceeba93e1eeb21c"
+        }
+      ]
+    },
+    {
+      "name": "dense",
+      "size": 2048,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 30000,
+        "radius": 0.0012,
+        "spread": 0.7,
+        "tilt": 0.35,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 62.41390000000001,
+      "radiusQuantiles": [
+        0.0005280000506923322,
+        0.0005438870852403928,
+        0.000910586533544521,
+        0.0017601797223954952,
+        0.0020399233217461617
+      ],
+      "bakeMs": 474.2728000000002,
+      "maxSliceMs": 1.8347999999996318,
+      "slices": 1199,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 682560,
+        "subsampleTests": 2730240,
+        "coveredSamples": 1163570,
+        "pixels": 4194304,
+        "tiles": 4096,
+        "indexedFlakes": 30000,
+        "slices": 1199,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "dense-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "cee194df8fa887247767d5ada1f7a6216102e849f432e10687b144e28328e9e3"
+        },
+        {
+          "name": "dense-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "7aeb59e5ec53fb4e9b280256430d5770555afb36062ffa4151558607ad198ec4"
+        },
+        {
+          "name": "dense-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "29c310bb32ad051524fd8694c7d30b322eabdecf97b1547a6e829b0063616d39"
+        }
+      ]
+    },
+    {
+      "name": "maximum",
+      "size": 1024,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 32768,
+        "radius": 0.003,
+        "spread": 1,
+        "tilt": 1,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 69.01290000000017,
+      "radiusQuantiles": [
+        0.0006000001810440436,
+        0.0006561961536657566,
+        0.0019655479189778645,
+        0.005003693790925926,
+        0.005999726149093436
+      ],
+      "bakeMs": 725.0014000000001,
+      "maxSliceMs": 2.1300999999998567,
+      "slices": 532,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 1094042,
+        "subsampleTests": 4376168,
+        "coveredSamples": 1690902,
+        "pixels": 1048576,
+        "tiles": 1024,
+        "indexedFlakes": 32768,
+        "slices": 532,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "maximum-1024-normal.rgba",
+          "bytes": 4194304,
+          "sha256": "1181b596a12b8bf5f07895113aab9d9bb2805d8eaecfc847d1798108d2778fa9"
+        },
+        {
+          "name": "maximum-1024-surface.rgba",
+          "bytes": 4194304,
+          "sha256": "eb04aa968ce2d91f687cadfeab42d82f3ec83b2f6e327de0eea2cb3995a82ca0"
+        },
+        {
+          "name": "maximum-1024-color.rgba",
+          "bytes": 4194304,
+          "sha256": "a49e999f68b667bbb394f13e9ed3ef5341008afaef318e0e2dc72940e80c29d2"
+        }
+      ]
+    },
+    {
+      "name": "maximum",
+      "size": 2048,
+      "settings": {
+        "model": "irregular-planar-1",
+        "count": 32768,
+        "radius": 0.003,
+        "spread": 1,
+        "tilt": 1,
+        "seed": 2077,
+        "color": "#f5df9f"
+      },
+      "sampleAxis": 2,
+      "base": "#592640",
+      "catalogueMs": 69.01290000000017,
+      "radiusQuantiles": [
+        0.0006000001810440436,
+        0.0006561961536657566,
+        0.0019655479189778645,
+        0.005003693790925926,
+        0.005999726149093436
+      ],
+      "bakeMs": 2385.2052000000003,
+      "maxSliceMs": 2.466299999999592,
+      "slices": 1947,
+      "diagnostics": {
+        "sampleCount": 4,
+        "candidateVisits": 3741293,
+        "subsampleTests": 14965172,
+        "coveredSamples": 6763534,
+        "pixels": 4194304,
+        "tiles": 4096,
+        "indexedFlakes": 32768,
+        "slices": 1947,
+        "scratchBytes": 16384
+      },
+      "files": [
+        {
+          "name": "maximum-2048-normal.rgba",
+          "bytes": 16777216,
+          "sha256": "2491d8b790fc52c227597ae99441458cd9684acb561a5966d7e7e7f953c60c42"
+        },
+        {
+          "name": "maximum-2048-surface.rgba",
+          "bytes": 16777216,
+          "sha256": "3ca3a55145dd0f11036ce45a6504954b7c67a1f3edc1efcb36cc45ef3984927c"
+        },
+        {
+          "name": "maximum-2048-color.rgba",
+          "bytes": 16777216,
+          "sha256": "04cc631e7f0ec668c0290a94c0418782d3fe4d176a410504b017bf8d250abdcd"
+        }
+      ]
+    }
+  ],
+  "metrics": {
+    "coverage": [
+      {
+        "name": "legacy",
+        "size": 1024,
+        "meanCoverage": 0.13913361792470896,
+        "fractionFullyCovered": 0.0780019760131836,
+        "fractionPartiallyCovered": 0.13218975067138672,
+        "axisLagCorrelation": {
+          "64": [
+            0.35659963739641704,
+            0.35096250123227946
+          ],
+          "128": [
+            0.3531443463946898,
+            0.3502521077581947
+          ],
+          "256": [
+            -0.09276264817781882,
+            -0.08596875930881671
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 22099.95927366674
+      },
+      {
+        "name": "legacy",
+        "size": 2048,
+        "meanCoverage": 0.1371358366573558,
+        "fractionFullyCovered": 0.10560965538024902,
+        "fractionPartiallyCovered": 0.0657649040222168,
+        "axisLagCorrelation": {
+          "64": [
+            0.338500934416523,
+            0.33207773994039896
+          ],
+          "128": [
+            0.33609635439872154,
+            0.33290596772765957
+          ],
+          "256": [
+            -0.09547342632721988,
+            -0.08692604058258786
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 22025.778845565408
+      },
+      {
+        "name": "sparse",
+        "size": 1024,
+        "meanCoverage": 0.01444831174962661,
+        "fractionFullyCovered": 0.006430625915527344,
+        "fractionPartiallyCovered": 0.01883220672607422,
+        "axisLagCorrelation": {
+          "64": [
+            -0.0018640740039605396,
+            0.0009104484803856502
+          ],
+          "128": [
+            -0.0010449584997100332,
+            0.00024289629007351795
+          ],
+          "256": [
+            0.003582400035856993,
+            -0.001655392845370236
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.4633209792079792
+      },
+      {
+        "name": "sparse",
+        "size": 2048,
+        "meanCoverage": 0.01444568260043275,
+        "fractionFullyCovered": 0.009905338287353516,
+        "fractionPartiallyCovered": 0.009740114212036133,
+        "axisLagCorrelation": {
+          "64": [
+            -0.001840602216830241,
+            0.0008351605340575228
+          ],
+          "128": [
+            -0.0009090037241346407,
+            -3.2928412894058984e-05
+          ],
+          "256": [
+            0.003097750221670287,
+            -0.0012591934389946677
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.384446747647926
+      },
+      {
+        "name": "default",
+        "size": 1024,
+        "meanCoverage": 0.037817438910989196,
+        "fractionFullyCovered": 0.01697826385498047,
+        "fractionPartiallyCovered": 0.04855060577392578,
+        "axisLagCorrelation": {
+          "64": [
+            -0.0005251328449079841,
+            -0.0022556842959904344
+          ],
+          "128": [
+            0.00044918701215969294,
+            -0.00012338645832845013
+          ],
+          "256": [
+            0.003946684484128452,
+            -0.001398082030819121
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.7149642002563462
+      },
+      {
+        "name": "default",
+        "size": 2048,
+        "meanCoverage": 0.03775688620174632,
+        "fractionFullyCovered": 0.026004552841186523,
+        "fractionPartiallyCovered": 0.025160551071166992,
+        "axisLagCorrelation": {
+          "64": [
+            -0.00016424569966459325,
+            -0.001882421623553551
+          ],
+          "128": [
+            0.0006200648600176205,
+            0.00011753511706678187
+          ],
+          "256": [
+            0.0033053785200939643,
+            -0.0012024388787919007
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.7148512134010281
+      },
+      {
+        "name": "default-16sample",
+        "size": 1024,
+        "meanCoverage": 0.03776201734355852,
+        "fractionFullyCovered": 0.010470390319824219,
+        "fractionPartiallyCovered": 0.07213973999023438,
+        "axisLagCorrelation": {
+          "64": [
+            -0.0002889873168834222,
+            -0.0024405564762903
+          ],
+          "128": [
+            0.0007463543154863203,
+            0.000259775403405904
+          ],
+          "256": [
+            0.004104013561505028,
+            -0.0012387432951145051
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.69101578626792
+      },
+      {
+        "name": "default-16sample",
+        "size": 2048,
+        "meanCoverage": 0.03774558329114727,
+        "fractionFullyCovered": 0.021138906478881836,
+        "fractionPartiallyCovered": 0.037557125091552734,
+        "axisLagCorrelation": {
+          "64": [
+            -0.00020713563997221102,
+            -0.001947565004664579
+          ],
+          "128": [
+            0.0006483137291196234,
+            7.487270589446934e-07
+          ],
+          "256": [
+            0.0035645971934160576,
+            -0.0011719841734298144
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.6574315841478913
+      },
+      {
+        "name": "dense",
+        "size": 1024,
+        "meanCoverage": 0.06949604258817785,
+        "fractionFullyCovered": 0.031783103942871094,
+        "fractionPartiallyCovered": 0.08715248107910156,
+        "axisLagCorrelation": {
+          "64": [
+            0.0010032473739219536,
+            0.0007019971460393264
+          ],
+          "128": [
+            -0.0007824397062949483,
+            0.0019008152484763328
+          ],
+          "256": [
+            0.003442925516332574,
+            -0.0014984123078214996
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.5435284600869633
+      },
+      {
+        "name": "dense",
+        "size": 2048,
+        "meanCoverage": 0.06939518030952005,
+        "fractionFullyCovered": 0.0481870174407959,
+        "fractionPartiallyCovered": 0.04532790184020996,
+        "axisLagCorrelation": {
+          "64": [
+            0.0012165264165494992,
+            0.0005967568778762015
+          ],
+          "128": [
+            -0.0007168757310251088,
+            0.002071437329703359
+          ],
+          "256": [
+            0.002749441531495325,
+            -0.0013444599888064416
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.5936305526145566
+      },
+      {
+        "name": "maximum",
+        "size": 1024,
+        "meanCoverage": 0.4032617531570734,
+        "fractionFullyCovered": 0.3336772918701172,
+        "fractionPartiallyCovered": 0.1432628631591797,
+        "axisLagCorrelation": {
+          "64": [
+            0.0027171159811693957,
+            0.003600162874220203
+          ],
+          "128": [
+            0.02038169130001627,
+            0.021297935391945993
+          ],
+          "256": [
+            0.2575207860568677,
+            0.25992830767194397
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.26618271137351485
+      },
+      {
+        "name": "maximum",
+        "size": 2048,
+        "meanCoverage": 0.4031984460120107,
+        "fractionFullyCovered": 0.3667302131652832,
+        "fractionPartiallyCovered": 0.07389712333679199,
+        "axisLagCorrelation": {
+          "64": [
+            0.00262525404610555,
+            0.0033383690409177704
+          ],
+          "128": [
+            0.01868363483212413,
+            0.019638564262410445
+          ],
+          "256": [
+            0.24062941016761288,
+            0.24256874231440323
+          ]
+        },
+        "legacy128GridPowerOverAnnulusMedian": 0.29645121290590265
+      }
+    ],
+    "sampling": [
+      {
+        "name": "default",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.006605088477041207,
+        "p99AbsoluteError": 0.18627450980392157,
+        "maxAbsoluteError": 0.5607843137254902,
+        "meanCoverageDifference": 6.0552709242871205e-05
+      },
+      {
+        "name": "default-16sample",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.0023441885031905826,
+        "p99AbsoluteError": 0.0490196078431373,
+        "maxAbsoluteError": 0.23529411764705888,
+        "meanCoverageDifference": 1.6434052411244682e-05
+      },
+      {
+        "name": "dense",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.011862525752946442,
+        "p99AbsoluteError": 0.18823529411764706,
+        "maxAbsoluteError": 0.5607843137254902,
+        "meanCoverageDifference": 0.0001008622786577984
+      },
+      {
+        "name": "legacy",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.003376362370509727,
+        "p99AbsoluteError": 0.04803921568627456,
+        "maxAbsoluteError": 0.09019607843137253,
+        "meanCoverageDifference": 0.0019977812673531714
+      },
+      {
+        "name": "maximum",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.019080984826181445,
+        "p99AbsoluteError": 0.24901960784313726,
+        "maxAbsoluteError": 0.5019607843137255,
+        "meanCoverageDifference": 6.330714506269652e-05
+      },
+      {
+        "name": "sparse",
+        "comparison": "1K base coverage versus 2K area-downsampled coverage",
+        "meanAbsoluteError": 0.0025873801287482766,
+        "p99AbsoluteError": 0.12450980392156863,
+        "maxAbsoluteError": 0.4980392156862745,
+        "meanCoverageDifference": 2.629149193859176e-06
+      }
+    ]
+  },
+  "checks": {
+    "tests": 169,
+    "assertions": 529331,
+    "testFiles": 40,
+    "typecheck": "pass",
+    "build": "pass"
+  },
+  "limits": [
+    "Four-sample and sixteen-sample maps are experimental ablations; neither freezes the public model.",
+    "Rendered highlights, minification variance and temporal stability remain untested.",
+    "Maximum parameter benchmark uses four samples, not sixteen.",
+    "Timing is a single machine run, not a hard responsiveness guarantee."
+  ]
+}

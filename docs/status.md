@@ -1,5 +1,7 @@
 # Current state — 2026-09-23
 
+**Irregular glitter study:** a deterministic convex-fragment generator and linear-light colour compositor now run offline, with sparse/dense variants, stable flakes across resolutions and bounded tile scratch. Measurements remove the old lattice but expose four-sample edge quantization; sixteen samples improve coverage consistency at higher bake cost. This is not yet the editor material. [Findings and next integration](../experiments/007-irregular-glitter/findings.md).
+
 **Preview quality:** persistent 512/1K/2K/4K generated makeup textures now appear in a collapsible group beside lighting. Masks and optical maps rebuild together in cancellable background jobs, with hardware/budget checks and disabled resource release. Browser checks include actual 4K glitter maps, downgrade, capacity recovery, reload and independent 2K export. 160 tests, typecheck/build pass. Complex 4K masks can still bake slowly. [Contract/evidence](../research/authoring/preview-quality-contract.md). Separate addable softness controls are explicitly on hold while Nathan evaluates per-point softness.
 
 **Directional softness and crisp UV controls:** per-point edge widths now work independently of pigment, with preserved old looks, Undo, reload, library save and shared compiler sampling. The UV pane now renders paths/handles at actual display resolution, fixing blur in wide sidebars and high-DPI displays. 141 tests, typecheck/build and isolated browser checks pass. [Contract and evidence](../research/authoring/directional-softness-contract.md).

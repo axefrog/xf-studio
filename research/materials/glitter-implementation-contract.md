@@ -1,5 +1,7 @@
 # Opt-in irregular glitter: implementation contract proposal
 
+Follow-up: [Experiment 007](../../experiments/007-irregular-glitter/findings.md) implements the pure field/compositor and measures 4/16-sample trade-offs. No public recipe tag or production material has changed. The [quality integration audit](glitter-quality-integration.md) supersedes this proposal's older separate-worker and fixed-1K assumptions.
+
 23 September 2026. Bounded follow-up to the [reference review](glitter-reference-review.md), based on the current `finish.ts`, `makeup-stack.ts`, recipe parser, UI, shader-hook ownership and tests. **Proposed contract only:** no production edits, no optical calibration and no promise of game parity. The active softness work may change the next available recipe version; do not reserve or overwrite its schema number.
 
 ## Smallest useful product change
