@@ -26,6 +26,19 @@ export const uvToPixel = (p: UV, region: UVRegion, width: number, height: number
 export const pixelToUV = (p: { x: number; y: number }, region: UVRegion, width: number, height: number): UV =>
   ({ u: region.u + p.x / width * region.w, v: region.v + p.y / height * region.h });
 
+/** Positive factor >1 zooms in around the supplied atlas coordinate. */
+export function zoomUVView(view: UVView, anchor: UV, factor: number): UVView {
+  if (![anchor.u, anchor.v, factor].every(Number.isFinite) || factor <= 0) return { ...view };
+  const span = clamp(view.span / factor, .02, MAX_UV_VIEW_SPAN), ratio = span / view.span;
+  return { ...view, span, u: clamp(anchor.u + (view.u - anchor.u) * ratio, -1, 2),
+    v: clamp(anchor.v + (view.v - anchor.v) * ratio, -1, 2) };
+}
+/** View offsets are atlas units; no authored geometry or aspect is changed. */
+export function panUVView(view: UVView, du: number, dv: number): UVView {
+  if (![du, dv].every(Number.isFinite)) return { ...view };
+  return { ...view, u: clamp(view.u + du, -1, 2), v: clamp(view.v + dv, -1, 2) };
+}
+
 /** View fitting never mutates the authored shape. Keep this crop fixed during a drag. */
 export function fitUVView(view: UVView, layer?: Layer): UVView {
   const fallback = { ...view, u: view.mode === "both" ? .5 : view.side === "low" ? .375 : .625, v: .2775,

@@ -1,5 +1,7 @@
 # Community credits and learning record
 
+Whole-shape gestures and UV indexing, 23 September 2026: existing **Three.js 0.186.0** geometry/raycast/typed-buffer facilities and the local CDPR-derived plate enable deformation-aware editing and indexed-versus-exhaustive lookup validation. **Bun 1.4.2** runs numeric/adapter tests and **SQLite** retains authored results. This extends the dependency and asset entries below. The transform mathematics, UV hierarchy and gesture adapters are project-authored; no new community implementation was copied. See [contract and evidence](../research/authoring/shape-gesture-contract.md).
+
 XF Studio builds on the discoveries, tools and creativity of the Cyberpunk modding community. This living record gives credit for what we learn, including ideas that inform an independent implementation. It also identifies tools and assets used in our work so their contributions remain visible when preparing public acknowledgements.
 
 Started 23 September 2026, with an initial backfill from existing research. This is not a claim that every earlier influence has already been recovered. Add missing contributions as they are identified. Authorship of the Nexus mods below was checked against each page's **Created by** field on that date; installed versions describe our actual research inputs, not necessarily the latest release.

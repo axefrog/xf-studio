@@ -49,6 +49,7 @@ test("UV tangent adapter mirrors drags, cancels exactly, guards replaced targets
   let captured: number | undefined;
   const canvas: any = {
     width: 720, height: 310, getContext: () => ctx,
+    addEventListener() {},
     getBoundingClientRect: () => ({ left: 10, top: 20, width: 720, height: 310 }),
     setPointerCapture: (id: number) => { captured = id; }, hasPointerCapture: (id: number) => captured === id,
     releasePointerCapture: () => { captured = undefined; },

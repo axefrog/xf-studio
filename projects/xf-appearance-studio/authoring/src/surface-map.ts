@@ -6,13 +6,19 @@ export type Anchor = {
   weights: [number, number, number];
 };
 
+type Bounds = { minU: number; maxU: number; minV: number; maxV: number };
+type UVNode = Bounds & { ids?: number[]; left?: UVNode; right?: UVNode };
+const intersects = (a: Bounds, b: Bounds) => a.minU <= b.maxU && a.maxU >= b.minU && a.minV <= b.maxV && a.maxV >= b.minV;
+
 /** UV lookup stays in the undeformed atlas; barycentric anchors follow the mesh. */
 export class SurfaceMap {
   private triangles: {
     indices: Anchor["indices"];
     uv: number[];
     den: number;
+    bounds: Bounds;
   }[] = [];
+  private root?: UVNode;
   constructor(geometry: THREE.BufferGeometry) {
     const uv = geometry.getAttribute("uv"),
       index = geometry.index;
@@ -22,12 +28,50 @@ export class SurfaceMap {
       ) as Anchor["indices"];
       const p = ids.flatMap((id) => [uv.getX(id), uv.getY(id)]);
       const den = (p[3] - p[5]) * (p[0] - p[4]) + (p[4] - p[2]) * (p[1] - p[5]);
-      if (Math.abs(den) > 1e-12)
-        this.triangles.push({ indices: ids, uv: p, den });
+      if (Number.isFinite(den) && Math.abs(den) > 1e-12) {
+        const minU = Math.min(p[0], p[2], p[4]), maxU = Math.max(p[0], p[2], p[4]),
+          minV = Math.min(p[1], p[3], p[5]), maxV = Math.max(p[1], p[3], p[5]);
+        // Accepted barycentric weights may be -1e-6. Expanding by three times
+        // that tolerance times the axis extent contains that entire relaxed
+        // triangle, including the smaller segment-clip tolerance below.
+        const padU = 3e-6 * (maxU - minU) + 1e-12, padV = 3e-6 * (maxV - minV) + 1e-12;
+        this.triangles.push({ indices: ids, uv: p, den,
+          bounds: { minU: minU - padU, maxU: maxU + padU, minV: minV - padV, maxV: maxV + padV } });
+      }
     }
+    this.root = this.build(this.triangles.map((_, i) => i));
+  }
+  private build(ids: number[]): UVNode | undefined {
+    if (!ids.length) return;
+    const bounds = ids.map(i => this.triangles[i].bounds);
+    const node: UVNode = { minU: Math.min(...bounds.map(b => b.minU)), maxU: Math.max(...bounds.map(b => b.maxU)),
+      minV: Math.min(...bounds.map(b => b.minV)), maxV: Math.max(...bounds.map(b => b.maxV)) };
+    if (ids.length <= 8) node.ids = ids;
+    else {
+      const axis = node.maxU - node.minU >= node.maxV - node.minV ? "U" : "V";
+      ids.sort((a, b) => { const x = this.triangles[a].bounds, y = this.triangles[b].bounds;
+        return (x[`min${axis}`] + x[`max${axis}`]) - (y[`min${axis}`] + y[`max${axis}`]) || a - b; });
+      const middle = Math.floor(ids.length / 2);
+      node.left = this.build(ids.slice(0, middle)); node.right = this.build(ids.slice(middle));
+    }
+    return node;
+  }
+  private candidates(bounds: Bounds): number[] {
+    const result: number[] = [], stack = this.root ? [this.root] : [];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (!intersects(node, bounds)) continue;
+      if (node.ids) for (const i of node.ids) { if (intersects(this.triangles[i].bounds, bounds)) result.push(i); }
+      else { if (node.left) stack.push(node.left); if (node.right) stack.push(node.right); }
+    }
+    // Overlapping islands and shared edges retain the original first-triangle
+    // winner. The hierarchy filters candidates; it never changes narrow tests.
+    return result.sort((a, b) => a - b);
   }
   anchor({ u, v }: UV): Anchor | undefined {
-    for (const { indices, uv: p, den } of this.triangles) {
+    if (!Number.isFinite(u) || !Number.isFinite(v)) return;
+    for (const i of this.candidates({ minU: u, maxU: u, minV: v, maxV: v })) {
+      const { indices, uv: p, den } = this.triangles[i];
       const a = ((p[3] - p[5]) * (u - p[4]) + (p[4] - p[2]) * (v - p[5])) / den;
       const b = ((p[5] - p[1]) * (u - p[4]) + (p[0] - p[4]) * (v - p[5])) / den,
         c = 1 - a - b;
@@ -35,12 +79,15 @@ export class SurfaceMap {
     }
   }
   continuous(a: UV, b: UV) {
+    if (![a.u, a.v, b.u, b.v].every(Number.isFinite)) return false;
     const distance = Math.hypot(a.u - b.u, a.v - b.v);
     if (distance > 0.06) return false;
-    // Clip the segment against every UV triangle and require continuous coverage.
+    // Clip against candidate UV triangles and require continuous coverage.
     // Unlike point sampling, this also catches arbitrarily narrow eyelid gaps.
     const intervals: [number, number][] = [];
-    for (const { uv: p, den } of this.triangles) {
+    for (const i of this.candidates({ minU: Math.min(a.u, b.u), maxU: Math.max(a.u, b.u),
+      minV: Math.min(a.v, b.v), maxV: Math.max(a.v, b.v) })) {
+      const { uv: p, den } = this.triangles[i];
       const weights = ({ u, v }: UV) => {
         const x =
           ((p[3] - p[5]) * (u - p[4]) + (p[4] - p[2]) * (v - p[5])) / den;

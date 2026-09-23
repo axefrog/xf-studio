@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
+import { shapeHit, transformLayer, wheelScaleFactor } from "./shape-transform";
 import {
   SurfaceMap,
   anchorPosition,
@@ -107,6 +108,45 @@ export function createSurfaceEditor(
         controlsEnabled: boolean;
       }
     | undefined;
+  type ShapeGesture = {
+    layer: Layer; snapshot: Layer; expected: string; selected: number; pivot: UV;
+    mirror: boolean; changed: boolean;
+  };
+  let shapeDrag: (ShapeGesture & {
+    kind: "translate" | "rotate"; start: UV; last: UV; pointer: number; controlsEnabled: boolean;
+  }) | undefined;
+  let wheel: (ShapeGesture & { factor: number; timer?: ReturnType<typeof setTimeout> }) | undefined;
+  const canonical = (uv: UV, mirror: boolean): UV => ({ u: mirror ? 1 - uv.u : uv.u, v: uv.v });
+  const validShape = (state: ShapeGesture) => enabled && hooks.layer() === state.layer && state.layer.enabled
+    && hooks.selected() === state.selected && JSON.stringify(state.layer) === state.expected;
+  function finishWheel(cancel = false) {
+    if (!wheel) return;
+    const old = wheel;
+    wheel = undefined;
+    clearTimeout(old.timer);
+    if (cancel && old.changed && validShape(old)) hooks.cancel();
+  }
+  function stopShape(cancel = false) {
+    if (!shapeDrag) return;
+    const old = shapeDrag;
+    shapeDrag = undefined;
+    controls.enabled = old.controlsEnabled;
+    if (canvas.hasPointerCapture(old.pointer)) canvas.releasePointerCapture(old.pointer);
+    if (cancel && old.changed && validShape(old)) hooks.cancel();
+    canvas.style.cursor = "";
+  }
+  function applyShape(state: ShapeGesture, next: Layer | null) {
+    if (!next) {
+      hooks.message("Shape limit reached; move back to continue or Esc to cancel");
+      return false;
+    }
+    if (JSON.stringify(next) === state.expected) return true;
+    if (!state.changed) { hooks.begin(); state.changed = true; }
+    Object.assign(state.layer, next);
+    state.expected = JSON.stringify(state.layer);
+    hooks.change();
+    return true;
+  }
   let hovered: Handle | undefined,
     unmapped = 0,
     unmappedTangents = 0,
@@ -208,6 +248,8 @@ export function createSurfaceEditor(
   }
   function update() {
     if (drag && !validDrag()) stop();
+    if (shapeDrag && !validShape(shapeDrag)) stopShape();
+    if (wheel && !validShape(wheel)) finishWheel();
     group.visible = enabled && !!hooks.layer()?.enabled;
     if (!group.visible) return;
     rebuild();
@@ -343,12 +385,35 @@ export function createSurfaceEditor(
   canvas.addEventListener(
     "pointerdown",
     (e) => {
-      if (drag || e.button !== 0 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)
+      if (drag || shapeDrag || e.button !== 0 || e.altKey || e.ctrlKey || e.metaKey)
         return;
       update();
       const handle = handleAt(e.clientX, e.clientY);
       const layer = hooks.layer();
-      if (!handle || !layer) return;
+      if (!enabled || !layer?.enabled) return;
+      finishWheel();
+      if (e.shiftKey || !handle) {
+        const uv = hit(e.clientX, e.clientY), selected = hooks.selected(), pivot = layer.points[selected];
+        if (!uv || !pivot) return;
+        const painted = handle ? { mirror: handle.mirror } : shapeHit(layer, uv);
+        if (!painted) return;
+        const start = canonical(uv, painted.mirror);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Rotation at its pivot has no direction; consume it without moving/orbiting.
+        if (e.shiftKey && Math.hypot(start.u - pivot.u, start.v - pivot.v) < 1e-5) {
+          hooks.message("Rotate by dragging away from the selected point");
+          return;
+        }
+        shapeDrag = { kind: e.shiftKey ? "rotate" : "translate", layer, snapshot: structuredClone(layer),
+          expected: JSON.stringify(layer), selected, pivot: { u: pivot.u, v: pivot.v },
+          mirror: painted.mirror, changed: false, start, last: uv,
+          pointer: e.pointerId, controlsEnabled: controls.enabled };
+        controls.enabled = false;
+        canvas.setPointerCapture(e.pointerId);
+        canvas.style.cursor = "grabbing";
+        return;
+      }
       const target = handle.kind === "point" || handle.kind === "tangent"
         ? layer.points[handle.index]
         : layer.fields.find((f) => f.id === handle.fieldId);
@@ -369,9 +434,32 @@ export function createSurfaceEditor(
   canvas.addEventListener(
     "pointermove",
     (e) => {
+      if (shapeDrag) {
+        if (e.pointerId !== shapeDrag.pointer) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (!validShape(shapeDrag)) { stopShape(); return; }
+        const uv = hit(e.clientX, e.clientY), state = shapeDrag;
+        if (!uv || !map.continuous(state.last, uv)) {
+          hooks.message("Drag paused at the surface edge; return to the shape or Esc to cancel");
+          return;
+        }
+        const current = canonical(uv, state.mirror);
+        if (Math.hypot(uv.u - state.last.u, uv.v - state.last.v) < 1e-5) return;
+        state.last = uv;
+        if (state.kind === "rotate" && Math.hypot(current.u - state.pivot.u, current.v - state.pivot.v) < 1e-5) return;
+        const transform = state.kind === "translate"
+          ? { kind: "translate" as const, du: current.u - state.start.u, dv: current.v - state.start.v }
+          : { kind: "rotate" as const, pivot: state.pivot,
+              radians: Math.atan2(current.v - state.pivot.v, current.u - state.pivot.u)
+                - Math.atan2(state.start.v - state.pivot.v, state.start.u - state.pivot.u) };
+        applyShape(state, transformLayer(state.snapshot, transform));
+        return;
+      }
       if (!drag) {
         hovered = handleAt(e.clientX, e.clientY);
-        canvas.style.cursor = hovered ? "grab" : "";
+        const layer = hooks.layer(), uv = !hovered && enabled && layer?.enabled
+          ? hit(e.clientX, e.clientY) : undefined;
+        canvas.style.cursor = hovered || (uv && layer && shapeHit(layer, uv)) ? "grab" : "";
         return;
       }
       if (e.pointerId !== drag.pointer) return;
@@ -418,6 +506,9 @@ export function createSurfaceEditor(
   canvas.addEventListener(
     "pointerup",
     (e) => {
+      if (shapeDrag && e.pointerId === shapeDrag.pointer) {
+        e.preventDefault(); e.stopImmediatePropagation(); stopShape(); return;
+      }
       if (!drag || e.pointerId !== drag.pointer) return;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -427,21 +518,49 @@ export function createSurfaceEditor(
   );
   canvas.addEventListener("pointercancel", (e) => {
     if (e.pointerId === drag?.pointer) stop(true);
+    if (e.pointerId === shapeDrag?.pointer) stopShape(true);
   }, true);
   canvas.addEventListener("lostpointercapture", (e) => {
     if (e.pointerId === drag?.pointer) stop(true);
+    if (e.pointerId === shapeDrag?.pointer) stopShape(true);
   });
-  window.addEventListener("blur", () => stop(true));
+  canvas.addEventListener("wheel", (e) => {
+    if (!enabled || !e.shiftKey) return;
+    // A scale gesture never leaks through to camera zoom, including rejected edits.
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (drag || shapeDrag || e.ctrlKey || e.altKey || e.metaKey) return;
+    update();
+    const layer = hooks.layer(), uv = hit(e.clientX, e.clientY), handle = handleAt(e.clientX, e.clientY);
+    if (!layer?.enabled || !uv || !(handle || shapeHit(layer, uv))) return;
+    const selected = hooks.selected(), pivot = layer.points[selected];
+    if (!pivot) return;
+    if (!wheel) wheel = { layer, snapshot: structuredClone(layer), expected: JSON.stringify(layer), selected,
+      pivot: { u: pivot.u, v: pivot.v }, mirror: handle?.mirror ?? shapeHit(layer, uv)!.mirror,
+      changed: false, factor: 1 };
+    const factor = wheel.factor * wheelScaleFactor(e.deltaY, e.deltaMode);
+    if (applyShape(wheel, transformLayer(wheel.snapshot, { kind: "scale", pivot: wheel.pivot, factor })))
+      wheel.factor = factor;
+    clearTimeout(wheel.timer);
+    wheel.timer = setTimeout(() => finishWheel(), 250);
+  }, { capture: true, passive: false });
+  // Committing a wheel burst before focus moves keeps a later Escape in a text
+  // field or the UV pane from cancelling an unrelated surface transaction.
+  window.addEventListener("pointerdown", (e) => {
+    if (e.target !== canvas) finishWheel();
+  }, true);
+  window.addEventListener("blur", () => { stop(true); stopShape(true); finishWheel(true); });
   window.addEventListener(
     "keydown",
     (e) => {
       if (
-        drag &&
+        (drag || shapeDrag || wheel) &&
         (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "z"))
       ) {
         e.preventDefault();
         e.stopImmediatePropagation();
         stop(true);
+        stopShape(true);
+        finishWheel(true);
       }
     },
     true,
@@ -449,12 +568,16 @@ export function createSurfaceEditor(
   return {
     setEnabled: (value: boolean) => {
       stop();
+      stopShape();
+      finishWheel();
       enabled = value;
       group.visible = value;
     },
     diagnostics: () => ({
       enabled,
-      dragging: !!drag,
+      dragging: !!drag || !!shapeDrag,
+      gesture: shapeDrag?.kind ?? (wheel ? "scale" : drag ? "handle" : null),
+      pivot: shapeDrag?.pivot ?? wheel?.pivot ?? null,
       unmapped,
       unmappedTangents,
       tangentFallback: unmappedTangents

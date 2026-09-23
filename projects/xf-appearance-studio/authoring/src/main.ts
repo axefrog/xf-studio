@@ -538,22 +538,7 @@ try {
   window.scrollTo(workspace.panels.pageX, workspace.panels.pageY);
   previewRestored = true;
   flushWorkspace();
-  viewer.renderer.domElement.addEventListener(
-    "pointerdown",
-    (e) => {
-      if (!e.shiftKey || !current()) return;
-      e.preventDefault();
-      const uv = viewer!.pick(e);
-      if (!uv) return;
-      e.stopImmediatePropagation();
-      checkpoint();
-      const p = current().points[selected];
-      p.u = current().symmetry && uv.x > 0.5 ? 1 - uv.x : uv.x;
-      p.v = uv.y;
-      render();
-    },
-    true,
-  );
+  // Shift gestures belong to the surface editor's whole-shape rotation/scaling.
   // Read-only diagnostics for offline browser verification and future capture manifests.
   Object.assign(window, {
     eyeArtistryDiagnostics: () => ({

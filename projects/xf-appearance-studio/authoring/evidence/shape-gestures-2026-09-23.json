@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-23",
+  "scope": "Whole-layer transforms, UV navigation and indexed head-surface lookup",
+  "schema": "xfs/recipe-5 unchanged",
+  "automated": {"passed": 116, "failed": 0, "files": 30, "assertions": 460081, "typecheck": "passed", "build": "passed", "externalPointerDownCommitsSurfaceWheelBurst": true},
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "isolation": "verification workspace and SQLite only",
+    "checks": {
+      "uvMirroredTranslationAllKnotsSameDelta": true,
+      "translationOneUndoAndExactRestore": true,
+      "uvRotationKeepsSelectedPivot": true,
+      "uvWheelThreeEventsOneUndo": true,
+      "uvWheelScaleRatio": 1.1274968515793757,
+      "uvScaleLeavesCropUnchanged": true,
+      "uvOrdinaryWheelZoomRatio": 0.8521437889662112,
+      "uvRightDragChangesCropOnly": true,
+      "navigationRecipeHistoryAndCameraUnchanged": true,
+      "realHeadWholeShapeTranslation": true,
+      "realHeadTranslationEscapeExact": true,
+      "realHeadShiftRotateKeepsPivotAndSelection": true,
+      "realHeadShiftWheelTwoEventsOneUndo": true,
+      "realHeadScaleRatio": 1.0832870676749584,
+      "surfaceGesturesCameraUnchanged": true,
+      "recipeReloadExact": true,
+      "uvCropReloadExact": true,
+      "previewReloadExact": true
+    },
+    "savedCollection": "Verification — shape gestures",
+    "savedRevision": 1,
+    "warningsAndErrors": [],
+    "temporaryTabClosed": true
+  },
+  "indexDifferentialChecks": {
+    "assertions": 16934,
+    "failures": 0,
+    "realPlateTriangles": 3010,
+    "realPlateQueryPairs": 3000,
+    "meanPointQueryCandidates": 1.0183333333333333,
+    "warm3000AnchorQueriesMs": {"indexed": 0.8945, "exhaustive": 78.4859},
+    "limits": "Timing is one local lookup batch, not a whole-renderer benchmark. Overlapping UV islands retain original first-triangle order."
+  },
+  "remaining": ["Directional softness", "Glitter visual correction", "Raster cancellation and worker error recovery", "Remaining plate/material/compiler/runtime work", "App-wide discoverable action registry and deferred Opus UI overhaul"],
+  "provenance": "Original transform/gesture/index implementation using existing credited Three.js, Bun and SQLite dependencies; local game-derived head assets remain ignored."
+}
