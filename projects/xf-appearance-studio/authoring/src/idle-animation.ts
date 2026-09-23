@@ -11,6 +11,9 @@ export class IdleAnimation {
   readonly unmapped: string[] = [];
   enabled = false;
   private elapsed = 0;
+  private playbackPaused = false;
+  private bodyContribution = true;
+  private faceContribution = true;
   private readonly delta = new THREE.Matrix4();
   private readonly local = new THREE.Matrix4();
   private readonly faceDelta = new THREE.Matrix4();
@@ -47,9 +50,20 @@ export class IdleAnimation {
     this.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
   }
   setEnabled(enabled: boolean) {
-    this.enabled = enabled; this.elapsed = 0;
+    if (enabled === this.enabled) return;
+    this.enabled = enabled; this.elapsed = 0; this.playbackPaused = false;
     if (enabled) this.update(0);
     else this.restore();
+  }
+  setPaused(paused: boolean) {
+    this.playbackPaused = this.enabled && paused;
+  }
+  setContributions({ body, face }: { body?: boolean; face?: boolean }) {
+    if (body !== undefined) this.bodyContribution = body;
+    if (face !== undefined) this.faceContribution = face;
+    // Recompose at the held phase, including when paused, so a muted source
+    // cannot leave its previous world-space transform on a target.
+    this.update(0);
   }
   restore() {
     for (const b of this.bindings) {
@@ -63,16 +77,21 @@ export class IdleAnimation {
   }
   update(seconds: number) {
     if (!this.enabled) return;
-    this.elapsed += Math.max(0, Math.min(seconds, .1));
+    if (!this.playbackPaused && Number.isFinite(seconds)) this.elapsed += Math.max(0, Math.min(seconds, .1));
     this.mixer.setTime(this.elapsed % this.clip.duration);
     if (this.facial && this.faceMixer) {
       this.faceMixer.setTime(this.elapsed % this.facial.clip.duration);
       this.facial.source.updateMatrixWorld(true);
     }
     this.source.updateMatrixWorld(true);
+    if (!this.bodyContribution && !this.faceContribution) {
+      this.restore();
+      return;
+    }
     for (const b of this.bindings) {
-      this.delta.multiplyMatrices(b.driver.matrixWorld,b.inverseDriverBind);
-      if (b.faceDriver && b.inverseFaceBind) {
+      this.delta.identity();
+      if (this.bodyContribution) this.delta.multiplyMatrices(b.driver.matrixWorld,b.inverseDriverBind);
+      if (this.faceContribution && b.faceDriver && b.inverseFaceBind) {
         this.faceDelta.multiplyMatrices(b.faceDriver.matrixWorld,b.inverseFaceBind);
         this.delta.multiply(this.faceDelta);
       }
@@ -83,4 +102,7 @@ export class IdleAnimation {
     }
   }
   get time() { return this.elapsed; }
+  get paused() { return this.playbackPaused; }
+  get bodyEnabled() { return this.bodyContribution; }
+  get faceEnabled() { return this.faceContribution; }
 }

@@ -60,3 +60,133 @@ test("nested target bones receive a world transform once, and unmapped controls 
   expect(child.position.y).toBeCloseTo(0,6);
   expect(child.getWorldPosition(new THREE.Vector3()).x).toBeCloseTo(3,6);
 });
+
+// The body turns around the origin; facial tracks independently translate named
+// children. This supplies an analytic expectation rather than another copy of
+// the adapter's matrix-composition algorithm.
+function contributionFixture() {
+  const body = new THREE.Group(), driver = new THREE.Bone();
+  driver.name = "Head"; body.add(driver);
+  const face = new THREE.Group(), faceHead = new THREE.Bone();
+  faceHead.name = "Head"; face.add(faceHead);
+  const offsets = { jaw: [.15, -.08, .12], eye: [.01, .04, -.02], lid: [0, -.1, .03] } as const;
+  const locals = { jaw: [.6, -.2, .3], eye: [.2, .4, .1], lid: [.2, .43, .1] } as const;
+  const faceTracks: THREE.KeyframeTrack[] = [];
+  for (const name of ["jaw", "eye", "lid"] as const) {
+    const bone = new THREE.Bone(); bone.name = name; bone.position.fromArray(locals[name]); faceHead.add(bone);
+    faceTracks.push(new THREE.VectorKeyframeTrack(`${name}.position`, [0, 1.5, 3], [
+      ...locals[name], ...locals[name].map((v, i) => v + offsets[name][i]!), ...locals[name],
+    ]));
+  }
+  const quarterTurn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  const clip = new THREE.AnimationClip("body", 2, [new THREE.QuaternionKeyframeTrack("Head.quaternion",
+    [0, 1, 2], [0, 0, 0, 1, ...quarterTurn.toArray(), 0, 0, 0, 1])]);
+  const faceClip = new THREE.AnimationClip("face", 3, faceTracks);
+  const preview = new THREE.Group(), targets: THREE.Bone[] = [];
+  for (let duplicate = 0; duplicate < 2; duplicate++) {
+    const head = new THREE.Bone(); head.name = "Head";
+    head.position.set(.3, .7, -.2); head.rotation.z = .11; head.scale.setScalar(1.2);
+    preview.add(head);
+    for (const name of ["jaw", "eye", "lid"] as const) {
+      const bone = new THREE.Bone(); bone.name = name; bone.position.fromArray(locals[name]);
+      bone.rotation.z = -.07; bone.scale.setScalar(.8); head.add(bone); targets.push(bone);
+    }
+    // Deliberately provide children before parents, with duplicate names in the
+    // two target rigs, as happens with independent head/detail skeletons.
+    targets.push(head);
+  }
+  preview.updateMatrixWorld(true);
+  const originals = targets.map(bone => ({
+    position: bone.position.toArray(), rotation: bone.quaternion.toArray(), scale: bone.scale.toArray(),
+    world: bone.getWorldPosition(new THREE.Vector3()).toArray(),
+  }));
+  const idle = new IdleAnimation(body, clip, targets, { jaw: "Head", eye: "Head", lid: "Head" }, { source: face, clip: faceClip });
+  return { idle, targets, originals, offsets };
+}
+
+function expectCloseVector(actual: readonly number[], expected: readonly number[]) {
+  expect(actual.length).toBe(expected.length);
+  actual.forEach((value, i) => expect(value).toBeCloseTo(expected[i]!, 6));
+}
+
+test("all body/facial subsets match independent transforms across separate loops and duplicate rigs", () => {
+  const { idle, targets, originals, offsets } = contributionFixture();
+  expect(idle.bodyEnabled).toBe(true); expect(idle.faceEnabled).toBe(true); expect(idle.paused).toBe(false);
+  idle.setEnabled(true); idle.seek(4.75); idle.setPaused(true);
+  for (const [body, face] of [[true, true], [false, true], [true, false], [false, false], [true, true]] as const) {
+    idle.setContributions({ body, face });
+    expect(idle.time).toBe(4.75); expect(idle.paused).toBe(true);
+    const angle = body ? .75 * Math.PI / 2 : 0;
+    for (const [i, bone] of targets.entries()) {
+      const initial = originals[i]!.world;
+      const movement = bone.name === "Head" || !face ? [0, 0, 0] : offsets[bone.name as keyof typeof offsets];
+      const x = initial[0]! + movement[0]! * (5 / 6), y = initial[1]! + movement[1]! * (5 / 6);
+      expectCloseVector(bone.getWorldPosition(new THREE.Vector3()).toArray(), [
+        x * Math.cos(angle) - y * Math.sin(angle), x * Math.sin(angle) + y * Math.cos(angle),
+        initial[2]! + movement[2]! * (5 / 6),
+      ]);
+      const expectedRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angle + (bone.name === "Head" ? .11 : .04));
+      expectCloseVector(bone.getWorldQuaternion(new THREE.Quaternion()).toArray(), expectedRotation.toArray());
+    }
+    for (let i = 0; i < 4; i++) expectCloseVector(targets[i]!.matrixWorld.elements, targets[i + 4]!.matrixWorld.elements);
+  }
+  idle.setContributions({ body: false });
+  expect(idle.faceEnabled).toBe(true);
+  const structural = targets.filter(bone => bone.name === "Head").map(bone => bone.matrixWorld.clone());
+  const features = targets.filter(bone => bone.name !== "Head").map(bone => bone.matrixWorld.clone());
+  idle.seek(5.2);
+  targets.filter(bone => bone.name === "Head").forEach((bone, i) => expectCloseVector(bone.matrixWorld.elements, structural[i]!.elements));
+  targets.filter(bone => bone.name !== "Head").forEach((bone, i) => expect(bone.matrixWorld.equals(features[i]!)).toBe(false));
+});
+
+test("pause holds pose and phase, seek still applies, and resume matches direct sampling", () => {
+  const { idle, targets } = contributionFixture();
+  const reference = contributionFixture();
+  idle.setEnabled(true); reference.idle.setEnabled(true);
+  idle.seek(5.95); idle.setPaused(true);
+  const held = targets.map(bone => bone.matrixWorld.toArray());
+  for (const dt of [.016, .1, 10, Infinity, NaN, -.1]) idle.update(dt);
+  expect(idle.time).toBe(5.95);
+  targets.forEach((bone, i) => expect(bone.matrixWorld.toArray()).toEqual(held[i]!));
+  idle.seek(11.975); reference.idle.seek(11.975);
+  expect(idle.paused).toBe(true);
+  targets.forEach((bone, i) => expectCloseVector(bone.matrixWorld.elements, reference.targets[i]!.matrixWorld.elements));
+  idle.setEnabled(true); // Redundant enable from UI restoration must not restart.
+  expect(idle.time).toBe(11.975); expect(idle.paused).toBe(true);
+  // Cross both loop boundaries together when resuming.
+  idle.setPaused(false); idle.update(.075); reference.idle.seek(12.05);
+  expect(idle.time).toBeCloseTo(12.05, 12);
+  targets.forEach((bone, i) => expectCloseVector(bone.matrixWorld.elements, reference.targets[i]!.matrixWorld.elements));
+});
+
+test("disabling restores exact captured locals, resets pause/clock and retains selected contributions", () => {
+  for (const [body, face] of [[true, true], [false, true], [true, false], [false, false]] as const) {
+    const { idle, targets, originals } = contributionFixture();
+    idle.setEnabled(true); idle.seek(4.75); idle.setPaused(true); idle.setContributions({ body, face });
+    idle.setEnabled(false);
+    expect(idle.time).toBe(0); expect(idle.paused).toBe(false);
+    expect(idle.bodyEnabled).toBe(body); expect(idle.faceEnabled).toBe(face);
+    for (const [i, bone] of targets.entries()) {
+      expect(bone.position.toArray()).toEqual(originals[i]!.position);
+      expect(bone.quaternion.toArray()).toEqual(originals[i]!.rotation);
+      expect(bone.scale.toArray()).toEqual(originals[i]!.scale);
+    }
+    idle.setPaused(true); idle.update(10); idle.setEnabled(false);
+    expect(idle.paused).toBe(false); expect(idle.time).toBe(0);
+    idle.setEnabled(true);
+    expect(idle.time).toBe(0); expect(idle.paused).toBe(false);
+    expect(idle.bodyEnabled).toBe(body); expect(idle.faceEnabled).toBe(face);
+  }
+});
+
+test("clock rejects nonfinite/negative increments and caps suspension catch-up at one tenth second", () => {
+  const { idle } = contributionFixture();
+  idle.setEnabled(true); idle.seek(3.5);
+  for (const dt of [NaN, Infinity, -Infinity, -1]) idle.update(dt);
+  expect(idle.time).toBe(3.5);
+  idle.update(10); expect(idle.time).toBe(3.6);
+  idle.setContributions({ body: false, face: false });
+  idle.update(.05); expect(idle.time).toBe(3.65);
+  idle.seek(NaN); expect(idle.time).toBe(0);
+  idle.seek(-1); expect(idle.time).toBe(0);
+});

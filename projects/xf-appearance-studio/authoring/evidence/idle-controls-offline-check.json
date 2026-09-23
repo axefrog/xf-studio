@@ -1,0 +1,31 @@
+{
+  "mappedBones": 385,
+  "shapes": [
+    "neutral",
+    "saved-face"
+  ],
+  "savedShapes": [
+    "h091_eyes",
+    "h012_nose",
+    "h053_mouth",
+    "h054_jaw",
+    "h145_ear"
+  ],
+  "samplesPerShape": 222,
+  "sampledSeconds": 22.1,
+  "headDrift": 2.220446049250313e-16,
+  "maxDeltaMismatch": 4.8405723873656825e-14,
+  "facialTargetMatrixRanges": {
+    "l_J_eye_JNT": 0.13691769559967637,
+    "r_J_eye_JNT": 0.1369177044758343,
+    "mid_J_jaw_JNT": 0.025138398440779097,
+    "l_J_eye_lid_up_rowA_1_JNT": 0.46240979009322797
+  },
+  "checkedVertices": 14037060,
+  "pauseError": 0,
+  "resetError": 0,
+  "limitations": [
+    "Offline local rigs, not game graph/shading parity",
+    "The browser separately attaches two rigid eyeballs; this offline harness does not instantiate those extra bindings."
+  ]
+}

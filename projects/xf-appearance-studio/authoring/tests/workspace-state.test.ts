@@ -60,3 +60,22 @@ test("private saved V survives workspace JSON independently of authored makeup a
   expect(restored.savedV!.groups.head.find(g => g.name === "character_customization")!.morphs.map(m => m.target))
     .toEqual(["h091", "h012", "h053", "h054", "h145"]);
 });
+
+test("paused idle and contribution choices round trip, and legacy workspaces preserve both motions", () => {
+  const state = freshWorkspace();
+  state.preview.idle = true; state.preview.idlePaused = true; state.preview.idleTime = 19.125;
+  state.preview.idleBody = false; state.preview.idleFace = true;
+  state.preview.camera = { position: [.03, 1.66, -.6], target: [.03, 1.66, .005], fov: 22 };
+  expect(parseWorkspace(JSON.parse(JSON.stringify(state)))).toEqual(state);
+  const old = JSON.parse(JSON.stringify(state));
+  delete old.preview.idlePaused; delete old.preview.idleBody; delete old.preview.idleFace;
+  const migrated = parseWorkspace(old);
+  expect(migrated.preview.idlePaused).toBe(false); expect(migrated.preview.idleBody).toBe(true);
+  expect(migrated.preview.idleFace).toBe(true); expect(migrated.preview.idleTime).toBe(19.125);
+  const malformed = parseWorkspace({ ...state, preview: { ...state.preview, idlePaused: "true", idleBody: 0, idleFace: null } });
+  expect(malformed.preview.idlePaused).toBe(false); expect(malformed.preview.idleBody).toBe(true); expect(malformed.preview.idleFace).toBe(true);
+  state.preview.idle = false;
+  const disabled = parseWorkspace(state);
+  expect(disabled.preview.idlePaused).toBe(false); expect(disabled.preview.idleBody).toBe(false);
+  expect(disabled.preview.camera).toEqual(state.preview.camera);
+});

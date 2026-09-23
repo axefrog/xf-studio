@@ -261,6 +261,22 @@ export async function createScene(
   } catch (error) {
     idle = undefined; idleError = (error as Error).message;
   }
+  function frameIdle() {
+    // Stored cameras use neutral space. Always derive the displacement at phase
+    // zero so restoring a paused/nonzero phase never adds a different offset.
+    camera.position.sub(idleFrameOffset); controls.target.sub(idleFrameOffset);
+    idleFrameOffset.set(0, 0, 0);
+    if (idle?.enabled) {
+      const time = idle.time;
+      idle.seek(0);
+      const anchor = idle.bindings.find(b => b.bone.name === "Head");
+      if (anchor) idleFrameOffset.setFromMatrixPosition(anchor.bone.matrixWorld)
+        .sub(new THREE.Vector3().setFromMatrixPosition(anchor.worldBind));
+      idle.seek(time);
+      camera.position.add(idleFrameOffset); controls.target.add(idleFrameOffset);
+    }
+    controls.update();
+  }
   const deforming = [
     head,
     plate,
@@ -407,17 +423,15 @@ export async function createScene(
       camera.updateProjectionMatrix();
     },
     setIdle: (enabled: boolean) => {
-      if (!idle) return;
+      if (!idle || idle.enabled === enabled) return;
       animation = false; amount = 0; blink(0);
-      camera.position.sub(idleFrameOffset); controls.target.sub(idleFrameOffset);
-      idleFrameOffset.set(0,0,0);
       idle.setEnabled(enabled);
-      if (enabled) {
-        const anchor = idle.bindings.find(b => b.bone.name === "Head");
-        if (anchor) idleFrameOffset.setFromMatrixPosition(anchor.bone.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(anchor.worldBind));
-        camera.position.add(idleFrameOffset); controls.target.add(idleFrameOffset);
-      }
-      controls.update();
+      frameIdle();
+    },
+    setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
+    setIdleContributions: (body: boolean, face: boolean) => {
+      if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
+      idle.setContributions({ body, face }); frameIdle();
     },
     setDetail: (name: string, v: boolean) => {
       if (details[name]) details[name].root.visible = v;

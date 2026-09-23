@@ -9,7 +9,7 @@ export type PreviewState = {
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; normals: boolean;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
-  idle: boolean; idleTime: number;
+  idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
 };
 export type WorkspaceState = {
   schema: "xfas/workspace-1";
@@ -25,7 +25,8 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
     preview: { eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
-      normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0 },
+      normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
+      idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
     panels: { lighting: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
   };
@@ -47,13 +48,14 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
   const p = v.preview;
   if (p && typeof p === "object") {
-    for (const key of ["surface", "wire", "brows", "lashes", "normals", "blinkPlaying", "idle"] as const)
+    for (const key of ["surface", "wire", "brows", "lashes", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
     for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", .5, 2], ["lightAngle", 0, 360],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }
+    else state.preview.idlePaused = false;
     const c = p.camera, vector = (x: unknown): x is number[] =>
       Array.isArray(x) && x.length === 3 && x.every(n => finite(n, -100, 100));
     if (c && vector(c.position) && vector(c.target) && finite(c.fov, 10, 90)) {

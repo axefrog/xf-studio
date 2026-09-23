@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-23",
+  "workspace": "?verify=1",
+  "userDraftEdited": false,
+  "automatedTests": 46,
+  "expectations": 390115,
+  "typecheck": "pass",
+  "browserBuild": "pass",
+  "checks": [
+    "Pause at phase 21.567800000000556 holds target head, eyes, jaw and lid matrices exactly through continued rendered frames",
+    "Surface-control interaction while paused leaves phase/pose and recipe unchanged",
+    "Reload restores exact paused phase, target matrices, FOV and panned neutral-space camera",
+    "Head movement off: clock advances and eye/jaw target matrices vary while Head matrix is unchanged",
+    "Both contributions off retains enabled/paused phase; disabling resets time and pause and retains both subset preferences",
+    "Exploratory blink becomes available after disabling idle",
+    "Makeup opacity remains editable while paused without changing pose/time",
+    "Facial-only paused state and edited makeup survive reload"
+  ],
+  "consoleWarningsOrErrors": [],
+  "limits": [
+    "Real preview behavior only; game graph, synchronization, wrinkles and optical parity remain unverified",
+    "Finer face masks are not implemented",
+    "Separate rigid eyeball attachment matrices were not independently measured by this new offline harness; existing preview attachments remain unchanged"
+  ]
+}

@@ -12,6 +12,7 @@ import { setupSidebars } from "./sidebar-ui";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { setupCollections } from "./collection-ui";
+import { setupMotionControls } from "./motion-ui";
 import { readSavedV, type SavedV } from "./save-reader";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 import {
@@ -69,7 +70,11 @@ function snapshot(): WorkspaceState {
       brows: input("brows").checked, lashes: input("lashes").checked, normals: input("normals").checked,
       exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
-      idle: input("cc-idle").checked, idleTime: viewer?.idle?.time ?? 0,
+      idle: viewer?.idle?.enabled ?? workspace.preview.idle,
+      idleTime: viewer?.idle?.time ?? workspace.preview.idleTime,
+      idlePaused: viewer?.idle?.paused ?? workspace.preview.idlePaused,
+      idleBody: viewer?.idle?.bodyEnabled ?? workspace.preview.idleBody,
+      idleFace: viewer?.idle?.faceEnabled ?? workspace.preview.idleFace,
     },
     panels: { ...sidebars.snapshot(), lighting: $<HTMLDetailsElement>("lighting-panel").open,
       layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
@@ -634,30 +639,7 @@ try {
   if (viewer.evidence.detailErrors.length)
     $("detail-note").textContent =
       `Some details unavailable: ${viewer.evidence.detailErrors.join("; ")}`;
-  input("blink").oninput = () => {
-    viewer!.setBlink(+input("blink").value);
-    $("play").setAttribute("aria-pressed", "false");
-    $("play").textContent = "▶ Blink";
-  };
-  input("cc-idle").disabled = !viewer.evidence.idle.available;
-  $("idle-note").textContent = viewer.evidence.idle.available
-    ? "Game close-up motion + facial animation · preview"
-    : `Idle unavailable: ${viewer.evidence.idle.error}`;
-  input("cc-idle").onchange = () => {
-    const enabled = input("cc-idle").checked;
-    viewer!.setIdle(enabled);
-    input("blink").disabled = enabled;
-    input("blink").value = "0";
-    ($("play") as HTMLButtonElement).disabled = enabled;
-    $("play").setAttribute("aria-pressed", "false");
-    $("play").textContent = "▶ Blink";
-  };
-  $("play").onclick = () => {
-    const on = $("play").getAttribute("aria-pressed") !== "true";
-    $("play").setAttribute("aria-pressed", String(on));
-    $("play").textContent = on ? "Ⅱ Pause" : "▶ Blink";
-    viewer!.animateBlink(on);
-  };
+  setupMotionControls(viewer, preview);
   shape.onchange = () => viewer!.eyeShape(+shape.value);
   input("exposure").oninput = () =>
     viewer!.setExposure(+input("exposure").value);
@@ -669,17 +651,7 @@ try {
     viewer!.setFov(+input("fov").value);
     $("fov-value").textContent = `${input("fov").value}°`;
   };
-  // Restore motion before the neutral-space camera so its framing offset is applied once.
-  input("cc-idle").checked = preview.idle && viewer.evidence.idle.available;
-  input("cc-idle").dispatchEvent(new Event("change"));
-  if (input("cc-idle").checked) viewer.idle?.seek(preview.idleTime);
-  else {
-    input("blink").value = String(preview.blink);
-    viewer.setBlink(preview.blink);
-    viewer.animateBlink(preview.blinkPlaying);
-    $("play").setAttribute("aria-pressed", String(preview.blinkPlaying));
-    $("play").textContent = preview.blinkPlaying ? "Ⅱ Pause" : "▶ Blink";
-  }
+  // Motion is restored before the neutral-space camera, applying its offset once.
   if (preview.camera) viewer.restoreCamera(preview.camera);
   viewer.controls.addEventListener("change", persist);
   layersPanel.scrollTop = workspace.panels.layersScroll;
@@ -712,6 +684,11 @@ try {
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,
       idle: { enabled: viewer!.idle?.enabled ?? false, time: viewer!.idle?.time ?? 0,
+        paused: viewer!.idle?.paused ?? false, body: viewer!.idle?.bodyEnabled ?? true, face: viewer!.idle?.faceEnabled ?? true,
+        targetPose: Object.fromEntries(["Head", "l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_rowA_1_JNT"].map(name => {
+          const binding = viewer!.idle?.bindings.find(b => b.bone.name === name);
+          return [name, binding?.bone.matrixWorld.toArray() ?? null];
+        })),
         facialPose: Object.fromEntries(["l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_root_1_JNT"].map(name => {
           const bone = viewer!.idle?.facial?.source.getObjectByName(name);
           return [name, bone ? { position: bone.position.toArray(), rotation: bone.quaternion.toArray() } : null];

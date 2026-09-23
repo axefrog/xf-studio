@@ -20,3 +20,5 @@ The first [XF Studio](../../projects/xf-appearance-studio/authoring/README.md) n
 The [persistent authoring queue](eye-artistry-authoring.md) tracks optional head details, direct live editing on the model surface, saved-V assembly, material/blink fidelity and richer procedural controls. A first direct surface-editing implementation is now verified; richer controls and fidelity work remain. Required glitter development has its own research task above.
 
 - [Viewport and editor controls](viewport-and-editor-controls.md): idle pause/subsets, stable-head facial motion, FOV/zoom/pan ergonomics, compact layers, rename and live reorder feedback.
+
+- [Path, falloff and surface controls](path-and-falloff-controls.md): nearest-curve insertion, single-eye UV view, weight seams, Bézier/corner handles, directional softness and overlay handles.
