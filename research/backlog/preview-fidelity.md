@@ -34,3 +34,7 @@ The two annotated screenshots are read-only references supplied with this reques
 - Lip seam close-up: `C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-deb9b284-1f69-44d8-92b5-61d06cb40561.png`.
 
 Related: [saved-V assembly](../eye-artistry/save-import.md), [authoring queue](eye-artistry-authoring.md), [idle guide](../../docs/idle-animation-guide.md), and [validation workflow](../../docs/validation.md). Use local/offline evidence first and batch any remaining game captures.
+
+## Saved-eye source resolved
+
+[23 September source investigation](../eye-artistry/modded-eye-resolution.md) resolves the selected option to Kala’s Eyes Standalone V2 through nutboy’s Unique Eyes to CCXL. The three texture providers are unique across the scanned roots; September 16 logs corroborate material instantiation. Local extracted maps remain ignored. Next verify eye UVs/colour space, integrate the selected diffuse with provenance, then study eye.mt/refraction/normal/roughness behavior. Resource resolution is complete for this captured choice; renderer parity and a generalized resolver are not.
