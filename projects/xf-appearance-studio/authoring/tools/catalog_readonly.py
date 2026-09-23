@@ -14,6 +14,8 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Iterable
 
+from archive_winners import resolve_archive_hashes
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -59,12 +61,19 @@ def mo2_snapshot(root: Path, profile: str) -> tuple[list[Candidate], dict]:
             for path in folder.rglob(suffix):
                 virtual = str(path.relative_to(folder)).replace("/", "\\")
                 candidates.append(Candidate(name, virtual, str(path), enabled, priority, "mo2"))
+        modlist = folder / "archive" / "pc" / "mod" / "modlist.txt"
+        if modlist.is_file():
+            candidates.append(Candidate(name, r"archive\pc\mod\modlist.txt", str(modlist), enabled, priority, "mo2"))
     overwrite = root / "overwrite"
     if overwrite.is_dir():
         for suffix in ("*.archive", "*.xl", "*.inkcharcustomization"):
             for path in overwrite.rglob(suffix):
                 candidates.append(Candidate("MO2 overwrite", str(path.relative_to(overwrite)).replace("/", "\\"),
                                             str(path), True, len(lines) + 1, "mo2"))
+        modlist = overwrite / "archive" / "pc" / "mod" / "modlist.txt"
+        if modlist.is_file():
+            candidates.append(Candidate("MO2 overwrite", r"archive\pc\mod\modlist.txt", str(modlist),
+                                        True, len(lines) + 1, "mo2"))
     settings = (root / "ModOrganizer.ini").read_text(encoding="utf-8-sig", errors="replace")
     flags = {name: (re.search(rf"{name}=(true|false)", settings, re.I) or [None, "unobserved"])[1]
              for name in ("enforce_archive_load_order", "reverse_archive_load_order")}
@@ -84,6 +93,9 @@ def directory_snapshot(root: Path, provider: str, kind: str, virtual_prefix: str
         for path in root.rglob(suffix):
             virtual = virtual_prefix + str(path.relative_to(root)).replace("/", "\\")
             out.append(Candidate(provider, virtual, str(path), True, None, kind))
+    modlist = root / "modlist.txt"
+    if modlist.is_file():
+        out.append(Candidate(provider, virtual_prefix + "modlist.txt", str(modlist), True, None, kind))
     return out
 
 
@@ -319,10 +331,16 @@ def main() -> None:
     parser.add_argument("--saved-definition", default="")
     parser.add_argument("--app-fix-xl", type=Path, help="Active ArchiveXL bundle resource fix .xl")
     parser.add_argument("--app-scope-xl", type=Path, help="Active ArchiveXL bundle resource scope .xl")
+    parser.add_argument("--archive-hash", action="append", default=[], metavar="DECIMAL_UINT64",
+                        help="Read-only index probe for one resource hash; may be repeated")
+    parser.add_argument("--base-archive-root", action="append", type=Path, default=[],
+                        help="Installed game base archive directory to include; may be repeated")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     mo, manual, launch = launch_sources(args.launch_context, args.game_mod_root, args.mo2_root, args.profile)
     files = visible_files(mo + manual)
+    archive_probe = (resolve_archive_hashes(files, args.archive_hash, base_roots=args.base_archive_root)
+                     if args.archive_hash else None)
     active_xl = [v["winner"] for k, v in files.items() if k.endswith(".xl") and v["winner"]]
     declarations = []
     for entry in active_xl:
@@ -375,10 +393,10 @@ def main() -> None:
               "inventory": {"mo2_files": len(mo), "manual_files": len(manual),
                             "active_xl_customization_declarations": len(declarations),
                             "decoded_custom_resources": len(additions),
-                            "excluded": ["archive index conflicts and effective resource hashes", "unexported .inkcharcustomization payloads",
+                            "excluded": ["unqueried archive hashes and archive payload decoding", "unexported .inkcharcustomization payloads",
                                          "ArchiveXL merge ordering beyond appearance overlay, resource patches, runtime script/UI changes",
                                          "Vortex deployment and actual runtime launch route"]},
-              "app_fix": app_meta,
+              "app_fix": app_meta, "archive_probe": archive_probe,
               "declarations": declarations, "resources": [{"provider": x["provider"], "depot": x["depot"],
                                                                 "json_sha256": x["json_sha256"], "gameVersion": x["gameVersion"]}
                                                                for x in [base] + additions],

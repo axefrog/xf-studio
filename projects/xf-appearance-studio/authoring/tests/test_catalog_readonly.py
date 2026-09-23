@@ -2,11 +2,13 @@
 import sys
 import tempfile
 import unittest
+import struct
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
 from catalog_readonly import (Candidate, apply_app_fix, fnv64, launch_sources, merge_catalog, saved_appearance_matches,
                               scope_leaves, visible_files, xl_customizations, xl_resource_meta)
+from archive_winners import decimal_hash, index_hashes, resolve_archive_hashes
 
 
 def appearance(name, slot, choices, provider, app="base\\example.app"):
@@ -14,7 +16,101 @@ def appearance(name, slot, choices, provider, app="base\\example.app"):
             "provider": provider, "app": app, "choices": [{"name": c, "provider": provider} for c in choices]}
 
 
+def archive(path, hashes):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    index = bytearray(28 + 56 * len(hashes))
+    struct.pack_into("<I", index, 16, len(hashes))
+    for offset, value in enumerate(hashes):
+        struct.pack_into("<Q", index, 28 + 56 * offset, value)
+    header = bytearray(24)
+    header[:4] = b"RDAR"
+    struct.pack_into("<Q", header, 8, 24)
+    path.write_bytes(header + index)
+
+
 class CatalogProbeTests(unittest.TestCase):
+    def test_archive_index_rejects_truncation_and_unsigned_overflow(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "bad.archive"
+            archive(path, [2**64 - 1])
+            self.assertEqual(index_hashes(path, {2**64 - 1}), {2**64 - 1})
+            self.assertEqual(decimal_hash("018446744073709551615"), str(2**64 - 1))
+            with self.assertRaisesRegex(ValueError, "decimal uint64"):
+                decimal_hash(str(2**64))
+            path.write_bytes(path.read_bytes()[:-1])
+            with self.assertRaisesRegex(ValueError, "outside file"):
+                index_hashes(path, {2**64 - 1})
+
+    def test_archive_hash_order_and_route_keep_physical_candidates_separate(self):
+        hashed = "7140168419554698265"
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root / "base"
+            archive(base / "basegame.archive", [3])
+            game_mod = root / "game" / "archive" / "pc" / "mod"
+            archive(game_mod / "Z_Eyes.archive", [int(hashed)])
+            mo2 = root / "MO2"
+            for name, filename in (("Low", "A_Eyes.archive"), ("High", "B_Eyes.archive"),
+                                   ("Disabled", "0_Eyes.archive")):
+                archive(mo2 / "mods" / name / "archive" / "pc" / "mod" / filename, [int(hashed)])
+            selected = mo2 / "profiles" / "Active"
+            selected.mkdir(parents=True)
+            (selected / "modlist.txt").write_text("+Low\n+High\n-Disabled\n")
+            (mo2 / "ModOrganizer.ini").write_text("selected_profile=@ByteArray(Active)\n"
+                                                   "enforce_archive_load_order=false\n"
+                                                   "reverse_archive_load_order=false\n")
+            direct, manual, _ = launch_sources("direct", game_mod, mo2, "Active")
+            direct_result = resolve_archive_hashes(visible_files(direct + manual), [hashed], base_roots=[base])
+            self.assertEqual(direct_result["resource_hashes"][hashed]["source_derived_winner"]["name"], "z_eyes.archive")
+            self.assertEqual(len(direct_result["resource_hashes"][hashed]["physical_candidates"]), 1)
+            staged, manual, _ = launch_sources("mo2", game_mod, mo2, "Active")
+            result = resolve_archive_hashes(visible_files(staged + manual), [hashed], base_roots=[base])
+            row = result["resource_hashes"][hashed]
+            self.assertEqual(row["source_derived_winner"]["provider"], "Low")
+            self.assertIsNone(row["runtime_observed_winner"])
+            self.assertEqual(len(row["physical_candidates"]), 4)
+            self.assertEqual(len(row["visible_candidates"]), 3)
+            self.assertEqual(row["confidence"], "source-derived")
+            (mo2 / "overwrite" / "archive" / "pc" / "mod").mkdir(parents=True)
+            (mo2 / "overwrite" / "archive" / "pc" / "mod" / "modlist.txt").write_text(
+                "B_Eyes.archive\nA_Eyes.archive\nZ_Eyes.archive\n")
+            staged, manual, _ = launch_sources("mo2", game_mod, mo2, "Active")
+            listed = resolve_archive_hashes(visible_files(staged + manual), [hashed], base_roots=[base])
+            self.assertEqual(listed["resource_hashes"][hashed]["source_derived_winner"]["provider"], "High")
+
+    def test_ambiguous_archive_file_blocks_winner(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root / "base"
+            base.mkdir()
+            one, two = root / "one.archive", root / "two.archive"
+            archive(one, [42])
+            archive(two, [42])
+            same = r"archive\pc\mod\same.archive"
+            rows = [Candidate("manual", same, str(one), True, None, "manual"),
+                    Candidate("mo2", same, str(two), True, 3, "mo2")]
+            result = resolve_archive_hashes(visible_files(rows), ["42"], base_roots=[base])
+            self.assertIsNone(result["resource_hashes"]["42"]["source_derived_winner"])
+            self.assertEqual(len(result["resource_hashes"]["42"]["physical_candidates"]), 2)
+            self.assertIn("ambiguous", " ".join(result["resource_hashes"]["42"]["gaps"]))
+
+    def test_missing_coverage_and_base_collision_stay_unresolved(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root / "base"
+            mod = root / "mod.archive"
+            archive(base / "game.archive", [42])
+            archive(mod, [42])
+            virtual = r"archive\pc\mod\mod.archive"
+            files = visible_files([Candidate("mod", virtual, str(mod), True, 1, "mo2")])
+            no_base = resolve_archive_hashes(files, ["42"])["resource_hashes"]["42"]
+            self.assertIsNone(no_base["source_derived_winner"])
+            self.assertIn("base archives not supplied", " ".join(no_base["gaps"]))
+            collision = resolve_archive_hashes(files, ["42"], base_roots=[base])["resource_hashes"]["42"]
+            self.assertIsNone(collision["source_derived_winner"])
+            self.assertEqual(len(collision["visible_candidates"]), 2)
+            self.assertIn("base-game versus mod", " ".join(collision["gaps"]))
+
     def test_launch_route_excludes_staged_mo2_from_direct_game_view(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
