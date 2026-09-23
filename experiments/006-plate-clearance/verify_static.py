@@ -65,6 +65,14 @@ def main():
         sw, ow = source.weights(bones), output.weights(bones)
         assert np.array_equal(sw.max(axis=0)>0, ow.max(axis=0)>0)
         assert abs(sw-ow).max() < .005 and (ow>0).sum(axis=1).max() == 8
+        shared_bones = sorted(set(head.bones()) | set(output.bones()))
+        head_weights = head.weights(shared_bones)[mapping]
+        plate_weights = output.weights(shared_bones)
+        head_weight_error = float(abs(head_weights-plate_weights).max())
+        if build.get('preserveHeadWeights'):
+            assert candidate['weightTransfer']['binaryRoundtripSkinBufferExact']
+            assert candidate['weightTransfer']['morphBaseBuffer']['binaryRoundtripSkinBufferExact']
+            assert head_weight_error < 2e-7, 'Retained skin weights differ from original head'
         sj, si = transforms(source); oj, oi = transforms(output)
         reorder = [output.bones().index(n) for n in source.bones()]
         bind_error = float(max(abs(sj-oj[reorder]).max(), abs(si-oi[reorder]).max()))
@@ -72,6 +80,7 @@ def main():
         clearance = measure(output, head, mapping)
         reports.append({'name': candidate['name'], 'offset': candidate['offset'], 'attributes': attrs,
             'morphMaxError': morph, 'bindMaxError': bind_error, 'weightMaxError': float(abs(sw-ow).max()),
+            'headWeightMaxError': head_weight_error,
             'newlyQuantizedZeroShadingRecords':zero_shading_records,
             'clearance': clearance, 'worstSignedDistance': min(x['minSignedDistance'] for x in clearance),
             'roundtripSha256': hashlib.sha256(output.path.read_bytes()).hexdigest()})

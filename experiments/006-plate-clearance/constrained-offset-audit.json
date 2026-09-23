@@ -1,0 +1,929 @@
+{
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+  "method": "Minimum-norm per-vertex displacement against all incident head triangle planes",
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    }
+  ],
+  "cases": 107,
+  "verticesPerCase": 1635,
+  "results": [
+    {
+      "shape": "Basis",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h011_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.7257217904033335,
+      "p99DisplacementMultiplier": 1.7805458238169733,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h012_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.266986181760279,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h013_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h014_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.771525877960236,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h015_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h021_eyes",
+      "unresolvedVertices": 2,
+      "overFourTimesOffset": 5,
+      "maxDisplacementMultiplier": 11.052885882146441,
+      "p99DisplacementMultiplier": 1.9585782428310625,
+      "problemHeadVertices": [
+        241,
+        2490,
+        3755,
+        3757,
+        3803,
+        5953,
+        5954
+      ]
+    },
+    {
+      "shape": "h022_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.1656486762592095,
+      "p99DisplacementMultiplier": 1.780680104310513,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h023_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h024_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7574226208215074,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h025_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h031_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.5675652598584295,
+      "p99DisplacementMultiplier": 1.9747522613739779,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h032_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.695216650276437,
+      "p99DisplacementMultiplier": 1.800075869291005,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h033_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h034_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7762632994108218,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h035_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h041_eyes",
+      "unresolvedVertices": 2,
+      "overFourTimesOffset": 3,
+      "maxDisplacementMultiplier": 9.107380650078865,
+      "p99DisplacementMultiplier": 1.5938262320867593,
+      "problemHeadVertices": [
+        2158,
+        2424,
+        2516,
+        3017
+      ]
+    },
+    {
+      "shape": "h042_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.0294666796539045,
+      "p99DisplacementMultiplier": 1.755497770669652,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h043_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h044_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7816728012081633,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h045_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h051_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.342819372121354,
+      "p99DisplacementMultiplier": 1.5959715908269827,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h052_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.900645200970508,
+      "p99DisplacementMultiplier": 1.7684484976571284,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h053_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h054_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7939150240752928,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h055_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h061_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 2,
+      "maxDisplacementMultiplier": 4.0334777604946614,
+      "p99DisplacementMultiplier": 1.8567670745037272,
+      "problemHeadVertices": [
+        3017
+      ]
+    },
+    {
+      "shape": "h062_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.362142095806983,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h063_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h064_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7956525796281535,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h065_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h071_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.1763988325753627,
+      "p99DisplacementMultiplier": 1.7388765269611008,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h072_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.0326370656623305,
+      "p99DisplacementMultiplier": 1.790424411068806,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h073_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h074_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7778362841313669,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h075_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h081_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.9747211519982915,
+      "p99DisplacementMultiplier": 1.8257797969315122,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h082_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.921418348406897,
+      "p99DisplacementMultiplier": 1.7769956922587506,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h083_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h084_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.8027615072783625,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h085_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h091_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.902311131450186,
+      "p99DisplacementMultiplier": 1.8069760509250632,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h092_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.134807583960928,
+      "p99DisplacementMultiplier": 1.772030204988479,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h093_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h094_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7980889418306198,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h095_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h101_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.311480485498355,
+      "p99DisplacementMultiplier": 1.7453458936933062,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h102_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.976905474077328,
+      "p99DisplacementMultiplier": 1.7729815821875308,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h103_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h104_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.799239416438888,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h105_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h111_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.7843872536878544,
+      "p99DisplacementMultiplier": 1.9050699451469868,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h112_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.2560901185996096,
+      "p99DisplacementMultiplier": 1.7705155277911948,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h113_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h114_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.802293613822058,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h115_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h121_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.042333911507409,
+      "p99DisplacementMultiplier": 1.4865445922078229,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h122_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.095677590687573,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h123_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h124_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7787939480760426,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h125_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h131_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.173938014891777,
+      "p99DisplacementMultiplier": 1.7302376456810191,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h132_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.827552624781958,
+      "p99DisplacementMultiplier": 1.750299861691248,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h133_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h134_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.8078470241338778,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h135_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h141_eyes",
+      "unresolvedVertices": 2,
+      "overFourTimesOffset": 3,
+      "maxDisplacementMultiplier": 18.907551602326514,
+      "p99DisplacementMultiplier": 1.6677624491824992,
+      "problemHeadVertices": [
+        2158,
+        5631,
+        5890,
+        6461
+      ]
+    },
+    {
+      "shape": "h142_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.7540776703393735,
+      "p99DisplacementMultiplier": 1.7501673388549759,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h143_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h144_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7843161799641643,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h145_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h151_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.8169713595530106,
+      "p99DisplacementMultiplier": 1.6711873003194788,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h152_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.9298266349012123,
+      "p99DisplacementMultiplier": 1.7471786247088223,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h153_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h154_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7714605858390973,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h155_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h161_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.611601224703876,
+      "p99DisplacementMultiplier": 1.899882676767918,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h162_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.9552333420609314,
+      "p99DisplacementMultiplier": 1.7856882963588336,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h163_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h164_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7939296434488183,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h165_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h171_eyes",
+      "unresolvedVertices": 3,
+      "overFourTimesOffset": 11,
+      "maxDisplacementMultiplier": 151.05405761673345,
+      "p99DisplacementMultiplier": 2.9565145702899644,
+      "problemHeadVertices": [
+        182,
+        183,
+        185,
+        186,
+        188,
+        2158,
+        2376,
+        3750,
+        3832,
+        5631,
+        5841,
+        6487,
+        6488,
+        6489
+      ]
+    },
+    {
+      "shape": "h172_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.96093733244682,
+      "p99DisplacementMultiplier": 1.7678033261650175,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h173_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h174_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.8096825176593079,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h175_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h181_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.6037427719550497,
+      "p99DisplacementMultiplier": 1.523766030834706,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h182_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.224349225614309,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h183_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h184_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7873282344095,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h185_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h191_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 2,
+      "maxDisplacementMultiplier": 4.387637854571088,
+      "p99DisplacementMultiplier": 1.8972793421938634,
+      "problemHeadVertices": [
+        262,
+        5631
+      ]
+    },
+    {
+      "shape": "h192_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.212519628549699,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h193_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h194_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7891377067489258,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h195_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h201_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 6,
+      "maxDisplacementMultiplier": 27.648939511682286,
+      "p99DisplacementMultiplier": 2.9619365675618554,
+      "problemHeadVertices": [
+        260,
+        262,
+        2158,
+        2424,
+        5631,
+        5890
+      ]
+    },
+    {
+      "shape": "h202_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.239796866224038,
+      "p99DisplacementMultiplier": 1.7666812769463547,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h203_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h204_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.797941704237987,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h205_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h211_eyes",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.7262571959655806,
+      "p99DisplacementMultiplier": 1.657990130587921,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h212_nose",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 2.9373398201518786,
+      "p99DisplacementMultiplier": 1.7615838293811927,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h213_mouth",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h214_jaw",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.804740734003979,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "h215_ear",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 0,
+      "maxDisplacementMultiplier": 3.4166739607144585,
+      "p99DisplacementMultiplier": 1.7913838537947302,
+      "problemHeadVertices": []
+    },
+    {
+      "shape": "saved-five",
+      "unresolvedVertices": 0,
+      "overFourTimesOffset": 2,
+      "maxDisplacementMultiplier": 4.160098457555401,
+      "p99DisplacementMultiplier": 1.8352823037588486,
+      "problemHeadVertices": [
+        2158,
+        2424
+      ]
+    }
+  ],
+  "limits": [
+    "Local half-space constraints do not clear non-adjacent folds or animated contacts.",
+    "Uses existing head vertex adjacency; coincident but independently indexed seams are not welded.",
+    "A numerical failure is reported unresolved, not asserted mathematically infeasible.",
+    "Four-times displacement is an experimental distortion budget, not a release standard.",
+    "No mesh/morph resources were changed or imported by this audit."
+  ]
+}

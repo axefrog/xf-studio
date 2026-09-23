@@ -9,6 +9,7 @@
 | Current product | [Preset library and compiler](../../projects/xf-appearance-studio/data/product-direction.md) | SQLite first slice implemented; one selector, authored collections and merged-material study next. Later feature categories require discussion before building. |
 | Requested; no assigned priority | [Preview fidelity and persistent workspace](preview-fidelity.md) | Actual modded eyes, adjustable FOV, all UI/camera state, imported-V reload fix, and SSS/material artifact investigation. Screenshot references preserved locally. |
 | Future direction; discuss before implementation | Quest design and other capabilities beyond appearance | The XF Studio rename leaves room for these; eye makeup stays first. See the product direction. |
+| During rendering-fidelity pass | [wgpu and ray-tracing assessment](wgpu-renderer-assessment.md) | Nathan's source lead; verify native/browser capabilities, material benefits and measured cost before recommending a renderer change. |
 | Lower priority | [Claude UI/UX overhaul](claude-ui-overhaul.md) | Explicit `claude` harness + Opus 5.5. Fully decouple UI from functionality BEFORE delegation; prerequisite not met, not dispatched. Cyberpunk 2077 aesthetic with freedom to rethink UI strategy. |
 
 This is a durable work queue within the headquarters, not a scheduled automation or a separate Codex task. No new task, worker or recurring run has been started.

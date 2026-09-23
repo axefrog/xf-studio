@@ -30,6 +30,7 @@ def main():
             s=next(r for r in static['candidates'] if r['name']==c['name'])
             p=next(r for r in posed['results'] if r['name']==c['name'])
             rows.append({'method':build.get('method','shading'),'offset':c['offset'],'build':str(root),
+                'preserveHeadWeights':build.get('preserveHeadWeights',False),'headWeightMaxError':s.get('headWeightMaxError'),
                 'roundtripSha256':s['roundtripSha256'],'staticCases':static['casesPerCandidate'],
                 'worstStaticShadingPlaneDistance':s['worstSignedDistance'],
                 'posedSamples':len(p['samples']),'worstPosedShadingPlaneDistance':p['worstSignedDistance'],
@@ -40,12 +41,14 @@ def main():
     assert len(rows)>=4, 'Both offset methods must have preserved evidence'
     report={'candidates':rows,'releaseCandidateSelected':False,
         'conclusion':'Both methods clear most of the expanded plate. Neither is contact-free in the sampled eyelid motion. Geometry normals reduce the open-eye crease contacts but can oppose lighting normals in some individual eye morphs. A blanket larger offset is not a validated repair.',
-        'next':['Classify render-visible versus occluded crease/corner contacts across sampled poses.',
-            'Investigate a local constrained correction or safe boundary treatment while preserving makeup coverage.',
+        'next':['Retain native head skin bytes in BOTH the mesh and embedded morph base buffer for subsequent cut-out builds.',
+            'Use the contact-visibility and constrained-offset audit to investigate exposed corner/fold contacts without unbounded displacement or broad coverage loss.',
             'Keep game depth/blending validation separate and batch it with material/selector tests.']}
     (HERE/'comparison.json').write_text(json.dumps(report,indent=2)+'\n')
     pointer={'root':str(latest),'validated':False,'checksCompleted':['resource-roundtrip','static-vertex-planes','sampled-idle','triangle-contact-analysis'],
         'clearanceAccepted':False,'reason':'Residual eyelid triangle contacts; no release offset selected'}
+    if json.loads((latest/'build.json').read_text()).get('preserveHeadWeights'):
+        pointer['checksCompleted'].append('native-skin-retention-in-mesh-and-morph')
     (HERE/'latest-build.json').write_text(json.dumps(pointer,indent=2)+'\n')
     print(json.dumps({'candidates':len(rows),'releaseCandidateSelected':False},indent=2))
 

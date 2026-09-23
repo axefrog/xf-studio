@@ -1,5 +1,5 @@
 {
-  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
   "zeroControlWorstSignedDistance": -1.551687388271753e-05,
   "casesPerCandidate": 107,
   "candidates": [
@@ -44,7 +44,8 @@
         "TANGENT": 0.001693107679136371
       },
       "bindMaxError": 1.1920930376163597e-07,
-      "weightMaxError": 0.004329085350036621,
+      "weightMaxError": 1.1920928955078125e-07,
+      "headWeightMaxError": 0.0,
       "newlyQuantizedZeroShadingRecords": 10458,
       "clearance": [
         {
@@ -798,7 +799,7 @@
         }
       ],
       "worstSignedDistance": -5.178634357686015e-05,
-      "roundtripSha256": "9bf34292f5f9a8612fde3bcf106c58755e285792f1ec83fba6125ddbe21e36b2"
+      "roundtripSha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c"
     },
     {
       "name": "geometry-0.00010000",
@@ -841,7 +842,8 @@
         "TANGENT": 0.001693107679136371
       },
       "bindMaxError": 1.1920930376163597e-07,
-      "weightMaxError": 0.004329085350036621,
+      "weightMaxError": 1.1920928955078125e-07,
+      "headWeightMaxError": 0.0,
       "newlyQuantizedZeroShadingRecords": 10458,
       "clearance": [
         {
@@ -1595,7 +1597,7 @@
         }
       ],
       "worstSignedDistance": -0.00010394859873978865,
-      "roundtripSha256": "e95538e8aeb290ae20c2af2c54c89ed0a075909770de5f2d09e7e15c9cd3f8c1"
+      "roundtripSha256": "e7aa12fbce4e4cac28e39119ff6ebd42cb5202f43412e4186b19e102645f6679"
     }
   ],
   "limitations": [

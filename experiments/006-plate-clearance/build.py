@@ -93,6 +93,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--offsets', nargs='+', type=float, default=[.00005, .0001])
     parser.add_argument('--method', choices=['shading','geometry'], default='shading')
+    parser.add_argument('--preserve-head-weights', action='store_true', help='Copy native head skin bytes after mesh import; preserve earlier controls')
     args = parser.parse_args()
     assert len(set(args.offsets)) == len(args.offsets) and all(0 < x <= .001 for x in args.offsets)
     out = HERE/'generated'/f'build-{time.time_ns()}'
@@ -138,18 +139,56 @@ def main():
         env['GltfImportArgs__ImportFormat'] = 'Mesh'
         env['GltfImportArgs__ImportGarmentSupport'] = 'false'
         run(folder, 'mesh-import', [wk, 'import', glb, '-o', resources, '--keep'], env)
+        weight_transfer = None
+        if args.preserve_head_weights:
+            from retain_head_weights import preserve
+            for name in ['imported-json', 'retained-json', 'retained-roundtrip-json']:
+                (folder/name).mkdir()
+            run(folder, 'serialize-skin', [wk, 'convert', 'serialize', resources/'xfas_eye_plate.mesh', '-o', folder/'imported-json'])
+            weight_transfer = preserve(HQ/'research/consumers/eye-plate/json/h0_000_pwa_c__basehead.mesh.json',
+                folder/'imported-json/xfas_eye_plate.mesh.json', BASE/'head-shading-transfer.json',
+                folder/'retained-json/xfas_eye_plate.mesh.json')
+            run(folder, 'restore-skin', [wk, 'convert', 'deserialize', folder/'retained-json', '-o', resources])
+            run(folder, 'verify-skin', [wk, 'convert', 'serialize', resources/'xfas_eye_plate.mesh', '-o', folder/'retained-roundtrip-json'])
+            def root_data(p):
+                return json.loads(p.read_text(encoding='utf-8-sig'))['Data']['RootChunk']
+            a = root_data(folder/'retained-json/xfas_eye_plate.mesh.json')
+            b = root_data(folder/'retained-roundtrip-json/xfas_eye_plate.mesh.json')
+            assert a['renderResourceBlob']['Data']['renderBuffer']['Bytes'] == b['renderResourceBlob']['Data']['renderBuffer']['Bytes']
+            assert a['boneNames'] == b['boneNames']
+            weight_transfer['binaryRoundtripSkinBufferExact'] = True
         lookup = folder/'lookup'/depot
         lookup.mkdir(parents=True)
         shutil.copy2(resources/'xfas_eye_plate.mesh', lookup)
         run(folder, 'pack-resolver', [wk, 'pack', folder/'lookup', '-o', folder/'packed'])
         run(folder, 'morph-import', ['dotnet', adapter, folder/'packed/lookup.archive', glb,
             resources/'xfas_eye_plate.morphtarget', folder/'roundtrip/xfas_eye_plate'])
+        if args.preserve_head_weights:
+            from retain_head_weights import preserve_morph
+            for name in ['morph-imported-json', 'morph-retained-json', 'morph-retained-roundtrip-json']:
+                (folder/name).mkdir()
+            run(folder, 'serialize-morph-skin', [wk, 'convert', 'serialize', resources/'xfas_eye_plate.morphtarget', '-o', folder/'morph-imported-json'])
+            morph_skin = preserve_morph(HQ/'research/consumers/eye-plate/json/h0_000_pwa_c__basehead.mesh.json',
+                HQ/'research/consumers/eye-plate/json/h0_000_pwa__morphs.morphtarget.json',
+                folder/'retained-roundtrip-json/xfas_eye_plate.mesh.json',
+                folder/'morph-imported-json/xfas_eye_plate.morphtarget.json', BASE/'head-shading-transfer.json',
+                folder/'morph-retained-json/xfas_eye_plate.morphtarget.json')
+            run(folder, 'restore-morph-skin', [wk, 'convert', 'deserialize', folder/'morph-retained-json', '-o', resources])
+            run(folder, 'verify-morph-skin', [wk, 'convert', 'serialize', resources/'xfas_eye_plate.morphtarget', '-o', folder/'morph-retained-roundtrip-json'])
+            a = root_data(folder/'morph-retained-json/xfas_eye_plate.morphtarget.json')['blob']['Data']
+            b = root_data(folder/'morph-retained-roundtrip-json/xfas_eye_plate.morphtarget.json')['blob']['Data']
+            assert a['baseBlob']['Data']['renderBuffer']['Bytes'] == b['baseBlob']['Data']['renderBuffer']['Bytes']
+            assert a['diffsBuffer']['Bytes'] == b['diffsBuffer']['Bytes'] and a['mappingBuffer']['Bytes'] == b['mappingBuffer']['Bytes']
+            morph_skin['binaryRoundtripSkinBufferExact'] = True
+            weight_transfer['morphBaseBuffer'] = morph_skin
+            run(folder, 'export-retained-morph', ['dotnet', adapter, '--export-bound', folder/'packed/lookup.archive',
+                resources/'xfas_eye_plate.morphtarget', folder/'roundtrip/xfas_eye_plate'])
         roundtrip = folder/'roundtrip/xfas_eye_plate.glb'
         assert roundtrip.exists()
-        candidates.append({'name': key, 'offset': amount, 'source': str(glb), 'roundtrip': str(roundtrip),
+        candidates.append({'name': key, 'offset': amount, 'source': str(glb), 'roundtrip': str(roundtrip), 'weightTransfer': weight_transfer,
             'resources': [{'path': str(p), 'sha256': sha(p), 'bytes': p.stat().st_size} for p in resources.iterdir()]})
     assert sha(source) == source_hash
-    report = {'root': str(out), 'method': args.method, 'source': str(source), 'sourceSha256': source_hash,
+    report = {'root': str(out), 'method': args.method, 'preserveHeadWeights': args.preserve_head_weights, 'source': str(source), 'sourceSha256': source_hash,
         'head': str(bound_head), 'headSourceSha256': {'mesh': sha(head_mesh), 'morph': sha(head_morph)},
         'zeroControl': str(BASE/'generated/roundtrip/xfas_eye_plate.glb.glb'),
         'mapping': str(BASE/'head-shading-transfer.json'), 'candidates': candidates,

@@ -12,6 +12,8 @@ Nathan requested these on 23 September 2026, without priority over current work.
 
 ## User-supplied visual evidence
 
+Additional renderer research request: assess [wgpu](wgpu-renderer-assessment.md) during the fidelity pass, including the suggested real-time ray-tracing capability, native/browser differences, benefit to our materials and actual integration/performance cost. Queued; no renderer choice or rewrite is implied.
+
 The two annotated screenshots are read-only references supplied with this request. They are not instructions embedded in an image. Preserved copies now live under ignored `research/consumers/preview-fidelity/raw/`; [the reference manifest](preview-fidelity-references.json) records matching source/copy hashes, and originals remain unchanged:
 
 - Eye close-up: `C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-a7c47d12-b418-4cf2-9cc2-4dd64dc813da.png`.

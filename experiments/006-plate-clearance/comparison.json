@@ -4,6 +4,8 @@
       "method": "shading",
       "offset": 5e-05,
       "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "headWeightMaxError": null,
       "roundtripSha256": "4471a82f4c78e1d8bcc1761e412f7c5aa09b36b6c0671d197dd4c6e9324e9fa4",
       "staticCases": 107,
       "worstStaticShadingPlaneDistance": 3.588677949666965e-05,
@@ -26,6 +28,8 @@
       "method": "shading",
       "offset": 0.0001,
       "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "headWeightMaxError": null,
       "roundtripSha256": "c14968b8dcafcad28d1425caeefa706d38b9d726190af8b249729f3289687b13",
       "staticCases": 107,
       "worstStaticShadingPlaneDistance": 8.597579745576057e-05,
@@ -48,6 +52,8 @@
       "method": "geometry",
       "offset": 5e-05,
       "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "headWeightMaxError": null,
       "roundtripSha256": "9bf34292f5f9a8612fde3bcf106c58755e285792f1ec83fba6125ddbe21e36b2",
       "staticCases": 107,
       "worstStaticShadingPlaneDistance": -5.178634357686015e-05,
@@ -70,6 +76,8 @@
       "method": "geometry",
       "offset": 0.0001,
       "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "headWeightMaxError": null,
       "roundtripSha256": "e95538e8aeb290ae20c2af2c54c89ed0a075909770de5f2d09e7e15c9cd3f8c1",
       "staticCases": 107,
       "worstStaticShadingPlaneDistance": -0.00010394859873978865,
@@ -87,13 +95,61 @@
         "static-clearance.json": "337cc8fbc69219cdce16c261e7697a7fc466ce3fbedabd032fb2e9e4d09cf79a",
         "posed-clearance.json": "1ad4c5afac19141f711a01211b520ad07fcb9d6ca15ff71eb11bac7e3b79fd1c"
       }
+    },
+    {
+      "method": "geometry",
+      "offset": 5e-05,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "headWeightMaxError": 0.0,
+      "roundtripSha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": -5.178634357686015e-05,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 9.602172195503493e-06,
+      "maxContactPairs": 167,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 6,
+      "morphMaxError": {
+        "POSITION": 1.2363161254609305e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "407152409dd1545c4ce406c60e577239d11c9dd950053846243e79bf20b8e04a",
+        "posed-clearance.json": "6f2d1d0659a9753005d1835355dedd9509b6b338789876d4124fdaac79cdaa2f"
+      }
+    },
+    {
+      "method": "geometry",
+      "offset": 0.0001,
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "headWeightMaxError": 0.0,
+      "roundtripSha256": "e7aa12fbce4e4cac28e39119ff6ebd42cb5202f43412e4186b19e102645f6679",
+      "staticCases": 107,
+      "worstStaticShadingPlaneDistance": -0.00010394859873978865,
+      "posedSamples": 73,
+      "worstPosedShadingPlaneDistance": 3.515931279311163e-05,
+      "maxContactPairs": 161,
+      "posesWithContact": 73,
+      "contactingTrianglesFrame0": 6,
+      "morphMaxError": {
+        "POSITION": 1.2342369650689205e-05,
+        "NORMAL": 0.001693107679136371,
+        "TANGENT": 0.001693107679136371
+      },
+      "evidenceHashes": {
+        "static-clearance.json": "407152409dd1545c4ce406c60e577239d11c9dd950053846243e79bf20b8e04a",
+        "posed-clearance.json": "6f2d1d0659a9753005d1835355dedd9509b6b338789876d4124fdaac79cdaa2f"
+      }
     }
   ],
   "releaseCandidateSelected": false,
   "conclusion": "Both methods clear most of the expanded plate. Neither is contact-free in the sampled eyelid motion. Geometry normals reduce the open-eye crease contacts but can oppose lighting normals in some individual eye morphs. A blanket larger offset is not a validated repair.",
   "next": [
-    "Classify render-visible versus occluded crease/corner contacts across sampled poses.",
-    "Investigate a local constrained correction or safe boundary treatment while preserving makeup coverage.",
+    "Retain native head skin bytes in BOTH the mesh and embedded morph base buffer for subsequent cut-out builds.",
+    "Use the contact-visibility and constrained-offset audit to investigate exposed corner/fold contacts without unbounded displacement or broad coverage loss.",
     "Keep game depth/blending validation separate and batch it with material/selector tests."
   ]
 }

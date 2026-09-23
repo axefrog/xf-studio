@@ -1,0 +1,894 @@
+{
+  "blender": "5.0.0",
+  "method": "Nine samples per actual intersection segment, five fixed perspective viewpoints, opaque head plus plate BVH",
+  "tolerance": 1e-06,
+  "viewDirections": {
+    "front": [
+      0,
+      0,
+      -1
+    ],
+    "left30": [
+      -0.5,
+      0,
+      -0.8660254
+    ],
+    "right30": [
+      0.5,
+      0,
+      -0.8660254
+    ],
+    "above20": [
+      0,
+      0.3420201,
+      -0.9396926
+    ],
+    "below20": [
+      0,
+      -0.3420201,
+      -0.9396926
+    ]
+  },
+  "cameraDistance": 0.35,
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\build.json",
+      "sha256": "f4bf179505c6e730e7af22c6a77f89236d3da0237c9cacb5e4bbe0f4cbcd3bdc"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\posed\\manifest.json",
+      "sha256": "1dde9796f4166224d1d51e1286b05311172e0c1954f5da70b21312f6bef1cbf8"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\posed\\head.positions.f64",
+      "sha256": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\offset-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "4471a82f4c78e1d8bcc1761e412f7c5aa09b36b6c0671d197dd4c6e9324e9fa4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\posed\\offset-0.00005000.positions.f64",
+      "sha256": "a1bfccc73dac053dd62a9efa115894c0770402d84d5270c29089753f44efe757"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\offset-0.00010000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "c14968b8dcafcad28d1425caeefa706d38b9d726190af8b249729f3289687b13"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\posed\\offset-0.00010000.positions.f64",
+      "sha256": "76e363450ff65feb701d10f571e31adc8a746e8102863bdbf973451b98d811a4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500\\contact-visibility-details.json",
+      "sha256": "f37e1001f6ad3fe7ed5a80c7ff4e2029f5a4d395e6c0dfcad322833333f12960"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\build.json",
+      "sha256": "8d7bfb6ed38a2064fbfb526745c97b4bef3b5998587325891db642d0f206dfad"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\posed\\manifest.json",
+      "sha256": "b5e195a95d2f571adeea604e19abb6f92f38e61328546702aeb18dda3f54709a"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\posed\\head.positions.f64",
+      "sha256": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\geometry-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "9bf34292f5f9a8612fde3bcf106c58755e285792f1ec83fba6125ddbe21e36b2"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\posed\\geometry-0.00005000.positions.f64",
+      "sha256": "a9f864917a0ef1c3cf88ad1dfd86c5bc4c3423360bf0f0f9499ea10590f33b1b"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\geometry-0.00010000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "e95538e8aeb290ae20c2af2c54c89ed0a075909770de5f2d09e7e15c9cd3f8c1"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\posed\\geometry-0.00010000.positions.f64",
+      "sha256": "b95edab215f153b06d4a4e72e9c58a53b3c72766746b8584efe6eaccb9c3565b"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\contact-visibility-details.json",
+      "sha256": "0024a81445c887117c2abf48d103bc6ed6df91b1db0041dd74c4efa0c30e755c"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\build.json",
+      "sha256": "7bf425d21f1a16c1ad9007717ca2fd65d3eeebcea6a99181a92e00e84394f287"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\manifest.json",
+      "sha256": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\head.positions.f64",
+      "sha256": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\geometry-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\geometry-0.00005000.positions.f64",
+      "sha256": "eee59cd3c41c24274969bd8d8d25317debb8861d4b2f2af02bcff5b8a8f073f9"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\geometry-0.00010000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "e7aa12fbce4e4cac28e39119ff6ebd42cb5202f43412e4186b19e102645f6679"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\geometry-0.00010000.positions.f64",
+      "sha256": "7e2fccc8d2819c90ccc001f68fb6b7b73f87675b04666e036d1dd8b822a942eb"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\contact-visibility-details.json",
+      "sha256": "7ddb1f2e0526ed1dbe9c7b8a1e611e26f93306148c8b1cf8ca7e1ddf4a60e877"
+    }
+  ],
+  "reports": [
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "candidate": "offset-0.00005000",
+      "frame": 0,
+      "pairs": 68,
+      "unresolvedPairs": 0,
+      "exposedPairs": 66,
+      "exposedPlateTriangles": [
+        589,
+        591,
+        601,
+        711,
+        734,
+        743,
+        744,
+        861,
+        1101,
+        1102,
+        1103,
+        1104,
+        1113,
+        1114,
+        1116,
+        1139,
+        1986,
+        1987,
+        1989,
+        1990,
+        1991,
+        1994,
+        1997,
+        1998,
+        2013,
+        2017,
+        2018,
+        2020,
+        2878,
+        2882,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 0,
+      "byView": {
+        "front": 64,
+        "left30": 39,
+        "right30": 56,
+        "above20": 49,
+        "below20": 43
+      },
+      "toleranceSensitivity": {
+        "1e-07": 66,
+        "1e-06": 66,
+        "1e-05": 66
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "candidate": "offset-0.00005000",
+      "frame": 25,
+      "pairs": 182,
+      "unresolvedPairs": 0,
+      "exposedPairs": 122,
+      "exposedPlateTriangles": [
+        792,
+        793,
+        1101,
+        1102,
+        1103,
+        1104,
+        1105,
+        1106,
+        1107,
+        1108,
+        1109,
+        1110,
+        1111,
+        1113,
+        1114,
+        1212,
+        1226,
+        1227,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2106,
+        2107,
+        2108,
+        2110,
+        2112,
+        2113,
+        2893,
+        2894,
+        2895,
+        2897,
+        2899,
+        2900,
+        2903,
+        2904,
+        2907,
+        2949,
+        2953,
+        2957,
+        2958,
+        2959,
+        2960,
+        2961,
+        2963,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 47,
+        "left30": 34,
+        "right30": 26,
+        "above20": 26,
+        "below20": 114
+      },
+      "toleranceSensitivity": {
+        "1e-07": 122,
+        "1e-06": 122,
+        "1e-05": 124
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "candidate": "offset-0.00010000",
+      "frame": 0,
+      "pairs": 53,
+      "unresolvedPairs": 0,
+      "exposedPairs": 46,
+      "exposedPlateTriangles": [
+        591,
+        601,
+        711,
+        1102,
+        1104,
+        1116,
+        1986,
+        1987,
+        1989,
+        1990,
+        1991,
+        1994,
+        1997,
+        1998,
+        2013,
+        2017,
+        2018,
+        2878,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 44,
+        "left30": 28,
+        "right30": 34,
+        "above20": 33,
+        "below20": 16
+      },
+      "toleranceSensitivity": {
+        "1e-07": 46,
+        "1e-06": 46,
+        "1e-05": 47
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132211979011500",
+      "preserveHeadWeights": false,
+      "candidate": "offset-0.00010000",
+      "frame": 25,
+      "pairs": 196,
+      "unresolvedPairs": 0,
+      "exposedPairs": 98,
+      "exposedPlateTriangles": [
+        792,
+        793,
+        1102,
+        1108,
+        1110,
+        1111,
+        1113,
+        1114,
+        1212,
+        1227,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2106,
+        2107,
+        2108,
+        2109,
+        2110,
+        2112,
+        2113,
+        2893,
+        2894,
+        2895,
+        2897,
+        2899,
+        2900,
+        2959,
+        2960,
+        2961,
+        2989,
+        2991
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 30,
+        "left30": 43,
+        "right30": 18,
+        "above20": 13,
+        "below20": 93
+      },
+      "toleranceSensitivity": {
+        "1e-07": 98,
+        "1e-06": 98,
+        "1e-05": 98
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "candidate": "geometry-0.00005000",
+      "frame": 0,
+      "pairs": 14,
+      "unresolvedPairs": 0,
+      "exposedPairs": 12,
+      "exposedPlateTriangles": [
+        711,
+        1116,
+        2878,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 0,
+      "byView": {
+        "front": 12,
+        "left30": 6,
+        "right30": 4,
+        "above20": 3,
+        "below20": 4
+      },
+      "toleranceSensitivity": {
+        "1e-07": 12,
+        "1e-06": 12,
+        "1e-05": 12
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "candidate": "geometry-0.00005000",
+      "frame": 25,
+      "pairs": 167,
+      "unresolvedPairs": 0,
+      "exposedPairs": 104,
+      "exposedPlateTriangles": [
+        792,
+        1084,
+        1086,
+        1090,
+        1102,
+        1104,
+        1105,
+        1106,
+        1107,
+        1108,
+        1109,
+        1110,
+        1111,
+        1157,
+        1158,
+        1212,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2107,
+        2108,
+        2112,
+        2113,
+        2893,
+        2894,
+        2899,
+        2900,
+        2903,
+        2904,
+        2907,
+        2957,
+        2958,
+        2959,
+        2960,
+        2961,
+        2962,
+        2963,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 50,
+        "left30": 26,
+        "right30": 30,
+        "above20": 22,
+        "below20": 97
+      },
+      "toleranceSensitivity": {
+        "1e-07": 104,
+        "1e-06": 104,
+        "1e-05": 104
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "candidate": "geometry-0.00005000",
+      "frame": 169,
+      "pairs": 169,
+      "unresolvedPairs": 0,
+      "exposedPairs": 104,
+      "exposedPlateTriangles": [
+        792,
+        796,
+        1084,
+        1086,
+        1090,
+        1102,
+        1104,
+        1105,
+        1106,
+        1107,
+        1108,
+        1109,
+        1110,
+        1111,
+        1112,
+        1146,
+        1150,
+        1151,
+        1157,
+        1158,
+        1212,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2107,
+        2108,
+        2112,
+        2113,
+        2893,
+        2894,
+        2899,
+        2900,
+        2903,
+        2904,
+        2907,
+        2957,
+        2958,
+        2959,
+        2960,
+        2961,
+        2962,
+        2963,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 38,
+        "left30": 26,
+        "right30": 35,
+        "above20": 16,
+        "below20": 98
+      },
+      "toleranceSensitivity": {
+        "1e-07": 104,
+        "1e-06": 104,
+        "1e-05": 104
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "candidate": "geometry-0.00010000",
+      "frame": 0,
+      "pairs": 14,
+      "unresolvedPairs": 0,
+      "exposedPairs": 6,
+      "exposedPlateTriangles": [
+        2878,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 0,
+      "byView": {
+        "front": 6,
+        "left30": 2,
+        "right30": 2,
+        "above20": 3,
+        "below20": 4
+      },
+      "toleranceSensitivity": {
+        "1e-07": 6,
+        "1e-06": 6,
+        "1e-05": 6
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+      "preserveHeadWeights": false,
+      "candidate": "geometry-0.00010000",
+      "frame": 25,
+      "pairs": 163,
+      "unresolvedPairs": 0,
+      "exposedPairs": 68,
+      "exposedPlateTriangles": [
+        1107,
+        1108,
+        1110,
+        1111,
+        1212,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2107,
+        2108,
+        2112,
+        2113,
+        2893,
+        2894,
+        2959,
+        2961,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 5,
+      "byView": {
+        "front": 19,
+        "left30": 30,
+        "right30": 22,
+        "above20": 14,
+        "below20": 55
+      },
+      "toleranceSensitivity": {
+        "1e-07": 68,
+        "1e-06": 68,
+        "1e-05": 68
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "candidate": "geometry-0.00005000",
+      "frame": 0,
+      "pairs": 14,
+      "unresolvedPairs": 0,
+      "exposedPairs": 12,
+      "exposedPlateTriangles": [
+        711,
+        1116,
+        2878,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 0,
+      "byView": {
+        "front": 12,
+        "left30": 6,
+        "right30": 4,
+        "above20": 3,
+        "below20": 4
+      },
+      "toleranceSensitivity": {
+        "1e-07": 12,
+        "1e-06": 12,
+        "1e-05": 12
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "candidate": "geometry-0.00005000",
+      "frame": 25,
+      "pairs": 167,
+      "unresolvedPairs": 0,
+      "exposedPairs": 104,
+      "exposedPlateTriangles": [
+        792,
+        1084,
+        1086,
+        1090,
+        1102,
+        1104,
+        1105,
+        1106,
+        1107,
+        1108,
+        1109,
+        1110,
+        1111,
+        1157,
+        1158,
+        1212,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2107,
+        2108,
+        2112,
+        2113,
+        2893,
+        2894,
+        2899,
+        2900,
+        2903,
+        2904,
+        2907,
+        2957,
+        2958,
+        2959,
+        2960,
+        2961,
+        2962,
+        2963,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 3,
+      "byView": {
+        "front": 51,
+        "left30": 26,
+        "right30": 33,
+        "above20": 23,
+        "below20": 97
+      },
+      "toleranceSensitivity": {
+        "1e-07": 104,
+        "1e-06": 104,
+        "1e-05": 104
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "candidate": "geometry-0.00010000",
+      "frame": 0,
+      "pairs": 14,
+      "unresolvedPairs": 0,
+      "exposedPairs": 6,
+      "exposedPlateTriangles": [
+        2878,
+        2893,
+        2894
+      ],
+      "exposedNewNonAdjacentPairs": 0,
+      "byView": {
+        "front": 6,
+        "left30": 2,
+        "right30": 2,
+        "above20": 3,
+        "below20": 4
+      },
+      "toleranceSensitivity": {
+        "1e-07": 6,
+        "1e-06": 6,
+        "1e-05": 6
+      }
+    },
+    {
+      "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+      "preserveHeadWeights": true,
+      "candidate": "geometry-0.00010000",
+      "frame": 25,
+      "pairs": 161,
+      "unresolvedPairs": 0,
+      "exposedPairs": 67,
+      "exposedPlateTriangles": [
+        1107,
+        1108,
+        1110,
+        1111,
+        1212,
+        1229,
+        1231,
+        1339,
+        1340,
+        1342,
+        1928,
+        1932,
+        1945,
+        2097,
+        2098,
+        2099,
+        2100,
+        2101,
+        2102,
+        2103,
+        2104,
+        2105,
+        2107,
+        2108,
+        2112,
+        2113,
+        2893,
+        2894,
+        2988,
+        2989,
+        2990,
+        2991,
+        2992
+      ],
+      "exposedNewNonAdjacentPairs": 5,
+      "byView": {
+        "front": 19,
+        "left30": 32,
+        "right30": 22,
+        "above20": 14,
+        "below20": 52
+      },
+      "toleranceSensitivity": {
+        "1e-07": 67,
+        "1e-06": 67,
+        "1e-05": 67
+      }
+    }
+  ],
+  "releaseCandidateSelected": false,
+  "limitations": [
+    "Only the representative neutral/closed/worst-contact sampled frames, not every animation frame or custom morph.",
+    "Finite segment samples and cameras cannot prove invisibility from every view.",
+    "Coplanar/unresolved segments are not considered hidden.",
+    "Head-only and head+plate occlusion are reported separately; actual makeup coverage and game blending are not simulated.",
+    "Front-facing classification uses triangle winding; game culling settings may differ.",
+    "Visibility is a geometric diagnostic, not a game rendering claim."
+  ]
+}

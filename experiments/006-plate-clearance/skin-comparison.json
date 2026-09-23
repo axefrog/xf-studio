@@ -1,0 +1,64 @@
+{
+  "baseline": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200",
+  "retained": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+  "samples": 73,
+  "headPosesExactlyEqual": true,
+  "results": [
+    {
+      "candidate": "geometry-0.00005000",
+      "offset": 5e-05,
+      "nonSkinAttributesAndAllMorphsIdentical": true,
+      "boneNamesAndBindTransformsIdentical": true,
+      "maxPosedDisplacementDueToWeightChange": 1.7799384042130725e-05,
+      "p99PosedDisplacementDueToWeightChange": 2.894772178054049e-06,
+      "oldMaxContactPairs": 169,
+      "newMaxContactPairs": 167,
+      "oldFrame0Contacts": 14,
+      "newFrame0Contacts": 14,
+      "oldTotalSampleContactPairs": 1651,
+      "newTotalSampleContactPairs": 1626,
+      "samplesImproved": 7,
+      "samplesWorsened": 0,
+      "samplesEqual": 66
+    },
+    {
+      "candidate": "geometry-0.00010000",
+      "offset": 0.0001,
+      "nonSkinAttributesAndAllMorphsIdentical": true,
+      "boneNamesAndBindTransformsIdentical": true,
+      "maxPosedDisplacementDueToWeightChange": 1.787259123240919e-05,
+      "p99PosedDisplacementDueToWeightChange": 2.899802568661714e-06,
+      "oldMaxContactPairs": 163,
+      "newMaxContactPairs": 161,
+      "oldFrame0Contacts": 14,
+      "newFrame0Contacts": 14,
+      "oldTotalSampleContactPairs": 1563,
+      "newTotalSampleContactPairs": 1559,
+      "samplesImproved": 3,
+      "samplesWorsened": 1,
+      "samplesEqual": 69
+    }
+  ],
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\build.json",
+      "sha256": "8d7bfb6ed38a2064fbfb526745c97b4bef3b5998587325891db642d0f206dfad"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\build.json",
+      "sha256": "7bf425d21f1a16c1ad9007717ca2fd65d3eeebcea6a99181a92e00e84394f287"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790132667142157200\\posed-clearance.json",
+      "sha256": "1ad4c5afac19141f711a01211b520ad07fcb9d6ca15ff71eb11bac7e3b79fd1c"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\posed-clearance.json",
+      "sha256": "6f2d1d0659a9753005d1835355dedd9509b6b338789876d4124fdaac79cdaa2f"
+    }
+  ],
+  "limitations": [
+    "Isolates the skin-byte change on the current decoded idle and saved morph combination, not every game animation.",
+    "Residual intersections and static geometry issues remain separate; no release geometry is approved."
+  ]
+}
