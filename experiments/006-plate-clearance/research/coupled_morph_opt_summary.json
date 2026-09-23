@@ -1,0 +1,1832 @@
+{
+  "startingNumericSha256": "16b805128b406abe6ef1729c081b9df551253c2a1a3a221f4d1137f9f5438083",
+  "startingReportSha256": "db01748be3516b2c9ead3ba890170c7ce332b75fc0f1a1cbb931e0e0e0d4ccc2",
+  "sourceBuild": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+  "trials": [
+    {
+      "start": 4,
+      "finish": 0,
+      "contexts": [
+        {
+          "context": "h171_eyes",
+          "contacts": 0
+        }
+      ],
+      "localVertices": 60,
+      "satRows": 12,
+      "solverStatus": 0,
+      "solverMessage": "Optimization terminated successfully",
+      "iterations": 7,
+      "minimumShapeSlackSquared": -1.41317846313882e-10,
+      "minimumSatSlack": -3.3306690738754696e-16,
+      "axisChoices": [
+        {
+          "context": "h171_eyes",
+          "plateFace": 674,
+          "headFace": 1854,
+          "direction": [
+            0.5249415245794334,
+            -0.685399572037085,
+            0.5046422717367233
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2784,
+          "headFace": 3672,
+          "direction": [
+            -0.44923492242922164,
+            -0.2493839793149799,
+            0.8579018681242259
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2788,
+          "headFace": 12326,
+          "direction": [
+            -0.3022781986725613,
+            0.399156462174499,
+            0.8656223248689981
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2789,
+          "headFace": 12326,
+          "direction": [
+            -0.3022781986725613,
+            0.399156462174499,
+            0.8656223248689981
+          ]
+        }
+      ],
+      "targetMorph": "h171_eyes",
+      "axisMode": "shortest",
+      "maxCorrection": 7.94839370098714e-06,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-h171_eyes-shortest.npz",
+      "numericSha256": "a57663eca4ea5f37b4fc9d195df7fb0dd3dc8d81bf083195f567b38aadecbb3b"
+    },
+    {
+      "start": 4,
+      "finish": 10,
+      "contexts": [
+        {
+          "context": "h171_eyes",
+          "contacts": 10
+        }
+      ],
+      "localVertices": 60,
+      "satRows": 12,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 57,
+      "minimumShapeSlackSquared": -27.474957548359118,
+      "minimumSatSlack": -31.160639464047485,
+      "axisChoices": [
+        {
+          "context": "h171_eyes",
+          "plateFace": 674,
+          "headFace": 1854,
+          "direction": [
+            -0.6468590621185728,
+            0.6020421903861642,
+            -0.4681010091316937
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2784,
+          "headFace": 3672,
+          "direction": [
+            -0.29657984016116923,
+            -0.9440824920195999,
+            0.14404390536234876
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2788,
+          "headFace": 12326,
+          "direction": [
+            0.08251820127121912,
+            -0.24234512791327875,
+            -0.9666744981821229
+          ]
+        },
+        {
+          "context": "h171_eyes",
+          "plateFace": 2789,
+          "headFace": 12326,
+          "direction": [
+            -0.5689742242683363,
+            -0.8195731251114478,
+            -0.06758864337520099
+          ]
+        }
+      ],
+      "targetMorph": "h171_eyes",
+      "axisMode": "outward",
+      "maxCorrection": 0.00012417300185339772,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-h171_eyes-outward.npz",
+      "numericSha256": "fb5b7418c1a04748d21eb57c609e49803b2026ca1571e3ab5a8583d594e22d15"
+    },
+    {
+      "start": 14,
+      "finish": 0,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 0
+        },
+        {
+          "context": "frame-169",
+          "contacts": 0
+        }
+      ],
+      "localVertices": 38,
+      "satRows": 42,
+      "solverStatus": 0,
+      "solverMessage": "Optimization terminated successfully",
+      "iterations": 12,
+      "minimumShapeSlackSquared": -1.1081979778282403e-10,
+      "minimumSatSlack": -9.50350909079134e-14,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.11253324506928795,
+            0.9696586027125921,
+            -0.2170218029130692
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4803826853673896,
+            -0.869378243501499,
+            0.11581858799633177
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.1054160871546261,
+            0.9627686723113297,
+            -0.24892555550784193
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4668404632698456,
+            -0.8701588933043741,
+            0.1577449912273056
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "shortest",
+      "maxCorrection": 6.0182379434524606e-05,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-h091_eyes-shortest.npz",
+      "numericSha256": "a04814c3a65416af572be915fab36af1dd03a4c8d0067d9157b1817fa802313e"
+    },
+    {
+      "start": 14,
+      "finish": 35,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 18
+        },
+        {
+          "context": "frame-169",
+          "contacts": 17
+        }
+      ],
+      "localVertices": 38,
+      "satRows": 42,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 16,
+      "minimumShapeSlackSquared": -444.3076140306756,
+      "minimumSatSlack": -14.560511875167169,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            0.8018563868752193,
+            -0.3905679700517689,
+            0.4521979606290359
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            0.17975023653764444,
+            -0.742029086187838,
+            0.6458193924898066
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.5786286979882551,
+            -0.8027310413558336,
+            -0.1442626254724198
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.0338888293819543,
+            0.9538218267353742,
+            -0.2984551391521255
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            0.7829708768056886,
+            -0.38633515844629934,
+            0.4875466658919985
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            0.15985313178472282,
+            -0.723259380204297,
+            0.6718205453877636
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.5790581140536529,
+            -0.8029147094563656,
+            -0.14149088270000634
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.04482447076267868,
+            0.9447814241474843,
+            -0.32462105200787145
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "outward",
+      "maxCorrection": 0.00023717249667602267,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-h091_eyes-outward.npz",
+      "numericSha256": "8705f3aa37c893e4eda2e7b6b80abe6c2c5a057f04a9e43e988e3e1e0218c580"
+    },
+    {
+      "start": 14,
+      "finish": 37,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 18
+        },
+        {
+          "context": "frame-169",
+          "contacts": 19
+        }
+      ],
+      "localVertices": 38,
+      "satRows": 42,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 17,
+      "minimumShapeSlackSquared": -448.736891356214,
+      "minimumSatSlack": -14.613223753983892,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            0.18539149936004426,
+            -0.7089482370972827,
+            0.6804574851389982
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            0.17975023653764444,
+            -0.742029086187838,
+            0.6458193924898066
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            0.09876360432716261,
+            -0.9725138223591333,
+            0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.0338888293819543,
+            0.9538218267353742,
+            -0.2984551391521255
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            0.16451644849160138,
+            -0.6893825069932881,
+            0.7054687074756467
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            0.15985313178472282,
+            -0.723259380204297,
+            0.6718205453877636
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            0.09124818783511728,
+            -0.9659389255953392,
+            0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.04482447076267868,
+            0.9447814241474843,
+            -0.32462105200787145
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "normal",
+      "maxCorrection": 0.00023490055724966066,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-h091_eyes-normal.npz",
+      "numericSha256": "74256c10a962c958053fc8a4d8cc97947a89394cf6185760a78da7f1ebda54ca"
+    }
+  ],
+  "limits": [
+    "SAT axes are sufficient finite-triangle separation conditions for the selected pairs, not a global nonintersection proof.",
+    "Local solver success does not override exact full 107-static/73-pose gates.",
+    "No resource import or master edit."
+  ],
+  "combinedNumericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-combined.npz",
+  "combinedNumericSha256": "928c6cf5b454d23b5209f21ef5ec559533a3481df50c8064dda579cd140f5f17",
+  "iteratedTrial": {
+    "start": 20,
+    "finish": 6,
+    "contexts": [
+      {
+        "context": "frame-25",
+        "contacts": 0
+      },
+      {
+        "context": "frame-120",
+        "contacts": 5
+      },
+      {
+        "context": "frame-169",
+        "contacts": 0
+      },
+      {
+        "context": "frame-170",
+        "contacts": 1
+      }
+    ],
+    "localVertices": 43,
+    "satRows": 60,
+    "solverStatus": 8,
+    "solverMessage": "Positive directional derivative for linesearch",
+    "iterations": 17,
+    "minimumShapeSlackSquared": -9.580690819061537,
+    "minimumSatSlack": -1.0273618612110813,
+    "axisChoices": [
+      {
+        "context": "frame-25",
+        "plateFace": 792,
+        "headFace": 2419,
+        "direction": [
+          -0.09876360432716261,
+          0.9725138223591333,
+          -0.21086160338178178
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 792,
+        "headFace": 2420,
+        "direction": [
+          -0.09876360432716261,
+          0.9725138223591333,
+          -0.21086160338178178
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 792,
+        "headFace": 2423,
+        "direction": [
+          -0.11253324506928795,
+          0.9696586027125921,
+          -0.2170218029130692
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 795,
+        "headFace": 1994,
+        "direction": [
+          0.08453179058812454,
+          -0.9199089793764668,
+          0.38291232161228844
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 795,
+        "headFace": 1995,
+        "direction": [
+          -0.3349609151877274,
+          -0.7578892085999352,
+          0.5598259843776137
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 797,
+        "headFace": 722,
+        "direction": [
+          -0.056902974128348466,
+          0.9981769826197101,
+          -0.020118720226687044
+        ]
+      },
+      {
+        "context": "frame-25",
+        "plateFace": 801,
+        "headFace": 1981,
+        "direction": [
+          0.4803826853673896,
+          -0.869378243501499,
+          0.11581858799633177
+        ]
+      },
+      {
+        "context": "frame-120",
+        "plateFace": 799,
+        "headFace": 1989,
+        "direction": [
+          -0.09787193813105512,
+          0.9859114969334126,
+          -0.13564513976176243
+        ]
+      },
+      {
+        "context": "frame-120",
+        "plateFace": 800,
+        "headFace": 1989,
+        "direction": [
+          0.03365801150013983,
+          -0.9885714801640829,
+          0.14694749697783424
+        ]
+      },
+      {
+        "context": "frame-120",
+        "plateFace": 801,
+        "headFace": 1989,
+        "direction": [
+          0.03365801150013983,
+          -0.9885714801640829,
+          0.14694749697783424
+        ]
+      },
+      {
+        "context": "frame-120",
+        "plateFace": 803,
+        "headFace": 1989,
+        "direction": [
+          0.03365801150013983,
+          -0.9885714801640829,
+          0.14694749697783424
+        ]
+      },
+      {
+        "context": "frame-120",
+        "plateFace": 1227,
+        "headFace": 1989,
+        "direction": [
+          0.03365801150013983,
+          -0.9885714801640829,
+          0.14694749697783424
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 792,
+        "headFace": 2419,
+        "direction": [
+          -0.09124818783511728,
+          0.9659389255953392,
+          -0.2421482195609311
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 792,
+        "headFace": 2420,
+        "direction": [
+          -0.09124818783511728,
+          0.9659389255953392,
+          -0.2421482195609311
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 792,
+        "headFace": 2423,
+        "direction": [
+          -0.1054160871546261,
+          0.9627686723113297,
+          -0.24892555550784193
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 795,
+        "headFace": 1994,
+        "direction": [
+          0.07210899933897118,
+          -0.9080575400381106,
+          0.4125915609828531
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 795,
+        "headFace": 1995,
+        "direction": [
+          -0.3602965653992033,
+          -0.7320925340779535,
+          0.5781236083303103
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 797,
+        "headFace": 722,
+        "direction": [
+          -0.047403875543976785,
+          0.9982136032649768,
+          -0.036365847166852094
+        ]
+      },
+      {
+        "context": "frame-169",
+        "plateFace": 801,
+        "headFace": 1981,
+        "direction": [
+          0.4668404632698456,
+          -0.8701588933043741,
+          0.1577449912273056
+        ]
+      },
+      {
+        "context": "frame-170",
+        "plateFace": 1227,
+        "headFace": 1987,
+        "direction": [
+          -0.13952942635387827,
+          -0.9078100070420809,
+          0.3954902404555826
+        ]
+      }
+    ],
+    "targetMorph": "h091_eyes",
+    "axisMode": "carried-shortest-plus-new-contacts",
+    "maxCorrection": 3.140298799145481e-05
+  },
+  "iteratedNumericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-iterated.npz",
+  "iteratedNumericSha256": "158675dd976d813d1128491882079a232c46ff1b756d73f9a58a1656a94f7ead",
+  "alternateIteratedTrials": [
+    {
+      "start": 20,
+      "finish": 6,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 0
+        },
+        {
+          "context": "frame-120",
+          "contacts": 5
+        },
+        {
+          "context": "frame-169",
+          "contacts": 0
+        },
+        {
+          "context": "frame-170",
+          "contacts": 1
+        }
+      ],
+      "localVertices": 43,
+      "satRows": 60,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 30,
+      "minimumShapeSlackSquared": -8.277112328869407e-11,
+      "minimumSatSlack": -20.326298360388513,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.11253324506928795,
+            0.9696586027125921,
+            -0.2170218029130692
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4803826853673896,
+            -0.869378243501499,
+            0.11581858799633177
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 799,
+          "headFace": 1989,
+          "direction": [
+            -0.09787193813105512,
+            0.9859114969334126,
+            -0.13564513976176243
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 800,
+          "headFace": 1989,
+          "direction": [
+            -0.5315137269337509,
+            0.8460808876928387,
+            -0.04050048841547461
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 801,
+          "headFace": 1989,
+          "direction": [
+            0.47452305164655906,
+            0.6623103662722661,
+            -0.5798041498509079
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 803,
+          "headFace": 1989,
+          "direction": [
+            0.27507166978333447,
+            0.8632903032515815,
+            -0.42316123262227184
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 1227,
+          "headFace": 1989,
+          "direction": [
+            0.27507166978333447,
+            0.8632903032515815,
+            -0.42316123262227184
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.1054160871546261,
+            0.9627686723113297,
+            -0.24892555550784193
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4668404632698456,
+            -0.8701588933043741,
+            0.1577449912273056
+          ]
+        },
+        {
+          "context": "frame-170",
+          "plateFace": 1227,
+          "headFace": 1987,
+          "direction": [
+            0.14237617463499708,
+            0.8447608706542267,
+            -0.5158566625602674
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "carried-plus-outward",
+      "maxCorrection": 1.4917677545662418e-14,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-iterated-outward.npz",
+      "numericSha256": "d73a37832725b1ee8002b032cb6ce15179bbf0473706047456cd735603f8a3b9"
+    },
+    {
+      "start": 20,
+      "finish": 6,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 0
+        },
+        {
+          "context": "frame-120",
+          "contacts": 5
+        },
+        {
+          "context": "frame-169",
+          "contacts": 0
+        },
+        {
+          "context": "frame-170",
+          "contacts": 1
+        }
+      ],
+      "localVertices": 43,
+      "satRows": 60,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 30,
+      "minimumShapeSlackSquared": -8.277112328869407e-11,
+      "minimumSatSlack": -20.326298360388513,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.11253324506928795,
+            0.9696586027125921,
+            -0.2170218029130692
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4803826853673896,
+            -0.869378243501499,
+            0.11581858799633177
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 799,
+          "headFace": 1989,
+          "direction": [
+            -0.09787193813105512,
+            0.9859114969334126,
+            -0.13564513976176243
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 800,
+          "headFace": 1989,
+          "direction": [
+            -0.5315137269337509,
+            0.8460808876928387,
+            -0.04050048841547461
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 801,
+          "headFace": 1989,
+          "direction": [
+            0.47452305164655906,
+            0.6623103662722661,
+            -0.5798041498509079
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 803,
+          "headFace": 1989,
+          "direction": [
+            0.27507166978333447,
+            0.8632903032515815,
+            -0.42316123262227184
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 1227,
+          "headFace": 1989,
+          "direction": [
+            0.27507166978333447,
+            0.8632903032515815,
+            -0.42316123262227184
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.1054160871546261,
+            0.9627686723113297,
+            -0.24892555550784193
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4668404632698456,
+            -0.8701588933043741,
+            0.1577449912273056
+          ]
+        },
+        {
+          "context": "frame-170",
+          "plateFace": 1227,
+          "headFace": 1987,
+          "direction": [
+            0.14237617463499708,
+            0.8447608706542267,
+            -0.5158566625602674
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "carried-plus-normal",
+      "maxCorrection": 1.4917677545662418e-14,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-iterated-normal.npz",
+      "numericSha256": "d73a37832725b1ee8002b032cb6ce15179bbf0473706047456cd735603f8a3b9"
+    }
+  ],
+  "expandedIteratedTrials": [
+    {
+      "start": 20,
+      "finish": 6,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 0
+        },
+        {
+          "context": "frame-120",
+          "contacts": 5
+        },
+        {
+          "context": "frame-169",
+          "contacts": 0
+        },
+        {
+          "context": "frame-170",
+          "contacts": 1
+        }
+      ],
+      "localVertices": 64,
+      "satRows": 60,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 21,
+      "minimumShapeSlackSquared": -9.580690819078995,
+      "minimumSatSlack": -1.0273618612076947,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.11253324506928795,
+            0.9696586027125921,
+            -0.2170218029130692
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4803826853673896,
+            -0.869378243501499,
+            0.11581858799633177
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 799,
+          "headFace": 1989,
+          "direction": [
+            -0.09787193813105512,
+            0.9859114969334126,
+            -0.13564513976176243
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 800,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 801,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 803,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 1227,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.1054160871546261,
+            0.9627686723113297,
+            -0.24892555550784193
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4668404632698456,
+            -0.8701588933043741,
+            0.1577449912273056
+          ]
+        },
+        {
+          "context": "frame-170",
+          "plateFace": 1227,
+          "headFace": 1987,
+          "direction": [
+            -0.13952942635387827,
+            -0.9078100070420809,
+            0.3954902404555826
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "carried-shortest-expanded",
+      "rings": 3,
+      "maxCorrection": 3.140298799151535e-05,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-iterated-rings-3.npz",
+      "numericSha256": "98f5a20f1ca515f5b3efb1a030931b1de79476d5491d74562c84de67831669ef"
+    },
+    {
+      "start": 20,
+      "finish": 6,
+      "contexts": [
+        {
+          "context": "frame-25",
+          "contacts": 0
+        },
+        {
+          "context": "frame-120",
+          "contacts": 5
+        },
+        {
+          "context": "frame-169",
+          "contacts": 0
+        },
+        {
+          "context": "frame-170",
+          "contacts": 1
+        }
+      ],
+      "localVertices": 88,
+      "satRows": 60,
+      "solverStatus": 8,
+      "solverMessage": "Positive directional derivative for linesearch",
+      "iterations": 13,
+      "minimumShapeSlackSquared": -9.580690819177285,
+      "minimumSatSlack": -1.0273618612112025,
+      "axisChoices": [
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09876360432716261,
+            0.9725138223591333,
+            -0.21086160338178178
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.11253324506928795,
+            0.9696586027125921,
+            -0.2170218029130692
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.08453179058812454,
+            -0.9199089793764668,
+            0.38291232161228844
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3349609151877274,
+            -0.7578892085999352,
+            0.5598259843776137
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.056902974128348466,
+            0.9981769826197101,
+            -0.020118720226687044
+          ]
+        },
+        {
+          "context": "frame-25",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4803826853673896,
+            -0.869378243501499,
+            0.11581858799633177
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 799,
+          "headFace": 1989,
+          "direction": [
+            -0.09787193813105512,
+            0.9859114969334126,
+            -0.13564513976176243
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 800,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 801,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 803,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-120",
+          "plateFace": 1227,
+          "headFace": 1989,
+          "direction": [
+            0.03365801150013983,
+            -0.9885714801640829,
+            0.14694749697783424
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2419,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2420,
+          "direction": [
+            -0.09124818783511728,
+            0.9659389255953392,
+            -0.2421482195609311
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 792,
+          "headFace": 2423,
+          "direction": [
+            -0.1054160871546261,
+            0.9627686723113297,
+            -0.24892555550784193
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1994,
+          "direction": [
+            0.07210899933897118,
+            -0.9080575400381106,
+            0.4125915609828531
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 795,
+          "headFace": 1995,
+          "direction": [
+            -0.3602965653992033,
+            -0.7320925340779535,
+            0.5781236083303103
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 797,
+          "headFace": 722,
+          "direction": [
+            -0.047403875543976785,
+            0.9982136032649768,
+            -0.036365847166852094
+          ]
+        },
+        {
+          "context": "frame-169",
+          "plateFace": 801,
+          "headFace": 1981,
+          "direction": [
+            0.4668404632698456,
+            -0.8701588933043741,
+            0.1577449912273056
+          ]
+        },
+        {
+          "context": "frame-170",
+          "plateFace": 1227,
+          "headFace": 1987,
+          "direction": [
+            -0.13952942635387827,
+            -0.9078100070420809,
+            0.3954902404555826
+          ]
+        }
+      ],
+      "targetMorph": "h091_eyes",
+      "axisMode": "carried-shortest-expanded",
+      "rings": 4,
+      "maxCorrection": 3.140298799159063e-05,
+      "numericResult": "experiments/006-plate-clearance/generated/morph-aware/coupled-iterated-rings-4.npz",
+      "numericSha256": "5d4cf2ad26338573477199582a1936584922aa05da7641e2ba3cf9ea58d42e87"
+    }
+  ]
+}
