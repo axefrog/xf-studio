@@ -24,6 +24,8 @@ Preserved comparison: ignored `research/consumers/preview-fidelity/raw/brow-comp
 
 Nathan observes movement above the eyes in the game idle that appears absent from the studio. Treat this as a reported fidelity gap, not proof of a missing bone track. Compare brow/accessory rig transport, face-bake bone motion, facial correctives, scale channels and wrinkle/material effects. First establish what the current extracted clip actually contains and what the preview applies; exact game graph/clip selection remains unverified. Queue the correction with the brow fidelity pass after makeup, with bounded offline tracing allowed now. Record observed motion versus hypotheses and batch any needed game comparison.
 
+The [bounded offline audit](../animation/brow-idle-gap.md) finds animated brow joints and nonzero motion on the actual brow cards, with no missing facial bindings. The bake does omit changing processed wrinkle outputs; their visible effect and the exact game clip/graph remain unverified. Investigate these rather than assuming an entirely missing brow track.
+
 ## Earlier references and renderer lead
 
 ## Matte flicker at narrow FOV / distant zoom
