@@ -334,6 +334,49 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?:
   if (x === 0) return 0;
   return x * x * (3 - 2 * x) * (strength ? strength(u, v) : weight) * l.opacity;
 }
+
+/** Raster-only preparation. Keep coverageAt above as the independent scalar
+ * reference: these bounds skip only samples whose exact feather result is
+ * already zero or one, without approximating either boundary integral. */
+function prepareRasterCoverage(l:Layer,polygon:Point[],strength:PigmentStrength|undefined,
+  softness:{maxWidth:number;width:number|PigmentStrength}) {
+  // Match the scalar loop's closing edge first, including nearest-edge ties.
+  const edges=polygon.map((b,i)=>{
+    const a=polygon[(i+polygon.length-1)%polygon.length],dx=b.u-a.u,dy=b.v-a.v;
+    return {u:a.u,v:a.v,endV:b.v,dx,dy,denominator:dx*dx+dy*dy||1,weight:a.weight,endWeight:b.weight};
+  });
+  // The width field is min + (max-min)*boundedField. Allow outward roundoff
+  // from that expression and from bounds/warp sums; these are rejection bounds,
+  // never replacement widths used to compute the authored feather itself.
+  const margin=Number.EPSILON*64*Math.max(1,softness.maxWidth,...polygon.flatMap(p=>[Math.abs(p.u),Math.abs(p.v)]));
+  const halfWidth=(softness.maxWidth+margin)/2;
+  const minU=Math.min(...polygon.map(p=>p.u))-halfWidth,maxU=Math.max(...polygon.map(p=>p.u))+halfWidth,
+    minV=Math.min(...polygon.map(p=>p.v))-halfWidth,maxV=Math.max(...polygon.map(p=>p.v))+halfWidth;
+  const warpU=l.fields.reduce((sum,f)=>sum+Math.abs(f.du),0)+margin,
+    warpV=l.fields.reduce((sum,f)=>sum+Math.abs(f.dv),0)+margin;
+  function at(u:number,v:number) {
+    if(u<minU-warpU||u>maxU+warpU||v<minV-warpV||v>maxV+warpV)return 0;
+    [u,v]=warpFields(u,v,l.fields);
+    if(u<minU||u>maxU||v<minV||v>maxV)return 0;
+    let inside=false,best=Infinity,weight=1;
+    for(const edge of edges){
+      if(edge.v>v!==edge.endV>v&&u<edge.dx*(v-edge.v)/edge.dy+edge.u)inside=!inside;
+      const du=u-edge.u,dv=v-edge.v,t=clamp((du*edge.dx+dv*edge.dy)/edge.denominator);
+      const distance=(du-edge.dx*t)**2+(dv-edge.dy*t)**2;
+      if(distance<best){best=distance;weight=edge.weight*(1-t)+edge.endWeight*t;}
+    }
+    const distance=Math.sqrt(best);
+    let x:number;
+    if(distance>=halfWidth){if(!inside)return 0;x=1;}
+    else {
+      const feather=typeof softness.width==="function"?softness.width(u,v):softness.width;
+      x=clamp(.5+((inside?1:-1)*distance)/feather);
+      if(x===0)return 0;
+    }
+    return x*x*(3-2*x)*(strength?strength(u,v):weight)*l.opacity;
+  }
+  return l.symmetry?(u:number,v:number)=>Math.max(at(u,v),at(1-u,v)):at;
+}
 // Alpha-only design: white RGB provides colour-independent masks and clean edges.
 export function createRasterJob(l: Layer, size: number) {
   if (!Number.isInteger(size) || size < 1 || size > 4096) throw Error("Invalid raster size.");
@@ -344,6 +387,7 @@ export function createRasterJob(l: Layer, size: number) {
     data[i] = data[i + 1] = data[i + 2] = 255;
   const strength = prepareLayerStrength(l, polygon);
   const softness = prepareLayerSoftness(l, polygon);
+  const sample=prepareRasterCoverage(l,polygon,strength,softness);
   const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   let minU = Math.min(...polygon.map((p) => p.u)) - pad,
     maxU = Math.max(...polygon.map((p) => p.u)) + pad;
@@ -357,16 +401,31 @@ export function createRasterJob(l: Layer, size: number) {
     ),
     y1 = Math.ceil(clamp(Math.max(...polygon.map((p) => p.v)) + pad) * size);
   const x0 = Math.floor(clamp(minU) * size), x1 = Math.ceil(clamp(maxU) * size);
-  let x = x0, y = y0;
+  // At power-of-two sizes both pixel-centre coordinates and 1-u are exact
+  // binary fractions. Symmetric pairs therefore invoke identical two samples
+  // in reverse order. Reuse that result; arbitrary sizes retain scalar sampling.
+  const paired=l.symmetry&&(size&(size-1))===0;
+  const workX0=paired?Math.min(x0,size-x1):x0,workX1=paired?Math.ceil(size/2):x1;
+  let x = workX0, y = y0, pendingIndex=-1,pendingAlpha=0;
   let done = !l.enabled || x0 >= x1 || y0 >= y1;
+  const next=()=>{if(++x>=workX1){x=workX0;if(++y>=y1)done=true;}};
   return { data, get done() { return done; },
     advance(maxPixels: number) {
       if (!(maxPixels > 0) || (!Number.isInteger(maxPixels) && maxPixels !== Infinity)) throw Error("Invalid raster slice size.");
       let count = 0;
-      while (!done && count++ < maxPixels) {
-        data[(y * size + x) * 4 + 3] = Math.round(
-          255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength, softness.width));
-        if (++x >= x1) { x = x0; if (++y >= y1) done = true; }
+      while (!done && count < maxPixels) {
+        // Retain the original write budget even when a one-pixel slice splits
+        // a pair. Cancellation still cannot publish an incomplete raster.
+        if(pendingIndex>=0){data[pendingIndex]=pendingAlpha;pendingIndex=-1;count++;next();continue;}
+        const alpha=Math.round(255*sample((x+.5)/size,(y+.5)/size));
+        if(x>=x0&&x<x1){data[(y*size+x)*4+3]=alpha;count++;}
+        const opposite=size-1-x;
+        if(paired&&opposite!==x&&opposite>=x0&&opposite<x1){
+          const index=(y*size+opposite)*4+3;
+          if(count<maxPixels){data[index]=alpha;count++;}
+          else {pendingIndex=index;pendingAlpha=alpha;continue;}
+        }
+        next();
       }
       return done;
     },

@@ -1,4 +1,6 @@
-# Headquarters working rules
+  # Headquarters working rules
+
+Exact raster performance checkpoint: preserve the independent scalar coverage oracle, conservative pre/post-warp bounds, original edge/tie arithmetic, and power-of-two-only mirrored pixel reuse. Cooperative work budgets count paired writes individually. Worker yields use bounded MessageChannel/timer fairness; never replace them with microtask-only yielding or assume one port cannot starve cancellation. Nathan's supplied 2K recipe was verified byte-identical before/after, about 7.13s to 0.97s in Chrome. See research/authoring/raster-performance.md; personal reproduction inputs stay ignored.
 
 Bezier eye-overlap correction supersedes the old off-plate tangent fallback: tangent arms are projected vector UI on their real parent knot's deformed triangle plane. Endpoints may cross eye holes; never label them mesh anchors. Only these vector guides bypass endpoint depth, gated by the parent's front-facing head/eye visibility. Actual contour points, warp fields and shape gestures retain surface constraints. Keep cached exact deformed occlusion and dependency invalidation; repeated full skinned raycasts per frame caused a verified frame-rate regression. Missing/singular parents still use UV editing. See research/authoring/projected-tangent-controls.md.
 

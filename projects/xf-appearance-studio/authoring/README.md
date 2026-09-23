@@ -4,6 +4,8 @@ A working local authoring experiment, built with Bun 1.4.2, TypeScript 7.0.2 and
 
 ## Use
 
+**Faster makeup updates:** the optimized raster preserves texture output while skipping irrelevant field calculations and reusing exact mirrored pixels. A supplied complex 2K design now updates in about one second in Chrome, previously about seven seconds. Reload an existing tab to load the new worker. Higher resolution and more complex fields still cost more; [measurements](../../../research/authoring/raster-performance.md).
+
 **Bezier handles over eyes:** tangent arms can now extend and be dragged across eyeballs and plate openings. They are direction guides attached to their parent point, rather than points that must sit on painted geometry. They remain visible only while their parent is visible and facing you. The actual makeup outline points still follow the head surface. Undo and Escape preserve the usual gesture behaviour.
 
 **Preview quality:** expand Preview quality beside Head & lighting to choose 512, 1K, 2K or 4K generated makeup textures. The choice and panel state survive reload. 512/1K suit responsive editing; higher resolutions help inspect fine edges but complex shapes take longer to bake. The last completed preview remains visible while replacements calculate. Rebuild preview retries failed work. Capacity messages explain when to lower quality or disable layers. Imported head/eye assets retain their source detail. Recipes, Undo and export are independent; the current mask export remains 2048 square. [Implementation and limits](../../../research/authoring/preview-quality-contract.md).

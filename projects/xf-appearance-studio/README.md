@@ -1,5 +1,7 @@
 # XF Studio
 
+Makeup raster performance: exact bounds, mirrored-pixel reuse and fair background scheduling reduce the supplied complex 2K Backdrop from roughly seven seconds to one second in Chrome, preserving its pixels. [Measurements and remaining limits](../../research/authoring/raster-performance.md).
+
 Whole-shape translation, selected-point rotation/scaling and persistent UV pan/zoom now work in both applicable editing views. Pure transform/view actions are separate from their gesture adapters; [details](../../research/authoring/shape-gesture-contract.md).
 
 Latest authoring checkpoint: Bézier tangents and smooth/symmetric/corner points work in UV and on the head, with explicit legacy conversion, shape-preserving continuous insertion, Undo and SQLite persistence. Existing designs retain their old curves until upgraded. Whole-shape gestures, directional softness and glitter refinement remain makeup work.

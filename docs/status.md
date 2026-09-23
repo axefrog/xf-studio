@@ -1,5 +1,7 @@
 # Current state — 2026-09-23
 
+**Makeup bake acceleration:** Nathan's supplied nine-knot Backdrop now computes in Chrome at about 0.97 seconds at 2K, versus 7.13 seconds in the original synchronous worker benchmark, with identical texture hashes. Conservative pruning, prepared edges, exact mirrored-pixel reuse and fair task yielding remove repeated work. Actual editor completion and cancellation verified; 182 tests, typecheck/build pass. Complex fields are still not instantaneous. [Measurements and contract](../research/authoring/raster-performance.md).
+
 **Bezier eye-overlap fix:** tangent arms now project from their real parent knot's deformed triangle, so eye-plate holes no longer block dragging or re-grabbing. Parent head/eye visibility and actual paint-point constraints remain. Real saved-V browser checks pass, including Undo/Escape. A repeated-skinning performance regression was caught and removed with cached exact deformed visibility: paused/animated cadence returned to about 16.7 ms. [Cause, design and evidence](../research/authoring/projected-tangent-controls.md).
 
 **Irregular glitter study:** a deterministic convex-fragment generator and linear-light colour compositor now run offline, with sparse/dense variants, stable flakes across resolutions and bounded tile scratch. Measurements remove the old lattice but expose four-sample edge quantization; sixteen samples improve coverage consistency at higher bake cost. This is not yet the editor material. [Findings and next integration](../experiments/007-irregular-glitter/findings.md).
