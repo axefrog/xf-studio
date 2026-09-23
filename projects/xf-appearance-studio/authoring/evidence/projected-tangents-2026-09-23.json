@@ -1,0 +1,58 @@
+{
+  "date": "2026-09-23",
+  "validation": {"tests": 175, "assertions": 529657, "files": 42, "typecheck": "pass", "build": "pass"},
+  "workspace": "isolated ?verify=1, saved-V preview",
+  "reportedIssue": "Cannot drag Bezier handles over eyeballs",
+  "reproduction": {
+    "point": 6,
+    "side": "in",
+    "oldRequestedScreen": [530, 376],
+    "oldStoppedScreen": [518.622027571214, 360.402005434672],
+    "oldRejection": "no-front-plate-hit",
+    "removingEyeBlockerAlone": "same failure"
+  },
+  "corrected": {
+    "mode": "parent-triangle projected vector control",
+    "dragScreen": [530.2115863900265, 376.1097585353236],
+    "regrabScreen": [540.2115549902912, 381.1097426395003],
+    "rejection": null,
+    "escapeRestoresExactRecipe": true,
+    "twoUndosRestoreExactBaseline": true,
+    "finalHeadAndEyeCachedVersion": {
+      "regrabScreen": [540.2452969633456, 381.85813952036],
+      "selectable": true,
+      "rejection": null
+    },
+    "consoleWarningsOrErrors": []
+  },
+  "frameCadence": {
+    "samplesEach": 60,
+    "animatedMode": "character-creator facial motion enabled, head movement muted",
+    "baselinePaused": {"medianMs": 16.7, "p95Ms": 16.8, "maxMs": 16.9},
+    "initialRepeatedSkinnedRays": {"medianMs": 49.9, "p95Ms": 50.2, "maxMs": 66.7},
+    "cachedPaused": {"medianMs": 16.7, "p95Ms": 16.8, "maxMs": 16.8},
+    "cachedAnimated": {"medianMs": 16.7, "p95Ms": 16.8, "maxMs": 16.9},
+    "finalHeadAndEyeCachedAnimated": {"medianMs": 16.7, "p95Ms": 16.8, "maxMs": 16.9},
+    "limits": "Observed on this machine; no universal frame-rate guarantee"
+  },
+  "geometryParity": {
+    "headVertices": 7189,
+    "headTriangles": 13186,
+    "poses": ["rest", "eye morph", "eyelid bone motion"],
+    "worldRays": 48,
+    "thresholdDecisions": 96,
+    "mismatches": 0,
+    "headCacheBytes": 172536,
+    "eyeCacheBytes": 15888,
+    "skinInfluences": 8
+  },
+  "regressions": [
+    "Real plate hole: tangent crosses and re-grabs; actual knot remains constrained",
+    "Parent hidden by head or eye suppresses projected guides and acquisition",
+    "Front-facing/offscreen, mirrored UV and singular/grazing/rearward projection",
+    "Pose, morph, bind, geometry, attribute and world-transform invalidation",
+    "Material sidedness, groups, draw range and negative world scale",
+    "Gesture capture, Undo, Escape and stale-target handling"
+  ],
+  "scope": "No recipe-schema, material, save-game or user-draft changes"
+}

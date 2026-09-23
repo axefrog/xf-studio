@@ -70,11 +70,17 @@ test("surface tangents retain knot identity, mirror edits and report missing anc
     expect(cancels).toBe(1);
     expect(controls.enabled).toBe(true);
     expect(editor.diagnostics().dragging).toBe(false);
-    // Outside the UV plate: no fabricated geometry anchor; UV editing is advertised.
+    // A vector endpoint outside the UV plate projects from its real parent,
+    // rather than inventing another mesh anchor or disappearing at an eye hole.
     knot.handles.out = { u: 1, v: 1 };
     frame();
-    expect(editor.diagnostics().unmappedTangents).toBe(2);
-    expect(editor.diagnostics().handles.filter(h => h.kind === "tangent")).toHaveLength(2);
+    expect(editor.diagnostics().unmappedTangents).toBe(0);
+    expect(editor.diagnostics().handles.filter(h => h.kind === "tangent")).toHaveLength(4);
+    expect(editor.diagnostics().handles.filter(h=>h.kind==="tangent").every(h=>h.projected)).toBe(true);
+    // If the actual parent has no surface anchor there is no valid projection.
+    knot.u=1.2;frame();
+    expect(editor.diagnostics().unmappedTangents).toBe(4);
+    expect(editor.diagnostics().handles.filter(h => h.kind === "tangent")).toHaveLength(0);
     expect(editor.diagnostics().tangentFallback).toContain("UV pane");
     expect(messages.at(-1)).toContain("UV pane");
     expect(editor.diagnostics().segments).toBeLessThanOrEqual(editor.diagnostics().capacity.segments);

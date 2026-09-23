@@ -9,6 +9,8 @@ import {
   type UV,
 } from "./surface-map";
 import type { createScene } from "./scene";
+import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
+import { createSurfaceOcclusion } from "./surface-occlusion";
 
 type Handle = {
   kind: "point" | "tangent" | "origin" | "field";
@@ -19,6 +21,7 @@ type Handle = {
   uv: UV;
   anchor: Anchor;
   world: THREE.Vector3;
+  projected?: {parent:UV; visible:boolean; frame?:TangentFrame};
 };
 type Hooks = {
   layer: () => Layer | undefined;
@@ -41,6 +44,8 @@ export function createSurfaceEditor(
     canvas = renderer.domElement;
   const map = new SurfaceMap(plate.geometry),
     group = new THREE.Group();
+  const headVisibility=createSurfaceOcclusion(head);
+  const eyeVisibility=createSurfaceOcclusion(viewer.eyes);
   scene.add(group);
   const pointGeometry = new THREE.BufferGeometry(),
     lineGeometry = new THREE.BufferGeometry();
@@ -77,6 +82,15 @@ export function createSurfaceEditor(
     );
   };
   const points = new THREE.Points(pointGeometry, pointMaterial);
+  const tangentGeometry = pointGeometry.clone(), tangentLineGeometry = new THREE.BufferGeometry();
+  tangentLineGeometry.setAttribute("position",new THREE.Float32BufferAttribute(new Float32Array(4*2*3),3).setUsage(THREE.DynamicDrawUsage));
+  tangentGeometry.setDrawRange(0,0);tangentLineGeometry.setDrawRange(0,0);
+  const tangentMaterial = pointMaterial.clone();
+  tangentMaterial.depthTest=false;
+  tangentMaterial.onBeforeCompile=pointMaterial.onBeforeCompile;
+  const tangentPoints=new THREE.Points(tangentGeometry,tangentMaterial),
+    tangentLines=new THREE.LineSegments(tangentLineGeometry,new THREE.LineBasicMaterial({
+      color:0xb9d0c2,transparent:true,opacity:.65,depthTest:false,depthWrite:false}));
   const lines = new THREE.LineSegments(
     lineGeometry,
     new THREE.LineBasicMaterial({
@@ -87,12 +101,16 @@ export function createSurfaceEditor(
     }),
   );
   points.frustumCulled = lines.frustumCulled = false;
+  tangentPoints.frustumCulled=tangentLines.frustumCulled=false;
   // Editor guides draw after the transparent makeup and detail cards (10–101).
   // Keep opaque head/eye depth occlusion, so far-side handles cannot show through
   // the face. This changes draw order, not their barycentric surface anchors.
   points.renderOrder = 1001;
   lines.renderOrder = 1000;
-  group.add(points, lines);
+  // Tangents are projected vector UI, visible only when their real parent knot
+  // faces the camera and is not hidden by the head/eyes. Endpoints may cross an eye hole.
+  tangentPoints.renderOrder=1003;tangentLines.renderOrder=1002;
+  group.add(points, lines, tangentPoints,tangentLines);
   let enabled = true,
     signature = "",
     handles: Handle[] = [],
@@ -106,6 +124,7 @@ export function createSurfaceEditor(
         pointer: number;
         changed: boolean;
         controlsEnabled: boolean;
+        grabOffset?:UV;
       }
     | undefined;
   type ShapeGesture = {
@@ -153,6 +172,9 @@ export function createSurfaceEditor(
     tangentWarningKey = "";
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
+  let hitRejection: {reason: string; plateDistance?: number; blockerDistance?: number} | undefined;
+  let lastDragRejection: {reason: string; x: number; y: number; uv?: UV; from?: UV;
+    plateDistance?: number; blockerDistance?: number} | null = null;
 
   function rebuild() {
     const layer = hooks.layer();
@@ -179,8 +201,9 @@ export function createSurfaceEditor(
       mirror: boolean,
       fieldId?: string,
       side?: Handle["side"],
+      parent?:UV,
     ) {
-      const anchor = map.anchor(uv);
+      const anchor = map.anchor(parent ?? uv);
       if (anchor)
         handles.push({
           kind,
@@ -191,6 +214,7 @@ export function createSurfaceEditor(
           mirror,
           anchor,
           world: new THREE.Vector3(),
+          ...(parent ? {projected:{parent,visible:false}} : {}),
         });
       else {
         unmapped++;
@@ -214,11 +238,7 @@ export function createSurfaceEditor(
       if (layer.pathMode === "bezier" && selectedPoint?.handles) {
         for (const side of ["in", "out"] as const) {
           const endpoint = tangentEndpoint(selectedPoint, side);
-          handle("tangent", hooks.selected(), reflect(endpoint), mirror, undefined, side);
-          path(Array.from({ length: 17 }, (_, j) => reflect({
-            u: selectedPoint.u + (endpoint.u - selectedPoint.u) * j / 16,
-            v: selectedPoint.v + (endpoint.v - selectedPoint.v) * j / 16,
-          })));
+          handle("tangent", hooks.selected(), reflect(endpoint), mirror, undefined, side, reflect(selectedPoint));
         }
       }
       layer.fields.forEach((f, i) => {
@@ -241,9 +261,8 @@ export function createSurfaceEditor(
       throw new Error("Surface guide capacity exceeded the validated path budget.");
     const warningKey = unmappedTangents ? `${layer.id}:${hooks.selected()}:${unmappedTangents}` : "";
     if (warningKey && warningKey !== tangentWarningKey)
-      hooks.message("Some Bézier handles lie outside the eye plate · edit them in the UV pane");
+      hooks.message("Some Bézier parent points have no eye-plate anchor · edit them in the UV pane");
     tangentWarningKey = warningKey;
-    pointGeometry.setDrawRange(0, handles.length);
     lineGeometry.setDrawRange(0, segments.length * 2);
   }
   function update() {
@@ -264,11 +283,27 @@ export function createSurfaceEditor(
       }
       return p;
     };
-    const positions = pointGeometry.getAttribute("position"),
-      colors = pointGeometry.getAttribute("color");
-    handles.forEach((h, i) => {
-      h.world.copy(anchorPosition(h.anchor, vertex, 0.0007));
-      positions.setXYZ(i, h.world.x, h.world.y, h.world.z);
+    let anchoredCount=0,projectedCount=0;
+    const parentFrames=new Map<string,{frame:TangentFrame|undefined;visible:boolean}>();
+    const tangentLinesPosition=tangentLineGeometry.getAttribute("position");
+    handles.forEach((h) => {
+      let geometry=pointGeometry,index=anchoredCount;
+      if(h.projected){
+        const key=`${h.index}:${h.mirror}`;
+        let parent=parentFrames.get(key);
+        if(!parent){const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,vertex);
+          parent={frame,visible:!!frame&&parentVisible(frame)};parentFrames.set(key,parent);}
+        const {frame}=parent;
+        h.projected.frame=frame;
+        h.projected.visible=parent.visible;
+        if(!frame||!h.projected.visible)return;
+        h.world.copy(tangentWorld(frame,h.uv));
+        geometry=tangentGeometry;index=projectedCount++;
+        tangentLinesPosition.setXYZ(index*2,frame.origin.x,frame.origin.y,frame.origin.z);
+        tangentLinesPosition.setXYZ(index*2+1,h.world.x,h.world.y,h.world.z);
+      }else {h.world.copy(anchorPosition(h.anchor, vertex, 0.0007));anchoredCount++;}
+      const positions=geometry.getAttribute("position"),colors=geometry.getAttribute("color");
+      positions.setXYZ(index, h.world.x, h.world.y, h.world.z);
       const selected = (h.kind === "point" || h.kind === "tangent")
           ? h.index === hooks.selected()
           : h.fieldId === hooks.selectedField(),
@@ -289,9 +324,12 @@ export function createSurfaceEditor(
                 ? 0x5ba985
                 : 0x75b892,
       );
-      colors.setXYZ(i, c.r, c.g, c.b);
+      colors.setXYZ(index, c.r, c.g, c.b);
     });
-    positions.needsUpdate = colors.needsUpdate = true;
+    pointGeometry.setDrawRange(0,anchoredCount);tangentGeometry.setDrawRange(0,projectedCount);
+    tangentLineGeometry.setDrawRange(0,projectedCount*2);tangentLinesPosition.needsUpdate=true;
+    for(const geometry of [pointGeometry,tangentGeometry])
+      for(const name of ["position","color"])geometry.getAttribute(name).needsUpdate=true;
     const p = lineGeometry.getAttribute("position");
     segments.forEach((pair, i) =>
       pair.forEach((a, k) => {
@@ -310,7 +348,27 @@ export function createSurfaceEditor(
     );
     ray.setFromCamera(mouse, camera);
   }
+  function parentVisible(frame:TangentFrame) {
+    const projected=frame.origin.clone().project(camera);
+    if(![projected.x,projected.y,projected.z].every(Number.isFinite)||
+      projected.z < -1 || projected.z > 1 || Math.abs(projected.x)>1 || Math.abs(projected.y)>1)return false;
+    mouse.set(projected.x,projected.y);ray.setFromCamera(mouse,camera);
+    if(frame.normal.dot(ray.ray.direction)>=-1e-4)return false;
+    const limit=ray.ray.origin.distanceTo(frame.origin)-.001;
+    return !headVisibility.occluded(ray.ray,limit)&&!eyeVisibility.occluded(ray.ray,limit);
+  }
+  function projectedHit(h:Handle,x:number,y:number) {
+    if(!h.projected)return;
+    const frame=tangentFrame(plate.geometry,h.anchor,h.projected.parent,
+      i=>plate.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(plate.matrixWorld));
+    if(!frame||!parentVisible(frame)){hitRejection={reason:"tangent-parent-hidden-or-singular"};return;}
+    setRay(x,y);
+    const uv=tangentRayUV(frame,ray.ray);
+    hitRejection=uv ? undefined : {reason:"tangent-plane-grazing"};
+    return uv;
+  }
   function hit(x: number, y: number) {
+    hitRejection = undefined;
     setRay(x, y);
     plate.computeBoundingSphere();
     const result = ray
@@ -323,10 +381,14 @@ export function createSurfaceEditor(
             .transformDirection(plate.matrixWorld)
             .dot(ray.ray.direction) < 0,
       );
-    if (!result?.uv) return;
+    if (!result?.uv) { hitRejection = {reason:"no-front-plate-hit"}; return; }
     head.computeBoundingSphere();
     const blocker = ray.intersectObjects([head, viewer.eyes], false)[0];
-    if (blocker && blocker.distance < result.distance - 0.001) return;
+    if (blocker && blocker.distance < result.distance - 0.001) {
+      hitRejection = {reason:blocker.object===head ? "head-occlusion" : "eye-occlusion",
+        plateDistance:result.distance,blockerDistance:blocker.distance};
+      return;
+    }
     return { u: result.uv.x, v: result.uv.y };
   }
   function handleAt(x: number, y: number) {
@@ -340,6 +402,7 @@ export function createSurfaceEditor(
       Number(!!b.fieldId && b.fieldId === hooks.selectedField()) -
       Number(!!a.fieldId && a.fieldId === hooks.selectedField()));
     for (const h of ordered) {
+      if(h.projected&&!h.projected.visible)continue;
       const p = h.world.clone().project(camera);
       if (p.z < -1 || p.z > 1) continue;
       const d = Math.hypot(
@@ -352,6 +415,7 @@ export function createSurfaceEditor(
       }
     }
     if (!best) return;
+    if(best.projected) return projectedHit(best,x,y) ? best : undefined;
     // Verify at the handle's centre, not at the edge of its clickable radius.
     const p = best.world.clone().project(camera),
       uv = hit(
@@ -418,6 +482,8 @@ export function createSurfaceEditor(
         ? layer.points[handle.index]
         : layer.fields.find((f) => f.id === handle.fieldId);
       if (!target) return;
+      const initialUV=handle.projected ? projectedHit(handle,e.clientX,e.clientY) : undefined;
+      if(handle.projected&&!initialUV)return;
       e.preventDefault();
       e.stopImmediatePropagation();
       const controlsEnabled = controls.enabled;
@@ -425,7 +491,9 @@ export function createSurfaceEditor(
       if (handle.kind === "point" || handle.kind === "tangent") hooks.select(handle.index);
       else hooks.selectField(handle.fieldId!);
       drag = { handle, layer, target, last: handle.uv, pointer: e.pointerId,
-        changed: false, controlsEnabled };
+        changed: false, controlsEnabled,
+        ...(initialUV?{grabOffset:{u:initialUV.u-handle.uv.u,v:initialUV.v-handle.uv.v}}:{}) };
+      lastDragRejection = null;
       canvas.setPointerCapture(e.pointerId);
       canvas.style.cursor = "grabbing";
     },
@@ -466,13 +534,18 @@ export function createSurfaceEditor(
       e.preventDefault();
       e.stopImmediatePropagation();
       if (!validDrag()) { stop(); return; }
-      const uv = hit(e.clientX, e.clientY);
-      if (!uv || !map.continuous(drag.last, uv)) {
+      let uv = drag.handle.projected ? projectedHit(drag.handle,e.clientX,e.clientY) : hit(e.clientX, e.clientY);
+      if(uv&&drag.grabOffset)uv={u:uv.u-drag.grabOffset.u,v:uv.v-drag.grabOffset.v};
+      if (!uv || (!drag.handle.projected&&!map.continuous(drag.last, uv))) {
+        lastDragRejection = { ...(uv ? {reason:"uv-discontinuity"} : hitRejection ?? {reason:"no-hit"}),
+          x:e.clientX,y:e.clientY,uv,from:{...drag.last} };
         hooks.message(
-          "Drag paused at the surface edge · return to the handle, or Esc to cancel",
+          drag.handle.projected ? "Tangent projection paused · turn the parent point toward you, or Esc to cancel"
+            : "Drag paused at the surface edge · return to the handle, or Esc to cancel",
         );
         return;
       }
+      lastDragRejection = null;
       if (Math.hypot(uv.u - drag.last.u, uv.v - drag.last.v) < 1e-5) return;
       if (!drag.changed) {
         hooks.begin();
@@ -580,14 +653,19 @@ export function createSurfaceEditor(
       pivot: shapeDrag?.pivot ?? wheel?.pivot ?? null,
       unmapped,
       unmappedTangents,
+      lastDragRejection,
+      headVisibility:headVisibility.diagnostics(),
+      eyeVisibility:eyeVisibility.diagnostics(),
       tangentFallback: unmappedTangents
-        ? "Some Bézier handles lie outside the eye plate; edit them in the UV pane."
+        ? "Some Bézier parent points have no eye-plate anchor; edit them in the UV pane."
         : null,
       selectedField: hooks.selectedField(),
       segments: segments.length,
       capacity: { handles: maxHandles, segments: maxSegments },
       overlay: { points: points.renderOrder, lines: lines.renderOrder,
-        depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite },
+        depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite,
+        tangentPoints:tangentPoints.renderOrder,tangentLines:tangentLines.renderOrder,
+        tangentDepthTest:tangentMaterial.depthTest,tangentVisibility:"real-parent-front-head-and-eyes" },
       handles: handles.map((h) => {
         const p = h.world.clone().project(camera),
           r = canvas.getBoundingClientRect();
@@ -602,6 +680,9 @@ export function createSurfaceEditor(
           index: h.index,
           fieldId: h.fieldId,
           mirror: h.mirror,
+          projected:!!h.projected,
+          parentUV:h.projected?.parent,
+          parentVisible:h.projected?.visible,
           uv: h.uv,
           screen: { x, y },
           selectable: handleAt(x, y) === h,

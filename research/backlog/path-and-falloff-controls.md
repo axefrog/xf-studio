@@ -1,5 +1,7 @@
 # Path, falloff and surface-control feedback
 
+**Bezier-over-eyeball bug corrected:** tangent arms now use explicit projected vector controls attached to real parent knots, crossing eye holes without fabricating surface anchors. Actual knots/warps retain surface restrictions. Cached head/eye parent visibility preserves frame cadence; browser drag/re-grab/Undo/Escape and real-head occlusion parity verified. [Evidence and limits](../authoring/projected-tangent-controls.md).
+
 **Explicit hold, 23 September:** Nathan proposed independent addable softness-field anchors with optional directional gradient handles (sharp wing tip, different upper/lower softness, interpolated field), then asked to hold that approach while trying existing per-point softness. Preserve as a possible refinement, not active implementation. Any future design must budget interactive recomputation, cancel obsolete work and share export sampling; wait for evidence the current controls are insufficient.
 
 **Whole-shape/UV navigation completed:** drag active painted shape, Shift-drag rotation, Shift-wheel scale, UV wheel zoom and right-drag pan are now implemented and browser-verified. Selected contour point is the rotation/scale pivot; scale carries feather, warp reach and pigment blend with it. Bounds reject whole proposals, gestures group Undo and view navigation stays outside recipe history. [Contract/API/evidence](../authoring/shape-gesture-contract.md). The queued wording below preserves the original request; directional softness and glitter remain open.
