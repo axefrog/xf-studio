@@ -1,0 +1,426 @@
+{
+  "originalCandidateSha256": "928c6cf5b454d23b5209f21ef5ec559533a3481df50c8064dda579cd140f5f17",
+  "variants": [
+    {
+      "name": "rounded_0p1micron",
+      "delta": [
+        -1.6999999999999998e-06,
+        -1.15e-05,
+        0.0
+      ],
+      "sha256": "41a8f6e40b6455f7cb3552845913760c5e4451874904effee99e10269439bb00",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "pure_y_minus12micron",
+      "delta": [
+        0.0,
+        -1.2e-05,
+        0.0
+      ],
+      "sha256": "0578b4e468347ed7c163b42fd7ef731caf512fd6f566db24e2703a88da5bb45f",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": false,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 2,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.045905092163665e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "pure_y_minus14micron",
+      "delta": [
+        0.0,
+        -1.4e-05,
+        0.0
+      ],
+      "sha256": "e12830f2f12a74dfa5ef1eb280605f6bd88f14a6fd4550ff303cce78525214d4",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": false,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 3,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0811433653254235e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "pure_y_minus16micron",
+      "delta": [
+        0.0,
+        -1.6e-05,
+        0.0
+      ],
+      "sha256": "fdfe0167f0f32616267168e7c9e84c9c868e704ff8ac5079e9d1d6feeba5d8f3",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": false,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 3,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.123951365773254e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "pure_y_minus20micron",
+      "delta": [
+        0.0,
+        -2e-05,
+        0.0
+      ],
+      "sha256": "78e7efdace71c6abbeee194ce8d464e94b35018032a001a07b98c77d81b4d9de",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": false,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": false,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 1,
+        "staticNeighborViolations": 6,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.23150045384205e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "y_minus_0p5micron",
+      "delta": [
+        -1.684454196978949e-06,
+        -1.2005914261711147e-05,
+        4.126032175296495e-08
+      ],
+      "sha256": "4d1c9424d35f8b6a420fd7ee57cebc2f8618b2878a86b01e1bd513d354a3ac67",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "y_plus_0p5micron",
+      "delta": [
+        -1.684454196978949e-06,
+        -1.1005914261711147e-05,
+        4.126032175296495e-08
+      ],
+      "sha256": "e70a4e2f0af34e02772e4891ec1e81613dd0e947dd29ab6507cd764b07134bfa",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": false,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 1,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_rounded_0p1micron",
+      "delta": [
+        -1.91e-05,
+        -1.2499999999999999e-05,
+        -4.8e-06
+      ],
+      "sha256": "c865817cc6f2a19d8d22494c5e17fcf60e5b4e0c3f4955b4f7516ccc83dd2b98",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_x_minus1micron",
+      "delta": [
+        -2.0080510891983186e-05,
+        -1.2471321994961125e-05,
+        -4.812522013852059e-06
+      ],
+      "sha256": "05ae04a9ccae9a35a505940721f2992f06af3c1b4426c9348cb3589452c805e9",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_x_plus1micron",
+      "delta": [
+        -1.8080510891983185e-05,
+        -1.2471321994961125e-05,
+        -4.812522013852059e-06
+      ],
+      "sha256": "38491bebea2e1bd58df854eb9fbbc4220c8484e609d31c7188ed03aa103e01a4",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_y_minus1micron",
+      "delta": [
+        -1.9080510891983185e-05,
+        -1.3471321994961126e-05,
+        -4.812522013852059e-06
+      ],
+      "sha256": "2e02fc3a49c01d50ad9f359b5ce8bd2215ba4b8a151fc8a844b47f9badf83192",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_y_plus1micron",
+      "delta": [
+        -1.9080510891983185e-05,
+        -1.1471321994961125e-05,
+        -4.812522013852059e-06
+      ],
+      "sha256": "da5a6e22c33db02b2b8c5b0ff0a4d712c7062a3e37caabf3c5dfd6688b86b651",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_z_minus1micron",
+      "delta": [
+        -1.9080510891983185e-05,
+        -1.2471321994961125e-05,
+        -5.812522013852058e-06
+      ],
+      "sha256": "c1a4c29f78d02c3f117063e1c92949f636222486182303ec55b1e9383b0fc0be",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    },
+    {
+      "name": "interior_z_plus1micron",
+      "delta": [
+        -1.9080510891983185e-05,
+        -1.2471321994961125e-05,
+        -3.812522013852059e-06
+      ],
+      "sha256": "bc9b1061737e1a370731ebf8ddae196635ea0c697c6bb9684c10a2f8427a9878",
+      "gates": {
+        "static107": true,
+        "posed73": true,
+        "allStaticDisplacementsWithinBound": true,
+        "allStaticNeighborsWithinLimit": true,
+        "allStaticNewNonadjacentFree": true,
+        "allPosedNewNonadjacentFree": true,
+        "candidateResourceRoundtripAndNativeSkinBytes": false
+      },
+      "summary": {
+        "staticNewNonadjacent": 0,
+        "posedNewNonadjacent": 0,
+        "staticNeighborViolations": 0,
+        "staticDisplacementViolations": 0,
+        "maxStaticDisplacement": 0.00010808504772115101,
+        "maxStaticNeighborGap": 5.0000000000122754e-05,
+        "morphRecordsChangedFromPrior": [
+          "h091_eyes",
+          "h171_eyes"
+        ]
+      }
+    }
+  ],
+  "scope": "107 static shapes and 73 sampled poses each; no resource or continuous-time proof"
+}

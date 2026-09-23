@@ -1,0 +1,105 @@
+{
+  "testedDeltas": 20126,
+  "legalDeltas": 12833,
+  "faceResults": [
+    {
+      "face": 797,
+      "legalAndClearCriticalDeltas": 4767,
+      "minimumDelta": [
+        -0.0,
+        -0.0,
+        -0.0
+      ]
+    },
+    {
+      "face": 798,
+      "legalAndClearCriticalDeltas": 12833,
+      "minimumDelta": [
+        -0.0,
+        -0.0,
+        -0.0
+      ]
+    },
+    {
+      "face": 799,
+      "legalAndClearCriticalDeltas": 8399,
+      "minimumDelta": [
+        -4.405674531766634e-07,
+        -8.609581156982091e-06,
+        -1.8430194874833175e-06
+      ]
+    },
+    {
+      "face": 800,
+      "legalAndClearCriticalDeltas": 5408,
+      "minimumDelta": [
+        -4.405674531766634e-07,
+        -8.609581156982091e-06,
+        -1.8430194874833175e-06
+      ]
+    },
+    {
+      "face": 801,
+      "legalAndClearCriticalDeltas": 10723,
+      "minimumDelta": [
+        -4.405674531766634e-07,
+        -8.609581156982091e-06,
+        -1.8430194874833175e-06
+      ]
+    },
+    {
+      "face": 803,
+      "legalAndClearCriticalDeltas": 10741,
+      "minimumDelta": [
+        -4.405674531766634e-07,
+        -8.609581156982091e-06,
+        -1.8430194874833175e-06
+      ]
+    },
+    {
+      "face": 1227,
+      "legalAndClearCriticalDeltas": 9937,
+      "minimumDelta": [
+        -1.684454196978949e-06,
+        -1.1505914261711147e-05,
+        4.126032175296495e-08
+      ]
+    },
+    {
+      "face": 1228,
+      "legalAndClearCriticalDeltas": 12833,
+      "minimumDelta": [
+        -0.0,
+        -0.0,
+        -0.0
+      ]
+    }
+  ],
+  "maximumSimultaneouslyClearFaces": 8,
+  "allEightClearCount": 1871,
+  "bestSharedDelta": [
+    -1.684454196978949e-06,
+    -1.1505914261711147e-05,
+    4.126032175296495e-08
+  ],
+  "bestSharedFaces": [
+    797,
+    798,
+    799,
+    800,
+    801,
+    803,
+    1227,
+    1228
+  ],
+  "bestInteriorDelta": [
+    -1.9080510891983185e-05,
+    -1.2471321994961125e-05,
+    -4.812522013852059e-06
+  ],
+  "bestInteriorMinimumShapeSlack": 1.6487371850489792e-05,
+  "numericCandidate": "experiments/006-plate-clearance/generated/morph-aware/crease-shallow-center.npz",
+  "numericSha256": "0593789cd61c64a254c38eaf5558fddae0799b9c544907304c6ded24fc236fbf",
+  "interiorNumericCandidate": "experiments/006-plate-clearance/generated/morph-aware/crease-interior-center.npz",
+  "interiorNumericSha256": "3600f54e9a53e3b95dc456ae8cfccbf0611d8f762146ebb5f13e7f5b25fffb34"
+}
