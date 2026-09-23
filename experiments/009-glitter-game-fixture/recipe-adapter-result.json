@@ -1,0 +1,93 @@
+{
+  "status": "recipe-driven offline map study; not a game export",
+  "gameTemplateEvidence": "mesh_decal.mt / mesh_decal_emissive_subsurface.mt, game 2.31; see result.json",
+  "source": {
+    "schema": "xfs/recipe-10",
+    "layerId": "sample-glitter",
+    "size": 1024,
+    "opticalModel": "uv-cell-direct-3",
+    "sourceSha256": "0f5e423c1ce5757f491c26c5292dd5e4f44db7617cce5fa5255a354a75f9c09d",
+    "coverageSha256": "03ba8012d01de4d342cafcdd1651c335606ba35a39016bcb43525e1a015705ab",
+    "coveredTexels": 5754,
+    "note": "Exact shared raster coverage only. The direct-light facet model has no stock-material equivalence."
+  },
+  "sourceOptics": {
+    "model": "uv-cell-direct-3",
+    "density": 0.88,
+    "fineShare": 0.88,
+    "strength": 6,
+    "seed": 2077,
+    "color": "#eac8ae"
+  },
+  "approximationProfile": {
+    "id": "mesh-decal-resolved-study-v1",
+    "seed": 20260924,
+    "candidateCount": 2400,
+    "radiusPxAt1024": [
+      0.6,
+      1.7
+    ],
+    "sparseEmissionEvery": 11
+  },
+  "acceptedFacetCandidates": 953,
+  "mapPixelSha256": {
+    "pigment": "1bf07a9b2042df21271469bbcddb49febc03825e9f8352d2e853366fc5d6a694",
+    "shape": "03ba8012d01de4d342cafcdd1651c335606ba35a39016bcb43525e1a015705ab",
+    "facet_normal": "7fb4debb05d8f66d22f31f451a62843ca16aac986b7ea6ba60b13a0a8afaa066",
+    "roughness": "2d93c080f9e1e84c1635362f24fa62c78251b2f151e7067f2040152a80902749",
+    "metalness": "021be53972dcefab8e98153b88a7ae5f8ec258974f74b7f1c2f3cb267dd72427",
+    "emissive_mask": "cd1d8ee03b58ce8948e6b6c51781284cf71cb1e59cc1e20756fabcb553342624"
+  },
+  "sourceBoxMinification": [
+    {
+      "size": 1024,
+      "coveredPixels": 3771,
+      "meanTangentSlope": 0.3512769211178958,
+      "strongTiltFraction": 0.6711747547069743,
+      "emissionHighContrastFraction": 0.00041675567626953125
+    },
+    {
+      "size": 512,
+      "coveredPixels": 949,
+      "meanTangentSlope": 0.2476127468834855,
+      "strongTiltFraction": 0.43730242360379346,
+      "emissionHighContrastFraction": 0.000301361083984375
+    },
+    {
+      "size": 256,
+      "coveredPixels": 238,
+      "meanTangentSlope": 0.16538332506868247,
+      "strongTiltFraction": 0.15126050420168066,
+      "emissionHighContrastFraction": 0.0001220703125
+    },
+    {
+      "size": 128,
+      "coveredPixels": 60,
+      "meanTangentSlope": 0.08506292796582306,
+      "strongTiltFraction": 0.0,
+      "emissionHighContrastFraction": 0.0
+    },
+    {
+      "size": 64,
+      "coveredPixels": 15,
+      "meanTangentSlope": 0.04213131287422436,
+      "strongTiltFraction": 0.0,
+      "emissionHighContrastFraction": 0.0
+    }
+  ],
+  "contract": {
+    "pigment": "sRGB layer RGB; alpha=sqrt(exact recipe coverage)",
+    "normal": "resolved RGB tilt; game reads BC5 R/G",
+    "normalCoverage": "exact recipe coverage; game reads red",
+    "roughnessMetalness": "resolved red scalar maps",
+    "emission": "separate sparse red mask; light-independent, second component"
+  },
+  "losses": [
+    "Direct-light UV-cell facet selection, strength and fineShare have no stock shader mapping.",
+    "This fixed approximation profile does not consume recipe density, seed or facet colour.",
+    "BOX results are source diagnostics, not decoded game XBM mips or light response.",
+    "No eye plate, morphs, appearance, selector, archive or runtime rendering is built."
+  ],
+  "studioExportGuardRetained": true,
+  "gameRendered": false
+}

@@ -1,5 +1,17 @@
 # Glitter game-material comparison: offline fixture
 
+## Recipe-driven boundary, 24 September
+
+The new [recipe adapter study](recipe-driven-boundary.md) replaces this fixture's
+synthetic *coverage* with the Studio's exact `raster(layer, size)` result for an
+enabled direct-glint Glitter layer. It emits six independently generated PNG maps
+and, optionally, imports them as six XBM textures and two `xfs_` material
+instances against hash-checked current-game templates. The tracked
+[source-map result](recipe-adapter-result.json) and
+[serialization result](recipe-adapter-serialization.json) are reproducible
+without distributing generated pixels or game resources. This is an explicitly
+lossy material candidate, not a Studio exporter or a game-validated finish.
+
 This is a **material-only** comparison for the current Cyberpunk 2077 2.31 stock templates. It generates its own eye-shaped test coverage and randomly seeded triangle/quadrilateral facets, then imports seven `xfs_` textures and three `xfs_` material instances. It does not change the studio's Glitter export guard, bind a mesh, make an appearance or selector, package an archive, or install anything. The outputs are ignored under `generated/`.
 
 Two PBR instances use `base/materials/mesh_decal.mt`: dark pigment, an independently masked BC5 facet normal, red-channel roughness and metalness maps, and source alpha square-root compensation for the inspected decal coverage equation. They share seeded polygon placement and all other maps. The original uses one fixed normal per facet; the new `xfs_glitter_axial_pbr` uses an independent axial height ramp per facet, converted by finite differences to a normal map. This is a deliberately simple comparison of normal structure, not island_dancer's Substance graph or its rendered output. Both can only behave as *resolved* highlights; filtering several flakes to one texel loses their separate reflections. The third instance uses `base/materials/mesh_decal_emissive_subsurface.mt` with a sparse red-channel mask and bounded warm emission. That option deliberately tests an artistic light-independent sparkle, not reflected glitter. It requires a separate component on the same morphed plate for a combined trial. Its depth and overlap behavior on that plate still need runtime proof.
