@@ -1,0 +1,2354 @@
+{
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+  "method": "Finite exposed-face normal pullbacks, geodesic taper, bounded Laplacian smoothing; counterfactual GLB base-position delta only.",
+  "candidateSource": "geometry-0.00005000",
+  "bound": 0.00025,
+  "neighborBudget": "min(0.00005, quarter local source edge length)",
+  "seeds": [
+    {
+      "headVertex": 266,
+      "frame": 25,
+      "sourceHeadFace": 2406,
+      "headFaceExposure": "exposed",
+      "amplitude": 0.0001,
+      "affectedVertices": 43
+    },
+    {
+      "headVertex": 275,
+      "frame": 25,
+      "sourceHeadFace": 1987,
+      "headFaceExposure": "exposed",
+      "amplitude": 7e-05,
+      "affectedVertices": 40
+    },
+    {
+      "headVertex": 277,
+      "frame": 25,
+      "sourceHeadFace": 1990,
+      "headFaceExposure": "exposed",
+      "amplitude": 7e-05,
+      "affectedVertices": 35
+    },
+    {
+      "headVertex": 805,
+      "frame": 590,
+      "sourceHeadFace": 720,
+      "headFaceExposure": "exposed",
+      "amplitude": 7e-05,
+      "affectedVertices": 32
+    },
+    {
+      "headVertex": 5981,
+      "frame": 490,
+      "sourceHeadFace": 3671,
+      "headFaceExposure": "exposed",
+      "amplitude": 2e-05,
+      "affectedVertices": 20
+    }
+  ],
+  "smoothingAttempts": [
+    {
+      "lambda": 0,
+      "edgeViolations": 64,
+      "maxGap": 0.00010617681965514349,
+      "maxNorm": 0.00014010273889622778
+    },
+    {
+      "lambda": 0.1,
+      "edgeViolations": 23,
+      "maxGap": 8.253991185831352e-05,
+      "maxNorm": 0.00013197829283120846
+    },
+    {
+      "lambda": 0.3,
+      "edgeViolations": 3,
+      "maxGap": 6.41949915794966e-05,
+      "maxNorm": 0.00011960459064049698
+    },
+    {
+      "lambda": 1,
+      "edgeViolations": 0,
+      "maxGap": 4.201343429795934e-05,
+      "maxNorm": 9.743698908371334e-05
+    }
+  ],
+  "field": {
+    "maxNorm": 9.743698908371334e-05,
+    "maxNeighborGap": 4.201343429795934e-05,
+    "changedVerticesOver1e-10": 1635
+  },
+  "baselinePoseCases": [
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 0
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 10
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 20
+    },
+    {
+      "pairs": 167,
+      "sourceAdjacent": 136,
+      "nativeNonadjacent": 19,
+      "newNonadjacent": 12,
+      "frame": 25
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 30
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 33
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 40
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 50
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 60
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 70
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 80
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 90
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 100
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 104
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 110
+    },
+    {
+      "pairs": 136,
+      "sourceAdjacent": 122,
+      "nativeNonadjacent": 4,
+      "newNonadjacent": 10,
+      "frame": 120
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 130
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 140
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 150
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 160
+    },
+    {
+      "pairs": 167,
+      "sourceAdjacent": 136,
+      "nativeNonadjacent": 19,
+      "newNonadjacent": 12,
+      "frame": 169
+    },
+    {
+      "pairs": 147,
+      "sourceAdjacent": 128,
+      "nativeNonadjacent": 10,
+      "newNonadjacent": 9,
+      "frame": 170
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 180
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 190
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 200
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 210
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 220
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 230
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 240
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 250
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 260
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 270
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 280
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 290
+    },
+    {
+      "pairs": 33,
+      "sourceAdjacent": 33,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 300
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 310
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 320
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 330
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 340
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 350
+    },
+    {
+      "pairs": 26,
+      "sourceAdjacent": 24,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 2,
+      "frame": 360
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 370
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 380
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 390
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 400
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 410
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 420
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 430
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 440
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 450
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 460
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 470
+    },
+    {
+      "pairs": 20,
+      "sourceAdjacent": 17,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 3,
+      "frame": 480
+    },
+    {
+      "pairs": 20,
+      "sourceAdjacent": 17,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 3,
+      "frame": 490
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 500
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 510
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 520
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 530
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 540
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 550
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 560
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 570
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 571
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 580
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 590
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 600
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 610
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 620
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 630
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 640
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 650
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 660
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 663
+    }
+  ],
+  "poseCases": [
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 0
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 10
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 20
+    },
+    {
+      "pairs": 163,
+      "sourceAdjacent": 134,
+      "nativeNonadjacent": 17,
+      "newNonadjacent": 12,
+      "frame": 25
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 30
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 33
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 40
+    },
+    {
+      "pairs": 42,
+      "sourceAdjacent": 40,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 50
+    },
+    {
+      "pairs": 42,
+      "sourceAdjacent": 40,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 60
+    },
+    {
+      "pairs": 34,
+      "sourceAdjacent": 34,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 70
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 80
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 90
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 100
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 104
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 110
+    },
+    {
+      "pairs": 122,
+      "sourceAdjacent": 104,
+      "nativeNonadjacent": 5,
+      "newNonadjacent": 13,
+      "frame": 120
+    },
+    {
+      "pairs": 34,
+      "sourceAdjacent": 34,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 130
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 140
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 150
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 160
+    },
+    {
+      "pairs": 165,
+      "sourceAdjacent": 134,
+      "nativeNonadjacent": 17,
+      "newNonadjacent": 14,
+      "frame": 169
+    },
+    {
+      "pairs": 139,
+      "sourceAdjacent": 119,
+      "nativeNonadjacent": 6,
+      "newNonadjacent": 14,
+      "frame": 170
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 180
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 190
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 200
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 210
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 220
+    },
+    {
+      "pairs": 34,
+      "sourceAdjacent": 34,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 230
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 240
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 250
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 260
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 270
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 280
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 290
+    },
+    {
+      "pairs": 65,
+      "sourceAdjacent": 63,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 300
+    },
+    {
+      "pairs": 40,
+      "sourceAdjacent": 38,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 310
+    },
+    {
+      "pairs": 46,
+      "sourceAdjacent": 44,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 320
+    },
+    {
+      "pairs": 44,
+      "sourceAdjacent": 42,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 330
+    },
+    {
+      "pairs": 34,
+      "sourceAdjacent": 34,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 340
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 350
+    },
+    {
+      "pairs": 56,
+      "sourceAdjacent": 54,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 360
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 370
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 380
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 390
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 400
+    },
+    {
+      "pairs": 42,
+      "sourceAdjacent": 40,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 410
+    },
+    {
+      "pairs": 42,
+      "sourceAdjacent": 40,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "frame": 420
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 430
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 440
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 450
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 460
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 470
+    },
+    {
+      "pairs": 38,
+      "sourceAdjacent": 35,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 3,
+      "frame": 480
+    },
+    {
+      "pairs": 38,
+      "sourceAdjacent": 35,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 3,
+      "frame": 490
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 500
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 510
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 520
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 530
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 540
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 550
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 560
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 570
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 571
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 580
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 590
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 600
+    },
+    {
+      "pairs": 34,
+      "sourceAdjacent": 34,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 610
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 620
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 630
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 640
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 650
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 660
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "frame": 663
+    }
+  ],
+  "staticCases": [
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "Basis",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 18,
+      "sourceAdjacent": 18,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h011_eyes",
+      "maxDisplacement": 9.60878114202337e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 7.84339661993658e-05,
+      "overNeighborBudget": 15
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h012_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.9868058378674145e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h013_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h014_jaw",
+      "maxDisplacement": 9.140247224379183e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.114672093867927e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h015_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 58,
+      "sourceAdjacent": 55,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 3,
+      "case": "h021_eyes",
+      "maxDisplacement": 9.754623755165455e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 8.239593543633686e-05,
+      "overNeighborBudget": 20
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h022_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.022967387594945e-05,
+      "overNeighborBudget": 11
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h023_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h024_jaw",
+      "maxDisplacement": 9.173248683298164e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.958983121798811e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h025_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 29,
+      "sourceAdjacent": 15,
+      "nativeNonadjacent": 12,
+      "newNonadjacent": 2,
+      "case": "h031_eyes",
+      "maxDisplacement": 9.718613721930092e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 8.362708709272082e-05,
+      "overNeighborBudget": 33
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h032_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.161483895526382e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h033_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h034_jaw",
+      "maxDisplacement": 9.176354278365896e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.1026077440890894e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h035_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 25,
+      "sourceAdjacent": 25,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h041_eyes",
+      "maxDisplacement": 9.912408207092806e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 0.00010053741484358427,
+      "overNeighborBudget": 23
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h042_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.15640511819478e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h043_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h044_jaw",
+      "maxDisplacement": 9.163025959514223e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.089312611061334e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h045_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 4,
+      "sourceAdjacent": 4,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h051_eyes",
+      "maxDisplacement": 9.986405857739352e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.9611068788754e-05,
+      "overNeighborBudget": 11
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h052_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.315620352181318e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h053_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h054_jaw",
+      "maxDisplacement": 9.155567036196783e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0446295286742144e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h055_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 19,
+      "sourceAdjacent": 13,
+      "nativeNonadjacent": 6,
+      "newNonadjacent": 0,
+      "case": "h061_eyes",
+      "maxDisplacement": 9.860682181272e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.7897045038725975e-05,
+      "overNeighborBudget": 8
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h062_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.048937153683747e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h063_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h064_jaw",
+      "maxDisplacement": 9.1702082254273e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.990499015121328e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h065_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 16,
+      "sourceAdjacent": 14,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h071_eyes",
+      "maxDisplacement": 9.617451342473418e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 4.606251228593148e-05,
+      "overNeighborBudget": 0
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h072_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.996937511041563e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h073_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h074_jaw",
+      "maxDisplacement": 9.150686595368e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.041919115745393e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h075_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 22,
+      "sourceAdjacent": 20,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h081_eyes",
+      "maxDisplacement": 0.00010136932003555083,
+      "overDisplacement": 0,
+      "maxNeighborGap": 7.413557294353037e-05,
+      "overNeighborBudget": 17
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h082_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.965705637003689e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h083_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h084_jaw",
+      "maxDisplacement": 9.184871987883854e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0834765504039125e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h085_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 20,
+      "sourceAdjacent": 20,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h091_eyes",
+      "maxDisplacement": 9.677104756970595e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 4.174458603793596e-05,
+      "overNeighborBudget": 0
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h092_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.16896091330421e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h093_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h094_jaw",
+      "maxDisplacement": 9.160907206553104e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.034114152425893e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h095_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 4,
+      "sourceAdjacent": 2,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h101_eyes",
+      "maxDisplacement": 9.613292893411203e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.96750596497551e-05,
+      "overNeighborBudget": 16
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h102_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.093533811918013e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h103_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h104_jaw",
+      "maxDisplacement": 9.118428872269244e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0840455470497866e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h105_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 9,
+      "sourceAdjacent": 8,
+      "nativeNonadjacent": 1,
+      "newNonadjacent": 0,
+      "case": "h111_eyes",
+      "maxDisplacement": 9.552308527227532e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.281289933448277e-05,
+      "overNeighborBudget": 4
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h112_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0077812691633676e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h113_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h114_jaw",
+      "maxDisplacement": 9.17715498599251e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.033860027383542e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h115_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 8,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h121_eyes",
+      "maxDisplacement": 9.873308857244165e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 4.8713180689012166e-05,
+      "overNeighborBudget": 0
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h122_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.14607161843415e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h123_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h124_jaw",
+      "maxDisplacement": 9.157126618973125e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.041789533512727e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h125_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 17,
+      "sourceAdjacent": 16,
+      "nativeNonadjacent": 1,
+      "newNonadjacent": 0,
+      "case": "h131_eyes",
+      "maxDisplacement": 9.625447794349009e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0534035464946355e-05,
+      "overNeighborBudget": 9
+    },
+    {
+      "pairs": 4,
+      "sourceAdjacent": 2,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h132_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.016367695709914e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h133_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h134_jaw",
+      "maxDisplacement": 9.118688922331242e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.058421998061933e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h135_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 40,
+      "sourceAdjacent": 36,
+      "nativeNonadjacent": 4,
+      "newNonadjacent": 0,
+      "case": "h141_eyes",
+      "maxDisplacement": 9.919121632954459e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 7.201610800518946e-05,
+      "overNeighborBudget": 5
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h142_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.226063743682169e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h143_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h144_jaw",
+      "maxDisplacement": 9.124029865512343e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.028561593019397e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h145_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 14,
+      "sourceAdjacent": 12,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 2,
+      "case": "h151_eyes",
+      "maxDisplacement": 9.481732196035085e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 7.652612841057043e-05,
+      "overNeighborBudget": 37
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h152_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.04120262268769e-05,
+      "overNeighborBudget": 11
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h153_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h154_jaw",
+      "maxDisplacement": 9.213567760147551e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.043290920698184e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h155_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 5,
+      "sourceAdjacent": 4,
+      "nativeNonadjacent": 1,
+      "newNonadjacent": 0,
+      "case": "h161_eyes",
+      "maxDisplacement": 9.685255064311354e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.119442172233825e-05,
+      "overNeighborBudget": 14
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h162_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0948272299078034e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h163_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h164_jaw",
+      "maxDisplacement": 9.176559932839387e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0807853185788975e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h165_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 104,
+      "sourceAdjacent": 92,
+      "nativeNonadjacent": 8,
+      "newNonadjacent": 4,
+      "case": "h171_eyes",
+      "maxDisplacement": 0.00010159398248150894,
+      "overDisplacement": 0,
+      "maxNeighborGap": 9.763536411498822e-05,
+      "overNeighborBudget": 62
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h172_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.095221333378781e-05,
+      "overNeighborBudget": 14
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h173_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 10,
+      "sourceAdjacent": 8,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h174_jaw",
+      "maxDisplacement": 9.103897304758056e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.980168903277454e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h175_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 8,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h181_eyes",
+      "maxDisplacement": 9.608391714253585e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.441095021330839e-05,
+      "overNeighborBudget": 2
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h182_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.9781327380058313e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h183_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h184_jaw",
+      "maxDisplacement": 9.113713151366757e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.093196712555762e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h185_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 13,
+      "sourceAdjacent": 13,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h191_eyes",
+      "maxDisplacement": 9.637194670041336e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 4.873394395263752e-05,
+      "overNeighborBudget": 0
+    },
+    {
+      "pairs": 12,
+      "sourceAdjacent": 10,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h192_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.114313549725158e-05,
+      "overNeighborBudget": 14
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h193_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h194_jaw",
+      "maxDisplacement": 9.225215274086925e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0886353560224066e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h195_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 48,
+      "sourceAdjacent": 43,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 3,
+      "case": "h201_eyes",
+      "maxDisplacement": 9.588760466553501e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.491983882678274e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h202_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.053239767951397e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h203_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h204_jaw",
+      "maxDisplacement": 9.22361420624105e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.086495302501791e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h205_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 8,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "h211_eyes",
+      "maxDisplacement": 9.831527474482755e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 5.912350037225688e-05,
+      "overNeighborBudget": 9
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h212_nose",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.138394164383447e-05,
+      "overNeighborBudget": 12
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h213_mouth",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h214_jaw",
+      "maxDisplacement": 9.131729322869852e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.0437605895074677e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 8,
+      "sourceAdjacent": 6,
+      "nativeNonadjacent": 2,
+      "newNonadjacent": 0,
+      "case": "h215_ear",
+      "maxDisplacement": 9.092887101400793e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 6.082317228253768e-05,
+      "overNeighborBudget": 13
+    },
+    {
+      "pairs": 30,
+      "sourceAdjacent": 30,
+      "nativeNonadjacent": 0,
+      "newNonadjacent": 0,
+      "case": "saved_v",
+      "maxDisplacement": 9.743698908373133e-05,
+      "overDisplacement": 0,
+      "maxNeighborGap": 4.201343429781411e-05,
+      "overNeighborBudget": 0
+    }
+  ],
+  "staticNeighborPairwiseNecessaryCondition": {
+    "certifiedIncompatibleEdges": 25,
+    "worstCertificate": {
+      "edgeIndex": 1931,
+      "plateVertices": [
+        572,
+        781
+      ],
+      "headVertices": [
+        2424,
+        3017
+      ],
+      "cases": [
+        "h041_eyes",
+        "h201_eyes"
+      ],
+      "caseVectorDistance": 0.000112901435302338,
+      "sumAllowedRadii": 6.21567214089804e-05,
+      "excessDistance": 5.0744713893357604e-05
+    },
+    "interpretation": "Necessary pairwise condition only; zero failures would not prove a coupled field exists."
+  },
+  "gates": {
+    "73PosesChecked": true,
+    "107StaticCasesChecked": true,
+    "poseContactFree": false,
+    "poseNewNonadjacentFree": false,
+    "staticContactFree": false,
+    "allStaticDisplacementWithinBudget": true,
+    "allStaticNeighborsWithinBudget": false,
+    "sourceMeshNativeSkinExact": true,
+    "sourceMorphBaseNativeSkinExact": true,
+    "all105MorphDeltasPreservedInCounterfactual": true
+  },
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\geometry-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\head.positions.f64",
+      "sha256": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\geometry-0.00005000.positions.f64",
+      "sha256": "eee59cd3c41c24274969bd8d8d25317debb8861d4b2f2af02bcff5b8a8f073f9"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\fixed_linear.f64",
+      "sha256": "a15b2ea0b6233b60a55981bcff7c02b93c25e4ba133780d54168cecc635c13aa"
+    },
+    {
+      "path": "D:\\Dev\\worktrees\\plate-finite-contact\\experiments\\006-plate-clearance\\research\\finite_contact_summary.json",
+      "sha256": "720b148745a5a12e5d441f6b2a3229215ccc5eb57b5349b6fc28576432e5c373"
+    }
+  ],
+  "limits": [
+    "Counterfactual positions only: no new mesh/morph import or native buffer byte audit exists for this candidate.",
+    "Head-only exposed-face seed selection does not establish combined-scene contact visibility.",
+    "Sampled poses and isolated static morphs do not prove all morph combinations or continuous animation."
+  ]
+}
