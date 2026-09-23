@@ -77,10 +77,10 @@ values += [{'$type':'Float',name:value} for name,value in {'DiffuseAlpha':1,'Nor
 values.append({'$type':'Color','DiffuseColor':{'$type':'Color','Red':255,'Green':255,'Blue':255,'Alpha':255}})
 root['localMaterialBuffer']['materials']=[{'$type':'CMaterialInstance','audioTag':cname('None'),'baseMaterial':ref('base/materials/mesh_decal.mt'),'cookingPlatform':'PLATFORM_PC','enableMask':0,'resourceVersion':4,'values':values}]
 root['localMaterialBuffer']['rawData']=None;root['localMaterialBuffer']['rawDataHeaders']=[]
-write(OUT/'models-json/xfas_eye_plate.mesh.json',mesh)
+write(OUT/'models-json'/(Path(plan['mesh']).name+'.json'),mesh)
 morph=load(OUT/'source-json/xfas_eye_plate.morphtarget.json');mr=morph['Data']['RootChunk']
 mr['baseMesh']=ref(plan['mesh']);mr['baseMeshAppearance']=cname(seed)
-write(OUT/'models-json/xfas_eye_plate.morphtarget.json',morph)
+write(OUT/'models-json'/(Path(plan['morph']).name+'.json'),morph)
 run('deserialize-models',[WK,'convert','deserialize',OUT/'models-json','-o',modeldir])
 
 component={'$type':'entMorphTargetSkinnedMeshComponent','name':cname(plan['component']),'id':'0','isEnabled':1,'version':1,
@@ -96,16 +96,16 @@ template={'$type':'appearanceAppearanceDefinition','name':cname(plan['templateAp
         'meshAppearance':cname(seed),'chunkMask':'9223372036854775807','visualScale':{'$type':'Vector3','X':1,'Y':1,'Z':1}}]),
     'resolvedDependencies':[ref(plan['morph'],True)],'visualTags':{'$type':'redTagList','tags':[cname('Female')]}}
 app=document({'$type':'appearanceAppearanceResource','cookingPlatform':'PLATFORM_PC','appearances':[handle(off),handle(template)]})
-write(OUT/'app-json/xfas_collection.app.json',app)
+write(OUT/'app-json'/(Path(plan['app']).name+'.json'),app)
 definitions=[{'$type':'gameuiIndexedAppearanceDefinition','name':cname(plan['offAppearance']),'index':0,'localizedName':'Common-Off'}]
 definitions += [{'$type':'gameuiIndexedAppearanceDefinition','name':cname(p['appAppearance']),'index':p['index'],'localizedName':p['name']} for p in plan['presets']]
 option={'$type':'gameuiAppearanceInfo','name':cname(plan['selector']),'uiSlot':cname(plan['selector']),
-    'localizedName':'XF Appearance Studio · Eye makeup','enabled':1,'hidden':0,'index':311,'defaultIndex':0,
+    'localizedName':'XF Studio · Eye makeup','enabled':1,'hidden':0,'index':311,'defaultIndex':0,
     'editTags':['NewGame','HairDresser','Ripperdoc'],'randomizeCategory':'Makeup','useThumbnails':0,
     'resource':ref(plan['app'],True),'definitions':definitions}
 cc=document({'$type':'gameuiCharacterCustomizationInfoResource','cookingPlatform':'PLATFORM_PC',
     'headCustomizationOptions':[handle(option)],'headGroups':[{'$type':'gameuiOptionsGroup','name':cname('character_customization'),'options':[cname(plan['selector'])]}]})
-write(OUT/'cc-json/xfas_collection.inkcharcustomization.json',cc)
+write(OUT/'cc-json'/(Path(plan['customization']).name+'.json'),cc)
 run('deserialize-app',[WK,'convert','deserialize',OUT/'app-json','-o',appdir])
 run('deserialize-customization',[WK,'convert','deserialize',OUT/'cc-json','-o',appdir])
 run('roundtrip',[WK,'convert','serialize',archive,'-o',OUT/'roundtrip'])

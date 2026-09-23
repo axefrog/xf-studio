@@ -72,7 +72,7 @@ export function parseRecipe(value: unknown): Recipe {
     r.layers.length !== 4
   )
     throw Error(
-      "Expected an XF Appearance Studio makeup recipe with four layers.",
+      "Expected an XF Studio makeup recipe with four layers.",
     );
   const num = (x: unknown, a: number, b: number) =>
     typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;

@@ -57,4 +57,4 @@ const server = Bun.serve({
     });
   },
 });
-console.log(`XF Appearance Studio: ${server.url}`);
+console.log(`XF Studio: ${server.url}`);

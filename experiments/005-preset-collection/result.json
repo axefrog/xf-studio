@@ -1,5 +1,5 @@
 {
-  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790130339455979000",
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790133575399258000",
   "presetCount": 2,
   "selectorCount": 1,
   "selectorOptionCount": 3,
@@ -9,27 +9,27 @@
   "materialTemplates": 1,
   "textureCount": 6,
   "archiveBytes": 831488,
-  "archiveSha256": "4b03e398f5c5d35720cfcc3b6bbbc4505368b2377c4b072a2e289de2801ccec6",
+  "archiveSha256": "1a67cfbe58bcc7224b77b4ae626ea72f3252b9a968ab3f0df81f865f63862c18",
   "unpackedFilesVerified": 10,
   "preservedMorphs": 105,
   "modelBuffersUnchanged": true,
   "resolvedDynamicPaths": [
     {
-      "appearance": "xfas_c11ea932b7ce94d40a28447c307009137__xfas_p193f4397e3134409b842a333307dece3",
-      "chunkMaterial": "xfas_p193f4397e3134409b842a333307dece3@preset",
+      "appearance": "xfs_c11ea932b7ce94d40a28447c307009137__xfs_p193f4397e3134409b842a333307dece3",
+      "chunkMaterial": "xfs_p193f4397e3134409b842a333307dece3@preset",
       "textures": {
-        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_diffuse.xbm",
-        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_roughness.xbm",
-        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p193f4397e3134409b842a333307dece3_metalness.xbm"
+        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_metalness.xbm"
       }
     },
     {
-      "appearance": "xfas_c11ea932b7ce94d40a28447c307009137__xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea",
-      "chunkMaterial": "xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea@preset",
+      "appearance": "xfs_c11ea932b7ce94d40a28447c307009137__xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea",
+      "chunkMaterial": "xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea@preset",
       "textures": {
-        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_diffuse.xbm",
-        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_roughness.xbm",
-        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfas_p6bf9f1e3a9fa4882a87cfbdc346464ea_metalness.xbm"
+        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_metalness.xbm"
       }
     }
   ],

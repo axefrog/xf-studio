@@ -1,6 +1,7 @@
 import { parseRecipe, type Recipe } from "./recipe";
 
 export type PresetCollection = {
+  // File-format compatibility ID; product branding does not change existing inputs.
   schema: "xfas/collection-1"; id: string; name: string;
   presets: { id: string; name: string; revision: number; recipe: Recipe }[];
 };
@@ -11,7 +12,7 @@ const title = (value: unknown): value is string => typeof value === "string" && 
 export function parseCollection(value: unknown): PresetCollection {
   const input = value as PresetCollection;
   if (!input || input.schema !== "xfas/collection-1" || !uuid.test(input.id ?? "") || !title(input.name) || !Array.isArray(input.presets) || !input.presets.length)
-    throw Error("Expected a named XFAS collection with a stable UUID and at least one preset.");
+    throw Error("Expected a named XF Studio collection with a stable UUID and at least one preset.");
   const seen = new Set<string>();
   const presets = input.presets.map(p => {
     if (!p || !uuid.test(p.id ?? "") || seen.has(p.id) || !title(p.name) || !Number.isSafeInteger(p.revision) || p.revision < 1)
@@ -24,16 +25,16 @@ export function parseCollection(value: unknown): PresetCollection {
 
 export function planCollection(value: unknown) {
   const collection = parseCollection(value), key = collection.id.replaceAll("-", "");
-  const namespace = `xfas_c${key}`, depot = `axefrog/appearance_studio/collections/${key}`;
+  const namespace = `xfs_c${key}`, depot = `axefrog/appearance_studio/collections/${key}`;
   const presets = collection.presets.map((preset, i) => {
-    const appearance = `xfas_p${preset.id.replaceAll("-", "")}`;
+    const appearance = `xfs_p${preset.id.replaceAll("-", "")}`;
     return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`,
       textures:Object.fromEntries(["diffuse","roughness","metalness"].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as Record<"diffuse"|"roughness"|"metalness",string> };
   });
   return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name, namespace, depot,
-    selector:namespace, component:`${namespace}_makeup`, offAppearance:"xfas_off", templateAppearance:`${namespace}__xfas_template`,
-    app:`${depot}/xfas_collection.app`, customization:`${depot}/xfas_collection.inkcharcustomization`,
-    mesh:`${depot}/models/xfas_eye_plate.mesh`, morph:`${depot}/models/xfas_eye_plate.morphtarget`,
+    selector:namespace, component:`${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
+    app:`${depot}/xfs_collection.app`, customization:`${depot}/xfs_collection.inkcharcustomization`,
+    mesh:`${depot}/models/xfs_eye_plate.mesh`, morph:`${depot}/models/xfs_eye_plate.morphtarget`,
     presets, requirements:{ArchiveXL:"1.27.3",game:"2.31"},
     limitations:["Appearance names are stable; game save/index persistence across reorder/removal still requires runtime proof.",
       "One pack creates one selector. Multi-pack aggregation into one global selector is not implemented."] };

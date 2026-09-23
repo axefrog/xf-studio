@@ -15,7 +15,7 @@ export class LookLibrary {
     const version = this.db.query("PRAGMA user_version").get() as { user_version: number };
     if (version.user_version > 1) {
       this.db.close();
-      throw Error("This library needs a newer version of XF Appearance Studio.");
+      throw Error("This library needs a newer version of XF Studio.");
     }
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     if (version.user_version === 0) this.db.transaction(() => {

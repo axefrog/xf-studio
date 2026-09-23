@@ -1,10 +1,10 @@
-# XF Appearance Studio
+# XF Studio
 
 Renamed by Nathan on 2026-09-23. Current product: users author their own eye-makeup presets in the studio, save a local library and compile a collection for **one in-game selector**. This supersedes four in-game layer selectors and the design/colour/finish matrix. Editable layers, expanded plate coverage, predictable stacking and seven familiar finish families remain the first delivery area. See the [product direction and later-feature discussion gates](data/product-direction.md).
 
-All newly generated archive appearance names use the `xfas_` namespace. See [naming and scope](data/naming.md). Photo Mode Tools remains an independent peer project.
+All newly generated archive appearance names use the `xfs_` namespace. See [naming and scope](data/naming.md). Photo Mode Tools remains an independent peer project.
 
-Status: foundation research complete; the first clean [procedural authoring prototype](authoring/README.md) now runs locally. The game mod implementation is still pending. This is the authoritative location for XF Appearance Studio, formerly XF Eye Artistry.
+Status: foundation research complete; the first clean [procedural authoring prototype](authoring/README.md) now runs locally. The game mod implementation is still pending. This is the authoritative location for XF Studio, formerly XF Appearance Studio and XF Eye Artistry.
 
 Historical Eye Artistry feature intent: female V, four independently selectable makeup layers, 20 designs (9 eyeliner and 11 eyeshadow), 49 colours and four finish labels. The legacy finish implementations are not all distinct; keep user-visible intent separate from accidental old behavior. Expanded eye-plate surface, predictable layer ordering and facial deformation support are core requirements.
 

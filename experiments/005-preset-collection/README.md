@@ -2,6 +2,8 @@
 
 Two editable authored looks, **Violet ink** and **Copper edge**, compile into an actual local archive plus ArchiveXL registration. Each combines two overlapping layers. One character-creator appearance control lists **Off**, Violet ink and Copper edge. This is an offline-verified fixture, not a deployed or render-verified release.
 
+Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate source retains its historical filename; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-appearance-studio/data/naming.md).
+
 ## What was built
 
 - One shared mesh/morph pair containing the owned neutral expanded plate and all 105 facial customization shapes.

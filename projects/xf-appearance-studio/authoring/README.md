@@ -1,6 +1,6 @@
-# XF Appearance Studio — authoring editor
+# XF Studio — authoring editor
 
-A working local authoring experiment, built with Bun 1.4.2, TypeScript 7.0.2 and Three.js 0.186.0. Open [XF Appearance Studio](http://127.0.0.1:4317/) while the local server is running.
+A working local authoring experiment, built with Bun 1.4.2, TypeScript 7.0.2 and Three.js 0.186.0. Open [XF Studio](http://127.0.0.1:4317/) while the local server is running.
 
 ## Use
 

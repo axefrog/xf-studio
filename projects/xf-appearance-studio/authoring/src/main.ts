@@ -462,7 +462,7 @@ function download(blob: Blob, name: string) {
 $("save").onclick = () => {
   download(
     new Blob([JSON.stringify(recipe, null, 2)], { type: "application/json" }),
-    "xfas.recipe.json",
+    "xfs.recipe.json",
   );
   status("Recipe exported — editable shapes, colours and fields.");
 };
@@ -507,7 +507,7 @@ $("export").onclick = () => {
     $<HTMLButtonElement>("export").disabled = false;
     c.toBlob((blob) => {
       if (blob) {
-        download(blob, `xfas-${layer.id}-alpha.png`);
+        download(blob, `xfs-${layer.id}-alpha.png`);
         status("Exported 2048² white + alpha mask; palette remains separate.");
       }
     });

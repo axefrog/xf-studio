@@ -26,7 +26,7 @@ def stats(x): return {'mean':float(x.mean()),'p95':float(np.percentile(x,95)),'m
 def pixels(p): return np.asarray(Image.open(p).convert('RGBA'),dtype=np.float64)/255
 def linear(x): return np.where(x<=.04045,x/12.92,((x+.055)/1.055)**2.4)
 
-mesh=root('xfas_eye_plate.mesh.json');morph=root('xfas_eye_plate.morphtarget.json');app=root('xfas_collection.app.json');cc=root('xfas_collection.inkcharcustomization.json')
+mesh,morph,app,cc=[root(Path(plan[key]).name+'.json') for key in ['mesh','morph','app','customization']]
 source_mesh=load(out/'source-json/xfas_eye_plate.mesh.json')['Data']['RootChunk']
 source_morph=load(out/'source-json/xfas_eye_plate.morphtarget.json')['Data']['RootChunk']
 for field in ['renderResourceBlob','boneNames','boneRigMatrices','boundingBox']:
@@ -72,6 +72,11 @@ assert component['isEnabled']==1
 assert len(cc['headCustomizationOptions'])==1
 option=cc['headCustomizationOptions'][0]['Data']
 assert option['$type']=='gameuiAppearanceInfo' and option['enabled']==1 and option['hidden']==0
+assert option['localizedName']=='XF Studio · Eye makeup'
+assert all(name.startswith('xfs_') for name in [plan['namespace'],plan['selector'],plan['component'],
+    value(off['name']),value(template['name']),*[p['appearance'] for p in plan['presets']],
+    *[p['appAppearance'] for p in plan['presets']]])
+assert all(Path(artifact['path']).name.startswith('xfs_') for artifact in build['artifacts'])
 assert value(option['name'])==plan['selector']==value(option['uiSlot']) and dep(option['resource'])==plan['app']
 assert len(option['definitions'])==len(plan['presets'])+1
 assert value(option['definitions'][0]['name'])==plan['offAppearance'] and option['defaultIndex']==0
@@ -83,7 +88,7 @@ for preset,definition,record in zip(plan['presets'],option['definitions'][1:],bu
     assert definition['localizedName']==preset['name']
     # Source-derived expansion model: app suffix -> mesh stub -> shared @preset template.
     suffix=value(definition['name']).rsplit('__',1)[1];assert suffix==preset['appearance']
-    assert suffix.startswith('xfas_')
+    assert suffix.startswith('xfs_')
     expanded={}
     for parameter,channel in [('DiffuseTexture','diffuse'),('RoughnessTexture','roughness'),('MetalnessTexture','metalness')]:
         reference=params[parameter];assert reference['Flags']=='Soft'

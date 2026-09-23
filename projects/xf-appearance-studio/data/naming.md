@@ -1,17 +1,24 @@
-# XF Appearance Studio: scope and naming
+# XF Studio: scope and naming
 
-Current product model is [one selector for complete authored presets](product-direction.md). The per-layer appearance names below are historical mechanism examples; they do not mandate multiple in-game selectors. Preserve `xfas_` for all new app/mesh appearances; the final collection/preset namespace and save-stability contract need proof.
+Latest user decisions, 23 September 2026: **XF Studio** supersedes XF Appearance Studio and XF Eye Artistry. New generated resources use **`xfs_`**, replacing the earlier `xfas_` prefix. The broader product name leaves room for capabilities such as quest design, while eye makeup remains the first delivery area. Future feature implementation still requires discussion.
 
-User decisions, 23 September 2026: rename XF Eye Artistry to **XF Appearance Studio**, allow broader appearance editing and potentially full-body work later, and prefix generated archive appearance names with `XFAS` or `xfas` for recognizable provenance and reduced collision risk. Canonical implementation spelling is lowercase `xfas_`.
+The current product model is [one selector for complete authored presets](product-direction.md), not the historical four-selector matrix.
 
-- Owned project: `projects/xf-appearance-studio`; package/archive stem: `xf-appearance-studio`.
-- Owned depot root: `axefrog\appearance_studio\`. All new resources should live here unless an engine integration explicitly requires another location.
-- App appearance example: `xfas_eye_layer1__xfas_e01+000+matte`.
-- Corresponding expanded mesh appearance: `xfas_e01+000+matte`. Prefixing only the app scope would leave the mesh appearance unbranded; both are covered.
-- Explicit appearance templates and generated fallback appearances must also use `xfas_`. Audit generated appearance fields before packaging; an engine-required literal must be investigated explicitly rather than silently exempted.
-- Keep `__`, `+` and `@` for ArchiveXL syntax. The example is a format study, not a commitment to old design IDs, the old catalogue or a fixed palette size.
-- Referenced game/third-party appearances, original Blender resource names and identifiers read from existing saves retain their original spelling. These are inputs, not new XFAS appearances.
+## New generated game resources
 
-Eye makeup is the first milestone. Other facial details, configurable asset sources, full saved-V rendering and eventual body authoring can build on the editor and material research; none should be described as finished merely because the scope expanded.
+- Every new app and mesh appearance starts with lowercase `xfs_`, including explicit templates and generated fallback appearances.
+- A collection UUID produces `xfs_c<uuid-without-hyphens>`. A preset UUID produces `xfs_p<uuid-without-hyphens>`; the requested app appearance is `xfs_c<collection>__xfs_p<preset>`.
+- Off is `xfs_off`; the shared app template is `xfs_c<collection>__xfs_template`.
+- New collection packages, selectors, components, texture filenames and resource basenames use the same prefix. The collection builder derives filenames from its export plan so resource references stay aligned.
+- Keep `__`, `+` and `@` where required by ArchiveXL syntax. Display names, revisions and list order do not change UUID-based identities. Actual game save/index persistence across collection changes still needs runtime proof.
+- Referenced game/third-party appearances and identifiers read from existing saves retain their original spelling. These are inputs, not new XFS appearances.
 
-The editor retains `eye-artistry/recipe-1`, `eye-artistry/saved-v-1` and its existing browser draft keys as versioned compatibility identifiers. Renaming these for branding alone would risk existing work. UI and new download filenames use the new name. The active browser draft is not modified or reloaded during this rename. Historical inventory, evidence and research filenames retain their original context; active project links point to the new directory.
+## Compatibility and historical evidence
+
+The technical project directory stays `projects/xf-appearance-studio`, and the depot root stays `axefrog/appearance_studio/`. The running app, source intake and reproducible pipelines already reference them; neither is user-facing product branding. Existing package/health identifiers and the `XFAS_DATA_DIR` setting also remain compatible.
+
+Keep serialized IDs (`eye-artistry/recipe-1`, `eye-artistry/saved-v-1`, `xfas/collection-1`, `xfas/export-plan-1`, `xfas/workspace-1`), browser storage keys and SQLite data unchanged. Existing collections load and compile into the new XFS namespace; they need no manual conversion. Visible UI, errors and new recipe/mask download filenames use XF Studio / XFS.
+
+Earlier experiments, captured results and the owned source plate `xfas_eye_plate.blend` retain their original names. Experiments 001-004 are historical studies, not current release generators; their XFAS fixture outputs remain reproducible. Experiment 006 continues using those geometry controls. Experiment 005 is the current collection packaging path and emits XFS resources from the historical plate input without modifying it.
+
+No XFAS package from these experiments has been installed or released. This is a pre-release namespace change, not a migration guarantee for an installed XFAS mod: old and new archives must not be co-installed as an upgrade strategy. Preserve prior build outputs and their hashes; record new validation separately. Do not replace names inside old evidence as though those tests originally used XFS.

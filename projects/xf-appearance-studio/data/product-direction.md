@@ -2,6 +2,8 @@
 
 User decisions, 2026-09-23. This supersedes the original four in-game layer selectors and the palette/design/finish option matrix. Eye makeup is the only feature currently authorized for implementation.
 
+Product name: **XF Studio**, formerly XF Appearance Studio / XF Eye Artistry. The broader name leaves room for future capabilities such as quest design; that is a future direction to discuss, not a current implementation task or a revival of the old xf-omega toolbox. Eye makeup remains the current focus. See [naming and compatibility](naming.md).
+
 ## User workflow
 
 1. Author as many named eye-makeup presets as desired in the studio. Each is an editable composition of shapes, layers, colours, finishes and order.
@@ -19,7 +21,7 @@ The desired output is a merged, multilayered material for each preset where the 
 
 Whatever its internal representation, a compiled look is one game selection. Prove switching A → B → Off removes stale components and persists correctly. Avoid a separate selector per colour, design, finish or layer. ArchiveXL expansion remains useful for reuse, but the older 15,680-case contract is a historical mechanism test, not the product target.
 
-Stable library preset IDs must be independent of names/list positions. Plan stable export collection namespaces plus stable preset appearance IDs (`xfas_…`) and manifest records of source revision, compiler version, material adapter, dependencies and output hashes. Namespace exported collections so separately shared packs cannot collide. Updating/reordering a collection must not silently change the appearance associated with a saved selection. Test CCXL index/name persistence before committing the release format.
+Stable library preset IDs must be independent of names/list positions. Plan stable export collection namespaces plus stable preset appearance IDs (`xfs_…`) and manifest records of source revision, compiler version, material adapter, dependencies and output hashes. Namespace exported collections so separately shared packs cannot collide. Updating/reordering a collection must not silently change the appearance associated with a saved selection. Test CCXL index/name persistence before committing the release format.
 
 ## Local library and portability
 
