@@ -5,6 +5,8 @@
 | 1 | Complete XF Studio makeup tasks | Editor, materials, plate and export work remain first. |
 | 2 — after makeup | [Eyebrow shape and brow/lash colours](preview-fidelity.md) | Investigate thinner in-game brows and reproduce the saved colours. Explicit next priority. |
 | 3 — after brows/lashes | Optional hair-mesh preview | Resolve the saved hairstyle and colour, with a visibility toggle. Preview is authorized; hair authoring remains a later discussion. |
+| Parallel preview/research | [Hair, piercings and jewellery](jewellery-and-customization.md) | Saved-V hair preview, vanilla piercing context, PRC inventory, CCXL versus EquipmentEx route, then a reviewable jewellery construction-set design. Nathan clarified these are roadmap work rather than an immediate interruption. |
+| Parallel architecture | [Data-driven customization and portable mod sources](jewellery-and-customization.md#data-driven-character-customization-preset-editor) | Derive selectors from effective vanilla/modded resources and saved V, with provider-neutral game/manual/MO2/Vortex discovery. Start read-only and preserve uncertain winners. |
 | Thereafter | [CCXL and character-creator capability map](ccxl-character-creator-capabilities.md) | Pull forward findings when they unblock current makeup work. |
 | Thereafter | Photo Mode Tools engine/API audit | Other queued work after the above priorities; see project README. |
 | Required for XF Studio | [Makeup finish families and glitter](glitter-material.md) | Seven recognizable finish families; prove mixed-finish preset compilation and game/browser effects. |

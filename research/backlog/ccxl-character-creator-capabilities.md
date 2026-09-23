@@ -1,12 +1,14 @@
 # Queued research: CCXL and the character creator's unexplored capabilities
 
-Requested by Nathan, 2026-09-23. Status: **queued**, not completed by the initial ArchiveXL material study. Own the investigation here and preserve findings/prototypes in this headquarters. Coordinate it with XF Appearance Studio rather than using it to postpone the first concrete build.
+Requested by Nathan, 2026-09-23. Status: **source and resource boundary mapped; runtime and UI capability probes remain queued**. The first pass found what ArchiveXL actually merges and inspected the wiki's linked diagrams. Preserve findings/prototypes in this headquarters. Coordinate it with XF Studio rather than postponing the eye-makeup pipeline.
 
 ## Objective
 
 Explain precisely what CCXL adds to ArchiveXL and how the complete character creator is implemented. Find credible, useful capabilities that existing mods have not widely exposed. Separate things supported by resource data, game scripts, scripting extensions, native hooks and renderer/UI constraints. The intended outcome is discovery backed by working probes, not a speculative feature list.
 
 Initial verified orientation: CCXL is ArchiveXL's character-customization feature family, not a separate scripting language. ArchiveXL is a native RED4ext plugin with a `Customization` extension and cooperating resource/mesh extensions. RED4ext is the native extension host/SDK; redscript is the game scripting/compiler layer; CET supplies a Lua runtime/observation interface; Codeware extends accessible scripting/runtime facilities. Trace actual paths before deciding which layer a feature needs.
+
+The current 1.27.3 source merges sex-specific `.inkcharcustomization` declarations into existing native head/body/arms groups in two passes: named options first, then anonymous `uiSlot`/link overlays. Existing option overlays merge choice arrays, not all layout/visibility/default metadata. New options may carry such metadata, but the extension does not create a new top-level group. Native SDK fields are not evidence that ArchiveXL merges or the UI renders them. The [pinned merge-boundary note](../character-customization/ccxl-merge-boundary.md) and [wiki file-chain map](../character-customization/file-chain-map.md) give source and screenshot evidence. One-selector A/B/Off save and display behavior still needs the planned batched game probe.
 
 ## Investigation sequence
 
