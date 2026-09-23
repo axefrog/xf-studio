@@ -236,9 +236,10 @@
           <button id="flake-opt-in" type="button">Try irregular glitter</button>
           <div id="flake-irregular" hidden>
             <div class="eyebrow">EXPERIMENTAL BROWSER GLITTER</div>
-            <p class="help">Fine irregular facets sit over a separate base colour. The dense setting is limited to the eye UV area. Browser preview only; distant sparkle and game lighting remain under study.</p>
-            <label class="control">Flake amount <output id="irregular-count-value"></output>
-              <input id="irregular-count" type="range" min="0" max="500000" step="1000" /></label>
+            <p class="help">Fine irregular facets sit over a separate base colour. The dense setting is limited to the eye UV area. Browser preview only: this raster candidate still lacks the photographs' bright, clustered glints at face distance.</p>
+            <label class="control">Flake field density <output id="irregular-count-value"></output>
+              <input id="irregular-count" type="range" min="0" max="100" step="1" /></label>
+            <p id="irregular-visible-note" class="help" aria-live="polite">Preview measurements will appear after the texture completes.</p>
             <label class="control">Flake size <output id="irregular-radius-value"></output>
               <input id="irregular-radius" type="range" min=".00025" max=".0006" step=".00005" /></label>
             <label class="control">Size variation <output id="irregular-spread-value"></output>

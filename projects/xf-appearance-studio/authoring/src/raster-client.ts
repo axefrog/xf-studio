@@ -28,6 +28,14 @@ function validResult(data: Completed, request: RasterRequest): boolean {
     const optical=studioIrregularOpticalKey(candidate,request.size);
     const expected=irregularAlbedoKey(optical,maskAlphaKey(request.layer,request.size),request.layer.color,candidate.color);
     if (!data.albedo || data.albedo.key!==expected || !(data.albedo.data instanceof Uint8Array) || data.albedo.data.length!==length) return false;
+    if(data.glitterStats){
+      const s=data.glitterStats;
+      if(![s.generated,s.regionRetained,s.maskCentres,s.paintedPixels,s.coveredPixels,
+        s.quarterCoveragePixels,s.halfCoveragePixels].every(x=>Number.isInteger(x)&&x>=0) ||
+        s.generated!==candidate.count || s.regionRetained>s.generated || s.maskCentres>s.regionRetained ||
+        s.paintedPixels>request.size*request.size || s.coveredPixels>s.paintedPixels ||
+        s.quarterCoveragePixels>s.coveredPixels || s.halfCoveragePixels>s.quarterCoveragePixels)return false;
+    }
   } else if (data.albedo) return false;
   return true;
 }

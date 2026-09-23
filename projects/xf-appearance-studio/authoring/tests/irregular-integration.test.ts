@@ -52,6 +52,8 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   if(first.cancelled)return;
   expect(first.data).toEqual(raster(layer,64));
   expect(first.optics).toBeDefined();expect(first.albedo).toBeDefined();
+  expect(first.glitterStats?.generated).toBe(1000);
+  expect(first.glitterStats?.maskCentres).toBeLessThanOrEqual(first.glitterStats!.regionRetained);
   let coloured=0;
   for(let i=0;i<first.data.length;i+=4){
     expect(first.albedo!.data[i+3]).toBe(first.data[i+3]);
@@ -64,9 +66,10 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   if(second.cancelled)return;
   expect(second.optics).toBeUndefined();expect(second.albedo?.key).not.toBe(first.albedo?.key);
   expect(second.data).toEqual(first.data);
+  expect(second.glitterStats).toEqual(first.glitterStats);
 });
 
-test("fine studio default covers the eye densely within a bounded region",async()=>{
+test("fine studio default reports bounded-region and resolved-coverage counts",async()=>{
   const layer=initialRecipe().layers[0];layer.finish="glitter";layer.flakes=defaultStudioIrregularFlakes();
   const results:RasterResponse[]=[];
   const worker=createRasterProcessor(r=>results.push(r));
@@ -74,6 +77,10 @@ test("fine studio default covers the eye densely within a bounded region",async(
   const result=results[0];expect(result.cancelled).not.toBe(true);
   if(result.cancelled)return;
   expect(result.albedo?.data.length).toBe(512*512*4);
+  expect(result.glitterStats?.generated).toBe(350000);
+  expect(result.glitterStats!.regionRetained).toBeGreaterThan(45000);
+  expect(result.glitterStats!.maskCentres).toBeGreaterThan(3000);
+  expect(result.glitterStats!.coveredPixels).toBeGreaterThan(result.glitterStats!.quarterCoveragePixels);
   let painted=0,coverage=0;
   for(let i=0;i<result.data.length;i+=4)if(result.data[i+3]){
     painted++;coverage+=result.optics!.surface[i]!/255;

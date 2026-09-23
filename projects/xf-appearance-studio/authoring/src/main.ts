@@ -20,7 +20,7 @@ import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { setupSoftness } from "./softness-ui";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { setupPreviewQuality } from "./preview-quality-ui";
-import type { RasterResponse } from "./raster-processor";
+import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { convertToBezier, setPointMode } from "./bezier-path";
 import { setupPathControls, type PathCommand } from "./path-ui";
@@ -37,7 +37,7 @@ import {
   finishDescription,
 } from "./finish";
 import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
-import {studioIrregularOpticalKey} from "./makeup-dependencies";
+import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const input = (id: string) => $<HTMLInputElement>(id);
@@ -58,6 +58,7 @@ const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && 
   ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
+const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let fieldSelection: FieldSelection = workspace.fieldSelection;
 const history: string[] = workspace.history.map(r => JSON.stringify(r));
 let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
@@ -78,6 +79,18 @@ function emptyPreviewCanvases() {
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
+function showGlitterMeasurement(){
+  const layer=current();
+  if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
+  const prior=glitterMeasurements.get(layer.id);
+  const valid=prior?.opticalKey===opticalKey(layer,textureSize) &&
+    prior.maskKey===maskAlphaKey(layer,textureSize);
+  const note=$("irregular-visible-note");
+  const scope=layer.flakes.count>FLAKE_LIMITS.count?"retained in the eye UV regions":"generated across the UV atlas";
+  note.textContent=valid
+    ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${textureSize}²; these are not visible screen glints.`
+    : "Calculating flakes in this painted shape. Field density is not a visible flake count.";
+}
 const currentField = () => selectedWarp(current(), fieldSelection);
 function selectField(id: string) {
   const l = current(); if (!l?.fields.some(f => f.id === id)) return;
@@ -227,9 +240,10 @@ function sync() {
       input("irregular-radius").min=flakes.count>FLAKE_LIMITS.count?".00025":".0004";
       input("irregular-radius").max=flakes.count>FLAKE_LIMITS.count?".0006":".003";
     }
-    input("irregular-"+id).value=String(flakes[id]);
-    if(id!=="color") $("irregular-"+id+"-value").textContent=id==="count"?String(flakes[id]):id==="radius"?`${(flakes[id]*100).toFixed(3)}% UV`:`${Math.round(flakes[id]*100)}%`;
+    input("irregular-"+id).value=String(id==="count"?Math.round(flakes.count/5000):flakes[id]);
+    if(id!=="color") $("irregular-"+id+"-value").textContent=id==="count"?`${Math.round(flakes.count/5000)}%`:id==="radius"?`${(flakes[id]*100).toFixed(3)}% UV`:`${Math.round(flakes[id]*100)}%`;
   }
+  if(isIrregular(flakes))showGlitterMeasurement();
   for (const [id, value] of Object.entries({
     weight: l.points[selected].weight,
     opacity: l.opacity,
@@ -246,7 +260,7 @@ function sync() {
 }
 let lastRaster = 0;
 const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
-  ({ i, data, ms, size, optics, albedo }) => {
+  ({ i, data, ms, size, optics, albedo, glitterStats }) => {
     if (!recipe.layers[i]) return;
     const layer = recipe.layers[i];
     if (size !== (layer.enabled ? textureSize : 1)) return;
@@ -264,6 +278,10 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
       initialOptics[i] = { key, data:optics ?? (prior?.key===key?prior.data:undefined), albedo };
     }
     else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
+    if(glitterStats && layer.finish==="glitter" && isIrregular(layer.flakes)){
+      glitterMeasurements.set(layer.id,{opticalKey:opticalKey(layer,size),maskKey:maskAlphaKey(layer,size),stats:glitterStats});
+      if(i===active)showGlitterMeasurement();
+    }
     lastRaster = ms;
     drawUV();
     refreshQuality?.();
@@ -390,6 +408,7 @@ for (const id of ["count","radius","spread","tilt","color"] as const) {
     const l=current(); if(!l || !isIrregular(l.flakes))return;
     const next={...l.flakes};
     if(id==="color") next.color=control.value;
+    else if(id==="count")next.count=+control.value*5000;
     else next[id]=+control.value;
     try {parseRecipe({...recipe,layers:recipe.layers.map(layer=>layer===l?{...layer,flakes:next}:layer)});}
     catch {status("This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount.");sync();return;}

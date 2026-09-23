@@ -5,9 +5,11 @@ import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBake
 import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
 
 export type RasterRequest = { i: number; version: number; layer: Layer; size: number; bakeOptics?: boolean };
+export type GlitterStats={generated:number;regionRetained:number;maskCentres:number;
+  paintedPixels:number;coveredPixels:number;quarterCoveragePixels:number;halfCoveragePixels:number};
 export type RasterResponse = { i: number; version: number } & (
   { cancelled: true; error?: string } | { cancelled?: false; size: number; data: Uint8ClampedArray<ArrayBuffer>;
-    optics?: FlakeMaps; albedo?: {key:string; data:Uint8Array<ArrayBuffer>}; ms: number }
+    optics?: FlakeMaps; albedo?: {key:string; data:Uint8Array<ArrayBuffer>}; glitterStats?:GlitterStats; ms: number }
 );
 
 const CACHE_CAP = 64 * 1024 * 1024;
@@ -19,6 +21,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
   now: () => number = () => performance.now()) {
   let active: { i: number; version: number; cancelled: boolean } | undefined;
   let cachedAlpha: Channel | undefined, cachedCoverage: Channel | undefined;
+  let cachedCentres:{key:string;uv:Float32Array}|undefined;
   return {
     cancel(version: number) { if (active?.version === version) active.cancelled = true; },
     async start(request: RasterRequest) {
@@ -53,10 +56,12 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           await drain(job,16);
           data = job.data;
         }
-        let optics: FlakeMaps | undefined, albedo: {key:string;data:Uint8Array<ArrayBuffer>} | undefined;
+        let optics: FlakeMaps | undefined, albedo: {key:string;data:Uint8Array<ArrayBuffer>} | undefined,
+          glitterStats:GlitterStats|undefined;
         if (!token.cancelled && irregular) {
           const settings=candidate as import("./flake-field").IrregularFlakes;
           const opticalKey=studioIrregularOpticalKey(settings,size), fine=settings.count>FLAKE_LIMITS.count;
+          let centres=cachedCentres?.key===opticalKey?cachedCentres.uv:undefined;
           if (fine) {
             // Fixed atlas scope keeps the optical key independent of shape.
             // Check every painted pixel before using a clipped catalogue, even
@@ -85,6 +90,11 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
               await drain(catalogueJob,128);
               await pause();
               if (!token.cancelled) {
+                const flakes=catalogueJob.catalogue!.flakes;
+                centres=new Float32Array(flakes.length*2);
+                for(let n=0;n<flakes.length;n++){
+                  centres[n*2]=flakes[n]!.u;centres[n*2+1]=flakes[n]!.v;
+                }
                 const optical=createFlakeBakeJob(catalogueJob.catalogue!,size,4,"covered-average");
                 await drain(optical,256);
                 if (!token.cancelled) {
@@ -102,6 +112,25 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
             }
           }
           if (!token.cancelled && coverage) {
+            let maskCentres=0,paintedPixels=0,coveredPixels=0,quarterCoveragePixels=0,halfCoveragePixels=0;
+            for(let n=0;n<(centres?.length??0);n+=2){
+              const x=Math.max(0,Math.min(size-1,Math.floor(centres![n]!*size)));
+              const y=Math.max(0,Math.min(size-1,Math.floor(centres![n+1]!*size)));
+              if(data[(y*size+x)*4+3])maskCentres++;
+              if((n&8191)===8190)await pause();
+            }
+            for(let p=0;p<size*size;p++){
+              if(data[p*4+3]){
+                paintedPixels++;
+                const c=coverage[p]!;
+                if(c)coveredPixels++;
+                if(c>=64)quarterCoveragePixels++;
+                if(c>=128)halfCoveragePixels++;
+              }
+              if((p&65535)===65535)await pause();
+            }
+            glitterStats={generated:settings.count,regionRetained:(centres?.length??0)/2,maskCentres,
+              paintedPixels,coveredPixels,quarterCoveragePixels,halfCoveragePixels};
             await pause();
           }
           if (!token.cancelled && coverage) {
@@ -132,6 +161,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
             if (!token.cancelled) {
               cachedCoverage={key:opticalKey,size,data:coverage};
               cachedAlpha={key:alphaKey!,size,data:alpha};
+              if(centres)cachedCentres={key:opticalKey,uv:centres};
             }
           }
         } else if (!token.cancelled && snapshot.bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter")) {
@@ -144,7 +174,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
         }
         if (token.cancelled) post({ i: token.i, version: token.version, cancelled: true });
         else post({ i: token.i, version: token.version, size, data, ...(optics ? {optics} : {}),
-          ...(albedo ? {albedo} : {}), ms: now() - start });
+          ...(albedo ? {albedo} : {}),...(glitterStats?{glitterStats}:{}), ms: now() - start });
       } finally {
         if (active === token) active = undefined;
       }
