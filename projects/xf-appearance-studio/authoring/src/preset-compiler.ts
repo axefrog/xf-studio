@@ -6,6 +6,7 @@ import { canonicalFinish } from "./finish";
 import { parseRecipe, raster, type Recipe } from "./recipe";
 
 export const DECAL_ADAPTER = "mesh-decal-flat-v1";
+export const SUPPORTED_FLAT_FINISHES: readonly ReturnType<typeof canonicalFinish>[] = ["matte", "regular", "metallic"];
 export const srgbToLinear = (v: number) =>
   v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 export const linearToSrgb = (v: number) =>
@@ -16,6 +17,13 @@ export class UnsupportedMaterialError extends Error {
   constructor(readonly layers: { id: string; finish: string }[]) {
     super(`Material export needs another adapter for: ${layers.map(l => `${l.id} (${l.finish})`).join(", ")}. The editable recipe is unchanged.`);
   }
+}
+
+/** The package preflight and compiler use the same active-layer finish gate. */
+export function unsupportedFlatLayers(recipe: Recipe) {
+  return recipe.layers.filter(layer => layer.enabled && layer.opacity > 0 &&
+    !SUPPORTED_FLAT_FINISHES.includes(canonicalFinish(layer.finish)))
+    .map(layer => ({ id: layer.id, finish: canonicalFinish(layer.finish) }));
 }
 
 export type FlatSurface = {
@@ -45,8 +53,8 @@ export function compileFlatPreset(value: unknown, size = 1024) {
   if (!Number.isInteger(size) || size < 32 || size > 2048 || (size & (size - 1)))
     throw Error("Texture size must be a power of two from 32 to 2048.");
   const active = recipe.layers.filter(l => l.enabled && l.opacity > 0);
-  const unsupported = active.filter(l => !["matte", "regular", "metallic"].includes(canonicalFinish(l.finish)));
-  if (unsupported.length) throw new UnsupportedMaterialError(unsupported.map(l => ({ id: l.id, finish: canonicalFinish(l.finish) })));
+  const unsupported = unsupportedFlatLayers(recipe);
+  if (unsupported.length) throw new UnsupportedMaterialError(unsupported);
   const count = size * size;
   // Premultiplied destination channels; no repeated objects in the texel loop.
   const accum = new Float64Array(count * 6);

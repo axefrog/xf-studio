@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { parseCollection, planCollection } from "./preset-collection";
+import { finishLabel } from "./finish";
+import { unsupportedFlatLayers } from "./preset-compiler";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 
 const app = resolve(import.meta.dir, "..");
@@ -13,6 +15,23 @@ const script = resolve(app, "tools/build_collection_package.py");
 const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const within = (path: string, root: string) => path.startsWith(root + sep);
+const displayFinish = (finish: string) => finish === "glitter" ? "Glitter" :
+  finish === "shimmer" ? "Shimmer" : finish === "glossy" ? "Glossy" :
+  finish === "iridescent" ? "Colour-shifting" : finish;
+
+/** Keep compiler diagnostics local; users need the specific editable location and a next step. */
+function unsupportedFinishFailure(collection: ReturnType<typeof parseCollection>) {
+  const details = collection.presets.flatMap(preset => unsupportedFlatLayers(preset.recipe).map(layer => ({
+    presetId: preset.id, presetName: preset.name, layerId: layer.id,
+    layerName: preset.recipe.layers.find(candidate => candidate.id === layer.id)?.name ?? layer.id,
+    finish: layer.finish,
+  })));
+  if (!details.length) return undefined;
+  const shown = details.slice(0, 3).map(item =>
+    `${displayFinish(finishLabel(item.finish))} in preset “${item.presetName}”, layer “${item.layerName}”`).join("; ");
+  const rest = details.length > 3 ? `; and ${details.length - 3} more unsupported layer(s)` : "";
+  return { details, message: `Mod export cannot include ${shown}${rest}. Cyberpunk mod files currently support Matte, Satin and Metallic. Change or disable the affected layers, then check again. Your draft is unchanged; no mod files were created.` };
+}
 
 export type PackageTools = { python: string; bun: string; plate: string; wolvenkit: string; gamepath: string };
 export function localPackageTools(): PackageTools {
@@ -45,7 +64,10 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
     ...(action === "check" ? ["--check"] : ["--plate", tools.plate, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
   const process = Bun.spawn(args, { cwd: hq, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([tail(process.stdout), tail(process.stderr), process.exited]);
-  if (code !== 0) throw Error(stderr.trim().slice(-3000) || `Package ${action} failed (exit ${code}).`);
+  if (code !== 0) {
+    console.error(`Local package ${action} tool failed (exit ${code}):`, stderr.trim().slice(-64_000));
+    throw Error(`Package ${action} failed in the local build tool. See the studio server log for details. Your draft is unchanged; no package was installed.`);
+  }
   const line = stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
   if (!line) throw Error("Package tool completed without a result.");
   return JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length));
@@ -74,6 +96,11 @@ export function createPackageHandler(tools = localPackageTools(), runner: Runner
       collection = parseCollection(input.collection);
     } catch (error) { return json({ error: (error as Error).message }, 400); }
     if (building) return json({ error: "A local package build is already running. Wait for its result before starting another." }, 409);
+    const finishFailure = unsupportedFinishFailure(collection);
+    if (finishFailure) {
+      console.warn("Local package preflight rejected unsupported finish(s):", finishFailure.details);
+      return json({ error: finishFailure.message, code: "unsupported_finish" }, 422);
+    }
     const plan = planCollection(collection);
     const source = JSON.stringify(collection);
     const sourceHash = createHash("sha256").update(source).digest("hex");

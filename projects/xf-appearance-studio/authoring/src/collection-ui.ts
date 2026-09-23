@@ -145,15 +145,15 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     $(id).onclick = () => void action(async () => {
       // Capture the current editor's unsaved work without writing SQLite or changing the draft's revision.
       const snapshot = parseCollection(session!.snapshot().collection);
-      message(kind === "check" ? "Checking the current draft snapshot for game-package support…" :
-        "Building and independently verifying the current draft snapshot. The local build can take several minutes…");
+      message(kind === "check" ? "Checking which layers in the current collection can become Cyberpunk mod files…" :
+        "Building and verifying Cyberpunk mod files from the current collection. This can take several minutes…");
       const result = await requestPackage(kind, snapshot);
       if (kind === "check") {
         const checked = result as PackageCheck;
-        message(`Ready to build ${checked.presets.length} preset(s) as ${checked.namespace}. This check did not create a package.`);
+        message(`${checked.presets.length} preset(s) can become mod files. This check created no files.`);
       } else {
         const built = result as PackageBuild;
-        message(`Verified ${built.presetCount} preset(s). Candidate: ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.`);
+        message(`Verified local mod files for ${built.presetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.`);
       }
     }, false);
   const file = $<HTMLInputElement>("collection-file");

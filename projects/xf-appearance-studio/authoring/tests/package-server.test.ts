@@ -54,5 +54,39 @@ test("real local preflight checks compiler finish support and keeps unsupported 
   unsupported.presets[0].recipe.layers[0].finish = "glitter";
   const rejected = await handler(request({ action: "check", collection: unsupported }));
   expect(rejected.status).toBe(422);
-  expect((await rejected.json()).error).toContain("glitter");
+  const response = await rejected.json();
+  expect(response.code).toBe("unsupported_finish");
+  expect(response.error).toContain("Glitter in preset “Verification — metallic copy”, layer “Petal wash”");
+  expect(response.error).toContain("Matte, Satin and Metallic");
+  expect(response.error).toContain("Change or disable");
+  expect(response.error).not.toContain("Stack trace");
+});
+
+test("check and build reject every enabled unsupported finish before invoking package tools", async () => {
+  let calls = 0;
+  const handler = createPackageHandler(localPackageTools(), async () => { calls++; return summary(); });
+  const unsupported = structuredClone(fixture);
+  unsupported.presets[0].recipe.layers[0].finish = "glitter";
+  unsupported.presets[1].recipe.layers[0].finish = "shimmer";
+  for (const action of ["check", "build"] as const) {
+    const response = await handler(request({ action, collection: unsupported }));
+    expect(response.status).toBe(422);
+    const message = (await response.json()).error as string;
+    expect(message).toContain("Glitter in preset");
+    expect(message).toContain("Shimmer in preset");
+    expect(message).toContain("no mod files were created");
+    expect(message).not.toContain("at compileFlatPreset");
+  }
+  expect(calls).toBe(0);
+});
+
+test("inactive and transparent experimental layers keep the current compiler eligibility", async () => {
+  const handler = createPackageHandler(localPackageTools(), async () => summary());
+  const collection = structuredClone(fixture);
+  collection.presets[0].recipe.layers[0].finish = "glitter";
+  collection.presets[0].recipe.layers[0].enabled = false;
+  collection.presets[1].recipe.layers[0].finish = "shimmer";
+  collection.presets[1].recipe.layers[0].opacity = 0;
+  const response = await handler(request({ action: "check", collection }));
+  expect(response.status).toBe(200);
 });
