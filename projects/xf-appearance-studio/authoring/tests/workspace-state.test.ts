@@ -26,7 +26,7 @@ test("workspace restores edited selection, camera, library revision and undo wit
   state.preview.brows = false;
   state.library = { name: "Unsaved name", selected: "11111111-2222-3333-4444-555555555555",
     current: { id: "11111111-2222-3333-4444-555555555555", revision: 7 } };
-  state.panels = { lighting: true, layersScroll: 40, propertiesScroll: 900, pageX: 0, pageY: 50, sidebarLeft: 370, sidebarRight: 410 };
+  state.panels = { lighting: true, layersScroll: 40, propertiesScroll: 900, pageX: 0, pageY: 50, sidebarLeft: 1370, sidebarRight: 1410 };
   state.history.push(structuredClone(state.recipe));
   const restored = parseWorkspace(JSON.parse(JSON.stringify(state)));
   expect(restored).toEqual(state);

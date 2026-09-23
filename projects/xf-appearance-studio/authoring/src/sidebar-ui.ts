@@ -1,7 +1,7 @@
 export type SidebarWidths = { sidebarLeft: number; sidebarRight: number };
 const defaults: SidebarWidths = { sidebarLeft: 260, sidebarRight: 350 };
 const minimum = { sidebarLeft: 220, sidebarRight: 280 };
-const maximum = 640, viewportMinimum = 320, handles = 16;
+const viewportMinimum = 320, handles = 16;
 
 /** Presentation-only layout; keep preferred widths when a smaller window temporarily constrains them. */
 export function setupSidebars(initial: SidebarWidths, changed: () => void) {
@@ -14,7 +14,7 @@ export function setupSidebars(initial: SidebarWidths, changed: () => void) {
   }));
   function maxFor(key: keyof SidebarWidths) {
     const other = key === "sidebarLeft" ? "sidebarRight" : "sidebarLeft";
-    return Math.max(minimum[key], Math.min(maximum, main.clientWidth - handles - viewportMinimum - actual[other]));
+    return Math.max(minimum[key], main.clientWidth - handles - viewportMinimum - minimum[other]);
   }
   function paint() {
     actual = { ...preferred };
@@ -32,19 +32,27 @@ export function setupSidebars(initial: SidebarWidths, changed: () => void) {
     }
   }
   for (const { key, direction, handle } of controls) {
-    let drag: { pointer: number; x: number; width: number; original: number } | undefined;
-    function resize(width: number) { preferred[key] = Math.round(Math.max(minimum[key], Math.min(maxFor(key), width))); paint(); changed(); }
+    let drag: { pointer: number; x: number; width: number; original: SidebarWidths } | undefined;
+    function resize(width: number) {
+      const other = key === "sidebarLeft" ? "sidebarRight" : "sidebarLeft";
+      preferred[key] = Math.round(Math.max(minimum[key], Math.min(maxFor(key), width)));
+      // Give the edited panel the requested space, shrinking the opposite panel
+      // only when necessary. Window resizing still preserves preferred widths.
+      preferred[other] = Math.max(minimum[other], Math.min(actual[other],
+        main.clientWidth - handles - viewportMinimum - preferred[key]));
+      paint(); changed();
+    }
     function stop(cancel = false) {
       if (!drag) return;
       const previous = drag; drag = undefined;
-      if (cancel) { preferred[key] = previous.original; paint(); changed(); }
+      if (cancel) { Object.assign(preferred, previous.original); paint(); changed(); }
       if (handle.hasPointerCapture(previous.pointer)) handle.releasePointerCapture(previous.pointer);
       document.body.classList.remove("resizing-sidebar");
     }
     handle.addEventListener("pointerdown", e => {
       if (e.button !== 0) return;
       e.preventDefault(); handle.focus();
-      drag = { pointer: e.pointerId, x: e.clientX, width: actual[key], original: preferred[key] };
+      drag = { pointer: e.pointerId, x: e.clientX, width: actual[key], original: { ...preferred } };
       handle.setPointerCapture(e.pointerId); document.body.classList.add("resizing-sidebar");
     });
     handle.addEventListener("pointermove", e => {

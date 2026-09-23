@@ -79,7 +79,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   }
   if (v.panels) {
     for (const [key, min] of [["sidebarLeft", 220], ["sidebarRight", 280]] as const)
-      if (finite(v.panels[key], min, 640)) state.panels[key] = v.panels[key];
+      if (finite(v.panels[key], min, Number.MAX_SAFE_INTEGER)) state.panels[key] = v.panels[key];
     if (typeof v.panels.lighting === "boolean") state.panels.lighting = v.panels.lighting;
     for (const key of ["layersScroll", "propertiesScroll", "pageX", "pageY"] as const)
       if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];
