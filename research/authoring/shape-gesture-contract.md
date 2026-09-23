@@ -6,13 +6,15 @@ UV wheel zooms around the pointer and right-drag pans the crop. These are view o
 
 ## Transform semantics and API
 
-`authoring/src/shape-transform.ts` exports presentation-independent `transformLayer(layer, command)`, `shapeHit(layer, uv)` and `wheelScaleFactor(deltaY, deltaMode)`. `ShapeTransform` accepts translation (`du`, `dv`), uniform scale (`pivot`, positive `factor`) and rotation (`pivot`, `radians`). `uv-view.ts` exports pure `panUVView` and `zoomUVView` alongside Fit/mapping functions. These are importable application capabilities, not remote script execution or a completed app-wide command registry.
+`authoring/src/shape-transform.ts` exports presentation-independent `transformLayer(layer, command)`, `shapeHit(layer, uv)`, `wheelScaleFactor(deltaY, deltaMode)` for UV view zoom and `shapeWheelScaleFactor(deltaY, deltaMode)` for fine shape scaling. `ShapeTransform` accepts translation (`du`, `dv`), uniform scale (`pivot`, positive `factor`) and rotation (`pivot`, `radians`). `uv-view.ts` exports pure `panUVView` and `zoomUVView` alongside Fit/mapping functions. These are importable application capabilities, not remote script execution or a completed app-wide command registry.
 
 Transforms move all contour knots and warp origins together, rotate/scale relative Bézier arms and warp vectors, and scale warp radii, edge softness and smooth pigment blend distances. IDs, pigment weights, modes, colours and finishes persist. Optical flake patterns remain defined by the material's atlas-space sampling; moving the mask is not a promise to rotate individual glitter flakes. Only the authored side is transformed; mirrored gestures are reflected into its coordinate system.
 
 Invalid input or any output outside current recipe bounds rejects the entire proposal. Controls freeze at the last valid pose instead of independently clamping and distorting it. A warp origin or width can therefore limit a move before the visible outline reaches an atlas edge. Paint picking evaluates the shared warped coverage, with a 1% coverage threshold; a virtually invisible layer may need a handle or the UV scale gesture. The stronger of overlapping mirrored instances wins, with the authored side winning ties.
 
 A drag uses its starting snapshot and adds one Undo entry when it actually changes. UV shape drags require four pixels of movement to avoid nudging during double-click insertion. Wheel events within 250 ms share one Undo entry. Escape cancels the active gesture; after a burst ends, use Undo. Cancellation never undoes edits in a replaced layer/preset. Pan cancellation restores the view without touching recipe history. The old immediate Shift-click point-relocation shortcut was removed because Shift now belongs to shape rotation.
+
+Shift-wheel shape scaling uses about 2% per conventional wheel notch (120 pixels, three lines or one page). Fractional trackpad deltas retain proportional steps; a single unusually large event is limited to about 5%. UV view zoom keeps its existing faster rate. Both editors use the same shape mapping and the selected-point pivot.
 
 ## Surface lookup improvement
 

@@ -116,8 +116,8 @@ test("Shift-wheel groups one cancellable scale burst, closes on context changes 
   f.wheel(p.x,p.y);f.wheel(p.x,p.y);
   expect(f.counts.begins).toBe(1);expect(f.editor.diagnostics().gesture).toBe("scale");
   expect(f.recipe.layers[0].points[0]).toEqual(original.layers[0].points[0]);
-  expect(f.recipe.layers[0].points[1].u).toBeCloseTo(.3+.15*1.25**2,12);
-  expect(f.recipe.layers[0].feather).toBeCloseTo(original.layers[0].feather*1.25**2,12);
+  expect(f.recipe.layers[0].points[1].u).toBeCloseTo(.3+.15*1.02**2,12);
+  expect(f.recipe.layers[0].feather).toBeCloseTo(original.layers[0].feather*1.02**2,12);
   expect(f.key().prevented).toBe(true);expect(f.recipe).toEqual(original);
   f.wheel(p.x,p.y);f.recipe=structuredClone(original);expect(f.key().prevented).toBe(false);expect(f.recipe).toEqual(original);
   expect(f.counts.cancels).toBe(1);

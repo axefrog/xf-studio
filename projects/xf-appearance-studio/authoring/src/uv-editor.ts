@@ -1,7 +1,7 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, transformLayer, wheelScaleFactor } from "./shape-transform";
+import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 
@@ -286,7 +286,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (wheel && !validWheel()) finishWheel();
     if (wheel) { clearTimeout(wheel.timer); wheel.timer = setTimeout(() => finishWheel(), 250); }
     const pivot = l.points[hooks.selected()] ?? l.points[0];
-    const factor = wheelScaleFactor(e.deltaY, e.deltaMode);
+    const factor = shapeWheelScaleFactor(e.deltaY, e.deltaMode);
     if (factor === 1) return;
     const next = transformLayer(l, { kind: "scale", pivot: { u: pivot.u, v: pivot.v }, factor });
     if (!next) { hooks.message("This scale reaches the layer's limits. Scroll back to continue."); return; }

@@ -80,3 +80,13 @@ export function wheelScaleFactor(deltaY: number, deltaMode = 0): number {
   const exponent = Math.max(-Math.log(1.25), Math.min(Math.log(1.25), -deltaY * unit * .002));
   return Math.exp(exponent);
 }
+
+/** Fine shape scaling: about 2% per conventional wheel notch. Keep fractional
+ * pixel deltas from trackpads, and bound unusually large events to about 5%.
+ * Browsers commonly report a notch as 120 pixels, 3 lines or one page.
+ */
+export function shapeWheelScaleFactor(deltaY: number, deltaMode = 0): number {
+  if (!Number.isFinite(deltaY) || ![0, 1, 2].includes(deltaMode)) return 1;
+  const notches = deltaMode === 1 ? deltaY / 3 : deltaMode === 2 ? deltaY : deltaY / 120;
+  return Math.pow(1.02, Math.max(-2.5, Math.min(2.5, -notches)));
+}

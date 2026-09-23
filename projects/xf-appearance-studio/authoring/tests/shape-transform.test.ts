@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { coverage, initialRecipe, parseRecipe, warpFields, type Layer } from "../src/recipe";
 import { bezierAt, splitBezierSegment } from "../src/bezier-path";
-import { shapeHit, transformLayer, wheelScaleFactor, type ShapeTransform } from "../src/shape-transform";
+import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor, type ShapeTransform } from "../src/shape-transform";
 
 const sample = (): Layer => {
   const layer = initialRecipe().layers[0];
@@ -142,5 +142,19 @@ describe("whole authored shape transformations", () => {
     for (const delta of [NaN, Infinity, -Infinity]) expect(wheelScaleFactor(delta)).toBe(1);
     expect(wheelScaleFactor(100, 3)).toBe(1);
     expect(wheelScaleFactor(10) * wheelScaleFactor(-10)).toBeCloseTo(1, 14);
+  });
+
+  test("shape wheel uses fine notches and proportional trackpad deltas without changing view zoom", () => {
+    const notch = shapeWheelScaleFactor(-120);
+    expect(notch).toBeCloseTo(1.02, 14);
+    expect(shapeWheelScaleFactor(-3, 1)).toBeCloseTo(notch, 14);
+    expect(shapeWheelScaleFactor(-1, 2)).toBeCloseTo(notch, 14);
+    expect(shapeWheelScaleFactor(-30) ** 4).toBeCloseTo(notch, 14);
+    expect(shapeWheelScaleFactor(120) * notch).toBeCloseTo(1, 14);
+    expect(shapeWheelScaleFactor(-10000)).toBeLessThan(1.051);
+    expect(shapeWheelScaleFactor(10000)).toBeGreaterThan(1 / 1.051);
+    expect(wheelScaleFactor(-120)).toBe(1.25);
+    for (const delta of [NaN, Infinity, -Infinity]) expect(shapeWheelScaleFactor(delta)).toBe(1);
+    expect(shapeWheelScaleFactor(120, 3)).toBe(1);
   });
 });

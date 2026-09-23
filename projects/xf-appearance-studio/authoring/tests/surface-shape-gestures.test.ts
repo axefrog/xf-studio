@@ -91,7 +91,8 @@ test("surface shape gestures share one transaction, preserve mirror/pivot and re
     expect(first.defaultPrevented).toBe(true);
     expect(checkpoints).toBe(beforeWheel+1);
     expect(layer.points[0]).toEqual(original.points[0]);
-    expect(layer.points[1].u).toBeGreaterThan(.4);
+    expect(layer.points[1].u).toBeCloseTo(.2 + .2 * 1.02 ** (1/3), 10);
+    expect(layer.feather).toBeCloseTo(original.feather * 1.02 ** (1/3), 10);
     expect(editor.diagnostics().gesture).toBe("scale");
     expect(cameraEvents).toBe(0);
     escape();expect(layer).toEqual(original);

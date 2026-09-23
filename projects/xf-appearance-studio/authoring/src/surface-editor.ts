@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, transformLayer, wheelScaleFactor } from "./shape-transform";
+import { shapeHit, shapeWheelScaleFactor, transformLayer } from "./shape-transform";
 import {
   SurfaceMap,
   anchorPosition,
@@ -610,7 +610,7 @@ export function createSurfaceEditor(
     if (!wheel) wheel = { layer, snapshot: structuredClone(layer), expected: JSON.stringify(layer), selected,
       pivot: { u: pivot.u, v: pivot.v }, mirror: handle?.mirror ?? shapeHit(layer, uv)!.mirror,
       changed: false, factor: 1 };
-    const factor = wheel.factor * wheelScaleFactor(e.deltaY, e.deltaMode);
+    const factor = wheel.factor * shapeWheelScaleFactor(e.deltaY, e.deltaMode);
     if (applyShape(wheel, transformLayer(wheel.snapshot, { kind: "scale", pivot: wheel.pivot, factor })))
       wheel.factor = factor;
     clearTimeout(wheel.timer);
