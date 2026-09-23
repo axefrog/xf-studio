@@ -5,6 +5,7 @@ import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
+import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -22,6 +23,7 @@ export type WorkspaceState = {
   recipe: Recipe; active: number; selected: number; history: Recipe[];
   uvView: UVView;
   fieldSelection: FieldSelection;
+  glitterChoices: GlitterChoices;
   savedV?: SavedV;
   preview: PreviewState;
   library: LibraryState;
@@ -32,7 +34,7 @@ export type WorkspaceState = {
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
-    uvView: defaultUVView(), fieldSelection: {},
+    uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
       normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
@@ -52,6 +54,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
   state.uvView = parseUVView(v.uvView);
   state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
+  state.glitterChoices = parseGlitterChoices(v.glitterChoices);
   if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active;
   if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {

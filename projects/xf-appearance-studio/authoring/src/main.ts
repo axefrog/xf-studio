@@ -36,8 +36,9 @@ import {
   finishLabel,
   finishDescription,
 } from "./finish";
-import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
-import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes,isDirectGlint} from "./direct-glint-settings";
+import {FLAKE_LIMITS} from "./flake-field";
+import {isDirectGlint} from "./direct-glint-settings";
+import {glitterModel, glitterModels, selectGlitterModel, type GlitterModel} from "./glitter-model";
 import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -59,6 +60,7 @@ const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && 
   ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
+const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let fieldSelection: FieldSelection = workspace.fieldSelection;
 const history: string[] = workspace.history.map(r => JSON.stringify(r));
@@ -103,7 +105,7 @@ const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
   const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
-    library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
+    glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
     panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
   return {
@@ -227,14 +229,22 @@ function sync() {
   $("flake-controls").hidden = !["shimmer", "glitter"].includes(
     canonicalFinish(l.finish),
   );
+  $("glitter-suite").hidden = l.finish !== "glitter";
+  if (l.finish === "glitter") {
+    const model = glitterModel(l.flakes);
+    $<HTMLSelectElement>("glitter-model").value = model;
+    $("glitter-model-summary").textContent = {
+      classic: "Original reflective flake map; existing classic recipes retain this look.",
+      irregular: "Irregular flakes are baked into a texture. Dense settings cover the eye UV area and can lose sparkle at face distance.",
+      direct: "Fine facets and occasional larger flashes respond to the preview light.",
+      clustered: "Fine facets gather in soft clusters over a continuous sheen.",
+      fine: "Denser tiny speckles with a sparse population of larger flashes; can look frosty.",
+    }[model];
+  }
   $("flake-legacy").hidden = l.finish === "glitter" && (isIrregular(l.flakes) || isDirectGlint(l.flakes));
+  $("flake-legacy-title").textContent = l.finish === "glitter" ? "CLASSIC REFLECTIVE FLAKES" : "SHIMMER FLAKES";
   $("flake-irregular").hidden = !(isIrregular(l.flakes) && l.finish === "glitter");
   $("flake-direct").hidden = !(isDirectGlint(l.flakes) && l.finish === "glitter");
-  $("flake-opt-in").hidden = l.finish !== "glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes);
-  $("flake-direct-opt-in").hidden = l.finish !== "glitter" || isDirectGlint(l.flakes);
-  $("flake-cluster-opt-in").hidden = l.finish !== "glitter" || (isDirectGlint(l.flakes) && l.flakes.model === "uv-cell-direct-2");
-  $("flake-fine-opt-in").hidden = l.finish !== "glitter" || (isDirectGlint(l.flakes) && l.flakes.model === "uv-cell-direct-3");
-  $("flake-direct-original").hidden = l.finish !== "glitter" || !isDirectGlint(l.flakes) || l.flakes.model === "uv-cell-direct-1";
   const flakes = l.flakes ?? defaultFlakes();
   for (const id of ["cells", "density", "tilt"] as const) {
     const legacy = isIrregular(flakes) || isDirectGlint(flakes) ? defaultFlakes() : flakes;
@@ -252,11 +262,6 @@ function sync() {
   }
   if(isIrregular(flakes))showGlitterMeasurement();
   if(isDirectGlint(flakes)){
-    $("direct-model-note").textContent=flakes.model==="uv-cell-direct-3"
-      ? "Dense tiny UV-anchored facets and fewer larger flashes cover the pigment. Density is a local maximum, not a visible speckle count. Browser study only; game material unproven."
-      : flakes.model==="uv-cell-direct-2"
-      ? "Fine UV-anchored facets gather in soft clusters over a continuous sheen. Density is the local maximum; quieter patches have fewer facets. Browser only, with no game-material equivalence."
-      : "Fine and occasional larger UV-anchored facets catch the preview light over a continuous sheen. Browser only; appearance and speed depend on this device and have no game-material equivalence.";
     $("direct-density-label").textContent=flakes.model==="uv-cell-direct-1"?"Facet density":"Maximum facet density";
   }
   if(isDirectGlint(flakes))for(const id of ["density","fineShare","strength","color"] as const){
@@ -415,37 +420,14 @@ for (const id of ["cells", "density", "tilt"] as const) {
     schedule();
   };
 }
-$("flake-opt-in").onclick = () => {
-  const l=current(); if (!l || l.finish!=="glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes)) return;
-  checkpoint(); l.flakes=defaultStudioIrregularFlakes(); render();
-};
-$("flake-direct-opt-in").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||isDirectGlint(l.flakes))return;
-  checkpoint();if(recipe.schema!=="xfs/recipe-9"&&recipe.schema!=="xfs/recipe-10")recipe.schema="xfs/recipe-8";
-  l.flakes=defaultDirectGlintFlakes();render();
-};
-$("flake-cluster-opt-in").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||(isDirectGlint(l.flakes)&&l.flakes.model==="uv-cell-direct-2"))return;
-  checkpoint();if(recipe.schema!=="xfs/recipe-10")recipe.schema="xfs/recipe-9";
-  l.flakes=isDirectGlint(l.flakes)?{...l.flakes,model:"uv-cell-direct-2",
-    strength:l.flakes.model==="uv-cell-direct-3"
-      ? Math.min(16,Math.round(l.flakes.strength*1.5*2)/2):l.flakes.strength}
-    :defaultClusteredGlintFlakes();render();
-};
-$("flake-fine-opt-in").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||(isDirectGlint(l.flakes)&&l.flakes.model==="uv-cell-direct-3"))return;
-  checkpoint();recipe.schema="xfs/recipe-10";
-  l.flakes=isDirectGlint(l.flakes)
-    ? {...l.flakes,model:"uv-cell-direct-3",strength:Math.round(l.flakes.strength*2/3*2)/2}
-    : defaultFineSpeckleFlakes();render();
-};
-$("flake-direct-original").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes)||l.flakes.model==="uv-cell-direct-1")return;
-  checkpoint();l.flakes={...l.flakes,model:"uv-cell-direct-1"};render();
-};
-$("flake-raster-switch").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes))return;
-  checkpoint();l.flakes=defaultStudioIrregularFlakes();render();
+$<HTMLSelectElement>("glitter-model").onchange = () => {
+  const layer = current(), model = $<HTMLSelectElement>("glitter-model").value as GlitterModel;
+  if (!layer || layer.finish !== "glitter" || !glitterModels.includes(model)) { sync(); return; }
+  if (glitterModel(layer.flakes) === model) return;
+  checkpoint();
+  recipe = selectGlitterModel(recipe, layer.id, model, glitterChoices,
+    presetLibrary?.snapshot()?.selected ?? "draft");
+  render();
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
