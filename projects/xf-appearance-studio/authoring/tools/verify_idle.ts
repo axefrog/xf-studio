@@ -8,6 +8,7 @@ const asset = (name: string) => new URL(`../public/assets/${name}`,import.meta.u
 const read = async (name: string) => new GLTFLoader().parseAsync(await Bun.file(asset(name)).arrayBuffer(),"");
 const [body,face,head,brows,lashes] = await Promise.all(["cc-idle-body.glb","cc-idle-face.glb","head.glb","brows.glb","lashes.glb"].map(read));
 const target = new THREE.Group(), bones: THREE.Bone[] = [], meshes: THREE.SkinnedMesh[] = [];
+const browMeshes = new Set<THREE.SkinnedMesh>();
 for (const [i,gltf] of [head!,brows!,lashes!].entries()) {
   const weights = restoreFirstWeights(await Bun.file(asset(["head.glb","brows.glb","lashes.glb"][i]!)).arrayBuffer());
   target.add(gltf.scene);
@@ -17,6 +18,7 @@ for (const [i,gltf] of [head!,brows!,lashes!].entries()) {
       const a=gltf.parser.associations.get(o),name=gltf.parser.json.meshes[a?.meshes ?? -1]?.name;
       o.geometry.setAttribute("skinWeight",new THREE.BufferAttribute(weights.get(name)!,4));
       extendSkin(o,o.material as THREE.MeshStandardMaterial); meshes.push(o);
+      if (i === 1) browMeshes.add(o);
     }
   });
 }
@@ -28,13 +30,19 @@ const originals=bones.map(b => b.matrixWorld.clone());
 if (process.argv.includes("--controls")) {
   const headBindings = idle.bindings.filter(b => b.bone.name === "Head");
   if (!headBindings.length) throw Error("Missing structural Head targets");
-  const tracked = ["l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_rowA_1_JNT"];
+  const tracked = ["l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_rowA_1_JNT",
+    "l_J_eye_brows_rowA_2_JNT", "r_J_eye_brows_rowA_2_JNT"];
   const samples = new Map<string, number[][]>();
+  const browTrajectories: Record<string, { min: THREE.Vector3; max: THREE.Vector3 }[]> = {};
   const savedShapes = ["h091_eyes", "h012_nose", "h053_mouth", "h054_jaw", "h145_ear"];
   let headDrift = 0, maxDeltaMismatch = 0, checkedVertices = 0;
   idle.setContributions({ body: false, face: true }); idle.setEnabled(true);
   const headRest = headBindings.map(b => b.worldBind);
   for (const shape of ["neutral", "saved-face"]) {
+    const browBounds = browTrajectories[shape] = [...browMeshes].flatMap(mesh =>
+      Array.from({ length: mesh.geometry.getAttribute("position").count }, () => ({
+        min: new THREE.Vector3(Infinity, Infinity, Infinity), max: new THREE.Vector3(-Infinity, -Infinity, -Infinity),
+      })));
     for (const mesh of meshes) for (const [name, index] of Object.entries(mesh.morphTargetDictionary ?? {})) {
       mesh.morphTargetInfluences![index] = shape === "saved-face" && savedShapes.includes(name) ? 1 : 0;
     }
@@ -55,14 +63,25 @@ if (process.argv.includes("--controls")) {
         if (!b) throw Error(`Missing facial target ${name}`);
         const values = samples.get(name) ?? []; values.push(b.bone.matrixWorld.toArray()); samples.set(name, values);
       }
+      let browIndex = 0;
       for (const mesh of meshes) for (let i = 0; i < mesh.geometry.getAttribute("position").count; i++) {
-        if (!mesh.getVertexPosition(i, new THREE.Vector3()).toArray().every(Number.isFinite)) throw Error("Nonfinite facial-only vertex");
+        const point = mesh.getVertexPosition(i, new THREE.Vector3());
+        if (!point.toArray().every(Number.isFinite)) throw Error("Nonfinite facial-only vertex");
+        if (browMeshes.has(mesh)) {
+          browBounds[browIndex]!.min.min(point); browBounds[browIndex]!.max.max(point); browIndex++;
+        }
         checkedVertices++;
       }
     }
   }
   const ranges = Object.fromEntries([...samples].map(([name, frames]) => [name,
     Math.max(...frames[0]!.map((_, i) => Math.max(...frames.map(f => f[i]!)) - Math.min(...frames.map(f => f[i]!))))]));
+  const browCardTrajectory = Object.fromEntries(Object.entries(browTrajectories).map(([shape, bounds]) => {
+    const diagonals = bounds.map(b => b.min.distanceTo(b.max)).sort((a, b) => a - b);
+    return [shape, { vertices: bounds.length, minimum: diagonals[0], median: diagonals[Math.floor(diagonals.length / 2)], maximum: diagonals.at(-1) }];
+  }));
+  if (!browMeshes.size || Object.values(browCardTrajectory).some(v => !v.vertices || !v.maximum || v.maximum < 1e-5))
+    throw Error("Facial-only brow card motion is absent");
   if (headDrift > 1e-9 || maxDeltaMismatch > 1e-8 || Object.values(ranges).some(v => v < 1e-5)) throw Error("Facial-only composition failed");
   idle.seek(7.125); idle.setPaused(true);
   const held = bones.map(b => b.matrixWorld.toArray());
@@ -73,7 +92,7 @@ if (process.argv.includes("--controls")) {
   const resetError = Math.max(...bones.flatMap((b, i) => b.matrixWorld.elements.map((v, j) => Math.abs(v - originals[i]!.elements[j]!))));
   if (resetError > 1e-10) throw Error("Real-asset reset failed");
   const report = { mappedBones: bones.length, shapes: ["neutral", "saved-face"], savedShapes, samplesPerShape: 222, sampledSeconds: 22.1,
-    headDrift, maxDeltaMismatch, facialTargetMatrixRanges: ranges, checkedVertices, pauseError, resetError,
+    headDrift, maxDeltaMismatch, facialTargetMatrixRanges: ranges, browCardTrajectory, checkedVertices, pauseError, resetError,
     limitations: ["Offline local rigs, not game graph/shading parity", "The browser separately attaches two rigid eyeballs; this offline harness does not instantiate those extra bindings."] };
   writeFileSync(new URL('../evidence/idle-controls-offline-check.json', import.meta.url), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2)); process.exit(0);

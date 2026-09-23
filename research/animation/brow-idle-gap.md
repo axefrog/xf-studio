@@ -55,3 +55,20 @@ Community learning/tool use: [Cyberpunk Blender Add-on / IO Suite](https://githu
 Nathan subsequently supplied two in-game eye/brow close-ups, annotated with red comparison marks. The apparent brow-to-eye gap and brow contour change between the frames. This is stronger evidence of a missing/under-applied geometric expression than the original text report; a wrinkle-shading-only explanation is inadequate. The images do not isolate bone versus corrective deformation or establish matched camera, gaze or exact clip phases, so no numerical displacement or definitive cause is inferred from them.
 
 Preserved unchanged copies and SHA-256 hashes are in [the reference manifest](../backlog/preview-fidelity-references.json), labels `brow-idle-frame-1` and `brow-idle-frame-2`. Prioritize live graph/clip/layer selection, facial track weights, setup/corrective coverage and deformation magnitude alongside the skin-wrinkle omission. Nonzero brow-card movement in the current offline clip is not evidence that this supplied in-game motion is reproduced.
+
+## 24 September: compare the other source close-up clips
+
+The same installed `base/animations/ui/female/ui_female_face.anims` (SHA-256 `9fe289d1eea33df4242cc37ce2b175d3b0c94342df66e4bd5be1d7f599982f8c`) contains separately named close-up clips for eyes, chin, hair, lips and nose. I exported each with the existing read-only WolvenKit `anim-export` adapter and the same female head rig, then inspected decoded glTF float-track keys. The temporary GLBs remain ignored under this worktree's `research/consumers/cc-idle/raw/`. Their names, durations and track ranges come from the game files; **this does not establish which clip the live character-creator graph selects or how it blends clips**.
+
+| Facial clip | Length | Left/right inner raise range | Left/right outer raise range | Left/right lower range |
+|---|---:|---:|---:|---:|
+| `ui_closeup_shot` (current studio default) | 22.07 s | 0.00115 / 0.00123 | 0 / 0.08601 | 0.00004 / 0.00004, around a constant 0.4064 baseline |
+| `ui_closeup_shot_eyes` | 4.00 s | 0.76649 / 0.76538 | 0.74188 / 0.73528 | 0.32199 / 0.32199 |
+| `ui_closeup_shot_chin` | 10.00 s | 0.07902 / 0.08416 | 0 / 0 | 0.42078 / 0.42078 |
+| `ui_closeup_shot_hair` | 5.17 s | 0.07902 / 0.08416 | 0 / 0 | 0.42077 / 0.42077 |
+| `ui_closeup_shot_lips` | 5.33 s | 0.07902 / 0.08416 | 0 / 0 | 0.56664 / 0.53117 |
+| `ui_closeup_shot_nose` | 5.67 s | 0.07786 / 0.08413 | 0 / 0 | 0.42077 / 0.42077 |
+
+The four-second eyes clip contains much stronger, bilateral brow movement. It is a plausible **feature-close-up expression candidate**, especially given Nathan's eye close-up references, but its name and range do not prove that it is part of the default idle shown in those frames. Looping or blending it into the existing idle by guesswork would mislabel the result. The next source check is the character-creator UI controller/animation graph or an instrumented runtime observation of the selected clip. The source `facial-animations.md` guide in the modding-docs clone currently has only an `entAnimatedComponent` introduction and an unfilled screenshot placeholder; the illustrated community guide on scene/dialogue animation relationships is about a different path and supplies no proof for UI clip selection. Thus no graph claim is inferred from either.
+
+The offline acceptance harness now checks both brow-joint matrices and all 390 brow-card vertex trajectories with body motion muted, for neutral and saved facial morph selections. It measures neutral minimum/median/maximum path-bounding diagonals of 0.00008333 / 0.00030952 / 0.00113206 scene units and saved-face values of 0.00008291 / 0.00029687 / 0.00121135. This catches a regression that disconnects the brow cards, while leaving Nathan's observed geometric disparity explicitly unresolved. It also preserves the original pause, reset and face-only checks. [Machine-readable result](../../projects/xf-appearance-studio/authoring/evidence/idle-controls-offline-check.json).

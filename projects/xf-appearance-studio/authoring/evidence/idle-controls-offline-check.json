@@ -19,7 +19,23 @@
     "l_J_eye_JNT": 0.13691769559967637,
     "r_J_eye_JNT": 0.1369177044758343,
     "mid_J_jaw_JNT": 0.025138398440779097,
-    "l_J_eye_lid_up_rowA_1_JNT": 0.46240979009322797
+    "l_J_eye_lid_up_rowA_1_JNT": 0.46240979009322797,
+    "l_J_eye_brows_rowA_2_JNT": 0.007245014002013425,
+    "r_J_eye_brows_rowA_2_JNT": 0.010758445558463961
+  },
+  "browCardTrajectory": {
+    "neutral": {
+      "vertices": 390,
+      "minimum": 0.0000833288326604542,
+      "median": 0.0003095176268886275,
+      "maximum": 0.0011320557595003605
+    },
+    "saved-face": {
+      "vertices": 390,
+      "minimum": 0.00008291271783739682,
+      "median": 0.00029687057795313123,
+      "maximum": 0.0012113467578473629
+    }
   },
   "checkedVertices": 14037060,
   "pauseError": 0,
