@@ -343,6 +343,10 @@ input[type="checkbox"] {
   gap: 13px;
   margin-top: 12px;
 }
+#idle-note {
+  display: block;
+  margin: 5px 0 10px;
+}
 .motion-row span {
   font-size: 10px;
   color: #b7bdbd;

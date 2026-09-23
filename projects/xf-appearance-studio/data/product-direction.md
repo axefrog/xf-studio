@@ -36,6 +36,9 @@ Local development uses Bun + localhost. Desktop packaging should reuse the domai
 3. Eyebrows.
 4. Cheek makeup.
 5. Hair.
-6. Tattoos — expand the preview to the full player body at this stage for full-body tattoos.
+6. Facial expressions — static and animated photo-mode expressions; also explore introducing new/varied idle animations.
+7. Tattoos — expand the preview to the full player body at this stage for full-body tattoos (formerly item 6).
+
+Nathan explicitly authorizes an early, brief animation side quest: load the actual default character-creator idle onto the studio head, with an enable/disable toggle. Preserve the main eye-makeup work and resume it afterwards. This establishes animation playback infrastructure; it does not authorize building the full expression/animation editor before discussing that feature. Do not substitute an invented idle and label it the game default.
 
 The same authored-preset workflow can inform those areas, but geometry/rigging/material/export needs differ. Existing brows/lashes are preview context, not authorization to build an eyebrow authoring product. Do not implement these later categories until Nathan and the agent discuss them.

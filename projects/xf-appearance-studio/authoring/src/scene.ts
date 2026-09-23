@@ -6,6 +6,7 @@ import { extendSkin, restoreFirstWeights, skinSets } from "./skin";
 import type { Layer } from "./recipe";
 import type { SavedV } from "./save-reader";
 import { bakeFlakes, canonicalFinish, defaultFlakes } from "./finish";
+import { IdleAnimation } from "./idle-animation";
 
 export async function createScene(
   host: HTMLElement,
@@ -27,6 +28,7 @@ export async function createScene(
   controls.enableDamping = true;
   controls.minDistance = 0.1;
   controls.maxDistance = 1.2;
+  const idleFrameOffset = new THREE.Vector3();
   function front() {
     const distance = Math.max(
       0.55,
@@ -34,6 +36,8 @@ export async function createScene(
     );
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
+    camera.position.add(idleFrameOffset);
+    controls.target.add(idleFrameOffset);
     controls.update();
   }
   front();
@@ -63,7 +67,7 @@ export async function createScene(
   const plate = meshes.find(
     (m) => m.name === "makeup_plate",
   ) as THREE.SkinnedMesh;
-  const eyes = meshes.find((m) => m.name === "eyes") as THREE.Mesh;
+  let eyes = meshes.find((m) => m.name === "eyes") as THREE.Mesh;
   if (!head || !plate || !eyes)
     throw Error("Preview asset is missing required meshes.");
   for (const m of meshes) {
@@ -225,6 +229,59 @@ export async function createScene(
     for (const b of bones)
       b.bone.position.copy(b.base).addScaledVector(b.delta, value);
   }
+  let idle: IdleAnimation | undefined, idleError = "";
+  try {
+    const [motion, facial, binding] = await Promise.all([
+      new GLTFLoader().loadAsync("/assets/cc-idle-body.glb"),
+      new GLTFLoader().loadAsync("/assets/cc-idle-face.glb"),
+      fetch("/assets/cc-idle-binding.json").then(r => { if (!r.ok) throw Error("Idle binding data unavailable"); return r.json(); }),
+    ]);
+    const clip = motion.animations.find(a => a.name === binding.clip);
+    if (!clip) throw Error("Expected character-creator close-up clip is missing");
+    const faceClip = facial.animations.find(a => a.name === "ui_closeup_shot_face");
+    if (!faceClip) throw Error("Solved facial idle clip is missing");
+    // The legacy eyeball preview is rigid geometry. Give each disconnected eye
+    // one authoritative eye-joint influence so gaze rotates around the game pivot.
+    if (!(eyes instanceof THREE.SkinnedMesh)) {
+      facial.scene.updateMatrixWorld(true); scene.updateMatrixWorld(true);
+      const eyeBones = ["l_J_eye_JNT","r_J_eye_JNT"].map(name => {
+        const reference = facial.scene.getObjectByName(name);
+        if (!reference) throw Error(`Missing gaze pivot ${name}`);
+        const bone = new THREE.Bone(); bone.name=name;
+        reference.matrixWorld.decompose(bone.position,bone.quaternion,bone.scale);
+        return bone;
+      });
+      const geometry = eyes.geometry.clone(), positions = geometry.getAttribute("position");
+      const indices = new Uint16Array(positions.count*4), weights = new Float32Array(positions.count*4);
+      const point = new THREE.Vector3();
+      for (let i=0;i<positions.count;i++) {
+        point.fromBufferAttribute(positions,i).applyMatrix4(eyes.matrixWorld);
+        indices[i*4] = point.distanceToSquared(eyeBones[0]!.position) < point.distanceToSquared(eyeBones[1]!.position) ? 0 : 1;
+        weights[i*4] = 1;
+      }
+      const triangles = geometry.index;
+      if (!triangles) throw Error("Expected indexed eyeball geometry");
+      for (let i=0;i<triangles.count;i+=3) {
+        const sides = [0,1,2].map(j => indices[triangles.getX(i+j)*4]);
+        if (sides[0]!==sides[1] || sides[0]!==sides[2]) throw Error("Eye geometry crosses gaze attachment groups");
+      }
+      geometry.setAttribute("skinIndex",new THREE.Uint16BufferAttribute(indices,4));
+      geometry.setAttribute("skinWeight",new THREE.Float32BufferAttribute(weights,4));
+      const skinned = new THREE.SkinnedMesh(geometry,eyeMat);
+      skinned.name="eyes"; skinned.position.copy(eyes.position);skinned.quaternion.copy(eyes.quaternion);skinned.scale.copy(eyes.scale);
+      skinned.frustumCulled=false;
+      eyes.parent!.add(skinned); scene.add(...eyeBones); scene.updateMatrixWorld(true);
+      skinned.bind(new THREE.Skeleton(eyeBones),skinned.matrixWorld);
+      meshes[meshes.indexOf(eyes)] = skinned;
+      eyes.removeFromParent(); eyes=skinned;
+    }
+    const targets: THREE.Object3D[] = [];
+    scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
+    idle = new IdleAnimation(motion.scene, clip, targets, binding.ancestry, { source: facial.scene, clip: faceClip });
+    if (!idle.bindings.length) throw Error("Idle rig has no matching bones");
+  } catch (error) {
+    idle = undefined; idleError = (error as Error).message;
+  }
   const flakeMaps = new Map<
     number,
     { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture }
@@ -357,10 +414,13 @@ export async function createScene(
   let animation = false,
     amount = 0;
   const start = performance.now();
+  let previous = start;
   const frameListeners = new Set<() => void>();
   renderer.setAnimationLoop(() => {
-    const t = (performance.now() - start) / 1000;
-    blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
+    const now = performance.now(), t = (now - start) / 1000, dt = (now - previous) / 1000;
+    previous = now;
+    if (idle?.enabled) idle.update(dt);
+    else blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
     if (controls.enabled) controls.update();
     if (frameListeners.size) {
       scene.updateMatrixWorld(true);
@@ -378,6 +438,9 @@ export async function createScene(
     })),
     blinkBones: bones.length,
     detailErrors,
+    idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
+      mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
+      faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
   };
   return {
     scene,
@@ -401,6 +464,20 @@ export async function createScene(
     eyeShape,
     applySavedV,
     details,
+    idle,
+    setIdle: (enabled: boolean) => {
+      if (!idle) return;
+      animation = false; amount = 0; blink(0);
+      camera.position.sub(idleFrameOffset); controls.target.sub(idleFrameOffset);
+      idleFrameOffset.set(0,0,0);
+      idle.setEnabled(enabled);
+      if (enabled) {
+        const anchor = idle.bindings.find(b => b.bone.name === "Head");
+        if (anchor) idleFrameOffset.setFromMatrixPosition(anchor.bone.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(anchor.worldBind));
+        camera.position.add(idleFrameOffset); controls.target.add(idleFrameOffset);
+      }
+      controls.update();
+    },
     setDetail: (name: string, v: boolean) => {
       if (details[name]) details[name].root.visible = v;
     },

@@ -1,0 +1,33 @@
+// Read-only clip export using an explicit locally extracted rig; no archive lookup or install.
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using SharpGLTF.Schema2;
+using WolvenKit.Common;
+using WolvenKit.Common.Interfaces;
+using WolvenKit.Common.Model.Arguments;
+using WolvenKit.Core.Compression;
+using WolvenKit.Modkit.RED4;
+using WolvenKit.RED4.CR2W;
+using WolvenKit.RED4.Types;
+
+if (args.Length != 4) throw new ArgumentException("Expected: input.anims input.rig clip-name output.glb");
+if (!Oodle.Load()) throw new Exception("Compression library unavailable.");
+ImportExportArgs.IsCLI = true;
+var factory = Assembly.Load("WolvenKit.CLI").GetType("WolvenKit.CLI.GenericHost", true)!.GetMethod("CreateHostBuilder", BindingFlags.Static | BindingFlags.Public)!;
+using var host = ((IHostBuilder)factory.Invoke(null, new object[] { Array.Empty<string>() })!).Build();
+var parser = host.Services.GetRequiredService<Red4ParserService>();
+using var animStream = File.OpenRead(args[0]);
+using var rigStream = File.OpenRead(args[1]);
+var anim = parser.ReadRed4File(animStream) ?? throw new Exception("Invalid animation resource.");
+var rig = parser.ReadRed4File(rigStream) ?? throw new Exception("Invalid rig resource.");
+var set = anim.RootChunk as animAnimSet ?? throw new Exception("Expected animAnimSet.");
+var selected = set.Animations.Where(a => a.Chunk?.Animation.Chunk?.Name.ToString() == args[2]).ToList();
+if (selected.Count != 1) throw new Exception($"Expected exactly one {args[2]} clip, found {selected.Count}.");
+set.Animations.Clear();
+set.Animations.Add(selected[0]);
+var model = ModelRoot.CreateModel();
+var tools = (ModTools)host.Services.GetRequiredService<IModTools>();
+if (!tools.GetAnimation(anim, rig, Path.GetFileName(args[0]), ref model, true, true, true)) throw new Exception("Animation export failed.");
+model.SaveGLB(args[3]);
+Console.WriteLine($"Exported {args[2]} to {args[3]}");

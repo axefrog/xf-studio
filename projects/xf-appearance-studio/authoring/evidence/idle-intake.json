@@ -1,0 +1,287 @@
+{
+  "clip": "ui_closeup_shot",
+  "bodyResource": "base\\animations\\ui\\female\\ui_female.anims",
+  "faceResource": "base\\animations\\ui\\female\\ui_female_face.anims",
+  "facialVariableControlCount": 67,
+  "facialVariableControls": {
+    "eye_l_brows_raise_in": [
+      0,
+      0.0011518294
+    ],
+    "eye_r_brows_raise_in": [
+      0,
+      0.001226845
+    ],
+    "eye_r_brows_raise_out": [
+      0,
+      0.0860108
+    ],
+    "eye_l_brows_lower": [
+      0.40642327,
+      0.40646505
+    ],
+    "eye_r_brows_lower": [
+      0.40642327,
+      0.40646505
+    ],
+    "eye_l_blink": [
+      0,
+      0.96893466
+    ],
+    "eye_r_blink": [
+      0,
+      0.96893466
+    ],
+    "eye_l_oculi_squint_outer_lower": [
+      0,
+      0.3
+    ],
+    "eye_r_oculi_squint_outer_lower": [
+      0,
+      0.35
+    ],
+    "eye_l_oculi_squint_outer_upper": [
+      0,
+      0.040511377
+    ],
+    "eye_r_oculi_squint_outer_upper": [
+      0,
+      0.040511377
+    ],
+    "nose_l_breathe_in": [
+      0,
+      0.78945553
+    ],
+    "nose_r_breathe_in": [
+      0,
+      0.50470454
+    ],
+    "nose_l_snear": [
+      0,
+      0.11462946
+    ],
+    "nose_r_snear": [
+      0,
+      0.09315752
+    ],
+    "lips_l_nasolabialDeepener": [
+      0,
+      0.15340516
+    ],
+    "lips_r_nasolabialDeepener": [
+      0,
+      0.2897188
+    ],
+    "lips_l_upper_raise": [
+      0,
+      0.084234044
+    ],
+    "lips_r_upper_raise": [
+      0,
+      0.049377084
+    ],
+    "lips_l_corner_up": [
+      0,
+      0.016469575
+    ],
+    "lips_r_corner_up": [
+      0,
+      0.032220528
+    ],
+    "lips_l_corner_stretch": [
+      0,
+      0.016469575
+    ],
+    "lips_r_corner_stretch": [
+      0,
+      0.019558623
+    ],
+    "lips_r_corner_sharp_up": [
+      0,
+      0.15518957
+    ],
+    "lips_suck_up": [
+      0,
+      0.16748057
+    ],
+    "lips_suck_dn": [
+      0,
+      0.120377734
+    ],
+    "lips_puff_up": [
+      0,
+      0.24636093
+    ],
+    "lips_puff_dn": [
+      0,
+      0.22640407
+    ],
+    "lips_chin_raise": [
+      0,
+      0.087598704
+    ],
+    "lips_l_funnel": [
+      0,
+      0.21
+    ],
+    "lips_r_funnel": [
+      0,
+      0.21
+    ],
+    "lips_tighten_up": [
+      0,
+      0.09281152
+    ],
+    "lips_tighten_dn": [
+      0,
+      0.17413351
+    ],
+    "lips_mid_shift_l": [
+      0,
+      0.032767933
+    ],
+    "lips_mid_shift_r": [
+      0,
+      0.07957041
+    ],
+    "lips_mid_shift_up": [
+      0,
+      0.13618647
+    ],
+    "lips_mid_shift_dn": [
+      0,
+      0.00397712
+    ],
+    "cheek_l_suck": [
+      0,
+      0.1753101
+    ],
+    "cheek_r_suck": [
+      0,
+      0.17729221
+    ],
+    "cheek_l_puff": [
+      0,
+      0.1583274
+    ],
+    "cheek_r_puff": [
+      0,
+      0.1583274
+    ],
+    "jaw_mid_open": [
+      0,
+      0.07737522
+    ],
+    "jaw_mid_shift_l": [
+      0,
+      0.03087473
+    ],
+    "jaw_mid_shift_r": [
+      0,
+      0.01905135
+    ],
+    "jaw_mid_shift_fwd": [
+      0,
+      0.124305606
+    ],
+    "jaw_mid_shift_back": [
+      0,
+      0.04172039
+    ],
+    "neck_tighten": [
+      0,
+      0.26946682
+    ],
+    "neck_throat_compress": [
+      0,
+      0.665
+    ],
+    "neck_throat_open": [
+      0,
+      0.588
+    ],
+    "eye_l_dir_up": [
+      0,
+      0.032922037
+    ],
+    "eye_l_dir_dn": [
+      0,
+      0.11761575
+    ],
+    "eye_l_dir_in": [
+      0,
+      0.07884068
+    ],
+    "eye_l_dir_out": [
+      0,
+      0.12032943
+    ],
+    "eye_r_dir_up": [
+      0,
+      0.021079905
+    ],
+    "eye_r_dir_dn": [
+      0,
+      0.13183843
+    ],
+    "eye_r_dir_in": [
+      0,
+      0.1203297
+    ],
+    "eye_r_dir_out": [
+      0,
+      0.078840405
+    ],
+    "lips_l_corner_up_in_sticky_cutScene": [
+      0,
+      0.13
+    ],
+    "lips_l_corner_dn_in_sticky_cutScene": [
+      0,
+      0.13
+    ],
+    "lips_l_corner_up_out_sticky_cutScene": [
+      0,
+      1
+    ],
+    "lips_l_corner_dn_out_sticky_cutScene": [
+      0,
+      1
+    ],
+    "lips_r_corner_up_in_sticky_cutScene": [
+      0,
+      0.13
+    ],
+    "lips_r_corner_up_out_sticky_cutScene": [
+      0,
+      1
+    ],
+    "lips_r_corner_dn_in_sticky_cutScene": [
+      0,
+      0.13
+    ],
+    "lips_r_corner_dn_out_sticky_cutScene": [
+      0,
+      1
+    ],
+    "eye_l_pupil_wide": [
+      0,
+      0.30017692
+    ],
+    "eye_r_pupil_wide": [
+      0,
+      0.30017692
+    ]
+  },
+  "sourceHashes": {
+    "idle-body.glb": "2fa1993d1d561e9738d8961f16be8a7bebe14876bf398f123c85df9151dba41a",
+    "idle-face.glb": "372bd9629c24b918e23f792b01b703238021a1d82554cd8381fd2f2e9d2fef58"
+  },
+  "outputBytes": 1496624,
+  "outputSha256": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
+  "limitations": [
+    "Body motion is decoded game data; runtime animation graph selection remains to be traced.",
+    "Facial float tracks are baked separately with the external IO Suite solver; see idle-face-bake.json.",
+    "Only female close-up idle is prepared. Game/mod assets remain local."
+  ]
+}

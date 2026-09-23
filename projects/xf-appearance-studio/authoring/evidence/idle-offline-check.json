@@ -1,0 +1,19 @@
+{
+  "mappedBones": 385,
+  "unmapped": [],
+  "sampledSeconds": 22.1,
+  "facialControlTransformRanges": {
+    "l_J_eye_JNT": 0.06849462352693081,
+    "r_J_eye_JNT": 0.0684911422431469,
+    "mid_J_jaw_JNT": 0.012330227973599051,
+    "l_J_mug_lip_up_0_JNT": 0.08307754279080146,
+    "l_J_eye_lid_up_root_1_JNT": 0.27069785462769047
+  },
+  "maxVertexDisplacement": 0.1021359476927834,
+  "maxSharedBoneDifference": 9.90671276887567e-8,
+  "restoreError": 0,
+  "limitations": [
+    "Duplicate source rigs can have different bind matrices; shared-bone difference is reported, not treated as game parity.",
+    "No visual parity, wrinkle shading or animation-graph synchronization proof."
+  ]
+}

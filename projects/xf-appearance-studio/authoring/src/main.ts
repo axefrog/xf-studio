@@ -576,6 +576,19 @@ try {
     $("play").setAttribute("aria-pressed", "false");
     $("play").textContent = "▶ Blink";
   };
+  input("cc-idle").disabled = !viewer.evidence.idle.available;
+  $("idle-note").textContent = viewer.evidence.idle.available
+    ? "Game close-up motion + facial animation · preview"
+    : `Idle unavailable: ${viewer.evidence.idle.error}`;
+  input("cc-idle").onchange = () => {
+    const enabled = input("cc-idle").checked;
+    viewer!.setIdle(enabled);
+    input("blink").disabled = enabled;
+    input("blink").value = "0";
+    ($("play") as HTMLButtonElement).disabled = enabled;
+    $("play").setAttribute("aria-pressed", "false");
+    $("play").textContent = "▶ Blink";
+  };
   $("play").onclick = () => {
     const on = $("play").getAttribute("aria-pressed") !== "true";
     $("play").setAttribute("aria-pressed", String(on));
@@ -612,6 +625,11 @@ try {
       surface: surface.diagnostics(),
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,
+      idle: { enabled: viewer!.idle?.enabled ?? false, time: viewer!.idle?.time ?? 0,
+        facialPose: Object.fromEntries(["l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_root_1_JNT"].map(name => {
+          const bone = viewer!.idle?.facial?.source.getObjectByName(name);
+          return [name, bone ? { position: bone.position.toArray(), rotation: bone.quaternion.toArray() } : null];
+        })) },
       details: Object.fromEntries(
         Object.entries(viewer!.details).map(([name, d]) => [
           name,
