@@ -90,7 +90,8 @@ mr['baseMesh']=ref(plan['mesh']);mr['baseMeshAppearance']=cname(seed)
 write(OUT/'models-json'/(Path(plan['morph']).name+'.json'),morph)
 run('deserialize-models',[WK,'convert','deserialize',OUT/'models-json','-o',modeldir])
 
-component={'$type':'entMorphTargetSkinnedMeshComponent','name':cname(plan['component']),'id':'0','isEnabled':1,'version':1,
+component_id=int.from_bytes(hashlib.sha256(('xfs:component:'+plan['component']).encode('utf-8')).digest()[:8],'little') or 1
+component={'$type':'entMorphTargetSkinnedMeshComponent','name':cname(plan['component']),'id':str(component_id),'isEnabled':1,'version':1,
     'autoHideDistance':50,'chunkMask':'9223372036854775807','forceLODLevel':-1,
     'meshAppearance':cname(seed),'morphResource':ref(plan['morph']),
     'parentTransform':handle({'$type':'entHardTransformBinding','bindName':cname('root'),'enabled':1}),

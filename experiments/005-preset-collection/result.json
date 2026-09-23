@@ -1,5 +1,5 @@
 {
-  "build": "D:\\Dev\\worktrees\\flat-export-mips\\experiments\\005-preset-collection\\generated\\build-1790195987726134900",
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790198621448031500",
   "presetCount": 4,
   "selectorCount": 1,
   "selectorOptionCount": 5,
@@ -9,7 +9,7 @@
   "materialTemplates": 1,
   "textureCount": 12,
   "archiveBytes": 847872,
-  "archiveSha256": "6e8159e807b91d0d5dfa54535643a4bec920c00f5065833962643a1c72884c43",
+  "archiveSha256": "bfdce8b5a2ac330b3f891308a288b132b5bc2a6be36b13b16c8b8e18b899959d",
   "unpackedFilesVerified": 16,
   "preservedMorphs": 105,
   "modelBuffersUnchanged": true,

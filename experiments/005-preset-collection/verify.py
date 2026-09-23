@@ -55,6 +55,9 @@ assert off['partsOverrides'][0]['componentsOverrides']==[]
 assert value(template['name'])==plan['templateAppearance'] and len(template['components'])==1
 component=template['components'][0];assert component['$type']=='entMorphTargetSkinnedMeshComponent'
 assert value(component['name'])==plan['component'] and dep(component['morphResource'])==plan['morph']
+expected_component_id=int.from_bytes(hashlib.sha256(('xfs:component:'+plan['component']).encode('utf-8')).digest()[:8],'little') or 1
+assert int(component['id'])==expected_component_id
+assert template['compiledData']['Data']['CruidDict']=={'0':str(expected_component_id)}
 assert value(component['meshAppearance'])==plan['presets'][0]['appearance']
 assert template['compiledData']['Data']['Chunks'], 'Component was not compiled into its binary package'
 override=template['partsOverrides'][0]['componentsOverrides'];assert len(override)==1 and value(override[0]['componentName'])==plan['component']
