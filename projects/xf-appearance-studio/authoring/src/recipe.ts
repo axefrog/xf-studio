@@ -300,12 +300,13 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?:
   return x * x * (3 - 2 * x) * (strength ? strength(u, v) : weight) * l.opacity;
 }
 // Alpha-only design: white RGB provides colour-independent masks and clean edges.
-export function raster(l: Layer, size: number): Uint8ClampedArray {
+export function createRasterJob(l: Layer, size: number) {
+  if (!Number.isInteger(size) || size < 1 || size > 4096) throw Error("Invalid raster size.");
+  l = structuredClone(l);
   const data = new Uint8ClampedArray(size * size * 4);
   const polygon = curve(l.points);
   for (let i = 0; i < data.length; i += 4)
     data[i] = data[i + 1] = data[i + 2] = 255;
-  if (!l.enabled) return data;
   const strength = prepareLayerStrength(l, polygon);
   const pad = l.feather + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   let minU = Math.min(...polygon.map((p) => p.u)) - pad,
@@ -319,14 +320,26 @@ export function raster(l: Layer, size: number): Uint8ClampedArray {
       clamp(Math.min(...polygon.map((p) => p.v)) - pad) * size,
     ),
     y1 = Math.ceil(clamp(Math.max(...polygon.map((p) => p.v)) + pad) * size);
-  for (let y = y0; y < y1; y++)
-    for (
-      let x = Math.floor(clamp(minU) * size);
-      x < Math.ceil(clamp(maxU) * size);
-      x++
-    )
-      data[(y * size + x) * 4 + 3] = Math.round(
-        255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength),
-      );
-  return data;
+  const x0 = Math.floor(clamp(minU) * size), x1 = Math.ceil(clamp(maxU) * size);
+  let x = x0, y = y0;
+  let done = !l.enabled || x0 >= x1 || y0 >= y1;
+  return { data, get done() { return done; },
+    advance(maxPixels: number) {
+      if (!(maxPixels > 0) || (!Number.isInteger(maxPixels) && maxPixels !== Infinity)) throw Error("Invalid raster slice size.");
+      let count = 0;
+      while (!done && count++ < maxPixels) {
+        data[(y * size + x) * 4 + 3] = Math.round(
+          255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength));
+        if (++x >= x1) { x = x0; if (++y >= y1) done = true; }
+      }
+      return done;
+    },
+  };
+}
+
+// Synchronous compiler/export callers retain the same exact pixel arithmetic.
+export function raster(l: Layer, size: number): Uint8ClampedArray<ArrayBuffer> {
+  const job = createRasterJob(l, size);
+  job.advance(Infinity);
+  return job.data;
 }

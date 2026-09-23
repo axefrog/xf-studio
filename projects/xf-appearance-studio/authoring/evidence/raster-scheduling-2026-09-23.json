@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-23",
+  "scope": "Cooperative mask cancellation and research checkpoint",
+  "automated": {
+    "tests": 129,
+    "files": 32,
+    "assertions": 472611,
+    "failures": 0,
+    "typecheck": "pass",
+    "browserBuild": "pass",
+    "schedulingTests": 7
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "isolatedWorkspace": true,
+    "rapidPigmentEdits": {
+      "from": 0,
+      "to": 0.03,
+      "cancellations": 2,
+      "discarded": 2,
+      "queueAtRest": 0,
+      "runningAtRest": null,
+      "failures": 0
+    },
+    "presetSwitch": "B then A; selected Layer 1 and authored weight retained",
+    "export2048": "UI reported completed white+alpha mask export using dedicated worker",
+    "finalBuildReload": {
+      "restoredWeight": 0.03,
+      "afterThreeLeftKeys": 0,
+      "cancellations": 3,
+      "discarded": 3,
+      "completed": 2,
+      "queueAtRest": 0,
+      "runningAtRest": null,
+      "failures": 0
+    },
+    "warningsAndErrors": []
+  },
+  "invariants": [
+    "No partial masks published",
+    "Monotonic versions across preset replacement",
+    "Sliced raster exact against synchronous and scalar fixture",
+    "Active-layer priority retains other layers",
+    "Failed requeued snapshot removed",
+    "Broken worker startup cannot cause idle restart loop"
+  ],
+  "limits": [
+    "Preparation and individual pixel batches remain synchronous; 8ms is a target, not a strict latency bound",
+    "Complex complete rasters remain expensive",
+    "Mask timing includes cooperative waits",
+    "Directional softness and replacement glitter are research-only"
+  ]
+}

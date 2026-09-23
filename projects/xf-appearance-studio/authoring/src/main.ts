@@ -12,6 +12,7 @@ import { setupContextMenus } from "./context-menu";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { layerRenderQueue } from "./layer-render-queue";
+import { createRasterClient } from "./raster-client";
 import { selectedWarp, type FieldSelection } from "./field-selection";
 import { setupFields } from "./field-ui";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
@@ -131,7 +132,7 @@ const paintLayerList = layerList($("layers"), {
 function layerCards() { paintLayerList(recipe, active); }
 function replaceRecipe(next: Recipe, nextActive = 0) {
   recipe = next; active = Math.max(0, Math.min(nextActive, recipe.layers.length - 1)); selected = 0;
-  queue.clear(); versions.length = recipe.layers.length; versions.fill(0);
+  maskClient.reset();
   // A structure change cannot reuse an in-flight mask or an old slot's pixels.
   canvases.splice(0, canvases.length, ...recipe.layers.map(() => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1024; return canvas;
@@ -201,47 +202,20 @@ function sync() {
   layerCards();
 }
 let lastRaster = 0;
-const worker = new Worker("/build/raster-worker.js", { type: "module" }),
-  queue = new Map<number, { version: number; layer: Layer }>(),
-  versions = recipe.layers.map(() => 0);
-let busy = false, requestVersion = 0;
-function dispatch() {
-  if (busy || !queue.size) return;
-  const [i, job] = queue.entries().next().value!;
-  queue.delete(i);
-  busy = true;
-  worker.postMessage({ i, ...job, size: 1024 });
-}
-worker.onmessage = (
-  e: MessageEvent<{
-    i: number;
-    version: number;
-    data: Uint8ClampedArray<ArrayBuffer>;
-    ms: number;
-  }>,
-) => {
-  const { i, version, data, ms } = e.data;
-  busy = false;
-  if (recipe.layers[i] && version === versions[i]) {
+const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
+  ({ i, data, ms }) => {
+    if (!recipe.layers[i]) return;
     canvases[i]
       .getContext("2d")!
       .putImageData(new ImageData(data, 1024, 1024), 0, 0);
     viewer?.updateLayer(i, recipe.layers[i]);
     lastRaster = ms;
     drawUV();
-    status(`Live mask Â· 1024Â² Â· ${Math.round(ms)} ms Â· layer ${i + 1}`);
-  }
-  dispatch();
-};
-worker.onerror = () =>
-  status("Mask worker failed â€” reload the editor to recover.");
+    status(`Live mask · 1024² · ${Math.round(ms)} ms · layer ${i + 1}`);
+  }, () => status("Mask calculation failed. Edit again to retry."));
 function render(i = active) {
   if (!recipe.layers[i]) return;
-  queue.set(i, {
-    version: (versions[i] = ++requestVersion),
-    layer: structuredClone(recipe.layers[i]),
-  });
-  dispatch();
+  maskClient.request(i, recipe.layers[i], i === active);
   viewer?.updateLayer(i, recipe.layers[i]);
   persist();
   sync();
@@ -573,6 +547,7 @@ try {
         ]),
       ),
       lastRasterMs: lastRaster,
+      rasterQueue: maskClient.diagnostics(),
       savedV: savedV
         ? { gameVersion: savedV.gameVersion, evidence: savedV.evidence }
         : null,

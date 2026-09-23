@@ -1,12 +1,8 @@
-import { raster, type Layer } from "./recipe";
-self.onmessage = (
-  e: MessageEvent<{ i: number; version: number; layer: Layer; size: number }>,
-) => {
-  const start = performance.now(),
-    { i, version, layer, size } = e.data;
-  const data = raster(layer, size);
-  self.postMessage(
-    { i, version, data, ms: performance.now() - start },
-    { transfer: [data.buffer] },
-  );
+import { createRasterProcessor, type RasterRequest } from "./raster-processor";
+const processor = createRasterProcessor(result => self.postMessage(result,
+  { transfer: result.cancelled ? [] : [result.data.buffer] }));
+self.onmessage = (e: MessageEvent<RasterRequest | { cancel: number }>) => {
+  if ("cancel" in e.data) processor.cancel(e.data.cancel);
+  // Surface asynchronous errors through the worker's standard error event.
+  else void processor.start(e.data).catch(error => setTimeout(() => { throw error; }, 0));
 };
