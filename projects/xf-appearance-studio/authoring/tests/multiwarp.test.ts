@@ -100,7 +100,7 @@ describe("multiple local warp fields", () => {
         [old.field.du, old.field.dv] = vector;
         const input = legacyRecipe(old), before = JSON.stringify(input);
         const migrated = parseRecipe(input), polygon = oldPolygon(old.points);
-        expect(migrated.schema).toBe("xfs/recipe-6");
+        expect(migrated.schema).toBe("xfs/recipe-7");
         expect(migrated.layers[0].fields).toEqual([{ ...old.field, id: "legacy-eye-field-1" }]);
         expect("field" in migrated.layers[0]).toBe(false);
         expect(raster(migrated.layers[0], 256)).toEqual(fullRaster(256, (u, v) => oldCoverage(u, v, old, polygon)));

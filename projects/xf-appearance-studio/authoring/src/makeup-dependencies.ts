@@ -1,4 +1,4 @@
-import { defaultFlakes, type Flakes } from "./finish";
+import { defaultFlakes, type LegacyFlakes } from "./finish";
 import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
 
@@ -83,7 +83,7 @@ export function irregularOpticalKey(catalogue: CatalogueKey, size: number, sampl
 
 /** Missing legacy settings mean the existing exact defaults; legacy shimmer
  * and glitter remain different models even when their controls match. */
-export function legacyOpticalKey(size: number, finish: "shimmer" | "glitter", settings: Flakes = defaultFlakes()): OpticalKey {
+export function legacyOpticalKey(size: number, finish: "shimmer" | "glitter", settings: LegacyFlakes = defaultFlakes()): OpticalKey {
   sizeWithin(size, 32);
   if ((finish !== "shimmer" && finish !== "glitter") || !settings ||
       !Number.isInteger(settings.cells) || settings.cells < 32 || settings.cells > 256 ||

@@ -66,6 +66,25 @@ export function createFlakeCatalogue(input: IrregularFlakes): FlakeCatalogue {
   catalogues.add(catalogue);
   return catalogue;
 }
+/** Production catalogue construction is sliced so a cancelled request can stop
+ * before all fragments have been materialized. It has the same ID order as the
+ * synchronous study helper. */
+export function createFlakeCatalogueJob(input: IrregularFlakes) {
+  validateSettings(input);
+  const settings = Object.freeze({...input}), flakes: Flake[] = [];
+  let id = 0, catalogue: FlakeCatalogue | undefined;
+  return {get done() {return !!catalogue;}, get catalogue() {return catalogue;},
+    advance(workBudget: number) {
+      validateWork(workBudget);
+      const end = Math.min(settings.count, id + workBudget);
+      for (; id < end; id++) flakes.push(createFragment(settings,id));
+      if (id === settings.count && !catalogue) {
+        catalogue = Object.freeze({settings, flakes: Object.freeze(flakes)});
+        catalogues.add(catalogue);
+      }
+      return !!catalogue;
+    }};
+}
 /** Bounded study-only alternative to materializing half a million JS objects.
  * Scans the SAME resolution-independent global IDs and retains every fragment
  * that could reach one of the explicit valid regions. Output outside those

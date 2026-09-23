@@ -1,5 +1,7 @@
 import type { Layer } from "./recipe";
 import type { RasterRequest, RasterResponse } from "./raster-processor";
+import {isIrregular} from "./finish";
+import {maskAlphaKey,irregularCatalogueKey,irregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
 
 export type RasterPort = {
   onmessage: ((event: MessageEvent<RasterResponse>) => void) | null;
@@ -14,10 +16,19 @@ function validResult(data: Completed, request: RasterRequest): boolean {
   if (data.size !== request.size || !(data.data instanceof Uint8ClampedArray) || data.data.length !== length ||
     !Number.isFinite(data.ms) || data.ms < 0) return false;
   const expectsOptics = !!request.bakeOptics && request.layer.enabled && (request.layer.finish === "shimmer" || request.layer.finish === "glitter");
-  if (expectsOptics !== !!data.optics) return false;
+  const settings=request.layer.flakes;
+  const irregular = request.layer.enabled && request.layer.finish === "glitter" && isIrregular(settings);
+  if (expectsOptics && !data.optics) return false;
+  if (!irregular && expectsOptics !== !!data.optics) return false;
   if (data.optics && (data.optics.size !== request.size ||
     !(data.optics.normal instanceof Uint8Array) || data.optics.normal.length !== length ||
     !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
+  if (irregular) {
+    const candidate=settings as import("./flake-field").IrregularFlakes;
+    const optical=irregularOpticalKey(irregularCatalogueKey(candidate),request.size);
+    const expected=irregularAlbedoKey(optical,maskAlphaKey(request.layer,request.size),request.layer.color,candidate.color);
+    if (!data.albedo || data.albedo.key!==expected || !(data.albedo.data instanceof Uint8Array) || data.albedo.data.length!==length) return false;
+  } else if (data.albedo) return false;
   return true;
 }
 

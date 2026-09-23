@@ -11,13 +11,16 @@ export type Finish =
   | "metallic"
   | "glossy"
   | "iridescent";
-export type Flakes = {
+export type LegacyFlakes = {
   cells: number;
   density: number;
   tilt: number;
   seed: number;
 };
-export const defaultFlakes = (): Flakes => ({
+export type Flakes = LegacyFlakes;
+export const isIrregular = (flakes: Flakes | import("./flake-field").IrregularFlakes | undefined): flakes is import("./flake-field").IrregularFlakes =>
+  !!flakes && "model" in flakes && flakes.model === "irregular-planar-1";
+export const defaultFlakes = (): LegacyFlakes => ({
   cells: 128,
   density: 0.65,
   tilt: 0.65,
@@ -51,7 +54,7 @@ export type FlakeMaps = {size: number; normal: Uint8Array<ArrayBuffer>; surface:
 
 /** Bounded cooperative work; each cell setup and each written pixel costs one
  * budget unit, including empty cells when the cell grid exceeds resolution. */
-export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: Flakes) {
+export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: LegacyFlakes) {
   if (!Number.isInteger(size) || size < 32 || size > 4096 ||
     (finish !== "shimmer" && finish !== "glitter") || !p ||
     !Number.isInteger(p.cells) || p.cells < 32 || p.cells > 256 ||
@@ -105,7 +108,8 @@ export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: F
 }
 
 /** Synchronous export callers retain identical normal/surface byte output. */
-export function bakeFlakes(size: number, finish: "shimmer" | "glitter", p: Flakes): FlakeMaps {
+export function bakeFlakes(size: number, finish: "shimmer" | "glitter", p: LegacyFlakes | import("./flake-field").IrregularFlakes): FlakeMaps {
+  if (isIrregular(p)) throw Error("Irregular glitter requires the separate field bake.");
   const job = createFlakeJob(size,finish,p);
   job.advance(Infinity);
   return {size: job.size, normal: job.normal, surface: job.surface};

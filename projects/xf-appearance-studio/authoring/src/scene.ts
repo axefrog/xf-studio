@@ -691,6 +691,7 @@ export async function createScene(
     setLayerCanvases: makeup.setCanvases,
     setLayerCanvas: makeup.setLayerCanvas,
     needsOptics: makeup.needsOptics,
+    needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape,

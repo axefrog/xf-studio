@@ -25,15 +25,17 @@ export type PreviewQualityAssessment = {
   enabledLayers: number;
   plainLayers: number;
   opticalLayers: number;
+  irregularLayers: number;
   generatedMaps: number;
   budgetBytes: number;
 };
 
 /** Generated-resource allocation estimate, not available VRAM or a hardware guarantee.
  * Each enabled layer keeps one RGBA8 CPU mask and its complete GPU mip pyramid.
- * Shimmer/glitter add two maps (normal and shared roughness/metalness), each with
- * the same CPU/GPU cost. Account for one largest-layer replacement bundle and
- * one mask worker output concurrently. Disabled layers use tiny placeholders.
+ * Shimmer and legacy Glitter add normal and packed surface maps; irregular
+ * Glitter also owns a separate sRGB albedo map. Account for the largest
+ * replacement bundle and conservative worker/cache/catalogue peak.
+ * Disabled layers use tiny placeholders.
  * Native game assets, meshes, framebuffers, browser/driver overhead, compression
  * and delayed GPU disposal are outside this operational budget.
  */
@@ -45,10 +47,11 @@ export function assessPreviewQuality(
 ): PreviewQualityAssessment {
   const enabled = recipe.layers.filter(layer => layer.enabled);
   const opticalLayers = enabled.filter(layer => layer.finish === "shimmer" || layer.finish === "glitter").length;
-  const plainLayers = enabled.length - opticalLayers, generatedMaps = plainLayers + opticalLayers * 3;
+  const irregularLayers=enabled.filter(layer=>layer.finish==="glitter" && layer.flakes && "model" in layer.flakes && layer.flakes.model==="irregular-planar-1").length;
+  const plainLayers = enabled.length - opticalLayers, generatedMaps = plainLayers + opticalLayers * 3 + irregularLayers;
   const result: PreviewQualityAssessment = {
     accepted: false, estimatedBytes: 0, cpuBytes: 0, gpuBytes: 0, stagingBytes: 0, workerBytes: 0,
-    enabledLayers: enabled.length, plainLayers, opticalLayers, generatedMaps, budgetBytes,
+    enabledLayers: enabled.length, plainLayers, opticalLayers, irregularLayers, generatedMaps, budgetBytes,
   };
   if (!isPreviewTextureSize(requestedSize))
     return { ...result, error: "Choose a preview size of 512, 1024, 2048 or 4096 pixels." };
@@ -59,9 +62,12 @@ export function assessPreviewQuality(
   for (let side: number = requestedSize; side >= 1; side /= 2) gpuMapBytes += side ** 2 * 4;
   result.cpuBytes = generatedMaps * baseBytes;
   result.gpuBytes = generatedMaps * gpuMapBytes;
-  const largestBundleMaps = opticalLayers ? 3 : plainLayers ? 1 : 0;
+  const largestBundleMaps = irregularLayers ? 4 : opticalLayers ? 3 : plainLayers ? 1 : 0;
   result.stagingBytes = largestBundleMaps * (baseBytes + gpuMapBytes);
-  result.workerBytes = enabled.length ? baseBytes : 0;
+  // Candidate peak includes mask, two optics, one temporary packed coverage
+  // surface, albedo, compact channel, bounded cache/catalogue and tile scratch.
+  result.workerBytes = irregularLayers ? Math.ceil(baseBytes*5.25) + 64*1024**2 + 128*1024**2 + 64*1024
+    : enabled.length ? baseBytes : 0;
   result.estimatedBytes = result.cpuBytes + result.gpuBytes + result.stagingBytes + result.workerBytes;
   if (!Number.isSafeInteger(hardwareMaxTextureSize) || hardwareMaxTextureSize < 1)
     return { ...result, error: "The renderer's maximum texture size is unavailable." };

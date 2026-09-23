@@ -1,6 +1,8 @@
 import { convertToBezier, tessellateBezier, interpolatedFeather, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
+import { FLAKE_LIMITS } from "./flake-field";
+import type {IrregularFlakes} from "./flake-field";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -26,7 +28,7 @@ export type Layer = {
   enabled: boolean;
   color: string;
   finish: Finish;
-  flakes?: Flakes;
+  flakes?: Flakes | IrregularFlakes;
   opacity: number;
   feather: number;
   symmetry: boolean;
@@ -37,7 +39,7 @@ export type Layer = {
   softness: Softness;
 };
 export type Recipe = {
-  schema: "xfs/recipe-6";
+  schema: "xfs/recipe-6" | "xfs/recipe-7";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -47,7 +49,7 @@ export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-6",
+    schema: "xfs/recipe-7",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => convertToBezier({
       id: `layer-${i + 1}`,
@@ -89,7 +91,7 @@ export function parseRecipe(value: unknown): Recipe {
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -124,18 +126,23 @@ export function parseRecipe(value: unknown): Recipe {
     )
       throw Error("Invalid layer settings.");
     ids.add(l.id);
-    if (
-      l.flakes !== undefined &&
-      (!l.flakes ||
-        typeof l.flakes !== "object" ||
-        !Number.isInteger(l.flakes.cells) ||
-        !num(l.flakes.cells, 32, 256) ||
-        !num(l.flakes.density, 0, 1) ||
-        !num(l.flakes.tilt, 0, 1) ||
-        !Number.isInteger(l.flakes.seed) ||
-        !num(l.flakes.seed, 0, 2147483647))
-    )
-      throw Error("Invalid flake settings.");
+    if (l.flakes !== undefined) {
+      const f = l.flakes;
+      if (!f || typeof f !== "object" || Array.isArray(f)) throw Error("Invalid flake settings.");
+      if ("model" in f) {
+        if (r.schema !== "xfs/recipe-7" || l.finish !== "glitter" || f.model !== "irregular-planar-1" ||
+          Object.keys(f).sort().join() !== "color,count,model,radius,seed,spread,tilt" ||
+          !Number.isInteger(f.count) || !num(f.count, 0, FLAKE_LIMITS.count) ||
+          !num(f.radius, FLAKE_LIMITS.minRadius, FLAKE_LIMITS.maxRadius) ||
+          !num(f.spread, 0, 1) || !num(f.tilt, 0, 1) ||
+          !Number.isInteger(f.seed) || !num(f.seed, 0, FLAKE_LIMITS.maxSeed) ||
+          typeof f.color !== "string" || !/^#[0-9a-f]{6}$/i.test(f.color))
+          throw Error("Invalid irregular flake settings.");
+      } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) ||
+        !num(f.density, 0, 1) || !num(f.tilt, 0, 1) ||
+        !Number.isInteger(f.seed) || !num(f.seed, 0, 2147483647))
+        throw Error("Invalid flake settings.");
+    }
     if (
       !Array.isArray(l.points) ||
       l.points.length < 3 ||
@@ -145,7 +152,7 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentSoftness = r.schema === "xfs/recipe-6";
+    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7";
     if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
       throw Error("Ambiguous edge softness format.");
     let softness: Softness = {mode: "uniform"};
@@ -223,7 +230,7 @@ export function parseRecipe(value: unknown): Recipe {
     const { field: _legacyField, fields: _fields, ...settings } = l;
     layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-6", layers });
+  return structuredClone({ ...r, schema: "xfs/recipe-7", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);

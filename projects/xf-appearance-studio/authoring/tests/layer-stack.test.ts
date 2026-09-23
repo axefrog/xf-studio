@@ -7,7 +7,7 @@ import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 test("legacy recipes upgrade explicitly; empty and variable stacks persist without corrupting history", () => {
   const legacy = { ...initialRecipe(), schema: "eye-artistry/recipe-1",
     layers: initialRecipe().layers.map(({ fields, strength: _strength, pathMode: _pathMode, softness: _softness, points, ...l }) => ({ ...l, points: points.map(({ handles: _handles, feather: _feather, ...point }) => point), field: fields[0] })) };
-  expect(parseRecipe(legacy).schema).toBe("xfs/recipe-6");
+  expect(parseRecipe(legacy).schema).toBe("xfs/recipe-7");
   expect(legacy.schema).toBe("eye-artistry/recipe-1");
   expect(() => parseRecipe({ ...legacy, layers: [] })).toThrow();
   const empty = { ...initialRecipe(), layers: [] };

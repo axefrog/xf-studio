@@ -144,7 +144,7 @@ describe("continuous pigment strength", () => {
 
   test("current recipe persists explicit semantics and rejects ambiguous legacy and invalid blend values", () => {
     const recipe=initialRecipe();
-    expect(recipe.schema).toBe("xfs/recipe-6");
+    expect(recipe.schema).toBe("xfs/recipe-7");
     expect(recipe.layers[0].strength).toEqual({mode:"smooth-boundary",blend:DEFAULT_STRENGTH_BLEND});
     recipe.layers[1].strength={mode:"legacy-nearest"};
     expect(parseRecipe(JSON.parse(JSON.stringify(recipe)))).toEqual(recipe);
