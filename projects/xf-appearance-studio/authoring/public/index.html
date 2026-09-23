@@ -158,6 +158,13 @@
           <button id="remove">Remove point</button
           ><button id="reset">Reset layer</button>
         </div>
+        <button id="path-enable" type="button">Enable Bézier handles</button>
+        <div id="point-modes" class="small-actions" role="group" aria-label="Selected point handles" hidden>
+          <button id="point-aligned" type="button">Smooth</button>
+          <button id="point-symmetric" type="button">Symmetric</button>
+          <button id="point-corner" type="button">Corner</button>
+        </div>
+        <p class="help" id="path-note"></p>
         <label class="toggle"
           ><input id="symmetry" type="checkbox" checked /> Mirror across the
           face</label

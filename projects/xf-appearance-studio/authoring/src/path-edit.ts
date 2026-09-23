@@ -1,3 +1,4 @@
+import { bezierAt, splitBezierSegment, tessellateBezier } from "./bezier-path";
 import { clamp, curve, type Point } from "./recipe";
 
 export type PathUV = { u: number; v: number };
@@ -37,6 +38,38 @@ export function nearestPathSection(
     !finiteUV(click) || !finiteUV(scale) || scale.u <= 0 || scale.v <= 0
   ) return null;
 
+  if (points.every(p => p.handles)) {
+    const samples = tessellateBezier(points);
+    let result: PathSection | null = null, best = Infinity;
+    const distance = (segment: number, t: number) => {
+      const p = bezierAt(points, segment, t);
+      return ((p.u - click.u) * scale.u) ** 2 + ((p.v - click.v) * scale.v) ** 2;
+    };
+    const consider = (segment: number, t: number) => {
+      const d = distance(segment, t), tie = 32 * Number.EPSILON * Math.max(best, d);
+      if (result && !(d < best - tie)) return;
+      best = d;
+      const p = bezierAt(points, segment, t);
+      result = { segment, index: segment + 1, t, nearest: { u: p.u, v: p.v }, weight: p.weight, distancePx: Math.sqrt(d) };
+    };
+    for (let i = 0; i < samples.length; i++) {
+      const a = samples[i], b = samples[(i + 1) % samples.length];
+      let lo = a.t, hi = b.segment === a.segment ? b.t : 1;
+      consider(a.segment, lo); consider(a.segment, hi);
+      // Refine every adaptive interval rather than trusting one global Newton
+      // seed. Endpoints remain explicit candidates for cusps and collapsed arms.
+      const ratio = (Math.sqrt(5) - 1) / 2;
+      let left = hi - ratio * (hi - lo), right = lo + ratio * (hi - lo);
+      let dl = distance(a.segment, left), dr = distance(a.segment, right);
+      for (let j = 0; j < 40; j++) {
+        if (dl < dr) { hi = right; right = left; dr = dl; left = hi - ratio * (hi - lo); dl = distance(a.segment, left); }
+        else { lo = left; left = right; dl = dr; right = lo + ratio * (hi - lo); dr = distance(a.segment, right); }
+      }
+      consider(a.segment, (lo + hi) / 2);
+    }
+    return result;
+  }
+  if (points.some(p => p.handles)) return null;
   const path = curve(points, steps);
   let result: PathSection | null = null;
   let best = Infinity;
@@ -65,7 +98,8 @@ export function nearestPathSection(
 }
 
 /**
- * Add the clicked position to the nearest section, inheriting that section's
+ * Bézier paths snap to and split the continuous cubic. Legacy paths add the
+ * clicked position to the nearest section, inheriting that section's
  * interpolated strength. This edits a Catmull–Rom knot list: adding a knot can
  * change neighboring curvature; it is not an exact shape-preserving split.
  * Neither the input array nor its points is mutated. A full/invalid path is a
@@ -79,6 +113,11 @@ export function insertPathPoint(
   if (!Array.isArray(points) || points.length >= maxPoints) return null;
   const section = nearestPathSection(points, click, scale);
   if (!section) return null;
+  if (points.every(p => p.handles)) {
+    const next = splitBezierSegment(points, section.segment, section.t);
+    if (!next) return null;
+    return { ...section, point: next[section.index], points: next };
+  }
   const point = { u: clamp(click.u), v: clamp(click.v), weight: section.weight };
   const next = points.map(p => ({ ...p }));
   next.splice(section.index, 0, point);

@@ -4,7 +4,7 @@ import {
   type Field, type Layer, type Point, type WarpField,
 } from "../src/recipe";
 
-type LegacyLayer = Omit<Layer, "fields" | "strength"> & { field: Field };
+type LegacyLayer = Omit<Layer, "fields" | "strength" | "pathMode"> & { field: Field };
 const oldLayer = (): LegacyLayer => ({
   id: "legacy-eye", name: "Legacy shape", enabled: true, color: "#905774",
   finish: "matte", opacity: 0.85, feather: 0.012, symmetry: true,
@@ -100,7 +100,7 @@ describe("multiple local warp fields", () => {
         [old.field.du, old.field.dv] = vector;
         const input = legacyRecipe(old), before = JSON.stringify(input);
         const migrated = parseRecipe(input), polygon = oldPolygon(old.points);
-        expect(migrated.schema).toBe("xfs/recipe-4");
+        expect(migrated.schema).toBe("xfs/recipe-5");
         expect(migrated.layers[0].fields).toEqual([{ ...old.field, id: "legacy-eye-field-1" }]);
         expect("field" in migrated.layers[0]).toBe(false);
         expect(raster(migrated.layers[0], 256)).toEqual(fullRaster(256, (u, v) => oldCoverage(u, v, old, polygon)));

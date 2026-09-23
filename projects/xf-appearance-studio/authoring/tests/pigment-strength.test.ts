@@ -9,7 +9,7 @@ const square = points([[.3,.3,0],[.7,.3,0],[.7,.7,1],[.3,.7,1]]);
 const thin = points([[.3,.498,0],[.7,.498,0],[.7,.502,1],[.3,.502,1]]);
 const crossing = points([[.3,.3,0],[.7,.7,0],[.3,.7,1],[.7,.3,1]]);
 function layer(polygon: Point[] = square): Layer {
-  return { ...initialRecipe().layers[0], points: structuredClone(polygon), fields: [], symmetry: false, opacity: 1 };
+  return { ...initialRecipe().layers[0], pathMode: "catmull-rom", points: structuredClone(polygon), fields: [], symmetry: false, opacity: 1 };
 }
 // Independent midpoint quadrature, with no analytical primitive in common with
 // production. Resolution is sufficient for epsilon .002 even on the boundary.
@@ -142,15 +142,15 @@ describe("continuous pigment strength", () => {
     }
   });
 
-  test("v4 persists explicit semantics and rejects ambiguous legacy and invalid blend values", () => {
+  test("current recipe persists explicit semantics and rejects ambiguous legacy and invalid blend values", () => {
     const recipe=initialRecipe();
-    expect(recipe.schema).toBe("xfs/recipe-4");
+    expect(recipe.schema).toBe("xfs/recipe-5");
     expect(recipe.layers[0].strength).toEqual({mode:"smooth-boundary",blend:DEFAULT_STRENGTH_BLEND});
     recipe.layers[1].strength={mode:"legacy-nearest"};
     expect(parseRecipe(JSON.parse(JSON.stringify(recipe)))).toEqual(recipe);
     const v3:any=structuredClone(recipe);v3.schema="xfs/recipe-3";
     expect(()=>parseRecipe(v3)).toThrow();
-    v3.layers.forEach((l:any)=>delete l.strength);
+    v3.layers.forEach((l:any)=>{ delete l.strength; delete l.pathMode; l.points.forEach((p:any)=>delete p.handles); });
     const original=JSON.stringify(v3),converted=parseRecipe(v3);
     expect(converted.layers.every(l=>l.strength.mode==="legacy-nearest")).toBe(true);
     expect(JSON.stringify(v3)).toBe(original);

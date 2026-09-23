@@ -13,11 +13,11 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
     const recipe = initialRecipe(), original = db.save({ name: "Legacy", recipe });
     db.close();
     const legacy = JSON.stringify({ ...recipe, schema: "eye-artistry/recipe-1",
-      layers: recipe.layers.map(({ fields, strength: _strength, ...l }) => ({ ...l, field: fields[0] })) });
+      layers: recipe.layers.map(({ fields, strength: _strength, pathMode: _pathMode, points, ...l }) => ({ ...l, points: points.map(({ handles: _handles, ...point }) => point), field: fields[0] })) });
     const raw = new Database(path);
     raw.query("UPDATE look_revisions SET recipe_json=? WHERE look_id=?").run(legacy, original.id); raw.close();
     db = new LookLibrary(path);
-    expect(db.get(original.id).recipe.schema).toBe("xfs/recipe-4");
+    expect(db.get(original.id).recipe.schema).toBe("xfs/recipe-5");
     const empty = { ...recipe, layers: [] };
     db.save({ name: "Empty", recipe: empty, revision: 1 }, original.id);
     const expanded = structuredClone(recipe);

@@ -10,7 +10,7 @@ export type CollectionDraft = {
   removed: { preset: Preset; index: number; editor: EditorMemory }[];
 };
 export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; filesOpen?: boolean };
-export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-4", uv: "gltf-uv0-top-left", layers: [] });
+export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-5", uv: "gltf-uv0-top-left", layers: [] });
 export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
 export function collectionDraft(collection: PresetCollection, revision?: number): CollectionDraft {
   return { collection: parseCollection(collection, true), revision, selected: collection.presets[0]?.id,

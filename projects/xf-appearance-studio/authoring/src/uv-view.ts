@@ -1,13 +1,17 @@
 import { clamp, curve, type Layer } from "./recipe";
+import { tangentEndpoint } from "./bezier-path";
 
 export type UV = { u: number; v: number };
 export type UVView = { mode: "both" | "single"; side: "low" | "high"; u: number; v: number; span: number };
 export type UVRegion = { u: number; v: number; w: number; h: number };
+// Knots remain in [0,1], while relative Bézier arms may reach [-1,2].
+// Ten UV units span the full legal height with padding at the widest pane aspect.
+export const MAX_UV_VIEW_SPAN = 10;
 export const defaultUVView = (): UVView => ({ mode: "both", side: "low", u: .5, v: .2775, span: .5 });
 export function parseUVView(value: unknown): UVView {
   const v = value as UVView;
   if (!v || !["both", "single"].includes(v.mode) || !["low", "high"].includes(v.side) ||
-      ![v.u, v.v, v.span].every(Number.isFinite) || v.u < -.25 || v.u > 1.25 || v.v < -.25 || v.v > 1.25 || v.span < .02 || v.span > 2)
+      ![v.u, v.v, v.span].every(Number.isFinite) || v.u < -1 || v.u > 2 || v.v < -1 || v.v > 2 || v.span < .02 || v.span > MAX_UV_VIEW_SPAN)
     return defaultUVView();
   return { mode: v.mode, side: v.side, u: v.u, v: v.v, span: v.span };
 }
@@ -27,14 +31,19 @@ export function fitUVView(view: UVView, layer?: Layer): UVView {
   const fallback = { ...view, u: view.mode === "both" ? .5 : view.side === "low" ? .375 : .625, v: .2775,
     span: view.mode === "both" ? .5 : .25 };
   if (!layer) return fallback;
-  const path = [...curve(layer.points), ...layer.points,
-    ...layer.fields.flatMap(f => [f, { u: f.u + f.du, v: f.v + f.dv }])];
-  let positions = (layer.symmetry ? [false, true] : [false]).flatMap(mirror => path.map(p => reflectUV(p, mirror)));
-  if (view.mode === "single") positions = positions.filter(p => view.side === "low" ? p.u <= .5 : p.u >= .5);
+  const path: { p: UV; owner: UV }[] = [...curve(layer.points), ...layer.points].map(p => ({ p, owner: p }));
+  if (layer.pathMode === "bezier") for (const p of layer.points) if (p.handles)
+    path.push({ p: tangentEndpoint(p, "in"), owner: p }, { p: tangentEndpoint(p, "out"), owner: p });
+  for (const f of layer.fields) path.push({ p: f, owner: f }, { p: { u: f.u + f.du, v: f.v + f.dv }, owner: f });
+  // Classify controls by their knot/origin, never by the far endpoint: an arm
+  // that crosses the atlas centre must still be reachable in its owner's view.
+  const positions = (layer.symmetry ? [false, true] : [false]).flatMap(mirror => path
+    .filter(({ owner }) => view.mode === "both" || (view.side === "low" ? reflectUV(owner, mirror).u <= .5 : reflectUV(owner, mirror).u >= .5))
+    .map(({ p }) => reflectUV(p, mirror)));
   if (!positions.length) return fallback;
   const minU = Math.min(...positions.map(p => p.u)), maxU = Math.max(...positions.map(p => p.u)),
     minV = Math.min(...positions.map(p => p.v)), maxV = Math.max(...positions.map(p => p.v));
   // Fields and spline overshoot can legitimately extend beyond the atlas edges.
-  return { ...view, u: clamp((minU + maxU) / 2, -.25, 1.25), v: clamp((minV + maxV) / 2, -.25, 1.25),
-    span: clamp(Math.max(maxU - minU, (maxV - minV) * uvAspect(view.mode)) * 1.25, .04, 2) };
+  return { ...view, u: clamp((minU + maxU) / 2, -1, 2), v: clamp((minV + maxV) / 2, -1, 2),
+    span: clamp(Math.max(maxU - minU, (maxV - minV) * uvAspect(view.mode)) * 1.25, .04, MAX_UV_VIEW_SPAN) };
 }

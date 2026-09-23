@@ -409,6 +409,10 @@ input[type="checkbox"] {
   line-height: 1.6;
   margin: 10px 0;
 }
+.small-actions[hidden] {
+  display: none;
+}
+
 .small-actions {
   display: flex;
   gap: 7px;

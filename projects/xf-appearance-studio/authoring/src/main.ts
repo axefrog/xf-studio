@@ -16,6 +16,8 @@ import { selectedWarp, type FieldSelection } from "./field-selection";
 import { setupFields } from "./field-ui";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { setupPigment } from "./pigment-ui";
+import { convertToBezier, setPointMode } from "./bezier-path";
+import { setupPathControls, type PathCommand } from "./path-ui";
 import { createUVEditor } from "./uv-editor";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
@@ -118,6 +120,7 @@ layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
 let refreshFields: (() => void) | undefined;
 let refreshPigment: (() => void) | undefined;
+let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
@@ -156,6 +159,7 @@ function sync() {
   presetLibrary?.refreshSummary();
   refreshFields?.();
   refreshPigment?.();
+  refreshPath?.();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
@@ -293,6 +297,18 @@ for (const id of ["cells", "density", "tilt"] as const) {
     schedule();
   };
 }
+function changePath(command: PathCommand) {
+  const layer = current(); if (!layer) return;
+  try {
+    const next = command.kind === "enable-bezier" ? convertToBezier(layer) : setPointMode(layer, command.index, command.mode);
+    if (JSON.stringify(next) === JSON.stringify(layer)) return;
+    checkpoint(); Object.assign(layer, next); schedule(); sync(); persist();
+  } catch (error) { status((error as Error).message); sync(); }
+}
+refreshPath = setupPathControls({
+  enable: $("path-enable"), modes: $("point-modes"), note: $("path-note"),
+  aligned: $("point-aligned"), symmetric: $("point-symmetric"), corner: $("point-corner"),
+}, { layer: current, selected: () => selected, edit: changePath });
 function changePigment(command: PigmentCommand) {
   const layer = current(); if (!layer) return;
   try {

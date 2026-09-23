@@ -1,0 +1,68 @@
+{
+  "date": "2026-09-23",
+  "scope": "Recipe-5 Bézier editing in the local authoring prototype; no game install or runtime claim",
+  "contract": {
+    "legacy": "v1–v4 remain Catmull–Rom with unchanged masks; conversion is explicit and undoable",
+    "newLayers": "Bézier with relative incoming/outgoing vectors",
+    "modes": {"aligned": "opposite directions, independent lengths", "symmetric": "equal opposite arms", "corner": "independent arms"},
+    "tessellationToleranceUV": 0.000025,
+    "maximumDepth": 9,
+    "maximumPolygonPoints": 12288,
+    "split": "de Casteljau subdivision preserves the continuous cubic and parameter-linear pigment targets"
+  },
+  "automated": {
+    "command": "bun test",
+    "passed": 101,
+    "failed": 0,
+    "files": 26,
+    "assertions": 442647,
+    "typecheck": "passed",
+    "browserBuild": "passed",
+    "independentNearEndpointSplitParserAudit": {"fixtures": 10000, "failuresBeforeFix": 1148, "failuresAfterFix": 0},
+    "coverage": ["legacy masks and workspace Undo", "strict mode validation", "anisotropic nearest curve", "closing section split", "independent numeric curve samples", "mirrored UV and surface gestures", "outside-atlas Fit", "atomic off-atlas rejection"]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "isolation": "verification browser draft and SQLite database only",
+    "checks": {
+      "explicitUpgradeUndoExact": true,
+      "legacyModeButtonsHidden": true,
+      "mirroredCornerTangentChangedOnlyDraggedArm": true,
+      "oneGestureUndoExact": true,
+      "symmetricDragEqualOppositeArms": true,
+      "escapeAfterNonzeroDragExact": true,
+      "realHeadTangentDragChangedArmsNotKnot": true,
+      "surfaceUndoExact": true,
+      "doubleClickInsertedNearestSectionFrom6To7Points": true,
+      "newLayerBezierWithAllHandles": true,
+      "reloadRecipeExact": true,
+      "sqliteReopenRecipeExact": true
+    },
+    "sqliteCollection": "Verification — Bézier curves",
+    "sqliteRevision": 1,
+    "warningsAndErrors": [],
+    "temporaryTabClosed": true,
+    "serverRestartedWithNewParser": true,
+    "backup": "data/backups/2026-09-23T06-47-02.818Z"
+  },
+  "numericObservations": {
+    "defaultPetalConversionMaximumAlphaByteDifference": {"1024": 5, "2048": 6},
+    "defaultPetalConversion1024ChangedPixels": 2664,
+    "defaultPetalConversion1024MeanAbsoluteDifference": 0.00299072265625,
+    "testedSplitMaximumAlphaByteDifference": 1,
+    "note": "Analytic curve conversion/split preservation does not imply identical finite polygon raster samples. Historical recipes do not automatically convert."
+  },
+  "warmRasterMediansMs": {
+    "petal6Knots170Segments": {"1024Uniform": 72.45, "1024Varied": 121.28, "2048Uniform": 286.68, "2048Varied": 487.53},
+    "ellipse24Knots172Segments": {"1024Uniform": 90.57, "1024Varied": 155.17, "2048Uniform": 313.70, "2048Varied": 571.05}
+  },
+  "limitations": [
+    "Extreme legal ±1 UV handles produced 2410/9644 segments for 6/24 knots. Measured 32-square rasters cost 36.6/116.1 ms; full-atlas 1024 estimates of 37.5/118.9 seconds are extrapolations, not measured runs.",
+    "Queued raster jobs coalesce per layer and stale results are discarded, but running jobs cannot yet be cancelled; worker-error recovery also needs improvement.",
+    "Surface guide construction scans mesh triangles for each curve segment on the main thread. Worker cancellation alone cannot guarantee fluid extreme-curve editing.",
+    "Collapsed UV tangent proxies become actual endpoints after nonzero movement; geometry remains continuous but the diamond can visually approach the knot.",
+    "Off-plate handles use the UV editor rather than fabricated face anchors.",
+    "Glitter correction, directional softness, whole-shape transforms and UV pan/zoom remain separate queued work."
+  ],
+  "provenance": "Project-authored curve mathematics and adapters; existing Three.js/Bun/SQLite dependency credits extended. No new community code or artwork copied."
+}

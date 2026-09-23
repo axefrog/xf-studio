@@ -1,5 +1,7 @@
 # Path, falloff and surface-control feedback
 
+**Bézier/corner checkpoint:** items 4–5 now work in the editor. Recipe-5 retains old automatic curves unless explicitly converted, with UV/surface tangent dragging, Smooth/Symmetric/Corner modes, exact continuous section splitting, Undo/Escape and persistence. Fit includes outside-atlas handles and crossing-eye-boundary arms. 101 tests and browser/SQLite checks pass; [evidence](../../projects/xf-appearance-studio/authoring/evidence/bezier-controls-2026-09-23.json). Remaining refinements: tiny collapsed-arm proxy diamonds visually approach the knot on first movement; extreme handles can create thousands of segments, expensive uncancellable worker jobs and main-thread surface-guide rebuilding. Add cancellation/error recovery and indexed UV triangle lookup without silently reducing final geometry fidelity. Whole-shape gestures, UV navigation and directional softness remain open.
+
 Nathan’s seven explicit requests, 23 September 2026. Preserve these across context changes. Makeup remains the active priority.
 
 1. **Insert at the nearest path section.** Double-click should insert into the section of the curve nearest the click, independent of which point was selected. The old code inserted after `selected`, connecting unrelated parts of the contour. Choose the actual curved segment, handle the closing segment and mirrored side, preserve useful weights/handles, selection and one-step Undo. Verify both source recipe and raster output.

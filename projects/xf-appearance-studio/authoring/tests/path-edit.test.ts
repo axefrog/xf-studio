@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { insertPathPoint, nearestPathSection } from "../src/path-edit";
 import { curve, type Point } from "../src/recipe";
+import { bezierAt, convertToBezier } from "../src/bezier-path";
+import { initialRecipe } from "../src/recipe";
 
 const square = (): Point[] => [
   { u: .3, v: .3, weight: 0 }, { u: .7, v: .3, weight: .4 },
@@ -106,5 +108,49 @@ describe("nearest displayed path insertion", () => {
     expect(insertPathPoint(square(), { u: .5, v: .5 }, { u: 1, v: Infinity })).toBeNull();
     const invalid = square(); invalid[1].weight = NaN;
     expect(insertPathPoint(invalid, { u: .5, v: .5 }, pixels)).toBeNull();
+  });
+});
+
+describe("nearest continuous Bézier insertion", () => {
+  const cubicSquare = () => {
+    const layer = initialRecipe().layers[0]; layer.pathMode = "catmull-rom"; layer.points = square();
+    return convertToBezier(layer).points;
+  };
+  test("snaps to the curve with exact split on all sections including closing", () => {
+    const points = cubicSquare(), before = structuredClone(points);
+    for (const [segment, u, v] of [[0, .5, .2], [1, .8, .5], [2, .5, .8], [3, .2, .5]]) {
+      const found = insertPathPoint(points, {u, v}, pixels)!;
+      expect(found.segment).toBe(segment); expect(found.index).toBe(segment + 1);
+      expect(found.t).toBeCloseTo(.5, 8); expect(found.distancePx).toBeCloseTo(50, 8);
+      expect(found.point.u).toBeCloseTo(found.nearest.u, 13); expect(found.point.v).toBeCloseTo(found.nearest.v, 13);
+      for (const t of [0, .1, .4, .9, 1]) {
+        const old = bezierAt(points, segment, t * found.t), next = bezierAt(found.points, segment, t);
+        expect(next.u).toBeCloseTo(old.u, 13); expect(next.v).toBeCloseTo(old.v, 13); expect(next.weight).toBeCloseTo(old.weight, 13);
+      }
+    }
+    expect(points).toEqual(before);
+    expect(insertPathPoint(points, points[0], pixels)).toBeNull();
+  });
+  test("anisotropic nearest search agrees with a dense independent cubic sampling", () => {
+    const points = cubicSquare(), click = {u: .64, v: .28}, scale = {u: 800, v: 310};
+    const found = nearestPathSection(points, click, scale)!;
+    let dense = Infinity;
+    for (let segment = 0; segment < points.length; segment++)
+      for (let i = 0; i <= 10000; i++) {
+        const p = bezierAt(points, segment, i / 10000);
+        dense = Math.min(dense, Math.hypot((p.u - click.u) * scale.u, (p.v - click.v) * scale.v));
+      }
+    expect(found.distancePx).toBeLessThanOrEqual(dense + 1e-8);
+    expect(dense - found.distancePx).toBeLessThan(.001);
+    const mirrored = points.map(p => ({...p, u: 1 - p.u, handles: {...p.handles!, in: {...p.handles!.in, u: -p.handles!.in.u}, out: {...p.handles!.out, u: -p.handles!.out.u}}}));
+    const reflected = nearestPathSection(mirrored, {u: 1 - click.u, v: click.v}, scale)!;
+    expect(reflected.segment).toBe(found.segment); expect(reflected.t).toBeCloseTo(found.t, 7);
+  });
+  test("collapsed curves and mixed representations cannot create malformed knots", () => {
+    const points: Point[] = cubicSquare().map(p => ({...p, u: .5, v: .5, handles: {...p.handles!, in: {u: 0, v: 0}, out: {u: 0, v: 0}}}));
+    expect(nearestPathSection(points, {u: .6, v: .5}, pixels)!.t).toBe(0);
+    expect(insertPathPoint(points, {u: .6, v: .5}, pixels)).toBeNull();
+    delete points[0].handles;
+    expect(nearestPathSection(points, {u: .6, v: .5}, pixels)).toBeNull();
   });
 });

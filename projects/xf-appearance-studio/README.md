@@ -1,5 +1,7 @@
 # XF Studio
 
+Latest authoring checkpoint: Bézier tangents and smooth/symmetric/corner points work in UV and on the head, with explicit legacy conversion, shape-preserving continuous insertion, Undo and SQLite persistence. Existing designs retain their old curves until upgraded. Whole-shape gestures, directional softness and glitter refinement remain makeup work.
+
 Renamed by Nathan on 2026-09-23. Current product: users author their own eye-makeup presets in the studio, save a local library and compile a collection for **one in-game selector**. This supersedes four in-game layer selectors and the design/colour/finish matrix. Editable layers, expanded plate coverage, predictable stacking and seven familiar finish families remain the first delivery area. See the [product direction and later-feature discussion gates](data/product-direction.md).
 
 All newly generated archive appearance names use the `xfs_` namespace. See [naming and scope](data/naming.md). Photo Mode Tools remains an independent peer project.

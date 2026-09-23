@@ -1,4 +1,6 @@
 import { initialRecipe, curve, raster, coverage, type Point, type Layer } from '../../src/recipe';
+// Freeze the historical study geometry when production defaults evolve.
+const studyLayer = (): Layer => { const l=initialRecipe().layers[0]; l.pathMode='catmull-rom'; l.points=l.points.map(({handles: _handles,...p})=>p); return l; };
 import { boundaryKernel, pointKernel, harmonicGrid, geometry, subdivide, type Field } from './fields';
 import { mkdir } from 'node:fs/promises';
 
@@ -9,7 +11,7 @@ const fixtures:Record<string,Point[]>={
   narrowWing:points([[.3,.24,0],[.38,.23,.2],[.47,.239,1],[.38,.246,.2]]),
   concaveU:points([[.25,.25,0],[.65,.25,0],[.65,.65,1],[.55,.65,1],[.55,.35,0],[.35,.35,0],[.35,.65,1],[.25,.65,1]]),
   nearbyOpposed:points([[.3,.3,0],[.7,.3,0],[.7,.304,1],[.3,.304,1]]),
-  petal:curve(initialRecipe().layers[0].points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}))),
+  petal:curve(studyLayer().points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}))),
 };
 const rng=(()=>{let s=729283;return()=>((s=(Math.imul(s,1664525)+1013904223)>>>0)/4294967296);})();
 const samples=Array.from({length:1500},()=>({u:.2+rng()*.6,v:.18+rng()*.55}));
@@ -56,7 +58,7 @@ for(const [name,polygon] of Object.entries(fixtures)) {
 
 const square=fixtures.opposing;
 const b=boundaryKernel(square,epsilon),p=pointKernel(square,epsilon),h=harmonicGrid(square,144,b);
-const legacy=initialRecipe().layers[0]; legacy.strength={mode:"legacy-nearest"}; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,fields:[{id:"study",u:.5,v:.5,du:0,dv:0,radius:.07}]});
+const legacy=studyLayer(); legacy.strength={mode:"legacy-nearest"}; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,fields:[{id:"study",u:.5,v:.5,du:0,dv:0,radius:.07}]});
 results.centerContinuity=[.01,.0001,.000001,.00000001].map(e=>({e,
   old:coverage(.5,.5+e,legacy)-coverage(.5,.5-e,legacy),
   point:p(.5,.5+e)-p(.5,.5-e),boundary:b(.5,.5+e)-b(.5,.5-e),harmonic:h.at(.5,.5+e)-h.at(.5,.5-e),
@@ -111,7 +113,7 @@ function bakedField(polygon:Point[],cells:number,field:Field) {
     return (data[i]*(1-tx)+data[i+1]*tx)*(1-ty)+(data[i+n]*(1-tx)+data[i+n+1]*tx)*ty;
   };
 }
-const layer=initialRecipe().layers[0]; layer.strength={mode:"legacy-nearest"};layer.points=layer.points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}));
+const layer=studyLayer(); layer.strength={mode:"legacy-nearest"};layer.points=layer.points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}));
 const methods:Record<string,(size:number)=>Uint8ClampedArray>={
   legacy:size=>raster(layer,size),
   point:size=>candidateRaster(layer,size,poly=>pointKernel(poly,epsilon)),

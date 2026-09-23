@@ -15,6 +15,9 @@ const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("h
 const alpha = (rgba: Uint8ClampedArray) => Uint8Array.from({ length: rgba.length / 4 }, (_, i) => rgba[i * 4 + 3]);
 const legacy = (layer: Layer): Layer => ({ ...structuredClone(layer), strength: { mode: "legacy-nearest" } });
 const petal = initialRecipe().layers[0];
+// Preserve the version-4 comparison fixture independently of new curve defaults.
+petal.pathMode = "catmull-rom";
+petal.points = petal.points.map(({ handles: _handles, ...point }) => point);
 petal.points.forEach((p, i) => p.weight = [0, .15, .4, .8, 1, .4][i]);
 const thin: Layer = {
   ...structuredClone(petal), fields: [], symmetry: false, opacity: 1,

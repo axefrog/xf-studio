@@ -6,7 +6,7 @@ import { editLayers } from "../src/layer-stack";
 
 test("explicit smooth upgrade and pigment edits preserve old draft/history through reload", () => {
   const old = { ...initialRecipe(), schema: "xfs/recipe-3",
-    layers: initialRecipe().layers.map(({ strength: _strength, ...layer }) => layer) };
+    layers: initialRecipe().layers.map(({ strength: _strength, pathMode: _pathMode, points, ...layer }) => ({ ...layer, points: points.map(({ handles: _handles, ...point }) => point) })) };
   old.layers[0].points[0].weight = 0;
   const original = JSON.stringify(old), migrated = parseRecipe(old);
   expect(migrated.layers[0].strength).toEqual({ mode: "legacy-nearest" });

@@ -1,6 +1,7 @@
+import { convertToBezier, tessellateBezier, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
-export type Point = { u: number; v: number; weight: number };
+export type Point = { u: number; v: number; weight: number; handles?: Handles };
 export type Field = {
   u: number;
   v: number;
@@ -23,12 +24,13 @@ export type Layer = {
   opacity: number;
   feather: number;
   symmetry: boolean;
+  pathMode: "catmull-rom" | "bezier";
   points: Point[];
   fields: WarpField[];
   strength: Strength;
 };
 export type Recipe = {
-  schema: "xfs/recipe-4";
+  schema: "xfs/recipe-5";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -38,9 +40,9 @@ export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-4",
+    schema: "xfs/recipe-5",
     uv: "gltf-uv0-top-left",
-    layers: Array.from({ length: 4 }, (_, i) => ({
+    layers: Array.from({ length: 4 }, (_, i) => convertToBezier({
       id: `layer-${i + 1}`,
       name: ["Petal wash", "Fine wing", "Inner light", "Accent"][i],
       enabled: i === 0,
@@ -50,6 +52,7 @@ export function initialRecipe(): Recipe {
       strength: { mode: "smooth-boundary", blend: DEFAULT_STRENGTH_BLEND },
       feather: i === 1 ? 0.0015 : 0.012,
       symmetry: true,
+      pathMode: "catmull-rom",
       points: (i === 1
         ? [
             [0.31, 0.241],
@@ -74,11 +77,11 @@ export function initialRecipe(): Recipe {
 }
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
-  type ImportedLayer = Omit<Layer, "fields" | "strength"> & { field?: Field; fields?: WarpField[]; strength?: Strength };
+  type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"] };
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -134,7 +137,32 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentStrength = r.schema === "xfs/recipe-4";
+    const currentPath = r.schema === "xfs/recipe-5";
+    if (!currentPath && ("pathMode" in l || l.points.some(p => "handles" in p)))
+      throw Error("Ambiguous path format.");
+    const pathMode = currentPath ? l.pathMode : "catmull-rom";
+    if (pathMode !== "catmull-rom" && pathMode !== "bezier") throw Error("Invalid path mode.");
+    for (const p of l.points) {
+      const h = p.handles;
+      if (pathMode === "catmull-rom") {
+        if ("handles" in p) throw Error("Catmull–Rom points cannot contain Bézier handles.");
+      } else {
+        const vec = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v) &&
+          num((v as {u:unknown}).u, -1, 1) && num((v as {v:unknown}).v, -1, 1) &&
+          Object.keys(v).every(k => k === "u" || k === "v");
+        if (!h || typeof h !== "object" || Array.isArray(h) ||
+          !["aligned", "symmetric", "corner"].includes(h.mode) || !vec(h.in) || !vec(h.out) ||
+          Object.keys(h).some(k => k !== "in" && k !== "out" && k !== "mode"))
+          throw Error("Invalid Bézier handles.");
+        const inLength = Math.hypot(h.in.u, h.in.v), outLength = Math.hypot(h.out.u, h.out.v);
+        if (h.mode === "symmetric" && (Math.abs(h.in.u + h.out.u) > 1e-10 || Math.abs(h.in.v + h.out.v) > 1e-10))
+          throw Error("Symmetric handles must have equal opposite vectors.");
+        if (h.mode === "aligned" && inLength > 0 && outLength > 0 &&
+          (Math.abs(h.in.u * h.out.v - h.in.v * h.out.u) > 1e-10 * inLength * outLength || h.in.u * h.out.u + h.in.v * h.out.v > 0))
+          throw Error("Aligned handles must point in opposite directions.");
+      }
+    }
+    const currentStrength = r.schema === "xfs/recipe-4" || currentPath;
     if (!currentStrength && "strength" in l) throw Error("Ambiguous pigment strength format.");
     let strength: Strength = { mode: "legacy-nearest" };
     if (currentStrength) {
@@ -170,11 +198,12 @@ export function parseRecipe(value: unknown): Recipe {
       fieldIds.add(f.id);
     }
     const { field: _legacyField, fields: _fields, ...settings } = l;
-    layers.push({ ...settings, fields: fields as WarpField[], strength });
+    layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-4", layers });
+  return structuredClone({ ...r, schema: "xfs/recipe-5", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
+  if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);
   const out: Point[] = [];
   const n = points.length;
   for (let i = 0; i < n; i++) {

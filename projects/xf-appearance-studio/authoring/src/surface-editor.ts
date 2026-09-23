@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
+import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
 import {
   SurfaceMap,
   anchorPosition,
@@ -9,7 +10,8 @@ import {
 import type { createScene } from "./scene";
 
 type Handle = {
-  kind: "point" | "origin" | "field";
+  kind: "point" | "tangent" | "origin" | "field";
+  side?: "in" | "out";
   index: number;
   fieldId?: string;
   mirror: boolean;
@@ -41,10 +43,10 @@ export function createSurfaceEditor(
   scene.add(group);
   const pointGeometry = new THREE.BufferGeometry(),
     lineGeometry = new THREE.BufferGeometry();
-  // Recipe limits, mirrored: 24 points, two handles/field, six samples/point,
-  // 16 segments/arrow and a 64-segment ring for the selected field. Reuse buffers.
-  const maxHandles = (24 + 2 * MAX_FIELDS) * 2,
-    maxSegments = (24 * 6 + MAX_FIELDS * 16 + 64) * 2;
+  // Recipe limits, mirrored: 24 knots, two selected-knot tangents, two handles/field.
+  // Adaptive outlines share the raster budget; each tangent connector has 16 segments.
+  const maxHandles = (24 + 2 + 2 * MAX_FIELDS) * 2,
+    maxSegments = (Math.max(24 * 6, MAX_CURVE_POINTS) + 32 + MAX_FIELDS * 16 + 64) * 2;
   for (const name of ["position", "color"])
     pointGeometry.setAttribute(
       name,
@@ -106,7 +108,9 @@ export function createSurfaceEditor(
       }
     | undefined;
   let hovered: Handle | undefined,
-    unmapped = 0;
+    unmapped = 0,
+    unmappedTangents = 0,
+    tangentWarningKey = "";
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
 
@@ -115,6 +119,7 @@ export function createSurfaceEditor(
     if (!layer) return;
     const key = JSON.stringify([
         layer.points,
+        layer.pathMode,
         layer.fields,
         layer.symmetry,
         layer.enabled,
@@ -126,17 +131,20 @@ export function createSurfaceEditor(
     handles = [];
     segments = [];
     unmapped = 0;
+    unmappedTangents = 0;
     function handle(
       kind: Handle["kind"],
       index: number,
       uv: UV,
       mirror: boolean,
       fieldId?: string,
+      side?: Handle["side"],
     ) {
       const anchor = map.anchor(uv);
-      if (anchor && handles.length < maxHandles)
+      if (anchor)
         handles.push({
           kind,
+          side,
           index,
           fieldId,
           uv,
@@ -144,22 +152,36 @@ export function createSurfaceEditor(
           anchor,
           world: new THREE.Vector3(),
         });
-      else unmapped++;
+      else {
+        unmapped++;
+        if (kind === "tangent") unmappedTangents++;
+      }
     }
     function path(path: UV[]) {
       for (let i = 1; i < path.length; i++) {
         const a = map.anchor(path[i - 1]),
           b = map.anchor(path[i]);
-        if (a && b && segments.length < maxSegments && map.continuous(path[i - 1], path[i]))
+        if (a && b && map.continuous(path[i - 1], path[i]))
           segments.push([a, b]);
       }
     }
     for (const mirror of layer.symmetry ? [false, true] : [false]) {
       const reflect = (p: UV) => ({ u: mirror ? 1 - p.u : p.u, v: p.v });
-      layer.points.slice(0, 24).forEach((p, i) => handle("point", i, reflect(p), mirror));
+      layer.points.forEach((p, i) => handle("point", i, reflect(p), mirror));
       const outline = curve(layer.points, 6);
       path([...outline, outline[0]].map(reflect));
-      layer.fields.slice(0, MAX_FIELDS).forEach((f, i) => {
+      const selectedPoint = layer.points[hooks.selected()];
+      if (layer.pathMode === "bezier" && selectedPoint?.handles) {
+        for (const side of ["in", "out"] as const) {
+          const endpoint = tangentEndpoint(selectedPoint, side);
+          handle("tangent", hooks.selected(), reflect(endpoint), mirror, undefined, side);
+          path(Array.from({ length: 17 }, (_, j) => reflect({
+            u: selectedPoint.u + (endpoint.u - selectedPoint.u) * j / 16,
+            v: selectedPoint.v + (endpoint.v - selectedPoint.v) * j / 16,
+          })));
+        }
+      }
+      layer.fields.forEach((f, i) => {
         handle("field", i, reflect({ u: f.u + f.du, v: f.v + f.dv }), mirror, f.id);
         handle("origin", i, reflect(f), mirror, f.id);
         path(Array.from({ length: 17 }, (_, j) => reflect({
@@ -174,6 +196,13 @@ export function createSurfaceEditor(
           })));
       });
     }
+    // Invalid work must fail explicitly rather than silently dropping guides.
+    if (handles.length > maxHandles || segments.length > maxSegments)
+      throw new Error("Surface guide capacity exceeded the validated path budget.");
+    const warningKey = unmappedTangents ? `${layer.id}:${hooks.selected()}:${unmappedTangents}` : "";
+    if (warningKey && warningKey !== tangentWarningKey)
+      hooks.message("Some Bézier handles lie outside the eye plate · edit them in the UV pane");
+    tangentWarningKey = warningKey;
     pointGeometry.setDrawRange(0, handles.length);
     lineGeometry.setDrawRange(0, segments.length * 2);
   }
@@ -198,19 +227,20 @@ export function createSurfaceEditor(
     handles.forEach((h, i) => {
       h.world.copy(anchorPosition(h.anchor, vertex, 0.0007));
       positions.setXYZ(i, h.world.x, h.world.y, h.world.z);
-      const selected = h.kind === "point"
+      const selected = (h.kind === "point" || h.kind === "tangent")
           ? h.index === hooks.selected()
           : h.fieldId === hooks.selectedField(),
         hover =
           h.kind === hovered?.kind &&
           h.index === hovered.index &&
+          h.side === hovered.side &&
           h.fieldId === hovered.fieldId &&
           h.mirror === hovered.mirror;
       const c = new THREE.Color(
         hover
           ? 0xffffb5
           : selected
-            ? h.kind === "point" ? 0xffffff : 0xb1ffcd
+            ? h.kind === "point" ? 0xffffff : h.kind === "tangent" ? 0xffcea0 : 0xb1ffcd
             : h.kind === "point"
               ? 0xe7a7d1
               : h.kind === "origin"
@@ -265,8 +295,8 @@ export function createSurfaceEditor(
     // At a zero-length field, prefer its endpoint so the first drag creates direction.
     // If fields overlap, make the currently selected field directly draggable.
     const ordered = [...handles].sort((a, b) =>
-      Number(b.fieldId === hooks.selectedField() && b.kind !== "point") -
-      Number(a.fieldId === hooks.selectedField() && a.kind !== "point"));
+      Number(!!b.fieldId && b.fieldId === hooks.selectedField()) -
+      Number(!!a.fieldId && a.fieldId === hooks.selectedField()));
     for (const h of ordered) {
       const p = h.world.clone().project(camera);
       if (p.z < -1 || p.z > 1) continue;
@@ -293,8 +323,8 @@ export function createSurfaceEditor(
     if (!drag || !enabled || hooks.layer() !== drag.layer || !drag.layer.enabled)
       return false;
     const { handle: h, target, layer } = drag;
-    return h.kind === "point"
-      ? layer.points[h.index] === target
+    return h.kind === "point" || h.kind === "tangent"
+      ? layer.points[h.index] === target && (h.kind !== "tangent" || (layer.pathMode === "bezier" && !!layer.points[h.index].handles))
       : layer.fields.some((f) => f.id === h.fieldId && f === target);
   }
   function stop(cancel = false) {
@@ -319,7 +349,7 @@ export function createSurfaceEditor(
       const handle = handleAt(e.clientX, e.clientY);
       const layer = hooks.layer();
       if (!handle || !layer) return;
-      const target = handle.kind === "point"
+      const target = handle.kind === "point" || handle.kind === "tangent"
         ? layer.points[handle.index]
         : layer.fields.find((f) => f.id === handle.fieldId);
       if (!target) return;
@@ -327,7 +357,7 @@ export function createSurfaceEditor(
       e.stopImmediatePropagation();
       const controlsEnabled = controls.enabled;
       controls.enabled = false;
-      if (handle.kind === "point") hooks.select(handle.index);
+      if (handle.kind === "point" || handle.kind === "tangent") hooks.select(handle.index);
       else hooks.selectField(handle.fieldId!);
       drag = { handle, layer, target, last: handle.uv, pointer: e.pointerId,
         changed: false, controlsEnabled };
@@ -367,6 +397,9 @@ export function createSurfaceEditor(
       if (h.kind === "point") {
         l.points[h.index].u = clamp(u);
         l.points[h.index].v = clamp(v);
+      } else if (h.kind === "tangent") {
+        // Keep knot identity stable so an in-progress gesture remains valid.
+        Object.assign(l.points[h.index], moveTangent(l.points[h.index], h.side!, { u, v }));
       } else {
         const field = l.fields.find((f) => f.id === h.fieldId)!;
         if (h.kind === "origin") {
@@ -423,6 +456,10 @@ export function createSurfaceEditor(
       enabled,
       dragging: !!drag,
       unmapped,
+      unmappedTangents,
+      tangentFallback: unmappedTangents
+        ? "Some Bézier handles lie outside the eye plate; edit them in the UV pane."
+        : null,
       selectedField: hooks.selectedField(),
       segments: segments.length,
       capacity: { handles: maxHandles, segments: maxSegments },
@@ -438,6 +475,7 @@ export function createSurfaceEditor(
         const obstruction = ray.intersectObject(head, false)[0];
         return {
           kind: h.kind,
+          side: h.side,
           index: h.index,
           fieldId: h.fieldId,
           mirror: h.mirror,
