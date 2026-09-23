@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes } from "../src/piercing-preview";
+import { aggregatePrcStyle, chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes,
+  type PiercingStyle } from "../src/piercing-preview";
 import { piercingPaletteColor } from "../src/piercing-palette";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import type { SavedV } from "../src/save-reader";
@@ -49,6 +50,41 @@ test("private PRC slot uses its own bounded local asset namespace", () => {
   expect(() => parsePiercingManifest({ ...prc, assets: source.assets })).toThrow();
   expect(() => parsePiercingManifest({ ...source, assets: prc.assets })).toThrow();
   expect(() => parsePiercingManifest({ ...prc, assets: [{ ...prc.assets[0], url: "https://example.invalid/slot.glb" }] })).toThrow();
+});
+
+test("PRC aggregate shares one colour across all resolved slots and preserves diagnostic choices", () => {
+  const colours = [
+    { definition: "i0_000_pwa__earring__01_silver", index: 1, label: "Silver (approx.)",
+      swatch: "#d6d5d3", previewColor: "#d6d5d3" },
+    { definition: "i0_000_pwa__earring__02_gold", index: 2, label: "Gold (approx.)",
+      swatch: "#b87123", previewColor: "#b87123" },
+  ];
+  const diagnostics: PiercingStyle[] = [50, 72, 74].map(slot => ({
+    id: `prc_fpm${slot}`, index: slot, label: `Inspect ${slot}`,
+    resourceHash: "13134131550013307257", choices: colours.map(colour => ({ ...colour,
+      parts: [{ mesh: `prc_fpm${slot}`, mask: "9223372036854775807" }] })),
+  }));
+  const aggregate = aggregatePrcStyle(diagnostics);
+  expect(aggregate.id).toBe("prc_active_bank");
+  expect(aggregate.choices.map(c => c.definition)).toEqual(colours.map(c => c.definition));
+  expect(aggregate.choices[1]!.parts.map(p => p.mesh)).toEqual(["prc_fpm50", "prc_fpm72", "prc_fpm74"]);
+  expect(aggregate.choices[1]!.previewColor).toBe("#b87123");
+  expect(diagnostics[0]!.choices[1]!.parts).toHaveLength(1);
+  const manifest = parsePiercingManifest({ schema: "xfs/local-prc-piercings-1", source: "private fixture",
+    assets: diagnostics.map(s => ({ id: s.id, url: `/assets/prc/${s.id}.glb`, sha256: "a".repeat(64) })),
+    styles: [aggregate, ...diagnostics] });
+  expect(manifest.styles).toHaveLength(4);
+  const state = freshWorkspace();
+  state.preview.piercingStyle = aggregate.id;
+  state.preview.piercingDefinition = aggregate.choices[1]!.definition;
+  expect(parseWorkspace(JSON.parse(JSON.stringify(state))).preview.piercingStyle).toBe("prc_active_bank");
+  expect(parseWorkspace(JSON.parse(JSON.stringify(state))).preview.piercingDefinition).toBe(colours[1]!.definition);
+  const divergent = structuredClone(diagnostics);
+  divergent[1]!.choices[1]!.previewColor = "#000000";
+  expect(() => aggregatePrcStyle(divergent)).toThrow("one verified appearance and colour");
+  divergent[1]!.choices[1]!.previewColor = colours[1]!.previewColor;
+  divergent[2]!.choices[0]!.parts[0]!.mesh = "prc_fpm50";
+  expect(() => aggregatePrcStyle(divergent)).toThrow("Duplicate PRC aggregate mesh");
 });
 
 test("visible source palette layers produce a nonblack linear-to-display preview tint", () => {

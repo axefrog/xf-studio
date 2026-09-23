@@ -4,7 +4,7 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { parsePiercingManifest, type PiercingManifest } from "../src/piercing-preview";
+import { aggregatePrcStyle, parsePiercingManifest, type PiercingManifest } from "../src/piercing-preview";
 
 const root = resolve(import.meta.dir, "../../../../research/consumers/prc-preview");
 const output = resolve(import.meta.dir, "../public/assets/prc");
@@ -30,13 +30,27 @@ const appBytes = pinnedRead(appPath, "01d4cf980d5531a76fd7424555356103979f48a4d4
 const appJsonBytes = pinnedRead(`${appPath}.json`, "3c35aa9cb66bdaf8b318bd34e561fa1b5f24cda2b674eb9039ae53e3f8674294");
 const app = JSON.parse(appJsonBytes.toString());
 if (app.Header.GameVersion !== 2310) throw Error("PRC framework is not the inspected 2.31 source");
-const appearance = app.Data.RootChunk.appearances.map((a: any) => a.Data)
-  .find((a: any) => unwrap(a.name) === "i0_000_pwa__earring__01_silver");
-if (!appearance) throw Error("PRC framework lacks the female silver appearance");
+const vanillaPath = resolve(import.meta.dir, "../public/assets/piercings/manifest.json");
+const vanillaBytes = readFileSync(vanillaPath);
+const vanilla = parsePiercingManifest(JSON.parse(vanillaBytes.toString()));
+if (vanilla.schema !== "xfs/local-vanilla-piercings-2") throw Error("Missing current vanilla colour reference");
+const reference = vanilla.styles.find(s => s.id === "piercings_12" && s.resourceHash === fnv64(appDepot));
+if (!reference || reference.choices.length !== 16) throw Error("Missing option-12 colour reference");
+const femaleAppearances = app.Data.RootChunk.appearances.map((a: any) => a.Data)
+  .filter((a: any) => unwrap(a.name)?.startsWith("i0_000_pwa__earring__"));
+if (femaleAppearances.length !== 16) throw Error("Unexpected PRC female colour bank");
+const appearances = new Map<string, any>(femaleAppearances.map((a: any) => [unwrap(a.name), a]));
+for (const colour of reference.choices) {
+  const chunks = appearances.get(colour.definition)?.compiledData?.Data?.Chunks;
+  if (!Array.isArray(chunks) || chunks.length !== 128 ||
+    chunks.some((c: any, i: number) => unwrap(c.name) !== `fpm${i + 1}`))
+    throw Error(`Incomplete PRC slot bank in ${colour.definition}`);
+}
+if (appearances.size !== 16) throw Error("Duplicate PRC female appearance");
 
 const slots = [
   {
-    index: 50, folder: "stud", label: "PRC · nose stud (slot 50)",
+    index: 50, folder: "stud", label: "PRC · inspect nose stud (slot 50)",
     archiveSha: "982c70c5eba41ca7072c4d40d1ea8b0f116a700f615c0650282d9108e0945c50",
     morphSha: "42b4c7e82f7e4fbf3500d2f79e7c1f6ac89eeda773d4bfbc2137c08ce707374f",
     morphJsonSha: "71f76d67c23e76604558ded8e98b82dd8c9018856ef4c60dd3acb642398c5bd1",
@@ -47,7 +61,7 @@ const slots = [
     meshes: 2, bones: 6, targets: 21,
   },
   {
-    index: 72, folder: "rings72", label: "PRC · front nostril ring (slot 72)",
+    index: 72, folder: "rings72", label: "PRC · inspect front nostril ring (slot 72)",
     archiveSha: "0fd967c071ca5c5c77ce9911accaf426ebe8c896dd72324326e6fc72e87b4cc5",
     morphSha: "d7b5238fd9cd4990fb9b3f4a53fa8148b0ae7b9fc60c9fe8f16b4b576008fc32",
     morphJsonSha: "b263db5118d676f1d3c58a3c936f50400fab630d014cdae6538b034abe5e0062",
@@ -57,7 +71,7 @@ const slots = [
     meshes: 1, bones: 6, targets: 21,
   },
   {
-    index: 74, folder: "rings74", label: "PRC · front nostril ring (slot 74)",
+    index: 74, folder: "rings74", label: "PRC · inspect front nostril ring (slot 74)",
     archiveSha: "8a412861555b0cf6695bb7f6dd05175203851a4cb92dde830f5534062cd0a355",
     morphSha: "6908833655c4b99ab60eca15331bccdc7d24b6c76ec687b43410a04a2973c40e",
     morphJsonSha: "c1249dc8a90f1a23865d1b6a7ddded3287c83b4ed884f48d1cfee96b19ae7039",
@@ -72,6 +86,7 @@ const slots = [
 const evidence = [];
 const assets: PiercingManifest["assets"] = [];
 const styles: PiercingManifest["styles"] = [];
+const sharedMaterials = new Map<string, string>();
 for (const slot of slots) {
   const name = `fpm${slot.index}`;
   const morphDepot = `eagul\\piercingmorphs\\female\\${name}.morphtarget`;
@@ -90,10 +105,20 @@ for (const slot of slots) {
     if (baseJson.Header.GameVersion !== 2310 || baseJson.Data.RootChunk.boneNames.length !== slot.bones)
       throw Error(`PRC ${name} linked mesh/rig changed`);
   }
-  const component = appearance.compiledData.Data.Chunks.find((c: any) => unwrap(c.name) === name);
-  if (!component || unwrap(component.morphResource.DepotPath) !== fnv64(morphDepot) ||
-    unwrap(component.meshAppearance) !== "silver" || component.chunkMask !== "9223372036854775807")
-    throw Error(`PRC ${name} framework component changed`);
+  const choices = reference.choices.map(colour => {
+    const component = appearances.get(colour.definition).compiledData.Data.Chunks[slot.index - 1];
+    const material = unwrap(component.meshAppearance);
+    if (unwrap(component.name) !== name || unwrap(component.morphResource.DepotPath) !== fnv64(morphDepot) ||
+      !material || component.chunkMask !== "9223372036854775807")
+      throw Error(`PRC ${name} framework component changed in ${colour.definition}`);
+    const shared = sharedMaterials.get(colour.definition);
+    if (shared && shared !== material) throw Error(`PRC slots have differing materials in ${colour.definition}`);
+    sharedMaterials.set(colour.definition, material);
+    return { definition: colour.definition, index: colour.index,
+      label: `${colour.label} (approx.)`, swatch: colour.previewColor,
+      previewColor: colour.previewColor,
+      parts: [{ mesh: `prc_${name}`, mask: component.chunkMask as string }] };
+  });
   if (glbBytes.toString("ascii", 0, 4) !== "glTF" || glbBytes.byteLength > 4 * 1024 * 1024)
     throw Error(`PRC ${name} GLB exceeds private preview budget`);
   const glb = JSON.parse(glbBytes.toString("utf8", 20, 20 + glbBytes.readUInt32LE(12)));
@@ -110,19 +135,19 @@ for (const slot of slots) {
   const id = `prc_${name}`;
   assets.push({ id, url: `/assets/prc/${id}.glb`, sha256: digest(glbBytes) });
   styles.push({ id, index: slot.index, label: slot.label, resourceHash: fnv64(appDepot),
-    choices: [{ definition: "i0_000_pwa__earring__01_silver", index: 1,
-      label: "Silver (approx.)", swatch: "#d6d5d3", previewColor: "#d6d5d3",
-      parts: [{ mesh: id, mask: component.chunkMask }] }] });
+    choices });
   evidence.push({ slot: slot.index, sourceArchiveSha256: slot.archiveSha,
     morphDepot, morphSha256: digest(morphBytes),
     morphJsonSha256: digest(morphJsonBytes), baseMeshDepot: slot.baseDepot,
     baseMeshSha256: slot.baseSha || "game-archive", exportedGlbSha256: digest(glbBytes),
     baseMeshJsonSha256: slot.baseJsonSha || "game-archive",
-    meshes: slot.meshes, bones: slot.bones, morphTargets: slot.targets, chunkMask: component.chunkMask });
+    meshes: slot.meshes, bones: slot.bones, morphTargets: slot.targets,
+    chunkMask: choices[0]!.parts[0]!.mask });
 }
+styles.unshift(aggregatePrcStyle(styles));
 const manifest: PiercingManifest = {
   schema: "xfs/local-prc-piercings-1",
-  source: "MO2 2025 (again): selected eagul PRC v1.1 slots 50, 72, 74; offline source expectation",
+  source: "MO2 2025 (again): candidate eagul PRC slots 50, 72, 74; shared-colour approximation, not a runtime winner",
   assets, styles,
 };
 parsePiercingManifest(manifest);
@@ -135,7 +160,10 @@ writeFileSync(resolve(output, "manifest.json"), JSON.stringify(manifest, null, 2
 writeFileSync(resolve(import.meta.dir, "../evidence/prc-piercing-intake.json"), JSON.stringify({
   source: manifest.source, frameworkArchiveSha256: "6e73610b3cdd85552aeb61f6a5a7c7fd3a9cf0f26b4d4f475977b255c8e17499",
   appDepot, appSha256: digest(appBytes), appJsonSha256: digest(appJsonBytes),
-  definition: styles[0].choices[0].definition, slots: evidence,
-  status: "Three local skinned slots; materials and effective runtime archive order unverified. Not redistributable.",
+  vanillaOption12ManifestSha256: digest(vanillaBytes),
+  frameworkColours: reference.choices.map(choice => ({ definition: choice.definition,
+    meshAppearance: sharedMaterials.get(choice.definition), previewColor: choice.previewColor })),
+  aggregateStyle: styles[0]!.id, definition: styles[0]!.choices[0]!.definition, slots: evidence,
+  status: "Three local skinned slots, combined under a shared approximate colour or individually inspectable. Stud stone material, other materials and runtime archive winners unverified. Not redistributable.",
 }, null, 2) + "\n");
-console.log("Prepared three private PRC styles: slots 50, 72, 74");
+console.log("Prepared one aggregate and three diagnostic private PRC styles, each with 16 approximate colours");

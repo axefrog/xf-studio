@@ -650,9 +650,15 @@ function setupPiercingControls() {
     $("piercing-note").textContent = `Piercing preview unavailable: ${viewer!.evidence.piercingError}; ${viewer!.evidence.prcError}.`;
     return;
   }
-  $("piercing-note").textContent = viewer!.prcManifest
-    ? "Vanilla and private PRC choices change only this viewport. PRC slots 50, 72 and 74 have locally resolved skinned geometry and approximate silver shading."
-    : "A preview choice changes only this viewport. PRC resources are unavailable; vanilla material colours remain approximate.";
+  function updatePiercingNote() {
+    $("piercing-note").textContent = !viewer!.prcManifest
+      ? "A preview choice changes only this viewport. PRC resources are unavailable; vanilla material colours remain approximate."
+      : style.value === "prc_active_bank"
+        ? "Private PRC preview: active candidate slots 50, 72 and 74 together, sharing one approximate framework colour. Stud stone material and effective game winners remain unresolved. Viewport only."
+        : style.value.startsWith("prc_")
+          ? "Single PRC slot for inspection only; the game framework includes the active slots together. Colours, stud stone material and effective winners are approximate or unresolved. Viewport only."
+          : "Vanilla and private PRC choices change only this viewport. PRC has an aggregate active-slot view and separate diagnostic slot views; materials and runtime winners remain unverified.";
+  }
   input("piercings").disabled = false;
   style.disabled = false;
   for (const entry of styles) {
@@ -663,13 +669,14 @@ function setupPiercingControls() {
     colour.replaceChildren();
     const entry = styles.find(s => s.id === style.value);
     colour.disabled = !entry;
-    if (!entry) { viewer!.setPiercingPreview("", ""); return; }
+    if (!entry) { viewer!.setPiercingPreview("", ""); updatePiercingNote(); return; }
     for (const choice of entry.choices) {
       const option = document.createElement("option");
       option.value = choice.definition; option.textContent = `${choice.index}. ${choice.label}`; colour.append(option);
     }
     colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
     viewer!.setPiercingPreview(entry.id, colour.value);
+    updatePiercingNote();
   }
   style.value = styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
   fillColours(workspace.preview.piercingDefinition);

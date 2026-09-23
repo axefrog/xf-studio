@@ -1,9 +1,93 @@
 {
-  "source": "MO2 2025 (again): selected eagul PRC v1.1 slots 50, 72, 74; offline source expectation",
+  "source": "MO2 2025 (again): candidate eagul PRC slots 50, 72, 74; shared-colour approximation, not a runtime winner",
   "frameworkArchiveSha256": "6e73610b3cdd85552aeb61f6a5a7c7fd3a9cf0f26b4d4f475977b255c8e17499",
   "appDepot": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_14.app",
   "appSha256": "01d4cf980d5531a76fd7424555356103979f48a4d4a60e297ba67074529abe13",
   "appJsonSha256": "3c35aa9cb66bdaf8b318bd34e561fa1b5f24cda2b674eb9039ae53e3f8674294",
+  "vanillaOption12ManifestSha256": "7784a2df255dbdf45403a8d99d8d41aa86f10dd21e9907d11958b2cd76e2f7cd",
+  "frameworkColours": [
+    {
+      "definition": "i0_000_pwa__earring__01_silver",
+      "meshAppearance": "silver",
+      "previewColor": "#efeae7"
+    },
+    {
+      "definition": "i0_000_pwa__earring__02_gold",
+      "meshAppearance": "gold",
+      "previewColor": "#b87123"
+    },
+    {
+      "definition": "i0_000_pwa__earring__07_pearl",
+      "meshAppearance": "pearl",
+      "previewColor": "#eae0c8"
+    },
+    {
+      "definition": "i0_000_pwa__earring__04_cooper",
+      "meshAppearance": "cooper",
+      "previewColor": "#b87333"
+    },
+    {
+      "definition": "i0_000_pwa__earring__05_red",
+      "meshAppearance": "plastic_red",
+      "previewColor": "#8f0808"
+    },
+    {
+      "definition": "i0_000_pwa__earring__06_pink",
+      "meshAppearance": "plastic_pink",
+      "previewColor": "#ce2d84"
+    },
+    {
+      "definition": "i0_000_pwa__earring__03_black",
+      "meshAppearance": "plastic_black",
+      "previewColor": "#383838"
+    },
+    {
+      "definition": "i0_000_pwa__earring__08_blue",
+      "meshAppearance": "blue",
+      "previewColor": "#4981be"
+    },
+    {
+      "definition": "i0_000_pwa__earring__09_mixed",
+      "meshAppearance": "mixed",
+      "previewColor": "#b8b5e1"
+    },
+    {
+      "definition": "i0_000_pwa__earring__10_mixed2",
+      "meshAppearance": "mixed2",
+      "previewColor": "#bea08c"
+    },
+    {
+      "definition": "i0_000_pwa__earring__11_neon_teal",
+      "meshAppearance": "neon_teal",
+      "previewColor": "#54f5d2"
+    },
+    {
+      "definition": "i0_000_pwa__earring__12_pink_metalic",
+      "meshAppearance": "pink_metalic",
+      "previewColor": "#ce878a"
+    },
+    {
+      "definition": "i0_000_pwa__earring__13_rainbow",
+      "meshAppearance": "rainbow",
+      "previewColor": "#9b97a9"
+    },
+    {
+      "definition": "i0_000_pwa__earring__14_rose_gold",
+      "meshAppearance": "rose_gold",
+      "previewColor": "#eb938b"
+    },
+    {
+      "definition": "i0_000_pwa__earring__15_steel",
+      "meshAppearance": "steel",
+      "previewColor": "#797979"
+    },
+    {
+      "definition": "i0_000_pwa__earring__16_wood",
+      "meshAppearance": "wood",
+      "previewColor": "#949494"
+    }
+  ],
+  "aggregateStyle": "prc_active_bank",
   "definition": "i0_000_pwa__earring__01_silver",
   "slots": [
     {
@@ -52,5 +136,5 @@
       "chunkMask": "9223372036854775807"
     }
   ],
-  "status": "Three local skinned slots; materials and effective runtime archive order unverified. Not redistributable."
+  "status": "Three local skinned slots, combined under a shared approximate colour or individually inspectable. Stud stone material, other materials and runtime archive winners unverified. Not redistributable."
 }

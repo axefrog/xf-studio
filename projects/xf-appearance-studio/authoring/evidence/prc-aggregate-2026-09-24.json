@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-24",
+  "scope": "Private viewport-only PRC aggregate of profile-enabled candidate slots 50, 72 and 74",
+  "inputs": {
+    "source": "Pinned local framework/item resource and GLB hashes in prc-piercing-intake.json; ignored payloads",
+    "frameworkAppearances": 16,
+    "componentsPerFemaleAppearance": 128,
+    "activeCandidateSlots": [50, 72, 74],
+    "privateGlbAssets": 3,
+    "materialTreatment": "One shared approximate tint from the verified local vanilla option-12 colour catalog; stud chunk 2 and game shading unresolved"
+  },
+  "generated": {
+    "manifestSchema": "xfs/local-prc-piercings-1",
+    "aggregateStyle": "prc_active_bank",
+    "diagnosticStyles": ["prc_fpm50", "prc_fpm72", "prc_fpm74"],
+    "choicesPerStyle": 16,
+    "aggregatePartsPerChoice": 3,
+    "diagnosticPartsPerChoice": 1
+  },
+  "verification": {
+    "intake": "bun tools/intake_prc.ts passed with source and palette validation",
+    "unit": "234 pass, 0 fail across 55 files after copying the ignored local head/plate fixtures into the isolated worktree",
+    "typecheck": "bun run check passed",
+    "build": "bun run build passed",
+    "browser": {
+      "url": "http://127.0.0.1:4451/?verify=1",
+      "isolation": "Separate worktree server and verification browser storage; user's active studio draft untouched",
+      "observations": [
+        "Aggregate silver displayed two nose hoops and the stud concurrently",
+        "Changing the shared choice to gold tinted all visible parts together",
+        "Piercings toggle hid the combined geometry and restored it",
+        "Character-creator idle moved the head while the combined piercings remained attached in the sampled view",
+        "Reload restored aggregate style, gold choice, enabled piercing toggle and idle state",
+        "Selecting diagnostic slot 50 hid the hoops and left only the stud",
+        "Returning to Saved V / Off removed the PRC-specific note and disabled the colour selector"
+      ],
+      "consoleWarnOrError": 0
+    }
+  },
+  "limits": "Approximate browser colours; effective archive winners, stud stone material, exact REDengine shading and game rendering not verified. PRC payloads remain ignored/local and not redistributable."
+}

@@ -12,6 +12,29 @@ export type PiercingManifest = {
   schema: "xfs/local-vanilla-piercings-2" | "xfs/local-prc-piercings-1"; source: string;
   assets: PiercingAsset[]; styles: PiercingStyle[];
 };
+
+/** One framework appearance chooses one colour for all resolved PRC slots. */
+export function aggregatePrcStyle(diagnostics: PiercingStyle[]): PiercingStyle {
+  if (diagnostics.length < 2 || diagnostics.length > 8) throw Error("Invalid PRC aggregate size");
+  const first = diagnostics[0]!;
+  if (!first.choices.length || first.choices.length > 32 || new Set(diagnostics.map(s => s.id)).size !== diagnostics.length)
+    throw Error("Invalid PRC diagnostic styles");
+  const choices = first.choices.map(choice => {
+    const parts = diagnostics.map(style => {
+      const match = style.choices.find(c => c.definition === choice.definition);
+      if (style.resourceHash !== first.resourceHash || style.choices.length !== first.choices.length || !match ||
+        match.index !== choice.index || match.previewColor !== choice.previewColor ||
+        match.parts.length !== 1)
+        throw Error("PRC slots do not share one verified appearance and colour");
+      return match.parts[0]!;
+    });
+    if (new Set(parts.map(p => p.mesh)).size !== parts.length) throw Error("Duplicate PRC aggregate mesh");
+    return { ...choice, parts };
+  });
+  return { id: "prc_active_bank", index: 12,
+    label: `PRC · combined ${diagnostics.map(s => s.index).join("+")} (approx.)`,
+    resourceHash: first.resourceHash, choices };
+}
 const hash = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 20 && /^[1-9][0-9]*$/.test(v) && BigInt(v) <= 18446744073709551615n;
 const uint64 = (v: unknown): v is string =>
