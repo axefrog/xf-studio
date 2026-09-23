@@ -3,6 +3,7 @@
 Dynamic expansion checks model inspected ArchiveXL rules; they do not run the game.
 """
 import hashlib
+import argparse
 import json
 from pathlib import Path
 import subprocess
@@ -11,10 +12,16 @@ from PIL import Image
 from mip_maps import destination_contributions, mip_levels, read_dds_levels
 
 HERE=Path(__file__).resolve().parent
-WK=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
+parser=argparse.ArgumentParser()
+parser.add_argument('--build',type=Path,help='Explicit intermediate build to verify without changing fixture pointers')
+parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
+args=parser.parse_args()
+WK=args.wolvenkit.resolve()
 def load(p): return json.loads(p.read_text(encoding='utf-8-sig'))
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
-out=Path(load(HERE/'latest-build.json')['build'])
+out=args.build.resolve() if args.build else Path(load(HERE/'latest-build.json')['build'])
+if not WK.is_file(): parser.error(f'WolvenKit is missing: {WK}')
+if not (out/'build.json').is_file(): parser.error(f'Build manifest is missing: {out}')
 if not (out/'export-dds').is_dir():
     raise RuntimeError('The selected build predates supplied mip chains; rerun build.py before verify.py')
 build=load(out/'build.json');plan=build['plan'];rt=out/'roundtrip';archive=out/'archive'
@@ -184,6 +191,9 @@ report={'build':str(out),'presetCount':len(plan['presets']),'selectorCount':1,'s
         'Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.',
         'Zero-offset plate control; outward clearance candidate still required.',
         'Flat matte/satin/metallic adapter only; other optical finishes remain required work.']}
-(HERE/'result.json').write_text(json.dumps(report,indent=2)+'\n')
-(HERE/'latest-build.json').write_text(json.dumps({'build':str(out),'validated':True},indent=2)+'\n')
+if args.build:
+    (out/'verification.json').write_text(json.dumps(report,indent=2)+'\n')
+else:
+    (HERE/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+    (HERE/'latest-build.json').write_text(json.dumps({'build':str(out),'validated':True},indent=2)+'\n')
 print(json.dumps({k:v for k,v in report.items() if k not in ['resolvedDynamicPaths','decodedPixelChecks','limits']},indent=2))

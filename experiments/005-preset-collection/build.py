@@ -19,12 +19,25 @@ from mip_maps import dds_bytes, mip_levels
 HERE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser()
 parser.add_argument('--collection',type=Path,default=HERE/'collection.json')
+parser.add_argument('--output',type=Path,help='Fresh isolated intermediate build directory')
+parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies')
+parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
+parser.add_argument('--bun',type=Path,default=Path('C:/Users/Nathan/.bun/bin/bun.exe'))
+parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077'))
+parser.add_argument('--no-latest',action='store_true',help='Do not change the experiment fixture pointer')
 args=parser.parse_args()
 HQ=HERE.parents[1]
 APP=HQ/'projects/xf-appearance-studio/authoring'
-WK=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-BUN=Path('C:/Users/Nathan/.bun/bin/bun.exe')
-OUT=HERE/'generated'/f'build-{time.time_ns()}'
+WK=args.wolvenkit.resolve()
+BUN=args.bun.resolve()
+PLATE=args.plate.resolve()
+GAME=args.gamepath.resolve()
+OUT=args.output.resolve() if args.output else HERE/'generated'/f'build-{time.time_ns()}'
+if OUT.exists(): parser.error(f'Output already exists: {OUT}')
+if not args.collection.is_file(): parser.error(f'Collection file is missing: {args.collection}')
+for label,path in [('WolvenKit',WK),('Bun',BUN),('plate mesh',PLATE/'xfas_eye_plate.mesh'),('plate morph',PLATE/'xfas_eye_plate.morphtarget')]:
+    if not path.is_file(): parser.error(f'{label} is missing: {path}')
+if not GAME.is_dir(): parser.error(f'Game path is missing: {GAME}')
 for folder in ['logs','baked','source-json','models-json','app-json','cc-json','roundtrip','export','export-dds','input/colour','input/scalar','input/dds-colour','input/dds-scalar','archive','package/archive/pc/mod']:
     (OUT/folder).mkdir(parents=True,exist_ok=True)
 steps=[]
@@ -72,7 +85,7 @@ for group,gamma,texture_group,raw_format,compression in [
     run('import-'+group,[WK,'import',OUT/'input'/group,'-o',texturedir],
         dict(IsGamma=gamma,TextureGroup=texture_group,RawFormat=raw_format,Compression=compression,GenerateMipMaps=False,IsStreamable=True,PremultiplyAlpha=False))
 
-plate=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies'
+plate=PLATE
 run('serialize-owned-models',[WK,'convert','serialize',plate,'-o',OUT/'source-json'])
 seed=plan['presets'][0]['appearance']
 mesh=load(OUT/'source-json/xfas_eye_plate.mesh.json');root=mesh['Data']['RootChunk']
@@ -117,8 +130,8 @@ write(OUT/'cc-json'/(Path(plan['customization']).name+'.json'),cc)
 run('deserialize-app',[WK,'convert','deserialize',OUT/'app-json','-o',appdir])
 run('deserialize-customization',[WK,'convert','deserialize',OUT/'cc-json','-o',appdir])
 run('roundtrip',[WK,'convert','serialize',archive,'-o',OUT/'roundtrip'])
-run('export-textures',[WK,'export',texturedir,'-o',OUT/'export','--uext','png','--gamepath','F:/Games/Cyberpunk 2077'])
-run('export-texture-mips',[WK,'export',texturedir,'-o',OUT/'export-dds','--uext','dds','--gamepath','F:/Games/Cyberpunk 2077'])
+run('export-textures',[WK,'export',texturedir,'-o',OUT/'export','--uext','png','--gamepath',GAME])
+run('export-texture-mips',[WK,'export',texturedir,'-o',OUT/'export-dds','--uext','dds','--gamepath',GAME])
 
 package=OUT/'package/archive/pc/mod';filename=plan['namespace']
 run('pack',[WK,'pack',archive,'-o',package])
@@ -131,4 +144,4 @@ write(OUT/'build.json',{'plan':plan,'compiled':compiled,'steps':steps,
     'archiveSha256':sha(package/(filename+'.archive')),'installed':False,'gameRenderingVerified':False})
 print('BUILD',OUT,flush=True)
 # Written only after all expected operations succeeded; validator is a separate step.
-write(HERE/'latest-build.json',{'build':str(OUT),'validated':False})
+if not args.no_latest: write(HERE/'latest-build.json',{'build':str(OUT),'validated':False})

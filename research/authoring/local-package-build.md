@@ -1,0 +1,23 @@
+# Local collection-to-package boundary
+
+The Studio's **Export collection** action downloads an editable `xfas/collection-1` snapshot with stable collection/preset UUIDs. Experiment 005 already compiles this format into one ArchiveXL character-creator selector, using the project-owned eye plate and the flat `mesh_decal.mt` adapter. The authoring [package CLI](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py) is a separate, local build action around that compiler. It does not run from the browser, save a collection revision, install a mod, or launch the game.
+
+Run from HQ (use your own local game/tool/plate paths):
+
+```powershell
+python projects/xf-appearance-studio/authoring/tools/build_collection_package.py `
+  --collection C:/path/to/xfs.collection.json `
+  --plate D:/Dev/cp2077-modding-hq/experiments/004-plate-import/generated/archive/axefrog/appearance_studio/studies `
+  --wolvenkit F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe `
+  --gamepath 'F:/Games/Cyberpunk 2077' --check
+```
+
+Remove `--check` to build; a standalone preflight needs only `--collection`. Bun is found on PATH or passed with `--bun`. Preflight parses the exact collection contract and invokes the same flat compiler at 32px to reject enabled unsupported finishes before creating output. It also rejects empty collections, malformed IDs/recipes and files over 16 MB. The input is hash-checked and copied into a temporary local snapshot, so editing the exported file during the longer build cannot change the package behind its manifest. The game build still uses experiment 005's 1024px compiler, source resources, full authored mip chains and WolvenKit conversion. An explicit intermediate directory under ignored `projects/xf-appearance-studio/build/` prevents modification of the experiment's fixture pointer. The independent 005 verifier checks binary resources, decoded maps/mips and unpacked archive payloads. **Only after it passes**, the wrapper copies the verified `.archive` and `.archive.xl` into a unique ignored `projects/xf-appearance-studio/dist/<namespace>-<timestamp>/archive/pc/mod/` directory, alongside a hash/identity manifest. `--output-root` can select only the project dist tree, never an installed game/MO2 path.
+
+The output is an installable **candidate**, not a game-tested release. Currently the flat adapter supports active Matte, Satin (`regular`) and Metallic layers with provisional shader parameters. Shimmer, Glitter, Glossy and Colour-shifting still fail explicitly; disabling an unsupported layer permits a package without it. No optical look is silently flattened. One collection produces one selector. Stable UUID-derived resource identities survive preset display-name changes, though indices change when reordered and game save behavior is unproven. The plate can still intersect sampled idle poses. ArchiveXL registration, A→B→Off clearing, pose clearance, compatibility and rendering must be checked in a later batched game session.
+
+The package embeds the local CDPR-derived plate resource. Therefore build intermediates and `dist` remain ignored and private; neither is suitable for Git or automatic public distribution. A clone without the locally generated experiment-004 plate cannot build a package. Fixture reproduction still works with the original `build.py`/`verify.py` defaults. The new CLI passes explicit paths and avoids changing `latest-build.json` and checked-in experiment results.
+
+## Offline checkpoint — 24 September 2026
+
+Two builds of the Studio's checked-in four-preset editor export completed through the wrapper. Each independent verifier reported one selector with five options including Off, four mesh appearances, 12 textures, 16 unpacked files with matching payload hashes, 105 preserved morphs and unchanged model buffers. Both promoted packages contained the archive, `.archive.xl` and `xfs/local-package-1` manifest only. The two archives had different byte hashes (`da035573…` and `2c0b0d0e…`) because WolvenKit records build timestamps in its index; all 16 input resource artifact path/hash pairs matched. The experiment's `latest-build.json` remained unchanged. The full authoring suite passed 240 tests after making the existing ignored head/brow/lash assets available in the isolated worktree; typecheck and browser bundling passed. This is structural/decoded-map evidence, not game-rendering evidence.
