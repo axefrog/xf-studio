@@ -65,6 +65,8 @@ Later feature order: piercings/earrings, eyebrows, cheek makeup, hair, facial ex
 
 Latest execution priority, 23 September: finish the makeup tasks first (editor, materials, plate and export work); then (1) eyebrow shape discrepancy and correct brow/lash colours, (2) optional rendering of the hair mesh, (3) other queued work or ask Nathan when useful work runs out. This supersedes earlier incidental ordering for preview fidelity. Hair rendering is explicitly authorized as optional preview context; it does not authorize the later hair-authoring feature without discussion.
 
+24 September update: Nathan explicitly elevated the long-waiting eyebrow and eyelash fidelity tasks. They are now an active high-priority preview workstream alongside the current makeup/glitter acceptance work, ahead of jewellery design and broader head-detail expansion. Optional saved-V hair mesh preview is integrated locally; its colour/profile/shading/physics fidelity is still open.
+
 Lower-priority explicit delegation request: full Cyberpunk 2077 aesthetic UI/UX overhaul via the `claude` harness, model Opus 5.5. BEFORE delegating, fully decouple presentation from functional logic so the redesign cannot inadvertently alter core behavior. This is queued in `research/backlog/claude-ui-overhaul.md`; current main.ts coupling means the prerequisite is not met. Do not silently substitute another harness/model or delegate early.
 
 Nathan clarified functionality comes first: establish useful boundaries during feature work, but defer the dedicated UI decoupling/overhaul rather than letting it compete with the working eye-makeup pipeline.

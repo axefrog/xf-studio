@@ -3,9 +3,9 @@
 | Priority | Work item | Status / trigger |
 |---|---|---|
 | 1 | Complete XF Studio makeup tasks | Editor, materials, plate and export work remain first. |
-| 2 — after makeup | [Eyebrow shape and brow/lash colours](preview-fidelity.md) | Investigate thinner in-game brows and reproduce the saved colours. Explicit next priority. |
+| 2 — active alongside makeup | [Eyebrow shape and brow/lash colours](preview-fidelity.md) | Nathan elevated this overdue work on 24 September. Trace the actual saved texture/material/gradient and correct preview shape/colour, with browser comparison. |
 | 3 — after brows/lashes | [Saved hair fidelity](../eye-artistry/saved-v-hair-preview.md) | Optional skinned saved-style mesh and toggle are integrated; resolve actual colour/profile, materials, physics and effective winner. Hair authoring remains a later discussion. |
-| Parallel preview/research | [Hair, piercings and jewellery](jewellery-and-customization.md) | Saved-V hair preview, vanilla piercing context, PRC inventory, CCXL versus EquipmentEx route, then a reviewable jewellery construction-set design. Nathan clarified these are roadmap work rather than an immediate interruption. |
+| Parallel preview/research; behind brow/lash fidelity | [Hair, piercings and jewellery](jewellery-and-customization.md) | Saved-V hair preview is integrated; vanilla piercing context is an isolated slice, PRC inventory is documented, and jewellery construction-set design awaits review. The broader feature work remains staged behind the elevated brow/lash task. |
 | Parallel architecture | [Data-driven customization and portable mod sources](jewellery-and-customization.md#data-driven-character-customization-preset-editor) | Derive selectors from effective vanilla/modded resources and saved V, with provider-neutral game/manual/MO2/Vortex discovery. Start read-only and preserve uncertain winners. |
 | Thereafter | [CCXL and character-creator capability map](ccxl-character-creator-capabilities.md) | Pull forward findings when they unblock current makeup work. |
 | Thereafter | Photo Mode Tools engine/API audit | Other queued work after the above priorities; see project README. |
