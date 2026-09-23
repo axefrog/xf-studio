@@ -1,0 +1,151 @@
+{
+  "status": "offline recipe-driven Shimmer material fixture",
+  "source": {
+    "schema": "xfs/recipe-7",
+    "layerId": "sample-shimmer",
+    "size": 1024,
+    "color": "#905774",
+    "opacity": 0.85,
+    "flakes": {
+      "cells": 128,
+      "density": 0.65,
+      "tilt": 0.65,
+      "seed": 2077
+    },
+    "recipeSha256": "e26c7ec7e2455ba804fb1941c3a4079f0fbabf37eace194ebd3d66697dbd91f8",
+    "shapeSha256": "e652b1addb13a44fc5322bcb2329d3631e385e886b723547f820937666143d01",
+    "normalSha256": "b090592c3e06ae2aa3a2d3e34f278d65c0f9bff888e27aab4038f546e213e939",
+    "surfaceSha256": "6abeb98661de90bc04406237622a57ae5050bfcb9bed9710cee62006ec26ef9e",
+    "coveredTexels": 11496,
+    "note": "Exact Studio recipe raster and legacy Shimmer optical bake; material translation remains experimental."
+  },
+  "template": {
+    "binarySha256": "b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019",
+    "jsonSha256": "413bc056a5378ed11d7c0bea6d9feaa6e38c051a7dad8367b668f8d877c2a851",
+    "gameVersion": 2310,
+    "pass": "MeshSkinned renderstage_post_gbuffer"
+  },
+  "materialSha256": "3aa9e3fc6d49871e9f6c6a6bdccb0298924763be4e24d4658890bb956e0f76b2",
+  "textures": {
+    "diffuse": {
+      "xbmSha256": "ce70e341422c7dbf500f5f357e53d53a41ba52cf49ca4a8bdf77d84b62e3b90b",
+      "compression": "TCM_QualityColor",
+      "decodedBaseRedMeanByteError": 0.005616188049316406
+    },
+    "normal": {
+      "xbmSha256": "d7e59e1d63a54be5a6e09cf71d780cc424a0c825c9b8679a595d6222bec81804",
+      "compression": "TCM_Normalmap",
+      "decodedBaseRedMeanByteError": 0.2962961196899414
+    },
+    "normal_alpha": {
+      "xbmSha256": "b87821fed81543da147606e0f298bb82c7f6b859508fe392d9b1918129a49bc0",
+      "compression": "TCM_QualityR",
+      "decodedBaseRedMeanByteError": 0.014856338500976562
+    },
+    "roughness": {
+      "xbmSha256": "1195630b4ca8ce7b41ff8a4c73a687ed91575808f11d186369bcceca5de57392",
+      "compression": "TCM_QualityR",
+      "decodedBaseRedMeanByteError": 0.6130342483520508
+    },
+    "metalness": {
+      "xbmSha256": "913f4c6ea63a576d326dd3d46b1124343723dc652acbb3511510b51a37ccbf69",
+      "compression": "TCM_QualityR",
+      "decodedBaseRedMeanByteError": 1.4406871795654297
+    }
+  },
+  "partialCoverageTexels": 11496,
+  "meanPartialCoverageError": 0.003935855729167963,
+  "sourceBoxMinification": [
+    {
+      "size": 1024,
+      "coveredTexels": 7034,
+      "meanTangentSlope": 0.058842734481754914,
+      "strongSlopeFraction": 0.16349161216946262,
+      "meanRoughnessByte": 109.27196474267842,
+      "meanMetalnessByte": 28.38783053738982
+    },
+    {
+      "size": 512,
+      "coveredTexels": 1766,
+      "meanTangentSlope": 0.05824134614589035,
+      "strongSlopeFraction": 0.06511891279728199,
+      "meanRoughnessByte": 109.5872027180068,
+      "meanMetalnessByte": 28.703850509626275
+    },
+    {
+      "size": 256,
+      "coveredTexels": 456,
+      "meanTangentSlope": 0.0574575620798596,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 109.50657894736842,
+      "meanMetalnessByte": 28.37061403508772
+    },
+    {
+      "size": 128,
+      "coveredTexels": 112,
+      "meanTangentSlope": 0.03243242054745567,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 109.3125,
+      "meanMetalnessByte": 28.410714285714285
+    },
+    {
+      "size": 64,
+      "coveredTexels": 26,
+      "meanTangentSlope": 0.014524212573462562,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 109.5,
+      "meanMetalnessByte": 28.384615384615383
+    }
+  ],
+  "decodedXbmMipMinification": [
+    {
+      "size": 1024,
+      "coveredTexels": 7024,
+      "meanTangentSlope": 0.058942408459462504,
+      "strongSlopeFraction": 0.16030751708428245,
+      "meanRoughnessByte": 108.85763097949886,
+      "meanMetalnessByte": 28.236902050113894
+    },
+    {
+      "size": 512,
+      "coveredTexels": 1756,
+      "meanTangentSlope": 0.058477124083070806,
+      "strongSlopeFraction": 0.07403189066059225,
+      "meanRoughnessByte": 108.6993166287016,
+      "meanMetalnessByte": 28.0125284738041
+    },
+    {
+      "size": 256,
+      "coveredTexels": 446,
+      "meanTangentSlope": 0.05828174277794379,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 109.08520179372198,
+      "meanMetalnessByte": 27.878923766816143
+    },
+    {
+      "size": 128,
+      "coveredTexels": 114,
+      "meanTangentSlope": 0.03249284669278977,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 108.48245614035088,
+      "meanMetalnessByte": 27.95614035087719
+    },
+    {
+      "size": 64,
+      "coveredTexels": 28,
+      "meanTangentSlope": 0.01395387806081171,
+      "strongSlopeFraction": 0.0,
+      "meanRoughnessByte": 108.71428571428571,
+      "meanMetalnessByte": 27.964285714285715
+    }
+  ],
+  "productionExportGuardRetained": true,
+  "gameRendered": false,
+  "deployed": false,
+  "limitations": [
+    "No mesh, morph, app, selector or archive binding.",
+    "Normal green sign and blend mode on the eye plate remain uncalibrated.",
+    "Decoded XBM mip statistics are not runtime sampler/LOD or screen-pixel evidence.",
+    "Stock decal blends one PBR surface; browser transparent-surface lighting is not equivalent."
+  ]
+}
