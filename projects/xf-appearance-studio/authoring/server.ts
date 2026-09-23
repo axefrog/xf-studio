@@ -1,10 +1,13 @@
 import { resolve, sep } from "node:path";
 import { mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
+import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
+const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
+const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
 const root = resolve(import.meta.dir, "public");
 const build = await Bun.build({
   entrypoints: ["main.ts", "raster-worker.ts"].map((n) =>
@@ -21,9 +24,11 @@ if (!build.success) {
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4317),
-  maxRequestBodySize: 1_000_000,
+  maxRequestBodySize: 16_000_000,
   async fetch(request) {
     const url = new URL(request.url);
+    for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
+      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
         return libraryRequest(request, store, prefix);

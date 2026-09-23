@@ -13,7 +13,7 @@ export class LookLibrary {
   constructor(path: string) {
     this.db = new Database(path, { create: true, strict: true });
     const version = this.db.query("PRAGMA user_version").get() as { user_version: number };
-    if (version.user_version > 1) {
+    if (version.user_version > 2) {
       this.db.close();
       throw Error("This library needs a newer version of XF Studio.");
     }

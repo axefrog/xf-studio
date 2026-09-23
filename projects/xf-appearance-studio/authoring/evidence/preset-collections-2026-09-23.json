@@ -1,0 +1,55 @@
+{
+  "date": "2026-09-23",
+  "scope": "Preset accordions, collection SQLite integration and compact layer interactions",
+  "automated": {
+    "testsPassed": 41,
+    "expectations": 388924,
+    "typecheck": "pass",
+    "browserBuild": "pass"
+  },
+  "browser": {
+    "workspace": "?verify=1",
+    "userDraftEdited": false,
+    "checks": [
+      "Legacy saved looks plus current browser draft retained in first collection",
+      "Add, rename and duplicate presets; unsaved reload and independent colours (#123456 versus #905774)",
+      "Two-layer presets retain separate selection and Undo across switching",
+      "Remove, reload and Restore removed preset retains identity and colour",
+      "Save collection, Save a copy, explicit saved collection opening and Undo collection open",
+      "Collection name Enter commit and expanded files panel survive reload",
+      "Portable collection import; saving imported existing identity rejects unbased overwrite and recovery retains previous draft",
+      "Export collection reports a saved snapshot; identical API snapshot passed to offline package pipeline",
+      "Held layer drag shows floating Move label and bright insertion line before drop; resulting order correct",
+      "Layer Rename action focuses existing field; row height 45.58px versus previous 88.58px"
+    ],
+    "unexpectedWarningsOrErrors": []
+  },
+  "database": {
+    "schema": 2,
+    "migration": "v1 transaction retains old look revisions byte-identically",
+    "backup": "data/backups/2026-09-23T04-31-52.517Z (ignored; live consistent snapshots and integrity checks passed)",
+    "writes": "explicit, immutable, optimistic conflict protection",
+    "browserDrafts": "automatic; separate per-preset history and recovery"
+  },
+  "compiler": {
+    "input": "../../../../experiments/005-preset-collection/editor-collection.json",
+    "inputSha256": "fce9e6107706f81e6a7d9ae28842baa207e5794bde38149cd9d3790de98066ad",
+    "presetCount": 4,
+    "selectorCount": 1,
+    "selectorOptionCount": 5,
+    "textureCount": 12,
+    "materialTemplates": 1,
+    "archiveBytes": 856064,
+    "archiveSha256": "ea7d96f4a1cd0e8bca70ddd19da85b0710b035e928270fbb9d87cc0d856344cb",
+    "unpackedFilesVerified": 16,
+    "preservedMorphs": 105,
+    "installed": false,
+    "gameRenderingVerified": false
+  },
+  "remaining": [
+    "Idle pause/subsets, narrow-FOV zoom and framing preservation, viewport pan",
+    "UI export is editable source/build plans; installable package command remains offline",
+    "Controlled plate clearance, non-flat finish adapters and runtime selector/save tests",
+    "Collection history browsing, library autosave, backup/restore UI and large catalogue performance"
+  ]
+}

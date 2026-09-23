@@ -4,7 +4,11 @@ Two editable authored looks, **Violet ink** and **Copper edge**, compile into an
 
 Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate source retains its historical filename; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-appearance-studio/data/naming.md).
 
-## What was built
+## Current editor-to-archive check
+
+The latest result uses [four synthetic verification presets authored and ordered in the actual studio](editor-collection.json), saved through the isolated SQLite collection API and exported as a collection snapshot. It contains 12 textures, 4 mesh appearances and 5 selector options including Off, with the same shared material/component design. All 16 unpacked resources verify; archive size is **856,064 bytes**. The original two-look fixture remains [collection.json](collection.json), and its 831,488-byte build is preserved at `generated/build-1790133575399258000`. The latest pointer/result now describe the four-look run. No personal save, decoded appearance, game asset or SQLite database is included in the source fixture.
+
+## Original fixture structure
 
 - One shared mesh/morph pair containing the owned neutral expanded plate and all 105 facial customization shapes.
 - One embedded `@preset` material template using the authoritative `mesh_decal.mt`; no modified material-priority template.
@@ -13,30 +17,30 @@ Naming update, 2026-09-23: the current generator and verified rebuild use **XF S
 - Two lightweight mesh appearance entries: one provides the shared chunk template and the other expands it. Explicit stubs avoid depending on unproven native missing-appearance fallback; they do not duplicate material instances.
 - One `.inkcharcustomization` control with three options and one `.xl` customization/scope registration.
 
-The validated archive is **831,488 bytes**, containing 10 resources. Its paired `.archive.xl` is outside the archive, in the standard `archive/pc/mod` package layout. [Result and hashes](result.json), [latest local build pointer](latest-build.json), [editable fixture](collection.json). Generated binaries/texture exports remain under ignored `generated/`; nothing was installed or pushed as game payload.
+The original fixture archive was **831,488 bytes**, containing 10 resources; the current editor-run counts are above. Its paired `.archive.xl` is outside the archive, in the standard `archive/pc/mod` package layout. [Result and hashes](result.json), [latest local build pointer](latest-build.json), [editable fixture](collection.json). Generated binaries/texture exports remain under ignored `generated/`; nothing was installed or pushed as game payload.
 
 ## Reproduce
 
 Requires the current locally built experiment 004 plate, WolvenKit CLI 8.17.4, Bun and Python/Pillow/NumPy. Paths are explicit in the scripts. From HQ:
 
 ```powershell
-python experiments/005-preset-collection/build.py
+python experiments/005-preset-collection/build.py --collection experiments/005-preset-collection/editor-collection.json
 python experiments/005-preset-collection/verify.py
 ```
 
 `build.py --collection <collection.json>` accepts another validated `xfas/collection-1` collection. Each build gets a new output directory, preserving prior outputs. The independent verifier follows the latest successfully completed build. No runtime install action is part of either command.
 
-`create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-appearance-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-appearance-studio/authoring/tools/bake_collection.ts) writes the material inputs. UI/database integration remains to implement.
+`create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-appearance-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-appearance-studio/authoring/tools/bake_collection.ts) writes the material inputs. The accordion editor and SQLite collection store now feed this same contract; its source export remains separate from installable packaging.
 
 ## Evidence and limits
 
 The verifier inspects **round-tripped binary resources**, including the compiled component package and its hard-transform/skinning bindings. It checks an empty Off, a named override, one enabled selector, definitions/labels, dynamic Soft resource paths, texture dimensions/gamma/mip/compression settings, unchanged mesh/morph buffers and all 105 targets. It then unpacks the final archive and compares every depot path and SHA-256 to the source payload.
 
-Decoded base-mip textures are checked against the compiled inputs in the shader's destination encoding. Mean premultiplied colour error is about 0.0021 on a 0–1 scale; 95th-percentile coverage error is about 0.0156. Maximum coverage error reaches 0.1665 at individual texels, so this is not a lossless import or proof that sharp edges look identical. Compression choices and lower mip filtering deserve further comparisons before release.
+Decoded base-mip textures are checked against the compiled inputs in the shader’s destination encoding. Per-preset coverage, colour, roughness and metalness errors are recorded in result.json. This is compressed output, not lossless import or proof of optical parity. Lower-mip filtering still needs investigation.
 
 Stable UUID-based appearance/resource names survive renaming, revision updates and collection reordering in unit tests. ArchiveXL regenerates option indexes; **actual game save behaviour across reorder/removal still needs runtime proof**. One collection currently creates one selector; combining multiple independently exported packs into one shared selector is not implemented.
 
-Other open work: controlled plate clearance after packing, posed intersections, game A → B → Off clearing, appearance persistence and external conflicts, mixed-finish adapters (shimmer/glitter/gloss/colour shift), richer collection/layer authoring and export UI. Matte/satin/metallic parameters are provisional. No runtime success is inferred from a source-derived resolver model or a valid archive.
+Other open work: controlled plate clearance after packing, posed intersections, game A → B → Off clearing, appearance persistence and external conflicts, mixed-finish adapters (shimmer/glitter/gloss/colour shift), installable export UI. Matte/satin/metallic parameters are provisional. No runtime success is inferred from a source-derived resolver model or a valid archive.
 
 ## Community provenance
 

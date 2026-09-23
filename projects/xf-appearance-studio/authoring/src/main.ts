@@ -11,7 +11,7 @@ import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
-import { setupLibrary } from "./library-ui";
+import { setupCollections } from "./collection-ui";
 import { readSavedV, type SavedV } from "./save-reader";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 import {
@@ -32,6 +32,7 @@ const workspace = restored.state;
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
 const history: string[] = workspace.history.map(r => JSON.stringify(r));
 let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
+let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 function checkpoint() {
   const s = JSON.stringify(recipe);
   if (history.at(-1) !== s) history.push(s);
@@ -58,7 +59,7 @@ const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
   const editing = { recipe, active, selected, history: history.map(s => JSON.parse(s)), savedV,
-    library: lookLibrary.snapshot() };
+    library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, panels: { ...workspace.panels, ...sidebars.snapshot() } };
   return {
     schema: "xfas/workspace-1", ...editing,
@@ -201,6 +202,7 @@ function drawUV() {
 }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
+  rename(i) { active = i; selected = 0; sync(); drawUV(); persist(); input("layer-name").focus(); input("layer-name").select(); },
   toggle(i, enabled) { checkpoint(); recipe.layers[i].enabled = enabled; render(i); },
   edit: changeLayers,
 });
@@ -232,6 +234,7 @@ function commitLayerName() {
 layerName.onchange = layerName.onblur = commitLayerName;
 layerName.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitLayerName(); } };
 function sync() {
+  presetLibrary?.refreshSummary();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
@@ -472,19 +475,18 @@ $("save").onclick = () => {
   status("Recipe exported — editable shapes, colours and fields.");
 };
 $("load").onclick = () => input("file").click();
-const lookLibrary = setupLibrary(() => recipe, (next) => {
-  checkpoint();
-  replaceRecipe(next);
-}, workspace.library, persist);
+presetLibrary = setupCollections(() => ({ recipe, active, selected, history: history.map(s => JSON.parse(s)) }), editor => {
+  history.splice(0, history.length, ...editor.history.map(r => JSON.stringify(r)));
+  replaceRecipe(editor.recipe, editor.active);
+  selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
+}, workspace.collections, workspace.library, persist, download);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
   if (!file) return;
   try {
     if (file.size > 1_000_000) throw Error("Recipe is too large.");
     const next = parseRecipe(JSON.parse(await file.text()));
-    checkpoint();
-    replaceRecipe(next);
-    lookLibrary.detach();
+    presetLibrary!.importRecipe(next, file.name.replace(/\.json$/i, ""));
     status(`Opened ${file.name}`);
   } catch (error) {
     status(`Could not open recipe: ${(error as Error).message}`);

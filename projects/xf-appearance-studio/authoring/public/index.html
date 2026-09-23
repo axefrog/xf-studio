@@ -37,12 +37,29 @@
         <p class="intro">
           Shape the makeup.<br />Keep every decision editable.
         </p>
+        <section class="collection-card">
+          <label>Collection name<input id="collection-name" maxlength="120" value="Makeup collection" /></label>
+          <div class="small-actions"><button id="preset-add">Add preset</button><button id="preset-restore">Restore removed preset</button></div>
+          <div id="presets"></div>
+          <div class="small-actions"><button id="collection-save">Save collection</button><button id="collection-copy">Save a copy</button></div>
+          <p id="collection-state" role="status">Loading collection library…</p>
+          <details><summary>Collection files &amp; library</summary>
+            <div class="small-actions"><button id="collection-export">Export collection</button><button id="collection-import">Import collection</button></div>
+            <button id="collection-plan">Export build plan</button>
+            <p class="help">Collection files retain editable presets. Build plans feed the offline compiler; they are not installable mods.</p>
+            <div class="small-actions"><button id="collection-refresh">Refresh saved collections</button><button id="collection-undo-open">Undo collection open</button></div>
+            <div id="saved-collections"></div>
+            <input id="collection-file" type="file" accept="application/json,.json" hidden />
+          </details>
+        </section>
+        <div id="parked-layers" hidden><section id="makeup-editor">
         <div class="section-title">MAKEUP LAYERS <span id="layer-count">04</span></div>
         <div class="two-col"><button id="layer-add">Add layer</button><button id="layer-copy">Duplicate layer</button></div>
         <div id="layers"></div>
         <div class="layer-note">
-          Top of the list = front of the makeup. Drag the arrow handle to reorder, or use the up/down buttons. Remove is undoable.
+          Top = front. Drag the arrow handle to reorder. The ⋯ menu has Rename, Duplicate, Move and Remove. Undo restores edits.
         </div>
+        </section></div>
         <div class="session-card" id="v-card" hidden>
           <span class="eyebrow">V FROM YOUR SAVE</span>
           <p id="v-summary"></p>
@@ -54,25 +71,11 @@
           <button id="v-export">Export appearance data</button>
         </div>
         <div class="spacer"></div>
-        <div class="session-card library-card">
-          <span class="eyebrow">LOOK LIBRARY</span>
-          <label>Look name<input id="look-name" maxlength="120" value="Untitled look" /></label>
-          <div class="two-col">
-            <button id="library-save">Save look</button>
-            <button id="library-copy">Save a copy</button>
-          </div>
-          <label>Saved looks<select id="library-looks"><option value="">Loading library…</option></select></label>
-          <div class="two-col">
-            <button id="library-open">Open look</button>
-            <button id="library-refresh">Refresh list</button>
-          </div>
-          <p id="library-state" role="status"></p>
-        </div>
         <div class="session-card">
           <span class="eyebrow">WORKING LOCALLY</span>
           <p>
-            Drafts stay in this browser. Save looks to your local library; export
-            recipes for portable copies.
+            Drafts stay in this browser. Save collections to your local library;
+            export recipes or collections for portable copies.
           </p>
           <span id="save-state">Autosave ready</span>
         </div>

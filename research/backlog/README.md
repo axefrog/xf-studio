@@ -18,3 +18,5 @@ This is a durable work queue within the headquarters, not a scheduled automation
 The first [XF Studio](../../projects/xf-appearance-studio/authoring/README.md) now provides concrete exploratory work. Continue game-material adaptation, authentic blink extraction, richer procedural control, and [saved-V resource resolution](../eye-artistry/save-import.md). The decoded save is a useful input to the CCXL boundary study. Old Eye Artistry content/identities may be discarded; legacy parity is not required.
 
 The [persistent authoring queue](eye-artistry-authoring.md) tracks optional head details, direct live editing on the model surface, saved-V assembly, material/blink fidelity and richer procedural controls. A first direct surface-editing implementation is now verified; richer controls and fidelity work remain. Required glitter development has its own research task above.
+
+- [Viewport and editor controls](viewport-and-editor-controls.md): idle pause/subsets, stable-head facial motion, FOV/zoom/pan ergonomics, compact layers, rename and live reorder feedback.

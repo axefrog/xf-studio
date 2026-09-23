@@ -1,9 +1,10 @@
 import type { Recipe } from "./recipe";
 import type { LayerCommand } from "./layer-stack";
 import { finishLabel } from "./finish";
+import { reorderHandle } from "./reorder-ui";
 
 export function layerList(host: HTMLElement, hooks: {
-  select(index: number): void; toggle(index: number, enabled: boolean): void; edit(command: LayerCommand): void;
+  select(index: number): void; rename(index: number): void; toggle(index: number, enabled: boolean): void; edit(command: LayerCommand): void;
 }) {
   return (recipe: Recipe, active: number) => {
     host.replaceChildren();
@@ -22,47 +23,27 @@ export function layerList(host: HTMLElement, hooks: {
       label.append(small); button.append(swatch, label); button.onclick = () => hooks.select(index);
       const toggle = document.createElement("input"); toggle.type = "checkbox"; toggle.checked = layer.enabled;
       toggle.setAttribute("aria-label", `Show ${layer.name}`); toggle.onchange = () => hooks.toggle(index, toggle.checked);
-      const actions = document.createElement("div"); actions.className = "layer-actions";
+      const menu = document.createElement("details"); menu.className = "layer-menu";
+      const summary = document.createElement("summary"); summary.textContent = "⋯"; summary.setAttribute("aria-label", `Actions for ${layer.name}`);
+      menu.append(summary);
+      const actions = document.createElement("div"); actions.className = "layer-actions"; menu.append(actions);
       const action = (text: string, title: string, click: () => void, disabled = false) => {
         const control = document.createElement("button"); control.textContent = text; control.title = title;
         control.setAttribute("aria-label", title); control.disabled = disabled; control.onclick = click;
         actions.append(control); return control;
       };
-      const handle = action("↕", `Drag ${layer.name} to reorder`, () => {});
-      let drag: { pointer: number; y: number; target?: HTMLElement } | undefined;
-      const clearDrag = () => {
-        if (!drag) return;
-        const pointer = drag.pointer; drag.target?.classList.remove("drop-target"); drag = undefined;
-        row.classList.remove("dragging");
-        if (handle.hasPointerCapture(pointer)) handle.releasePointerCapture(pointer);
-      };
-      handle.onpointerdown = e => {
-        if (e.button !== 0) return;
-        e.preventDefault(); handle.focus(); handle.setPointerCapture(e.pointerId);
-        drag = { pointer: e.pointerId, y: e.clientY }; row.classList.add("dragging");
-      };
-      handle.onpointermove = e => {
-        if (!drag || drag.pointer !== e.pointerId || Math.abs(e.clientY - drag.y) < 4) return;
-        drag.target?.classList.remove("drop-target"); drag.target = undefined;
-        const pane = host.closest("aside")!; const bounds = pane.getBoundingClientRect();
-        if (e.clientY < bounds.top + 32) pane.scrollTop -= 20;
-        else if (e.clientY > bounds.bottom - 32) pane.scrollTop += 20;
-        const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".layer");
-        if (target && host.contains(target) && target !== row) {
-          drag.target = target; target.classList.add("drop-target");
-        }
-      };
-      handle.onpointerup = () => {
-        const id = drag?.target?.dataset.layerId; clearDrag();
-        const to = recipe.layers.findIndex(l => l.id === id);
+      const handle = document.createElement("button"); handle.textContent = "↕"; handle.className = "layer-drag";
+      handle.title = `Drag ${layer.name} to reorder`; handle.setAttribute("aria-label", handle.title);
+      reorderHandle(handle, row, host, ".layer", layer.name, target => {
+        const to = recipe.layers.findIndex(l => l.id === target.dataset.layerId);
         if (to >= 0) hooks.edit({ kind: "move", id: layer.id, to });
-      };
-      handle.onpointercancel = handle.onlostpointercapture = clearDrag;
-      handle.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); clearDrag(); } };
+      });
+      action("Rename", `Rename ${layer.name}`, () => hooks.rename(index));
+      action("Duplicate", `Duplicate ${layer.name}`, () => hooks.edit({ kind: "duplicate", id: layer.id }));
       action("↑", `Move ${layer.name} up`, () => hooks.edit({ kind: "move", id: layer.id, to: index + 1 }), index === recipe.layers.length - 1);
       action("↓", `Move ${layer.name} down`, () => hooks.edit({ kind: "move", id: layer.id, to: index - 1 }), index === 0);
       action("Remove", `Remove ${layer.name}`, () => hooks.edit({ kind: "remove", id: layer.id }));
-      row.append(button, toggle, actions); host.append(row);
+      row.append(handle, button, toggle, menu); host.append(row);
     });
   };
 }

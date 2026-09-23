@@ -11,9 +11,9 @@ Product name: **XF Studio**, formerly XF Appearance Studio / XF Eye Artistry. Th
 3. Choose a collection to compile into a personal game mod. Generate only actual authored presets, reuse identical assets, and never enumerate all possible combinations.
 4. One character-creator selector switches between complete eye-makeup presets, including an Off choice. Internal layer count is not the in-game selector count.
 
-“Any number” means no arbitrary small product catalogue cap. Actual CCXL option, atlas, memory and export-size limits need measurement. The current recipe has four authoring layers; variable layer count is separate future schema work, not an in-game requirement.
+“Any number” means no arbitrary small product catalogue cap. Actual CCXL option, atlas, memory and export-size limits need measurement. The current recipe supports 0–32 authoring layers as a preview budget; this is independent of the number of game selector options. Collections have a 16 MB import/storage request budget; larger-scale performance remains to measure.
 
-Additional explicit, nonurgent authoring requirement: users can add/remove layers and drag to reorder them. Presets appear ABOVE their layers as an accordion, with add/remove, rename and reorder operations; do not use a preset dropdown in the intended UI. The current dropdown library is a functional first slice only. Variable layer count, collection order, stable identity and recoverable removal must be supported by the core before the future UI redesign consumes them.
+Additional explicit, nonurgent authoring requirement: users can add/remove layers and drag to reorder them. Presets appear ABOVE their layers as an accordion, with add/remove, rename and reorder operations; do not use a preset dropdown in the intended UI. The accordion and variable-layer core are now implemented, including stable identities, recoverable removal and separate per-preset drafts/history. The future UI redesign should consume these existing domain boundaries.
 
 ## Compilation contract to prove
 
@@ -25,9 +25,9 @@ Stable library preset IDs must be independent of names/list positions. Plan stab
 
 ## Local library and portability
 
-First implemented slice: named full-recipe snapshots, immutable saved revisions, optimistic conflict protection, explicit Save look / Save a copy / Open look, separate verification DB. Browser draft recovery and portable JSON files remain. No automatic migration or deletion of existing drafts.
+Current implementation: SQLite v2 stores atomic immutable collection snapshots and per-preset versions, with optimistic conflict protection. Accordion CRUD/order, Save collection, Save a copy, explicit saved-collection opening and portable collection/recipe import/export work. Switching retains unsaved drafts and Undo per preset. Removal and opening another collection are recoverable across reload. The transactional v1 migration retains legacy revisions unchanged; consistent local backups preceded it. Verification has its own database.
 
-Next: visible revision history/restore, library autosave with clear draft-versus-published state, thumbnails/tags/search, export collections, backup/restore, and bounded schema migrations. Large textures and derived meshes should be content-addressed files with hashes/provenance in SQLite, not repeated giant JSON/blob payloads. Regenerable caches are distinct from user-authored inputs. Portable bundles must contain owned source assets and recipes, and references/dependency reports for game/third-party assets.
+Next: visible revision history/restore, library autosave with clear draft-versus-published state, thumbnails/tags/search, a backup/restore UI, scheduled backups, and further bounded schema migrations. The live-backup command, v1→v2 migration and collection exports are implemented. Large textures and derived meshes should be content-addressed files with hashes/provenance in SQLite, not repeated giant JSON/blob payloads. Regenerable caches are distinct from user-authored inputs. Portable bundles must contain owned source assets and recipes, and references/dependency reports for game/third-party assets.
 
 Local development uses Bun + localhost. Desktop packaging should reuse the domain/compiler and library boundaries; filesystem/database operations stay outside the renderer. Electron and Electrobun remain candidates, not installed/chosen dependencies. See [desktop assessment](../../../research/authoring/desktop-packaging.md).
 

@@ -9,9 +9,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const title = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= 120;
 
 /** Identity is independent of display names, revisions and collection order. */
-export function parseCollection(value: unknown): PresetCollection {
+export function parseCollection(value: unknown, allowEmpty = false): PresetCollection {
   const input = value as PresetCollection;
-  if (!input || input.schema !== "xfas/collection-1" || !uuid.test(input.id ?? "") || !title(input.name) || !Array.isArray(input.presets) || !input.presets.length)
+  if (!input || input.schema !== "xfas/collection-1" || !uuid.test(input.id ?? "") || !title(input.name) || !Array.isArray(input.presets) || (!allowEmpty && !input.presets.length))
     throw Error("Expected a named XF Studio collection with a stable UUID and at least one preset.");
   const seen = new Set<string>();
   const presets = input.presets.map(p => {

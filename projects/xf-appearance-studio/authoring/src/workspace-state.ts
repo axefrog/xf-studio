@@ -1,5 +1,6 @@
 import { initialRecipe, parseRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
+import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -16,6 +17,7 @@ export type WorkspaceState = {
   savedV?: SavedV;
   preview: PreviewState;
   library: LibraryState;
+  collections?: CollectionWorkspace;
   panels: { lighting: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
     sidebarLeft: number; sidebarRight: number };
 };
@@ -72,6 +74,13 @@ export function parseWorkspace(value: unknown): WorkspaceState {
     if (typeof v.panels.lighting === "boolean") state.panels.lighting = v.panels.lighting;
     for (const key of ["layersScroll", "propertiesScroll", "pageX", "pageY"] as const)
       if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];
+  }
+  if (v.collections !== undefined) {
+    state.collections = parseCollectionWorkspace(v.collections);
+    const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);
+    state.recipe = preset ? structuredClone(preset.recipe) : emptyRecipe();
+    const memory = preset ? state.collections.editors[preset.id] ?? emptyMemory() : emptyMemory();
+    state.active = memory.active; state.selected = memory.selected; state.history = memory.history;
   }
   return state;
 }

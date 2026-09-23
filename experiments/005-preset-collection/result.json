@@ -1,57 +1,101 @@
 {
-  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790133575399258000",
-  "presetCount": 2,
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790138501448325100",
+  "presetCount": 4,
   "selectorCount": 1,
-  "selectorOptionCount": 3,
+  "selectorOptionCount": 5,
   "appDefinitions": 2,
   "compiledComponentTemplates": 1,
-  "meshAppearances": 2,
+  "meshAppearances": 4,
   "materialTemplates": 1,
-  "textureCount": 6,
-  "archiveBytes": 831488,
-  "archiveSha256": "1a67cfbe58bcc7224b77b4ae626ea72f3252b9a968ab3f0df81f865f63862c18",
-  "unpackedFilesVerified": 10,
+  "textureCount": 12,
+  "archiveBytes": 856064,
+  "archiveSha256": "ea7d96f4a1cd0e8bca70ddd19da85b0710b035e928270fbb9d87cc0d856344cb",
+  "unpackedFilesVerified": 16,
   "preservedMorphs": 105,
   "modelBuffersUnchanged": true,
   "resolvedDynamicPaths": [
     {
-      "appearance": "xfs_c11ea932b7ce94d40a28447c307009137__xfs_p193f4397e3134409b842a333307dece3",
-      "chunkMaterial": "xfs_p193f4397e3134409b842a333307dece3@preset",
+      "appearance": "xfs_c0ec3546e3fac43e78c19a65d20383d41__xfs_pf25f8eb18a834f65a111b83086382c18",
+      "chunkMaterial": "xfs_pf25f8eb18a834f65a111b83086382c18@preset",
       "textures": {
-        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_diffuse.xbm",
-        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_roughness.xbm",
-        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p193f4397e3134409b842a333307dece3_metalness.xbm"
+        "diffuse": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf25f8eb18a834f65a111b83086382c18_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf25f8eb18a834f65a111b83086382c18_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf25f8eb18a834f65a111b83086382c18_metalness.xbm"
       }
     },
     {
-      "appearance": "xfs_c11ea932b7ce94d40a28447c307009137__xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea",
-      "chunkMaterial": "xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea@preset",
+      "appearance": "xfs_c0ec3546e3fac43e78c19a65d20383d41__xfs_p9039b2bd3320437984e0fe7c69460d73",
+      "chunkMaterial": "xfs_p9039b2bd3320437984e0fe7c69460d73@preset",
       "textures": {
-        "diffuse": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_diffuse.xbm",
-        "roughness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_roughness.xbm",
-        "metalness": "axefrog/appearance_studio/collections/11ea932b7ce94d40a28447c307009137/textures/xfs_p6bf9f1e3a9fa4882a87cfbdc346464ea_metalness.xbm"
+        "diffuse": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p9039b2bd3320437984e0fe7c69460d73_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p9039b2bd3320437984e0fe7c69460d73_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p9039b2bd3320437984e0fe7c69460d73_metalness.xbm"
+      }
+    },
+    {
+      "appearance": "xfs_c0ec3546e3fac43e78c19a65d20383d41__xfs_p1c6ff912757849468b547d47e65d1d8e",
+      "chunkMaterial": "xfs_p1c6ff912757849468b547d47e65d1d8e@preset",
+      "textures": {
+        "diffuse": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p1c6ff912757849468b547d47e65d1d8e_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p1c6ff912757849468b547d47e65d1d8e_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_p1c6ff912757849468b547d47e65d1d8e_metalness.xbm"
+      }
+    },
+    {
+      "appearance": "xfs_c0ec3546e3fac43e78c19a65d20383d41__xfs_pf80173e2e5b94be28f2d8d870ec55566",
+      "chunkMaterial": "xfs_pf80173e2e5b94be28f2d8d870ec55566@preset",
+      "textures": {
+        "diffuse": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf80173e2e5b94be28f2d8d870ec55566_diffuse.xbm",
+        "roughness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf80173e2e5b94be28f2d8d870ec55566_roughness.xbm",
+        "metalness": "axefrog/appearance_studio/collections/0ec3546e3fac43e78c19a65d20383d41/textures/xfs_pf80173e2e5b94be28f2d8d870ec55566_metalness.xbm"
       }
     }
   ],
   "decodedPixelChecks": [
     {
-      "preset": "Violet ink",
-      "coveredTexels": 12688,
+      "preset": "Verification \u2014 metallic copy",
+      "coveredTexels": 11670,
       "coverageError": {
-        "mean": 0.004098198238818807,
-        "p95": 0.015378700499807718,
-        "max": 0.16650519031141875
+        "mean": 0.003637052125822015,
+        "p95": 0.014086889657823898,
+        "max": 0.034448289119569375
       },
       "premultipliedEncodedColourError": {
-        "mean": 0.002043065586798817,
-        "p95": 0.007743982909988317,
-        "max": 0.054604959774288406
+        "mean": 0.002119857328922954,
+        "p95": 0.006497247592140876,
+        "max": 0.02048242101529564
       },
       "premultipliedSurfaceError": {
         "roughness": {
-          "mean": 0.0026831923528809996,
-          "p95": 0.011442235640892258,
-          "max": 0.12577424972295737
+          "mean": 0.0009841435163988987,
+          "p95": 0.003811746613293532,
+          "max": 0.009321301761765828
+        },
+        "metalness": {
+          "mean": 0.0023676496191625688,
+          "p95": 0.009170288953720629,
+          "max": 0.022425160760190258
+        }
+      }
+    },
+    {
+      "preset": "Verification \u2014 reload persistence",
+      "coveredTexels": 11484,
+      "coverageError": {
+        "mean": 0.003371587248212947,
+        "p95": 0.012856593617839307,
+        "max": 0.02780469050365242
+      },
+      "premultipliedEncodedColourError": {
+        "mean": 0.001973114452915602,
+        "p95": 0.005875674796565677,
+        "max": 0.01806923568513555
+      },
+      "premultipliedSurfaceError": {
+        "roughness": {
+          "mean": 0.002961708014116472,
+          "p95": 0.011293635178023509,
+          "max": 0.02442451244242408
         },
         "metalness": {
           "mean": 0.0,
@@ -61,28 +105,54 @@
       }
     },
     {
-      "preset": "Copper edge",
-      "coveredTexels": 12700,
+      "preset": "Verification \u2014 collection B",
+      "coveredTexels": 11484,
       "coverageError": {
-        "mean": 0.0045655511054197824,
-        "p95": 0.015624759707804636,
-        "max": 0.14371395617070348
+        "mean": 0.00696216697728053,
+        "p95": 0.028173779315647907,
+        "max": 0.05843906189926951
       },
       "premultipliedEncodedColourError": {
-        "mean": 0.0020766111313885844,
-        "p95": 0.00861521386039571,
-        "max": 0.07330876180606727
+        "mean": 0.0033054251484558052,
+        "p95": 0.01022856143862888,
+        "max": 0.027170539314257558
       },
       "premultipliedSurfaceError": {
         "roughness": {
-          "mean": 0.0027195756979254727,
-          "p95": 0.010306684457712434,
-          "max": 0.12624284777348072
+          "mean": 0.006115785893767994,
+          "p95": 0.02474873163413771,
+          "max": 0.051334705354652455
         },
         "metalness": {
-          "mean": 0.002244982679967096,
-          "p95": 0.008769839654431622,
-          "max": 0.05152190334034412
+          "mean": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    {
+      "preset": "Verification \u2014 collection A",
+      "coveredTexels": 11484,
+      "coverageError": {
+        "mean": 0.0037770150028034913,
+        "p95": 0.017716262975778496,
+        "max": 0.04724336793540948
+      },
+      "premultipliedEncodedColourError": {
+        "mean": 0.0022835570311529477,
+        "p95": 0.0075580198419208655,
+        "max": 0.031025872745020416
+      },
+      "premultipliedSurfaceError": {
+        "roughness": {
+          "mean": 0.0033178484730509105,
+          "p95": 0.015562521202252488,
+          "max": 0.04150005653934008
+        },
+        "metalness": {
+          "mean": 0.0,
+          "p95": 0.0,
+          "max": 0.0
         }
       }
     }
