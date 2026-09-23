@@ -1,0 +1,31 @@
+# XF Appearance Studio
+
+Renamed by Nathan on 2026-09-23. Current product: users author their own eye-makeup presets in the studio, save a local library and compile a collection for **one in-game selector**. This supersedes four in-game layer selectors and the design/colour/finish matrix. Editable layers, expanded plate coverage, predictable stacking and seven familiar finish families remain the first delivery area. See the [product direction and later-feature discussion gates](data/product-direction.md).
+
+All newly generated archive appearance names use the `xfas_` namespace. See [naming and scope](data/naming.md). Photo Mode Tools remains an independent peer project.
+
+Status: foundation research complete; the first clean [procedural authoring prototype](authoring/README.md) now runs locally. The game mod implementation is still pending. This is the authoritative location for XF Appearance Studio, formerly XF Eye Artistry.
+
+Historical Eye Artistry feature intent: female V, four independently selectable makeup layers, 20 designs (9 eyeliner and 11 eyeshadow), 49 colours and four finish labels. The legacy finish implementations are not all distinct; keep user-visible intent separate from accidental old behavior. Expanded eye-plate surface, predictable layer ordering and facial deformation support are core requirements.
+
+**Content reset authorized:** Nathan is happy to replace all old designs, identities, preset names and IDs. The numbers above describe historical reference material, not a new catalogue specification. The concept and layered structure matter; the procedural editor can author a completely fresh collection. Do not require legacy parity or a save migration bridge unless it becomes useful or is requested. Save inspection can reproduce a reference V without forcing those old choices into new content.
+
+The user wants **more colours**. The legacy 49-colour limit was imposed by the enormous material matrix and reports of WolvenKit becoming unusably slow. Make the palette configurable; benchmark larger candidates and residual UI/thumbnail/cache growth. Do not treat 49 as a release cap. The queued CCXL capability study should investigate decoupled selectors and palette browsing where they help this goal.
+
+Target: current stable ArchiveXL 1.27.3, Cyberpunk 2077 2.31. Installed ArchiveXL requires an update before runtime verification. Use the [expansion design](../../research/archive-xl/eye-artistry-strategy.md) and [asset lineage](../../research/eye-artistry/lineage.md).
+
+Planned project-local structure:
+
+- `src/`: new build/validation code; no old toolbox dependencies.
+- `data/`: explicit stable IDs, palette, finishes, selectors and asset provenance.
+- `assets/authored/`: authoritative editable art once selected/imported; `assets/imported/` for preserved intake copies.
+- `resources/`: small reviewed resource templates and registration declarations.
+- `build/`: generated intermediate files; `dist/`: uniquely versioned install packages and manifests.
+- `tests/`: meaningful invariants and regression fixtures as implementation warrants.
+- `authoring/`: Bun/TypeScript/Three.js procedural editor, local derived preview assets, saved-V reader and renderer experiments.
+
+The authoring prototype supports weighted curve areas, a Gaussian vector field, symmetry, four layers, colour/finish studies, recipe persistence, 2K alpha-mask export, exploratory eyelid motion and importing a save's facial morph choices. It renders the actual head and `.010` plate with eight bone influences and all 105 customization morphs. Optional Arkhe brows and Soft Natural lashes provide local reference context with independent toggles and deformation. Materials and blink remain approximate; saved skin/hair/other appearance references are read but not yet resolved into a complete likeness. Direct face dragging for curve/field controls is now implemented; remaining authoring refinements are in the [persistent queue](../../research/backlog/eye-artistry-authoring.md). See [save research](../../research/eye-artistry/save-import.md).
+
+Next game slice: ONE selector with two complete overlapping-layer presets and Off. Prove switching clears previous components, resource paths/CCXL registration, mesh deformation and stable identities. Compare merged material output with coordinated layers; preserve separate zero-offset and controlled-offset candidates where useful. Do not regenerate a full combinatorial catalogue.
+
+No installed mod is replaced by this work. The owned neutral plate master is now `assets/authored/xfas_eye_plate.blend`, with hashed source intake, all 105 facial shapes and eight bone influences retained. Nathan confirms the plate was cut from the larger head, and exact geometric correspondence is verified. The historical static GLB lacks deformation data; it is not used as the master. [Experiment 004](../../experiments/004-plate-import/README.md) records game-resource conversion and shading retention; skin clearance, posed intersections and game rendering remain open.

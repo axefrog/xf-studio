@@ -1,0 +1,154 @@
+{
+  "normals": [
+    {
+      "name": "xfas_glitter_normal.png",
+      "xyAbsoluteError": {
+        "mean": 0.0014317119822782603,
+        "p95": 0.003921568627451022,
+        "max": 0.02352941176470591
+      },
+      "decodedRowOrder": "matches input",
+      "flippedXYMeanError": 0.0346415314019895,
+      "angularErrorDegreesAll": {
+        "mean": 0.2830107877516792,
+        "p95": 0.969250965953668,
+        "max": 3.392729975298307
+      },
+      "angularErrorDegreesTiltedTexels": {
+        "mean": 0.6710273437502604,
+        "p95": 1.8128493718962417,
+        "max": 3.392729975298307
+      },
+      "blueChannelUsed": false
+    },
+    {
+      "name": "xfas_glitter_normal_yflip.png",
+      "xyAbsoluteError": {
+        "mean": 0.0014222238578048378,
+        "p95": 0.003921568627451022,
+        "max": 0.02352941176470591
+      },
+      "decodedRowOrder": "matches input",
+      "flippedXYMeanError": 0.03463900696997548,
+      "angularErrorDegreesAll": {
+        "mean": 0.2884212479760269,
+        "p95": 0.9755748830113204,
+        "max": 3.3009867881538604
+      },
+      "angularErrorDegreesTiltedTexels": {
+        "mean": 0.6763816756605735,
+        "p95": 1.8062931158749231,
+        "max": 3.3009867881538604
+      },
+      "blueChannelUsed": false
+    },
+    {
+      "name": "xfas_shimmer_normal.png",
+      "xyAbsoluteError": {
+        "mean": 0.0011502303329168576,
+        "p95": 0.003921568627451022,
+        "max": 0.007843137254902044
+      },
+      "decodedRowOrder": "matches input",
+      "flippedXYMeanError": 0.030082842882941746,
+      "angularErrorDegreesAll": {
+        "mean": 0.23342391440628424,
+        "p95": 0.6407630077695118,
+        "max": 1.294283262242955
+      },
+      "angularErrorDegreesTiltedTexels": {
+        "mean": 0.40611200767890093,
+        "p95": 0.9054915131434887,
+        "max": 1.294283262242955
+      },
+      "blueChannelUsed": false
+    },
+    {
+      "name": "xfas_shimmer_normal_yflip.png",
+      "xyAbsoluteError": {
+        "mean": 0.001164705613080192,
+        "p95": 0.003921568627451022,
+        "max": 0.007843137254902044
+      },
+      "decodedRowOrder": "matches input",
+      "flippedXYMeanError": 0.03008302052815755,
+      "angularErrorDegreesAll": {
+        "mean": 0.23681631350744184,
+        "p95": 0.6407630077695118,
+        "max": 1.294283262242955
+      },
+      "angularErrorDegreesTiltedTexels": {
+        "mean": 0.40607403695279665,
+        "p95": 0.9055066270158862,
+        "max": 1.294283262242955
+      },
+      "blueChannelUsed": false
+    }
+  ],
+  "scalars": [
+    {
+      "name": "xfas_glitter_metalness.png",
+      "redAbsoluteError": {
+        "mean": 0.0039640875423655785,
+        "p95": 0.027450980392156876,
+        "max": 0.09803921568627455
+      }
+    },
+    {
+      "name": "xfas_glitter_roughness.png",
+      "redAbsoluteError": {
+        "mean": 0.0032917733285941298,
+        "p95": 0.019607843137254832,
+        "max": 0.03921568627450983
+      }
+    },
+    {
+      "name": "xfas_shape_normal_alpha.png",
+      "redAbsoluteError": {
+        "mean": 5.818535299862131e-05,
+        "p95": 0.0,
+        "max": 0.0313725490196079
+      }
+    },
+    {
+      "name": "xfas_shimmer_metalness.png",
+      "redAbsoluteError": {
+        "mean": 0.005649753645354624,
+        "p95": 0.023529411764705882,
+        "max": 0.03529411764705884
+      }
+    },
+    {
+      "name": "xfas_shimmer_roughness.png",
+      "redAbsoluteError": {
+        "mean": 0.002404055875890399,
+        "p95": 0.0117647058823529,
+        "max": 0.011764705882352955
+      }
+    }
+  ],
+  "colourCoverage": {
+    "expectedAtTexelCentres": "decoded alpha squared at contrast=0 and secondaryInfluence=0",
+    "beforeImportError": {
+      "mean": 0.0013356945075515302,
+      "p95": 0.002599000384467476,
+      "max": 0.003521722414455919
+    },
+    "afterBC7ImportError": {
+      "mean": 0.004015261659536451,
+      "p95": 0.013533256439830776,
+      "max": 0.02506728181468665
+    },
+    "uncompensatedSquareError": {
+      "mean": 0.14767244224985943,
+      "p95": 0.2479661668589004,
+      "max": 0.24999615532487507
+    }
+  },
+  "limits": [
+    "Only base mip decoded here. Lower mip normal variance and coverage filtering remain unverified.",
+    "Roundtrip row order does not prove mesh UV or tangent-space orientation in-game.",
+    "BC5 blue output is ignored; Z is reconstructed as in the inspected shader.",
+    "Scalar output is read from red, not RGB luminance; this matches the inspected shader."
+  ]
+}

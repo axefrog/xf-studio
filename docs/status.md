@@ -1,0 +1,65 @@
+# Current state — 2026-09-23
+
+**Latest product direction:** ONE eye-makeup selector chooses complete studio-authored presets. A local SQLite library and portable recipes retain editable source; a future compiler exports only authored combinations. This supersedes the old four-selector/palette matrix. [Product decision](../projects/xf-appearance-studio/data/product-direction.md) records stable identity/collection requirements and the later feature order. Piercings/earrings, eyebrows, cheek makeup, hair, then full-body tattoos each require discussion before implementation.
+
+**Plate conversion:** [Experiment 004](../experiments/004-plate-import/README.md) now rebuilds both mesh and morph resources from the owned neutral master. Source head correspondence is exact; original game shading is retained to avoid clipped Blender-derived morph normals/tangents. Numeric round-trip bounds pass: 105 facial shapes, both UV sets, all 122 weighted bones and eight influences retained. Morph lighting deltas now round-trip exactly. Skin clearance, inverse-bind transforms, posed intersections and actual game rendering remain pending. Nathan's private [source repository](https://github.com/axefrog/xf-studio) holds source/research checkpoints; personal inventories and binary game-derived assets remain local.
+
+**Latest implementation:** seven [finish families](../research/materials/makeup-finish-taxonomy.md), including separate Metallic, Glossy and Colour-shifting. SQLite named looks, immutable revisions, Save a copy, explicit Open look, stale-write protection and separate test storage now work. 21 tests and typecheck pass; browser save/revision/reload/open/undo/copy and new finish previews were verified without changing the main draft. DB autosave/history UI/backups, collection compilation, in-game rendering and desktop packaging remain pending. [Desktop assessment](../research/authoring/desktop-packaging.md) records Electron/Electrobun tradeoffs.
+
+New research: [multilayered makeup assessment](../research/materials/multilayered-makeup-assessment.md) follows Nathan's wiki links and CDPR's primary explanation. Current standard multilayered template has blending disabled/depth writes enabled; it is not a drop-in transparent eye-plate decal. Offline compositing and relevant variants remain to investigate. [Claude UI/UX overhaul](../research/backlog/claude-ui-overhaul.md) is explicitly queued at lower priority for `claude` / Opus 5.5, only after UI and functionality are fully decoupled.
+
+**Scope/name update:** Nathan renamed the project to **XF Appearance Studio**, with other appearance details and potentially full-body work allowed later. The owned project is now `projects/xf-appearance-studio`; eye makeup remains the first milestone. Generated app and mesh appearance names must use `xfas_`; see [naming contract](../projects/xf-appearance-studio/data/naming.md). Original resource/save identifiers remain intact.
+
+Rename verification: 17 authoring tests, typecheck and browser build passed; the isolated page loads the head/details under the new branding. The 15,680-case ArchiveXL contract and material binary round-trip passed again with `xfas_` app/mesh names and the new depot root. Existing draft keys and recipe schemas are retained. [Glitter research](../research/materials/glitter-shader-investigation.md) now identifies and indexes shipped compiled shader code; convincing game/browser glitter remains pending.
+
+Material progress: [Experiment 002](../experiments/002-flake-material/README.md) adds stationary reflective-flake browser candidates, editable fineness/density/orientation, a movable key light and identical texture bakes for engine trials. All ten PNGs match their raw inputs; its original 19-test verification passed. The menu subsequently expanded to seven families above. Finish accuracy, overly dark speckles at some angles, normal blending in-game and subpixel sparkle filtering remain open. Nathan welcomes useful unsolicited insights as research advances.
+
+[Experiment 003](../experiments/003-decal-material-import/README.md) now imports ten XBM textures and ten material instances for the game-side comparison. Actual decal DXIL confirms RG normal reconstruction, red-only scalar maps, independent blend weights and squared colour coverage. Texture metadata, material round-trips, local dependencies and decoded base-level compression error are checked; colour-mask compensation substantially reduces the measured edge-weight discrepancy. This is a resource fixture, not a working CCXL mod: mesh/morph/app assembly and runtime proof remain pending.
+
+Foundation survey and initial ArchiveXL investigation completed. XF Appearance Studio (formerly Eye Artistry) is first; Photo Mode Tools is a separate second project. No legacy source implementation was edited, no game launch was requested, and no mod was deployed.
+
+The first [XF Appearance Studio authoring prototype](../projects/xf-appearance-studio/authoring/README.md) is now running at [localhost](http://127.0.0.1:4317/). It edits procedural masks on the actual head/expanded plate, preserves all eight bone influences and 105 customization morphs, exports recipes/2K alpha masks, and offers exploratory blink motion. Materials/pose are still approximations.
+
+Direct surface editing now has a working first implementation: curve and field controls drag on either side of the face, remain attached through blink/morph changes, share the UV recipe and support whole-gesture Undo/Escape cancellation. UV gap guards and head/eye occlusion are checked. 17 automated tests, typecheck and browser build pass; actual browser gestures and deformation were verified in the isolated page. Remaining authoring refinements and the explicit four-class/glitter material request are tracked in the [authoring queue](../research/backlog/eye-artistry-authoring.md).
+
+Saved-V import is proven for the newest local 2.31 save: the whole appearance node decoded (zero trailing bytes), including CCXL/legacy Eye Artistry choices, and five facial morphs applied in the browser. Saved Arkhe brows 18 and Soft Natural lashes now render with independent toggles, full skin weights and their corresponding facial morphs; colours and blink remain approximations. Remaining appearance-resource assembly is pending; do not call this a complete reproduction of Nathan's current V. See [save import evidence](../research/eye-artistry/save-import.md).
+
+## Completed
+
+- Inventoried 43 external top-level `D:/Dev` folders plus the new HQ's role, all 6 RedModding top-level folders and 15 project folders, nested project/repository boundaries, 999 MO2 folders including 11 separators, profiles and both overwrite generations. 382,741 files/39,377 directories; exclusions and coverage are explicit. See [inventory](../inventory/README.md).
+- Assessed old agent work: relevant `sx-cp2077` research is useful but was left at planning/prerequisite stage. Do not resume the old coordination toolbox.
+- Refreshed 30 external source references; 22 advanced. ArchiveXL, TweakXL, Codeware, RED4ext/SDK, redscript and WolvenKit references are ready for research at their recorded revisions. Forks/branch caveats remain documented.
+- Traced Eye Artistry generation: 15,681 material entries/local instances, 80 generated app files and 4 layer controls. Preserved latest art/backup chronology and hashes.
+- Reconciled February 2026 plate lineage: `.011` is `.010` with saved facial shapes baked in, not a separate design. Nathan confirms he cut the plate from the head; all plate vertices and 105 shapes match the head exactly. Owned neutral master retains full deformation; no source save. [Plate audit and intake](../research/eye-artistry/lineage.md).
+- Compared historical material templates: only `EMP_Normal` → `EMP_Front` differs; depth writes remain disabled. Geometric ordering is a hypothesis to test.
+- Extracted/serialized three CCXL consumers, verified current ArchiveXL 1.27.3 composite material behavior from source, and wrote a concrete reduction strategy.
+- Passed a fresh dynamic-material JSON/CR2W round-trip and all 15,680 baseline naming/path cases. This is offline contract evidence, not a working/render-tested mod.
+- Created a reusable log capture helper and captured an existing-session baseline without launching the game.
+- Saved/validated Nathan's Nexus API credential outside the repo; deleted supplied `temp.txt`.
+- Queued the requested [CCXL capability investigation](../research/backlog/ccxl-character-creator-capabilities.md).
+
+## User decisions that must carry forward
+
+- Reimplement mods cleanly within HQ; mine original code/art as reference. No new all-in-one xf-omega toolbox.
+- Old Eye Artistry designs, preset identities and IDs may all be replaced. Nathan prioritizes the layered structure and concept, and wants to author a fresh content collection with the new tools. Legacy catalogue parity is not an acceptance criterion.
+- Build a Bun/TypeScript/Three.js local procedural authoring tool with shape controls, weights, falloffs, vector fields, actual meshes/material approximation and blink support. This also serves exploratory character-rendering work. Save import should eventually reconstruct the user's current V using their installed assets.
+- Direct live editing on the model surface was explicitly requested; the first implementation now supports draggable curve/field controls that follow deformation. Remaining refinement and fidelity work must not be confused with complete authoring/mod delivery. The persistent [authoring queue](../research/backlog/eye-artistry-authoring.md) also covers configurable asset sources for MO2, Vortex and manual mod folders.
+- User prioritizes more Eye Artistry colours. 49 is an old implementation compromise; do not freeze it into a product requirement. Avoid WolvenKit's prior full-material-matrix slowdown; benchmark residual UI/atlas/cache growth.
+- Design for latest stable frameworks and state installed update requirements rather than constraining work to old installed versions. Before runtime testing: ArchiveXL 1.26.3→1.27.3, TweakXL 1.11.3→1.11.4, Codeware 1.20.3→1.20.5. Installed updates have not yet been performed.
+- Blender can be upgraded if needed. Current headless 5.0 inspection succeeded; Blender MCP was not exposed in this session.
+- Batch runtime tests to minimize Nathan's effort and launches. Use source/resource/geometry checks and diagnostics creatively.
+
+## Next concrete work
+
+1. Complete [plate import](../experiments/004-plate-import/README.md) checks: retained game-head shading, rig transforms, skin clearance and posed eyelid behavior. Lineage reconciliation and authoritative neutral master intake are complete; the original viewport/render Displace mismatch is removed.
+2. Implement ONE selector with two complete authored presets and Off. Study compiled mixed-finish material composition, atomically switching all components, stable IDs and app scope. The old [ArchiveXL matrix contract](../research/archive-xl/eye-artistry-strategy.md) remains mechanism evidence, not the product target.
+3. Verify morph import/export, paths, serialization and proposed offset candidates offline. Benchmark larger palette growth before selecting a full release palette.
+4. Prepare framework updates and a diagnostic package; fill out the [single-session test card](validation.md) only when ready.
+5. Research CCXL one-selector preset switching and identity persistence; the broader capability exploration remains queued. Extend SQLite with history/restore, autosave and export collections as the compiler takes shape.
+6. Develop XF Appearance Studio from the validated first slice: exact game material mapping, authentic blink data, multiple shapes/fields and ergonomic authoring; resolve saved appearance hashes against installed winners and assemble a faithful V. Keep current limitations visible and work in an isolated verification page rather than changing Nathan's live draft.
+
+## Open proof obligations
+
+Runtime propagation of custom CCXL app names to these morph-skinned meshes; single-template mesh fallback in this resource shape; correct normal/morph transfer for the new topology; deterministic decal stacking; distinct finished material looks; actual large-palette editor/runtime performance; stable IDs/save behavior. None is disguised as a completed in-game check.
+
+Entry points: [HQ README](../README.md), [XF Appearance Studio project](../projects/xf-appearance-studio/README.md), [lineage](../research/eye-artistry/lineage.md), [toolchain](toolchain.md), [validation](validation.md), [research queue](../research/backlog/README.md).

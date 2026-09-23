@@ -1,0 +1,243 @@
+{
+  "templates": [
+    {
+      "depot": "engine/materials/multilayered.mt",
+      "binarySha256": "415f4a88835aece7e6ed9d1a694756f5a14958fbd0f3bfc0da4ad750aa848f80",
+      "jsonSha256": "cf7625b830f70470c3d6a3e63c6428e4abe3cb851aa1e2887f13748c58ea2af3",
+      "gameVersion": 2310,
+      "wolvenKitVersion": "8.17.4",
+      "canBeMasked": 0,
+      "parameters": [
+        "GlobalNormal",
+        "GlobalNormalIntensity",
+        "GlobalNormalUVBias",
+        "GlobalNormalUVScale",
+        "Layers",
+        "LayersStartIndex",
+        "MaskAtlas",
+        "MaskAtlasDims",
+        "MaskBaseResolution",
+        "MaskTileSize",
+        "MaskTiles",
+        "MaskToTileScale",
+        "MicroblendsTextureDDXYMultiplier",
+        "MultilayerMask",
+        "MultilayerSetup",
+        "NormalsTextureDDXYMultiplier",
+        "SetupLayerMask",
+        "SurfaceTexAspectRatio"
+      ],
+      "passes": [
+        {
+          "featureFlags": "2097152",
+          "stage": "renderstage_depth_prepass",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "1",
+          "stage": "renderstage_gbuffer_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "524289",
+          "stage": "renderstage_gbuffer_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "33",
+          "stage": "renderstage_gbuffer_velbuff_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "524321",
+          "stage": "renderstage_gbuffer_velbuff_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "2",
+          "stage": "renderstage_cascade_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "512",
+          "stage": "renderstage_highlights",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 0,
+              "srcFactor": "FAC_SrcColor",
+              "destFactor": "FAC_One",
+              "colorOp": "OP_Add"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "depot": "base/materials/mesh_decal.mt",
+      "binarySha256": "b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019",
+      "jsonSha256": "413bc056a5378ed11d7c0bea6d9feaa6e38c051a7dad8367b668f8d877c2a851",
+      "gameVersion": 2310,
+      "wolvenKitVersion": "8.17.4",
+      "canBeMasked": 1,
+      "parameters": [
+        "AlphaMaskContrast",
+        "AnimationFramesHeight",
+        "AnimationFramesWidth",
+        "AnimationSpeed",
+        "DepthThreshold",
+        "DiffuseAlpha",
+        "DiffuseColor",
+        "DiffuseTexture",
+        "MetalnessBias",
+        "MetalnessScale",
+        "MetalnessTexture",
+        "NormalAlpha",
+        "NormalAlphaTex",
+        "NormalTexture",
+        "NormalsBlendingMode",
+        "NormalsBlendingModeAlpha",
+        "RoughnessBias",
+        "RoughnessMetalnessAlpha",
+        "RoughnessScale",
+        "RoughnessTexture",
+        "SecondaryMask",
+        "SecondaryMaskInfluence",
+        "SecondaryMaskUVScale",
+        "UVOffsetX",
+        "UVOffsetY",
+        "UVRotation",
+        "UVScaleX",
+        "UVScaleY",
+        "UseNormalAlphaTex",
+        "VertexOffsetFactor"
+      ],
+      "passes": [
+        {
+          "featureFlags": "1",
+          "stage": "renderstage_post_gbuffer",
+          "depthWrite": 0,
+          "targets": [
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "8",
+          "stage": "renderstage_gbuffer_regular",
+          "depthWrite": 1,
+          "targets": [
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            }
+          ]
+        },
+        {
+          "featureFlags": "512",
+          "stage": "renderstage_highlights",
+          "depthWrite": 0,
+          "targets": [
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            },
+            {
+              "blendEnable": 1,
+              "srcFactor": "FAC_SrcAlpha",
+              "destFactor": "FAC_InvSrcAlpha",
+              "colorOp": "OP_Add"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scope": "Serialized template render states; not runtime pipeline capture."
+}

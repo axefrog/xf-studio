@@ -1,0 +1,128 @@
+{
+  "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\xfea_head2.blend",
+  "sourceSha256": "c7a5fa8a90bcd4c45b78f85ad27b9f4a16056b370c664908bd7940adf3a6995d",
+  "blender": "5.0.0",
+  "sceneUnitScale": 1.0,
+  "activeMorphs": {
+    "h032_nose": 1.0,
+    "h043_mouth": 1.0,
+    "h054_jaw": 1.0,
+    "h091_eyes": 1.0,
+    "h145_ear": 1.0
+  },
+  "sameTopology": true,
+  "worldTransformsEqual": true,
+  "comparisons": {
+    "directRelativeShapeMixToStatic": {
+      "max": 3.839941346661803e-09,
+      "mean": 6.733295819642646e-11,
+      "p95": 0.0
+    },
+    "basisToStatic": {
+      "max": 0.006007908046735039,
+      "mean": 0.002658687631333327,
+      "p95": 0.0049143422678878815
+    },
+    "evaluatedToStatic": {
+      "max": 1.19456415957391e-07,
+      "mean": 1.750631580836475e-08,
+      "p95": 1.1926748300777466e-07
+    },
+    "evaluatedToEvaluated": {
+      "max": 0.0,
+      "mean": 0.0,
+      "p95": 0.0
+    },
+    "activeMorphsAndDisplaceToStatic": {
+      "max": 5.0053061724966965e-05,
+      "mean": 5.000051809986052e-05,
+      "p95": 5.002453967756479e-05
+    },
+    "activeMorphsToStatic": {
+      "max": 0.0,
+      "mean": 0.0,
+      "p95": 0.0
+    },
+    "basisNoModifiersToStatic": {
+      "max": 0.006007908046735039,
+      "mean": 0.002658687631333327,
+      "p95": 0.0049143422678878815
+    },
+    "basisAndDisplaceToStatic": {
+      "max": 0.005978461678601587,
+      "mean": 0.002668129789691896,
+      "p95": 0.004922284769820215
+    }
+  },
+  "originalModifiers": [
+    {
+      "name": "Armature",
+      "type": "ARMATURE",
+      "viewport": true,
+      "render": true,
+      "strength": null,
+      "midLevel": null,
+      "direction": null
+    },
+    {
+      "name": "Displace",
+      "type": "DISPLACE",
+      "viewport": false,
+      "render": true,
+      "strength": 9.999999747378752e-05,
+      "midLevel": 0.5,
+      "direction": "NORMAL"
+    }
+  ],
+  "hidden": {
+    "submesh_00_LOD_1.010": {
+      "hideGet": false,
+      "hideViewport": false,
+      "hideRender": false
+    },
+    "submesh_00_LOD_1.011": {
+      "hideGet": true,
+      "hideViewport": false,
+      "hideRender": false
+    }
+  },
+  "closestSingleMorphAndDisplace": [
+    {
+      "key": "h091_eyes",
+      "max": 0.0036687672274035594,
+      "mean": 0.00047333598356009315,
+      "p95": 0.0021239408751056654
+    },
+    {
+      "key": "h141_eyes",
+      "max": 0.0051556442384591075,
+      "mean": 0.001747665431133818,
+      "p95": 0.0036036890952632454
+    },
+    {
+      "key": "h041_eyes",
+      "max": 0.006061512117827458,
+      "mean": 0.0018604406418496087,
+      "p95": 0.004130673456429303
+    },
+    {
+      "key": "h071_eyes",
+      "max": 0.0052043659977811735,
+      "mean": 0.0019960848837504448,
+      "p95": 0.003635531173683164
+    },
+    {
+      "key": "h081_eyes",
+      "max": 0.006969076258417451,
+      "mean": 0.0019970337096719215,
+      "p95": 0.003999068335558797
+    }
+  ],
+  "uvDifferences": {
+    "0": 0.0,
+    "1": 0.0
+  },
+  "boneWeightsEqual": true,
+  "maxBoneInfluences": 8,
+  "maxWeightSumDeviation": 1.1641532182693481e-07
+}

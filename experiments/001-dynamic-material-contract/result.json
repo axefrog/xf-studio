@@ -1,0 +1,23 @@
+{
+  "result": "passed",
+  "selectors": 15680,
+  "texture_paths": 20,
+  "palette_material_paths": 196,
+  "authored_layer_app_templates": 4,
+  "authored_layer_mesh_templates": 4,
+  "material_reference_roundtrip": "both dynamic paths and Soft flags retained by WolvenKit 8.17.4",
+  "invalid_name_cases": 4,
+  "sample": {
+    "selector": "xfas_eye_layer1__xfas_e01+000+matte",
+    "chunk_material": "xfas_e01+000+matte@makeup",
+    "resolved_paths": [
+      "axefrog\\appearance_studio\\textures\\xfas_e01.xbm",
+      "axefrog\\appearance_studio\\materials\\palette\\000_matte.mi"
+    ]
+  },
+  "limits": [
+    "Resolver is a source-derived model, not executed ArchiveXL code.",
+    "Fixture references are intentionally unresolved; this proves CR2W serialization, not asset existence or rendering.",
+    "CCXL dynamic scope/appearance propagation, morph integration and blend order require further checks."
+  ]
+}

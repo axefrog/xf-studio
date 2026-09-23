@@ -1,0 +1,24 @@
+{
+  "providedBy": "Nathan",
+  "received": "2026-09-23",
+  "description": "User-provided current in-game V comparison references; inspected locally without changing originals.",
+  "images": [
+    {
+      "path": "F:\\Media\\Other\\Cyberpunk 2077\\AI\\photographs\\1\\prompt\\1.jpg",
+      "sha256": "13094bfdb54bf4ce984b41eaf2aa37aedb1b6d6c5dee2f230da48deb22776747",
+      "bytes": 508432,
+      "lastWriteTimeUtc": "2026-09-11T03:53:27.4318434Z",
+      "width": 2000,
+      "height": 1600
+    },
+    {
+      "path": "F:\\Media\\Other\\Cyberpunk 2077\\AI\\photographs\\1\\prompt\\6.jpg",
+      "sha256": "69f8f334444260f7ebab70d4e9556903967944e6e10002b940aaeafb5a649340",
+      "bytes": 263430,
+      "lastWriteTimeUtc": "2026-09-11T05:47:48.7589607Z",
+      "width": 2000,
+      "height": 1600
+    }
+  ],
+  "use": "Visual assembly/material reference. Do not infer exact preset IDs, neutral material colours, capture/save correspondence or calibrated camera parameters from images alone."
+}

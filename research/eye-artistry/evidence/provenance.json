@@ -1,0 +1,65 @@
+[
+  {
+    "path": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\assets\\project.yaml",
+    "bytes": 1057,
+    "sha256": "adea932b47d9470bfdc792151ec8a1c40874c0e60c18cf0f7a26c36243849483"
+  },
+  {
+    "path": "D:\\Dev\\xf-omega\\assets\\xf-eye-artistry-ccxl\\assets\\project.yaml",
+    "bytes": 1057,
+    "sha256": "adea932b47d9470bfdc792151ec8a1c40874c0e60c18cf0f7a26c36243849483"
+  },
+  {
+    "path": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\xfea_head2.blend",
+    "bytes": 53148907,
+    "sha256": "c7a5fa8a90bcd4c45b78f85ad27b9f4a16056b370c664908bd7940adf3a6995d"
+  },
+  {
+    "path": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\eye_makeup_plates.glb",
+    "bytes": 97180,
+    "sha256": "209f09a7d3c0e17b42bdd86c1a6a1c753d6a8eb9f01175dce1e9dad840d2f6bf"
+  },
+  {
+    "path": "F:\\Games\\RedModding\\Projects\\xfea backup 2026-01-22.zip",
+    "bytes": 2108511,
+    "sha256": "f155353f8bb83fb80f2392b5197a806c5cb9d857e5b90549ae6132dad70e7a11",
+    "members": [
+      {
+        "name": "xf-eye-artistry-ccxl.archive",
+        "bytes": 2199552,
+        "zip_timestamp": [
+          2025,
+          8,
+          25,
+          21,
+          41,
+          48
+        ],
+        "sha256": "30f9a1b1bdcbddbf1b3078952b16cb1a3545511a76609a073b4e9dcf3fe6d73f"
+      },
+      {
+        "name": "xf-eye-artistry-ccxl.xl",
+        "bytes": 85,
+        "zip_timestamp": [
+          2025,
+          8,
+          25,
+          21,
+          41,
+          40
+        ],
+        "sha256": "f6f5dc952cee41a20d912eec309c5d6588a1205028aaf002b06ae8850ddf3da4"
+      }
+    ]
+  },
+  {
+    "path": "F:\\Games\\MO2\\mods\\XF Eye Artistry CCXL - Dev\\archive\\pc\\mod\\xf-eye-artistry-ccxl.archive",
+    "bytes": 14594048,
+    "sha256": "6e474df5262a8c894910b7591cf39c6acd432a3389027c96617a5b4bc80d5d85"
+  },
+  {
+    "path": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl.archive",
+    "bytes": 35340288,
+    "sha256": "a505691a75125bfbc99462b5dcc6e92b6efb9489b1aac8beda5d482a1abfd860"
+  }
+]

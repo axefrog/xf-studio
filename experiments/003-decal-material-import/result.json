@@ -1,0 +1,288 @@
+{
+  "textures": [
+    {
+      "name": "xfas_glitter_normal",
+      "group": "normal",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_Normalmap",
+        "group": "TEXG_Generic_Normal",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_TrueColor"
+      },
+      "bytes": 313221,
+      "sha256": "052a2c8175eb65b5c27e7fdfd2e579182e1be0c454d516cf05c2c0dd023215da"
+    },
+    {
+      "name": "xfas_glitter_normal_yflip",
+      "group": "normal",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_Normalmap",
+        "group": "TEXG_Generic_Normal",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_TrueColor"
+      },
+      "bytes": 314538,
+      "sha256": "f9c825db0e84dc0ffdbbb458454d8625be44c108f9ee48e53b922a94bbcef53b"
+    },
+    {
+      "name": "xfas_shimmer_normal",
+      "group": "normal",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_Normalmap",
+        "group": "TEXG_Generic_Normal",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_TrueColor"
+      },
+      "bytes": 431271,
+      "sha256": "d7e59e1d63a54be5a6e09cf71d780cc424a0c825c9b8679a595d6222bec81804"
+    },
+    {
+      "name": "xfas_shimmer_normal_yflip",
+      "group": "normal",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_Normalmap",
+        "group": "TEXG_Generic_Normal",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_TrueColor"
+      },
+      "bytes": 435931,
+      "sha256": "7deea91dbaea77e8554905d3008823a47e211ccdeb39266725f680934855d252"
+    },
+    {
+      "name": "xfas_glitter_metalness",
+      "group": "scalar",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityR",
+        "group": "TEXG_Generic_Grayscale",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_Grayscale"
+      },
+      "bytes": 182848,
+      "sha256": "d08e4d8b7f1b51f486c6b0ff728f28094a686660e2fc7b165bc833e355088e0d"
+    },
+    {
+      "name": "xfas_glitter_roughness",
+      "group": "scalar",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityR",
+        "group": "TEXG_Generic_Grayscale",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_Grayscale"
+      },
+      "bytes": 146101,
+      "sha256": "b800a91226c7a051433bbaeaf427d34ff55ba84897c6f7954dc4996a67a572a9"
+    },
+    {
+      "name": "xfas_shape_normal_alpha",
+      "group": "scalar",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityR",
+        "group": "TEXG_Generic_Grayscale",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_Grayscale"
+      },
+      "bytes": 7990,
+      "sha256": "bd68dabfb21dd643071a079fad81abb4bbcccb9ead03271847a710a013376d50"
+    },
+    {
+      "name": "xfas_shimmer_metalness",
+      "group": "scalar",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityR",
+        "group": "TEXG_Generic_Grayscale",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_Grayscale"
+      },
+      "bytes": 169602,
+      "sha256": "913f4c6ea63a576d326dd3d46b1124343723dc652acbb3511510b51a37ccbf69"
+    },
+    {
+      "name": "xfas_shimmer_roughness",
+      "group": "scalar",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityR",
+        "group": "TEXG_Generic_Grayscale",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_Grayscale"
+      },
+      "bytes": 141352,
+      "sha256": "1195630b4ca8ce7b41ff8a4c73a687ed91575808f11d186369bcceca5de57392"
+    },
+    {
+      "name": "xfas_shape_diffuse",
+      "group": "colour",
+      "setup": {
+        "$type": "STextureGroupSetup",
+        "allowTextureDowngrade": 0,
+        "alphaToCoverageThreshold": 0,
+        "compression": "TCM_QualityColor",
+        "group": "TEXG_Generic_Color",
+        "hasMipchain": 1,
+        "isGamma": 0,
+        "isStreamable": 1,
+        "platformMipBiasConsole": 0,
+        "platformMipBiasPC": 0,
+        "rawFormat": "TRF_TrueColor"
+      },
+      "bytes": 9893,
+      "sha256": "71d755bc13625c5e2f901fe2e7fdd2297188a282c7f96eee631b90c5acf1a9fd"
+    }
+  ],
+  "materials": [
+    {
+      "name": "xfas_matte_n0",
+      "finish": "matte",
+      "normalMode": 0,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_regular_n0",
+      "finish": "regular",
+      "normalMode": 0,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_shimmer_n0",
+      "finish": "shimmer",
+      "normalMode": 0,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_shimmer_n0_yflip",
+      "finish": "shimmer",
+      "normalMode": 0,
+      "greenChannelFlipped": true
+    },
+    {
+      "name": "xfas_shimmer_n1",
+      "finish": "shimmer",
+      "normalMode": 1,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_shimmer_n1_yflip",
+      "finish": "shimmer",
+      "normalMode": 1,
+      "greenChannelFlipped": true
+    },
+    {
+      "name": "xfas_glitter_n0",
+      "finish": "glitter",
+      "normalMode": 0,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_glitter_n0_yflip",
+      "finish": "glitter",
+      "normalMode": 0,
+      "greenChannelFlipped": true
+    },
+    {
+      "name": "xfas_glitter_n1",
+      "finish": "glitter",
+      "normalMode": 1,
+      "greenChannelFlipped": false
+    },
+    {
+      "name": "xfas_glitter_n1_yflip",
+      "finish": "glitter",
+      "normalMode": 1,
+      "greenChannelFlipped": true
+    }
+  ],
+  "cliSha256": "fdffea5f19a13a5abf57487acf4e9cffce35e789d8f0d8ef551130021a086201",
+  "settings": {
+    "normal": {
+      "TextureGroup": "TEXG_Generic_Normal",
+      "RawFormat": "TRF_TrueColor",
+      "Compression": "TCM_Normalmap",
+      "IsGamma": false,
+      "GenerateMipMaps": true,
+      "IsStreamable": true,
+      "PremultiplyAlpha": false
+    },
+    "scalar": {
+      "TextureGroup": "TEXG_Generic_Grayscale",
+      "RawFormat": "TRF_Grayscale",
+      "Compression": "TCM_QualityR",
+      "IsGamma": false,
+      "GenerateMipMaps": true,
+      "IsStreamable": true,
+      "PremultiplyAlpha": false
+    },
+    "colour": {
+      "TextureGroup": "TEXG_Generic_Color",
+      "RawFormat": "TRF_TrueColor",
+      "Compression": "TCM_QualityColor",
+      "IsGamma": false,
+      "GenerateMipMaps": true,
+      "IsStreamable": true,
+      "PremultiplyAlpha": false
+    }
+  },
+  "proof": "Metadata, output files, material roundtrip and local material dependencies verified; no runtime proof.",
+  "deployment": "None; no mesh, app or CCXL registration is included yet."
+}

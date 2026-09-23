@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-23",
+  "outputs": [
+    {
+      "file": "brows.glb",
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\saved-v-brows\\base\\raw\\base\\characters\\head\\player_base_heads\\player_female_average\\heb_000_pwa__morphs.morphtarget.glb",
+      "bytes": 1610848,
+      "sha256": "da1e38700d2549335d6c6b9bf8ad12899fc8dbb2d9b25c8ce70de77db80edcae"
+    },
+    {
+      "file": "brows-alpha.png",
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\saved-v-brows\\raw\\ark_heb__base_d18.png",
+      "bytes": 847923,
+      "sha256": "5fac5306ee4f32c082a6739457170e5f5d2aac5e2f3a73eb3c903628ebfdb56f"
+    },
+    {
+      "file": "lashes.glb",
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\saved-v-lashes\\raw\\softnatural_eyelashes_pwa.morphtarget.glb",
+      "bytes": 19740312,
+      "sha256": "3113122a9870c4c097300c09b544d6e3949ce700d7d243e94c8b01faafa34f34"
+    },
+    {
+      "file": "lashes-alpha.png",
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\saved-v-lashes\\raw\\softnatural_eyelashes_single_lash_alpha.png",
+      "bytes": 581,
+      "sha256": "c844d762c249ebf7e17c009605929c736aa039e53e698863d3d9fa6415be82de"
+    }
+  ],
+  "brows": {
+    "appearanceHash": "10685882159528859062",
+    "appearance": "ark_eyebrows_02_ccxl_18",
+    "definition": "10_brown_ombre",
+    "geometry": "ArchiveXL .xl copies vanilla female brow morph blob/boundingBox/targets and mesh renderResourceBlob into the mod stubs. Export uses those vanilla geometry sources.",
+    "texture": "Arkhe Beautiful EYEBROWS II FULLER style 18",
+    "morphs": 105
+  },
+  "lashes": {
+    "appearanceHash": "6047185506343464350",
+    "appearance": "icxrus_softnaturaleyelashes",
+    "definition": "05_brown_liquorice",
+    "geometry": "Soft Natural Eyelashes female morph + base mesh, exported using isolated archive context",
+    "morphs": 21
+  },
+  "limitations": [
+    "Reference study; not a general installed-resource resolver or verified MO2 winner.",
+    "Brow/lash colours and shaders approximated; gradient maps, secondary diffuse, anisotropy and packed normals not reproduced.",
+    "Blink remains synthetic, extended to lash rig; no game animation proof.",
+    "Third-party/game assets must not be redistributed."
+  ]
+}

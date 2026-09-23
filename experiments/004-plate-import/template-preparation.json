@@ -1,0 +1,23 @@
+{
+  "source": "Fresh vanilla full-head resource scaffolding; geometry replaced by the owned plate import",
+  "resources": [
+    {
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\eye-plate\\json\\h0_000_pwa_c__basehead.mesh.json",
+      "sourceSha256": "6e302b14b1aa208a344a9699c108c99e391aa49a99e97c8dadc442734c0cb14f",
+      "output": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\generated\\templates\\xfas_eye_plate.mesh.json",
+      "sha256": "66e3a67372cf470c4751b347567455377991b00c645547cac08e47366c955aad",
+      "bytes": 772676,
+      "removedMaterialEntries": 61,
+      "boneCount": 254
+    },
+    {
+      "source": "D:\\Dev\\cp2077-modding-hq\\research\\consumers\\eye-plate\\json\\h0_000_pwa__morphs.morphtarget.json",
+      "sourceSha256": "e72683ef93e9acfcad628fff8aa4b873fd09a27034c9d54c2ee0b0b43fedc18c",
+      "output": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\generated\\templates\\xfas_eye_plate.morphtarget.json",
+      "sha256": "26b984818909f565b15984cf6132f5196bb2e1df8b8daf0c9e456e33a7e1eb9b",
+      "bytes": 16211459,
+      "morphCount": 105,
+      "targetOrderMatchesGLB": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "baseline": "F:/Games/RedModding/General/references/mesh_decal.json",
+  "modified": "D:/Dev/xf-omega/source/projects/xf-eye-artistry-ccxl/mesh_decal__emp_front.mt.json",
+  "differences": [
+    [
+      "/materialPriority",
+      "EMP_Normal",
+      "EMP_Front"
+    ]
+  ]
+}

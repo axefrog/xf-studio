@@ -1,0 +1,144 @@
+{
+  "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\xfea_head2.blend",
+  "source_sha256": "c7a5fa8a90bcd4c45b78f85ad27b9f4a16056b370c664908bd7940adf3a6995d",
+  "blender": "5.0.0",
+  "objects": [
+    {
+      "source_object": "submesh_00_LOD_1.009",
+      "export_name": "head",
+      "vertices": 7186,
+      "morphs": 105,
+      "saved_morph_weights": {
+        "h032_nose": 1.0,
+        "h043_mouth": 1.0,
+        "h054_jaw": 1.0,
+        "h091_eyes": 1.0,
+        "h145_ear": 1.0
+      },
+      "max_nonzero_vertex_group_memberships": 10,
+      "max_bone_influences": 8,
+      "non_bone_groups": [
+        "TEMPORARY_EYE_MAKEUP_AREA",
+        "Group.002"
+      ]
+    },
+    {
+      "source_object": "submesh_00_LOD_1.010",
+      "export_name": "makeup_plate",
+      "vertices": 1620,
+      "morphs": 105,
+      "saved_morph_weights": {
+        "h032_nose": 1.0,
+        "h043_mouth": 1.0,
+        "h054_jaw": 1.0,
+        "h091_eyes": 1.0,
+        "h145_ear": 1.0
+      },
+      "max_nonzero_vertex_group_memberships": 10,
+      "max_bone_influences": 8,
+      "non_bone_groups": [
+        "TEMPORARY_EYE_MAKEUP_AREA",
+        "Group.002"
+      ]
+    },
+    {
+      "source_object": "submesh_01_LOD_1",
+      "export_name": "eyes",
+      "vertices": 662,
+      "morphs": 0,
+      "saved_morph_weights": {},
+      "max_nonzero_vertex_group_memberships": 2
+    }
+  ],
+  "textures": [
+    {
+      "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\UDIM_d.png",
+      "source_sha256": "a7e645494aafb35cbea0a641e0789d10f2bf68ebfa528610f1c677541776ccdc",
+      "tile": [
+        0,
+        0
+      ],
+      "output": "head-color.png",
+      "size": [
+        2048,
+        2048
+      ],
+      "source_colorspace": "sRGB"
+    },
+    {
+      "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\UDIM_d.png",
+      "source_sha256": "a7e645494aafb35cbea0a641e0789d10f2bf68ebfa528610f1c677541776ccdc",
+      "tile": [
+        1,
+        1
+      ],
+      "output": "eye-color.png",
+      "size": [
+        2048,
+        2048
+      ],
+      "source_colorspace": "sRGB"
+    },
+    {
+      "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\UDIM_n.png",
+      "source_sha256": "c89b5caea3a72b0d3a64588f1a5cee03c4f8aa1b33e23d7f3d0be872b29d169c",
+      "tile": [
+        0,
+        0
+      ],
+      "output": "head-normal.png",
+      "size": [
+        2048,
+        2048
+      ],
+      "source_colorspace": "sRGB"
+    },
+    {
+      "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\UDIM_r.png",
+      "source_sha256": "92ba35eaab0525d88cb843476b217bc1b0db81868010358272fc27120c84f501",
+      "tile": [
+        0,
+        0
+      ],
+      "output": "head-roughness.png",
+      "size": [
+        2048,
+        2048
+      ],
+      "source_colorspace": "sRGB"
+    }
+  ],
+  "limitations": [
+    "Preview uses UV0, omits the separate high-detail eye-skin overlay, brows, lashes and hair.",
+    "Plate Displace omitted; browser uses a preview-only normal offset.",
+    "Existing facial customization morph defaults retained. No game blink animation present.",
+    "Material adaptation is a PBR approximation, not REDengine shader execution."
+  ],
+  "outputs": [
+    {
+      "file": "eye-color.png",
+      "sha256": "92ecdf42807fc58554d259a3fa04914c2b8c34d0616e4c04791ae6c7344b3249",
+      "bytes": 4699839
+    },
+    {
+      "file": "head-color.png",
+      "sha256": "5f50adb99a385882ec162d1c03a29d1bd4e88011e43f06bc5c1161d99e06005a",
+      "bytes": 3948529
+    },
+    {
+      "file": "head-normal.png",
+      "sha256": "416bbfc2db339058a371229310978852e9ec73c8a0cda0ae464522537a1b2e1f",
+      "bytes": 5836287
+    },
+    {
+      "file": "head-roughness.png",
+      "sha256": "7b6353b22e82c250c4f598669e92a14e5f682007ca50525306cdf29b3f6b08c3",
+      "bytes": 2473778
+    },
+    {
+      "file": "head.glb",
+      "sha256": "72b46566276bf87786d2b8025800278b41833194b45359792d380009bc3f82e8",
+      "bytes": 12299820
+    }
+  ]
+}

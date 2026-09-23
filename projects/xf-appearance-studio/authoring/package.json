@@ -1,0 +1,20 @@
+{
+  "name": "xf-appearance-studio-authoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun server.ts",
+    "test": "bun test",
+    "check": "tsc --noEmit",
+    "build": "bun build src/main.ts src/raster-worker.ts --outdir public/build --target browser"
+  },
+  "dependencies": {
+    "three": "0.186.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@types/three": "0.186.0",
+    "typescript": "7.0.2"
+  }
+}

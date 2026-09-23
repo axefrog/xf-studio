@@ -1,0 +1,10 @@
+{
+  "master": "D:\\Dev\\cp2077-modding-hq\\projects\\xf-appearance-studio\\assets\\authored\\xfas_eye_plate.blend",
+  "masterSha256": "f1b6c09d1bf7cd8cc78f8431fdbf8ae15bdc369cb7c34a0cee2a129f0f5b1265",
+  "glb": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\generated\\raw\\xfas_eye_plate.blender.glb",
+  "glbSha256": "06224dba58c942793bcc02ada345aeb0438dfb277f22745748af9872fcd1c3b7",
+  "bytes": 6511892,
+  "blender": "5.0.0",
+  "denseMorphAccessors": true,
+  "reason": "Installed SharpGLTF path in WolvenKit 8.17.4 throws on sparse-only morph POSITION accessors."
+}

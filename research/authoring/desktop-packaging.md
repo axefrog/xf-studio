@@ -1,0 +1,13 @@
+# Desktop distribution assessment — 2026-09-23
+
+Requirement: eventual desktop XF Appearance Studio, with the current localhost development workflow retained. No wrapper dependency has been installed or selected yet.
+
+Electron bundles Chromium and Node and offers separate renderer/main/utility processes ([official introduction](https://www.electronjs.org/docs/latest), [process model](https://www.electronjs.org/docs/latest/tutorial/process-model)). Its bundled browser makes renderer-version selection explicit. A Bun backend could remain a child service, or the small SQLite adapter could be ported; neither means rewriting the Three.js editor. Recommendation/inference: the safer initial distribution baseline if packaging predictability dominates.
+
+Electrobun supports a Bun main process and native webviews or bundled CEF. Its current build docs expose Windows native WebView2 and optional CEF ([build configuration](https://framework.blackboard.sh/electrobun/apis/cli/build-configuration/)). The same docs say Windows/Linux URL schemes and file associations are not yet implemented. Recommendation/inference: attractive for keeping Bun, but first prove our skinned Three.js renderer, file import/export, native tool invocation, SQLite persistence, installer/update and recovery behavior. Native webview builds and bundled CEF have different browser-version/size tradeoffs; do not promise both tiny downloads and a bundled fixed Chromium engine.
+
+Keep packaging replaceable: recipe/domain types, material adapters, compiler, asset resolver and library service should not import desktop-wrapper APIs. UI uses a narrow transport adapter; localhost now, wrapper IPC or loopback service later. Never expose arbitrary SQL, unrestricted filesystem access or process execution to the renderer. Heavy texture/mesh/archive operations belong in background workers/processes with progress/cancellation and recorded tool versions.
+
+Bun's built-in [SQLite driver](https://bun.com/docs/runtime/sqlite) handles the current local prototype. Database schema and portable documents should not depend on the desktop wrapper. Shipping data belongs in a user-data directory with backups; developer data currently lives in ignored `authoring/data/`, overridable with `XFAS_DATA_DIR`.
+
+Next wrapper step, after eye-makeup export is proven: one bounded Windows packaging comparison with the actual scene and representative import/export workload. Measure install size, cold start, GPU/frame performance, asset-load memory, shutdown/restart durability and updater behavior. Select based on evidence rather than runtime name alone.

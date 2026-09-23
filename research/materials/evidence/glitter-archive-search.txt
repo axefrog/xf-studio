@@ -1,0 +1,7 @@
+base\surfaces\microblends\scratches_and_flakes_a.xbm
+base\fx\_textures\smoke\fx_glitter_3x3.xbm
+base\items\quest\q003__drug_inhaler\_src\textures\ml_q003__drug_inhaler_glitter.mlmask
+base\items\quest\q003__drug_inhaler\_src\textures\ml_q003__drug_inhaler_glitter.mlsetup
+base\items\quest\q003__drug_inhaler\q003__drug_inhaler_04_glitter.mesh
+base\vehicles\standard\v_standard2_chevalier_thrax\entities\meshes\textures\ml_v_standard2_chevalier_thrax_exterior_carpaint_clean_01.mlsetup
+base\fx\shaders\metal_base_glitter.mt

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "variants": [
+    {
+      "finish": "shimmer",
+      "size": 1024,
+      "settings": {
+        "cells": 128,
+        "density": 0.65,
+        "tilt": 0.65,
+        "seed": 2077
+      },
+      "normalConvention": "tangent-space XYZ encoded [0,1], UV0 top-left, browser convention; game import convention must be calibrated",
+      "surfaceChannels": {
+        "R": "flake coverage",
+        "G": "roughness",
+        "B": "metalness",
+        "A": "one"
+      }
+    },
+    {
+      "finish": "glitter",
+      "size": 1024,
+      "settings": {
+        "cells": 128,
+        "density": 0.65,
+        "tilt": 0.65,
+        "seed": 2077
+      },
+      "normalConvention": "tangent-space XYZ encoded [0,1], UV0 top-left, browser convention; game import convention must be calibrated",
+      "surfaceChannels": {
+        "R": "flake coverage",
+        "G": "roughness",
+        "B": "metalness",
+        "A": "one"
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "xfas_shimmer_normal.png",
+      "bytes": 1179856,
+      "sha256": "0de8881aab6fa79972fb65ad45512236e03bc70a366f04b32cf47ce1fa23e6bb"
+    },
+    {
+      "name": "xfas_shimmer_surface.png",
+      "bytes": 1088293,
+      "sha256": "fad6a61972cd6c2f190386845423c88b2a8885c6e5179969b203c52f9b14c4df"
+    },
+    {
+      "name": "xfas_shimmer_coverage.png",
+      "bytes": 467577,
+      "sha256": "a0a921f83423a15bd5b799671fce40489c31ee2ca251b96b2719b6b49ea168ce"
+    },
+    {
+      "name": "xfas_shimmer_roughness.png",
+      "bytes": 396183,
+      "sha256": "6fc1ee6ba10f6f42cd815b7a5c849b876401ff921023af8939470e735b45e824"
+    },
+    {
+      "name": "xfas_shimmer_metalness.png",
+      "bytes": 469496,
+      "sha256": "5c7fc54e0a4bcf818ac57cb9771bb3514d5200084c509ce30937a29aa1c0731c"
+    },
+    {
+      "name": "xfas_glitter_normal.png",
+      "bytes": 660879,
+      "sha256": "275d354f6aceceb88719d3834c2a19b1565c99424445801edf04f21a9c61769d"
+    },
+    {
+      "name": "xfas_glitter_surface.png",
+      "bytes": 621559,
+      "sha256": "082d556eb131708d46c274058c173e5d33338d230e6b124a9ebbdcd1d6602b31"
+    },
+    {
+      "name": "xfas_glitter_coverage.png",
+      "bytes": 256619,
+      "sha256": "0a039ab70848b74a758cbdfbceb0574dd32d43b22ed03a4f6df4fb817d5330c4"
+    },
+    {
+      "name": "xfas_glitter_roughness.png",
+      "bytes": 300535,
+      "sha256": "2c1542556b09ead565b95e0f7e76b3691834851c405ce353169e445822b44dea"
+    },
+    {
+      "name": "xfas_glitter_metalness.png",
+      "bytes": 265039,
+      "sha256": "bab32b658b705796fb34117a621940e06b0fdd80675540b6fbfbbd10fb07c144"
+    }
+  ],
+  "limitations": [
+    "Procedural browser candidate, not an extracted game material or proven game effect.",
+    "1024 base level shared exactly with browser; renderer makes ordinary mipmaps. Normal-variance preserving minification is not implemented.",
+    "Game normal encoding, blend weights and texture import/compression need verification before packaging."
+  ],
+  "pngRoundtrip": "All ten PNGs decoded and matched source bytes/channel selection exactly."
+}

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>XF Appearance Studio</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="identity">
+        <span class="logo">xf<span>°</span></span>
+        <div>
+          <strong>XF APPEARANCE STUDIO</strong
+          ><small>MAKEUP WORKSPACE / 01</small>
+        </div>
+      </div>
+      <span class="local"><i></i> LOCAL WORKSPACE</span>
+      <div class="actions">
+        <button id="open-v">Load V from save</button
+        ><button id="undo" title="Undo (Ctrl+Z)">Undo</button
+        ><button id="save">Export recipe</button
+        ><button id="load">Open recipe</button
+        ><button id="export" class="primary">Export mask ↗</button
+        ><input
+          type="file"
+          id="file"
+          accept="application/json,.json"
+          hidden
+        /><input type="file" id="v-file" accept=".dat" hidden />
+      </div>
+    </header>
+    <main>
+      <aside class="layers-panel">
+        <div class="eyebrow">COMPOSITION</div>
+        <h1>A study in<br />expression.</h1>
+        <p class="intro">
+          Shape the makeup.<br />Keep every decision editable.
+        </p>
+        <div class="section-title">MAKEUP LAYERS <span>04</span></div>
+        <div id="layers"></div>
+        <div class="layer-note">
+          Higher layers sit above lower layers in this preview.
+        </div>
+        <div class="session-card" id="v-card" hidden>
+          <span class="eyebrow">V FROM YOUR SAVE</span>
+          <p id="v-summary"></p>
+          <p id="v-details"></p>
+          <p>
+            Skin, eyes and makeup use the study assets. Hair and other details
+            still need resolving.
+          </p>
+          <button id="v-export">Export appearance data</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="session-card library-card">
+          <span class="eyebrow">LOOK LIBRARY</span>
+          <label>Look name<input id="look-name" maxlength="120" value="Untitled look" /></label>
+          <div class="two-col">
+            <button id="library-save">Save look</button>
+            <button id="library-copy">Save a copy</button>
+          </div>
+          <label>Saved looks<select id="library-looks"><option value="">Loading library…</option></select></label>
+          <div class="two-col">
+            <button id="library-open">Open look</button>
+            <button id="library-refresh">Refresh list</button>
+          </div>
+          <p id="library-state" role="status"></p>
+        </div>
+        <div class="session-card">
+          <span class="eyebrow">WORKING LOCALLY</span>
+          <p>
+            Drafts stay in this browser. Save looks to your local library; export
+            recipes for portable copies.
+          </p>
+          <span id="save-state">Autosave ready</span>
+        </div>
+      </aside>
+      <section class="viewport" id="viewport">
+        <div class="stage-top">
+          <span class="tag">V / EXPANDED EYE PLATE</span
+          ><label class="toggle surface-toggle"
+            ><input id="surface-controls" type="checkbox" checked /> Surface
+            controls</label
+          ><button id="front">Front view</button>
+        </div>
+        <div class="loading" id="loading">
+          Preparing your head &amp; makeup plate…
+        </div>
+        <div class="stage-bottom">
+          <span
+            >Drag to orbit · Scroll to zoom<br /><em
+              >Drag face points to reshape · Mint points bend the field · Esc
+              cancels</em
+            ></span
+          ><label class="toggle"
+            ><input type="checkbox" id="wire" /> Plate wireframe</label
+          >
+        </div>
+        <div class="motion">
+          <div>
+            <span class="eyebrow">EYELID STUDY</span
+            ><span class="hint">Exploratory pose</span>
+          </div>
+          <div class="motion-row">
+            <button id="play" aria-pressed="false">▶ Blink</button
+            ><span>Open</span
+            ><input
+              aria-label="Eyelid closure"
+              id="blink"
+              type="range"
+              min="0"
+              max="1"
+              step=".01"
+              value="0"
+            /><span>Closed</span>
+          </div>
+        </div>
+      </section>
+      <aside class="properties">
+        <div class="eyebrow">SHAPE &amp; SURFACE</div>
+        <h2 id="active-name">Petal wash</h2>
+        <div class="canvas-heading">
+          <span>UV control points</span
+          ><span id="point-label">Point 1 / 6</span>
+        </div>
+        <canvas
+          id="uv"
+          width="720"
+          height="310"
+          aria-label="Editable makeup shape on the head UV map"
+        ></canvas>
+        <p class="help">
+          Drag a point to reshape. Double-click to add.<br />Drag the mint arrow
+          to bend the field. Face and UV guides show the control curve before
+          the field bends it.
+        </p>
+        <div class="small-actions">
+          <button id="remove">Remove point</button
+          ><button id="reset">Reset layer</button>
+        </div>
+        <label class="toggle"
+          ><input id="symmetry" type="checkbox" checked /> Mirror across the
+          face</label
+        >
+        <div class="rule"></div>
+        <label class="control"
+          >Selected point weight <output id="weight-value"></output
+          ><input id="weight" type="range" min="0" max="1" step=".01" /></label
+        ><label class="control"
+          >Edge softness <output id="feather-value"></output
+          ><input
+            id="feather"
+            type="range"
+            min=".0005"
+            max=".04"
+            step=".0005" /></label
+        ><label class="control"
+          >Field reach <output id="radius-value"></output
+          ><input
+            id="radius"
+            type="range"
+            min=".005"
+            max=".15"
+            step=".001" /></label
+        ><button class="text-button" id="clear-field">
+          Clear field direction
+        </button>
+        <div class="rule"></div>
+        <div class="two-col">
+          <label
+            >Colour<input
+              id="color"
+              type="color"
+              aria-label="Makeup colour" /></label
+          ><label
+            >Finish<select id="finish">
+              <option value="matte">Matte</option>
+              <option value="regular">Satin</option>
+              <option value="shimmer">Shimmer / pearl</option>
+              <option value="metallic">Metallic / foil</option>
+              <option value="glitter">Glitter</option>
+              <option value="glossy">Glossy / wet look</option>
+              <option value="iridescent">Colour-shifting</option>
+            </select></label
+          >
+        </div>
+        <label class="control"
+          >Opacity <output id="opacity-value"></output
+          ><input id="opacity" type="range" min="0" max="1" step=".01"
+        /></label>
+        <div class="rule"></div>
+        <p class="help" id="finish-note"></p>
+        <div id="flake-controls" hidden>
+          <div class="eyebrow">REFLECTIVE FLAKE STUDY</div>
+          <label class="control"
+            >Flake fineness <output id="flake-cells-value"></output>
+            <input
+              id="flake-cells"
+              type="range"
+              min="32"
+              max="256"
+              step="8"
+              value="128"
+          /></label>
+          <label class="control"
+            >Flake density <output id="flake-density-value"></output>
+            <input
+              id="flake-density"
+              type="range"
+              min="0"
+              max="1"
+              step=".05"
+              value=".65"
+          /></label>
+          <label class="control"
+            >Orientation spread <output id="flake-tilt-value"></output>
+            <input
+              id="flake-tilt"
+              type="range"
+              min="0"
+              max="1"
+              step=".05"
+              value=".65"
+          /></label>
+          <p class="help">
+            Orbit to inspect reflections. A browser material candidate; game
+            matching and distant sparkle filtering are still being studied.
+          </p>
+        </div>
+        <div class="eyebrow">FACE DETAILS</div>
+        <label class="toggle"
+          ><input type="checkbox" id="brows" checked /> Eyebrows</label
+        ><label class="toggle"
+          ><input type="checkbox" id="lashes" checked /> Eyelashes</label
+        >
+        <p class="help" id="detail-note">
+          Arkhe brows 18 · Soft Natural lashes<br />Reference styles ·
+          approximate colours
+        </p>
+        <details>
+          <summary>Head &amp; lighting</summary>
+          <label>Eye shape<select id="eye-shape"></select></label
+          ><label class="control"
+            >Exposure<input
+              id="exposure"
+              type="range"
+              min=".5"
+              max="2"
+              step=".05"
+              value="1.2" /></label
+          ><label class="control"
+            >Key light angle
+            <input
+              id="light-angle"
+              type="range"
+              min="0"
+              max="360"
+              step="1"
+              value="329" /></label
+          ><label class="toggle"
+            ><input type="checkbox" id="normals" checked /> Preview normal
+            map</label
+          >
+        </details>
+      </aside>
+    </main>
+    <footer>
+      <span id="status" role="status">Loading local assets</span
+      ><span
+        >Material &amp; blink study · game appearance not yet calibrated</span
+      >
+    </footer>
+    <script type="module" src="/build/main.js"></script>
+  </body>
+</html>

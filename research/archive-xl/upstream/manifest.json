@@ -1,0 +1,35 @@
+{
+  "retrieved_utc": "2026-09-22T22:31:42.291030+00:00",
+  "release": "v1.27.3",
+  "published_at": "2026-09-07T10:15:21Z",
+  "release_url": "https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3",
+  "commit": "5474e34d56112f5d8843ae863e1e72ff510957c0",
+  "release_notes": "- Fixed override tags parsing",
+  "files": [
+    {
+      "path": "src/App/Extensions/Mesh/Extension.cpp",
+      "url": "https://raw.githubusercontent.com/psiberx/cp2077-archive-xl/5474e34d56112f5d8843ae863e1e72ff510957c0/src/App/Extensions/Mesh/Extension.cpp",
+      "sha256": "36e8c852c83526d51a3e456a1f810280906285f17d2aac9a76fa178e37d05e9b"
+    },
+    {
+      "path": "src/App/Extensions/Customization/Extension.cpp",
+      "url": "https://raw.githubusercontent.com/psiberx/cp2077-archive-xl/5474e34d56112f5d8843ae863e1e72ff510957c0/src/App/Extensions/Customization/Extension.cpp",
+      "sha256": "caa1e30fa357bdde892f42e0ee56573f1649bd6f517d6ec5ed6dd1455ebd8c79"
+    },
+    {
+      "path": "src/App/Extensions/Garment/Dynamic.cpp",
+      "url": "https://raw.githubusercontent.com/psiberx/cp2077-archive-xl/5474e34d56112f5d8843ae863e1e72ff510957c0/src/App/Extensions/Garment/Dynamic.cpp",
+      "sha256": "f8be36ad1d28ce9d010398b0a52beaed9dcb0e1d7eccd85bfc38baeea63449d1"
+    },
+    {
+      "path": "src/App/Extensions/Garment/Extension.cpp",
+      "url": "https://raw.githubusercontent.com/psiberx/cp2077-archive-xl/5474e34d56112f5d8843ae863e1e72ff510957c0/src/App/Extensions/Garment/Extension.cpp",
+      "sha256": "cd29a05d70545cd9a8dd3cccac09e204ef8b932841b6defad33be566d6b71067"
+    },
+    {
+      "path": "src/App/Extensions/ResourceMeta/Extension.cpp",
+      "url": "https://raw.githubusercontent.com/psiberx/cp2077-archive-xl/5474e34d56112f5d8843ae863e1e72ff510957c0/src/App/Extensions/ResourceMeta/Extension.cpp",
+      "sha256": "8aabd6858cb03f3f1f11d98545da5a3bd7973c4e467a4cc7d3ac7c1078cc0fd1"
+    }
+  ]
+}

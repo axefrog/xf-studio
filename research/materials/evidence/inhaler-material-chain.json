@@ -1,0 +1,530 @@
+{
+  "sources": {
+    "q003__drug_inhaler_04_glitter.mesh.json": "38ab44f066ec204be13d32fe3f865c972d8ad0af0d1cb337de10bd9e8eb3b31a",
+    "ml_q003__drug_inhaler_glitter.mlsetup.json": "3e6779c94aa37b0538157e8295a94988afb1900b056ce6acb8f3b245f93bbabf",
+    "plastic_tech_01_300.mltemplate.json": "aeb95d325e359e240df7d960db347fd48d2490ac4bb1479c733e26a224ab5b0c"
+  },
+  "meshMaterials": [
+    {
+      "base": "engine\\materials\\multilayered.mt",
+      "values": [
+        {
+          "$type": "rRef:ITexture",
+          "GlobalNormal": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\items\\quest\\q003__drug_inhaler\\textures\\q003__drug_inhaler_health_n01.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "rRef:Multilayer_Mask",
+          "MultilayerMask": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\items\\quest\\q003__drug_inhaler\\_src\\textures\\ml_q003__drug_inhaler_glitter.mlmask"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "rRef:Multilayer_Setup",
+          "MultilayerSetup": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\items\\quest\\q003__drug_inhaler\\_src\\textures\\ml_q003__drug_inhaler_glitter.mlsetup"
+            },
+            "Flags": "Embedded"
+          }
+        }
+      ]
+    },
+    {
+      "base": "base\\materials\\glass_deferred.mt",
+      "values": [
+        {
+          "$type": "Color",
+          "TintColor": {
+            "$type": "Color",
+            "Alpha": 255,
+            "Blue": 91,
+            "Green": 0,
+            "Red": 255
+          }
+        },
+        {
+          "$type": "rRef:ITexture",
+          "MaskTexture": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\materials\\placeholder\\white.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "rRef:ITexture",
+          "Roughness": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\materials\\placeholder\\black.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "rRef:ITexture",
+          "Normal": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\materials\\placeholder\\normal.xbm"
+            },
+            "Flags": "Default"
+          }
+        }
+      ]
+    },
+    {
+      "base": "engine\\materials\\metal_base.remt",
+      "values": [
+        {
+          "$type": "rRef:ITexture",
+          "Emissive": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "engine\\textures\\editor\\white.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "Color",
+          "EmissiveColor": {
+            "$type": "Color",
+            "Alpha": 255,
+            "Blue": 0,
+            "Green": 114,
+            "Red": 255
+          }
+        },
+        {
+          "$type": "Float",
+          "EmissiveEV": 5
+        }
+      ]
+    },
+    {
+      "base": "base\\surfaces\\masks\\decal_normals\\entropy\\entropy_devices_01_opaque.mi",
+      "values": [
+        {
+          "$type": "rRef:ITexture",
+          "DiffuseTexture": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "base\\characters\\common\\textures\\decals\\decals_tyger_d01.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "Float",
+          "NormalAlpha": 0
+        },
+        {
+          "$type": "rRef:ITexture",
+          "RoughnessTexture": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "engine\\textures\\editor\\normal.xbm"
+            },
+            "Flags": "Default"
+          }
+        },
+        {
+          "$type": "rRef:ITexture",
+          "MetalnessTexture": {
+            "DepotPath": {
+              "$type": "ResourcePath",
+              "$storage": "string",
+              "$value": "engine\\textures\\editor\\black.xbm"
+            },
+            "Flags": "Default"
+          }
+        }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "index": 0,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\default.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 1,
+      "colorScale": {
+        "name": "1302b0_null",
+        "resolved": {
+          "Elements": [
+            0.127499998,
+            0.00436000014,
+            0.00436000014
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "f3d6fb",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 1,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\default.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 1,
+      "colorScale": {
+        "name": "5af286_2fc256",
+        "resolved": {
+          "Elements": [
+            0.0588300005,
+            0.0437499993,
+            0.053270001
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 2,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\grunge_graffiti_01_100.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 1.5,
+      "colorScale": {
+        "name": "869c69_null",
+        "resolved": {
+          "Elements": [
+            0.393999994,
+            0.00867000036,
+            0.39410001
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 3,
+      "opacity": 0.25,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\default.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 1,
+      "colorScale": {
+        "name": "3dbf91_null",
+        "resolved": {
+          "Elements": [
+            0.234899998,
+            0.00803400017,
+            0.1206
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 4,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\concrete_wear.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 4,
+      "colorScale": {
+        "name": "86f75b_null",
+        "resolved": {
+          "Elements": [
+            0.0356100015,
+            0.0356100015,
+            0.0356100015
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "2ce6ab",
+        "resolved": {
+          "Elements": [
+            0.337300003,
+            0.497999996
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 8,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\default.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 1,
+      "colorScale": {
+        "name": "5af286_2fc256",
+        "resolved": {
+          "Elements": [
+            0.0588300005,
+            0.0437499993,
+            0.053270001
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 11,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\fine_filth.xbm",
+      "microblendNormalStrength": 0,
+      "mbTile": 4,
+      "colorScale": {
+        "name": "8f9120_null",
+        "resolved": {
+          "Elements": [
+            0.585900009,
+            0.586000025,
+            0.0200399999
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 12,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\scratches_and_flakes_a.xbm",
+      "microblendNormalStrength": -1.10000002,
+      "mbTile": 2,
+      "colorScale": {
+        "name": "86f75b_b5edc3",
+        "resolved": {
+          "Elements": [
+            0.1285,
+            0.1285,
+            0.1285
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "423f7a",
+        "resolved": {
+          "Elements": [
+            0.333400011,
+            0.549000025
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    },
+    {
+      "index": 13,
+      "opacity": 1,
+      "material": "base\\surfaces\\materials\\plastic\\plastic_tech\\plastic_tech_01_300.mltemplate",
+      "microblend": "base\\surfaces\\microblends\\scratches_horizontal_02.xbm",
+      "microblendNormalStrength": 0.839999974,
+      "mbTile": 4,
+      "colorScale": {
+        "name": "86f75b_b5edc3",
+        "resolved": {
+          "Elements": [
+            0.1285,
+            0.1285,
+            0.1285
+          ]
+        }
+      },
+      "metalLevelsOut": {
+        "name": "null",
+        "resolved": {
+          "Elements": [
+            1,
+            0
+          ]
+        }
+      },
+      "roughLevelsOut": {
+        "name": "423f7a",
+        "resolved": {
+          "Elements": [
+            0.333400011,
+            0.549000025
+          ]
+        }
+      },
+      "normalStrength": {
+        "name": "null",
+        "resolved": 0.200000003
+      }
+    }
+  ],
+  "embeddedSetupEqualsExternal": true
+}

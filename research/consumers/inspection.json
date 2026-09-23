@@ -1,0 +1,631 @@
+[
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\id_pma__hair_profiles_ccxl.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiAppearanceInfo": 4,
+      "gameuiIndexedAppearanceDefinition": 180,
+      "Color": 180,
+      "TweakDBID": 180,
+      "CName": 237,
+      "gameuiCharacterRandomizationInfo": 180,
+      "redTagList": 180,
+      "ResourcePath": 4
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": []
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\id_pwa__hair_profiles_ccxl.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiAppearanceInfo": 3,
+      "gameuiIndexedAppearanceDefinition": 135,
+      "Color": 135,
+      "TweakDBID": 135,
+      "CName": 189,
+      "gameuiCharacterRandomizationInfo": 135,
+      "redTagList": 135,
+      "ResourcePath": 3
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": []
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\patch.mesh.json",
+    "root_type": "CMesh",
+    "types": {
+      "CMesh": 1,
+      "meshMeshAppearance": 45,
+      "CName": 56,
+      "Box": 1,
+      "Vector4": 2,
+      "ResourcePath": 11,
+      "meshMeshMaterialBuffer": 1,
+      "CMeshMaterialEntry": 11,
+      "Vector3": 1
+    },
+    "appearances": 45,
+    "material_entries": 11,
+    "dynamic_samples": [
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__beard.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__braid.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap_mask.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__curls.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__dread.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__long.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__short.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__brows.mi",
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__lashes.mi",
+      "@beard",
+      "@braid",
+      "@cap",
+      "@cap01",
+      "@curls",
+      "@dread"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__beard.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{beard_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__braid.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{braid_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__brows.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 3,
+      "Color": 4,
+      "Float": 8,
+      "rRef:ITexture": 2
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{brows_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__cap.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "Float": 4,
+      "rRef:ITexture": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{cap_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\cap_gradients\\hh_cap_grad__{material}.xbm"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__cap_mask.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 1,
+      "Float": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "island_dancer\\id_hair_profiles_ccxl\\materials\\template__cap.mi"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__curls.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{curls_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__dread.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{dread_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__lashes.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{lashes_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__long.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{long_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\hair-profiles\\json\\template__short.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 2,
+      "rRef:CHairProfile": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*{short_base_material}",
+      "*island_dancer\\id_hair_profiles_ccxl\\hair_profiles\\{material}.hp"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pma.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiSwitcherInfo": 1,
+      "CName": 174,
+      "gameuiSwitcherOption": 2,
+      "gameuiCharacterRandomizationInfo": 145,
+      "redTagList": 145,
+      "gameuiAppearanceInfo": 3,
+      "gameuiIndexedAppearanceDefinition": 143,
+      "Color": 143,
+      "TweakDBID": 143,
+      "ResourcePath": 3,
+      "gameuiOptionsGroup": 3
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "icxrus\\ccxl\\heterochromia\\appearances\\heterochromia_pma__eyes_left.app",
+      "icxrus\\ccxl\\heterochromia\\appearances\\heterochromia_pma__eyes_right.app"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pma__eyes_left.app.json",
+    "root_type": "appearanceAppearanceResource",
+    "types": {
+      "appearanceAppearanceResource": 1,
+      "CName": 230,
+      "appearanceAppearanceDefinition": 2,
+      "entMorphTargetSkinnedMeshComponent": 4,
+      "WorldTransform": 4,
+      "Quaternion": 6,
+      "WorldPosition": 4,
+      "FixedPoint": 12,
+      "ResourcePath": 16,
+      "entHardTransformBinding": 2,
+      "entTagMask": 4,
+      "redTagList": 20,
+      "entSkinningBinding": 2,
+      "entEntityParametersBuffer": 2,
+      "appearanceAppearancePartOverrides": 2,
+      "appearancePartComponentOverrides": 2,
+      "Transform": 2,
+      "Vector4": 2,
+      "Vector3": 2,
+      "appearanceAppearancePart": 2,
+      "entdismembermentWoundsConfigSet": 1,
+      "entdismembermentWoundConfigContainer": 187
+    },
+    "appearances": 2,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "he_000_pma__basehead__01_blood_gradient_black",
+      "base\\characters\\head\\player_base_heads\\appearances\\entity\\head\\he_000_pma__basehead.ent"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pma__eyes_right.app.json",
+    "root_type": "appearanceAppearanceResource",
+    "types": {
+      "appearanceAppearanceResource": 1,
+      "CName": 230,
+      "appearanceAppearanceDefinition": 2,
+      "entMorphTargetSkinnedMeshComponent": 4,
+      "WorldTransform": 4,
+      "Quaternion": 6,
+      "WorldPosition": 4,
+      "FixedPoint": 12,
+      "ResourcePath": 16,
+      "entHardTransformBinding": 2,
+      "entTagMask": 4,
+      "redTagList": 20,
+      "entSkinningBinding": 2,
+      "entEntityParametersBuffer": 2,
+      "appearanceAppearancePartOverrides": 2,
+      "appearancePartComponentOverrides": 2,
+      "Transform": 2,
+      "Vector4": 2,
+      "Vector3": 2,
+      "appearanceAppearancePart": 2,
+      "entdismembermentWoundsConfigSet": 1,
+      "entdismembermentWoundConfigContainer": 187
+    },
+    "appearances": 2,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "he_000_pma__basehead__01_blood_gradient_black",
+      "base\\characters\\head\\player_base_heads\\appearances\\entity\\head\\he_000_pma__basehead.ent"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pma_split_eyes.mesh.json",
+    "root_type": "CMesh",
+    "types": {
+      "CMesh": 1,
+      "meshMeshAppearance": 107,
+      "CName": 1025,
+      "Matrix": 56,
+      "Vector4": 284,
+      "Box": 1,
+      "meshMeshMaterialBuffer": 1,
+      "CMaterialInstance": 218,
+      "ResourcePath": 596,
+      "rRef:ITexture": 258,
+      "rRef:Multilayer_Mask": 42,
+      "rRef:Multilayer_Setup": 42,
+      "rRef:CGradient": 36,
+      "Float": 720,
+      "meshLocalMaterialHeader": 109,
+      "CMeshMaterialEntry": 109,
+      "rendRenderMeshBlob": 1,
+      "rendRenderMeshBlobHeader": 1,
+      "rendChunk": 5,
+      "rendIndexBufferChunk": 5,
+      "rendVertexBufferChunk": 5,
+      "GpuWrapApiVertexLayoutDesc": 5,
+      "GpuWrapApiVertexPackingPackingElement": 78,
+      "rendTopologyData": 5,
+      "Vector3": 1
+    },
+    "appearances": 107,
+    "material_entries": 109,
+    "dynamic_samples": [
+      "eyelashes__black_carbon",
+      "eyelashes__black_salt_n_pepper",
+      "eyelashes__blonde_dishwater",
+      "eyelashes__blonde_golden",
+      "eyelashes__blonde_platinum",
+      "eyelashes__blue_red_ombre",
+      "eyelashes__blue_sapphire",
+      "eyelashes__blue_steel",
+      "eyelashes__brown_liquorice",
+      "eyelashes__brown_medium",
+      "eyelashes__brown_ombre",
+      "eyelashes__cold_white",
+      "eyelashes__cyberpunk_yellow",
+      "eyelashes__ginger_copper",
+      "eyelashes__ginger_strawberry",
+      "eyelashes__goblin_green"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pwa.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiSwitcherInfo": 1,
+      "CName": 176,
+      "gameuiSwitcherOption": 2,
+      "gameuiCharacterCustomizationAction": 1,
+      "gameuiCharacterRandomizationInfo": 145,
+      "redTagList": 145,
+      "gameuiAppearanceInfo": 3,
+      "gameuiIndexedAppearanceDefinition": 143,
+      "Color": 143,
+      "TweakDBID": 143,
+      "ResourcePath": 3,
+      "gameuiOptionsGroup": 3
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "icxrus\\ccxl\\heterochromia\\appearances\\heterochromia_pwa__eyes_left.app",
+      "icxrus\\ccxl\\heterochromia\\appearances\\heterochromia_pwa__eyes_right.app"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pwa__eyes_left.app.json",
+    "root_type": "appearanceAppearanceResource",
+    "types": {
+      "appearanceAppearanceResource": 1,
+      "CName": 230,
+      "appearanceAppearanceDefinition": 2,
+      "entMorphTargetSkinnedMeshComponent": 4,
+      "WorldTransform": 4,
+      "Quaternion": 6,
+      "WorldPosition": 4,
+      "FixedPoint": 12,
+      "ResourcePath": 16,
+      "entHardTransformBinding": 2,
+      "entTagMask": 4,
+      "redTagList": 20,
+      "entSkinningBinding": 2,
+      "entEntityParametersBuffer": 2,
+      "appearanceAppearancePartOverrides": 2,
+      "appearancePartComponentOverrides": 2,
+      "Transform": 2,
+      "Vector4": 2,
+      "Vector3": 2,
+      "appearanceAppearancePart": 2,
+      "entdismembermentWoundsConfigSet": 1,
+      "entdismembermentWoundConfigContainer": 187
+    },
+    "appearances": 2,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "he_000_pwa__basehead__01_blood_gradient_black",
+      "base\\characters\\head\\player_base_heads\\appearances\\entity\\head\\he_000_pwa__basehead.ent"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pwa__eyes_right.app.json",
+    "root_type": "appearanceAppearanceResource",
+    "types": {
+      "appearanceAppearanceResource": 1,
+      "CName": 230,
+      "appearanceAppearanceDefinition": 2,
+      "entMorphTargetSkinnedMeshComponent": 4,
+      "WorldTransform": 4,
+      "Quaternion": 6,
+      "WorldPosition": 4,
+      "FixedPoint": 12,
+      "ResourcePath": 16,
+      "entHardTransformBinding": 2,
+      "entTagMask": 4,
+      "redTagList": 20,
+      "entSkinningBinding": 2,
+      "entEntityParametersBuffer": 2,
+      "appearanceAppearancePartOverrides": 2,
+      "appearancePartComponentOverrides": 2,
+      "Transform": 2,
+      "Vector4": 2,
+      "Vector3": 2,
+      "appearanceAppearancePart": 2,
+      "entdismembermentWoundsConfigSet": 1,
+      "entdismembermentWoundConfigContainer": 187
+    },
+    "appearances": 2,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "he_000_pwa__basehead__01_blood_gradient_black",
+      "base\\characters\\head\\player_base_heads\\appearances\\entity\\head\\he_000_pwa__basehead.ent"
+    ]
+  },
+  {
+    "path": "research\\consumers\\heterochromia\\json\\heterochromia_pwa_split_eyes.mesh.json",
+    "root_type": "CMesh",
+    "types": {
+      "CMesh": 1,
+      "meshMeshAppearance": 107,
+      "CName": 1023,
+      "Matrix": 57,
+      "Vector4": 289,
+      "Box": 1,
+      "meshMeshMaterialBuffer": 1,
+      "CMaterialInstance": 216,
+      "ResourcePath": 566,
+      "rRef:ITexture": 234,
+      "rRef:Multilayer_Mask": 42,
+      "rRef:Multilayer_Setup": 42,
+      "rRef:CGradient": 32,
+      "Float": 640,
+      "meshLocalMaterialHeader": 108,
+      "CMeshMaterialEntry": 108,
+      "rendRenderMeshBlob": 1,
+      "rendRenderMeshBlobHeader": 1,
+      "rendChunk": 5,
+      "rendIndexBufferChunk": 5,
+      "rendVertexBufferChunk": 5,
+      "GpuWrapApiVertexLayoutDesc": 5,
+      "GpuWrapApiVertexPackingPackingElement": 76,
+      "rendTopologyData": 5,
+      "Vector3": 1
+    },
+    "appearances": 107,
+    "material_entries": 108,
+    "dynamic_samples": [
+      "eyelashes__black_carbon",
+      "eyelashes__black_salt_n_pepper",
+      "eyelashes__blonde_dishwater",
+      "eyelashes__blonde_golden",
+      "eyelashes__blonde_platinum",
+      "eyelashes__blue_red_ombre",
+      "eyelashes__blue_sapphire",
+      "eyelashes__blue_steel",
+      "eyelashes__brown_liquorice",
+      "eyelashes__brown_medium",
+      "eyelashes__brown_ombre",
+      "eyelashes__cold_white",
+      "eyelashes__cyberpunk_yellow",
+      "eyelashes__ginger_copper",
+      "eyelashes__ginger_strawberry",
+      "eyelashes__goblin_green"
+    ]
+  },
+  {
+    "path": "research\\consumers\\photoreal-eyes\\json\\id_pma_photoreal_eyes_ccxl.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiAppearanceInfo": 1,
+      "gameuiIndexedAppearanceDefinition": 32,
+      "Color": 32,
+      "TweakDBID": 32,
+      "CName": 35,
+      "gameuiCharacterRandomizationInfo": 32,
+      "redTagList": 32,
+      "ResourcePath": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "id_photoreal_eyes__fudge_fondant",
+      "id_photoreal_eyes__chocolate_brownie",
+      "id_photoreal_eyes__sea_biscuit",
+      "id_photoreal_eyes__tawney_coral",
+      "id_photoreal_eyes__sepia_sky",
+      "id_photoreal_eyes__terracotta_frost",
+      "id_photoreal_eyes__cerulean_clay",
+      "id_photoreal_eyes__denim_blush",
+      "id_photoreal_eyes__lapis_linen",
+      "id_photoreal_eyes__pacific_islet",
+      "id_photoreal_eyes__sienna_sapphire",
+      "id_photoreal_eyes__custard_cobalt",
+      "id_photoreal_eyes__tangerine_aquamarine",
+      "id_photoreal_eyes__kyanite_sap",
+      "id_photoreal_eyes__tidal_ivory",
+      "id_photoreal_eyes__mint_incense"
+    ]
+  },
+  {
+    "path": "research\\consumers\\photoreal-eyes\\json\\id_pwa_photoreal_eyes_ccxl.inkcharcustomization.json",
+    "root_type": "gameuiCharacterCustomizationInfoResource",
+    "types": {
+      "gameuiCharacterCustomizationInfoResource": 1,
+      "gameuiAppearanceInfo": 1,
+      "gameuiIndexedAppearanceDefinition": 32,
+      "Color": 32,
+      "TweakDBID": 32,
+      "CName": 35,
+      "gameuiCharacterRandomizationInfo": 32,
+      "redTagList": 32,
+      "ResourcePath": 1
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "id_photoreal_eyes__fudge_fondant",
+      "id_photoreal_eyes__chocolate_brownie",
+      "id_photoreal_eyes__sea_biscuit",
+      "id_photoreal_eyes__tawney_coral",
+      "id_photoreal_eyes__sepia_sky",
+      "id_photoreal_eyes__terracotta_frost",
+      "id_photoreal_eyes__cerulean_clay",
+      "id_photoreal_eyes__denim_blush",
+      "id_photoreal_eyes__lapis_linen",
+      "id_photoreal_eyes__pacific_islet",
+      "id_photoreal_eyes__sienna_sapphire",
+      "id_photoreal_eyes__custard_cobalt",
+      "id_photoreal_eyes__tangerine_aquamarine",
+      "id_photoreal_eyes__kyanite_sap",
+      "id_photoreal_eyes__tidal_ivory",
+      "id_photoreal_eyes__mint_incense"
+    ]
+  },
+  {
+    "path": "research\\consumers\\photoreal-eyes\\json\\patch.mesh.json",
+    "root_type": "CMesh",
+    "types": {
+      "CMesh": 1,
+      "meshMeshAppearance": 32,
+      "CName": 67,
+      "Box": 1,
+      "Vector4": 2,
+      "meshMeshMaterialBuffer": 1,
+      "CMaterialInstance": 2,
+      "ResourcePath": 2,
+      "meshLocalMaterialHeader": 1,
+      "CMeshMaterialEntry": 1,
+      "Vector3": 1
+    },
+    "appearances": 32,
+    "material_entries": 1,
+    "dynamic_samples": [
+      "island_dancer\\id_photoreal_eyes_ccxl\\materials\\template__eyes.mi",
+      "@eyes"
+    ]
+  },
+  {
+    "path": "research\\consumers\\photoreal-eyes\\json\\template__eyes.mi.json",
+    "root_type": "CMaterialInstance",
+    "types": {
+      "CMaterialInstance": 1,
+      "CName": 1,
+      "ResourcePath": 3,
+      "rRef:ITexture": 2
+    },
+    "appearances": 0,
+    "material_entries": 0,
+    "dynamic_samples": [
+      "*island_dancer\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_d.xbm",
+      "*island_dancer\\id_photoreal_eyes_ccxl\\materials\\textures\\{material}_n.xbm"
+    ]
+  }
+]

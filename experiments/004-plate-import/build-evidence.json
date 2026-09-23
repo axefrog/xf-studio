@@ -1,0 +1,58 @@
+{
+  "steps": [
+    {
+      "name": "export-blender",
+      "exitCode": 0
+    },
+    {
+      "name": "build-adapter",
+      "exitCode": 0
+    },
+    {
+      "name": "export-game-head",
+      "exitCode": 0
+    },
+    {
+      "name": "retain-head-shading",
+      "exitCode": 0
+    },
+    {
+      "name": "prepare-templates",
+      "exitCode": 0
+    },
+    {
+      "name": "deserialize",
+      "exitCode": 0
+    },
+    {
+      "name": "mesh-import",
+      "exitCode": 0
+    },
+    {
+      "name": "pack-resolver",
+      "exitCode": 0
+    },
+    {
+      "name": "morph-import",
+      "exitCode": 0
+    },
+    {
+      "name": "numeric-comparison",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\generated\\archive\\axefrog\\appearance_studio\\studies\\xfas_eye_plate.mesh",
+      "bytes": 142813,
+      "sha256": "9099726e9842888232ae22c0abf41a6b9fb99c6bf44f36c7786fe0d791223fed"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\generated\\archive\\axefrog\\appearance_studio\\studies\\xfas_eye_plate.morphtarget",
+      "bytes": 7110116,
+      "sha256": "7252eaad86f58e31c54c6168a30b3eb34a3e22e2edbb55d6ef826b310eaf6b4b"
+    }
+  ],
+  "installed": false,
+  "gameRenderingVerified": false
+}

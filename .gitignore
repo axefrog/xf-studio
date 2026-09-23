@@ -1,0 +1,43 @@
+# Derived evidence and third-party/game resources remain locally available.
+inventory/snapshots/
+inventory/directories-classified.jsonl
+research/consumers/*/extracted/
+research/consumers/*/json/
+research/consumers/*/raw/
+research/consumers/*/base/
+research/archive-xl/upstream/src/
+experiments/*/generated/
+projects/*/build/
+projects/*/dist/
+projects/*/assets/imported/
+captures/
+__pycache__/
+*.pyc
+.env
+.env.*
+node_modules/
+projects/*/authoring/public/assets/
+projects/*/authoring/public/build/
+projects/*/authoring/evidence/screenshots/
+projects/*/authoring/.server-*.log
+projects/*/authoring/data/
+projects/*/tools/*/bin/
+projects/*/tools/*/obj/
+
+# Local inventories and personal machine state, not source distribution.
+inventory/*
+!inventory/README.md
+
+# Game-derived art stays local even when it is an editable project master.
+projects/*/assets/authored/*.blend*
+*.glb
+*.gltf
+*.archive
+*.xbm
+*.mesh
+*.morphtarget
+*.sav
+sav.dat
+*.sqlite*
+*.dpapi
+temp.txt

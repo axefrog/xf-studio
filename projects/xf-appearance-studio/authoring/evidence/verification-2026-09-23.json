@@ -1,0 +1,51 @@
+{
+  "date": "2026-09-23",
+  "scope": "Local authoring prototype; no in-game validation or mod deployment",
+  "automated": {
+    "bun": "1.4.2",
+    "tests": 14,
+    "failures": 0,
+    "typecheck": "pass",
+    "browserBuild": "pass",
+    "coverage": ["recipe validation and round trip", "weighted mirrored field raster", "palette-independent alpha", "full-influence CPU skinning", "head/brow/lash morph and normalized skin totals", "bounded CSAV/LZ4 decoding", "complete private 2.31 appearance fixture"]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "isolatedDraftKey": "eye-artistry.verification.v1",
+    "checks": [
+      "UV point and field drag changed the recipe and live preview",
+      "Opacity edit and Undo restored the tested value",
+      "Recipe download, reset and reimport restored the edited point and field",
+      "2048px mask downloaded successfully; download-event wait was unreliable in IAB",
+      "Brows/lashes rendered with independent working visibility switches",
+      "Eye shape 01 reached head, brows and lashes; other facial regions retained",
+      "Saved-V import restored all five head/brow morphs and the matching lash eye morph",
+      "Closed-eye pose visually inspected with accessories on eye shape 09",
+      "No console errors observed after accessory loading"
+    ],
+    "meshVertices": {"head": 7189, "makeupPlate": 1620, "eyes": 662, "brows": 390, "lashes": 22416},
+    "morphCounts": {"head": 105, "makeupPlate": 105, "brows": 105, "lashes": 21},
+    "skinSets": 2,
+    "posedBonesIncludingAccessoryRigs": 117,
+    "detailErrors": [],
+    "savedMorphs": ["h012_nose", "h053_mouth", "h054_jaw", "h091_eyes", "h145_ear"]
+  },
+  "exportedMask": {
+    "file": "C:/Users/Nathan/Downloads/eye-artistry-layer-1-alpha.png",
+    "bytes": 119636,
+    "size": [2048, 2048],
+    "alphaRange": [0, 0.8509804606437683],
+    "coveredPixels": 41564,
+    "coveredRgbRange": [1, 1],
+    "inspection": "Blender 5.0 image decode and NumPy pixel statistics"
+  },
+  "save": {"gameVersion": 2310, "nodeBytes": 9109, "bytesRead": 9109, "trailingBytes": 0, "chunks": 33, "decompressedBytes": 8509596},
+  "limitations": [
+    "Current V is not fully reproduced: study skin/eyes, missing hair/other details, approximate brow/lash colours",
+    "Specific local reference assembly; no general profile/load-order winner resolver yet",
+    "Synthetic blink visually checked on shape 09, not all morph combinations or true game animation",
+    "Browser mesh offsets and draw order do not prove REDengine decal layering",
+    "Direct live on-surface dragging remains queued; current Shift-click only places a selected point",
+    "Save compatibility tested on one 2.31 save, not every version admitted by the guard"
+  ]
+}

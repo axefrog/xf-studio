@@ -1,0 +1,98 @@
+{
+  "date": "2026-09-23",
+  "scope": "Browser authoring, not game rendering",
+  "automated": {
+    "tests": 17,
+    "failures": 0,
+    "typecheck": "pass",
+    "browserBuild": "pass"
+  },
+  "testsAdded": [
+    "UV barycentric interpolation and outside/degenerate rejection",
+    "disconnected UV drag rejection and jump guard",
+    "simultaneous morph and full-weight skinning of anchors"
+  ],
+  "browserChecks": {
+    "isolatedUrl": "http://127.0.0.1:4317/?verify=1",
+    "pointDrag": {
+      "before": [
+        0.33,
+        0.206
+      ],
+      "after": [
+        0.3489515348768922,
+        0.19223659714346308
+      ],
+      "singleUndoRestored": true
+    },
+    "mirroredDrag": {
+      "before": [
+        0.33,
+        0.206
+      ],
+      "after": [
+        0.350706745658779,
+        0.19517751085829024
+      ],
+      "singleUndoRestored": true
+    },
+    "fieldDirectionDrag": {
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0.01857848091412101,
+        -0.00881025238919958
+      ]
+    },
+    "escapeDuringHeldDrag": {
+      "recipeExactlyRestored": true,
+      "draggingAfter": false
+    },
+    "dragIntoEmptySpace": {
+      "recipeExactlyUnchanged": true,
+      "draggingAfter": false
+    },
+    "blink": {
+      "recipeExactlyUnchanged": true,
+      "point5OpenWorld": [
+        0.044067178269393305,
+        1.6956796934409581,
+        -0.054590140047195694
+      ],
+      "point5ClosedWorld": [
+        0.04416260328055036,
+        1.6941770263603546,
+        -0.054740645123435336
+      ]
+    },
+    "eyeShape01": {
+      "recipeExactlyUnchanged": true,
+      "point5ClosedWorld": [
+        0.04582508045646575,
+        1.6945919975523993,
+        -0.057109916137518105
+      ]
+    },
+    "initialUnmappedHandles": 0,
+    "consoleErrorsObserved": 0,
+    "finalBuildControlsToggleVerified": true
+  },
+  "implementation": [
+    "UV triangle anchors + current CPU morph/full-weight skinning",
+    "depth-tested transparent overlay rendered after makeup",
+    "reused GPU attribute buffers",
+    "exact segment/UV-triangle interval coverage test with numerical tolerance",
+    "head and eye occlusion checks",
+    "0.06 UV maximum per-event motion guard"
+  ],
+  "limits": [
+    "guides are pre-warp controls, not final-mask contour",
+    "off-plate/occluded anchors edited through companion UV view",
+    "overlapping arbitrary UV islands not disambiguated",
+    "field reach remains a slider",
+    "no layer isolation or spatial-distance falloff yet",
+    "synthetic blink/material approximations unchanged"
+  ]
+}
