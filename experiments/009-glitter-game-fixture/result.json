@@ -1,0 +1,116 @@
+{
+  "status": "offline material-only comparison",
+  "gameVersion": 2310,
+  "templates": {
+    "mesh_decal": {
+      "binarySha256": "b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019",
+      "jsonSha256": "413bc056a5378ed11d7c0bea6d9feaa6e38c051a7dad8367b668f8d877c2a851",
+      "gameVersion": 2310,
+      "stage": "renderstage_post_gbuffer",
+      "meshSkinned": true,
+      "alphaBlendedTarget": true,
+      "depthWrite": false
+    },
+    "mesh_decal_emissive_subsurface": {
+      "binarySha256": "b590a2ee02497e7354e3ed2f83d4bfff42b08a7b2ee14f202c45f10ee799d699",
+      "jsonSha256": "05ba481fc111725d4500549563b9f4d123bf75036ff7f08f5c09e3057a304405",
+      "gameVersion": 2310,
+      "stage": "renderstage_subsurface_emissive",
+      "meshSkinned": true,
+      "alphaBlendedTarget": true,
+      "depthWrite": false
+    }
+  },
+  "materials": {
+    "xfs_glitter_resolved_pbr": {
+      "sha256": "7cd265521cd3a252b2053ea085038edf3f9401191486f8df68a0cf126045239b",
+      "base": "base\\materials\\mesh_decal.mt"
+    },
+    "xfs_glitter_sparse_emission": {
+      "sha256": "b152d3bcc78555f510f02dfacca1bab012ac72b416be1dc18d0a836eb805cdc7",
+      "base": "base\\materials\\mesh_decal_emissive_subsurface.mt"
+    }
+  },
+  "textures": {
+    "xfs_glitter_pigment": {
+      "sha256": "3ff301275d56d174b3a459c87ddda219f504a8bea79b4b0c4c66c07c0896ff0f",
+      "compression": "TCM_QualityColor",
+      "mipchainFlag": true,
+      "isGamma": true
+    },
+    "xfs_glitter_facet_normal": {
+      "sha256": "01a67a04a44a70359d2edb19fa55102dc92a285655ef013530870f518f63d1b4",
+      "compression": "TCM_Normalmap",
+      "mipchainFlag": true,
+      "isGamma": false
+    },
+    "xfs_glitter_emissive_mask": {
+      "sha256": "00e727c66e0672d68ef7b8beff66b6e58350860d0c27c5123c741e3c93896ca4",
+      "compression": "TCM_QualityR",
+      "mipchainFlag": true,
+      "isGamma": false,
+      "decodedRedMeanByteError": 0.0007638931274414062
+    },
+    "xfs_glitter_metalness": {
+      "sha256": "15b562a96c5d7193039e6af6271dbe31278a294e8784def34512c2f3ac66534d",
+      "compression": "TCM_QualityR",
+      "mipchainFlag": true,
+      "isGamma": false,
+      "decodedRedMeanByteError": 0.006336212158203125
+    },
+    "xfs_glitter_roughness": {
+      "sha256": "1a4d318805d888d2e399cb6a99ffd99b5e4af53963b52dec5465d45e8eb7011e",
+      "compression": "TCM_QualityR",
+      "mipchainFlag": true,
+      "isGamma": false,
+      "decodedRedMeanByteError": 0.03511810302734375
+    },
+    "xfs_glitter_shape": {
+      "sha256": "eea8136abfb2bec00cb78e72075601359b4d566646117e1a3fb08a09ead98e34",
+      "compression": "TCM_QualityR",
+      "mipchainFlag": true,
+      "isGamma": false,
+      "decodedRedMeanByteError": 0.026800155639648438
+    }
+  },
+  "partialCoverageTexels": 75047,
+  "meanPartialCoverageError": 0.0034366828954303457,
+  "emissiveOutsideShapeTexels": 0,
+  "sourceBoxMinification": [
+    {
+      "size": 1024,
+      "nonzeroFraction": 0.006482124328613281,
+      "highContrastFraction": 0.006252288818359375
+    },
+    {
+      "size": 512,
+      "nonzeroFraction": 0.009246826171875,
+      "highContrastFraction": 0.004718780517578125
+    },
+    {
+      "size": 256,
+      "nonzeroFraction": 0.01531982421875,
+      "highContrastFraction": 0.00323486328125
+    },
+    {
+      "size": 128,
+      "nonzeroFraction": 0.02740478515625,
+      "highContrastFraction": 0.001220703125
+    },
+    {
+      "size": 64,
+      "nonzeroFraction": 0.051025390625,
+      "highContrastFraction": 0.0
+    }
+  ],
+  "comparisons": [
+    "PBR only",
+    "emission only",
+    "combined (two components)",
+    "Off"
+  ],
+  "meshBound": false,
+  "selectorRegistered": false,
+  "gameRendered": false,
+  "limit": "Mip occupancy is source-map diagnostic; game filtering, material order, glow, and appearance are unverified."
+}
