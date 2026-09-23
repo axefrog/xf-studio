@@ -1,6 +1,8 @@
 # Saved-eye preview adapter — 23 September 2026
 
-The [resolved Kala eye option](modded-eye-resolution.md) can replace the yellow placeholder using the existing eye mesh and diffuse-texture path. The current UVs support that bounded correction. A diffuse swap will not reproduce the game's cornea, iris depth, reflection or subsurface response. No application source was changed in this investigation.
+The [resolved Kala eye option](modded-eye-resolution.md) can replace the yellow placeholder using the existing eye mesh and diffuse-texture path. The current UVs support that bounded correction. A diffuse swap will not reproduce the game's cornea, iris depth, reflection or subsurface response. The initial investigation changed no application source; the subsequent integration below implements its bounded diffuse contract.
+
+**Integration checkpoint:** `eye-appearance.ts` validates an optional local manifest, verifies image hashes, preloads before save selection and requires exact app-hash/definition identity. `scene.ts` retains the existing opaque material and gaze rig, explicitly resetting the diffuse on unresolved choices. `tools/intake_eyes.ts` prepares ignored local inputs only. The saved-V card names the selected source. Browser reload, gaze and unavailable-image fallback pass; [evidence](../../projects/xf-appearance-studio/authoring/evidence/saved-eye-preview-2026-09-23.json). General resource resolution and optical parity remain open.
 
 ## Measured inputs
 
@@ -62,7 +64,7 @@ Diffuse alpha spans 0–255. The inspected `eye.mt` declares `RMT_Eye`, normal m
 1. Resolve the saved eye group by the **app hash plus definition** already recorded in the resolution report: `7132639559252259433` / `eye_16_diffuse`. Use the explicit local manifest/provider chain. Do not use visual colour similarity or a filename-only global match.
 2. Serve the locally extracted 512² diffuse with its recorded hash. Assign it to the existing eye material's map using sRGB and `flipY=false`; keep current geometry, rig/gaze, opaque state and transforms. No resampling or tint is justified by this evidence.
 3. Preserve the known fallback for unresolved choices and report which source is active. Switching/importing/reloading a V must resolve again without retaining the previous V's successful texture accidentally. Missing local assets should remain an explicit fallback state.
-4. Verify both pupil centres and scleral landmarks in a neutral pose, then exercise gaze and saved-V reload in the isolated workspace. Those browser checks have not been performed in this research slice.
+4. Verify both pupil centres and scleral landmarks in a neutral pose, then exercise gaze and saved-V reload in the isolated workspace. The subsequent integration checked these visually and verified exact restored metadata/pose; see the evidence above. This is not a calibrated game-image comparison.
 5. Label material response approximate. Keep normal/roughness integration separate until its optical/channel checks are implemented; a wrong packed normal is worse evidence than an explicit unimplemented normal adapter.
 
 ## Optical work still open

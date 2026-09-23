@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-23",
+  "workspace": "?verify=1",
+  "userDraftEdited": false,
+  "cause": "Transparent brows/lashes at draw orders 100/101 painted over surface guides at 50/51; details do not write depth.",
+  "correction": "Draw surface lines/points at 1000/1001, retaining opaque head/eye depth testing and existing surface anchors.",
+  "checks": [
+    "At paused facial-only idle phase 0.2836000000014901, point 6 on the lash line is visibly complete and selectable with lashes enabled",
+    "Dragging that handle changes its UV from (0.369,0.235) to (0.3769638071281214,0.22408453768578873); the paused phase is unchanged",
+    "Undo exactly restores the serialized recipe and paused phase",
+    "All 12 curve handles remain selectable at full exploratory eyelid closure; screenshot confirms guides remain visible",
+    "Side view keeps all six visible-side curve handles selectable and rejects all six far-side handles; far-side head occlusion ranges from 0.024198396107790954 to 0.11800218825343567 world units",
+    "Side-view screenshot confirms far-side controls do not show through the opaque head"
+  ],
+  "limits": [
+    "Current transparent brow/lash cards do not write depth. Future opaque accessories may require a separate editor occlusion pass.",
+    "This is browser editing visibility, not a makeup shader or game layering change.",
+    "Coincident field origin/endpoint retain existing endpoint-first picking. Offscreen and UV-gap rules remain unchanged."
+  ]
+}

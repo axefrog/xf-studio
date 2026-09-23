@@ -8,6 +8,7 @@ import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import type { CameraState } from "./workspace-state";
 import { previewNearPlane } from "./camera-depth";
+import { prepareEyeAppearances } from "./eye-appearance";
 
 export async function createScene(
   host: HTMLElement,
@@ -111,6 +112,33 @@ export async function createScene(
   });
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
+  const eyeAppearances = await prepareEyeAppearances(async (bytes, entry) => {
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
+    try {
+      const t = await loader.loadAsync(url);
+      if (t.image.width !== entry.width || t.image.height !== entry.height) {
+        t.dispose(); throw Error("Local eye image dimensions do not match its manifest");
+      }
+      // Existing eye UV0 is already folded to one tile. Do not crop/translate it again.
+      t.flipY = false;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      t.name = entry.label;
+      return t;
+    } finally { URL.revokeObjectURL(url); }
+  });
+  let eyeAppearanceStatus = eyeAppearances.select().status;
+  function eyeAppearance() {
+    const map = eyeMat.map, reference = map === eyeColor;
+    const image = map?.image as HTMLImageElement | undefined;
+    return { ...eyeAppearanceStatus,
+      activeTexture: { url: reference ? "/assets/eye-color.png" : eyeAppearanceStatus.asset?.url,
+        sha256: reference ? undefined : eyeAppearanceStatus.asset?.sha256,
+        width: image?.width, height: image?.height, flipY: map?.flipY, colorSpace: map?.colorSpace },
+      material: { transparent: eyeMat.transparent, depthWrite: eyeMat.depthWrite, alphaTest: eyeMat.alphaTest,
+        normalMap: !!eyeMat.normalMap, roughnessMap: !!eyeMat.roughnessMap },
+    };
+  }
   const details: Record<
     string,
     {
@@ -322,10 +350,16 @@ export async function createScene(
         ),
       )
       .map(([name]) => name);
+    const selectedEye = eyeAppearances.select(group.appearances);
+    // Reset explicitly on every accepted save, including unresolved/missing images.
+    eyeMat.map = selectedEye.texture ?? eyeColor;
+    eyeMat.needsUpdate = true;
+    eyeAppearanceStatus = selectedEye.status;
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
       matchedDetails,
+      eyeAppearance: eyeAppearance(),
     };
   }
   const ray = new THREE.Raycaster(),
@@ -406,6 +440,7 @@ export async function createScene(
     setLayerCanvases: makeup.setCanvases,
     eyeShape,
     applySavedV,
+    eyeAppearance,
     details,
     idle,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.

@@ -2,6 +2,8 @@
 
 23 September 2026. Queued design/research, not a feature implementation. This note records source inspection and a deterministic numeric probe so the requested editing changes survive conversation history. No game launch, browser draft change or external source was used.
 
+Follow-up checkpoints: the [continuous-strength study](continuous-weight-study.md) compares and measures replacement fields without changing production recipes. The surface-overlay draw-order correction is now implemented and [browser-verified](../../projects/xf-appearance-studio/authoring/evidence/surface-overlay-2026-09-23.json); the original orders described below record the diagnosed cause. The other path/falloff controls remain queued.
+
 ## Current behavior and its consequences
 
 - [recipe.ts](../../projects/xf-appearance-studio/authoring/src/recipe.ts) stores a closed list of 3–24 `{u,v,weight}` points, one layer-wide `feather`, opacity, symmetry and a Gaussian displacement field. `curve()` is a uniform closed Catmull–Rom spline sampled ten times per segment; it interpolates weights linearly along each segment. It has no editable tangents.

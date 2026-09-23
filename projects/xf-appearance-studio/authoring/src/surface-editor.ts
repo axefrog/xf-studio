@@ -79,8 +79,11 @@ export function createSurfaceEditor(
     }),
   );
   points.frustumCulled = lines.frustumCulled = false;
-  points.renderOrder = 51;
-  lines.renderOrder = 50;
+  // Editor guides draw after the transparent makeup and detail cards (10–101).
+  // Keep opaque head/eye depth occlusion, so far-side handles cannot show through
+  // the face. This changes draw order, not their barycentric surface anchors.
+  points.renderOrder = 1001;
+  lines.renderOrder = 1000;
   group.add(points, lines);
   let enabled = true,
     signature = "",
@@ -363,6 +366,8 @@ export function createSurfaceEditor(
       enabled,
       dragging: !!drag,
       unmapped,
+      overlay: { points: points.renderOrder, lines: lines.renderOrder,
+        depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite },
       handles: handles.map((h) => {
         const p = h.world.clone().project(camera),
           r = canvas.getBoundingClientRect();
@@ -377,6 +382,7 @@ export function createSurfaceEditor(
           mirror: h.mirror,
           uv: h.uv,
           screen: { x, y },
+          selectable: handleAt(x, y) === h,
           world: h.world.toArray(),
           headOcclusion: obstruction
             ? ray.ray.origin.distanceTo(h.world) - obstruction.distance

@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-23",
+  "workspace": "?verify=1",
+  "userDraftEdited": false,
+  "identity": {"appHash": "7132639559252259433", "definition": "eye_16_diffuse"},
+  "diffuse": {
+    "url": "/assets/eyes/kala-eye-16-diffuse.png",
+    "sha256": "cc06290fe63cba59b42f11b97c06e364661e704c206b1e63a3b2c9420bc84d35",
+    "width": 512, "height": 512, "colorSpace": "srgb", "flipY": false
+  },
+  "checks": [
+    "Restored captured V selects the exact local manifest identity and verified diffuse bytes",
+    "Neutral preview screenshot shows the replacement on both eyes with centred pupils and surrounding sclera",
+    "Facial-only idle advances gaze with the selected texture retained; paused screenshot inspected at phase 62.355999999998275",
+    "Reload exactly restores eye source/material metadata, paused phase, target bone matrices and serialized makeup recipe",
+    "Blocking only the diffuse request in the isolated tab produces explicit unavailable status and the 2048-square reference map; screenshot confirms fallback",
+    "Removing the test request block and reloading restores the selected diffuse",
+    "Final reload console warnings/errors are empty",
+    "Unit checks cover exact identity, missing/invalid data, ambiguous choices, changed image bytes and synchronous repeated matched/unresolved selection"
+  ],
+  "material": {"transparent": false, "depthWrite": true, "alphaTest": 0, "normalMap": false, "roughnessMap": false},
+  "limits": [
+    "One previously researched local appearance; not a general installed-mod resolver",
+    "Diffuse only: iris/cornea depth, refraction, normal/roughness interpretation, SSS and game shading parity remain open",
+    "Browser test restores the real captured choice and exercises missing-image fallback; alternate saved-eye identities are tested in the resolver, not by loading a second real save",
+    "Third-party image and local manifest remain ignored and are not redistributed"
+  ]
+}

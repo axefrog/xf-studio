@@ -75,6 +75,14 @@ The local save fixture is deliberately excluded from distribution. [Verification
 
 [Surface editing verification](evidence/surface-editing-2026-09-23.json) records the earlier 17-test build and actual gestures. The expanded finish families have a [dedicated research task](../../../research/backlog/glitter-material.md); all game mappings remain provisional.
 
+Surface controls now draw above the transparent brows/lashes while retaining opaque head/eye occlusion. Lash-line dragging, exact Undo, closed eyelids and far-side rejection were checked in the isolated workspace. [Overlay evidence](evidence/surface-overlay-2026-09-23.json). This changes editor guides only; it does not change makeup layering or game geometry.
+
+## Locally resolved eye colour
+
+Loading/restoring Nathan's captured V now uses the selected Kala eye-16 diffuse through the researched Unique Eyes to CCXL mapping. The saved-V card names the source and explains that eye shading remains approximate. Matching requires both app hash and definition; another unresolved choice falls back explicitly instead of retaining this texture. Optional missing images do not prevent the editor from opening.
+
+Run `bun tools/intake_eyes.ts` after the [local extraction and UV audit](../../../research/eye-artistry/eye-preview-adapter-plan.md). It verifies the known PNG hash and dimensions, then prepares ignored `public/assets/eyes/` files. These third-party images are local preview inputs, not distributable app assets. Source/provider credits stay in the intake manifest and [community record](../../../docs/community-credits.md). This is one researched choice, not general MO2/Vortex/manual installation discovery. Packed normals, roughness interpretation, cornea/refraction and shader parity remain open.
+
 ## Library storage
 
 Ignored developer data: `data/library.sqlite`; isolated UI checks use `data/verification.sqlite`. Override the directory with `XFAS_DATA_DIR`. For a consistent live backup, run `bun tools/backup-library.ts`; it creates timestamped copies under `data/backups` using SQLite VACUUM INTO and verifies integrity. Both local databases were backed up before the v2 migration. Do not copy only a running WAL database file. Production packaging will use a user-data location. Schema v2 adds immutable collection revisions and per-preset versions. The transactional v1 migration gathers latest looks into a collection and retains every legacy look revision unchanged. Recipe/name changes advance preset versions; order-only changes advance the collection revision. Removal does not delete history, and restoring old content never reuses an earlier preset revision. Future-version databases are rejected. Revision browsing, automatic backup scheduling and DB autosave remain queued. Imported V and game assets are not stored in this recipe library.

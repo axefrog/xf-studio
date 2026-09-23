@@ -568,6 +568,7 @@ function showSavedV(v: SavedV) {
     result.matchedDetails.length === 2
       ? "Brows and lashes match the saved resource references; colours are approximate."
       : "Brows and lashes are reference styles, not a resolved match for this save.";
+  $("v-eyes").textContent = result.eyeAppearance.message;
   $("v-card").hidden = false;
   $("v-summary").textContent =
     `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
@@ -683,6 +684,7 @@ try {
       surface: surface.diagnostics(),
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,
+      eyeAppearance: viewer!.eyeAppearance(),
       idle: { enabled: viewer!.idle?.enabled ?? false, time: viewer!.idle?.time ?? 0,
         paused: viewer!.idle?.paused ?? false, body: viewer!.idle?.bodyEnabled ?? true, face: viewer!.idle?.faceEnabled ?? true,
         targetPose: Object.fromEntries(["Head", "l_J_eye_JNT", "r_J_eye_JNT", "mid_J_jaw_JNT", "l_J_eye_lid_up_rowA_1_JNT"].map(name => {
