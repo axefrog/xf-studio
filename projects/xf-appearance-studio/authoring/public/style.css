@@ -611,3 +611,9 @@ button[aria-pressed="true"] {
 #saved-collections button { font-size: 11px; overflow-wrap: anywhere; text-align: left; }
 .idle-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .idle-options button { padding: 6px 9px; font-size: 11px; }
+
+.field-controls { margin-top: 16px; }
+.field-list { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.field-list button { padding: 5px 8px; font-size: 11px; }
+.field-list button[aria-pressed=true] { background: var(--mint); color: #192a23; }
+#field-add { padding: 5px 8px; font-size: 11px; }

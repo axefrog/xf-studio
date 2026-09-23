@@ -5,10 +5,11 @@ import { fitUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToP
 type Hooks = {
   recipe(): Recipe; layer(): Layer | undefined; selected(): number;
   canvases(): HTMLCanvasElement[]; albedo(): HTMLImageElement | undefined;
-  select(index: number): void; begin(): void; change(): void; cancel(): void;
+  select(index: number): void; selectedField(): string | undefined; selectField(id: string): void;
+  begin(): void; change(): void; cancel(): void;
   persist(): void; message(text: string): void;
 };
-type Handle = { kind: "point" | "origin" | "field"; index: number; mirror: boolean; uv: UV };
+type Handle = { kind: "point" | "origin" | "field"; index: number; fieldId?: string; mirror: boolean; uv: UV };
 
 /** Canvas presentation and gestures. View state never enters portable recipes. */
 export function createUVEditor(canvas: HTMLCanvasElement, elements: {
@@ -18,7 +19,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
   tinted.width = tinted.height = 1024;
   let view = parseUVView(initial);
-  let drag: { handle: Handle; pointer: number; layer: Layer; changed: boolean } | undefined;
+  let drag: { handle: Handle; pointer: number; layer: Layer; target: Layer["points"][number] | Layer["fields"][number]; changed: boolean } | undefined;
   const bounds = () => canvas.getBoundingClientRect();
   const region = () => uvRegion(view);
   const pixel = (p: UV) => uvToPixel(p, region(), canvas.width, canvas.height);
@@ -31,8 +32,10 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (!l) return [];
     return (l.symmetry ? [false, true] : [false]).flatMap(mirror => [
       ...l.points.map((p, index) => ({ kind: "point" as const, index, mirror, uv: reflectUV(p, mirror) })),
-      { kind: "field" as const, index: -1, mirror, uv: reflectUV({ u: l.field.u + l.field.du, v: l.field.v + l.field.dv }, mirror) },
-      { kind: "origin" as const, index: -1, mirror, uv: reflectUV(l.field, mirror) },
+      ...l.fields.flatMap((f, index) => [
+        { kind: "field" as const, index, fieldId: f.id, mirror, uv: reflectUV({ u: f.u + f.du, v: f.v + f.dv }, mirror) },
+        { kind: "origin" as const, index, fieldId: f.id, mirror, uv: reflectUV(f, mirror) },
+      ]),
     ]);
   }
   function draw() {
@@ -66,29 +69,41 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       ctx.strokeStyle = "#f1dbee"; ctx.lineWidth = 1.25 * unit; ctx.beginPath();
       path.forEach((p, i) => { const q = pixel(reflectUV(p, mirror)); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
       ctx.closePath(); ctx.stroke();
-      const f = l.field, a = pixel(reflectUV(f, mirror)), b = pixel(reflectUV({ u: f.u + f.du, v: f.v + f.dv }, mirror));
-      ctx.strokeStyle = "#b1ebc9"; ctx.lineWidth = 1.25 * unit;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      for (const f of l.fields) {
+        const a = pixel(reflectUV(f, mirror)), b = pixel(reflectUV({ u: f.u + f.du, v: f.v + f.dv }, mirror));
+        const selected = f.id === hooks.selectedField();
+        ctx.strokeStyle = selected ? "#b1ebc9" : "#7f9c8a"; ctx.lineWidth = 1.25 * unit;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        if (selected) {
+          ctx.setLineDash([4 * unit, 4 * unit]); ctx.strokeStyle = "#b1ebc966";
+          ctx.beginPath(); ctx.arc(a.x, a.y, f.radius / r.w * canvas.width, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
     }
     let selectedVisible = false;
     for (const h of handles()) {
-      const p = pixel(h.uv), selected = h.kind === "point" && h.index === hooks.selected();
-      if (selected && p.x >= 0 && p.x <= canvas.width && p.y >= 0 && p.y <= canvas.height) selectedVisible = true;
+      const p = pixel(h.uv), selected = h.kind === "point" ? h.index === hooks.selected() : h.fieldId === hooks.selectedField();
+      if (h.kind === "point" && selected && p.x >= 0 && p.x <= canvas.width && p.y >= 0 && p.y <= canvas.height) selectedVisible = true;
       ctx.beginPath(); ctx.lineWidth = unit;
       if (h.kind === "field") ctx.rect(p.x - 4 * unit, p.y - 4 * unit, 8 * unit, 8 * unit);
       else ctx.arc(p.x, p.y, (h.kind === "point" ? selected ? 5 : 3.5 : 4) * unit, 0, Math.PI * 2);
-      ctx.fillStyle = h.kind === "point" ? selected ? "#fff4fb" : "#c49ab8" : "#b1ebc9";
+      ctx.fillStyle = h.kind === "point" ? selected ? "#fff4fb" : "#c49ab8" : selected ? "#c9ffe2" : "#7f9c8a";
       ctx.strokeStyle = h.kind === "origin" ? "#b1ebc9" : "#2b2a34";
       if (h.kind !== "origin") ctx.fill();
       ctx.stroke();
     }
     elements.note.textContent = selectedVisible ? "View only · Fit shape recentres the controls." : "Selected point outside this view · use Fit shape or Other eye.";
   }
+  function validDrag() {
+    if (!drag || hooks.layer() !== drag.layer) return false;
+    const { handle: h, target, layer } = drag;
+    return h.kind === "point" ? layer.points[h.index] === target : layer.fields.some(f => f.id === h.fieldId && f === target);
+  }
   function stop(cancel = false) {
     if (!drag) return;
-    const old = drag; drag = undefined;
+    const old = drag, mayCancel = validDrag(); drag = undefined;
     if (canvas.hasPointerCapture(old.pointer)) canvas.releasePointerCapture(old.pointer);
-    if (cancel && old.changed && hooks.layer() === old.layer) hooks.cancel();
+    if (cancel && old.changed && mayCancel) hooks.cancel();
     draw();
   }
   function updateView(next: UVView) {
@@ -103,7 +118,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const l = hooks.layer(); if (!l) return;
     const b = bounds(), p = coordinate(e), r = region();
     let closest: Handle | undefined, best = 11;
-    for (const h of handles()) {
+    for (const h of handles().sort((a, b) => Number(b.fieldId === hooks.selectedField() && b.kind !== "point") - Number(a.fieldId === hooks.selectedField() && a.kind !== "point"))) {
       const d = Math.hypot((h.uv.u - p.u) * b.width / r.w, (h.uv.v - p.v) * b.height / r.h);
       if (d < best - .1) { best = d; closest = h; }
     }
@@ -111,16 +126,20 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     e.preventDefault();
     view.side = closest.uv.u <= .5 ? "low" : "high";
     if (closest.kind === "point") hooks.select(closest.index);
-    drag = { handle: closest, pointer: e.pointerId, layer: l, changed: false };
+    else hooks.selectField(closest.fieldId!);
+    drag = { handle: closest, pointer: e.pointerId, layer: l, changed: false,
+      target: closest.kind === "point" ? l.points[closest.index] : l.fields.find(f => f.id === closest.fieldId)! };
     canvas.setPointerCapture(e.pointerId); draw(); hooks.persist();
   };
   canvas.onpointermove = e => {
     if (!drag || e.pointerId !== drag.pointer) return;
-    if (hooks.layer() !== drag.layer) { stop(); return; }
+    if (!validDrag()) { stop(); return; }
     const l = drag.layer, h = drag.handle, p = reflectUV(coordinate(e), h.mirror);
+    const f = l.fields.find(f => f.id === h.fieldId);
+    if (h.kind !== "point" && !f) { stop(); return; }
     const next = h.kind === "point" || h.kind === "origin" ? { u: clamp(p.u), v: clamp(p.v) }
-      : { du: clamp(p.u - l.field.u, -.1, .1), dv: clamp(p.v - l.field.v, -.1, .1) };
-    const target = h.kind === "point" ? l.points[h.index] : l.field;
+      : { du: clamp(p.u - f!.u, -.1, .1), dv: clamp(p.v - f!.v, -.1, .1) };
+    const target = h.kind === "point" ? l.points[h.index] : f!;
     if (Object.entries(next).every(([key, value]) => Math.abs((target as unknown as Record<string, number>)[key] - value) < 1e-7)) return;
     if (!drag.changed) { hooks.begin(); drag.changed = true; }
     Object.assign(target, next); hooks.change();

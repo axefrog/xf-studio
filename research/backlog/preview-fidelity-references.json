@@ -51,6 +51,27 @@
       "localCopy": "research/consumers/preview-fidelity/raw/matte-flicker-4.jpg",
       "sha256": "ac00150d647c6916a45e70d37e48012e3982e2e767e66247eb7f3cbf7080b747",
       "bytes": 8577
+    },
+    {
+      "label": "brow-idle-frame-1",
+      "source": "F:\\Media\\Other\\ShareX\\2026-09\\ApplicationFrameHost_2026-09-23_15-55-44.jpg",
+      "localCopy": "research\\consumers\\preview-fidelity\\raw\\brow-idle-frame-1.jpg",
+      "sha256": "d5382a69726ffcf24732e2fb681683c5f318465ab8e8e40ca8ba474144542946",
+      "bytes": 22986
+    },
+    {
+      "label": "brow-idle-frame-2",
+      "source": "F:\\Media\\Other\\ShareX\\2026-09\\ApplicationFrameHost_2026-09-23_15-56-14.jpg",
+      "localCopy": "research\\consumers\\preview-fidelity\\raw\\brow-idle-frame-2.jpg",
+      "sha256": "dab3b083198fe1b4bf69a7728c44697f78edacd76ab49030036c47d64ac89cf2",
+      "bytes": 22183
+    },
+    {
+      "label": "brow-texture-comparison",
+      "source": "C:\\Users\\Nathan\\AppData\\Local\\Temp\\codex-clipboard-2843978c-711d-4025-a722-9aa046b8384c.png",
+      "localCopy": "research\\consumers\\preview-fidelity\\raw\\brow-texture-comparison.png",
+      "sha256": "4987c4ed33948d16e74c8069ae78e2efe30115e2046cda0d42d3de1b8cae162a",
+      "bytes": 432144
     }
   ]
 }

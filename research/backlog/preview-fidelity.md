@@ -44,3 +44,7 @@ Related: [saved-V assembly](../eye-artistry/save-import.md), [authoring queue](e
 ## Saved-eye source resolved
 
 [23 September source investigation](../eye-artistry/modded-eye-resolution.md) resolves the selected option to Kala’s Eyes Standalone V2 through nutboy’s Unique Eyes to CCXL. The three texture providers are unique across the scanned roots; September 16 logs corroborate material instantiation. Local extracted maps remain ignored. UV/colour-space verification and the selected diffuse integration are now implemented: exact saved app hash plus definition, verified PNG digest, opaque sRGB preview and explicit fallback. Browser checks cover restored V, gaze, reload and missing-image fallback. Resource resolution and diffuse display are complete for this captured choice; eye.mt/refraction/normal/roughness parity and a generalized resolver are not.
+
+## Follow-up source and image evidence
+
+The [brow texture audit](../eye-artistry/brow-texture-audit.md) verifies the installed style-18 FULLER candidate across 1,103 archive indexes, but identifies green-channel alphaMap coverage and omitted gradient/secondary/normal inputs in the preview. The selected gradient has an Alliekat override. Treat this as material-adapter evidence, not conclusive runtime identity or a proven alpha-only fix. Nathan’s additional comparison and two idle frames are preserved with hashes in the reference manifest. The idle frames strengthen the geometric-motion discrepancy; wrinkle shading alone is insufficient. Continue this work after makeup as prioritized.

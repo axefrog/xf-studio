@@ -1,0 +1,122 @@
+{
+  "date": "2026-09-23",
+  "scope": "All installed MO2 mod archives, both overwrite folders, physical game archive/pc/mod; index hashes only, not runtime load order or XL/script patches",
+  "profile": "F:\\Games\\MO2\\profiles\\2025 (again)\\modlist.txt",
+  "scannedArchives": 1103,
+  "errors": [],
+  "resources": [
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\materials\\ark_eyebrows_02__18.mi",
+      "hash": "17519094438502283721"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb_wa__base_ds18.xbm",
+      "hash": "8825559761805751330"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb__base_d18.xbm",
+      "hash": "12014415929380493100"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb__base_n18.xbm",
+      "hash": "11366430283384820302"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\models\\pma\\heb_000_pma_c__basehead_18.mesh",
+      "hash": "2829789273308833203"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\models\\pwa\\heb_000_pwa_c__basehead_18.mesh",
+      "hash": "6964115484359009791"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\models\\pwa\\heb_000_pwa__morphs_18.morphtarget",
+      "hash": "5838896660247859963"
+    },
+    {
+      "path": "arkhe\\ccxl_eyebrows_02\\app\\pwa\\ark_eyebrows_02_ccxl_18_pwa.app",
+      "hash": "10685882159528859062"
+    },
+    {
+      "path": "base\\characters\\common\\hair\\textures\\cap_gradiants\\hh_cap_grad__brown_ombre.xbm",
+      "hash": "17043542013265241872"
+    },
+    {
+      "path": "base\\materials\\mesh_decal_double_diffuse.mt",
+      "hash": "10501783642502886761"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\heb_000_pwa__morphs.morphtarget",
+      "hash": "16994631526596172536"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\heb_000_pwa_c__basehead.mesh",
+      "hash": "93420395318360365"
+    }
+  ],
+  "matches": [
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\models\\pma\\heb_000_pma_c__basehead_18.mesh",
+      "hash": "2829789273308833203",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\models\\pwa\\heb_000_pwa__morphs_18.morphtarget",
+      "hash": "5838896660247859963",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\models\\pwa\\heb_000_pwa_c__basehead_18.mesh",
+      "hash": "6964115484359009791",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb_wa__base_ds18.xbm",
+      "hash": "8825559761805751330",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\app\\pwa\\ark_eyebrows_02_ccxl_18_pwa.app",
+      "hash": "10685882159528859062",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb__base_n18.xbm",
+      "hash": "11366430283384820302",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\textures\\ark_heb__base_d18.xbm",
+      "hash": "12014415929380493100",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "arkhe\\ccxl_eyebrows_02\\materials\\ark_eyebrows_02__18.mi",
+      "hash": "17519094438502283721",
+      "archive": "F:\\Games\\MO2\\mods\\Beautiful EYEBROWS II - CCXL - Realistic Textures - BOTH V\\archive\\pc\\mod\\Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    },
+    {
+      "resource": "base\\characters\\common\\hair\\textures\\cap_gradiants\\hh_cap_grad__brown_ombre.xbm",
+      "hash": "17043542013265241872",
+      "archive": "F:\\Games\\MO2\\mods\\Alliekat's Natural Hair Tones\\archive\\pc\\mod\\Alliekat's Natural Hair.archive",
+      "profileEnabled": true,
+      "entrySha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    }
+  ]
+}

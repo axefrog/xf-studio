@@ -5,8 +5,9 @@ import { compileFlatPreset } from "../src/preset-compiler";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 
 test("legacy recipes upgrade explicitly; empty and variable stacks persist without corrupting history", () => {
-  const legacy = { ...initialRecipe(), schema: "eye-artistry/recipe-1" };
-  expect(parseRecipe(legacy).schema).toBe("xfs/recipe-2");
+  const legacy = { ...initialRecipe(), schema: "eye-artistry/recipe-1",
+    layers: initialRecipe().layers.map(({ fields, ...l }) => ({ ...l, field: fields[0] })) };
+  expect(parseRecipe(legacy).schema).toBe("xfs/recipe-3");
   expect(legacy.schema).toBe("eye-artistry/recipe-1");
   expect(() => parseRecipe({ ...legacy, layers: [] })).toThrow();
   const empty = { ...initialRecipe(), layers: [] };

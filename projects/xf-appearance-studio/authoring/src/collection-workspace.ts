@@ -1,15 +1,16 @@
 import { parseCollection, type PresetCollection } from "./preset-collection";
+import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 
 export type Preset = PresetCollection["presets"][number];
-export type EditorMemory = { active: number; selected: number; history: Recipe[] };
+export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: Recipe[] };
 export type CollectionDraft = {
   collection: PresetCollection; revision?: number; selected?: string; expanded: boolean;
   editors: Record<string, EditorMemory>;
   removed: { preset: Preset; index: number; editor: EditorMemory }[];
 };
 export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; filesOpen?: boolean };
-export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-2", uv: "gltf-uv0-top-left", layers: [] });
+export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-3", uv: "gltf-uv0-top-left", layers: [] });
 export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
 export function collectionDraft(collection: PresetCollection, revision?: number): CollectionDraft {
   return { collection: parseCollection(collection, true), revision, selected: collection.presets[0]?.id,
@@ -22,6 +23,7 @@ export function parseEditorMemory(value: unknown, recipe: Recipe): EditorMemory 
   if (Array.isArray(input?.history)) for (const item of input.history.slice(-80)) {
     try { out.history.push(parseRecipe(item)); } catch { /* Preserve usable history. */ }
   }
+  out.fieldSelection = parseFieldSelection(input?.fieldSelection, recipe);
   return out;
 }
 function parseDraft(value: unknown): CollectionDraft {

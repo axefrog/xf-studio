@@ -1,6 +1,7 @@
 import { initialRecipe, parseRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
+import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
@@ -16,6 +17,7 @@ export type WorkspaceState = {
   schema: "xfas/workspace-1";
   recipe: Recipe; active: number; selected: number; history: Recipe[];
   uvView: UVView;
+  fieldSelection: FieldSelection;
   savedV?: SavedV;
   preview: PreviewState;
   library: LibraryState;
@@ -26,7 +28,7 @@ export type WorkspaceState = {
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
-    uvView: defaultUVView(),
+    uvView: defaultUVView(), fieldSelection: {},
     preview: { eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
       normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
@@ -44,6 +46,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
   state.uvView = parseUVView(v.uvView);
+  state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
   if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active;
   if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
@@ -87,6 +90,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
     state.recipe = preset ? structuredClone(preset.recipe) : emptyRecipe();
     const memory = preset ? state.collections.editors[preset.id] ?? emptyMemory() : emptyMemory();
     state.active = memory.active; state.selected = memory.selected; state.history = memory.history;
+    state.fieldSelection = memory.fieldSelection ?? {};
   }
   return state;
 }

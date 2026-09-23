@@ -7,6 +7,7 @@ export type Field = {
   dv: number;
   radius: number;
 };
+export type WarpField = Field & { id: string };
 export type Layer = {
   id: string;
   name: string;
@@ -18,19 +19,20 @@ export type Layer = {
   feather: number;
   symmetry: boolean;
   points: Point[];
-  field: Field;
+  fields: WarpField[];
 };
 export type Recipe = {
-  schema: "xfs/recipe-2";
+  schema: "xfs/recipe-3";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
 // Operational import/preview budget, separate from preset catalogue size.
 export const MAX_LAYERS = 32;
+export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-2",
+    schema: "xfs/recipe-3",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => ({
       id: `layer-${i + 1}`,
@@ -59,16 +61,17 @@ export function initialRecipe(): Recipe {
             [0.369, 0.235],
           ]
       ).map(([u, v]) => ({ u, v, weight: 1 })),
-      field: { u: 0.342, v: 0.223, du: 0, dv: 0, radius: 0.07 },
+      fields: [{ id: `layer-${i + 1}-field-1`, u: 0.342, v: 0.223, du: 0, dv: 0, radius: 0.07 }],
     })),
   };
 }
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
-  const r = value as Omit<Recipe, "schema"> & { schema: string };
+  type ImportedLayer = Omit<Layer, "fields"> & { field?: Field; fields?: WarpField[] };
+  const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -80,9 +83,11 @@ export function parseRecipe(value: unknown): Recipe {
   const num = (x: unknown, a: number, b: number) =>
     typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;
   const ids = new Set<string>();
+  const layers: Layer[] = [];
   for (const l of r.layers) {
     if (
       !l ||
+      typeof l !== "object" ||
       typeof l.id !== "string" ||
       !l.id.trim() ||
       l.id.length > 80 ||
@@ -122,18 +127,33 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const f = l.field;
-    if (
-      !f ||
-      !num(f.u, 0, 1) ||
-      !num(f.v, 0, 1) ||
-      !num(f.du, -0.1, 0.1) ||
-      !num(f.dv, -0.1, 0.1) ||
-      !num(f.radius, 0.005, 0.2)
-    )
-      throw Error("Invalid vector field.");
+    const current = r.schema === "xfs/recipe-3";
+    if (current ? "field" in l : "fields" in l)
+      throw Error("Ambiguous vector field format.");
+    const fields = current ? l.fields : [{ ...l.field, id: `${l.id.slice(0, 72)}-field-1` }];
+    if (!Array.isArray(fields) || fields.length > MAX_FIELDS)
+      throw Error(`Expected up to ${MAX_FIELDS} vector fields.`);
+    const fieldIds = new Set<string>();
+    for (const f of fields) {
+      if (
+        !f ||
+        typeof f.id !== "string" ||
+        !f.id.trim() ||
+        f.id.length > 80 ||
+        fieldIds.has(f.id) ||
+        !num(f.u, 0, 1) ||
+        !num(f.v, 0, 1) ||
+        !num(f.du, -0.1, 0.1) ||
+        !num(f.dv, -0.1, 0.1) ||
+        !num(f.radius, 0.005, 0.2)
+      )
+        throw Error("Invalid vector field.");
+      fieldIds.add(f.id);
+    }
+    const { field: _legacyField, fields: _fields, ...settings } = l;
+    layers.push({ ...settings, fields: fields as WarpField[] });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-2" });
+  return structuredClone({ ...r, schema: "xfs/recipe-3", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   const out: Point[] = [];
@@ -168,6 +188,21 @@ export function warp(u: number, v: number, field: Field): [number, number] {
   );
   return [u - field.du * q, v - field.dv * q];
 }
+// Each influence is sampled at the original query, never at another field's
+// warped result. The sum is independent of field order (up to floating point
+// rounding), preserves one-field masks, and does not dilute existing fields.
+export function warpFields(u: number, v: number, fields: readonly Field[]): [number, number] {
+  let du = 0, dv = 0;
+  for (const field of fields) {
+    if (field.du === 0 && field.dv === 0) continue;
+    const q = Math.exp(
+      -((u - field.u) ** 2 + (v - field.v) ** 2) / (2 * field.radius ** 2),
+    );
+    du += field.du * q;
+    dv += field.dv * q;
+  }
+  return [u - du, v - dv];
+}
 export function coverage(
   u: number,
   v: number,
@@ -180,7 +215,7 @@ export function coverage(
     : coverageAt(u, v, l, polygon);
 }
 function coverageAt(u: number, v: number, l: Layer, polygon: Point[]): number {
-  [u, v] = warp(u, v, l.field);
+  [u, v] = warpFields(u, v, l.fields);
   let inside = false,
     best = Infinity,
     weight = 1;
@@ -213,7 +248,7 @@ export function raster(l: Layer, size: number): Uint8ClampedArray {
   for (let i = 0; i < data.length; i += 4)
     data[i] = data[i + 1] = data[i + 2] = 255;
   if (!l.enabled) return data;
-  const pad = l.feather + Math.hypot(l.field.du, l.field.dv);
+  const pad = l.feather + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   let minU = Math.min(...polygon.map((p) => p.u)) - pad,
     maxU = Math.max(...polygon.map((p) => p.u)) + pad;
   if (l.symmetry) {

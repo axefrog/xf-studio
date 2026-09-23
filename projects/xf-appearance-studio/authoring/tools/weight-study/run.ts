@@ -56,7 +56,7 @@ for(const [name,polygon] of Object.entries(fixtures)) {
 
 const square=fixtures.opposing;
 const b=boundaryKernel(square,epsilon),p=pointKernel(square,epsilon),h=harmonicGrid(square,144,b);
-const legacy=initialRecipe().layers[0]; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,field:{u:.5,v:.5,du:0,dv:0,radius:.07}});
+const legacy=initialRecipe().layers[0]; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,fields:[{id:"study",u:.5,v:.5,du:0,dv:0,radius:.07}]});
 results.centerContinuity=[.01,.0001,.000001,.00000001].map(e=>({e,
   old:coverage(.5,.5+e,legacy)-coverage(.5,.5-e,legacy),
   point:p(.5,.5+e)-p(.5,.5-e),boundary:b(.5,.5+e)-b(.5,.5-e),harmonic:h.at(.5,.5+e)-h.at(.5,.5-e),

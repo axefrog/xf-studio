@@ -174,17 +174,24 @@
             min=".0005"
             max=".04"
             step=".0005" /></label
-        ><label class="control"
-          >Field reach <output id="radius-value"></output
+        >
+        <div class="field-controls">
+          <div class="label-row"><span>Warp controls</span><button id="field-add" type="button">Add warp</button></div>
+          <div id="field-list" class="field-list" role="group" aria-label="Warp controls"></div>
+          <label class="control"
+          >Selected warp reach <output id="radius-value"></output
           ><input
             id="radius"
             type="range"
             min=".005"
-            max=".15"
+            max=".2"
             step=".001" /></label
         ><button class="text-button" id="clear-field">
-          Clear field direction
+          Reset selected direction
         </button>
+        <button class="text-button" id="field-remove">Remove selected warp</button>
+        <p class="help" id="field-note"></p>
+        </div>
         <div class="rule"></div>
         <div class="two-col">
           <label

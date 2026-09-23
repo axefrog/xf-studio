@@ -1,0 +1,80 @@
+{
+  "date": "2026-09-23",
+  "feature": "Independent local warp controls",
+  "recipeSchema": "xfs/recipe-3",
+  "fieldBudgetPerLayer": 8,
+  "contract": {
+    "composition": "Sum Gaussian displacement vectors sampled at the original inverse-warp query; no sequential composition or normalization.",
+    "legacy": "v1/v2 single field migrates to deterministic stable field ID; independent old-evaluator mask fixtures remain byte-identical.",
+    "empty": "Identity warp; remove final control allowed.",
+    "selection": "Editor-only stable layer/field IDs, per preset, separate from portable recipe.",
+    "bounds": "Sum of field vector magnitudes included in conservative raster bounds."
+  },
+  "checks": {
+    "testsPassed": 73,
+    "testsFailed": 0,
+    "assertions": 402834,
+    "typecheck": "pass",
+    "browserBuild": "pass",
+    "oldRasterParityFixtures": 6,
+    "fullAtlasBoundFixtures": 6,
+    "compilerAlphaPixelsVerified": 16384,
+    "compilerCoveredTexels": 222,
+    "compilerSource": "Two-field recipe saved and reopened through live isolated collection API; compiled alpha compared with ordered coverage of independently rastered layers.",
+    "deferredLayerRace": "Regression test covers coalesced edits, layer reorder/selection changes and replacement before animation-frame flush."
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "userDraftUsed": false,
+    "checks": [
+      "Legacy browser collection restores as recipe-3 with deterministic migrated field IDs.",
+      "Add a second zero-vector control, then drag its mirrored UV endpoint; first field remains unchanged.",
+      "Drag the second mirrored origin on the actual head; first field and second direction remain unchanged; whole-gesture Undo restores exact recipe.",
+      "Change second reach to 0.2; selecting first shows its independent 0.07 reach; selecting second restores 0.2.",
+      "Save a copy in the isolated SQLite library, reload with exact recipe/selection/collection equality, then reopen the saved collection and recover both fields and their values.",
+      "Add up to eight: Add disabled at cap, 32 mirrored field/origin handles in both UV and surface diagnostics.",
+      "Remove all eight: fields empty, field handles zero in both views, removal/reach disabled; Undo restores final removed control.",
+      "Escape after a confirmed nonzero live UV drag restores exact multi-field recipe.",
+      "Selected reach ring, original contour and independent controls visually checked in single-eye view.",
+      "No captured console warnings/errors; temporary tab closed.",
+      "Final build: Tab/Enter selects Warp 2 while preserving focus and aria-pressed; no captured console warnings/errors."
+    ]
+  },
+  "performance": {
+    "method": "Median of three warm full raster calls, initial six-knot symmetric petal, nonzero fields at u=.32+.013*i, v=.225, du=alternating ±.01, dv=.006, radius=.035; excludes shader upload and scheduling.",
+    "measurements": [
+      {
+        "fields": 1,
+        "size": 1024,
+        "medianMs": 38.3484
+      },
+      {
+        "fields": 1,
+        "size": 2048,
+        "medianMs": 148.5345
+      },
+      {
+        "fields": 8,
+        "size": 1024,
+        "medianMs": 143.801
+      },
+      {
+        "fields": 8,
+        "size": 2048,
+        "medianMs": 577.8791
+      }
+    ],
+    "limits": "Eight active fields noticeably increase mask latency. Does not establish worst-case 24-knot or 32-layer performance; unchanged-layer scheduling and zero-vector fast paths retained."
+  },
+  "operations": {
+    "sqliteBackups": "data/backups/2026-09-23T06-03-40.985Z (ignored), both backups integrity checked before restart",
+    "server": "localhost:4317 restarted to load schema-3 server parser; no database schema change",
+    "gameAssetsChanged": false,
+    "gameInstalled": false
+  },
+  "open": [
+    "Continuous point-strength repair, Bezier/corner handles and directional softness remain queued.",
+    "Strong overlapping warps may fold the mask; this is not a bijective deformation cage.",
+    "Runtime shader/plate/material verification remains separate."
+  ]
+}

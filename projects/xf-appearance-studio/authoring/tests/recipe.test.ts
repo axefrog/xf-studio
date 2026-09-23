@@ -17,7 +17,7 @@ describe("portable authoring contract", () => {
   test("rejects malformed and unbounded work before rendering", () => {
     for (const edit of [
       (r: any) => (r.layers[0].points[0].u = NaN),
-      (r: any) => (r.layers[0].field.radius = 0),
+      (r: any) => (r.layers[0].fields[0].radius = 0),
       (r: any) =>
         (r.layers[0].points = Array(200).fill({ u: 0.3, v: 0.2, weight: 1 })),
       (r: any) => (r.layers[1].id = r.layers[0].id),
@@ -30,8 +30,8 @@ describe("portable authoring contract", () => {
   });
   test("mirrored field and weighted shape produce matching halves", () => {
     const l = initialRecipe().layers[0];
-    l.field.du = 0.025;
-    l.field.dv = 0.015;
+    l.fields[0].du = 0.025;
+    l.fields[0].dv = 0.015;
     l.points[0].weight = 0.2;
     const p = curve(l.points);
     for (let u = 0.27; u < 0.47; u += 0.017)

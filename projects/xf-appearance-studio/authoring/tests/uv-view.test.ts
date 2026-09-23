@@ -30,7 +30,7 @@ test("single-eye fitting enlarges the shape without mutating it and mirrors the 
   expect(layer).toEqual(before);
   layer.symmetry = false;
   expect(fitUVView({ ...high, mode: "single" }, layer).u).toBe(.625);
-  layer.field = { u: 0, v: .2, du: -.1, dv: 0, radius: .07 };
+  layer.fields[0] = { id: "outside", u: 0, v: .2, du: -.1, dv: 0, radius: .07 };
   const edgeView = fitUVView({ ...low, side: "low" }, layer);
   const outsideAtlas = uvToPixel({ u: -.1, v: .2 }, uvRegion(edgeView), 720, 520);
   expect(outsideAtlas.x).toBeGreaterThan(0); expect(outsideAtlas.x).toBeLessThan(720);

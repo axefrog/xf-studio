@@ -27,7 +27,8 @@ export function fitUVView(view: UVView, layer?: Layer): UVView {
   const fallback = { ...view, u: view.mode === "both" ? .5 : view.side === "low" ? .375 : .625, v: .2775,
     span: view.mode === "both" ? .5 : .25 };
   if (!layer) return fallback;
-  const f = layer.field, path = [...curve(layer.points), ...layer.points, f, { u: f.u + f.du, v: f.v + f.dv }];
+  const path = [...curve(layer.points), ...layer.points,
+    ...layer.fields.flatMap(f => [f, { u: f.u + f.du, v: f.v + f.dv }])];
   let positions = (layer.symmetry ? [false, true] : [false]).flatMap(mirror => path.map(p => reflectUV(p, mirror)));
   if (view.mode === "single") positions = positions.filter(p => view.side === "low" ? p.u <= .5 : p.u >= .5);
   if (!positions.length) return fallback;

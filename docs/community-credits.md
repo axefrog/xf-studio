@@ -102,6 +102,16 @@ Other installed or surveyed frameworks/mods are not automatically claimed as stu
 
 [SciPy](https://scipy.org/) 1.18.1 and [NumPy](https://numpy.org/) 2.5.3, used 23 September 2026, enabled the [fixed plate-correction feasibility study](../experiments/006-plate-clearance/fixed_feasibility.md). NumPy supplies matrix arithmetic; SciPy supplies SLSQP proposals, nonnegative least squares and HiGHS linear programming through public APIs. **Use:** executed research dependencies in an ignored local target directory; no upstream optimizer implementation was copied or bundled with the application. The constraint construction and independent certificate verifier are project code. Installed package metadata retains developer attribution, licenses and bundled solver notices; preserve applicable notices if any tooling is later distributed.
 
+### Brow coverage and failure-plane follow-up — 23 September 2026
+
+The [brow texture audit](../research/eye-artistry/brow-texture-audit.md) extends **Arkhe’s Beautiful EYEBROWS II** credit (mod 26168, installed 1.0.0.0/file 129560): its exact style-18 resource chain and Default/Fuller description distinguish the installed variant from the preview’s material approximation. Existing local reference use continues; no new redistribution permission is inferred.
+
+**[Alliekat / Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787)**, installed 1.0.0.0, metadata modified 15 July 2024, supplies the saved brown-ombre gradient’s unique installed mod override. This is provider/source learning that identifies a missing input for accurate brow colour; the texture has not yet been integrated or redistributed.
+
+The already pinned **WolvenKit** `ArchiveReader.cs` layout informed the 1,103-index provider census; no upstream implementation file was copied. Installed **Three.js 0.186.0** `alphamap_fragment.glsl.js` establishes that alphaMap samples green, explaining a measurable mismatch with the diffuse image’s alpha channel. These extend existing format/source-learning and dependency credits, not a claim that game coverage semantics are already solved.
+
+Existing **Blender 5.0 BVH/NumPy tooling**, WolvenKit-derived geometry and IO Suite/Three.js idle samples enabled the [fixed-failure visibility classification](../experiments/006-plate-clearance/research/fixed-failure-classification.md): 73 poses, 40 incident faces, and exposure checks at the actual certificate phases. New classification code is project-authored; no new external technique or copied implementation was introduced. Detailed game-derived observations remain ignored/local.
+
 ## Entry checklist
 
 For each new contribution record: **source/mod/repository and link; author/contributors or an explicit attribution gap; inspected version/commit/date; what it taught or enabled; where we used it; learning/tool/code/asset use; relevant reuse terms if applicable.** Amend existing entries when new lessons emerge. Keep unresolved leads visibly separate from completed study, and never erase credit because the eventual implementation took a different form.

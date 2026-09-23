@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { clamp, curve, type Layer } from "./recipe";
+import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import {
   SurfaceMap,
   anchorPosition,
@@ -11,6 +11,7 @@ import type { createScene } from "./scene";
 type Handle = {
   kind: "point" | "origin" | "field";
   index: number;
+  fieldId?: string;
   mirror: boolean;
   uv: UV;
   anchor: Anchor;
@@ -20,6 +21,8 @@ type Hooks = {
   layer: () => Layer | undefined;
   selected: () => number;
   select: (i: number) => void;
+  selectedField: () => string | undefined;
+  selectField: (id: string) => void;
   begin: () => void;
   change: () => void;
   cancel: () => void;
@@ -38,18 +41,20 @@ export function createSurfaceEditor(
   scene.add(group);
   const pointGeometry = new THREE.BufferGeometry(),
     lineGeometry = new THREE.BufferGeometry();
-  // Recipe limit: 24 curve points + 2 field handles, mirrored; 6 curve samples
-  // per point + 16 field segments. Reuse GPU buffers throughout a drag.
+  // Recipe limits, mirrored: 24 points, two handles/field, six samples/point,
+  // 16 segments/arrow and a 64-segment ring for the selected field. Reuse buffers.
+  const maxHandles = (24 + 2 * MAX_FIELDS) * 2,
+    maxSegments = (24 * 6 + MAX_FIELDS * 16 + 64) * 2;
   for (const name of ["position", "color"])
     pointGeometry.setAttribute(
       name,
-      new THREE.Float32BufferAttribute(new Float32Array(52 * 3), 3).setUsage(
+      new THREE.Float32BufferAttribute(new Float32Array(maxHandles * 3), 3).setUsage(
         THREE.DynamicDrawUsage,
       ),
     );
   lineGeometry.setAttribute(
     "position",
-    new THREE.Float32BufferAttribute(new Float32Array(640 * 3), 3).setUsage(
+    new THREE.Float32BufferAttribute(new Float32Array(maxSegments * 2 * 3), 3).setUsage(
       THREE.DynamicDrawUsage,
     ),
   );
@@ -90,7 +95,15 @@ export function createSurfaceEditor(
     handles: Handle[] = [],
     segments: [Anchor, Anchor][] = [];
   let drag:
-    | { handle: Handle; last: UV; pointer: number; changed: boolean }
+    | {
+        handle: Handle;
+        layer: Layer;
+        target: Layer["points"][number] | Layer["fields"][number];
+        last: UV;
+        pointer: number;
+        changed: boolean;
+        controlsEnabled: boolean;
+      }
     | undefined;
   let hovered: Handle | undefined,
     unmapped = 0;
@@ -102,10 +115,11 @@ export function createSurfaceEditor(
     if (!layer) return;
     const key = JSON.stringify([
         layer.points,
-        layer.field,
+        layer.fields,
         layer.symmetry,
         layer.enabled,
         hooks.selected(),
+        hooks.selectedField(),
       ]);
     if (key === signature) return;
     signature = key;
@@ -117,12 +131,14 @@ export function createSurfaceEditor(
       index: number,
       uv: UV,
       mirror: boolean,
+      fieldId?: string,
     ) {
       const anchor = map.anchor(uv);
-      if (anchor)
+      if (anchor && handles.length < maxHandles)
         handles.push({
           kind,
           index,
+          fieldId,
           uv,
           mirror,
           anchor,
@@ -134,28 +150,35 @@ export function createSurfaceEditor(
       for (let i = 1; i < path.length; i++) {
         const a = map.anchor(path[i - 1]),
           b = map.anchor(path[i]);
-        if (a && b && map.continuous(path[i - 1], path[i]))
+        if (a && b && segments.length < maxSegments && map.continuous(path[i - 1], path[i]))
           segments.push([a, b]);
       }
     }
     for (const mirror of layer.symmetry ? [false, true] : [false]) {
       const reflect = (p: UV) => ({ u: mirror ? 1 - p.u : p.u, v: p.v });
-      layer.points.forEach((p, i) => handle("point", i, reflect(p), mirror));
-      const f = layer.field;
-      handle("field", -1, reflect({ u: f.u + f.du, v: f.v + f.dv }), mirror);
-      handle("origin", -1, reflect(f), mirror);
+      layer.points.slice(0, 24).forEach((p, i) => handle("point", i, reflect(p), mirror));
       const outline = curve(layer.points, 6);
       path([...outline, outline[0]].map(reflect));
-      path(
-        Array.from({ length: 17 }, (_, i) =>
-          reflect({ u: f.u + (f.du * i) / 16, v: f.v + (f.dv * i) / 16 }),
-        ),
-      );
+      layer.fields.slice(0, MAX_FIELDS).forEach((f, i) => {
+        handle("field", i, reflect({ u: f.u + f.du, v: f.v + f.dv }), mirror, f.id);
+        handle("origin", i, reflect(f), mirror, f.id);
+        path(Array.from({ length: 17 }, (_, j) => reflect({
+          u: f.u + (f.du * j) / 16, v: f.v + (f.dv * j) / 16,
+        })));
+        // This is the Gaussian reach parameter, not a hard edge to the field.
+        // Barycentric segment checks leave real gaps where the ring exits the plate.
+        if (f.id === hooks.selectedField())
+          path(Array.from({ length: 65 }, (_, j) => reflect({
+            u: f.u + f.radius * Math.cos(j * Math.PI / 32),
+            v: f.v + f.radius * Math.sin(j * Math.PI / 32),
+          })));
+      });
     }
     pointGeometry.setDrawRange(0, handles.length);
     lineGeometry.setDrawRange(0, segments.length * 2);
   }
   function update() {
+    if (drag && !validDrag()) stop();
     group.visible = enabled && !!hooks.layer()?.enabled;
     if (!group.visible) return;
     rebuild();
@@ -175,21 +198,24 @@ export function createSurfaceEditor(
     handles.forEach((h, i) => {
       h.world.copy(anchorPosition(h.anchor, vertex, 0.0007));
       positions.setXYZ(i, h.world.x, h.world.y, h.world.z);
-      const selected = h.kind === "point" && h.index === hooks.selected(),
+      const selected = h.kind === "point"
+          ? h.index === hooks.selected()
+          : h.fieldId === hooks.selectedField(),
         hover =
           h.kind === hovered?.kind &&
           h.index === hovered.index &&
+          h.fieldId === hovered.fieldId &&
           h.mirror === hovered.mirror;
       const c = new THREE.Color(
         hover
           ? 0xffffb5
           : selected
-            ? 0xffffff
+            ? h.kind === "point" ? 0xffffff : 0xb1ffcd
             : h.kind === "point"
               ? 0xe7a7d1
               : h.kind === "origin"
                 ? 0x5ba985
-                : 0xb1ffcd,
+                : 0x75b892,
       );
       colors.setXYZ(i, c.r, c.g, c.b);
     });
@@ -237,7 +263,11 @@ export function createSurfaceEditor(
     let best: Handle | undefined,
       distance = 13;
     // At a zero-length field, prefer its endpoint so the first drag creates direction.
-    for (const h of handles) {
+    // If fields overlap, make the currently selected field directly draggable.
+    const ordered = [...handles].sort((a, b) =>
+      Number(b.fieldId === hooks.selectedField() && b.kind !== "point") -
+      Number(a.fieldId === hooks.selectedField() && a.kind !== "point"));
+    for (const h of ordered) {
       const p = h.world.clone().project(camera);
       if (p.z < -1 || p.z > 1) continue;
       const d = Math.hypot(
@@ -259,28 +289,48 @@ export function createSurfaceEditor(
     if (!uv || Math.hypot(uv.u - best.uv.u, uv.v - best.uv.v) > 0.012) return;
     return best;
   }
+  function validDrag() {
+    if (!drag || !enabled || hooks.layer() !== drag.layer || !drag.layer.enabled)
+      return false;
+    const { handle: h, target, layer } = drag;
+    return h.kind === "point"
+      ? layer.points[h.index] === target
+      : layer.fields.some((f) => f.id === h.fieldId && f === target);
+  }
   function stop(cancel = false) {
     if (!drag) return;
-    const old = drag;
+    const old = drag,
+      mayCancel = validDrag();
     drag = undefined;
-    controls.enabled = true;
+    controls.enabled = old.controlsEnabled;
     if (canvas.hasPointerCapture(old.pointer))
       canvas.releasePointerCapture(old.pointer);
-    if (cancel && old.changed) hooks.cancel();
+    // A preset/layer/field replacement owns a different Undo context. Never undo
+    // its edit because an old pointer gesture later loses capture or is cancelled.
+    if (cancel && old.changed && mayCancel) hooks.cancel();
     canvas.style.cursor = "";
   }
   canvas.addEventListener(
     "pointerdown",
     (e) => {
-      if (e.button !== 0 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)
+      if (drag || e.button !== 0 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)
         return;
+      update();
       const handle = handleAt(e.clientX, e.clientY);
-      if (!handle) return;
+      const layer = hooks.layer();
+      if (!handle || !layer) return;
+      const target = handle.kind === "point"
+        ? layer.points[handle.index]
+        : layer.fields.find((f) => f.id === handle.fieldId);
+      if (!target) return;
       e.preventDefault();
       e.stopImmediatePropagation();
+      const controlsEnabled = controls.enabled;
       controls.enabled = false;
       if (handle.kind === "point") hooks.select(handle.index);
-      drag = { handle, last: handle.uv, pointer: e.pointerId, changed: false };
+      else hooks.selectField(handle.fieldId!);
+      drag = { handle, layer, target, last: handle.uv, pointer: e.pointerId,
+        changed: false, controlsEnabled };
       canvas.setPointerCapture(e.pointerId);
       canvas.style.cursor = "grabbing";
     },
@@ -297,6 +347,7 @@ export function createSurfaceEditor(
       if (e.pointerId !== drag.pointer) return;
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (!validDrag()) { stop(); return; }
       const uv = hit(e.clientX, e.clientY);
       if (!uv || !map.continuous(drag.last, uv)) {
         hooks.message(
@@ -309,20 +360,22 @@ export function createSurfaceEditor(
         hooks.begin();
         drag.changed = true;
       }
-      const l = hooks.layer();
-      if (!l) { stop(); return; }
+      const l = drag.layer;
       const h = drag.handle,
         u = h.mirror ? 1 - uv.u : uv.u,
         v = uv.v;
       if (h.kind === "point") {
         l.points[h.index].u = clamp(u);
         l.points[h.index].v = clamp(v);
-      } else if (h.kind === "origin") {
-        l.field.u = clamp(u);
-        l.field.v = clamp(v);
       } else {
-        l.field.du = clamp(u - l.field.u, -0.1, 0.1);
-        l.field.dv = clamp(v - l.field.v, -0.1, 0.1);
+        const field = l.fields.find((f) => f.id === h.fieldId)!;
+        if (h.kind === "origin") {
+          field.u = clamp(u);
+          field.v = clamp(v);
+        } else {
+          field.du = clamp(u - field.u, -0.1, 0.1);
+          field.dv = clamp(v - field.v, -0.1, 0.1);
+        }
       }
       drag.last = uv;
       hooks.change();
@@ -339,8 +392,12 @@ export function createSurfaceEditor(
     },
     true,
   );
-  canvas.addEventListener("pointercancel", () => stop(true), true);
-  canvas.addEventListener("lostpointercapture", () => stop(true));
+  canvas.addEventListener("pointercancel", (e) => {
+    if (e.pointerId === drag?.pointer) stop(true);
+  }, true);
+  canvas.addEventListener("lostpointercapture", (e) => {
+    if (e.pointerId === drag?.pointer) stop(true);
+  });
   window.addEventListener("blur", () => stop(true));
   window.addEventListener(
     "keydown",
@@ -366,6 +423,9 @@ export function createSurfaceEditor(
       enabled,
       dragging: !!drag,
       unmapped,
+      selectedField: hooks.selectedField(),
+      segments: segments.length,
+      capacity: { handles: maxHandles, segments: maxSegments },
       overlay: { points: points.renderOrder, lines: lines.renderOrder,
         depthTest: pointMaterial.depthTest, depthWrite: pointMaterial.depthWrite },
       handles: handles.map((h) => {
@@ -379,6 +439,7 @@ export function createSurfaceEditor(
         return {
           kind: h.kind,
           index: h.index,
+          fieldId: h.fieldId,
           mirror: h.mirror,
           uv: h.uv,
           screen: { x, y },

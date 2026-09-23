@@ -10,6 +10,9 @@ import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
+import { layerRenderQueue } from "./layer-render-queue";
+import { selectedWarp, type FieldSelection } from "./field-selection";
+import { setupFields } from "./field-ui";
 import { createUVEditor } from "./uv-editor";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
@@ -31,6 +34,7 @@ const verification = new URLSearchParams(location.search).has("verify");
 const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
 const workspace = restored.state;
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
+let fieldSelection: FieldSelection = workspace.fieldSelection;
 const history: string[] = workspace.history.map(r => JSON.stringify(r));
 let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
@@ -47,12 +51,17 @@ const canvases = Array.from({ length: recipe.layers.length }, () => {
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
+const currentField = () => selectedWarp(current(), fieldSelection);
+function selectField(id: string) {
+  const l = current(); if (!l?.fields.some(f => f.id === id)) return;
+  fieldSelection = { ...fieldSelection, [l.id]: id }; sync(); drawUV(); persist();
+}
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { recipe, active, selected, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
+  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
     library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, panels: { ...workspace.panels, ...sidebars.snapshot() } };
   return {
@@ -103,6 +112,7 @@ $("lighting-panel").addEventListener("toggle", persist);
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
+let refreshFields: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
@@ -139,6 +149,7 @@ layerName.onchange = layerName.onblur = commitLayerName;
 layerName.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitLayerName(); } };
 function sync() {
   presetLibrary?.refreshSummary();
+  refreshFields?.();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
@@ -167,7 +178,6 @@ function sync() {
   for (const [id, value] of Object.entries({
     weight: l.points[selected].weight,
     feather: l.feather,
-    radius: l.field.radius,
     opacity: l.opacity,
   })) {
     input(id).value = String(value);
@@ -227,15 +237,9 @@ function render(i = active) {
   sync();
   drawUV();
 }
-let pending = false;
-function schedule() {
-  if (pending) return;
-  pending = true;
-  requestAnimationFrame(() => {
-    pending = false;
-    render();
-  });
-}
+const scheduleLayer = layerRenderQueue(() => recipe.layers, run => requestAnimationFrame(run), render);
+function schedule() { scheduleLayer(current()); }
+
 function undo() {
   const s = history.pop();
   if (!s) return;
@@ -249,7 +253,7 @@ window.addEventListener("keydown", (e) => {
     undo();
   }
 });
-for (const id of ["weight", "feather", "radius", "opacity", "color"]) {
+for (const id of ["weight", "feather", "opacity", "color"]) {
   const control = input(id);
   control.addEventListener("pointerdown", checkpoint);
   control.addEventListener("keydown", () => checkpoint());
@@ -257,7 +261,6 @@ for (const id of ["weight", "feather", "radius", "opacity", "color"]) {
     const l = current();
     if (id === "color") l.color = control.value;
     else if (id === "weight") l.points[selected].weight = +control.value;
-    else if (id === "radius") l.field.radius = +control.value;
     else if (id === "feather") l.feather = +control.value;
     else l.opacity = +control.value;
     schedule();
@@ -284,11 +287,10 @@ for (const id of ["cells", "density", "tilt"] as const) {
     schedule();
   };
 }
-$("clear-field").onclick = () => {
-  checkpoint();
-  current().field.du = current().field.dv = 0;
-  render();
-};
+refreshFields = setupFields({
+  list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
+  reach: input("radius"), value: $("radius-value"), note: $("field-note"),
+}, { layer: current, selected: currentField, select: selectField, begin: checkpoint, change: schedule });
 $("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
   if (current().points.length <= 3) return;
@@ -300,7 +302,8 @@ $("remove").onclick = () => {
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
 }, {
-  recipe: () => recipe, layer: current, selected: () => selected, canvases: () => canvases,
+  recipe: () => recipe, layer: current, selected: () => selected,
+  selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { selected = index; sync(); }, begin: checkpoint, change: schedule,
   cancel: undo, persist, message: status,
@@ -321,8 +324,9 @@ $("save").onclick = () => {
   status("Recipe exported — editable shapes, colours and fields.");
 };
 $("load").onclick = () => input("file").click();
-presetLibrary = setupCollections(() => ({ recipe, active, selected, history: history.map(s => JSON.parse(s)) }), editor => {
+presetLibrary = setupCollections(() => ({ recipe, active, selected, fieldSelection, history: history.map(s => JSON.parse(s)) }), editor => {
   history.splice(0, history.length, ...editor.history.map(r => JSON.stringify(r)));
+  fieldSelection = editor.fieldSelection ?? {};
   replaceRecipe(editor.recipe, editor.active);
   selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
 }, workspace.collections, workspace.library, persist, download);
@@ -453,6 +457,7 @@ try {
   const surface = createSurfaceEditor(viewer, {
     layer: current,
     selected: () => selected,
+    selectedField: () => currentField()?.id, selectField,
     select: (i) => {
       selected = i;
       sync();

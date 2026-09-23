@@ -156,7 +156,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       const id = legacy.current?.id ?? crypto.randomUUID(), existing = draft.collection.presets.find(p => p.id === id);
       if (existing) { existing.recipe = current.recipe; existing.name = legacy.name.trim() || existing.name; }
       else draft.collection.presets.push({ id, name: legacy.name.trim() || "Unsaved preset", revision: 1, recipe: current.recipe });
-      draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected, history: current.history };
+      draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected, fieldSelection: current.fieldSelection, history: current.history };
       session = new CollectionSession(draft, read, show);
       message("Existing looks and your current draft are retained. Save collection to store this arrangement.");
     } else message("Collection draft restored without replacing unsaved edits from SQLite.");
