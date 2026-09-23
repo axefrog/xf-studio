@@ -1,0 +1,11 @@
+# Current authored recipe intake — 23 September 2026
+
+Nathan supplied `C:/Users/Nathan/Downloads/xfs.recipe.json` after the raster-performance repair. SHA-256: `1d7512dfdd687239075e909a4c7eec94e2dfee75a3a60a554e7db16fca1a184a`. It is a personal editable source file, **not** a public fixture or distributable asset; the file itself remains outside Git.
+
+The `xfs/recipe-6` parser accepts it and round-trips the full recipe without migration or layer changes. The five bottom-to-top layers are: enabled matte **Backdrop** (nine Bézier knots, variable pigment and directional edge softness), disabled metallic **Inner light**, disabled metallic **Accent**, enabled glossy **Eyeliner (hooks)**, and enabled glossy **Eyeliner (wings)**. All are symmetric and each retains one warp field. Disabled layers remain editable but do not contribute to a compiled preset.
+
+The three enabled layers' 1K and 2K raster hashes match the previous local performance fixture exactly; the supplied Backdrop's 2K SHA-256 is `1dc9372a511c20bea54eea3c287a27cc16b29e6b05266b94320b091b000a6dbe`. This confirms the [earlier 7.13 s → ~0.97 s Chrome benchmark](raster-performance.md) was on the same authored shape. A current Bun run measured 688 ms for that 2K Backdrop and 7–13 ms for each enabled eyeliner; these timings are environment-specific and are not a promise of browser interaction latency. The output bytes matched their earlier local fixture hashes.
+
+`compileFlatPreset` currently rejects the **two enabled glossy layers** with `UnsupportedMaterialError`. Its validated scope remains matte, satin/regular and metallic. Changing the eyeliner finish merely to make compilation pass would change the authored look. A glossy export adapter or a tested multi-component approach is required before this recipe can become a game preset. The recipe is also a single look, not a `xfas/collection-1` package with stable collection/preset identities; the studio can import it into a collection, while game packaging requires that wrapper. Existing file-format IDs stay compatible despite XF Studio branding.
+
+This file is a realistic regression input for future raster, finish and compiler work. Keep its source private, maintain identity/shape, and compare bytes and visual behavior rather than silently flattening unsupported finishes.

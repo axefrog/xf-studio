@@ -1,0 +1,34 @@
+{
+  "study": "xfs-uv-cell-direct-glint-pilot-1",
+  "date": "2026-09-23",
+  "scope": "isolated local Three.js head study; no production editor or game material change",
+  "field": {
+    "grid": [576, 576],
+    "candidatePerCell": 1,
+    "neighbourhood": [3, 3],
+    "radiusUv": [0.00015, 0.0005],
+    "cellJitterRange": [0.1, 0.9],
+    "slopeRange": [-0.4, 0.4],
+    "frameRandom": false,
+    "distinctFromIrregular350kCatalogue": true
+  },
+  "browserChecks": {
+    "resolutions": [1024, 2048],
+    "controls": ["strength 4 versus 0", "directional-light angle 25 versus 90 degrees", "close-eye versus distant view", "blink 0.7", "idle"],
+    "postCorrectionShaderErrors": 0,
+    "idleDisplayFrameSample": {
+      "frames": 90,
+      "medianMs": 16.7,
+      "p95Ms": 16.8,
+      "maxMs": 16.8,
+      "gpuTimeMeasured": false
+    }
+  },
+  "knownLimits": [
+    "direct-light only; no glint response to the room environment",
+    "additive, not energy-conserving reflection",
+    "heuristic footprint fade, not a filtered facet distribution",
+    "separate candidate field from CPU oracle and existing fine-map variants",
+    "no demonstrated REDengine shader path or game-rendering parity"
+  ]
+}

@@ -1,6 +1,6 @@
 # Irregular planar glitter study
 
-First results: [measured findings](findings.md) and [versioned evidence](evidence.json). The [lit-head follow-up](lit-head-findings.md) compares fine fields, normal filtering and separate pigment/flake reflections; no production material was switched.
+First results: [measured findings](findings.md) and [versioned evidence](evidence.json). The [lit-head follow-up](lit-head-findings.md) compares fine fields, normal filtering and separate pigment/flake reflections. The [CPU glint reference](glint-oracle-findings.md) measures facet-response integration against averaged maps at 1K/2K. A separate [UV-cell browser pilot](uv-cell-glint-findings.md) tests fixed procedural facets under direct light. No production material was switched.
 
 Owned procedural texture research for the user-supplied glitter references. This experiment evaluates the proposed `irregular-planar-1` field before freezing a portable recipe contract or replacing the studio material. The current editor and historical glitter recipes remain unchanged until explicit integration.
 
@@ -34,6 +34,8 @@ bun build tools/glitter-head-study.ts --outdir public/build --target browser
 ```
 
 With the studio server running, open `http://127.0.0.1:4317/glitter-study.html`. This isolated page has no workspace/library controller. Compare candidates at 1K/2K, front/close/distant views, key-light angles, blink and actual idle. The two-reflection diagnostic separates matte pigment from flakes and exposes flake roughness and room illumination. Normal/metalness ablations distinguish coloured marks from reflective response. The `fine350k-covered` option changes normal averaging only; its coverage and colour maps are byte-identical to `fine350k`. `window.glitterStudyDiagnostics()` reports bound maps, source hashes, pose and renderer state. The derived head remains a required ignored local asset.
+
+The `uv-cell-glints` option is a separate shader pilot over the same fixed eye mask, with direct-glint strength and angular-sharpness controls. Its 576² hashed candidate field is **not** the 350k flake catalogue; see its [method, browser observations and limits](uv-cell-glint-findings.md) and [structured evidence](uv-cell-glint-evidence.json). It must not be interpreted as a preview of a currently exportable game material.
 
 Fine-region measurements must restrict their scope to valid regions or the verified fixed paint mask; global atlas averages and spectral probes would mostly measure the ungenerated exterior. The original unflagged study remains separate. The covered-normal ablation is also region-limited and does not establish a production normal encoding.
 

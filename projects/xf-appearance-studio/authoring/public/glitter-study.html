@@ -24,9 +24,12 @@
         <option value="dense">Irregular - dense</option><option value="maximum">Irregular - maximum bounds</option>
         <option value="fine160k">Fine glitter - 160k field</option><option value="fine350k">Fine glitter - 350k field</option>
         <option value="fine350k-covered">Fine glitter - 350k, covered normals</option>
+        <option value="uv-cell-glints">UV-cell glint pilot (direct light)</option>
       </select></label>
       <label><input id="mixture" type="checkbox">Separate pigment and flake reflections</label>
       <label>Flake roughness (separate reflections only)<input id="flake-roughness" type="range" min=".02" max=".5" step=".01" value=".2" aria-label="Flake roughness"></label>
+      <label>UV-cell glint strength<input id="glint-strength" type="range" min="0" max="16" step=".5" value="4" aria-label="UV-cell glint strength"></label>
+      <label>UV-cell glint sharpness<input id="glint-power" type="range" min="20" max="1200" step="10" value="220" aria-label="UV-cell glint sharpness"></label>
       <label>Room environment intensity<input id="environment" type="range" min="0" max="1" step=".1" value="1" aria-label="Room environment intensity"></label>
       <label><input id="zero-normal" type="checkbox">Zero flake normal perturbation</label>
       <label><input id="zero-metalness" type="checkbox">Zero flake metalness</label>
