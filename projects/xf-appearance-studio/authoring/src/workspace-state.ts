@@ -11,7 +11,8 @@ export type PreviewState = {
   textureSize: PreviewTextureSize;
   camera?: CameraState;
   eyeShape: number;
-  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; normals: boolean;
+  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean;
+  piercingStyle: string; piercingDefinition: string;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
 };
@@ -32,6 +33,7 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
     uvView: defaultUVView(), fieldSelection: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
+      piercings: true, piercingStyle: "", piercingDefinition: "",
       normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
@@ -58,8 +60,10 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   const p = v.preview;
   if (p && typeof p === "object") {
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
-    for (const key of ["surface", "wire", "brows", "lashes", "hair", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
+    for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
+    if (typeof p.piercingStyle === "string" && p.piercingStyle.length <= 128) state.preview.piercingStyle = p.piercingStyle;
+    if (typeof p.piercingDefinition === "string" && p.piercingDefinition.length <= 128) state.preview.piercingDefinition = p.piercingDefinition;
     for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", .5, 2], ["lightAngle", 0, 360],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];

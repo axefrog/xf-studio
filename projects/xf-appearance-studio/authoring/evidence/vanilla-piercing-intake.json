@@ -1,0 +1,87 @@
+{
+  "source": "Cyberpunk 2077 2.31 female customization and basegame_4_appearance",
+  "ccoSha256": "6689fe6f823c224459d95ea64919decb41855161864a7ddee50bb3f5749478ba",
+  "apps": [
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_01.app",
+      "sha256": "67ad64a73a9c260b42f59bd917342fb61d0ba985eb666acd8be32f91e03ae355"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_02.app",
+      "sha256": "abefde879661a7833f0fe9bd323e0f94e82b348383c87d18ce57ef8f39bad155"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_03.app",
+      "sha256": "3ee7dfb53fb4dda20bad61cdb9c22ff6d2698ed0bdb4a8057d04036ec55adc9c"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_04.app",
+      "sha256": "03562d44af1e97171b0aebda575fcae86768f80587438f02abd11905a4ee2914"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_05.app",
+      "sha256": "1d2356dd539593d648be72ed0dd4d33835dc7c3c1706bc4fbbeb17a61b2e0588"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_06.app",
+      "sha256": "826968486a3594648f7a3c66f80ba48aafade07b000d6e5f919b7ae1baa62874"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_07.app",
+      "sha256": "c3418e086df687516fdc398b406e28b96e59cb7b610f1874c9dc69fcafe689bb"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_08.app",
+      "sha256": "ea1597ee67867790e18908955ed92c7622087e501b0ff4f1b1586725f45f6ce2"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_09.app",
+      "sha256": "61ffa360cb681fd3960b5ec827f6515b6cd298f2bac8a4eae02e36e1d375b74b"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_10.app",
+      "sha256": "eaa64c148008c1ad3a91695f5542463078b09c195c2d249cd292ae572158f802"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_11.app",
+      "sha256": "93d2b221e619181b4983a68dc91c60e950e1a011f37604bf4bae62cb0b5a10b7"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_14.app",
+      "sha256": "6deaa5fb6751ab1ab639be2441120b4eda7ef074b4536384e9c7853bf246b35a"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_15.app",
+      "sha256": "53d7fba53c70d81fb88964a61f5bf4d707a575a418660cd03a49254dea91de49"
+    },
+    {
+      "path": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_16.app",
+      "sha256": "3011bca94ba70f6fbe084b8d71dffa99188632d592d7494f28887a8b864bb6e8"
+    }
+  ],
+  "assetDigests": [
+    {
+      "id": "i1_000_pwa__morphs_earring_01",
+      "url": "/assets/piercings/i1_000_pwa__morphs_earring_01.glb",
+      "sha256": "72f248a4685365867d27b6796941e8a4834be0ec206542afc75cd7b0c277624a"
+    },
+    {
+      "id": "i1_000_pwa__morphs_earring_02",
+      "url": "/assets/piercings/i1_000_pwa__morphs_earring_02.glb",
+      "sha256": "3d3b75633d785c897344e0256d3f45e241e93cf9eeeee043dae246144c5a67b7"
+    },
+    {
+      "id": "i1_000_pwa__morphs_earring_03",
+      "url": "/assets/piercings/i1_000_pwa__morphs_earring_03.glb",
+      "sha256": "b55c261446a477a19dd911feed3a1fae109f653bc2e772ee61b2fa0217c81db8"
+    },
+    {
+      "id": "i1_000_pwa__morphs_earring_04",
+      "url": "/assets/piercings/i1_000_pwa__morphs_earring_04.glb",
+      "sha256": "baee1f26dac41f05d9da9921c712f4db7567093b841938ba3eef4040440fd5b6"
+    }
+  ],
+  "styleCount": 14,
+  "definitionCount": 224,
+  "note": "Local game-derived geometry and serialized resources are excluded from Git; installed mod precedence and runtime rendering are unverified."
+}

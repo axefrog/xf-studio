@@ -92,7 +92,9 @@ function snapshot(): WorkspaceState {
       textureSize,
       camera: viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
       surface: input("surface-controls").checked, wire: input("wire").checked,
-      brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked, normals: input("normals").checked,
+      brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked,
+      piercings: input("piercings").checked, piercingStyle: $<HTMLSelectElement>("piercing-style").value,
+      piercingDefinition: $<HTMLSelectElement>("piercing-colour").value, normals: input("normals").checked,
       exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
       idle: viewer?.idle?.enabled ?? workspace.preview.idle,
@@ -508,10 +510,46 @@ function showSavedV(v: SavedV) {
     ? "Saved hair mesh matched; colour, strand shading and physics are approximate."
     : "Saved hair is unresolved or its local assets are unavailable.";
   input("hair").disabled = !result.matchedHair;
+  $("v-piercings").textContent = result.matchedPiercing
+    ? "Saved vanilla piercing reference matched; materials and game lighting remain approximate."
+    : "No matching vanilla piercing is selected in this save. You can try a viewport-only style below.";
   $("v-eyes").textContent = result.eyeAppearance.message;
   $("v-card").hidden = false;
   $("v-summary").textContent =
     `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
+}
+function setupPiercingControls() {
+  const style = $<HTMLSelectElement>("piercing-style"), colour = $<HTMLSelectElement>("piercing-colour"),
+    manifest = viewer!.piercingManifest;
+  if (!manifest) {
+    $("piercing-note").textContent = `Vanilla piercing preview unavailable: ${viewer!.evidence.piercingError || "local resources missing"}.`;
+    return;
+  }
+  const available = manifest;
+  input("piercings").disabled = false;
+  style.disabled = false;
+  for (const entry of available.styles) {
+    const option = document.createElement("option");
+    option.value = entry.id; option.textContent = entry.label; style.append(option);
+  }
+  function fillColours(preferred = "") {
+    colour.replaceChildren();
+    const entry = available.styles.find(s => s.id === style.value);
+    colour.disabled = !entry;
+    if (!entry) { viewer!.setPiercingPreview("", ""); return; }
+    for (const choice of entry.choices) {
+      const option = document.createElement("option");
+      option.value = choice.definition; option.textContent = `${choice.index}. ${choice.label}`; colour.append(option);
+    }
+    colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
+    viewer!.setPiercingPreview(entry.id, colour.value);
+  }
+  style.value = available.styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
+  fillColours(workspace.preview.piercingDefinition);
+  style.onchange = () => fillColours();
+  colour.onchange = () => viewer!.setPiercingPreview(style.value, colour.value);
+  viewer!.setPiercings(input("piercings").checked);
+  input("piercings").onchange = () => viewer!.setPiercings(input("piercings").checked);
 }
 $("v-export").onclick = () => {
   if (savedV)
@@ -542,7 +580,9 @@ try {
   if (savedV) showSavedV(savedV);
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
-    brows: preview.brows, lashes: preview.lashes, hair: preview.hair, normals: preview.normals })) input(id).checked = checked;
+    brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
+    normals: preview.normals })) input(id).checked = checked;
+  setupPiercingControls();
   input("blink").value = String(preview.blink);
   input("exposure").value = String(preview.exposure);
   input("light-angle").value = String(preview.lightAngle);

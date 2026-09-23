@@ -10,6 +10,7 @@ import type { CameraState } from "./workspace-state";
 import { previewNearPlane } from "./camera-depth";
 import { prepareEyeAppearances } from "./eye-appearance";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
+import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 
 export async function createScene(
   host: HTMLElement,
@@ -279,6 +280,68 @@ export async function createScene(
     }
   } catch (error) { hairErrors.push((error as Error).message); }
   const hairError = hairErrors.join("; ");
+  let piercingManifest: PiercingManifest | undefined, piercingError = "";
+  const piercingMeshes = new Map<string, THREE.SkinnedMesh[]>();
+  const piercingRoots: THREE.Group[] = [];
+  let pendingPiercingRoot: THREE.Group | undefined;
+  try {
+    const response = await fetch("/assets/piercings/manifest.json", { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw Error("Local vanilla piercing assets are unavailable");
+    const candidate = parsePiercingManifest(await response.json());
+    let totalBytes = 0, totalVertices = 0, totalBones = 0;
+    for (const asset of candidate.assets) {
+      const response = await fetch(asset.url, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw Error(`Local piercing mesh unavailable (${response.status})`);
+      const length = Number(response.headers.get("Content-Length"));
+      if (Number.isFinite(length) && length > 24 * 1024 * 1024 - totalBytes)
+        throw Error("Piercing meshes exceed the 24 MiB source budget");
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      totalBytes += bytes.byteLength;
+      if (totalBytes > 24 * 1024 * 1024) throw Error("Piercing meshes exceed the 24 MiB source budget");
+      await verifyPiercingBytes(bytes, asset.sha256);
+      const original = restoreFirstWeights(bytes.buffer), loaded = await new GLTFLoader().parseAsync(bytes.buffer, "/assets/piercings/");
+      pendingPiercingRoot = loaded.scene;
+      const parts: THREE.SkinnedMesh[] = [];
+      loaded.scene.traverse(o => {
+        if (o instanceof THREE.Bone) totalBones++;
+        if (!(o instanceof THREE.SkinnedMesh)) return;
+        const match = /^submesh_(\d+)_LOD_\d+$/.exec(o.name);
+        if (!match) throw Error(`Unexpected piercing chunk ${o.name}`);
+        const association = loaded.parser.associations.get(o);
+        const raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
+        if (!raw) throw Error(`Missing original piercing weights for ${o.name}`);
+        o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+        const mat = new THREE.MeshStandardMaterial({ color: 0xd6d5d3, metalness: .72, roughness: .3,
+          side: THREE.DoubleSide });
+        // The source geometry, morphs and chunk masks are exact; .mi/.mlsetup
+        // colours, coated/pearl variants and REDengine reflections remain approximate.
+        o.material = mat;
+        o.userData.piercingChunk = Number(match[1]);
+        o.visible = false; o.frustumCulled = false;
+        extendSkin(o, mat);
+        totalVertices += o.geometry.getAttribute("position").count;
+        parts.push(o); meshes.push(o);
+      });
+      if (!parts.length || totalVertices > 200_000 || totalBones > 300)
+        throw Error("Piercing geometry exceeds the preview budget");
+      scene.add(loaded.scene);
+      piercingRoots.push(loaded.scene);
+      pendingPiercingRoot = undefined;
+      piercingMeshes.set(asset.id, parts);
+    }
+    piercingManifest = candidate;
+  } catch (error) {
+    piercingError = (error as Error).message;
+    for (const root of [...piercingRoots, ...(pendingPiercingRoot ? [pendingPiercingRoot] : [])]) {
+      root.removeFromParent();
+      root.traverse(o => { if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+        const i = meshes.indexOf(o); if (i >= 0) meshes.splice(i, 1);
+      } });
+    }
+    piercingMeshes.clear();
+  }
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
@@ -389,6 +452,7 @@ export async function createScene(
     head,
     plate,
     ...Object.values(details).flatMap((d) => d.meshes),
+    ...[...piercingMeshes.values()].flat(),
   ];
   function eyeShape(index: number) {
     for (const m of deforming) {
@@ -398,6 +462,34 @@ export async function createScene(
           m.morphTargetInfluences[i] =
             name === `h${String(index * 10 + 1).padStart(3, "0")}_eyes` ? 1 : 0;
     }
+  }
+  let piercingEnabled = true, piercingStyle = "", piercingDefinition = "";
+  let currentSave: SavedV | undefined;
+  function piercingSelection() {
+    if (!piercingManifest) return undefined;
+    if (piercingStyle) {
+      const style = piercingManifest.styles.find(s => s.id === piercingStyle);
+      const choice = style?.choices.find(c => c.definition === piercingDefinition);
+      return style && choice ? { style, choice, fromSave: false } : undefined;
+    }
+    const saved = savedPiercing(piercingManifest, currentSave);
+    return saved ? { ...saved, fromSave: true } : undefined;
+  }
+  function refreshPiercings() {
+    const selected = piercingEnabled ? piercingSelection() : undefined;
+    for (const parts of piercingMeshes.values()) for (const mesh of parts) mesh.visible = false;
+    if (!selected) return;
+    for (const part of selected.choice.parts) for (const mesh of piercingMeshes.get(part.mesh) ?? []) {
+      mesh.visible = chunkEnabled(part.mask, mesh.userData.piercingChunk);
+      (mesh.material as THREE.MeshStandardMaterial).color.set(selected.choice.swatch);
+    }
+  }
+  function setPiercings(enabled: boolean) { piercingEnabled = enabled; refreshPiercings(); }
+  function setPiercingPreview(style: string, definition: string) {
+    if (style && !piercingManifest?.styles.some(s => s.id === style && s.choices.some(c => c.definition === definition)))
+      throw Error("Unknown local vanilla piercing choice");
+    piercingStyle = style; piercingDefinition = style ? definition : "";
+    refreshPiercings();
   }
   function applySavedV(v: SavedV) {
     if (v.isMale)
@@ -436,6 +528,7 @@ export async function createScene(
     eyeMat.needsUpdate = true;
     eyeAppearanceStatus = selectedEye.status;
     currentSave = v;
+    refreshPiercings();
     const selectedHair = selectSavedHair(hair.map(h => h.asset), v);
     for (const h of hair) h.root.visible = h.asset === selectedHair && hairEnabled;
     const matchedHair = !!selectedHair;
@@ -445,6 +538,7 @@ export async function createScene(
       matchedDetails,
       eyeAppearance: eyeAppearance(),
       matchedHair,
+      matchedPiercing: !!(piercingManifest && savedPiercing(piercingManifest, v)),
     };
   }
   let hairEnabled = true;
@@ -453,7 +547,6 @@ export async function createScene(
     const selectedHair = selectSavedHair(hair.map(h => h.asset), currentSave);
     for (const h of hair) h.root.visible = enabled && h.asset === selectedHair;
   }
-  let currentSave: SavedV | undefined;
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
   function pick(e: PointerEvent) {
@@ -507,6 +600,10 @@ export async function createScene(
     blinkBones: bones.length,
     detailErrors,
     hairError,
+    piercingError,
+    piercing: { source: piercingManifest?.source, styles: piercingManifest?.styles.length ?? 0,
+      meshes: [...piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length,
+        vertices: parts.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })) },
     hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length,
       vertices: h.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })),
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
@@ -543,6 +640,10 @@ export async function createScene(
     details,
     hair,
     setHair,
+    piercingManifest,
+    piercingSelection,
+    setPiercings,
+    setPiercingPreview,
     idle,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
