@@ -1,5 +1,5 @@
 {
-  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\005-preset-collection\\generated\\build-1790138501448325100",
+  "build": "D:\\Dev\\worktrees\\flat-export-mips\\experiments\\005-preset-collection\\generated\\build-1790195987726134900",
   "presetCount": 4,
   "selectorCount": 1,
   "selectorOptionCount": 5,
@@ -8,8 +8,8 @@
   "meshAppearances": 4,
   "materialTemplates": 1,
   "textureCount": 12,
-  "archiveBytes": 856064,
-  "archiveSha256": "ea7d96f4a1cd0e8bca70ddd19da85b0710b035e928270fbb9d87cc0d856344cb",
+  "archiveBytes": 847872,
+  "archiveSha256": "6e8159e807b91d0d5dfa54535643a4bec920c00f5065833962643a1c72884c43",
   "unpackedFilesVerified": 16,
   "preservedMorphs": 105,
   "modelBuffersUnchanged": true,
@@ -157,12 +157,694 @@
       }
     }
   ],
+  "decodedMipChecks": [
+    {
+      "preset": "Verification \u2014 metallic copy",
+      "levels": [
+        {
+          "level": 0,
+          "size": 1024,
+          "partialTexels": 11670,
+          "coverage": {
+            "mean": 0.003637052125822015,
+            "p95": 0.014086889657823898,
+            "max": 0.034448289119569375
+          },
+          "premultipliedDestination": {
+            "mean": 0.001942273024466066,
+            "p95": 0.006749015936336394,
+            "max": 0.022425160760190258
+          }
+        },
+        {
+          "level": 1,
+          "size": 512,
+          "partialTexels": 3000,
+          "coverage": {
+            "mean": 0.007395937459951296,
+            "p95": 0.027846981930027,
+            "max": 0.07456362937331812
+          },
+          "premultipliedDestination": {
+            "mean": 0.0035396227878626498,
+            "p95": 0.012706756828067621,
+            "max": 0.04853946069008158
+          }
+        },
+        {
+          "level": 2,
+          "size": 256,
+          "partialTexels": 776,
+          "coverage": {
+            "mean": 0.014756933296868363,
+            "p95": 0.06627835447904656,
+            "max": 0.12485486351403285
+          },
+          "premultipliedDestination": {
+            "mean": 0.006901414213073181,
+            "p95": 0.02666016123877904,
+            "max": 0.08127806801305676
+          }
+        },
+        {
+          "level": 3,
+          "size": 128,
+          "partialTexels": 218,
+          "coverage": {
+            "mean": 0.021118352944703683,
+            "p95": 0.0789398668781238,
+            "max": 0.10313365051903117
+          },
+          "premultipliedDestination": {
+            "mean": 0.010374698618470433,
+            "p95": 0.03658417139477956,
+            "max": 0.06713798425944778
+          }
+        },
+        {
+          "level": 4,
+          "size": 64,
+          "partialTexels": 66,
+          "coverage": {
+            "mean": 0.0276704618270362,
+            "p95": 0.07015733131487883,
+            "max": 0.07760981353325636
+          },
+          "premultipliedDestination": {
+            "mean": 0.012893731399890258,
+            "p95": 0.03962610063248671,
+            "max": 0.05464389837356365
+          }
+        },
+        {
+          "level": 5,
+          "size": 32,
+          "partialTexels": 22,
+          "coverage": {
+            "mean": 0.006523766536471967,
+            "p95": 0.033250271830545956,
+            "max": 0.03455017301038066
+          },
+          "premultipliedDestination": {
+            "mean": 0.004175764170291011,
+            "p95": 0.016444016111643377,
+            "max": 0.031654679307653755
+          }
+        },
+        {
+          "level": 6,
+          "size": 16,
+          "partialTexels": 8,
+          "coverage": {
+            "mean": 0.010497606652189056,
+            "p95": 0.028581303615196063,
+            "max": 0.028581303615196063
+          },
+          "premultipliedDestination": {
+            "mean": 0.004658252317943382,
+            "p95": 0.016808099743876603,
+            "max": 0.018605868235774647
+          }
+        },
+        {
+          "level": 7,
+          "size": 8,
+          "partialTexels": 4,
+          "coverage": {
+            "mean": 0.0007572639579728965,
+            "p95": 0.0009177566170463364,
+            "max": 0.0009177566170463364
+          },
+          "premultipliedDestination": {
+            "mean": 0.0003666870495845966,
+            "p95": 0.0007200495486032951,
+            "max": 0.0007200495486032951
+          }
+        },
+        {
+          "level": 8,
+          "size": 4,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.0005646753952806491,
+            "p95": 0.0005646753952806491,
+            "max": 0.0005646753952806491
+          },
+          "premultipliedDestination": {
+            "mean": 0.00024228892195065407,
+            "p95": 0.0003675926102611332,
+            "max": 0.0003675926102611332
+          }
+        },
+        {
+          "level": 9,
+          "size": 2,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.00024033120759218464,
+            "p95": 0.00024033120759218464,
+            "max": 0.00024033120759218464
+          },
+          "premultipliedDestination": {
+            "mean": 0.00010551041830737296,
+            "p95": 0.0001788197057526423,
+            "max": 0.0001788197057526423
+          }
+        },
+        {
+          "level": 10,
+          "size": 1,
+          "partialTexels": 1,
+          "coverage": {
+            "mean": 0.00019509775644996688,
+            "p95": 0.00019509775644996688,
+            "max": 0.00019509775644996688
+          },
+          "premultipliedDestination": {
+            "mean": 8.942533727988541e-05,
+            "p95": 0.00012221024815266466,
+            "max": 0.0001270048140027246
+          }
+        }
+      ]
+    },
+    {
+      "preset": "Verification \u2014 reload persistence",
+      "levels": [
+        {
+          "level": 0,
+          "size": 1024,
+          "partialTexels": 11484,
+          "coverage": {
+            "mean": 0.003371587248212947,
+            "p95": 0.012856593617839307,
+            "max": 0.02780469050365242
+          },
+          "premultipliedDestination": {
+            "mean": 0.0017762102745726557,
+            "p95": 0.006538420366224151,
+            "max": 0.02442451244242408
+          }
+        },
+        {
+          "level": 1,
+          "size": 512,
+          "partialTexels": 2946,
+          "coverage": {
+            "mean": 0.0069143858973244625,
+            "p95": 0.026757016532102926,
+            "max": 0.05920030757401007
+          },
+          "premultipliedDestination": {
+            "mean": 0.003306262752815215,
+            "p95": 0.013542905820536608,
+            "max": 0.052003407437561766
+          }
+        },
+        {
+          "level": 2,
+          "size": 256,
+          "partialTexels": 780,
+          "coverage": {
+            "mean": 0.011594445923165633,
+            "p95": 0.0423039215686275,
+            "max": 0.10616589773164165
+          },
+          "premultipliedDestination": {
+            "mean": 0.005304710417142904,
+            "p95": 0.021115131071371286,
+            "max": 0.09325945526230484
+          }
+        },
+        {
+          "level": 3,
+          "size": 128,
+          "partialTexels": 212,
+          "coverage": {
+            "mean": 0.01731001728290279,
+            "p95": 0.055327758554402195,
+            "max": 0.0702758554402153
+          },
+          "premultipliedDestination": {
+            "mean": 0.008422111705086437,
+            "p95": 0.033041861727389876,
+            "max": 0.06173251615140485
+          }
+        },
+        {
+          "level": 4,
+          "size": 64,
+          "partialTexels": 68,
+          "coverage": {
+            "mean": 0.022380753231223273,
+            "p95": 0.07049168589004223,
+            "max": 0.127597078046905
+          },
+          "premultipliedDestination": {
+            "mean": 0.009797933704605332,
+            "p95": 0.04495636557583434,
+            "max": 0.11208527640198707
+          }
+        },
+        {
+          "level": 5,
+          "size": 32,
+          "partialTexels": 26,
+          "coverage": {
+            "mean": 0.010709579386996147,
+            "p95": 0.03366043108419839,
+            "max": 0.03583774870242212
+          },
+          "premultipliedDestination": {
+            "mean": 0.005629872055105865,
+            "p95": 0.020994259035622152,
+            "max": 0.031481002781735504
+          }
+        },
+        {
+          "level": 6,
+          "size": 16,
+          "partialTexels": 12,
+          "coverage": {
+            "mean": 0.005929225563284975,
+            "p95": 0.03106254580569978,
+            "max": 0.03106254580569978
+          },
+          "premultipliedDestination": {
+            "mean": 0.003198907695217226,
+            "p95": 0.022578168001948673,
+            "max": 0.027286314746967688
+          }
+        },
+        {
+          "level": 7,
+          "size": 8,
+          "partialTexels": 6,
+          "coverage": {
+            "mean": 0.004561135403150227,
+            "p95": 0.010457542621828131,
+            "max": 0.010457542621828131
+          },
+          "premultipliedDestination": {
+            "mean": 0.0020874571116369337,
+            "p95": 0.008267808665184357,
+            "max": 0.009186233518782366
+          }
+        },
+        {
+          "level": 8,
+          "size": 4,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.00010160675694143723,
+            "p95": 0.00010160675694144347,
+            "max": 0.00010160675694144417
+          },
+          "premultipliedDestination": {
+            "mean": 0.00030804929108359106,
+            "p95": 0.000721911950574923,
+            "max": 0.000721911950574923
+          }
+        },
+        {
+          "level": 9,
+          "size": 2,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.00021987703844750066,
+            "p95": 0.00021987703844750223,
+            "max": 0.0002198770384475024
+          },
+          "premultipliedDestination": {
+            "mean": 0.0001026405780539595,
+            "p95": 0.0001931468886754526,
+            "max": 0.0001931468886754526
+          }
+        },
+        {
+          "level": 10,
+          "size": 1,
+          "partialTexels": 1,
+          "coverage": {
+            "mean": 1.309108477471222e-05,
+            "p95": 1.309108477471222e-05,
+            "max": 1.309108477471222e-05
+          },
+          "premultipliedDestination": {
+            "mean": 8.475566363388845e-06,
+            "p95": 1.7095026982013627e-05,
+            "max": 1.8493878835815604e-05
+          }
+        }
+      ]
+    },
+    {
+      "preset": "Verification \u2014 collection B",
+      "levels": [
+        {
+          "level": 0,
+          "size": 1024,
+          "partialTexels": 11484,
+          "coverage": {
+            "mean": 0.00696216697728053,
+            "p95": 0.028173779315647907,
+            "max": 0.05843906189926951
+          },
+          "premultipliedDestination": {
+            "mean": 0.0032064122678270826,
+            "p95": 0.012968767668543713,
+            "max": 0.051334705354652455
+          }
+        },
+        {
+          "level": 1,
+          "size": 512,
+          "partialTexels": 2988,
+          "coverage": {
+            "mean": 0.011918582956714734,
+            "p95": 0.048801614763552534,
+            "max": 0.10721261053440978
+          },
+          "premultipliedDestination": {
+            "mean": 0.005032448922882951,
+            "p95": 0.021205235982699133,
+            "max": 0.09417892062630506
+          }
+        },
+        {
+          "level": 2,
+          "size": 256,
+          "partialTexels": 792,
+          "coverage": {
+            "mean": 0.01673401644278233,
+            "p95": 0.07376585928489049,
+            "max": 0.14076124567474058
+          },
+          "premultipliedDestination": {
+            "mean": 0.007613375374387744,
+            "p95": 0.03516510658450827,
+            "max": 0.123649094239772
+          }
+        },
+        {
+          "level": 3,
+          "size": 128,
+          "partialTexels": 218,
+          "coverage": {
+            "mean": 0.031626429848787906,
+            "p95": 0.09729839484813509,
+            "max": 0.1514516051518646
+          },
+          "premultipliedDestination": {
+            "mean": 0.01413274751423689,
+            "p95": 0.056508842593732234,
+            "max": 0.13303984138830463
+          }
+        },
+        {
+          "level": 4,
+          "size": 64,
+          "partialTexels": 68,
+          "coverage": {
+            "mean": 0.0254591718824208,
+            "p95": 0.10498344086409053,
+            "max": 0.11817185697808519
+          },
+          "premultipliedDestination": {
+            "mean": 0.014090780458663282,
+            "p95": 0.05735836621733023,
+            "max": 0.10380586652192592
+          }
+        },
+        {
+          "level": 5,
+          "size": 32,
+          "partialTexels": 26,
+          "coverage": {
+            "mean": 0.02902582193793805,
+            "p95": 0.11438357542772012,
+            "max": 0.1261636600105729
+          },
+          "premultipliedDestination": {
+            "mean": 0.011625504912239803,
+            "p95": 0.03399830457226463,
+            "max": 0.11082611702889539
+          }
+        },
+        {
+          "level": 6,
+          "size": 16,
+          "partialTexels": 12,
+          "coverage": {
+            "mean": 0.010680846659537996,
+            "p95": 0.03190051227292395,
+            "max": 0.03190051227292395
+          },
+          "premultipliedDestination": {
+            "mean": 0.003967432519759838,
+            "p95": 0.01912698311735305,
+            "max": 0.02802241078092138
+          }
+        },
+        {
+          "level": 7,
+          "size": 8,
+          "partialTexels": 6,
+          "coverage": {
+            "mean": 0.005694133441264575,
+            "p95": 0.008206518188617326,
+            "max": 0.008206518188617326
+          },
+          "premultipliedDestination": {
+            "mean": 0.001828802496121097,
+            "p95": 0.007025388124901061,
+            "max": 0.007208863036275645
+          }
+        },
+        {
+          "level": 8,
+          "size": 4,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.004183703242517878,
+            "p95": 0.004183703242517878,
+            "max": 0.004183703242517878
+          },
+          "premultipliedDestination": {
+            "mean": 0.0010391008532439985,
+            "p95": 0.0036750961816627748,
+            "max": 0.003675096181662778
+          }
+        },
+        {
+          "level": 9,
+          "size": 2,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.000233059024774121,
+            "p95": 0.000233059024774121,
+            "max": 0.000233059024774121
+          },
+          "premultipliedDestination": {
+            "mean": 7.406630753770872e-05,
+            "p95": 0.0002047263590172688,
+            "max": 0.0002047263590172696
+          }
+        },
+        {
+          "level": 10,
+          "size": 1,
+          "partialTexels": 1,
+          "coverage": {
+            "mean": 0.0003140741016075567,
+            "p95": 0.0003140741016075567,
+            "max": 0.0003140741016075567
+          },
+          "premultipliedDestination": {
+            "mean": 9.990454065343553e-05,
+            "p95": 0.0002435153921188266,
+            "max": 0.00027589254415722603
+          }
+        }
+      ]
+    },
+    {
+      "preset": "Verification \u2014 collection A",
+      "levels": [
+        {
+          "level": 0,
+          "size": 1024,
+          "partialTexels": 11484,
+          "coverage": {
+            "mean": 0.0037770150028034913,
+            "p95": 0.017716262975778496,
+            "max": 0.04724336793540948
+          },
+          "premultipliedDestination": {
+            "mean": 0.0020337039133019505,
+            "p95": 0.008464210996436905,
+            "max": 0.04150005653934008
+          }
+        },
+        {
+          "level": 1,
+          "size": 512,
+          "partialTexels": 2988,
+          "coverage": {
+            "mean": 0.00801852289331619,
+            "p95": 0.0367320261437909,
+            "max": 0.10721261053440978
+          },
+          "premultipliedDestination": {
+            "mean": 0.003818428712301398,
+            "p95": 0.017749245683757645,
+            "max": 0.09417892062630506
+          }
+        },
+        {
+          "level": 2,
+          "size": 256,
+          "partialTexels": 792,
+          "coverage": {
+            "mean": 0.012615112097522717,
+            "p95": 0.06219035947712397,
+            "max": 0.14076124567474058
+          },
+          "premultipliedDestination": {
+            "mean": 0.005890014425160408,
+            "p95": 0.027731425142823583,
+            "max": 0.123649094239772
+          }
+        },
+        {
+          "level": 3,
+          "size": 128,
+          "partialTexels": 218,
+          "coverage": {
+            "mean": 0.022332048982572007,
+            "p95": 0.07884707804690505,
+            "max": 0.14142733564013832
+          },
+          "premultipliedDestination": {
+            "mean": 0.011107026009751416,
+            "p95": 0.04072797339396561,
+            "max": 0.1242342085623176
+          }
+        },
+        {
+          "level": 4,
+          "size": 64,
+          "partialTexels": 68,
+          "coverage": {
+            "mean": 0.027359155203315454,
+            "p95": 0.10498344086409053,
+            "max": 0.11817185697808519
+          },
+          "premultipliedDestination": {
+            "mean": 0.012307308717616572,
+            "p95": 0.04717200929320642,
+            "max": 0.10380586652192592
+          }
+        },
+        {
+          "level": 5,
+          "size": 32,
+          "partialTexels": 26,
+          "coverage": {
+            "mean": 0.012964697379705998,
+            "p95": 0.04691347303320833,
+            "max": 0.0772163500816993
+          },
+          "premultipliedDestination": {
+            "mean": 0.006510161004763934,
+            "p95": 0.025133327467485294,
+            "max": 0.06782926438549275
+          }
+        },
+        {
+          "level": 6,
+          "size": 16,
+          "partialTexels": 12,
+          "coverage": {
+            "mean": 0.007603283092240162,
+            "p95": 0.024831367442810393,
+            "max": 0.024831367442810393
+          },
+          "premultipliedDestination": {
+            "mean": 0.003453233651335251,
+            "p95": 0.020601177436635115,
+            "max": 0.021812652185057013
+          }
+        },
+        {
+          "level": 7,
+          "size": 8,
+          "partialTexels": 6,
+          "coverage": {
+            "mean": 0.0070364225398084025,
+            "p95": 0.015184485271590276,
+            "max": 0.015184485271590276
+          },
+          "premultipliedDestination": {
+            "mean": 0.003051572174478867,
+            "p95": 0.010362457921536302,
+            "max": 0.013338528238573386
+          }
+        },
+        {
+          "level": 8,
+          "size": 4,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.004183703242517878,
+            "p95": 0.004183703242517878,
+            "max": 0.004183703242517878
+          },
+          "premultipliedDestination": {
+            "mean": 0.002087182542275082,
+            "p95": 0.0036750961816627748,
+            "max": 0.003675096181662778
+          }
+        },
+        {
+          "level": 9,
+          "size": 2,
+          "partialTexels": 2,
+          "coverage": {
+            "mean": 0.000233059024774121,
+            "p95": 0.000233059024774121,
+            "max": 0.000233059024774121
+          },
+          "premultipliedDestination": {
+            "mean": 8.789249058355616e-05,
+            "p95": 0.0002047263590172688,
+            "max": 0.0002047263590172696
+          }
+        },
+        {
+          "level": 10,
+          "size": 1,
+          "partialTexels": 1,
+          "coverage": {
+            "mean": 0.0003140741016075567,
+            "p95": 0.0003140741016075567,
+            "max": 0.0003140741016075567
+          },
+          "premultipliedDestination": {
+            "mean": 0.00013944781820436955,
+            "p95": 0.00025388681869016534,
+            "max": 0.00027589254415722603
+          }
+        }
+      ]
+    }
+  ],
   "installed": false,
   "gameRenderingVerified": false,
   "limits": [
     "Dynamic resolution is a source-derived model, not executed ArchiveXL.",
     "A/B/Off component clearing and save persistence need runtime evidence.",
-    "Base-mip compression checked; lower mip filtering not yet compared.",
+    "Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.",
     "Zero-offset plate control; outward clearance candidate still required.",
     "Flat matte/satin/metallic adapter only; other optical finishes remain required work."
   ]

@@ -8,12 +8,15 @@ from pathlib import Path
 import subprocess
 import numpy as np
 from PIL import Image
+from mip_maps import destination_contributions, mip_levels, read_dds_levels
 
 HERE=Path(__file__).resolve().parent
 WK=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
 def load(p): return json.loads(p.read_text(encoding='utf-8-sig'))
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 out=Path(load(HERE/'latest-build.json')['build'])
+if not (out/'export-dds').is_dir():
+    raise RuntimeError('The selected build predates supplied mip chains; rerun build.py before verify.py')
 build=load(out/'build.json');plan=build['plan'];rt=out/'roundtrip';archive=out/'archive'
 def root(name): return load(rt/name)['Data']['RootChunk']
 def value(x): return x['$value']
@@ -82,7 +85,7 @@ assert len(option['definitions'])==len(plan['presets'])+1
 assert value(option['definitions'][0]['name'])==plan['offAppearance'] and option['defaultIndex']==0
 assert [value(x) for x in cc['headGroups'][0]['options']]==[plan['selector']]
 
-resolved=[];pixel_results=[]
+resolved=[];pixel_results=[];mip_results=[]
 for preset,definition,record in zip(plan['presets'],option['definitions'][1:],build['compiled']):
     assert value(definition['name'])==preset['appAppearance'] and definition['index']==preset['index']
     assert definition['localizedName']==preset['name']
@@ -116,6 +119,44 @@ for preset,definition,record in zip(plan['presets'],option['definitions'][1:],bu
         scalar[channel]=error
     pixel_results.append({'preset':preset['name'],'coveredTexels':int(active.sum()),'coverageError':alpha,'premultipliedEncodedColourError':colour,'premultipliedSurfaceError':scalar})
 
+    # WolvenKit's PNG export exposes the base only. DDS export gives the full
+    # decompressed XBM chain; compare it against coverage-space reductions of
+    # the compiler's *original* base pixels rather than another imported image.
+    source_diffuse=np.asarray(Image.open(out/'input/colour'/f'{name}_diffuse.png').convert('RGBA'),dtype=np.uint8)
+    source_rough=np.asarray(Image.open(out/'input/scalar'/f'{name}_roughness.png').convert('L'),dtype=np.uint8)
+    source_metal=np.asarray(Image.open(out/'input/scalar'/f'{name}_metalness.png').convert('L'),dtype=np.uint8)
+    expected=mip_levels(source_diffuse.tobytes(),source_rough.tobytes(),source_metal.tobytes(),record['size'])
+    decoded_levels=[]
+    for channel,member in [('diffuse',0),('roughness',1),('metalness',2)]:
+        source_group='dds-colour' if channel=='diffuse' else 'dds-scalar'
+        source_size,source_chain=read_dds_levels(out/'input'/source_group/f'{name}_{channel}.dds',channel)
+        decoded_size,decoded_chain=read_dds_levels(out/'export-dds'/f'{name}_{channel}.dds',channel)
+        assert source_size==decoded_size==record['size']
+        assert [level.tobytes() for level in source_chain]==expected[member],channel
+        assert len(decoded_chain)==record['size'].bit_length()
+        assert np.array_equal(decoded_chain[0],np.asarray(Image.open(out/'export'/f'{name}_{channel}.png').convert('RGBA' if channel=='diffuse' else 'L')).reshape(decoded_chain[0].shape)),channel
+        decoded_levels.append(decoded_chain)
+    ideal=destination_contributions(source_diffuse,source_rough,source_metal)
+    levels=[]
+    for mip in range(len(decoded_levels[0])):
+        if mip:
+            height,width,_=ideal.shape
+            ideal=ideal.reshape(height//2,2,width//2,2,6).mean(axis=(1,3))
+        d=decoded_levels[0][mip]
+        r=decoded_levels[1][mip][...,0]
+        m=decoded_levels[2][mip][...,0]
+        actual=destination_contributions(d,r,m)
+        edge=(ideal[...,5]>.002)&(ideal[...,5]<.998)
+        if not np.any(edge):
+            levels.append({'level':mip,'size':d.shape[0],'partialTexels':0});continue
+        error=np.abs(actual[edge]-ideal[edge])
+        row={'level':mip,'size':d.shape[0],'partialTexels':int(edge.sum()),
+             'coverage':stats(error[...,5]),'premultipliedDestination':stats(error[...,:5])}
+        if 1<=mip<=5:
+            assert row['coverage']['mean']<.05 and row['premultipliedDestination']['mean']<.035,row
+        levels.append(row)
+    mip_results.append({'preset':preset['name'],'levels':levels})
+
 package=out/'package/archive/pc/mod';packed=package/(plan['namespace']+'.archive')
 assert sha(packed)==build['archiveSha256']
 xl=(package/(plan['namespace']+'.archive.xl')).read_text()
@@ -134,10 +175,10 @@ report={'build':str(out),'presetCount':len(plan['presets']),'selectorCount':1,'s
     'appDefinitions':2,'compiledComponentTemplates':1,'meshAppearances':len(mesh['appearances']),'materialTemplates':len(materials),
     'textureCount':len(plan['presets'])*3,'archiveBytes':packed.stat().st_size,'archiveSha256':sha(packed),
     'unpackedFilesVerified':len(files),'preservedMorphs':105,'modelBuffersUnchanged':True,
-    'resolvedDynamicPaths':resolved,'decodedPixelChecks':pixel_results,'installed':False,'gameRenderingVerified':False,
+    'resolvedDynamicPaths':resolved,'decodedPixelChecks':pixel_results,'decodedMipChecks':mip_results,'installed':False,'gameRenderingVerified':False,
     'limits':['Dynamic resolution is a source-derived model, not executed ArchiveXL.',
         'A/B/Off component clearing and save persistence need runtime evidence.',
-        'Base-mip compression checked; lower mip filtering not yet compared.',
+        'Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.',
         'Zero-offset plate control; outward clearance candidate still required.',
         'Flat matte/satin/metallic adapter only; other optical finishes remain required work.']}
 (HERE/'result.json').write_text(json.dumps(report,indent=2)+'\n')

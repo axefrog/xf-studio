@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 from PIL import Image
+from mip_maps import dds_bytes, mip_levels
 
 HERE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser()
@@ -24,7 +25,7 @@ APP=HQ/'projects/xf-appearance-studio/authoring'
 WK=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
 BUN=Path('C:/Users/Nathan/.bun/bin/bun.exe')
 OUT=HERE/'generated'/f'build-{time.time_ns()}'
-for folder in ['logs','baked','source-json','models-json','app-json','cc-json','roundtrip','export','input/colour','input/scalar','archive','package/archive/pc/mod']:
+for folder in ['logs','baked','source-json','models-json','app-json','cc-json','roundtrip','export','export-dds','input/colour','input/scalar','input/dds-colour','input/dds-scalar','archive','package/archive/pc/mod']:
     (OUT/folder).mkdir(parents=True,exist_ok=True)
 steps=[]
 
@@ -55,15 +56,21 @@ appdir=archive/Path(plan['app']).parent;texturedir=archive/depot/'textures'
 for path in [modeldir,appdir,texturedir]: path.mkdir(parents=True,exist_ok=True)
 for preset,record in zip(plan['presets'],compiled):
     assert preset['id']==record['id']
+    raw_maps={}
     for m in record['maps']:
         colour=m['channel']=='diffuse';raw=OUT/'baked'/m['file'];assert sha(raw)==m['sha256']
-        image=Image.frombytes('RGBA' if colour else 'L',(record['size'],record['size']),raw.read_bytes())
+        raw_maps[m['channel']]=raw.read_bytes()
+        image=Image.frombytes('RGBA' if colour else 'L',(record['size'],record['size']),raw_maps[m['channel']])
         image.save(OUT/'input'/('colour' if colour else 'scalar')/(raw.stem+'.png'))
+    colour_levels,rough_levels,metal_levels=mip_levels(raw_maps['diffuse'],raw_maps['roughness'],raw_maps['metalness'],record['size'])
+    for channel,levels in [('diffuse',colour_levels),('roughness',rough_levels),('metalness',metal_levels)]:
+        group='dds-colour' if channel=='diffuse' else 'dds-scalar'
+        (OUT/'input'/group/f"{preset['appearance']}_{channel}.dds").write_bytes(dds_bytes(levels,record['size'],channel))
 for group,gamma,texture_group,raw_format,compression in [
-    ('colour',True,'TEXG_Generic_Color','TRF_TrueColor','TCM_QualityColor'),
-    ('scalar',False,'TEXG_Generic_Grayscale','TRF_Grayscale','TCM_QualityR')]:
+    ('dds-colour',True,'TEXG_Generic_Color','TRF_TrueColor','TCM_QualityColor'),
+    ('dds-scalar',False,'TEXG_Generic_Grayscale','TRF_Grayscale','TCM_QualityR')]:
     run('import-'+group,[WK,'import',OUT/'input'/group,'-o',texturedir],
-        dict(IsGamma=gamma,TextureGroup=texture_group,RawFormat=raw_format,Compression=compression,GenerateMipMaps=True,IsStreamable=True,PremultiplyAlpha=False))
+        dict(IsGamma=gamma,TextureGroup=texture_group,RawFormat=raw_format,Compression=compression,GenerateMipMaps=False,IsStreamable=True,PremultiplyAlpha=False))
 
 plate=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies'
 run('serialize-owned-models',[WK,'convert','serialize',plate,'-o',OUT/'source-json'])
@@ -110,6 +117,7 @@ run('deserialize-app',[WK,'convert','deserialize',OUT/'app-json','-o',appdir])
 run('deserialize-customization',[WK,'convert','deserialize',OUT/'cc-json','-o',appdir])
 run('roundtrip',[WK,'convert','serialize',archive,'-o',OUT/'roundtrip'])
 run('export-textures',[WK,'export',texturedir,'-o',OUT/'export','--uext','png','--gamepath','F:/Games/Cyberpunk 2077'])
+run('export-texture-mips',[WK,'export',texturedir,'-o',OUT/'export-dds','--uext','dds','--gamepath','F:/Games/Cyberpunk 2077'])
 
 package=OUT/'package/archive/pc/mod';filename=plan['namespace']
 run('pack',[WK,'pack',archive,'-o',package])
