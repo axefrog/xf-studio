@@ -9,6 +9,7 @@ import { IdleAnimation } from "./idle-animation";
 import type { CameraState } from "./workspace-state";
 import { previewNearPlane } from "./camera-depth";
 import { prepareEyeAppearances } from "./eye-appearance";
+import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
 
 export async function createScene(
   host: HTMLElement,
@@ -199,6 +200,57 @@ export async function createScene(
       detailErrors.push(`${name}: ${(error as Error).message}`);
     }
   }
+  let hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[] } | undefined;
+  let hairError = "";
+  try {
+    const response = await fetch("/assets/hair/manifest.json", { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw Error("Local resolved hair assets are unavailable");
+    const entries = parseHairManifest(await response.json());
+    // This local intake currently contains one complete, exact saved style.
+    if (entries.length !== 1) throw Error("Expected one resolved local hair style");
+    const asset = entries[0]!, root = new THREE.Group(), parts: THREE.SkinnedMesh[] = [];
+    const bytes = async (url: string, sha256: string) => {
+      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw Error(`Local hair asset unavailable (${response.status})`);
+      const data = new Uint8Array(await response.arrayBuffer());
+      await verifyHairBytes(data, sha256);
+      return data;
+    };
+    const alphaBytes = await bytes(asset.alpha.url, asset.alpha.sha256);
+    const alphaUrl = URL.createObjectURL(new Blob([new Uint8Array(alphaBytes)], { type: "image/png" }));
+    let alpha: THREE.Texture;
+    try { alpha = await loader.loadAsync(alphaUrl); } finally { URL.revokeObjectURL(alphaUrl); }
+    alpha.flipY = false;
+    alpha.colorSpace = THREE.NoColorSpace;
+    alpha.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    for (let index = 0; index < asset.parts.length; index++) {
+      const entry = asset.parts[index]!, buffer = (await bytes(entry.url, entry.sha256)).buffer,
+        original = restoreFirstWeights(buffer), loaded = await new GLTFLoader().parseAsync(buffer, "/assets/hair/");
+      loaded.scene.traverse(o => {
+        if (!(o instanceof THREE.SkinnedMesh)) return;
+        const association = loaded.parser.associations.get(o),
+          raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
+        if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
+        o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+        o.frustumCulled = false;
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0x342c29, roughness: 0.9, side: THREE.DoubleSide,
+          ...(index ? { alphaMap: alpha, alphaTest: 0.12 } : {}),
+        });
+        // Saved colour and REDengine's strand/cap material are unresolved.
+        o.material = mat;
+        extendSkin(o, mat);
+        o.name = `preview_hair_${index}_${parts.length}`;
+        parts.push(o);
+        meshes.push(o);
+      });
+      root.add(loaded.scene);
+    }
+    if (parts.length < 2) throw Error("Saved hair geometry is incomplete");
+    root.visible = false;
+    scene.add(root);
+    hair = { asset, root, meshes: parts };
+  } catch (error) { hairError = (error as Error).message; }
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
@@ -355,13 +407,23 @@ export async function createScene(
     eyeMat.map = selectedEye.texture ?? eyeColor;
     eyeMat.needsUpdate = true;
     eyeAppearanceStatus = selectedEye.status;
+    currentSave = v;
+    const matchedHair = !!hair && hair.asset === selectSavedHair([hair.asset], v);
+    if (hair) hair.root.visible = matchedHair && hairEnabled;
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
       matchedDetails,
       eyeAppearance: eyeAppearance(),
+      matchedHair,
     };
   }
+  let hairEnabled = true;
+  function setHair(enabled: boolean) {
+    hairEnabled = enabled;
+    if (hair) hair.root.visible = enabled && !!selectSavedHair([hair.asset], currentSave);
+  }
+  let currentSave: SavedV | undefined;
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
   function pick(e: PointerEvent) {
@@ -414,6 +476,8 @@ export async function createScene(
     })),
     blinkBones: bones.length,
     detailErrors,
+    hairError,
+    hair: hair ? { label: hair.asset.label, parts: hair.meshes.length, vertices: hair.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) } : undefined,
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
       faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
@@ -446,6 +510,8 @@ export async function createScene(
     applySavedV,
     eyeAppearance,
     details,
+    hair,
+    setHair,
     idle,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),

@@ -92,7 +92,7 @@ function snapshot(): WorkspaceState {
       textureSize,
       camera: viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
       surface: input("surface-controls").checked, wire: input("wire").checked,
-      brows: input("brows").checked, lashes: input("lashes").checked, normals: input("normals").checked,
+      brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked, normals: input("normals").checked,
       exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
       idle: viewer?.idle?.enabled ?? workspace.preview.idle,
@@ -504,6 +504,10 @@ function showSavedV(v: SavedV) {
     result.matchedDetails.length === 2
       ? "Brows and lashes match the saved resource references; colours are approximate."
       : "Brows and lashes are reference styles, not a resolved match for this save.";
+  $("v-hair").textContent = result.matchedHair
+    ? "Saved hair mesh matched; colour, strand shading and physics are approximate."
+    : "Saved hair is unresolved or its local assets are unavailable.";
+  input("hair").disabled = !result.matchedHair;
   $("v-eyes").textContent = result.eyeAppearance.message;
   $("v-card").hidden = false;
   $("v-summary").textContent =
@@ -538,7 +542,7 @@ try {
   if (savedV) showSavedV(savedV);
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
-    brows: preview.brows, lashes: preview.lashes, normals: preview.normals })) input(id).checked = checked;
+    brows: preview.brows, lashes: preview.lashes, hair: preview.hair, normals: preview.normals })) input(id).checked = checked;
   input("blink").value = String(preview.blink);
   input("exposure").value = String(preview.exposure);
   input("light-angle").value = String(preview.lightAngle);
@@ -584,6 +588,10 @@ try {
     viewer.setDetail(name, input(name).checked);
     input(name).onchange = () => viewer!.setDetail(name, input(name).checked);
   }
+  if (!savedV) input("hair").disabled = true;
+  viewer.setHair(input("hair").checked);
+  input("hair").onchange = () => viewer!.setHair(input("hair").checked);
+  if (viewer.evidence.hairError) $("hair-note").textContent = `Hair preview unavailable: ${viewer.evidence.hairError}`;
   if (viewer.evidence.detailErrors.length)
     $("detail-note").textContent =
       `Some details unavailable: ${viewer.evidence.detailErrors.join("; ")}`;

@@ -60,10 +60,11 @@
           <span class="eyebrow">V FROM YOUR SAVE</span>
           <p id="v-summary"></p>
           <p id="v-details"></p>
+          <p id="v-hair"></p>
           <p id="v-eyes"></p>
           <p>
-            Skin uses study assets; makeup is your studio design. Hair and other details
-            still need resolving.
+            Skin uses study assets; makeup is your studio design. Other appearance
+            materials and details still need resolving.
           </p>
           <button id="v-export">Export appearance data</button>
         </div>
@@ -274,6 +275,8 @@
         ><label class="toggle"
           ><input type="checkbox" id="lashes" checked /> Eyelashes</label
         >
+        <label class="toggle"><input type="checkbox" id="hair" checked disabled /> Saved V hair</label>
+        <p class="help" id="hair-note">Hair appears for a matching imported V. Mesh from local source; colour, shading and physics are approximate.</p>
         <p class="help" id="detail-note">
           Arkhe brows 18 · Soft Natural lashes<br />Reference styles ·
           approximate colours

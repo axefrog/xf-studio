@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-23",
+  "source": "MELUMINARY LONG LENGTH PAK VOL 3 #011, installed MO2 package 6.0.0.0",
+  "url": "https://www.nexusmods.com/cyberpunk2077/mods/27125",
+  "app": "base\\mel_ccxl_hair\\appearances\\lm097_hair.app",
+  "componentMeshes": [
+    "base\\mel_ccxl_hair\\meshes\\lm127_hair_pt1.mesh",
+    "base\\mel_ccxl_hair\\meshes\\lm097_hair_pt2.mesh"
+  ],
+  "schema": "xfs/local-hair-assets-1",
+  "entries": [
+    {
+      "resourceHash": "14407260537193084196",
+      "definition": "38_ash_brown",
+      "label": "MELUMINARY Long Length Pak Vol 3 #011",
+      "parts": [
+        {
+          "url": "/assets/hair/lm127_hair_pt1.glb",
+          "sha256": "54d8cfa24b6276426e04fedd2e33ac688a057ee05c6569f00e813bbf8b3201d7"
+        },
+        {
+          "url": "/assets/hair/lm097_hair_pt2.glb",
+          "sha256": "29383e1f186d25666c6b0e006cc860deadb6d2a9641736eb42726b683e0b2517"
+        }
+      ],
+      "alpha": {
+        "url": "/assets/hair/hair_lm60_a.png",
+        "sha256": "e77359fef7ac863dc3df3cc3293c57c95fc88e8fad560e90ae259f8e95d52d00"
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "lm127_hair_pt1.glb",
+      "bytes": 153236,
+      "sha256": "54d8cfa24b6276426e04fedd2e33ac688a057ee05c6569f00e813bbf8b3201d7"
+    },
+    {
+      "name": "lm097_hair_pt2.glb",
+      "bytes": 19373456,
+      "sha256": "29383e1f186d25666c6b0e006cc860deadb6d2a9641736eb42726b683e0b2517"
+    },
+    {
+      "name": "hair_lm60_a.png",
+      "bytes": 1859836,
+      "sha256": "e77359fef7ac863dc3df3cc3293c57c95fc88e8fad560e90ae259f8e95d52d00"
+    }
+  ],
+  "limitations": [
+    "Source files are ignored local assets, not redistribution content.",
+    "Installed archive and XL match the save reference; effective runtime winner is not proven.",
+    "Saved colour is approximated; dynamic hair profile, strand shader, cap map and physics are not reproduced."
+  ]
+}
