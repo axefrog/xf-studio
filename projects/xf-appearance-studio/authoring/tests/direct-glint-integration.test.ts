@@ -1,7 +1,7 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
 import {initialRecipe,parseRecipe,raster} from "../src/recipe";
-import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes} from "../src/direct-glint-settings";
+import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes} from "../src/direct-glint-settings";
 import {createRasterProcessor,type RasterResponse} from "../src/raster-processor";
 import {createMakeupStack} from "../src/makeup-stack";
 import {assessPreviewQuality} from "../src/preview-quality";
@@ -46,6 +46,25 @@ test("clustered study is recipe-9 only and round-trips without changing the orig
   expect(JSON.stringify(parseRecipe(old))).toBe(oldBytes);
 });
 
+test("denser fine speckles opt into recipe-10 while old direct looks remain byte-stable",()=>{
+  const old=initialRecipe();old.schema="xfs/recipe-9";
+  old.layers[0]!.finish="glitter";old.layers[0]!.flakes=defaultClusteredGlintFlakes();
+  const oldBytes=JSON.stringify(parseRecipe(old));
+  const recipe=structuredClone(old);recipe.schema="xfs/recipe-10";
+  recipe.layers[0]!.flakes=defaultFineSpeckleFlakes();
+  expect(parseRecipe(recipe)).toEqual(recipe);
+  expect(parseWorkspace(freshWorkspace(recipe)).recipe).toEqual(recipe);
+  const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Fine study",
+    presets:[{id:crypto.randomUUID(),name:"Speckles",revision:1,recipe}]});
+  expect(collection.presets[0]!.recipe).toEqual(recipe);
+  const db=new LookLibrary(":memory:");
+  try{const saved=db.save({name:"Fine study",recipe});expect(db.get(saved.id).recipe).toEqual(recipe);}
+  finally{db.close();}
+  expect(()=>parseRecipe({...recipe,schema:"xfs/recipe-9"})).toThrow();
+  expect(()=>compileFlatPreset(recipe,32)).toThrow(UnsupportedMaterialError);
+  expect(JSON.stringify(parseRecipe(old))).toBe(oldBytes);
+});
+
 test("direct-light model uses the cancellable mask worker without optical textures",async()=>{
   const layer=initialRecipe().layers[0]!;layer.finish="glitter";layer.flakes=defaultDirectGlintFlakes();
   const responses:RasterResponse[]=[];
@@ -81,6 +100,13 @@ test("direct-light shader waits for the complete mask and disposes on finish cha
   stack.updateLayer(0,{...layer,flakes:defaultClusteredGlintFlakes()},undefined,undefined,true);
   expect(material.onBeforeCompile).toBe(originalShader);
   expect(stack.diagnostics()[0]!.mapCount).toBe(1);
+  stack.updateLayer(0,{...layer,flakes:defaultFineSpeckleFlakes()},undefined,undefined,true);
+  const shader={vertexShader:THREE.ShaderLib.physical.vertexShader,
+    fragmentShader:THREE.ShaderLib.physical.fragmentShader,uniforms:{}} as Parameters<typeof material.onBeforeCompile>[0];
+  material.onBeforeCompile(shader,{} as THREE.WebGLRenderer);
+  expect(shader.uniforms.xfsGlintFineSpeckleProfile?.value).toBe(true);
+  stack.updateLayer(0,{...layer,flakes:defaultClusteredGlintFlakes()},undefined,undefined,true);
+  expect(shader.uniforms.xfsGlintFineSpeckleProfile?.value).toBe(false);
   stack.updateLayer(0,{...layer,finish:"matte",flakes:undefined});
   expect(stack.diagnostics()[0]!.directGlints).toBe(false);
   expect(material.onBeforeCompile).toBe(prior);

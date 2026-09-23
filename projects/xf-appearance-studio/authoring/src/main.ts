@@ -37,7 +37,7 @@ import {
   finishDescription,
 } from "./finish";
 import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
-import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,isDirectGlint} from "./direct-glint-settings";
+import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes,isDirectGlint} from "./direct-glint-settings";
 import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -232,7 +232,8 @@ function sync() {
   $("flake-opt-in").hidden = l.finish !== "glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes);
   $("flake-direct-opt-in").hidden = l.finish !== "glitter" || isDirectGlint(l.flakes);
   $("flake-cluster-opt-in").hidden = l.finish !== "glitter" || (isDirectGlint(l.flakes) && l.flakes.model === "uv-cell-direct-2");
-  $("flake-direct-original").hidden = l.finish !== "glitter" || !isDirectGlint(l.flakes) || l.flakes.model !== "uv-cell-direct-2";
+  $("flake-fine-opt-in").hidden = l.finish !== "glitter" || (isDirectGlint(l.flakes) && l.flakes.model === "uv-cell-direct-3");
+  $("flake-direct-original").hidden = l.finish !== "glitter" || !isDirectGlint(l.flakes) || l.flakes.model === "uv-cell-direct-1";
   const flakes = l.flakes ?? defaultFlakes();
   for (const id of ["cells", "density", "tilt"] as const) {
     const legacy = isIrregular(flakes) || isDirectGlint(flakes) ? defaultFlakes() : flakes;
@@ -250,10 +251,12 @@ function sync() {
   }
   if(isIrregular(flakes))showGlitterMeasurement();
   if(isDirectGlint(flakes)){
-    $("direct-model-note").textContent=flakes.model==="uv-cell-direct-2"
+    $("direct-model-note").textContent=flakes.model==="uv-cell-direct-3"
+      ? "Dense tiny UV-anchored facets and fewer larger flashes cover the pigment. Density is a local maximum, not a visible speckle count. Browser study only; game material unproven."
+      : flakes.model==="uv-cell-direct-2"
       ? "Fine UV-anchored facets gather in soft clusters over a continuous sheen. Density is the local maximum; quieter patches have fewer facets. Browser only, with no game-material equivalence."
       : "Fine and occasional larger UV-anchored facets catch the preview light over a continuous sheen. Browser only; appearance and speed depend on this device and have no game-material equivalence.";
-    $("direct-density-label").textContent=flakes.model==="uv-cell-direct-2"?"Maximum facet density":"Facet density";
+    $("direct-density-label").textContent=flakes.model==="uv-cell-direct-1"?"Facet density":"Maximum facet density";
   }
   if(isDirectGlint(flakes))for(const id of ["density","fineShare","strength","color"] as const){
     input("direct-"+id).value=String(flakes[id]);
@@ -417,15 +420,26 @@ $("flake-opt-in").onclick = () => {
 };
 $("flake-direct-opt-in").onclick=()=>{
   const l=current();if(!l||l.finish!=="glitter"||isDirectGlint(l.flakes))return;
-  checkpoint();recipe.schema="xfs/recipe-8";l.flakes=defaultDirectGlintFlakes();render();
+  checkpoint();if(recipe.schema!=="xfs/recipe-9"&&recipe.schema!=="xfs/recipe-10")recipe.schema="xfs/recipe-8";
+  l.flakes=defaultDirectGlintFlakes();render();
 };
 $("flake-cluster-opt-in").onclick=()=>{
   const l=current();if(!l||l.finish!=="glitter"||(isDirectGlint(l.flakes)&&l.flakes.model==="uv-cell-direct-2"))return;
-  checkpoint();recipe.schema="xfs/recipe-9";
-  l.flakes=isDirectGlint(l.flakes)?{...l.flakes,model:"uv-cell-direct-2"}:defaultClusteredGlintFlakes();render();
+  checkpoint();if(recipe.schema!=="xfs/recipe-10")recipe.schema="xfs/recipe-9";
+  l.flakes=isDirectGlint(l.flakes)?{...l.flakes,model:"uv-cell-direct-2",
+    strength:l.flakes.model==="uv-cell-direct-3"
+      ? Math.min(16,Math.round(l.flakes.strength*1.5*2)/2):l.flakes.strength}
+    :defaultClusteredGlintFlakes();render();
+};
+$("flake-fine-opt-in").onclick=()=>{
+  const l=current();if(!l||l.finish!=="glitter"||(isDirectGlint(l.flakes)&&l.flakes.model==="uv-cell-direct-3"))return;
+  checkpoint();recipe.schema="xfs/recipe-10";
+  l.flakes=isDirectGlint(l.flakes)
+    ? {...l.flakes,model:"uv-cell-direct-3",strength:Math.round(l.flakes.strength*2/3*2)/2}
+    : defaultFineSpeckleFlakes();render();
 };
 $("flake-direct-original").onclick=()=>{
-  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes)||l.flakes.model!=="uv-cell-direct-2")return;
+  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes)||l.flakes.model==="uv-cell-direct-1")return;
   checkpoint();l.flakes={...l.flakes,model:"uv-cell-direct-1"};render();
 };
 $("flake-raster-switch").onclick=()=>{

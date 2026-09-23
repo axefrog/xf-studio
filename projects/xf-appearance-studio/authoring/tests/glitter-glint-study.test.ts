@@ -23,9 +23,10 @@ test("UV-cell glint pilot chains existing shader ownership and restores it",()=>
   expect(shader.fragmentShader).toContain("vec2( cos( rampAngle ), sin( rampAngle ) )");
   expect(shader.fragmentShader).toContain("float distanceUv = length( uv - centre )");
   expect(shader.fragmentShader).toContain("xfsGlintUnit( cell, 14u ) >= occupancy");
-  expect(shader.fragmentShader).toContain("if ( xfsGlintShape == 1 && xfsGlintClusteredProfile )");
+  expect(shader.fragmentShader).toContain("xfsGlintClusteredProfile || xfsGlintFineSpeckleProfile");
+  expect(shader.fragmentShader).toContain("xfsGlintFineSpeckleProfile ? 2304.0");
   expect(shader.fragmentShader).toContain("min( bodyCoverage, 1.0 )");
-  expect(shader.fragmentShader).toContain(": max( 20.0, xfsGlintPower * 0.35 ) ) : xfsGlintPower");
+  expect(shader.fragmentShader).toContain("xfsGlintFineSpeckleProfile ? max( 10.0, xfsGlintPower * 0.055 )");
   expect(shader.fragmentShader).not.toContain("gl_FragCoord");
   expect(shader.fragmentShader).not.toContain("transpose( tbn )");
   expect(shader.fragmentShader).toContain("#include <opaque_fragment>");
@@ -36,6 +37,9 @@ test("UV-cell glint pilot chains existing shader ownership and restores it",()=>
   expect(shader.uniforms.xfsGlintSeed?.value).toBe(0);
   expect(shader.uniforms.xfsGlintDensity?.value).toBe(.9);
   expect(shader.uniforms.xfsGlintFineShare?.value).toBe(.65);
+  expect(shader.uniforms.xfsGlintFineSpeckleProfile?.value).toBe(false);
+  study.setFineSpeckleProfile(true);
+  expect(shader.uniforms.xfsGlintFineSpeckleProfile?.value).toBe(true);
   study.setShape("polygon");study.setSeed(173);
   expect(shader.uniforms.xfsGlintShape?.value).toBe(1);
   expect(shader.uniforms.xfsGlintSeed?.value).toBe(173);
