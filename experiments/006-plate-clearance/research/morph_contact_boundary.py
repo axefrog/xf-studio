@@ -13,6 +13,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 EXP = HERE.parent
+WORKSPACE = EXP.parent.parent
 sys.path.insert(0, str(EXP.parent / '004-plate-import'))
 from verify_roundtrip import Glb
 
@@ -21,6 +22,11 @@ SAVED = ['h091_eyes', 'h012_nose', 'h053_mouth', 'h054_jaw', 'h145_ear']
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def report_path(path):
+    resolved = Path(path).resolve()
+    return resolved.relative_to(WORKSPACE).as_posix() if resolved.is_relative_to(WORKSPACE) else str(resolved)
 
 
 def components(edge_indices, edges):
@@ -188,7 +194,7 @@ def main():
                                  default=None)
             for x in observed},
         'certificates': certificates,
-        'inputs': [{'path': str(path), 'sha256': digest(path)} for path in
+        'inputs': [{'path': report_path(path), 'sha256': digest(path)} for path in
                    [Path(build['head']), Path(candidate['roundtrip']), mapping_path,
                     HERE / 'finite_correction_summary.json', visibility_path]],
         'limits': [

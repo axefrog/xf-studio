@@ -1269,23 +1269,23 @@
   ],
   "inputs": [
     {
-      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\head.glb",
+      "path": "experiments/006-plate-clearance/generated/build-1790134714546030800/head.glb",
       "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
     },
     {
-      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\geometry-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "path": "experiments/006-plate-clearance/generated/build-1790134714546030800/geometry-0.00005000/roundtrip/xfas_eye_plate.glb",
       "sha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c"
     },
     {
-      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "path": "experiments/004-plate-import/head-shading-transfer.json",
       "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
     },
     {
-      "path": "D:\\Dev\\worktrees\\plate-clearance-next\\experiments\\006-plate-clearance\\research\\finite_correction_summary.json",
+      "path": "experiments/006-plate-clearance/research/finite_correction_summary.json",
       "sha256": "1862af615671bfe281e7041e6317bf925c81d3072c6ae4b11858a02f20ee16ea"
     },
     {
-      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\contact-visibility-details.json",
+      "path": "experiments/006-plate-clearance/generated/build-1790134714546030800/contact-visibility-details.json",
       "sha256": "7ddb1f2e0526ed1dbe9c7b8a1e611e26f93306148c8b1cf8ca7e1ddf4a60e877"
     }
   ],
