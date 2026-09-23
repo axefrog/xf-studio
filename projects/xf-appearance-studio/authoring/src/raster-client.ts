@@ -9,6 +9,18 @@ export type RasterPort = {
 };
 type Completed = Extract<RasterResponse, { data: unknown }>;
 
+function validResult(data: Completed, request: RasterRequest): boolean {
+  const length = request.size * request.size * 4;
+  if (data.size !== request.size || !(data.data instanceof Uint8ClampedArray) || data.data.length !== length ||
+    !Number.isFinite(data.ms) || data.ms < 0) return false;
+  const expectsOptics = !!request.bakeOptics && request.layer.enabled && (request.layer.finish === "shimmer" || request.layer.finish === "glitter");
+  if (expectsOptics !== !!data.optics) return false;
+  if (data.optics && (data.optics.size !== request.size ||
+    !(data.optics.normal instanceof Uint8Array) || data.optics.normal.length !== length ||
+    !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
+  return true;
+}
+
 /** Latest pending snapshot per slot, with cancellation for obsolete running work.
  * Versions never reset, so an old message cannot apply to a replacement preset.
  */
@@ -18,22 +30,42 @@ export function createRasterClient(makeWorker: () => RasterPort,
   let running: RasterRequest | undefined, cancelSent = false, sequence = 0;
   let cancellations = 0, completed = 0, discarded = 0, failures = 0;
   let worker: RasterPort | undefined;
+  function recover(port: RasterPort | undefined) {
+    if (port !== worker) return;
+    if (running && queue.get(running.i)?.version === running.version) queue.delete(running.i);
+    failures++; running = undefined; cancelSent = false; worker = undefined;
+    // Construction and message delivery can throw before an error event exists.
+    // Clear scheduling first, and never requeue the failed snapshot itself.
+    try {port?.terminate();} catch { /* A dead port must not prevent recovery. */ }
+    failed(); dispatch();
+  }
   function cancelRunning() {
     if (!running || cancelSent) return;
     cancelSent = true; cancellations++;
-    worker?.postMessage({ cancel: running.version });
+    const port = worker, request = running;
+    try {port?.postMessage({ cancel: request.version });}
+    catch {if (running === request) recover(port);}
   }
   function dispatch() {
     if (running || !queue.size) return;
     const [i, request] = queue.entries().next().value!;
     queue.delete(i); running = request; cancelSent = false;
-    worker ??= connect();
-    worker.postMessage(request);
+    try {
+      worker ??= connect();
+      worker.postMessage(request);
+    } catch {
+      // A synchronous mock/adapter may already have delivered the result; do
+      // not tear down a replacement request if only that old send then throws.
+      if (running === request) recover(worker);
+    }
   }
   function connect() {
     const port = makeWorker();
     port.onmessage = ({ data }) => {
-      if (port !== worker || !running || running.version !== data.version || running.i !== data.i) return;
+      if (port !== worker || !running) return;
+      if (!data || typeof data !== "object") {recover(port); return;}
+      if (running.version !== data.version || running.i !== data.i) return;
+      if (!data.cancelled && !validResult(data,running)) {recover(port); return;}
       running = undefined; cancelSent = false;
       if (!data.cancelled && versions.get(data.i) === data.version) {
         if (queue.get(data.i)?.version === data.version) queue.delete(data.i);
@@ -42,21 +74,18 @@ export function createRasterClient(makeWorker: () => RasterPort,
       else discarded++;
       dispatch();
     };
-    port.onerror = () => {
-      if (port !== worker) return;
-      if (running && queue.get(running.i)?.version === running.version) queue.delete(running.i);
-      failures++; port.terminate(); running = undefined; cancelSent = false;
-      // Do not automatically repeat the failing snapshot. A pending newer edit
-      // may continue; otherwise the next user edit starts in a fresh worker.
-      worker = undefined; failed(); dispatch();
-    };
+    port.onerror = () => recover(port);
     return port;
   }
   return {
-    request(i: number, layer: Layer, prioritize = true) {
+    request(i: number, layer: Layer, prioritize = true, sizeOverride?: number, bakeOptics = false) {
+      const requestedSize = sizeOverride ?? size;
+      if (!Number.isInteger(requestedSize) || requestedSize < 1 || requestedSize > 4096 || typeof bakeOptics !== "boolean" ||
+        (bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter") && requestedSize < 32))
+        throw Error("Invalid preview raster request.");
       const version = ++sequence;
       versions.set(i, version);
-      const request = { i, version, layer: structuredClone(layer), size };
+      const request = { i, version, layer: structuredClone(layer), size: requestedSize, bakeOptics };
       if (prioritize) {
         if (running && running.i !== i && versions.get(running.i) === running.version && !queue.has(running.i))
           queue.set(running.i, running);

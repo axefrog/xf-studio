@@ -1,5 +1,7 @@
 # Preview fidelity and persistent workspace
 
+**Preview quality implemented:** 512/1K/2K/4K generated mask and optical-map choices now persist in a collapsible group beside lighting. Cooperative baking, actual-size UV crops, disposal, hardware limits and an aggregate resource estimate are integrated. Export-quality choices and broader renderer enhancements remain future work. See [contract and verification](../authoring/preview-quality-contract.md).
+
 Nathan requested these on 23 September 2026, without priority over current work. Preserve all five across context changes. Eye-makeup compilation remains the main delivery area; these improve the existing preview, not authorization for later feature editors.
 
 **Implementation checkpoint, 23 September:** requests 2, 3 and 5 now have a working implementation. Vertical FOV, a validated browser workspace (including library revision context and undo), decoded saved V and a later eye-shape override survive real browser reloads. Camera orbit remains stable across idle restore/toggle, and library Save continues the prior revision with stale-write protection. [Authoring instructions](../../projects/xf-appearance-studio/authoring/README.md) describe storage and photo-comparison limits. Requests 1 and 4 remain open: the modded eye resource chain and renderer/shader fidelity are not fixed by this persistence work.

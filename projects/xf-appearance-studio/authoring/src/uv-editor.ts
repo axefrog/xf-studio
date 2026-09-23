@@ -22,7 +22,6 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   fit: HTMLButtonElement; note: HTMLElement;
 }, hooks: Hooks, initial: UVView) {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
-  tinted.width = tinted.height = 1024;
   let view = parseUVView(initial);
   // Establish layout before observing it; the initial observer callback must not
   // itself change the canvas aspect and trigger a resize-observer feedback pass.
@@ -92,13 +91,19 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       ctx.drawImage(image, r.u * image.width, r.v * image.height, r.w * image.width, r.h * image.height, 0, 0, width, height);
       ctx.globalAlpha = 1;
     }
+    // The tint scratch follows display pixels, never an intermediate 1K atlas.
+    if (tinted.width !== resolution.pixelWidth) tinted.width = resolution.pixelWidth;
+    if (tinted.height !== resolution.pixelHeight) tinted.height = resolution.pixelHeight;
     const layers = hooks.recipe().layers, masks = hooks.canvases();
     for (let i = 0; i < layers.length; i++) if (layers[i].enabled && masks[i]) {
       const t = tinted.getContext("2d")!;
-      t.clearRect(0, 0, 1024, 1024); t.globalCompositeOperation = "source-over";
-      t.drawImage(masks[i], 0, 0); t.globalCompositeOperation = "source-in";
-      t.fillStyle = layers[i].color; t.fillRect(0, 0, 1024, 1024); t.globalCompositeOperation = "source-over";
-      ctx.drawImage(tinted, r.u * 1024, r.v * 1024, r.w * 1024, r.h * 1024, 0, 0, width, height);
+      const mask = masks[i];
+      t.clearRect(0, 0, tinted.width, tinted.height); t.globalCompositeOperation = "source-over";
+      t.drawImage(mask, r.u * mask.width, r.v * mask.height, r.w * mask.width, r.h * mask.height,
+        0, 0, tinted.width, tinted.height);
+      t.globalCompositeOperation = "source-in";
+      t.fillStyle = layers[i].color; t.fillRect(0, 0, tinted.width, tinted.height); t.globalCompositeOperation = "source-over";
+      ctx.drawImage(tinted, 0, 0, tinted.width, tinted.height, 0, 0, width, height);
     }
     const centre = pixel({ u: .5, v: r.v });
     ctx.setLineDash([3 * unit, 4 * unit]); ctx.strokeStyle = "#c4ddca55";
@@ -336,7 +341,8 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const b = bounds();
     return { view: { ...view }, region: region(), aspect: b.width / b.height,
       resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),
-        actualWidth: canvas.width, actualHeight: canvas.height }, dragging: !!drag, gesture: drag?.kind ?? (wheel ? "scale" : null),
+        actualWidth: canvas.width, actualHeight: canvas.height,
+        tintWidth: tinted.width, tintHeight: tinted.height }, dragging: !!drag, gesture: drag?.kind ?? (wheel ? "scale" : null),
       handles: handles().map(h => ({ ...h, screen: (() => { const p = uvToPixel(h.uv, region(), b.width, b.height);
         return { x: b.left + p.x, y: b.top + p.y }; })() })) };
   } };

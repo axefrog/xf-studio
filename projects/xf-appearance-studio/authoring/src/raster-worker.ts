@@ -1,6 +1,6 @@
 import { createRasterProcessor, type RasterRequest } from "./raster-processor";
 const processor = createRasterProcessor(result => self.postMessage(result,
-  { transfer: result.cancelled ? [] : [result.data.buffer] }));
+  { transfer: result.cancelled ? [] : [result.data.buffer, ...(result.optics ? [result.optics.normal.buffer,result.optics.surface.buffer] : [])] }));
 self.onmessage = (e: MessageEvent<RasterRequest | { cancel: number }>) => {
   if ("cancel" in e.data) processor.cancel(e.data.cancel);
   // Surface asynchronous errors through the worker's standard error event.

@@ -3,10 +3,12 @@ import { parseSavedV, type SavedV } from "./save-reader";
 import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
+import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
 export type PreviewState = {
+  textureSize: PreviewTextureSize;
   camera?: CameraState;
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; normals: boolean;
@@ -22,18 +24,18 @@ export type WorkspaceState = {
   preview: PreviewState;
   library: LibraryState;
   collections?: CollectionWorkspace;
-  panels: { lighting: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
+  panels: { lighting: boolean; previewQuality: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
     sidebarLeft: number; sidebarRight: number };
 };
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
     schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
     uvView: defaultUVView(), fieldSelection: {},
-    preview: { eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
+    preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
       normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
-    panels: { lighting: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
+    panels: { lighting: false, previewQuality: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
   };
 }
 const finite = (x: unknown, min: number, max: number): x is number =>
@@ -55,6 +57,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
   const p = v.preview;
   if (p && typeof p === "object") {
+    state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
     for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", .5, 2], ["lightAngle", 0, 360],
@@ -81,6 +84,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
     for (const [key, min] of [["sidebarLeft", 220], ["sidebarRight", 280]] as const)
       if (finite(v.panels[key], min, Number.MAX_SAFE_INTEGER)) state.panels[key] = v.panels[key];
     if (typeof v.panels.lighting === "boolean") state.panels.lighting = v.panels.lighting;
+    if (typeof v.panels.previewQuality === "boolean") state.panels.previewQuality = v.panels.previewQuality;
     for (const key of ["layersScroll", "propertiesScroll", "pageX", "pageY"] as const)
       if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];
   }

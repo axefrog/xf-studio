@@ -26,7 +26,7 @@ test("workspace restores edited selection, camera, library revision and undo wit
   state.preview.brows = false;
   state.library = { name: "Unsaved name", selected: "11111111-2222-3333-4444-555555555555",
     current: { id: "11111111-2222-3333-4444-555555555555", revision: 7 } };
-  state.panels = { lighting: true, layersScroll: 40, propertiesScroll: 900, pageX: 0, pageY: 50, sidebarLeft: 1370, sidebarRight: 1410 };
+  state.panels = { lighting: true, previewQuality: true, layersScroll: 40, propertiesScroll: 900, pageX: 0, pageY: 50, sidebarLeft: 1370, sidebarRight: 1410 };
   state.history.push(structuredClone(state.recipe));
   const restored = parseWorkspace(JSON.parse(JSON.stringify(state)));
   expect(restored).toEqual(state);
@@ -44,6 +44,25 @@ test("workspace restores edited selection, camera, library revision and undo wit
   expect(sanitized.library.current).toBeUndefined();
   expect(() => parseWorkspace({ ...state, schema: "future" })).toThrow();
   expect(() => parseWorkspace({ ...state, savedV: {} })).toThrow();
+});
+
+test("preview texture size and quality panel persist independently of recipes; older documents keep defaults", () => {
+  const state = freshWorkspace(), originalRecipe = structuredClone(state.recipe);
+  expect(state.preview.textureSize).toBe(1024); expect(state.panels.previewQuality).toBe(false);
+  for (const size of [512,1024,2048,4096] as const) {
+    state.preview.textureSize = size; state.panels.previewQuality = true;
+    const restored = parseWorkspace(JSON.parse(JSON.stringify(state)));
+    expect(restored.preview.textureSize).toBe(size); expect(restored.panels.previewQuality).toBe(true);
+    expect(restored.recipe).toEqual(originalRecipe);
+  }
+  const old = JSON.parse(JSON.stringify(state)); delete old.preview.textureSize; delete old.panels.previewQuality;
+  const migrated = parseWorkspace(old);
+  expect(migrated.preview.textureSize).toBe(1024); expect(migrated.panels.previewQuality).toBe(false);
+  for (const size of [null,"2048",0,768,8192,NaN,Infinity]) {
+    const malformed = parseWorkspace({...state,preview:{...state.preview,textureSize:size},panels:{...state.panels,previewQuality:"true"}});
+    expect(malformed.preview.textureSize).toBe(1024); expect(malformed.panels.previewQuality).toBe(false);
+    expect(malformed.recipe).toEqual(originalRecipe);
+  }
 });
 
 test("private saved V survives workspace JSON independently of authored makeup and eye override", async () => {

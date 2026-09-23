@@ -1,5 +1,7 @@
 # Current state — 2026-09-23
 
+**Preview quality:** persistent 512/1K/2K/4K generated makeup textures now appear in a collapsible group beside lighting. Masks and optical maps rebuild together in cancellable background jobs, with hardware/budget checks and disabled resource release. Browser checks include actual 4K glitter maps, downgrade, capacity recovery, reload and independent 2K export. 160 tests, typecheck/build pass. Complex 4K masks can still bake slowly. [Contract/evidence](../research/authoring/preview-quality-contract.md). Separate addable softness controls are explicitly on hold while Nathan evaluates per-point softness.
+
 **Directional softness and crisp UV controls:** per-point edge widths now work independently of pigment, with preserved old looks, Undo, reload, library save and shared compiler sampling. The UV pane now renders paths/handles at actual display resolution, fixing blur in wide sidebars and high-DPI displays. 141 tests, typecheck/build and isolated browser checks pass. [Contract and evidence](../research/authoring/directional-softness-contract.md).
 
 **Sidebar width follow-up:** fixed 640px caps removed. Panels can use the available window width while retaining viewport/opposite-panel minima; dragging redistributes space, Escape restores both panels and wider preferences survive reload. Browser drag/keyboard/reload checks and workspace tests pass. [Details](../research/backlog/viewport-and-editor-controls.md#sidebar-width-follow-up--23-september-2026).

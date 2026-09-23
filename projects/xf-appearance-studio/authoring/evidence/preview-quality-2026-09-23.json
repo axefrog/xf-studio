@@ -1,0 +1,38 @@
+{
+  "date": "2026-09-23",
+  "scope": "Generated makeup preview resolution; isolated ?verify=1 workspace",
+  "validation": { "tests": 160, "assertions": 493753, "testFiles": 38, "typecheck": "pass", "build": "pass" },
+  "browser": {
+    "tiers": [512, 1024, 2048, 4096],
+    "rapidSequence": [4096, 512, 2048],
+    "qualityOnlyPreservedExactly": ["recipe", "Undo history", "camera", "UV view"],
+    "completeOpticalBundleSizesObserved": [512, 2048, 4096],
+    "bundleMaps": ["coverage", "normal", "packed roughness/metalness"],
+    "disabledLayer": { "maskSize": 1, "normal": null, "surface": null, "visible": false },
+    "capacity": {
+      "budgetMiB": 1024,
+      "one4KOpticalEstimatedPeakMiB": 960,
+      "plusOne4KPlainEstimatedPeakMiB": 1109,
+      "overBudgetErrorVisible": true,
+      "disableLayerRebuildsCancelledSlots": true
+    },
+    "reload": { "requestedSize": 512, "panelOpen": true, "activeMaskSize": 512, "disabledMaskSize": 1 },
+    "exportAt512Preview": "Exported 2048 square white + alpha mask; palette remains separate",
+    "consoleWarningsOrErrors": [],
+    "testRecipeRestored": "Four Undo operations restored original matte/enabled states before reload"
+  },
+  "regressions": [
+    "Six frozen prerefactor optical hashes at 32/33/127/256/1024/2048",
+    "4096 empty-density optical fixture",
+    "Cancellation during optical generation and immutable job snapshots",
+    "Worker construction/send/cancel failures, malformed and stale results",
+    "Texture replacement/disposal and actual-size UV cropping",
+    "Quality preference validation and persistence"
+  ],
+  "limits": [
+    "Complex warped directional-softness 4K layer was cancelled before completion; simpler 4K glitter completed",
+    "Resource estimate is not actual VRAM availability; native assets, browser/driver overhead and disposal delay are additional",
+    "Preview quality does not change export resolution or improve source game textures",
+    "No game launch, deployment or user draft edits"
+  ]
+}

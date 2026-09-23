@@ -18,6 +18,9 @@ import { setupFields } from "./field-ui";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { setupSoftness } from "./softness-ui";
+import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
+import { setupPreviewQuality } from "./preview-quality-ui";
+import type { RasterResponse } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { convertToBezier, setPointMode } from "./bezier-path";
 import { setupPathControls, type PathCommand } from "./path-ui";
@@ -42,6 +45,12 @@ const status = (text: string) => {
 const verification = new URLSearchParams(location.search).has("verify");
 const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
 const workspace = restored.state;
+let textureSize = workspace.preview.textureSize;
+let qualityError = "";
+let qualityBlocked = false;
+type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
+let initialOptics: ({ key: string; data: PreviewOptics } | undefined)[] = [];
+const opticalKey = (layer: Layer, size: number) => JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
 let fieldSelection: FieldSelection = workspace.fieldSelection;
 const history: string[] = workspace.history.map(r => JSON.stringify(r));
@@ -54,9 +63,12 @@ function checkpoint() {
 }
 const canvases = Array.from({ length: recipe.layers.length }, () => {
   const c = document.createElement("canvas");
-  c.width = c.height = 1024;
+  c.width = c.height = 1;
   return c;
 });
+function emptyPreviewCanvases() {
+  return recipe.layers.map(() => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas; });
+}
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
@@ -72,10 +84,12 @@ function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
   const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
     library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
-  if (!previewRestored) return { ...workspace, ...editing, panels: { ...workspace.panels, ...sidebars.snapshot() } };
+  if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
+    panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
   return {
     schema: "xfas/workspace-1", ...editing,
     preview: {
+      textureSize,
       camera: viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
       surface: input("surface-controls").checked, wire: input("wire").checked,
       brows: input("brows").checked, lashes: input("lashes").checked, normals: input("normals").checked,
@@ -88,6 +102,7 @@ function snapshot(): WorkspaceState {
       idleFace: viewer?.idle?.faceEnabled ?? workspace.preview.idleFace,
     },
     panels: { ...sidebars.snapshot(), lighting: $<HTMLDetailsElement>("lighting-panel").open,
+      previewQuality: $<HTMLDetailsElement>("quality-panel").open,
       layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
   };
 }
@@ -118,12 +133,15 @@ document.addEventListener("input", persist);
 document.addEventListener("change", persist);
 document.addEventListener("click", persist);
 $("lighting-panel").addEventListener("toggle", persist);
+$("quality-panel").addEventListener("toggle", persist);
+$<HTMLDetailsElement>("quality-panel").open = workspace.panels.previewQuality;
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
 let refreshFields: (() => void) | undefined;
 let refreshPigment: (() => void) | undefined;
 let refreshSoftness: (() => void) | undefined;
+let refreshQuality: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
@@ -136,9 +154,10 @@ function layerCards() { paintLayerList(recipe, active); }
 function replaceRecipe(next: Recipe, nextActive = 0) {
   recipe = next; active = Math.max(0, Math.min(nextActive, recipe.layers.length - 1)); selected = 0;
   maskClient.reset();
+  initialOptics = [];
   // A structure change cannot reuse an in-flight mask or an old slot's pixels.
   canvases.splice(0, canvases.length, ...recipe.layers.map(() => {
-    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1024; return canvas;
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas;
   }));
   viewer?.setLayerCanvases(canvases);
   for (let i = 0; i < recipe.layers.length; i++) render(i);
@@ -164,6 +183,7 @@ function sync() {
   refreshFields?.();
   refreshPigment?.();
   refreshSoftness?.();
+  refreshQuality?.();
   refreshPath?.();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
@@ -206,19 +226,72 @@ function sync() {
 }
 let lastRaster = 0;
 const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
-  ({ i, data, ms }) => {
+  ({ i, data, ms, size, optics }) => {
     if (!recipe.layers[i]) return;
+    const layer = recipe.layers[i];
+    if (size !== (layer.enabled ? textureSize : 1)) return;
+    if (canvases[i].width !== size) {
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
+      canvases[i] = canvas;
+    }
     canvases[i]
       .getContext("2d")!
-      .putImageData(new ImageData(data, 1024, 1024), 0, 0);
-    viewer?.updateLayer(i, recipe.layers[i]);
+      .putImageData(new ImageData(data, size, size), 0, 0);
+    viewer?.setLayerCanvas(i, canvases[i]);
+    if (viewer) { viewer.updateLayer(i, layer, optics); initialOptics[i] = undefined; }
+    else if (optics) initialOptics[i] = { key: opticalKey(layer, size), data: optics };
+    else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
     lastRaster = ms;
     drawUV();
-    status(`Live mask · 1024² · ${Math.round(ms)} ms · layer ${i + 1}`);
-  }, () => status("Mask calculation failed. Edit again to retry."));
+    refreshQuality?.();
+    status(`Live makeup · ${size}² · ${Math.round(ms)} ms · layer ${i + 1}`);
+  }, () => { qualityBlocked = true; qualityError = "Texture calculation failed. Rebuild the preview or edit again to retry."; status(qualityError); refreshQuality?.(); });
+function qualityAssessment(size = textureSize) {
+  return assessPreviewQuality(recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
+}
+function describeQuality() {
+  if (qualityError) return qualityError;
+  const assessment = qualityAssessment(), queue = maskClient.diagnostics();
+  if (!assessment.accepted) return assessment.error!;
+  const pending = queue.queued + (queue.running ? 1 : 0);
+  const waiting = recipe.layers.some((l,i) => l.enabled && canvases[i]?.width !== textureSize);
+  return `${pending || waiting ? "Updating" : "Ready"} · ${textureSize} × ${textureSize} · estimated generated-texture peak ${Math.ceil(assessment.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
+}
+function setPreviewTextureSize(size: PreviewTextureSize) {
+  const assessment = qualityAssessment(size);
+  if (!assessment.accepted) { qualityError = assessment.error!; refreshQuality?.(); return; }
+  textureSize = size; qualityError = ""; qualityBlocked = false; maskClient.reset();
+  for (const i of [active, ...recipe.layers.map((_,i) => i).filter(i => i !== active)]) render(i);
+  refreshQuality?.(); persist();
+}
+refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
+  { current: () => textureSize, describe: describeQuality, set: setPreviewTextureSize, rebuild: () => setPreviewTextureSize(textureSize) });
 function render(i = active) {
   if (!recipe.layers[i]) return;
-  maskClient.request(i, recipe.layers[i], i === active);
+  const layer = recipe.layers[i], assessment = qualityAssessment();
+  if (!layer.enabled) {
+    // Release large hidden resources immediately, even if a bake is being cancelled.
+    if (canvases[i].width !== 1) {
+      const empty = document.createElement("canvas"); empty.width = empty.height = 1;
+      canvases[i] = empty; viewer?.setLayerCanvas(i, empty);
+    }
+    initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
+  }
+  if (!assessment.accepted) {
+    maskClient.reset(); qualityBlocked = true; qualityError = assessment.error!;
+    status(qualityError); refreshQuality?.(); sync(); persist(); return;
+  }
+  if (qualityBlocked) {
+    // Capacity/failure recovery rebuilds every potentially stale slot.
+    qualityBlocked = false; qualityError = ""; maskClient.reset();
+    for (const slot of [active, ...recipe.layers.map((_,slot) => slot).filter(slot => slot !== active)]) render(slot);
+    return;
+  }
+  qualityError = "";
+  const size = layer.enabled ? textureSize : 1;
+  const needsOptics = layer.enabled && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
+    (viewer ? viewer.needsOptics(i, layer, size) : initialOptics[i]?.key !== opticalKey(layer, size));
+  maskClient.request(i, layer, i === active, size, needsOptics);
   viewer?.updateLayer(i, recipe.layers[i]);
   persist();
   sync();
@@ -455,8 +528,13 @@ for (let i = 0; i < recipe.layers.length; i++) render(i);
 sync();
 workspaceReady = true;
 try {
-  viewer = await createScene($("viewport"), canvases);
-  viewer.setLayerCanvases(canvases);
+  // Discover hardware limits before attaching any full-size generated texture.
+  viewer = await createScene($("viewport"), emptyPreviewCanvases());
+  const initialQuality = qualityAssessment();
+  viewer.setLayerCanvases(initialQuality.accepted ? canvases : emptyPreviewCanvases());
+  if (!initialQuality.accepted) {
+    maskClient.reset(); qualityBlocked = true; qualityError = initialQuality.error!; refreshQuality?.();
+  }
   if (savedV) showSavedV(savedV);
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
@@ -490,7 +568,12 @@ try {
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
     surface.setEnabled(input("surface-controls").checked);
-  for (let i = 0; i < recipe.layers.length; i++) viewer.updateLayer(i, recipe.layers[i]);
+  for (let i = 0; i < recipe.layers.length; i++) {
+    const stored = initialOptics[i];
+    if (initialQuality.accepted)
+      viewer.updateLayer(i, recipe.layers[i], stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.data : undefined);
+    initialOptics[i] = undefined;
+  }
   $("loading").hidden = true;
   drawUV();
   $("front").onclick = () => viewer!.front();
@@ -560,6 +643,8 @@ try {
       ),
       lastRasterMs: lastRaster,
       rasterQueue: maskClient.diagnostics(),
+      previewQuality: { requestedSize: textureSize, canvases: canvases.map(c => c.width),
+        materials: viewer!.makeupDiagnostics(), assessment: qualityAssessment(), error: qualityError },
       savedV: savedV
         ? { gameVersion: savedV.gameVersion, evidence: savedV.evidence }
         : null,

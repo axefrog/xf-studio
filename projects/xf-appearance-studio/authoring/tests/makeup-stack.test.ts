@@ -29,7 +29,7 @@ test("new makeup layers inherit morphs and extra bone weights; removal frees onl
   let disposed = 0, sharedDisposed = false;
   geometry.addEventListener("dispose", () => sharedDisposed = true);
   const layer = initialRecipe().layers[0]; layer.finish = "glitter";
-  stack.updateLayer(4, layer);
+  stack.updateLayer(4, layer, { size: 8, normal: new Uint8Array(8 * 8 * 4), surface: new Uint8Array(8 * 8 * 4) });
   const removed = stack.plates[4], material = stack.materials[4];
   for (const resource of [material, stack.textures[4], material.normalMap!, material.roughnessMap!])
     resource.addEventListener("dispose", () => disposed++);

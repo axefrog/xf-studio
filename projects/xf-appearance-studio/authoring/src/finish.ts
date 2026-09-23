@@ -47,85 +47,66 @@ function random(x: number, y: number, seed: number) {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
-export function bakeFlakes(
-  size: number,
-  finish: "shimmer" | "glitter",
-  p: Flakes,
-) {
-  if (
-    !Number.isInteger(size) ||
-    size < 32 ||
-    size > 2048 ||
-    !Number.isInteger(p.cells) ||
-    p.cells < 32 ||
-    p.cells > 256 ||
-    !Number.isFinite(p.density) ||
-    p.density < 0 ||
-    p.density > 1 ||
-    !Number.isFinite(p.tilt) ||
-    p.tilt < 0 ||
-    p.tilt > 1 ||
-    !Number.isInteger(p.seed) ||
-    p.seed < 0 ||
-    p.seed > 2147483647
-  )
+export type FlakeMaps = {size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer>};
+
+/** Bounded cooperative work; each cell setup and each written pixel costs one
+ * budget unit, including empty cells when the cell grid exceeds resolution. */
+export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: Flakes) {
+  if (!Number.isInteger(size) || size < 32 || size > 4096 ||
+    (finish !== "shimmer" && finish !== "glitter") || !p ||
+    !Number.isInteger(p.cells) || p.cells < 32 || p.cells > 256 ||
+    !Number.isFinite(p.density) || p.density < 0 || p.density > 1 ||
+    !Number.isFinite(p.tilt) || p.tilt < 0 || p.tilt > 1 ||
+    !Number.isInteger(p.seed) || p.seed < 0 || p.seed > 2147483647)
     throw Error("Invalid flake bake settings");
-  const normal = new Uint8Array(size * size * 4),
-    surface = new Uint8Array(normal.length);
-  const dense = finish === "shimmer";
-  const cells = p.cells * (dense ? 2 : 1),
-    cellSize = size / cells;
-  // One flat oriented facet per occupied cell; no radial bump/dome masquerading as a flake.
-  for (let cy = 0; cy < cells; cy++)
-    for (let cx = 0; cx < cells; cx++) {
-      const occupied = random(cx, cy, p.seed) < p.density;
-      const px =
-        (cx + 0.5 + (random(cx, cy, p.seed + 1) - 0.5) * 0.3) * cellSize;
-      const py =
-        (cy + 0.5 + (random(cx, cy, p.seed + 2) - 0.5) * 0.3) * cellSize;
-      const radius =
-        cellSize * (dense ? 0.39 : 0.21 + random(cx, cy, p.seed + 3) * 0.09);
-      const azimuth = random(cx, cy, p.seed + 4) * Math.PI * 2;
-      const angle =
-        Math.sqrt(random(cx, cy, p.seed + 5)) * p.tilt * (dense ? 0.4 : 1.1);
-      const nx = Math.sin(angle) * Math.cos(azimuth),
-        ny = Math.sin(angle) * Math.sin(azimuth),
-        nz = Math.cos(angle);
-      for (
-        let y = Math.ceil(cy * cellSize);
-        y < Math.min(size, Math.ceil((cy + 1) * cellSize));
-        y++
-      )
-        for (
-          let x = Math.ceil(cx * cellSize);
-          x < Math.min(size, Math.ceil((cx + 1) * cellSize));
-          x++
-        ) {
-          const i = (y * size + x) * 4;
-          const a = occupied
-            ? Math.max(
-                0,
-                Math.min(
-                  1,
-                  radius + 0.5 - Math.hypot(x + 0.5 - px, y + 0.5 - py),
-                ),
-              )
-            : 0;
-          const vx = nx * a,
-            vy = ny * a,
-            vz = 1 + (nz - 1) * a,
-            len = Math.hypot(vx, vy, vz);
-          normal[i] = Math.round(((vx / len) * 0.5 + 0.5) * 255);
-          normal[i + 1] = Math.round(((vy / len) * 0.5 + 0.5) * 255);
-          normal[i + 2] = Math.round(((vz / len) * 0.5 + 0.5) * 255);
-          normal[i + 3] = 255;
-          surface[i] = Math.round(a * 255); // coverage, useful for inspecting/disentangling flake distribution
-          surface[i + 1] = Math.round(
-            ((dense ? 0.48 : 0.7) * (1 - a) + (dense ? 0.32 : 0.2) * a) * 255,
-          );
-          surface[i + 2] = Math.round(a * (dense ? 0.35 : 0.95) * 255);
-          surface[i + 3] = 255;
+  p = {...p};
+  const normal = new Uint8Array(size * size * 4), surface = new Uint8Array(normal.length);
+  const dense = finish === "shimmer", cells = p.cells * (dense ? 2 : 1), cellSize = size / cells;
+  let cx = 0, cy = 0, done = false;
+  let cell: {x: number; y: number; x0: number; x1: number; y1: number; occupied: boolean; px: number; py: number; radius: number; nx: number; ny: number; nz: number} | undefined;
+  return {size, normal, surface, get done() {return done;},
+    advance(maxWork: number) {
+      if (!(maxWork > 0) || (!Number.isInteger(maxWork) && maxWork !== Infinity)) throw Error("Invalid flake slice size.");
+      let work = 0;
+      while (!done && work++ < maxWork) {
+        if (!cell) {
+          if (cy >= cells) {done = true; break;}
+          const occupied = random(cx, cy, p.seed) < p.density;
+          const px = (cx + 0.5 + (random(cx, cy, p.seed + 1) - 0.5) * 0.3) * cellSize;
+          const py = (cy + 0.5 + (random(cx, cy, p.seed + 2) - 0.5) * 0.3) * cellSize;
+          const radius = cellSize * (dense ? 0.39 : 0.21 + random(cx, cy, p.seed + 3) * 0.09);
+          const azimuth = random(cx, cy, p.seed + 4) * Math.PI * 2;
+          const angle = Math.sqrt(random(cx, cy, p.seed + 5)) * p.tilt * (dense ? 0.4 : 1.1);
+          const nx = Math.sin(angle) * Math.cos(azimuth), ny = Math.sin(angle) * Math.sin(azimuth), nz = Math.cos(angle);
+          const x0 = Math.ceil(cx * cellSize), x1 = Math.min(size, Math.ceil((cx + 1) * cellSize));
+          const y0 = Math.ceil(cy * cellSize), y1 = Math.min(size, Math.ceil((cy + 1) * cellSize));
+          if (++cx >= cells) {cx = 0; cy++;}
+          if (x0 < x1 && y0 < y1) cell = {x:x0,y:y0,x0,x1,y1,occupied,px,py,radius,nx,ny,nz};
+          else if (cy >= cells) done = true;
+          continue;
         }
-    }
-  return { size, normal, surface };
+        // Arithmetic and traversal match the original synchronous baker exactly.
+        const {x,y,occupied,px,py,radius,nx,ny,nz} = cell, i = (y * size + x) * 4;
+        const a = occupied ? Math.max(0, Math.min(1, radius + 0.5 - Math.hypot(x + 0.5 - px, y + 0.5 - py))) : 0;
+        const vx = nx * a, vy = ny * a, vz = 1 + (nz - 1) * a, len = Math.hypot(vx, vy, vz);
+        normal[i] = Math.round(((vx / len) * 0.5 + 0.5) * 255);
+        normal[i + 1] = Math.round(((vy / len) * 0.5 + 0.5) * 255);
+        normal[i + 2] = Math.round(((vz / len) * 0.5 + 0.5) * 255);
+        normal[i + 3] = 255;
+        surface[i] = Math.round(a * 255);
+        surface[i + 1] = Math.round(((dense ? 0.48 : 0.7) * (1 - a) + (dense ? 0.32 : 0.2) * a) * 255);
+        surface[i + 2] = Math.round(a * (dense ? 0.35 : 0.95) * 255);
+        surface[i + 3] = 255;
+        if (++cell.x >= cell.x1) {cell.x = cell.x0; if (++cell.y >= cell.y1) {cell = undefined; if (cy >= cells) done = true;}}
+      }
+      return done;
+    },
+  };
+}
+
+/** Synchronous export callers retain identical normal/surface byte output. */
+export function bakeFlakes(size: number, finish: "shimmer" | "glitter", p: Flakes): FlakeMaps {
+  const job = createFlakeJob(size,finish,p);
+  job.advance(Infinity);
+  return {size: job.size, normal: job.normal, surface: job.surface};
 }
