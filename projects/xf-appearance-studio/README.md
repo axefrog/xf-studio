@@ -1,5 +1,7 @@
 # XF Studio
 
+Viewport FOV changes now preserve scale at the viewed face area when camera bounds permit. Narrow 10° Front view fits a 324px editor pane; panned eye close zoom still reaches the original 0.1-unit limit. [Camera evidence and limits](../../research/authoring/camera-zoom-design.md#implementation-checkpoint--24-september-2026).
+
 Makeup raster performance: exact bounds, mirrored-pixel reuse and fair background scheduling reduce the supplied complex 2K Backdrop from roughly seven seconds to one second in Chrome, preserving its pixels. [Measurements and remaining limits](../../research/authoring/raster-performance.md).
 
 Whole-shape translation, selected-point rotation/scaling and persistent UV pan/zoom now work in both applicable editing views. Pure transform/view actions are separate from their gesture adapters; [details](../../research/authoring/shape-gesture-contract.md).

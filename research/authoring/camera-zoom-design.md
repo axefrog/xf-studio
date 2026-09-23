@@ -1,8 +1,20 @@
 # Camera zoom and framing design investigation
 
-23 September 2026. This is offline diagnosis and a proposed control model, **not an implemented camera change or reproduction of Nathan's exact mouse-wheel session**. It extends [the first camera findings](camera-control-findings.md). No browser workspace was changed.
+The 23 September section below records offline diagnosis and the original proposal; the 24 September checkpoint records the implemented change and isolated browser checks. This extends [the first camera findings](camera-control-findings.md).
 
-## What the current code actually does
+## Implementation checkpoint — 24 September 2026
+
+The bounded camera change now lives in `authoring/src/camera-framing.ts`, `camera-depth.ts` and `scene.ts`. The historical diagnosis below describes the earlier 1.2-unit camera. The new orbit range is 0.1–3.5 units, with matching workspace validation. Front view at 10° now reaches its calculated distance instead of being clamped: 3.032 units in the actual 324×660 pane and 1.951 units at 504×660. The existing 0.1 close limit is deliberately unchanged. In the isolated `?verify=1` browser, a panned eye at 10° enlarged clearly through two wheel pages (orbit approximately 1.336→0.378); two more reached approximately 0.107 with the iris filling the viewport, positive depth and no near-plane hole. Nathan's reported close-zoom restriction remains unreproduced. The unpanned minimum still aims at the nose and can put the eyes off screen; pan toward the eye first.
+
+Changing FOV now moves the camera along its current view direction around the centre ray's first head/plate/eye hit. The hit plane is held through one slider gesture. Background uses the orbit target as fallback. The target, orientation and pan remain intact. A 30°→10°→30° check after panning onto an eye kept that area in view; perspective elsewhere changed as expected. Bounds can prevent full scale preservation; a visible note reports the camera limit and Front view recovers the subject. A 90°→10° change from 90° Front view demonstrates the 3.5-unit clamp and note. Front view also reports if an exceptionally tall/narrow pane exceeds that range.
+
+At farther camera positions, the near plane advances only outside a conservative one-unit sphere around the head centre. The optional local hair GLB POSITION ranges lie within approximately 0.5 units of that centre before idle deformation (part-2 ranges x −.154–.168, y 1.289–1.834, z −.094–.234); the 1-unit envelope includes ample margin. Far clipping extends beyond the envelope as needed. At the 3.5-unit orbit, near is approximately 2.5 and far remains 10; this protects depth precision without cutting the head or known hair. The GPU comparison still needs a saved-V hair-enabled visual case, since its diagnostic renders only head and plate.
+
+The original GPU red-head/green-plate study was extended from 36 to 72 cases across eye shapes 5/9, idle phases 0/2.4/5.7, 0°/25° view angles, and distances .2/.55/1.2/1.95/3.07/3.5. Chrome/Three r186 used a 24-bit depth buffer. Every reference image had plate pixels. Against high-precision reference near planes, the new policy had 23 mismatched pixels (missing plus extra) across 1,600,955 reference plate pixels; the former adaptive near policy had 10,681. At 3.07 and 3.5 units, the new policy had zero mismatches across 128,333 reference plate pixels, versus 10,432 with the prior 5 mm cap. This is a diagnostic of static sampled frames, not proof that every finish remains shimmer-free in motion.
+
+The isolated browser also restored exact neutral-space camera/target/FOV values and paused idle phase 3.6406 after reload at 10° and 504×660. The test used ignored local preview assets copied into the worktree. The central status and community credit entries are updated by the integrating agent.
+
+## Previous camera behavior (23 September)
 
 `scene.ts` uses a perspective camera, FOV 10–90°, OrbitControls distance 0.1–1.2, far plane 10, and the adaptive near plane capped at 0.005. Wheel zoom changes camera-to-target distance; it does not change FOV or camera projection `zoom`. OrbitControls applies the same multiplicative distance step regardless of FOV. `setFov` currently changes projection alone. Workspace validation independently rejects distances outside approximately 0.1–1.2.
 

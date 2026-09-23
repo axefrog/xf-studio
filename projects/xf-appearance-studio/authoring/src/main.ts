@@ -735,7 +735,12 @@ try {
   }
   $("loading").hidden = true;
   drawUV();
-  $("front").onclick = () => viewer!.front();
+  $("front").onclick = () => {
+    const limited = viewer!.front();
+    $("fov-help").textContent = limited
+      ? "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV."
+      : "Camera distance follows the viewed face area as lens angle changes. Game FOV numbers may use a different convention.";
+  };
   input("wire").onchange = () => viewer!.setWire(input("wire").checked);
   for (const name of ["brows", "lashes"]) {
     input(name).disabled = !viewer.details[name];
@@ -764,9 +769,13 @@ try {
   input("normals").onchange = () =>
     viewer!.setNormals(input("normals").checked);
   input("fov").oninput = () => {
-    viewer!.setFov(+input("fov").value);
+    const limited = viewer!.setFov(+input("fov").value);
     $("fov-value").textContent = `${input("fov").value}°`;
+    $("fov-help").textContent = limited
+      ? "Framing reached the camera limit. Pan or use Front view to recover the subject."
+      : "Camera distance follows the viewed face area as lens angle changes. Game FOV numbers may use a different convention.";
   };
+  input("fov").onchange = () => viewer!.endFovGesture();
   // Motion is restored before the neutral-space camera, applying its offset once.
   if (preview.camera) viewer.restoreCamera(preview.camera);
   viewer.controls.addEventListener("change", persist);

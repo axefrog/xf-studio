@@ -4,6 +4,7 @@ import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWork
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
+import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -74,7 +75,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
       Array.isArray(x) && x.length === 3 && x.every(n => finite(n, -100, 100));
     if (c && vector(c.position) && vector(c.target) && finite(c.fov, 10, 90)) {
       const distance = Math.hypot(...c.position.map((n, i) => n - c.target[i]));
-      if (distance >= .099 && distance <= 1.201) state.preview.camera = structuredClone(c);
+      if (distance >= MIN_CAMERA_DISTANCE - .001 && distance <= MAX_CAMERA_DISTANCE + .001) state.preview.camera = structuredClone(c);
     }
   }
   if (v.library) {

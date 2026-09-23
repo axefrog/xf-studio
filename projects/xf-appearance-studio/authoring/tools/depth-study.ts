@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { createScene } from "../src/scene";
 import { initialRecipe } from "../src/recipe";
 import { extendSkin } from "../src/skin";
-import { previewNearPlane } from "../src/camera-depth";
+import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
 
 const run = document.getElementById("run") as HTMLButtonElement;
 const output = document.getElementById("output")!;
@@ -32,18 +32,19 @@ run.onclick = async () => {
       const pixels = new Uint8Array(640 * 640 * 4); gl.readPixels(0, 0, 640, 640, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       return pixels;
     };
-    for (const eye of [5, 9]) for (const time of [0, 2.4, 5.7]) for (const distance of [.2, .55, 1.2]) {
+    for (const eye of [5, 9]) for (const time of [0, 2.4, 5.7]) for (const distance of [.2, .55, 1.2, 1.95, 3.07, 3.5]) {
       v.eyeShape(eye); v.setIdle(true); v.idle?.seek(time); v.scene.updateMatrixWorld(true);
       for (const angle of [0, 25]) {
         v.camera.fov = distance <= .2 ? 60 : distance === .55 ? 30 : 10;
         const rad = THREE.MathUtils.degToRad(angle);
         v.camera.position.set(Math.sin(rad) * distance, 1.67, .005 - Math.cos(rad) * distance);
         v.camera.lookAt(0, 1.67, .005); v.camera.updateMatrixWorld(true);
-        const referenceNear = .05;
+        const referenceNear = distance > 1.2 ? distance - .6 : .05;
         const reference = capture(referenceNear), candidates = [
           { mode: "previous", near: .001 }, { mode: "fixed-5mm", near: .005 },
           { mode: "fixed-10mm", near: .01 }, { mode: "fixed-20mm", near: .02 },
           { mode: "adaptive", near: previewNearPlane(distance) },
+          { mode: "camera-envelope", near: previewClipPlanes(distance, distance).near },
         ].map(({ mode, near }) => {
           const pixels = capture(near); let missing = 0, extra = 0, referencePixels = 0;
           for (let p = 0; p < pixels.length; p += 4) {

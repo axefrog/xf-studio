@@ -7,7 +7,8 @@ import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import type { CameraState } from "./workspace-state";
-import { previewNearPlane } from "./camera-depth";
+import { previewClipPlanes } from "./camera-depth";
+import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
 import { prepareEyeAppearances } from "./eye-appearance";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
 import { attachHairColor, hairGradientTexture } from "./hair-shading";
@@ -33,19 +34,18 @@ export async function createScene(
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.minDistance = 0.1;
-  controls.maxDistance = 1.2;
+  controls.minDistance = MIN_CAMERA_DISTANCE;
+  controls.maxDistance = MAX_CAMERA_DISTANCE;
   const idleFrameOffset = new THREE.Vector3();
   function front() {
-    const distance = Math.max(
-      0.55,
-      0.13 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (host.clientWidth / host.clientHeight)),
-    );
+    const requested = frontCameraDistance(camera.fov, host.clientWidth / host.clientHeight);
+    const distance = Math.min(MAX_CAMERA_DISTANCE - .005, requested);
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
     camera.position.add(idleFrameOffset);
     controls.target.add(idleFrameOffset);
     controls.update();
+    return requested > distance;
   }
   front();
   const pmrem = new THREE.PMREMGenerator(renderer),
@@ -604,6 +604,7 @@ export async function createScene(
   }
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
+  let fovGestureAnchor: THREE.Vector3 | undefined;
   function pick(e: PointerEvent) {
     const r = renderer.domElement.getBoundingClientRect();
     mouse.set(
@@ -638,11 +639,13 @@ export async function createScene(
     if (idle?.enabled) idle.update(dt);
     else blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
     if (controls.enabled) controls.update();
-    // A 1 mm near plane wastes precision at the 1.2 m orbit limit, making the
-    // 0.08 mm plate separation comparable to one depth-buffer step. Keep the
-    // close-up limit while using a 5 mm plane at ordinary/far viewing distances.
-    const near = previewNearPlane(controls.getDistance());
-    if (near !== camera.near) { camera.near = near; camera.updateProjectionMatrix(); }
+    // At long orbits, move the near plane in front of a conservative head
+    // envelope so the thin makeup plate retains depth precision.
+    const centre = new THREE.Vector3(0, 1.67, 0).add(idleFrameOffset);
+    const clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
+    if (clip.near !== camera.near || clip.far !== camera.far) {
+      camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
+    }
     if (frameListeners.size) {
       scene.updateMatrixWorld(true);
       for (const update of frameListeners) update();
@@ -732,9 +735,28 @@ export async function createScene(
       controls.update();
     },
     setFov: (degrees: number) => {
-      camera.fov = THREE.MathUtils.clamp(degrees, 10, 90);
+      const next = THREE.MathUtils.clamp(degrees, 10, 90);
+      if (next === camera.fov) return;
+      // The centre ray selects the currently viewed head, plate or eye plane.
+      // When looking at background, preserve the orbit target plane instead.
+      if (!fovGestureAnchor) {
+        scene.updateMatrixWorld(true);
+        ray.setFromCamera(new THREE.Vector2(), camera);
+        head.computeBoundingSphere();
+        plate.computeBoundingSphere();
+        const hit = ray.intersectObjects([head, plate, eyes], false)[0];
+        fovGestureAnchor = (hit?.point ?? controls.target).clone();
+      }
+      const frame = surfaceAnchoredDistance(
+        camera.position.toArray(), controls.target.toArray(), fovGestureAnchor.toArray(), camera.fov, next);
+      const orbitDirection = camera.position.clone().sub(controls.target).normalize();
+      camera.position.copy(controls.target).addScaledVector(orbitDirection, frame.distance);
+      camera.fov = next;
       camera.updateProjectionMatrix();
+      controls.update();
+      return frame.limited;
     },
+    endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => {
       if (!idle || idle.enabled === enabled) return;
       animation = false; amount = 0; blink(0);

@@ -46,6 +46,14 @@ test("workspace restores edited selection, camera, library revision and undo wit
   expect(() => parseWorkspace({ ...state, savedV: {} })).toThrow();
 });
 
+test("far narrow-FOV framing survives reload but out-of-range orbit does not", () => {
+  const state = freshWorkspace();
+  state.preview.camera = { position: [.03, 1.69, -3.02], target: [.03, 1.69, .005], fov: 10 };
+  expect(parseWorkspace(JSON.parse(JSON.stringify(state))).preview.camera).toEqual(state.preview.camera);
+  state.preview.camera.position[2] = -4;
+  expect(parseWorkspace(state).preview.camera).toBeUndefined();
+});
+
 test("preview texture size and quality panel persist independently of recipes; older documents keep defaults", () => {
   const state = freshWorkspace(), originalRecipe = structuredClone(state.recipe);
   expect(state.preview.textureSize).toBe(1024); expect(state.panels.previewQuality).toBe(false);
