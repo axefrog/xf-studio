@@ -5,7 +5,8 @@ import {
   type Recipe,
   type Layer,
 } from "./recipe";
-import { editLayers, type LayerCommand } from "./layer-stack";
+import { type LayerCommand } from "./layer-stack";
+import { applyLayerAction, layerCapability, RecipeHistory, type LayerAction } from "./editor-actions";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
@@ -63,13 +64,11 @@ let recipe = workspace.recipe, active = workspace.active, selected = workspace.s
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let fieldSelection: FieldSelection = workspace.fieldSelection;
-const history: string[] = workspace.history.map(r => JSON.stringify(r));
+const history = new RecipeHistory(workspace.history);
 let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 function checkpoint() {
-  const s = JSON.stringify(recipe);
-  if (history.at(-1) !== s) history.push(s);
-  if (history.length > 80) history.shift();
+  history.checkpoint(recipe);
 }
 const canvases = Array.from({ length: recipe.layers.length }, () => {
   const c = document.createElement("canvas");
@@ -104,7 +103,7 @@ const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.map(s => JSON.parse(s)), savedV,
+  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.snapshot(), savedV,
     glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
     panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
@@ -172,7 +171,7 @@ function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
   rename(i) { active = i; selected = 0; sync(); drawUV(); persist(); input("layer-name").focus(); input("layer-name").select(); },
-  toggle(i, enabled) { checkpoint(); recipe.layers[i].enabled = enabled; render(i); },
+  toggle(i, enabled) { dispatchLayer({ kind: "layer.setEnabled", id: recipe.layers[i].id, enabled }); },
   edit: changeLayers,
 });
 function layerCards() { paintLayerList(recipe, active); }
@@ -189,9 +188,16 @@ function replaceRecipe(next: Recipe, nextActive = 0) {
   sync(); drawUV(); persist();
 }
 function changeLayers(command: LayerCommand) {
+  dispatchLayer({ kind: "layer.edit", command });
+}
+function dispatchLayer(action: LayerAction) {
   try {
-    const next = editLayers(recipe, current()?.id, command);
-    checkpoint(); replaceRecipe(next.recipe, next.active);
+    const capability = layerCapability(recipe, action);
+    if (!capability.available) throw Error(capability.reason);
+    const next = applyLayerAction(recipe, current()?.id, action);
+    checkpoint();
+    if (next.structure) replaceRecipe(next.recipe, next.active);
+    else { recipe = next.recipe; render(next.changed); }
   } catch (error) { status((error as Error).message); sync(); }
 }
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
@@ -217,7 +223,7 @@ function sync() {
   $<HTMLButtonElement>("export").disabled = !l;
   $<HTMLButtonElement>("layer-add").disabled = recipe.layers.length >= MAX_LAYERS;
   $<HTMLButtonElement>("layer-copy").disabled = !l || recipe.layers.length >= MAX_LAYERS;
-  $<HTMLButtonElement>("undo").disabled = history.length === 0;
+  $<HTMLButtonElement>("undo").disabled = !history.canUndo;
   if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
   input("layer-name").value = l.name;
   $("active-name").textContent = l.name;
@@ -279,7 +285,7 @@ function sync() {
         : `${Math.round(value * 100)}%`;
   }
   $<HTMLButtonElement>("remove").disabled = l.points.length <= 3;
-  $<HTMLButtonElement>("undo").disabled = history.length === 0;
+  $<HTMLButtonElement>("undo").disabled = !history.canUndo;
   layerCards();
 }
 let lastRaster = 0;
@@ -372,9 +378,8 @@ const scheduleLayer = layerRenderQueue(() => recipe.layers, run => requestAnimat
 function schedule() { scheduleLayer(current()); }
 
 function undo() {
-  const s = history.pop();
-  if (!s) return;
-  const next = parseRecipe(JSON.parse(s));
+  const next = history.undo();
+  if (!next) return;
   replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
 }
 $("undo").onclick = undo;
@@ -525,8 +530,8 @@ $("save").onclick = () => {
   status("Recipe exported — editable shapes, colours and fields.");
 };
 $("load").onclick = () => input("file").click();
-presetLibrary = setupCollections(() => ({ recipe, active, selected, fieldSelection, history: history.map(s => JSON.parse(s)) }), editor => {
-  history.splice(0, history.length, ...editor.history.map(r => JSON.stringify(r)));
+presetLibrary = setupCollections(() => ({ recipe, active, selected, fieldSelection, history: history.snapshot() }), editor => {
+  history.restore(editor.history);
   fieldSelection = editor.fieldSelection ?? {};
   replaceRecipe(editor.recipe, editor.active);
   selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();

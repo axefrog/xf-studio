@@ -1,7 +1,7 @@
 import { collectionDraft, editPresets, emptyMemory, emptyRecipe, parseCollectionWorkspace,
   type CollectionWorkspace, type EditorMemory, type PresetCommand } from "./collection-workspace";
 import { parseRecipe, type Recipe } from "./recipe";
-import type { PresetCollection } from "./preset-collection";
+import { parseCollection, type PresetCollection } from "./preset-collection";
 import type { StoredCollection } from "./collection-store";
 
 export type EditorSnapshot = EditorMemory & { recipe: Recipe };
@@ -26,6 +26,12 @@ export class CollectionSession {
   select(id: string) {
     if (!this.state.collection.presets.some(p => p.id === id)) throw Error("Preset not found.");
     this.stash(); this.state.selected = id; this.state.expanded = true; this.display();
+  }
+  setExpanded(expanded: boolean) { this.state.expanded = expanded; }
+  setFilesOpen(open: boolean) { this.state.filesOpen = open; }
+  renameCollection(name: string) {
+    this.stash();
+    this.state.collection = parseCollection({ ...this.state.collection, name: name.trim() }, true);
   }
   edit(command: PresetCommand) {
     this.stash(); const previous = this.state.selected;

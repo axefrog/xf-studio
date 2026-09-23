@@ -1,4 +1,5 @@
-import { CollectionSession, type EditorSnapshot } from "./collection-session";
+import type { EditorSnapshot } from "./collection-session";
+import { CollectionActions } from "./collection-actions";
 import { collectionDraft, type CollectionWorkspace, type PresetCommand } from "./collection-workspace";
 import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
@@ -14,9 +15,9 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   const title = $<HTMLInputElement>("collection-name"), savedList = $("saved-collections");
   const files = savedList.closest<HTMLDetailsElement>("details")!;
   const endpoint = new URLSearchParams(location.search).has("verify") ? "/api/verification/collections" : "/api/collections";
-  let session = restored ? new CollectionSession(restored, read, show) : undefined, busy = false;
+  let session = restored ? new CollectionActions(restored, read, show) : undefined, busy = false;
   files.open = restored?.filesOpen ?? false;
-  files.ontoggle = () => { if (session) { session.state.filesOpen = files.open; changed(); } };
+  files.ontoggle = () => { if (session) { session.dispatch({ kind: "collection.filesOpen", open: files.open }); changed(); } };
   const layerCount = (count: number) => `${count} ${count === 1 ? "layer" : "layers"}`;
   const controls = ["preset-add", "preset-restore", "collection-save", "collection-copy", "collection-export", "collection-plan",
     "collection-package-check", "collection-package-build",
@@ -32,8 +33,8 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     for (const id of controls) $<HTMLButtonElement>(id).disabled = busy || !session;
     title.disabled = busy || !session;
     if (session && !busy) {
-      $<HTMLButtonElement>("preset-restore").disabled = !session.state.removed.length;
-      $<HTMLButtonElement>("collection-undo-open").disabled = !session.state.previous;
+      $<HTMLButtonElement>("preset-restore").disabled = !session.capability({ kind: "preset.edit", command: { kind: "restore" } }).available;
+      $<HTMLButtonElement>("collection-undo-open").disabled = !session.capability({ kind: "collection.undoOpen" }).available;
     }
     for (const actions of host.querySelectorAll<HTMLElement>(".preset-actions")) actions.inert = busy;
     for (const field of host.querySelectorAll<HTMLInputElement>(".preset-name-label input")) field.disabled = busy;
@@ -44,7 +45,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   function paint() {
     parked.append(layerEditor); host.replaceChildren();
     if (!session) { host.textContent = "Loading presets…"; buttons(); return; }
-    const state = session.state; title.value = state.collection.name;
+    const state = session.view(); title.value = state.collection.name;
     if (!state.collection.presets.length) host.textContent = "No presets yet. Add a preset to begin.";
     for (const [index, preset] of state.collection.presets.entries()) {
       const details = document.createElement("details"); details.className = "preset"; details.dataset.presetId = preset.id;
@@ -56,8 +57,8 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       summary.onclick = e => {
         e.preventDefault();
         if (busy) return;
-        if (session!.state.selected === preset.id) session!.state.expanded = !session!.state.expanded;
-        else session!.select(preset.id);
+        if (session!.view().selected === preset.id) session!.dispatch({ kind: "preset.expand", expanded: !session!.view().expanded });
+        else session!.dispatch({ kind: "preset.select", id: preset.id });
         paint(); changed();
       };
       const actions = document.createElement("div"); actions.className = "preset-actions";
@@ -66,8 +67,8 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
         b.disabled = disabled; b.onclick = action; actions.append(b); return b;
       };
       const handle = button("↕", `Drag preset ${preset.name} to reorder`, () => {});
-      reorderHandle(handle, details, host, ".preset", () => session!.state.collection.presets.find(p => p.id === preset.id)!.name, target => {
-        const to = session!.state.collection.presets.findIndex(p => p.id === target.dataset.presetId);
+      reorderHandle(handle, details, host, ".preset", () => session!.view().collection.presets.find(p => p.id === preset.id)!.name, target => {
+        const to = session!.view().collection.presets.findIndex(p => p.id === target.dataset.presetId);
         edit({ kind: "move", id: preset.id, to });
       });
       button("↑", `Move preset ${preset.name} up`, () => edit({ kind: "move", id: preset.id, to: index - 1 }), index === 0);
@@ -77,9 +78,9 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       const label = document.createElement("label"); label.className = "preset-name-label"; label.textContent = "Preset name";
       const name = document.createElement("input"); name.maxLength = 120; name.value = preset.name; label.append(name);
       const commit = () => {
-        if (name.value === session!.state.collection.presets.find(p => p.id === preset.id)?.name) return;
-        const oldName = session!.state.collection.presets.find(p => p.id === preset.id)!.name;
-        try { session!.edit({ kind: "rename", id: preset.id, name: name.value }); const newName = session!.state.collection.presets.find(p => p.id === preset.id)!.name;
+        if (name.value === session!.view().collection.presets.find(p => p.id === preset.id)?.name) return;
+        const oldName = session!.view().collection.presets.find(p => p.id === preset.id)!.name;
+        try { session!.dispatch({ kind: "preset.edit", command: { kind: "rename", id: preset.id, name: name.value } }); const newName = session!.view().collection.presets.find(p => p.id === preset.id)!.name;
           heading.textContent = newName;
           for (const button of actions.querySelectorAll("button")) { button.title = button.title.replace(oldName, newName); button.setAttribute("aria-label", button.title); }
           changed(); } catch (e) { message((e as Error).message); name.value = oldName; }
@@ -93,7 +94,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   }
   function edit(command: PresetCommand) {
     if (!session || busy) return;
-    try { session.edit(command); paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision."); }
+    try { session.dispatch({ kind: "preset.edit", command }); paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision."); }
     catch (e) { message((e as Error).message); }
   }
   async function action(task: () => Promise<void>, persist = true) {
@@ -106,7 +107,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     for (const item of summaries) {
       const button = document.createElement("button"); button.textContent = `${item.name} · ${item.count} presets · v${item.revision}`;
       button.onclick = () => void action(async () => {
-        const saved = await api<StoredCollection>(`/${item.id}`); session!.open(saved.collection, saved.revision); paint();
+        const saved = await api<StoredCollection>(`/${item.id}`); session!.dispatch({ kind: "collection.open", collection: saved.collection, revision: saved.revision }); paint();
         message(`Opened “${saved.collection.name}”. Undo collection open restores the previous draft.`);
       }); savedList.append(button);
     }
@@ -117,7 +118,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     const snapshot = session.snapshot(), sourceId = snapshot.collection.id;
     if (copy) { snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined; }
     const saved = await api<StoredCollection>("", { collection: snapshot.collection, revision: snapshot.revision });
-    session.saved(saved, sourceId); await list();
+    session.dispatch({ kind: "collection.saved", result: saved, sourceId }); await list();
     message(`Saved “${saved.collection.name}” · revision ${saved.revision}. Changes made during saving remain in your draft.`);
     return saved;
   }
@@ -125,12 +126,12 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   $("collection-save").onclick = () => void action(async () => { await store(); });
   $("collection-copy").onclick = () => void action(async () => { await store(true); });
   $("collection-refresh").onclick = () => void action(async () => { await list(); message("Saved collection list refreshed; draft retained."); });
-  $("collection-undo-open").onclick = () => { if (session && !busy) { session.undoOpen(); paint(); changed(); } };
+  $("collection-undo-open").onclick = () => { if (session && !busy) { session.dispatch({ kind: "collection.undoOpen" }); paint(); changed(); } };
   const commitTitle = () => {
     if (!session) return;
-    if (title.value === session.state.collection.name) return;
-    try { session.stash(); session.state.collection = parseCollection({ ...session.state.collection, name: title.value.trim() }, true); changed(); }
-    catch (e) { message((e as Error).message); title.value = session.state.collection.name; }
+    if (title.value === session.view().collection.name) return;
+    try { session.dispatch({ kind: "collection.rename", name: title.value }); changed(); }
+    catch (e) { message((e as Error).message); title.value = session.view().collection.name; }
   };
   title.onchange = title.onblur = commitTitle;
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitTitle(); } };
@@ -161,7 +162,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     try {
       const source = file.files?.[0]; if (!source) return;
       if (source.size > 16_000_000) throw Error("Collection exceeds the current 16 MB import budget.");
-      const collection = parseCollection(JSON.parse(await source.text())); session!.open(collection); paint();
+      const collection = parseCollection(JSON.parse(await source.text())); session!.dispatch({ kind: "collection.open", collection }); paint();
       message("Imported collection draft. Existing IDs are preserved; Save a copy creates a separate collection. Undo collection open recovers the previous draft.");
     } finally { file.value = ""; }
   });
@@ -174,7 +175,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       if (existing) { existing.recipe = current.recipe; existing.name = legacy.name.trim() || existing.name; }
       else draft.collection.presets.push({ id, name: legacy.name.trim() || "Unsaved preset", revision: 1, recipe: current.recipe });
       draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected, fieldSelection: current.fieldSelection, history: current.history };
-      session = new CollectionSession(draft, read, show);
+      session = new CollectionActions(draft, read, show);
       message("Existing looks and your current draft are retained. Save collection to store this arrangement.");
     } else message("Collection draft restored without replacing unsaved edits from SQLite.");
     paint();
@@ -183,11 +184,11 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     snapshot: () => session?.snapshot(),
     importRecipe(recipe: Recipe, name: string) {
       if (!session || busy) throw Error("Wait for the collection to finish loading or saving.");
-      session.importRecipe(recipe, name); paint(); changed();
+      session.dispatch({ kind: "collection.importRecipe", recipe, name }); paint(); changed();
     },
     refreshSummary() {
       if (!session) return;
-      const current = read(), row = host.querySelector<HTMLElement>(`[data-preset-id="${session.state.selected}"] small`);
+      const current = read(), row = host.querySelector<HTMLElement>(`[data-preset-id="${session.view().selected}"] small`);
       if (row) row.textContent = layerCount(current.recipe.layers.length);
     },
   };
