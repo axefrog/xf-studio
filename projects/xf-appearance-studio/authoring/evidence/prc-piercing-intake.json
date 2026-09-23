@@ -1,13 +1,56 @@
 {
-  "source": "MO2 2025 (again): eagul PRC v1.1 plus enabled front nostril item; offline source expectation",
+  "source": "MO2 2025 (again): selected eagul PRC v1.1 slots 50, 72, 74; offline source expectation",
+  "frameworkArchiveSha256": "6e73610b3cdd85552aeb61f6a5a7c7fd3a9cf0f26b4d4f475977b255c8e17499",
   "appDepot": "base\\characters\\head\\player_base_heads\\appearances\\head\\piercings\\i0_000__earring_14.app",
   "appSha256": "01d4cf980d5531a76fd7424555356103979f48a4d4a60e297ba67074529abe13",
   "appJsonSha256": "3c35aa9cb66bdaf8b318bd34e561fa1b5f24cda2b674eb9039ae53e3f8674294",
-  "morphDepot": "eagul\\piercingmorphs\\female\\fpm72.morphtarget",
-  "morphSha256": "d7b5238fd9cd4990fb9b3f4a53fa8148b0ae7b9fc60c9fe8f16b4b576008fc32",
-  "morphJsonSha256": "b263db5118d676f1d3c58a3c936f50400fab630d014cdae6538b034abe5e0062",
-  "exportedGlbSha256": "b243873de5c4d5ed07198c61174b53a401a9eaa752af384a43cbb1a0738c6d2a",
   "definition": "i0_000_pwa__earring__01_silver",
-  "chunkMask": "9223372036854775807",
-  "status": "One local skinned slot preview; material and effective runtime archive order unverified. Not redistributable."
+  "slots": [
+    {
+      "slot": 50,
+      "sourceArchiveSha256": "982c70c5eba41ca7072c4d40d1ea8b0f116a700f615c0650282d9108e0945c50",
+      "morphDepot": "eagul\\piercingmorphs\\female\\fpm50.morphtarget",
+      "morphSha256": "42b4c7e82f7e4fbf3500d2f79e7c1f6ac89eeda773d4bfbc2137c08ce707374f",
+      "morphJsonSha256": "71f76d67c23e76604558ded8e98b82dd8c9018856ef4c60dd3acb642398c5bd1",
+      "baseMeshDepot": "eagul\\piercingmorphs\\female\\fpm50_linked.mesh",
+      "baseMeshSha256": "7b61b2688aebb55356e3f08341bb7e6158eb92a02fdc40cb48c9d121750fc2b1",
+      "exportedGlbSha256": "1287c387b61da88bb7248d495c9958c18aab65bd2a53cd0d1ce7508183fa0f10",
+      "baseMeshJsonSha256": "a95e5680869e9f237aa7311d919f3a152e10248177fc1240a8df0f087209c142",
+      "meshes": 2,
+      "bones": 6,
+      "morphTargets": 21,
+      "chunkMask": "9223372036854775807"
+    },
+    {
+      "slot": 72,
+      "sourceArchiveSha256": "0fd967c071ca5c5c77ce9911accaf426ebe8c896dd72324326e6fc72e87b4cc5",
+      "morphDepot": "eagul\\piercingmorphs\\female\\fpm72.morphtarget",
+      "morphSha256": "d7b5238fd9cd4990fb9b3f4a53fa8148b0ae7b9fc60c9fe8f16b4b576008fc32",
+      "morphJsonSha256": "b263db5118d676f1d3c58a3c936f50400fab630d014cdae6538b034abe5e0062",
+      "baseMeshDepot": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\i1_000_pwa_c__basehead_earring_03.mesh",
+      "baseMeshSha256": "game-archive",
+      "exportedGlbSha256": "b243873de5c4d5ed07198c61174b53a401a9eaa752af384a43cbb1a0738c6d2a",
+      "baseMeshJsonSha256": "game-archive",
+      "meshes": 1,
+      "bones": 6,
+      "morphTargets": 21,
+      "chunkMask": "9223372036854775807"
+    },
+    {
+      "slot": 74,
+      "sourceArchiveSha256": "8a412861555b0cf6695bb7f6dd05175203851a4cb92dde830f5534062cd0a355",
+      "morphDepot": "eagul\\piercingmorphs\\female\\fpm74.morphtarget",
+      "morphSha256": "6908833655c4b99ab60eca15331bccdc7d24b6c76ec687b43410a04a2973c40e",
+      "morphJsonSha256": "c1249dc8a90f1a23865d1b6a7ddded3287c83b4ed884f48d1cfee96b19ae7039",
+      "baseMeshDepot": "eagul\\piercingmorphs\\wa_linked.mesh",
+      "baseMeshSha256": "f166cc07958fdd2288d3746a40b971d700c4615a87f76126d85314a546034bf6",
+      "exportedGlbSha256": "e34cbff636f5d2bb03f78477f488b48d6a1f3b6d08e2a73565916902580cd246",
+      "baseMeshJsonSha256": "33ef1c739a9fd867e0bd71ce30ad88ed0ac5570fd3faecb2d3c3f03e302d7c5a",
+      "meshes": 1,
+      "bones": 254,
+      "morphTargets": 105,
+      "chunkMask": "9223372036854775807"
+    }
+  ],
+  "status": "Three local skinned slots; materials and effective runtime archive order unverified. Not redistributable."
 }

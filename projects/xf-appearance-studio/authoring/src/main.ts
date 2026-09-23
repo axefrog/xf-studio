@@ -620,7 +620,7 @@ function setupPiercingControls() {
     return;
   }
   $("piercing-note").textContent = viewer!.prcManifest
-    ? "Vanilla and private PRC preview choices change only this viewport. PRC slot 72 has source geometry and approximate silver shading; other active PRC slots await linked-mesh export."
+    ? "Vanilla and private PRC choices change only this viewport. PRC slots 50, 72 and 74 have locally resolved skinned geometry and approximate silver shading."
     : "A preview choice changes only this viewport. PRC resources are unavailable; vanilla material colours remain approximate.";
   input("piercings").disabled = false;
   style.disabled = false;
