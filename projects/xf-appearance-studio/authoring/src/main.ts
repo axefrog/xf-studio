@@ -591,7 +591,8 @@ try {
   if (!savedV) input("hair").disabled = true;
   viewer.setHair(input("hair").checked);
   input("hair").onchange = () => viewer!.setHair(input("hair").checked);
-  if (viewer.evidence.hairError) $("hair-note").textContent = `Hair preview unavailable: ${viewer.evidence.hairError}`;
+  if (viewer.evidence.hairError) $("hair-note").textContent =
+    `${viewer.hair.length ? "Some local hair styles unavailable" : "Hair preview unavailable"}: ${viewer.evidence.hairError}`;
   if (viewer.evidence.detailErrors.length)
     $("detail-note").textContent =
       `Some details unavailable: ${viewer.evidence.detailErrors.join("; ")}`;

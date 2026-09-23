@@ -200,57 +200,85 @@ export async function createScene(
       detailErrors.push(`${name}: ${(error as Error).message}`);
     }
   }
-  let hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[] } | undefined;
-  let hairError = "";
+  const hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[] }[] = [];
+  const hairErrors: string[] = [];
+  // All loaded rigs enter the idle binding once at scene creation. Keep their
+  // aggregate CPU/GPU cost bounded even if a local manifest lists many styles.
+  const MAX_HAIR_BYTES = 128 * 1024 * 1024, MAX_HAIR_VERTICES = 750_000, MAX_HAIR_BONES = 800;
+  let hairBytes = 0, hairVertices = 0, hairBones = 0;
   try {
     const response = await fetch("/assets/hair/manifest.json", { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw Error("Local resolved hair assets are unavailable");
     const entries = parseHairManifest(await response.json());
-    // This local intake currently contains one complete, exact saved style.
-    if (entries.length !== 1) throw Error("Expected one resolved local hair style");
-    const asset = entries[0]!, root = new THREE.Group(), parts: THREE.SkinnedMesh[] = [];
-    const bytes = async (url: string, sha256: string) => {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw Error(`Local hair asset unavailable (${response.status})`);
-      const data = new Uint8Array(await response.arrayBuffer());
-      await verifyHairBytes(data, sha256);
-      return data;
-    };
-    const alphaBytes = await bytes(asset.alpha.url, asset.alpha.sha256);
-    const alphaUrl = URL.createObjectURL(new Blob([new Uint8Array(alphaBytes)], { type: "image/png" }));
-    let alpha: THREE.Texture;
-    try { alpha = await loader.loadAsync(alphaUrl); } finally { URL.revokeObjectURL(alphaUrl); }
-    alpha.flipY = false;
-    alpha.colorSpace = THREE.NoColorSpace;
-    alpha.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    for (let index = 0; index < asset.parts.length; index++) {
-      const entry = asset.parts[index]!, buffer = (await bytes(entry.url, entry.sha256)).buffer,
-        original = restoreFirstWeights(buffer), loaded = await new GLTFLoader().parseAsync(buffer, "/assets/hair/");
-      loaded.scene.traverse(o => {
-        if (!(o instanceof THREE.SkinnedMesh)) return;
-        const association = loaded.parser.associations.get(o),
-          raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
-        if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
-        o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-        o.frustumCulled = false;
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x342c29, roughness: 0.9, side: THREE.DoubleSide,
-          ...(index ? { alphaMap: alpha, alphaTest: 0.12 } : {}),
+    for (const asset of entries) {
+      const root = new THREE.Group(), parts: THREE.SkinnedMesh[] = [];
+      let alpha: THREE.Texture | undefined, bytesUsed = 0, verticesUsed = 0, bonesUsed = 0;
+      try {
+        const bytes = async (url: string, sha256: string) => {
+          const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+          if (!response.ok) throw Error(`Local hair asset unavailable (${response.status})`);
+          const length = Number(response.headers.get("Content-Length"));
+          if (Number.isFinite(length) && length > MAX_HAIR_BYTES - hairBytes - bytesUsed)
+            throw Error("Local hair asset exceeds the aggregate 128 MiB limit");
+          const data = new Uint8Array(await response.arrayBuffer());
+          if (data.byteLength > MAX_HAIR_BYTES - hairBytes - bytesUsed)
+            throw Error("Local hair asset exceeds the aggregate 128 MiB limit");
+          await verifyHairBytes(data, sha256);
+          bytesUsed += data.byteLength;
+          return data;
+        };
+        const alphaBytes = await bytes(asset.alpha.url, asset.alpha.sha256);
+        const alphaUrl = URL.createObjectURL(new Blob([new Uint8Array(alphaBytes)], { type: "image/png" }));
+        try { alpha = await loader.loadAsync(alphaUrl); } finally { URL.revokeObjectURL(alphaUrl); }
+        alpha.flipY = false;
+        alpha.colorSpace = THREE.NoColorSpace;
+        alpha.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        for (let index = 0; index < asset.parts.length; index++) {
+          const entry = asset.parts[index]!, buffer = (await bytes(entry.url, entry.sha256)).buffer,
+            original = restoreFirstWeights(buffer), loaded = await new GLTFLoader().parseAsync(buffer, "/assets/hair/");
+          root.add(loaded.scene);
+          loaded.scene.traverse(o => {
+            if (o instanceof THREE.Bone) bonesUsed++;
+            if (!(o instanceof THREE.SkinnedMesh)) return;
+            const association = loaded.parser.associations.get(o),
+              raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
+            if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
+            o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+            o.frustumCulled = false;
+            const mat = new THREE.MeshStandardMaterial({
+              color: 0x342c29, roughness: 0.9, side: THREE.DoubleSide,
+              ...(index ? { alphaMap: alpha, alphaTest: 0.12 } : {}),
+            });
+            // Saved colour and REDengine's strand/cap material are unresolved.
+            o.material = mat;
+            extendSkin(o, mat);
+            o.name = `preview_hair_${index}_${parts.length}`;
+            verticesUsed += o.geometry.getAttribute("position").count;
+            parts.push(o);
+          });
+          if (hairVertices + verticesUsed > MAX_HAIR_VERTICES || hairBones + bonesUsed > MAX_HAIR_BONES)
+            throw Error("Local hair styles exceed the aggregate geometry/rig limit");
+        }
+        if (parts.length < 2) throw Error("Saved hair geometry is incomplete");
+        root.visible = false;
+        scene.add(root);
+        hair.push({ asset, root, meshes: parts });
+        meshes.push(...parts);
+        hairBytes += bytesUsed; hairVertices += verticesUsed; hairBones += bonesUsed;
+      } catch (error) {
+        root.traverse(o => {
+          if (o instanceof THREE.Mesh) {
+            o.geometry.dispose();
+            const materials = Array.isArray(o.material) ? o.material : [o.material];
+            for (const material of materials) material.dispose();
+          }
         });
-        // Saved colour and REDengine's strand/cap material are unresolved.
-        o.material = mat;
-        extendSkin(o, mat);
-        o.name = `preview_hair_${index}_${parts.length}`;
-        parts.push(o);
-        meshes.push(o);
-      });
-      root.add(loaded.scene);
+        alpha?.dispose();
+        hairErrors.push(`${asset.label}: ${(error as Error).message}`);
+      }
     }
-    if (parts.length < 2) throw Error("Saved hair geometry is incomplete");
-    root.visible = false;
-    scene.add(root);
-    hair = { asset, root, meshes: parts };
-  } catch (error) { hairError = (error as Error).message; }
+  } catch (error) { hairErrors.push((error as Error).message); }
+  const hairError = hairErrors.join("; ");
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
@@ -408,8 +436,9 @@ export async function createScene(
     eyeMat.needsUpdate = true;
     eyeAppearanceStatus = selectedEye.status;
     currentSave = v;
-    const matchedHair = !!hair && hair.asset === selectSavedHair([hair.asset], v);
-    if (hair) hair.root.visible = matchedHair && hairEnabled;
+    const selectedHair = selectSavedHair(hair.map(h => h.asset), v);
+    for (const h of hair) h.root.visible = h.asset === selectedHair && hairEnabled;
+    const matchedHair = !!selectedHair;
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
@@ -421,7 +450,8 @@ export async function createScene(
   let hairEnabled = true;
   function setHair(enabled: boolean) {
     hairEnabled = enabled;
-    if (hair) hair.root.visible = enabled && !!selectSavedHair([hair.asset], currentSave);
+    const selectedHair = selectSavedHair(hair.map(h => h.asset), currentSave);
+    for (const h of hair) h.root.visible = enabled && h.asset === selectedHair;
   }
   let currentSave: SavedV | undefined;
   const ray = new THREE.Raycaster(),
@@ -477,7 +507,8 @@ export async function createScene(
     blinkBones: bones.length,
     detailErrors,
     hairError,
-    hair: hair ? { label: hair.asset.label, parts: hair.meshes.length, vertices: hair.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) } : undefined,
+    hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length,
+      vertices: h.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })),
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
       faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },

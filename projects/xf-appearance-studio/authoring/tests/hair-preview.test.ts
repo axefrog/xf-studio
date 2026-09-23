@@ -21,6 +21,18 @@ test("saved hair matches exact 64-bit app hash and definition in hairs group", (
   expect(selectSavedHair(entries)).toBeUndefined();
 });
 
+test("two resolved styles switch by the new save identity without retaining the previous hair", () => {
+  const second = { ...manifest.entries[0], resourceHash: "11883473447972092899",
+    definition: "01_black", label: "Second style" };
+  const entries = parseHairManifest({ ...manifest, entries: [manifest.entries[0], second] });
+  const firstSave = save("14407260537193084196", "38_ash_brown");
+  const secondSave = save("11883473447972092899", "01_black");
+  expect(selectSavedHair(entries, firstSave)).toBe(entries[0]);
+  expect(selectSavedHair(entries, secondSave)).toBe(entries[1]);
+  expect(selectSavedHair(entries, save("11883473447972092899", "wrong"))).toBeUndefined();
+  expect(selectSavedHair(entries, firstSave)).toBe(entries[0]);
+});
+
 test("local manifest rejects duplicate identities, unsafe asset URLs and bad digests", async () => {
   expect(() => parseHairManifest({ ...manifest, entries: [manifest.entries[0], manifest.entries[0]] })).toThrow();
   expect(() => parseHairManifest({ ...manifest, entries: [{ ...manifest.entries[0], alpha: { url: "https://remote.invalid/a.png", sha256: digest } }] })).toThrow();
