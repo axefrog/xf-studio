@@ -520,21 +520,23 @@ function showSavedV(v: SavedV) {
 }
 function setupPiercingControls() {
   const style = $<HTMLSelectElement>("piercing-style"), colour = $<HTMLSelectElement>("piercing-colour"),
-    manifest = viewer!.piercingManifest;
-  if (!manifest) {
-    $("piercing-note").textContent = `Vanilla piercing preview unavailable: ${viewer!.evidence.piercingError || "local resources missing"}.`;
+    styles = viewer!.piercingStyles;
+  if (!styles.length) {
+    $("piercing-note").textContent = `Piercing preview unavailable: ${viewer!.evidence.piercingError}; ${viewer!.evidence.prcError}.`;
     return;
   }
-  const available = manifest;
+  $("piercing-note").textContent = viewer!.prcManifest
+    ? "Vanilla and private PRC preview choices change only this viewport. PRC slot 72 has source geometry and approximate silver shading; other active PRC slots await linked-mesh export."
+    : "A preview choice changes only this viewport. PRC resources are unavailable; vanilla material colours remain approximate.";
   input("piercings").disabled = false;
   style.disabled = false;
-  for (const entry of available.styles) {
+  for (const entry of styles) {
     const option = document.createElement("option");
     option.value = entry.id; option.textContent = entry.label; style.append(option);
   }
   function fillColours(preferred = "") {
     colour.replaceChildren();
-    const entry = available.styles.find(s => s.id === style.value);
+    const entry = styles.find(s => s.id === style.value);
     colour.disabled = !entry;
     if (!entry) { viewer!.setPiercingPreview("", ""); return; }
     for (const choice of entry.choices) {
@@ -544,7 +546,7 @@ function setupPiercingControls() {
     colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
     viewer!.setPiercingPreview(entry.id, colour.value);
   }
-  style.value = available.styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
+  style.value = styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
   fillColours(workspace.preview.piercingDefinition);
   style.onchange = () => fillColours();
   colour.onchange = () => viewer!.setPiercingPreview(style.value, colour.value);

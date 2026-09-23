@@ -9,7 +9,7 @@ export type PiercingStyle = {
 };
 export type PiercingAsset = { id: string; url: string; sha256: string };
 export type PiercingManifest = {
-  schema: "xfs/local-vanilla-piercings-1"; source: string;
+  schema: "xfs/local-vanilla-piercings-1" | "xfs/local-prc-piercings-1"; source: string;
   assets: PiercingAsset[]; styles: PiercingStyle[];
 };
 const hash = (v: unknown): v is string =>
@@ -20,14 +20,15 @@ const text = (v: unknown, length = 128): v is string => typeof v === "string" &&
 
 export function parsePiercingManifest(value: unknown): PiercingManifest {
   const m = value as PiercingManifest;
-  if (!m || m.schema !== "xfs/local-vanilla-piercings-1" || !text(m.source, 200) ||
+  if (!m || !["xfs/local-vanilla-piercings-1", "xfs/local-prc-piercings-1"].includes(m.schema) || !text(m.source, 200) ||
     !Array.isArray(m.assets) || m.assets.length < 1 || m.assets.length > 8 ||
     !Array.isArray(m.styles) || m.styles.length < 1 || m.styles.length > 32)
     throw Error("Unsupported local piercing manifest");
   const assets = new Set<string>();
   for (const a of m.assets) {
     if (!a || !text(a.id) || !/^[a-z0-9_]+$/.test(a.id) || assets.has(a.id) ||
-      !/^\/assets\/piercings\/[a-z0-9_-]+\.glb$/.test(a.url) || !/^[0-9a-f]{64}$/.test(a.sha256))
+      !new RegExp(`^/assets/${m.schema === "xfs/local-prc-piercings-1" ? "prc" : "piercings"}/[a-z0-9_-]+\\.glb$`).test(a.url) ||
+      !/^[0-9a-f]{64}$/.test(a.sha256))
       throw Error("Invalid local piercing mesh entry");
     assets.add(a.id);
   }

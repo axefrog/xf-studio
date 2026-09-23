@@ -323,25 +323,32 @@ export async function createScene(
   } catch (error) { hairErrors.push((error as Error).message); }
   const hairError = hairErrors.join("; ");
   let piercingManifest: PiercingManifest | undefined, piercingError = "";
+  let prcManifest: PiercingManifest | undefined, prcError = "";
   const piercingMeshes = new Map<string, THREE.SkinnedMesh[]>();
-  const piercingRoots: THREE.Group[] = [];
-  let pendingPiercingRoot: THREE.Group | undefined;
-  try {
-    const response = await fetch("/assets/piercings/manifest.json", { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw Error("Local vanilla piercing assets are unavailable");
+  async function loadPiercingResources(path: string, schema: PiercingManifest["schema"], budget: number) {
+    const piercingRoots: THREE.Group[] = [];
+    const loadedIds: string[] = [];
+    let pendingPiercingRoot: THREE.Group | undefined;
+    try {
+    const response = await fetch(path, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw Error("Local piercing assets are unavailable");
     const candidate = parsePiercingManifest(await response.json());
+    if (candidate.schema !== schema) throw Error("Unexpected piercing resource schema");
+    if (candidate.styles.some(style => piercingManifest?.styles.some(existing => existing.id === style.id)))
+      throw Error("Duplicate piercing style across sources");
     let totalBytes = 0, totalVertices = 0, totalBones = 0;
     for (const asset of candidate.assets) {
+      if (piercingMeshes.has(asset.id)) throw Error("Duplicate piercing mesh across sources");
       const response = await fetch(asset.url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw Error(`Local piercing mesh unavailable (${response.status})`);
       const length = Number(response.headers.get("Content-Length"));
-      if (Number.isFinite(length) && length > 24 * 1024 * 1024 - totalBytes)
-        throw Error("Piercing meshes exceed the 24 MiB source budget");
+      if (Number.isFinite(length) && length > budget - totalBytes)
+        throw Error("Piercing meshes exceed their source budget");
       const bytes = new Uint8Array(await response.arrayBuffer());
       totalBytes += bytes.byteLength;
-      if (totalBytes > 24 * 1024 * 1024) throw Error("Piercing meshes exceed the 24 MiB source budget");
+      if (totalBytes > budget) throw Error("Piercing meshes exceed their source budget");
       await verifyPiercingBytes(bytes, asset.sha256);
-      const original = restoreFirstWeights(bytes.buffer), loaded = await new GLTFLoader().parseAsync(bytes.buffer, "/assets/piercings/");
+      const original = restoreFirstWeights(bytes.buffer), loaded = await new GLTFLoader().parseAsync(bytes.buffer, asset.url.slice(0, asset.url.lastIndexOf("/") + 1));
       pendingPiercingRoot = loaded.scene;
       const parts: THREE.SkinnedMesh[] = [];
       loaded.scene.traverse(o => {
@@ -370,10 +377,10 @@ export async function createScene(
       piercingRoots.push(loaded.scene);
       pendingPiercingRoot = undefined;
       piercingMeshes.set(asset.id, parts);
+      loadedIds.push(asset.id);
     }
-    piercingManifest = candidate;
+    return { manifest: candidate, error: "" };
   } catch (error) {
-    piercingError = (error as Error).message;
     for (const root of [...piercingRoots, ...(pendingPiercingRoot ? [pendingPiercingRoot] : [])]) {
       root.removeFromParent();
       root.traverse(o => { if (o instanceof THREE.Mesh) {
@@ -382,8 +389,14 @@ export async function createScene(
         const i = meshes.indexOf(o); if (i >= 0) meshes.splice(i, 1);
       } });
     }
-    piercingMeshes.clear();
+    for (const id of loadedIds) piercingMeshes.delete(id);
+    return { manifest: undefined, error: (error as Error).message };
   }
+  }
+  ({ manifest: piercingManifest, error: piercingError } = await loadPiercingResources(
+    "/assets/piercings/manifest.json", "xfs/local-vanilla-piercings-1", 24 * 1024 * 1024));
+  ({ manifest: prcManifest, error: prcError } = await loadPiercingResources(
+    "/assets/prc/manifest.json", "xfs/local-prc-piercings-1", 4 * 1024 * 1024));
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
@@ -505,16 +518,16 @@ export async function createScene(
             name === `h${String(index * 10 + 1).padStart(3, "0")}_eyes` ? 1 : 0;
     }
   }
+  const piercingStyles = [...(piercingManifest?.styles ?? []), ...(prcManifest?.styles ?? [])];
   let piercingEnabled = true, piercingStyle = "", piercingDefinition = "";
   let currentSave: SavedV | undefined;
   function piercingSelection() {
-    if (!piercingManifest) return undefined;
     if (piercingStyle) {
-      const style = piercingManifest.styles.find(s => s.id === piercingStyle);
+      const style = piercingStyles.find(s => s.id === piercingStyle);
       const choice = style?.choices.find(c => c.definition === piercingDefinition);
       return style && choice ? { style, choice, fromSave: false } : undefined;
     }
-    const saved = savedPiercing(piercingManifest, currentSave);
+    const saved = piercingManifest && savedPiercing(piercingManifest, currentSave);
     return saved ? { ...saved, fromSave: true } : undefined;
   }
   function refreshPiercings() {
@@ -528,8 +541,8 @@ export async function createScene(
   }
   function setPiercings(enabled: boolean) { piercingEnabled = enabled; refreshPiercings(); }
   function setPiercingPreview(style: string, definition: string) {
-    if (style && !piercingManifest?.styles.some(s => s.id === style && s.choices.some(c => c.definition === definition)))
-      throw Error("Unknown local vanilla piercing choice");
+    if (style && !piercingStyles.some(s => s.id === style && s.choices.some(c => c.definition === definition)))
+      throw Error("Unknown local piercing choice");
     piercingStyle = style; piercingDefinition = style ? definition : "";
     refreshPiercings();
   }
@@ -645,9 +658,11 @@ export async function createScene(
     lashColor: savedLashColor ? "saved-profile-swatch-approximation" : "provisional",
     hairError,
     piercingError,
+    prcError,
     piercing: { source: piercingManifest?.source, styles: piercingManifest?.styles.length ?? 0,
       meshes: [...piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length,
         vertices: parts.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })) },
+    prc: { source: prcManifest?.source, styles: prcManifest?.styles.length ?? 0 },
     hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length,
       vertices: h.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })),
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
@@ -685,6 +700,8 @@ export async function createScene(
     hair,
     setHair,
     piercingManifest,
+    prcManifest,
+    piercingStyles,
     piercingSelection,
     setPiercings,
     setPiercingPreview,

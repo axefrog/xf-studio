@@ -4,6 +4,8 @@ A working local authoring experiment, built with Bun 1.4.2, TypeScript 7.0.2 and
 
 **Optional vanilla piercing context:** Face details can display a female vanilla piercing style and colour in the viewport, or follow an exact saved choice if one is present. The preview selector does not edit the imported V. It requires locally extracted, hash-checked game geometry and a manifest made by `bun tools/intake_piercings.ts`; without them the control explains why it is unavailable. Shape/chunk selection follows current serialized game resources, while the browser material is approximate. [Resource chain, intake and fidelity limits](../../../research/jewellery/vanilla-piercing-preview.md).
 
+**Private PRC preview slice:** The same selector can show one separately sourced PRC nostril ring (female slot 72) after `bun tools/intake_prc.ts` validates locally extracted framework/item resources and writes ignored `public/assets/prc`. This is a viewport-only, silver-approximation preview. The other enabled PRC slots 50 and 74 are withheld because their current GLB exports lack skin data. Missing PRC resources leave vanilla piercing choices usable. [Exact chain, validation and rights boundary](../../../research/jewellery/prc-preview-slice.md).
+
 ## Use
 
 **Faster makeup updates:** the optimized raster preserves texture output while skipping irrelevant field calculations and reusing exact mirrored pixels. A supplied complex 2K design now updates in about one second in Chrome, previously about seven seconds. Reload an existing tab to load the new worker. Higher resolution and more complex fields still cost more; [measurements](../../../research/authoring/raster-performance.md).

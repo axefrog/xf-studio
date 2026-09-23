@@ -35,6 +35,19 @@ test("local piercing input rejects unsafe assets, invalid masks and duplicate de
   await expect(verifyPiercingBytes(bytes, "a".repeat(64))).rejects.toThrow();
 });
 
+test("private PRC slot uses its own bounded local asset namespace", () => {
+  const prc = { ...source, schema: "xfs/local-prc-piercings-1", assets: [{ ...source.assets[0],
+    id: "prc_fpm72", url: "/assets/prc/prc_fpm72.glb" }],
+    styles: [{ ...source.styles[0], id: "prc_fpm72", choices: [{ ...source.styles[0]!.choices[0],
+      parts: [{ mesh: "prc_fpm72", mask: "9223372036854775807" }] }] }] };
+  const parsed = parsePiercingManifest(prc);
+  expect(parsed.schema).toBe("xfs/local-prc-piercings-1");
+  expect(chunkEnabled(parsed.styles[0]!.choices[0]!.parts[0]!.mask, 0)).toBe(true);
+  expect(() => parsePiercingManifest({ ...prc, assets: source.assets })).toThrow();
+  expect(() => parsePiercingManifest({ ...source, assets: prc.assets })).toThrow();
+  expect(() => parsePiercingManifest({ ...prc, assets: [{ ...prc.assets[0], url: "https://example.invalid/slot.glb" }] })).toThrow();
+});
+
 test("viewport-only piercing selection and visibility persist without changing saved V", () => {
   const state = freshWorkspace();
   state.preview.piercings = false;
