@@ -5,6 +5,7 @@ import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import { reorderHandle } from "./reorder-ui";
 import type { Recipe } from "./recipe";
+import { requestPackage, type PackageBuild, type PackageCheck } from "./package-action";
 
 export function setupCollections(read: () => EditorSnapshot, show: (editor: EditorSnapshot) => void,
   restored: CollectionWorkspace | undefined, legacy: LibraryState, changed: () => void, download: (blob: Blob, name: string) => void) {
@@ -18,6 +19,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   files.ontoggle = () => { if (session) { session.state.filesOpen = files.open; changed(); } };
   const layerCount = (count: number) => `${count} ${count === 1 ? "layer" : "layers"}`;
   const controls = ["preset-add", "preset-restore", "collection-save", "collection-copy", "collection-export", "collection-plan",
+    "collection-package-check", "collection-package-build",
     "collection-import", "collection-refresh", "collection-undo-open"];
   const message = (text: string) => { note.textContent = text; };
   async function api<T>(path = "", value?: unknown): Promise<T> {
@@ -94,10 +96,10 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     try { session.edit(command); paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision."); }
     catch (e) { message((e as Error).message); }
   }
-  async function action(task: () => Promise<void>) {
+  async function action(task: () => Promise<void>, persist = true) {
     if (busy) return; busy = true; buttons();
     try { await task(); } catch (e) { message((e as Error).message); }
-    finally { busy = false; buttons(); changed(); }
+    finally { busy = false; buttons(); if (persist) changed(); }
   }
   async function list() {
     const summaries = await api<CollectionSummary[]>(); savedList.replaceChildren();
@@ -138,6 +140,21 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     download(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }), plan ? "xfs.build-plan.json" : "xfs.collection.json");
     message(plan ? "Build plan exported for the offline compiler; this is not an installable mod." : "Saved snapshot exported. Recipes and stable preset identities are included.");
   });
+  for (const [id, kind] of [["collection-package-check", "check"], ["collection-package-build", "build"]] as const)
+    $(id).onclick = () => void action(async () => {
+      // Capture the current editor's unsaved work without writing SQLite or changing the draft's revision.
+      const snapshot = parseCollection(session!.snapshot().collection);
+      message(kind === "check" ? "Checking the current draft snapshot for game-package support…" :
+        "Building and independently verifying the current draft snapshot. The local build can take several minutes…");
+      const result = await requestPackage(kind, snapshot);
+      if (kind === "check") {
+        const checked = result as PackageCheck;
+        message(`Ready to build ${checked.presets.length} preset(s) as ${checked.namespace}. This check did not create a package.`);
+      } else {
+        const built = result as PackageBuild;
+        message(`Verified ${built.presetCount} preset(s). Candidate: ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.`);
+      }
+    }, false);
   const file = $<HTMLInputElement>("collection-file");
   $("collection-import").onclick = () => file.click();
   file.onchange = () => void action(async () => {

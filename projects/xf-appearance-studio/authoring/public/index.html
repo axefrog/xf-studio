@@ -43,6 +43,8 @@
             <div class="small-actions"><button id="collection-export">Export collection</button><button id="collection-import">Import collection</button></div>
             <button id="collection-plan">Export build plan</button>
             <p class="help">Collection files retain editable presets. Build plans feed the offline compiler; they are not installable mods.</p>
+            <div class="small-actions"><button id="collection-package-check">Check game package</button><button id="collection-package-build">Build local package</button></div>
+            <p class="help">Build uses a snapshot of your current draft, including unsaved edits, and creates an independently verified candidate in local dist. Supported active finishes: Matte, Satin and Metallic. The package is not installed or game-tested.</p>
             <div class="small-actions"><button id="collection-refresh">Refresh saved collections</button><button id="collection-undo-open">Undo collection open</button></div>
             <div id="saved-collections"></div>
             <input id="collection-file" type="file" accept="application/json,.json" hidden />

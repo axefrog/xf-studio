@@ -59,6 +59,7 @@ def main(argv=None):
     parser.add_argument('--bun', type=Path, default=Path(shutil.which('bun') or ''), help='Bun executable')
     parser.add_argument('--output-root', type=Path, default=DIST, help='Ignored destination within project dist')
     parser.add_argument('--check', action='store_true', help='Validate the collection/finish support without building')
+    parser.add_argument('--machine-result', action='store_true', help='Emit one prefixed JSON result for the local server')
     args = parser.parse_args(argv)
 
     try:
@@ -75,7 +76,8 @@ def main(argv=None):
             raise ValueError('Collection preflight rejected input: ' + preflight.stderr[-3000:])
         summary = json.loads(preflight.stdout)
         if args.check:
-            print(json.dumps({'ready': True, **summary}, indent=2))
+            result = {'ready': True, **summary}
+            print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
             return 0
         if not args.plate or not args.wolvenkit or not args.gamepath:
             raise ValueError('Build requires --plate, --wolvenkit and --gamepath. --check only needs --collection.')
@@ -140,9 +142,10 @@ def main(argv=None):
             staging.rename(final)
         finally:
             if staging.exists(): shutil.rmtree(staging)
-        print(json.dumps({'package': str(final), 'archiveSha256': verification['archiveSha256'],
+        result = {'package': str(final), 'manifest': str(final/'manifest.json'), 'archiveSha256': verification['archiveSha256'],
             'presetCount': verification['presetCount'], 'installed': False,
-            'gameRenderingVerified': False}, indent=2))
+            'gameRenderingVerified': False}
+        print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
