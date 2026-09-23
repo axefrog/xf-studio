@@ -266,6 +266,11 @@ export async function createScene(
             loadMap(asset.strandId, false), loadMap(asset.strandGradient, false),
             loadMap(asset.capMask, false), loadMap(asset.capGradient, true),
           ]);
+          // The saved MELUMINARY cap's U coordinates occupy tile 2..3. The
+          // source mask is a 0..1 tile; clamping samples its black right edge
+          // over the entire cap, hiding it. The strand cards use 0..1 UVs.
+          mask.wrapS = THREE.RepeatWrapping;
+          mask.needsUpdate = true;
           const idPalette = hairGradientTexture(asset.profile.id);
           const rootPalette = hairGradientTexture(asset.profile.rootToTip);
           materialTextures.push(idPalette, rootPalette);

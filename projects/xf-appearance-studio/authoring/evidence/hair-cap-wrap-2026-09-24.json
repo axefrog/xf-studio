@@ -1,0 +1,30 @@
+{
+  "date": "2026-09-24",
+  "scope": "saved-V MELUMINARY lm097_hair / island_dancer 38_ash_brown browser context preview",
+  "privateSources": {
+    "capGlb": "lm127_hair_pt1.glb, source intake SHA-256 54d8cfa24b6276426e04fedd2e33ac688a057ee05c6569f00e813bbf8b3201d7",
+    "capMask": "hh_110_wa__wizzy_cap_mask.png, source intake SHA-256 8137373f101516ffeb25a3771744237e4d746fd17c813afb0fc333fdfc1f73ee"
+  },
+  "sourceMeasurements": {
+    "capUv0U": [2.015625, 2.9824219],
+    "capUv0V": [0.09375, 0.99725914],
+    "maskSize": [1024, 1024],
+    "rightmostMaskColumn": { "min": 0, "max": 0, "mean": 0 },
+    "centreMaskColumn": { "min": 0, "max": 255, "mean": 214.322265625 },
+    "strandUv0U": "within 0..1 on all three saved strand chunks"
+  },
+  "isolatedBrowser": {
+    "url": "http://127.0.0.1:4453/?verify=1",
+    "save": "AutoSave-12 exact saved hair appearance; private raw save not included",
+    "test": "Temporarily hide strand card meshes, compare clamp vs repeat U using the same cap GLB, mask, shader, pose and camera",
+    "clamp": "Head remained bald: cap fully removed by black-edge mask sampling",
+    "repeatU": "Brown scalp cap appeared and followed the forehead hairline",
+    "afterRestoringCards": "Saved hair visible with cap under the cards; no shader/console error observed"
+  },
+  "acceptedChange": "Repeat only the cap mask's U texture address; leave strand alpha addressing and V unchanged",
+  "limits": [
+    "Local browser comparison is not a matched game screenshot or REDengine material validation.",
+    "Strand colour, flow/anisotropy, alpha compositing and hair physics remain approximate.",
+    "Private extracted game/mod assets and the save remain ignored, not distributed."
+  ]
+}
