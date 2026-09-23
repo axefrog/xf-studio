@@ -1,0 +1,200 @@
+{
+  "status": "offline recipe-driven Glossy single-lobe material study",
+  "source": {
+    "schema": "xfs/recipe-7",
+    "layerId": "sample-glossy",
+    "size": 1024,
+    "color": "#905774",
+    "opacity": 0.85,
+    "recipeSha256": "66a7c57795cc55f30a96abc45b42426156b04318067b87b4490a15522b670c66",
+    "shapeSha256": "e652b1addb13a44fc5322bcb2329d3631e385e886b723547f820937666143d01",
+    "coveredTexels": 11496,
+    "partialTexels": 11496,
+    "note": "Exact Studio recipe raster. Browser Glossy uses base roughness 0.16, clearcoat 1, coat roughness 0.08."
+  },
+  "template": {
+    "binarySha256": "ddfacaf5894b6aba9cfde35d796ccad415d5db16d6c8e4851d7f3875d8266bbe",
+    "serializedDataSha256": "37c35987e6a6eea23ba52834b8e36b74d38436907717f9c4a77a84ae35aa4e19",
+    "jsonSha256": "1a3e32d0995ae2537ffdb16c1791ba1900e356ef274e8d9a9953854cac6329dc",
+    "gameVersion": 2310,
+    "pass": "MeshSkinned renderstage_post_gbuffer"
+  },
+  "materialSha256": "979882275d0b4942fcf5144d9fb6f52f0cbd8864ad59e334cf28c75d90ea1a22",
+  "textures": {
+    "diffuse": {
+      "xbmSha256": "ce70e341422c7dbf500f5f357e53d53a41ba52cf49ca4a8bdf77d84b62e3b90b",
+      "inputSha256": "0e0342a4b92302b238ed629e4c20b9669403551c66fcd75e18ed2359c6e72e84",
+      "compression": "TCM_QualityColor",
+      "meanDecodedRgbByteError": 0.33386770884195965
+    },
+    "roughness": {
+      "xbmSha256": "762034633bff2aeb74b707288c0f540e355a524459ab3f01a61243552d923fe8",
+      "inputSha256": "cb7ac08eeeef7851115131c277dc5c9c3ab99af9aa01ef5765be222e36022351",
+      "compression": "TCM_QualityR",
+      "meanDecodedRedByteError": 0.0
+    },
+    "metalness": {
+      "xbmSha256": "c31899076ebabe7993a5b366051dad14ba266183478559fac95a9ca27b18ed73",
+      "inputSha256": "0f4b1668d119f77ceb6b86645573f088ab2341d7b284314d5df0be7226ea5d91",
+      "compression": "TCM_QualityR",
+      "meanDecodedRedByteError": 0.0
+    }
+  },
+  "partialCoverageTexels": 11496,
+  "meanPartialCoverageError": 0.003935855729167963,
+  "decodedXbmMipCoverage": [
+    {
+      "size": 1024,
+      "sourceMeanCoverage": 0.006151880002489277,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.006145694883728613,
+      "decodedMeanSquaredAlphaCoverage": 0.006146902299211466,
+      "decodedCoverageRetention": 0.9991908646989542,
+      "meanAbsoluteCoverageError": 4.31513392159871e-05,
+      "maxAbsoluteCoverageError": 0.025743944636678173,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 512,
+      "sourceMeanCoverage": 0.00616607666015625,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.006148052633564914,
+      "decodedMeanSquaredAlphaCoverage": 0.006136781545108852,
+      "decodedCoverageRetention": 0.9952489862416573,
+      "meanAbsoluteCoverageError": 7.785044739403158e-05,
+      "maxAbsoluteCoverageError": 0.05319492502883516,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 256,
+      "sourceMeanCoverage": 0.006160840801164216,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.006092406804173875,
+      "decodedMeanSquaredAlphaCoverage": 0.0060915456007004515,
+      "decodedCoverageRetention": 0.9887523143836683,
+      "meanAbsoluteCoverageError": 0.00014502478764177266,
+      "maxAbsoluteCoverageError": 0.06314494425221062,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 128,
+      "sourceMeanCoverage": 0.006157130821078431,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.005906909677167435,
+      "decodedMeanSquaredAlphaCoverage": 0.005912570623378027,
+      "decodedCoverageRetention": 0.9602801686683069,
+      "meanAbsoluteCoverageError": 0.00034410499417291437,
+      "maxAbsoluteCoverageError": 0.08127643214148408,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 64,
+      "sourceMeanCoverage": 0.006156173406862745,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.005510117803248751,
+      "decodedMeanSquaredAlphaCoverage": 0.0053938914720299885,
+      "decodedCoverageRetention": 0.8761760131735432,
+      "meanAbsoluteCoverageError": 0.0007891496059207995,
+      "maxAbsoluteCoverageError": 0.14171472510572847,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 32,
+      "sourceMeanCoverage": 0.006165747549019608,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.003860984957708574,
+      "decodedMeanSquaredAlphaCoverage": 0.0039003928777393312,
+      "decodedCoverageRetention": 0.632590427475338,
+      "meanAbsoluteCoverageError": 0.0022656850730488273,
+      "maxAbsoluteCoverageError": 0.17484044598231455,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 16,
+      "sourceMeanCoverage": 0.006127450980392157,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.0031504709727028066,
+      "decodedMeanSquaredAlphaCoverage": 0.0031615244136870436,
+      "decodedCoverageRetention": 0.5159607843137255,
+      "meanAbsoluteCoverageError": 0.0029659265667051136,
+      "maxAbsoluteCoverageError": 0.17018069973087274,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 8,
+      "sourceMeanCoverage": 0.006127450980392157,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.0009020569011918494,
+      "decodedMeanSquaredAlphaCoverage": 0.0008708189158016146,
+      "decodedCoverageRetention": 0.14211764705882352,
+      "meanAbsoluteCoverageError": 0.005256632064590542,
+      "maxAbsoluteCoverageError": 0.08621299500192234,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 4,
+      "sourceMeanCoverage": 0.0058823529411764705,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.00043252595155709344,
+      "decodedMeanSquaredAlphaCoverage": 0.0004940407535563244,
+      "decodedCoverageRetention": 0.08398692810457514,
+      "meanAbsoluteCoverageError": 0.005392156862745098,
+      "maxAbsoluteCoverageError": 0.043121876201460976,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 2,
+      "sourceMeanCoverage": 0.0058823529411764705,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 0.00012302960399846212,
+      "decodedMeanSquaredAlphaCoverage": 0.00012302960399846212,
+      "decodedCoverageRetention": 0.02091503267973856,
+      "meanAbsoluteCoverageError": 0.005759323337178008,
+      "maxAbsoluteCoverageError": 0.011518646674356016,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    },
+    {
+      "size": 1,
+      "sourceMeanCoverage": 0.00784313725490196,
+      "sourceBoxOfEncodedAlphaSquaredMeanCoverage": 6.151480199923106e-05,
+      "decodedMeanSquaredAlphaCoverage": 6.151480199923106e-05,
+      "decodedCoverageRetention": 0.00784313725490196,
+      "meanAbsoluteCoverageError": 0.007781622452902729,
+      "maxAbsoluteCoverageError": 0.007781622452902729,
+      "roughnessMeanByteError": 0.0,
+      "metalnessMeanByteError": 0.0
+    }
+  ],
+  "roughnessByte": 41,
+  "metalnessByte": 0,
+  "browserGlossy": {
+    "baseRoughness": 0.16,
+    "metalness": 0,
+    "clearcoat": 1,
+    "clearcoatRoughness": 0.08
+  },
+  "gameCandidate": {
+    "surfaceRoughness": 0.1607843137254902,
+    "metalness": 0,
+    "DiffuseAlpha": 1,
+    "RoughnessMetalnessAlpha": 1,
+    "independentCoatLobe": false,
+    "coatRoughnessParameter": null
+  },
+  "parameterTransfer": {
+    "baseRoughnessAbsoluteQuantizationError": 0.0007843137254902044,
+    "browserReflectionLobes": 2,
+    "candidateReflectionLobes": 1,
+    "unmappedClearcoatStrength": 1,
+    "unmappedCoatRoughness": 0.08
+  },
+  "productionExportGuardRetained": true,
+  "deployed": false,
+  "gameRendered": false,
+  "limitations": [
+    "No mesh, morph, app, selector, archive or runtime binding.",
+    "Colour and roughness share a coverage mask on one G-buffer surface; no independent coat lobe.",
+    "Decoded XBM mip data is not sampler/LOD or screen-pixel evidence.",
+    "Mixed-finish overlap, light response and skin preservation remain unverified."
+  ]
+}
