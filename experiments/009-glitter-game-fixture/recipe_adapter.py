@@ -238,15 +238,22 @@ if __name__ == '__main__':
     parser.add_argument('--layer', default='sample-glitter')
     parser.add_argument('--size', type=int, default=1024)
     parser.add_argument('--check', action='store_true', help='Compare to committed sample result')
+    parser.add_argument('--update-baseline', action='store_true',
+                        help='Replace committed sample reports after an intentional fixture change')
     parser.add_argument('--serialize', action='store_true', help='Also make XBM/MI fixture with verified current-game templates')
     parser.add_argument('--pbr-template', type=Path)
     parser.add_argument('--emissive-template', type=Path)
     args = parser.parse_args()
+    sample_run = args.recipe == '--sample' and args.layer == 'sample-glitter' and args.size == 1024
+    if args.check and args.update_baseline:
+        parser.error('--check and --update-baseline are mutually exclusive')
+    if (args.check or args.update_baseline) and not sample_run:
+        parser.error('Baseline check/update requires the default sample, layer and 1024 size')
     report = run(args.recipe, args.layer, args.size)
     expected = HERE / 'recipe-adapter-result.json'
     if args.check:
         assert json.loads(expected.read_text(encoding='utf-8')) == report
-    else:
+    elif args.update_baseline:
         expected.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     if args.serialize:
         if not args.pbr_template or not args.emissive_template:
@@ -256,7 +263,7 @@ if __name__ == '__main__':
         serial = HERE / 'recipe-adapter-serialization.json'
         if args.check:
             assert json.loads(serial.read_text(encoding='utf-8')) == result
-        else:
+        elif args.update_baseline:
             serial.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'mask': report['source']['coverageSha256'],
                       'acceptedFacets': report['acceptedFacetCandidates'],

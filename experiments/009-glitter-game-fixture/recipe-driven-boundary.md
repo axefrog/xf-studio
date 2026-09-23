@@ -23,7 +23,9 @@ the [original fixture](README.md). `--check` compares against the tracked
 [map report](recipe-adapter-result.json) and
 [binary report](recipe-adapter-serialization.json). Use `--recipe PATH --layer
 ID --size 512|1024|2048` without `--check` for a different local study; its
-generated report will reflect that recipe. Do **not** commit personal recipes,
+generated report will reflect that recipe without changing the tracked sample
+reports. Only the default sample can update those reports, with an explicit
+`--update-baseline` after review. Do **not** commit personal recipes,
 generated pixels, XBM/MI binaries or extracted templates. All outputs are
 ignored in `generated/recipe-adapter/`. The tracked sample is constructed
 in [recipe-mask.ts](recipe-mask.ts) from `initialRecipe`, with an opt-in
