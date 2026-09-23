@@ -7,14 +7,33 @@ export type HairAsset = {
   label: string;
   parts: { url: string; sha256: string }[];
   alpha: { url: string; sha256: string };
+  /** Present for locally resolved CCXL strand/cap material chains. */
+  profile?: {
+    sourceSha256: string;
+    id: HairStop[];
+    rootToTip: HairStop[];
+  };
+  strandId?: { url: string; sha256: string };
+  strandGradient?: { url: string; sha256: string };
+  capMask?: { url: string; sha256: string };
+  capGradient?: { url: string; sha256: string };
 };
+export type HairStop = { value: number; color: [number, number, number] };
 const hash = (value: unknown): value is string =>
   typeof value === "string" && /^[1-9][0-9]*$/.test(value) && BigInt(value) <= 18446744073709551615n;
 const digest = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+const png = (value: unknown): value is { url: string; sha256: string } => {
+  const file = value as { url?: unknown; sha256?: unknown } | null;
+  return !!file && typeof file.url === "string" && /^\/assets\/hair\/[a-z0-9_-]+\.png$/.test(file.url) && digest(file.sha256);
+};
+const stops = (value: unknown): value is HairStop[] => Array.isArray(value) && value.length >= 2 && value.length <= 32 &&
+  value.every((stop, i) => stop && typeof stop.value === "number" && Number.isFinite(stop.value) &&
+    stop.value >= 0 && stop.value <= 1 && (i === 0 || stop.value >= value[i - 1].value) &&
+    Array.isArray(stop.color) && stop.color.length === 3 && stop.color.every((c: unknown) => Number.isInteger(c) && (c as number) >= 0 && (c as number) <= 255));
 
 export function parseHairManifest(value: unknown): HairAsset[] {
   const manifest = value as { schema?: unknown; entries?: unknown } | null;
-  if (!manifest || manifest.schema !== "xfs/local-hair-assets-1" || !Array.isArray(manifest.entries) || manifest.entries.length > 16)
+  if (!manifest || !["xfs/local-hair-assets-1", "xfs/local-hair-assets-2"].includes(manifest.schema as string) || !Array.isArray(manifest.entries) || manifest.entries.length > 16)
     throw Error("Unsupported local hair asset manifest");
   const keys = new Set<string>();
   return manifest.entries.map((entry: unknown) => {
@@ -23,13 +42,20 @@ export function parseHairManifest(value: unknown): HairAsset[] {
       typeof e.label !== "string" || !e.label || e.label.length > 128 ||
       !Array.isArray(e.parts) || e.parts.length < 1 || e.parts.length > 8 ||
       e.parts.some(p => !p || !/^\/assets\/hair\/[a-z0-9_-]+\.glb$/.test(p.url) || !digest(p.sha256)) ||
-      !e.alpha || !/^\/assets\/hair\/[a-z0-9_-]+\.png$/.test(e.alpha.url) || !digest(e.alpha.sha256))
+      !png(e.alpha))
       throw Error("Invalid local hair asset entry");
+    const hasProfile = manifest.schema === "xfs/local-hair-assets-2";
+    if (hasProfile && (!e.profile || !digest(e.profile.sourceSha256) || !stops(e.profile.id) ||
+      !stops(e.profile.rootToTip) || !png(e.strandId) || !png(e.strandGradient) ||
+      !png(e.capMask) || !png(e.capGradient)))
+      throw Error("Invalid local hair profile/material chain");
     const key = JSON.stringify([e.resourceHash, e.definition]);
     if (keys.has(key)) throw Error("Duplicate local hair appearance identity");
     keys.add(key);
     return { resourceHash: e.resourceHash, definition: e.definition, label: e.label,
-      parts: e.parts.map(p => ({ url: p.url, sha256: p.sha256 })), alpha: { ...e.alpha } };
+      parts: e.parts.map(p => ({ url: p.url, sha256: p.sha256 })), alpha: { ...e.alpha },
+      ...(hasProfile ? { profile: e.profile, strandId: e.strandId, strandGradient: e.strandGradient,
+        capMask: e.capMask, capGradient: e.capGradient } : {}) };
   });
 }
 

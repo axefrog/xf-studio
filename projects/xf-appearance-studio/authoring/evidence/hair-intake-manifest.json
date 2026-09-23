@@ -1,13 +1,13 @@
 {
-  "date": "2026-09-23",
-  "source": "MELUMINARY LONG LENGTH PAK VOL 3 #011, installed MO2 package 6.0.0.0",
+  "date": "2026-09-24",
+  "source": "MELUMINARY LONG LENGTH PAK VOL 3 #011, Hair Profiles CCXL ash_brown.hp and vanilla Wizzy cap mask",
   "url": "https://www.nexusmods.com/cyberpunk2077/mods/27125",
   "app": "base\\mel_ccxl_hair\\appearances\\lm097_hair.app",
   "componentMeshes": [
     "base\\mel_ccxl_hair\\meshes\\lm127_hair_pt1.mesh",
     "base\\mel_ccxl_hair\\meshes\\lm097_hair_pt2.mesh"
   ],
-  "schema": "xfs/local-hair-assets-1",
+  "schema": "xfs/local-hair-assets-2",
   "entries": [
     {
       "resourceHash": "14407260537193084196",
@@ -26,6 +26,109 @@
       "alpha": {
         "url": "/assets/hair/hair_lm60_a.png",
         "sha256": "e77359fef7ac863dc3df3cc3293c57c95fc88e8fad560e90ae259f8e95d52d00"
+      },
+      "strandId": {
+        "url": "/assets/hair/hair_lm60_id.png",
+        "sha256": "7c4db9f0517cac6baff902e743d73d94cd98d3cdf0dc967126e6ad3d75d18780"
+      },
+      "strandGradient": {
+        "url": "/assets/hair/hair_lm60_grad.png",
+        "sha256": "7b3d00a81c741485567a8c89fc54b866fdb8dc61cff10da146a829ec419e25cc"
+      },
+      "capMask": {
+        "url": "/assets/hair/hh_110_wa__wizzy_cap_mask.png",
+        "sha256": "8137373f101516ffeb25a3771744237e4d746fd17c813afb0fc333fdfc1f73ee"
+      },
+      "capGradient": {
+        "url": "/assets/hair/hh_cap_grad__ash_brown.png",
+        "sha256": "388ac349d09372bfbe78c90944615a3f962b160d44b56207f7d865e5eb57f70c"
+      },
+      "profile": {
+        "sourceSha256": "c2d53c6216104329ccc522cafe7e3d2dd2021d053bf63d6f7207c42bcf798b9a",
+        "id": [
+          {
+            "value": 0.115999997,
+            "color": [
+              129,
+              122,
+              106
+            ]
+          },
+          {
+            "value": 0.551999986,
+            "color": [
+              173,
+              168,
+              180
+            ]
+          },
+          {
+            "value": 0.996183276,
+            "color": [
+              94,
+              94,
+              94
+            ]
+          },
+          {
+            "value": 1,
+            "color": [
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "value": 1,
+            "color": [
+              255,
+              255,
+              255
+            ]
+          }
+        ],
+        "rootToTip": [
+          {
+            "value": 0.146297738,
+            "color": [
+              16,
+              10,
+              8
+            ]
+          },
+          {
+            "value": 0.410755992,
+            "color": [
+              186,
+              165,
+              142
+            ]
+          },
+          {
+            "value": 0.56844908,
+            "color": [
+              143,
+              123,
+              110
+            ]
+          },
+          {
+            "value": 0.830762982,
+            "color": [
+              65,
+              47,
+              41
+            ]
+          },
+          {
+            "value": 1,
+            "color": [
+              193,
+              168,
+              149
+            ]
+          }
+        ]
       }
     }
   ],
@@ -44,11 +147,32 @@
       "name": "hair_lm60_a.png",
       "bytes": 1859836,
       "sha256": "e77359fef7ac863dc3df3cc3293c57c95fc88e8fad560e90ae259f8e95d52d00"
+    },
+    {
+      "name": "hair_lm60_id.png",
+      "bytes": 10561423,
+      "sha256": "7c4db9f0517cac6baff902e743d73d94cd98d3cdf0dc967126e6ad3d75d18780"
+    },
+    {
+      "name": "hair_lm60_grad.png",
+      "bytes": 360873,
+      "sha256": "7b3d00a81c741485567a8c89fc54b866fdb8dc61cff10da146a829ec419e25cc"
+    },
+    {
+      "name": "hh_110_wa__wizzy_cap_mask.png",
+      "bytes": 94712,
+      "sha256": "8137373f101516ffeb25a3771744237e4d746fd17c813afb0fc333fdfc1f73ee"
+    },
+    {
+      "name": "hh_cap_grad__ash_brown.png",
+      "bytes": 202,
+      "sha256": "388ac349d09372bfbe78c90944615a3f962b160d44b56207f7d865e5eb57f70c"
     }
   ],
   "limitations": [
     "Source files are ignored local assets, not redistribution content.",
     "Installed archive and XL match the save reference; effective runtime winner is not proven.",
-    "Saved colour is approximated; dynamic hair profile, strand shader, cap map and physics are not reproduced."
+    "Browser colour combines verified source ID/root-tip stops but does not claim exact REDengine shader blending, anisotropy, physics or lighting.",
+    "Source XBM/HP hashes and provenance are recorded in research/eye-artistry/saved-hair-profile-resolution.md."
   ]
 }

@@ -10,6 +10,7 @@ import type { CameraState } from "./workspace-state";
 import { previewNearPlane } from "./camera-depth";
 import { prepareEyeAppearances } from "./eye-appearance";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
+import { attachHairColor, hairGradientTexture } from "./hair-shading";
 import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { loadSavedBrowMaterial } from "./brow-material";
 import { loadSavedLashColor } from "./lash-profile";
@@ -228,6 +229,7 @@ export async function createScene(
     for (const asset of entries) {
       const root = new THREE.Group(), parts: THREE.SkinnedMesh[] = [];
       let alpha: THREE.Texture | undefined, bytesUsed = 0, verticesUsed = 0, bonesUsed = 0;
+      const materialTextures: THREE.Texture[] = [];
       try {
         const bytes = async (url: string, sha256: string) => {
           const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -242,12 +244,34 @@ export async function createScene(
           bytesUsed += data.byteLength;
           return data;
         };
-        const alphaBytes = await bytes(asset.alpha.url, asset.alpha.sha256);
-        const alphaUrl = URL.createObjectURL(new Blob([new Uint8Array(alphaBytes)], { type: "image/png" }));
-        try { alpha = await loader.loadAsync(alphaUrl); } finally { URL.revokeObjectURL(alphaUrl); }
-        alpha.flipY = false;
-        alpha.colorSpace = THREE.NoColorSpace;
-        alpha.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const loadMap = async (file: { url: string; sha256: string }, color: boolean) => {
+          const data = await bytes(file.url, file.sha256);
+          const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type: "image/png" }));
+          let map: THREE.Texture;
+          try { map = await loader.loadAsync(url); } finally { URL.revokeObjectURL(url); }
+          map.flipY = false;
+          map.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+          map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+          materialTextures.push(map);
+          return map;
+        };
+        // Three's alphaMap samples green. Source hair_lm60_a has grayscale RGB;
+        // its nearly opaque PNG alpha channel is not the card cutout.
+        alpha = await loadMap(asset.alpha, false);
+        let strand: { id: THREE.Texture; gradient: THREE.Texture; idPalette: THREE.Texture;
+          rootPalette: THREE.Texture } | undefined;
+        let cap: { mask: THREE.Texture; gradient: THREE.Texture } | undefined;
+        if (asset.profile && asset.strandId && asset.strandGradient && asset.capMask && asset.capGradient) {
+          const [id, gradient, mask, capGradient] = await Promise.all([
+            loadMap(asset.strandId, false), loadMap(asset.strandGradient, false),
+            loadMap(asset.capMask, false), loadMap(asset.capGradient, true),
+          ]);
+          const idPalette = hairGradientTexture(asset.profile.id);
+          const rootPalette = hairGradientTexture(asset.profile.rootToTip);
+          materialTextures.push(idPalette, rootPalette);
+          strand = { id, gradient, idPalette, rootPalette };
+          cap = { mask, gradient: capGradient };
+        }
         for (let index = 0; index < asset.parts.length; index++) {
           const entry = asset.parts[index]!, buffer = (await bytes(entry.url, entry.sha256)).buffer,
             original = restoreFirstWeights(buffer), loaded = await new GLTFLoader().parseAsync(buffer, "/assets/hair/");
@@ -261,12 +285,16 @@ export async function createScene(
             o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
             o.frustumCulled = false;
             const mat = new THREE.MeshStandardMaterial({
-              color: 0x342c29, roughness: 0.9, side: THREE.DoubleSide,
-              ...(index ? { alphaMap: alpha, alphaTest: 0.12 } : {}),
+              color: strand ? 0xffffff : 0x342c29,
+              roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
+              ...(index ? { alphaMap: alpha, alphaTest: 0.12, alphaToCoverage: true } :
+                cap ? { alphaMap: cap.mask, alphaTest: 0.08 } : {}),
             });
-            // Saved colour and REDengine's strand/cap material are unresolved.
+            // Source textures and CCXL profile stops, rendered with approximate Three lighting.
             o.material = mat;
             extendSkin(o, mat);
+            if (index && strand) attachHairColor(mat, { kind: "strand", ...strand });
+            else if (!index && cap) attachHairColor(mat, { kind: "cap", ...cap });
             o.name = `preview_hair_${index}_${parts.length}`;
             verticesUsed += o.geometry.getAttribute("position").count;
             parts.push(o);
@@ -288,7 +316,7 @@ export async function createScene(
             for (const material of materials) material.dispose();
           }
         });
-        alpha?.dispose();
+        for (const texture of materialTextures) texture.dispose();
         hairErrors.push(`${asset.label}: ${(error as Error).message}`);
       }
     }
