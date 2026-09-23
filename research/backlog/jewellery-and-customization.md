@@ -37,10 +37,10 @@ Do not bake `F:/Games/MO2` or Nathan's game paths into browser-facing recipes. U
 
 ## Acceptance and order
 
-1. Complete current Glitter browser acceptance and other eye-makeup gates.
-2. Integrate optional hair and vanilla piercing preview in bounded independent slices; record fidelity gaps.
-3. Inventory PRC and prove one representative preview binding; investigate CCXL and EquipmentEx export choices.
+1. Continue Glitter browser/photo acceptance, optical game-material adapters and the eye-plate clearance/export gates. Current Glitter and Shimmer fixtures are offline studies, not production exports.
+2. Optional saved hair, vanilla piercing and three PRC candidate slots now render as preview context with documented material/asset fidelity gaps; compare exact saved choices in a later matched game session.
+3. PRC inventory and a private representative combined preview exist. Investigate CCXL and EquipmentEx export choices separately from that preview.
 4. Review jewellery construction-set design with Nathan before committing to its editor/export surface.
-5. Build provider-neutral enumeration, then a read-only customization selector prototype; only after round-trip and conflict tests add editable presets.
+5. The read-only customization selector prototype now separates MO2/direct routes and can query selected archive hashes. Extend payload winner/ArchiveXL transformation coverage, then require round-trip and conflict tests before adding editable presets.
 
 These tracks can overlap where their ownership and assets do not conflict. A working preview does not imply a working CCXL/inventory export or accurate runtime material order. Batch game-only uncertainties into one prepared capture session.
