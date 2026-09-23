@@ -8,6 +8,7 @@ import {
 import { editLayers, type LayerCommand } from "./layer-stack";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
+import { setupContextMenus } from "./context-menu";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { layerRenderQueue } from "./layer-render-queue";
@@ -27,6 +28,7 @@ import {
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const input = (id: string) => $<HTMLInputElement>(id);
+setupContextMenus(document);
 const status = (text: string) => {
   $("status").textContent = text;
 };

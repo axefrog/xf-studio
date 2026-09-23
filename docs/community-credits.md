@@ -115,3 +115,7 @@ Existing **Blender 5.0 BVH/NumPy tooling**, WolvenKit-derived geometry and IO Su
 ## Entry checklist
 
 For each new contribution record: **source/mod/repository and link; author/contributors or an explicit attribution gap; inspected version/commit/date; what it taught or enabled; where we used it; learning/tool/code/asset use; relevant reuse terms if applicable.** Amend existing entries when new lessons emerge. Keep unresolved leads visibly separate from completed study, and never erase credit because the eventual implementation took a different form.
+
+### Makeup photography references — attribution unresolved
+
+Nathan supplied four local makeup photographs on 23 September 2026 to correct the glitter preview's overly regular dots and to establish irregular fine-flake, pigment and glint targets. [Paths, hashes and provenance](../research/backlog/glitter-visual-references.json) and [affected material work](../research/backlog/glitter-material.md#visual-correction-requested-23-september) preserve the contribution. Photographer and makeup-artist identities/source URLs are not yet established; the fourth reference's visible Xiaohongshu watermark appears to read `yangyangbabyi`, an attribution lead only. **Use:** visual study/inspiration, local-only reference copies; no texture tracing, asset inclusion or redistribution permission established. Resolve authorship before public acknowledgement that names a creator or any reuse beyond research. Nathan's accompanying screenshot documents our existing preview, not an external creator's material.

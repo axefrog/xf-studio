@@ -23,4 +23,4 @@ The [persistent authoring queue](eye-artistry-authoring.md) tracks optional head
 
 - [Viewport and editor controls](viewport-and-editor-controls.md): idle pause/subsets, stable-head facial motion, FOV/zoom/pan ergonomics, compact layers, rename and live reorder feedback.
 
-- [Path, falloff and surface controls](path-and-falloff-controls.md): nearest-curve insertion, single-eye UV view, weight seams, Bézier/corner handles, directional softness and overlay handles.
+- [Path, falloff and surface controls](path-and-falloff-controls.md): nearest-curve insertion, single-eye UV view, weight seams, Bézier/corner handles, directional softness, overlay handles, whole-shape transforms and UV wheel zoom/right-drag pan.

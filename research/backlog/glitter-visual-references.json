@@ -1,0 +1,44 @@
+{
+  "providedBy": "Nathan",
+  "date": "2026-09-23",
+  "originalsUnchanged": true,
+  "use": "Local visual research only; no redistribution permission established.",
+  "authorship": "Photographers and makeup artists unresolved. Reference 4 has a visible Xiaohongshu watermark reading yangyangbabyi; this is an attribution lead, not verified authorship.",
+  "references": [
+    {
+      "label": "studio-glitter",
+      "source": "C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-5b188c64-5562-48a5-b3a6-481790717445.png",
+      "localCopy": "research/consumers/glitter-reference/raw/studio-glitter.png",
+      "sha256": "3137747000def92dc31fe2c504191bd2112a10e3fa697b0da217bdde7cce7ebd",
+      "bytes": 329352
+    },
+    {
+      "label": "glitter-reference-1",
+      "source": "F:/Games/RedModding/General/references/eye makeup/15154b7bda9b2fbf04267eba2419d391.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-1.jpg",
+      "sha256": "cbd80fc4c0576b87a2a2c6bb2b6ef8f86b2d78b602ff122f6a61865b2840711e",
+      "bytes": 76478
+    },
+    {
+      "label": "glitter-reference-2",
+      "source": "F:/Games/RedModding/General/references/eye makeup/8880e9a1b7980f0fce56d7a3e3c547ac.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-2.jpg",
+      "sha256": "6c34d11b62fa44f2c96054835680831a17c38f4f265eb073a0139ef077e43776",
+      "bytes": 181361
+    },
+    {
+      "label": "glitter-reference-3",
+      "source": "F:/Games/RedModding/General/references/eye makeup/8a20c191f71b6d29ceac0bdbf80d4ca0.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-3.jpg",
+      "sha256": "fb28649c5373c58c0844e0ffa8670dea01615be06b191498d072a3c2e3932ca9",
+      "bytes": 57886
+    },
+    {
+      "label": "glitter-reference-4",
+      "source": "F:/Games/RedModding/General/references/eye makeup/d490ffeb617663253c6c3ba0f2c4eb35.jpg",
+      "localCopy": "research/consumers/glitter-reference/raw/glitter-reference-4.jpg",
+      "sha256": "98aa5a1e9ae115e290a2070a276c4a44b5aa5825ac57402d7f5661ede0b45a68",
+      "bytes": 94104
+    }
+  ]
+}
