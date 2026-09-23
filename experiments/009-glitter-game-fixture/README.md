@@ -28,6 +28,8 @@ Six 1024² textures and two material instances imported and serialized successfu
 
 Each XBM reports a generated mip chain, but the CLI export used here exposes the base level. A separate BOX minification of the **source** emissive mask shows the high-contrast (byte ≥96) atlas fraction falling from 0.00625 at 1024 to 0 at 64. This signals likely distance loss; it is not a measurement of the game's compressed lower mips or lighting. The normal's green-channel convention, skin preservation, decal stacking, bloom and face-framed readability are likewise unverified. The [browser glint pilot](../007-irregular-glitter/uv-cell-glint-findings.md) computes per-fragment light/view response that neither stock material reproduces for subpixel flakes.
 
+The [2.31 shader and minification audit](shader-and-minification-audit.md) pins the selected compiled input paths and the emissive shader's otherwise easy-to-miss white `SecondaryMask` default. The verifier now asserts that default and records source BOX normal-tilt collapse alongside the sparse-mask diagnostic. These are offline source-map measurements, not captured game shading.
+
 ## One-session runtime gate
 
 After the owned plate/morph pair passes its separate clearance and exact native-weight checks, bind this fixture to **four temporary comparison states** in one selector: Off; PBR only; emission only; PBR plus emission. Keep all resource appearance names `xfs_`. Update the installed framework versions listed in [toolchain](../../docs/toolchain.md) before the session. Verify local material/texture references, all 105 morphs, preset clearing and logs before a game launch. Do not route these material candidates through the production compiler until the comparison is reviewed.

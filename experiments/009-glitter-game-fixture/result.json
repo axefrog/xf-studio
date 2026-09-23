@@ -4,7 +4,7 @@
   "templates": {
     "mesh_decal": {
       "binarySha256": "b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019",
-      "jsonSha256": "413bc056a5378ed11d7c0bea6d9feaa6e38c051a7dad8367b668f8d877c2a851",
+      "jsonSha256": "10b02068ecf6908d5d848491a4eccec384dce849619b1f8586cd0da44eb84c28",
       "gameVersion": 2310,
       "stage": "renderstage_post_gbuffer",
       "meshSkinned": true,
@@ -13,12 +13,13 @@
     },
     "mesh_decal_emissive_subsurface": {
       "binarySha256": "b590a2ee02497e7354e3ed2f83d4bfff42b08a7b2ee14f202c45f10ee799d699",
-      "jsonSha256": "05ba481fc111725d4500549563b9f4d123bf75036ff7f08f5c09e3057a304405",
+      "jsonSha256": "961ae425ef656cce9af151d004746f6a53815e3b0dd39fb0b15e31163018c802",
       "gameVersion": 2310,
       "stage": "renderstage_subsurface_emissive",
       "meshSkinned": true,
       "alphaBlendedTarget": true,
-      "depthWrite": false
+      "depthWrite": false,
+      "defaultSecondaryMask": "engine\\textures\\editor\\white.xbm"
     }
   },
   "materials": {
@@ -103,6 +104,38 @@
       "highContrastFraction": 0.0
     }
   ],
+  "sourceBoxNormalTilt": [
+    {
+      "size": 1024,
+      "coveredPixels": 69755,
+      "meanTangentSlope": 0.244236065261109,
+      "strongTiltFraction": 0.473371084510071
+    },
+    {
+      "size": 512,
+      "coveredPixels": 17441,
+      "meanTangentSlope": 0.22671255170111615,
+      "strongTiltFraction": 0.4273264147697953
+    },
+    {
+      "size": 256,
+      "coveredPixels": 4354,
+      "meanTangentSlope": 0.20237578406470955,
+      "strongTiltFraction": 0.35002296738631145
+    },
+    {
+      "size": 128,
+      "coveredPixels": 1077,
+      "meanTangentSlope": 0.16548433026532466,
+      "strongTiltFraction": 0.2191272051996286
+    },
+    {
+      "size": 64,
+      "coveredPixels": 260,
+      "meanTangentSlope": 0.10924157272212516,
+      "strongTiltFraction": 0.026923076923076925
+    }
+  ],
   "comparisons": [
     "PBR only",
     "emission only",
@@ -112,5 +145,5 @@
   "meshBound": false,
   "selectorRegistered": false,
   "gameRendered": false,
-  "limit": "Mip occupancy is source-map diagnostic; game filtering, material order, glow, and appearance are unverified."
+  "limit": "BOX minification is source-map diagnostic, not decoded REDengine mip data; material order, glow, and appearance are unverified."
 }

@@ -63,9 +63,19 @@ def validate_templates(paths):
         available = {p['name']['$value'] for group in root['parameterInfo'] for p in group}
         instance = materials()[PBR if name == 'mesh_decal' else EMISSION]['Data']['RootChunk']
         assert set(values(instance)).issubset(available)
+        # The selected emissive pixel program multiplies EmissiveMask by
+        # SecondaryMask.red. The instance omits SecondaryMask intentionally,
+        # so pin the 2.31 template's white default instead of assuming it.
+        if name == 'mesh_decal_emissive_subsurface':
+            defaults = {item['Data']['parameterName']['$value']: item['Data']
+                        for group in root['parameters']['Elements'] for item in group}
+            gate = defaults['SecondaryMask']['texture']['DepotPath']['$value']
+            assert gate == 'engine\\textures\\editor\\white.xbm', gate
         evidence[name] = {'binarySha256': expected, 'jsonSha256': sha(serialized),
                           'gameVersion': 2310, 'stage': stage, 'meshSkinned': True,
                           'alphaBlendedTarget': True, 'depthWrite': False}
+        if name == 'mesh_decal_emissive_subsurface':
+            evidence[name]['defaultSecondaryMask'] = gate
     return evidence
 
 
@@ -260,19 +270,32 @@ def verify(paths):
     assert leak == 0, f'emissive bleed outside pigment: {leak} texels'
     # PIL BOX is a diagnostic source-map minification, not REDengine's decoded mip chain.
     mip = []
+    normal_mip = []
     emission = Image.open(OUT / 'input/scalar/xfs_glitter_emissive_mask.png').getchannel('L')
+    normal = Image.open(OUT / 'input/normal/xfs_glitter_facet_normal.png').convert('RGB')
+    shape = Image.open(OUT / 'input/scalar/xfs_glitter_shape.png').getchannel('L')
     for size in (1024, 512, 256, 128, 64):
         reduced = emission.resize((size, size), Image.Resampling.BOX)
         data = reduced.tobytes()
         mip.append({'size': size, 'nonzeroFraction': sum(v > 0 for v in data) / len(data),
                     'highContrastFraction': sum(v >= 96 for v in data) / len(data)})
+        n = normal.resize((size, size), Image.Resampling.BOX)
+        r, g = n.getchannel('R').tobytes(), n.getchannel('G').tobytes()
+        coverage = shape.resize((size, size), Image.Resampling.BOX).tobytes()
+        slopes = [math.hypot(2 * r[i] / 255 - 1, 2 * g[i] / 255 - 1)
+                  for i, v in enumerate(coverage) if v >= 128]
+        assert slopes
+        normal_mip.append({'size': size, 'coveredPixels': len(slopes),
+                           'meanTangentSlope': sum(slopes) / len(slopes),
+                           'strongTiltFraction': sum(v >= .25 for v in slopes) / len(slopes)})
     report = {'status': 'offline material-only comparison', 'gameVersion': 2310,
               'templates': template_evidence, 'materials': material_evidence, 'textures': textures,
               'partialCoverageTexels': len(edge), 'meanPartialCoverageError': sum(edge) / len(edge),
               'emissiveOutsideShapeTexels': leak, 'sourceBoxMinification': mip,
+              'sourceBoxNormalTilt': normal_mip,
               'comparisons': ['PBR only', 'emission only', 'combined (two components)', 'Off'],
               'meshBound': False, 'selectorRegistered': False, 'gameRendered': False,
-              'limit': 'Mip occupancy is source-map diagnostic; game filtering, material order, glow, and appearance are unverified.'}
+              'limit': 'BOX minification is source-map diagnostic, not decoded REDengine mip data; material order, glow, and appearance are unverified.'}
     save(OUT / 'verification.json', report)
     save(HERE / 'result.json', report)
     print(json.dumps(report, indent=2))

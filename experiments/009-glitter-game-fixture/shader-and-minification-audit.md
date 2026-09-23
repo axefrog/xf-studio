@@ -1,0 +1,34 @@
+# Current-game Glitter input path: shader and minification audit
+
+24 September 2026. This is an **offline** audit of Cyberpunk 2077 2.31 game resources and the independently generated [material-only fixture](README.md). It does not establish game appearance, skin preservation, component ordering or a route for the Studio's direct-light Glitter shader to execute in REDengine.
+
+## Pinned inputs and observed dataflow
+
+The installed `engine/shader_final.cache` is RDHS v10, 161,804,693 bytes, SHA-256 `339145371a3b5aaa08eb4ef82d558f445b632e28603ee0f3b4860270dfc3ccfa`. The two templates extracted from the installed `memoryresident_1_general.archive` match the binary hashes in [result.json](result.json): `b1b181...019` for `mesh_decal.mt` and `b590a2...699` for `mesh_decal_emissive_subsurface.mt`. WolvenKit 8.17.4 serialized them locally with `GameVersion: 2310`. Template binaries, JSON and shader programs remain ignored local files.
+
+- `mesh_decal`, MeshSkinned `renderstage_post_gbuffer`, compiled pixel GUID `16098255505177109230` (DXBC SHA-256 `35e8c18f7f90f77e82c536d114ed279cd39979cfb5a34c5e157e58762a905c3d`): [the independently traced input contract](../../research/materials/mesh-decal-shader-contract.md) samples diffuse alpha for squared pigment/surface coverage, a separate red normal-coverage mask, normal-map **R/G** for tangent X/Y, and separate roughness/metalness **R**. The fixture supplies all of these and explicitly enables their weights. The pass alpha-blends its G-buffer targets and disables depth writes in the 2.31 template. It writes surface inputs for later lighting; it does **not** compute the browser model's many per-fragment facet reflections.
+- `mesh_decal_emissive_subsurface`, MeshSkinned `renderstage_subsurface_emissive`, compiled pixel GUID `8986576764202126900` (DXBC SHA-256 `39e758c667d394f55d0e67e39060f1000cce97c55e579015667defcbe70df3dc`): the pixel program samples `EmissiveMask.rgba` and `SecondaryMask.r`, multiplies each mask channel by the scalar and its channel-selector component, takes their **maximum**, subtracts `AlphaThreshold` and discards below threshold. It writes `EmissiveColor.rgb` times an intensity constant, with output alpha multiplied by that selected mask. Its used inputs are UV, two sampled textures and material constants; there is no sampled normal or light/view vector in this pixel program. The fixture selects only red (`X=1, Y=Z=W=0`) and sets threshold zero. Its instance omits `SecondaryMask`; the 2.31 template's default is explicitly `engine\textures\editor\white.xbm`, now asserted by the verifier. The pass has depth test on, depth writes off, source-alpha/inverse-source-alpha colour blending on target 0 and additive BA blending on target 2. Exact buffer meaning, exposure and bloom still require a runtime observation.
+
+The companion `renderstage_highlights` MeshSkinned pixel GUID `7960168020925993542` writes zero to all four output channels in the inspected variant. The pass name is therefore not evidence of a dynamic highlight. The named `metal_base_glitter` FX material remains a separate, depth-writing, noise/emission lead in the [stock-material assessment](../../research/materials/redengine-glint-feasibility.md); its name alone does not make it a transparent eye cosmetic.
+
+## What the generated fixture loses with size
+
+The fixture seeds variable triangular/quadrilateral facet normals, roughness and metalness into 1024² source maps, plus a separate sparse emission mask. The normal facets have *constant tilt within each polygon*; this does not reproduce island_dancer's authored axial-gradient/height-to-normal graph. The new verifier records BOX-reduced **source-map** normals inside texels with shape coverage at least 128/255. A strong tilt here means tangent length at least 0.25 after R/G decoding:
+
+| Source BOX size | Covered atlas pixels | Mean tangent slope | Strong-tilt fraction |
+| ---: | ---: | ---: | ---: |
+| 1024 | 69,755 | 0.244 | 47.3% |
+| 512 | 17,441 | 0.227 | 42.7% |
+| 256 | 4,354 | 0.202 | 35.0% |
+| 128 | 1,077 | 0.165 | 21.9% |
+| 64 | 260 | 0.109 | 2.7% |
+
+The separate sparse emission-mask source loses every byte-96-or-brighter atlas texel at BOX 64, as recorded in [result.json](result.json). These diagnostics show the **fixture's authored signal** collapsing under a simple reduction; they do not inspect REDengine's compressed lower mips, sampler selection, screen coverage or actual glint response. A more resolved 2K/4K map could shift the distance of collapse, but it would still feed only one filtered surface value into the stock PBR pass. The Studio's `uv-cell-direct-1` [browser model](../../research/materials/direct-glint-browser-checkpoint.md) evaluates UV-stable facet light/view response per fragment instead, and has no established equivalent in these game passes.
+
+## Bounded export candidate and decision test
+
+Keep the production Glitter export guard. For one controlled, temporary **approximation** trial, bind the existing PBR instance to one morphed eye plate and the sparse-emission instance to a second instance of that same validated plate. Put Off, PBR only, emission only and both under one test selector after the plate's independent clearance gate. This is not yet an installable package: the fixture deliberately has no mesh, `.app`, CCXL registration or archive. Before a game launch, resolve every material and texture reference in that package, confirm plate native skin bytes and all 105 morphs, and run static archive/resource validation. Do not use the community `.sbs`, extracted game shaders or reference photographs as release assets.
+
+In a **single** runtime session, hold exposure and pose fixed, then compare close-eye and face-framed views while changing light with camera fixed, camera with light fixed, and illumination to dim. Record a blink, mip transition and repeated switching through Off. If PBR facets survive only at close range while emission stays bright under opposing/dim light, the candidate is a stylized sparkle rather than faithful fine glitter. Observe skin/underlying-makeup changes, depth/overlap, temporal stability, stale components, logs and loading cost before considering any compiler route. The photographic target also needs a separate density/clustering judgement: the current browser model still falls short there.
+
+Sources: installed 2.31 game cache/templates above; [fixture generator](fixture.py) and [result](result.json); [REDengine feasibility](../../research/materials/redengine-glint-feasibility.md); [island_dancer graph analysis](../../research/materials/island-dancer-glitter-graph.md). WolvenKit is used as an inspection/serialization tool; community learning and unresolved graph reuse permission are already recorded in the [community credits](../../docs/community-credits.md). This audit adds no third-party pixels or code.
