@@ -23,8 +23,18 @@ const fnv64 = (path: string) => {
   return value.toString();
 };
 const appBytes = readFileSync(appPath), morphBytes = readFileSync(morphPath), glbBytes = readFileSync(glbPath);
-const app = JSON.parse(readFileSync(`${appPath}.json`, "utf8"));
-const morph = JSON.parse(readFileSync(`${morphPath}.json`, "utf8"));
+const appJson = readFileSync(`${appPath}.json`), morphJson = readFileSync(`${morphPath}.json`);
+const pinned = {
+  app: "01d4cf980d5531a76fd7424555356103979f48a4d4a60e297ba67074529abe13",
+  appJson: "3c35aa9cb66bdaf8b318bd34e561fa1b5f24cda2b674eb9039ae53e3f8674294",
+  morph: "d7b5238fd9cd4990fb9b3f4a53fa8148b0ae7b9fc60c9fe8f16b4b576008fc32",
+  morphJson: "b263db5118d676f1d3c58a3c936f50400fab630d014cdae6538b034abe5e0062",
+  glb: "b243873de5c4d5ed07198c61174b53a401a9eaa752af384a43cbb1a0738c6d2a",
+};
+if (digest(appBytes) !== pinned.app || digest(appJson) !== pinned.appJson ||
+  digest(morphBytes) !== pinned.morph || digest(morphJson) !== pinned.morphJson || digest(glbBytes) !== pinned.glb)
+  throw Error("PRC source bytes changed; audit the archive/version and regenerate this intake fixture");
+const app = JSON.parse(appJson.toString()), morph = JSON.parse(morphJson.toString());
 if (app.Header.GameVersion !== morph.Header.GameVersion || app.Header.GameVersion !== 2310)
   throw Error("PRC resources do not match inspected game 2.31");
 if (unwrap(morph.Data.RootChunk.baseMesh.DepotPath) !==
@@ -66,8 +76,8 @@ mkdirSync(output, { recursive: true });
 copyFileSync(glbPath, resolve(output, "prc_fpm72.glb"));
 writeFileSync(resolve(output, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 writeFileSync(resolve(import.meta.dir, "../evidence/prc-piercing-intake.json"), JSON.stringify({
-  source: manifest.source, appDepot, appSha256: digest(appBytes), morphDepot,
-  morphSha256: digest(morphBytes), exportedGlbSha256: digest(glbBytes),
+  source: manifest.source, appDepot, appSha256: digest(appBytes), appJsonSha256: digest(appJson), morphDepot,
+  morphSha256: digest(morphBytes), morphJsonSha256: digest(morphJson), exportedGlbSha256: digest(glbBytes),
   definition: manifest.styles[0].choices[0].definition, chunkMask: component.chunkMask,
   status: "One local skinned slot preview; material and effective runtime archive order unverified. Not redistributable.",
 }, null, 2) + "\n");
