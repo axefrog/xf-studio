@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>XF Studio - Glitter material study</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#171d22;color:#e7e7e1;font:14px system-ui,sans-serif}
+    main{height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr)}aside{padding:18px;overflow:auto;border-right:1px solid #43505a}
+    h1{font-size:21px;margin-top:0}p{line-height:1.5;color:#bfc9cd}fieldset{border:0;padding:0;margin:0}label{display:block;margin:15px 0}
+    select,input[type=range]{width:100%;margin-top:7px}select,button{background:#29343c;color:inherit;border:1px solid #566671;border-radius:4px;padding:8px}
+    button{cursor:pointer}.views{display:flex;gap:6px;flex-wrap:wrap}input[type=checkbox]{margin-right:7px}output{float:right;font-variant-numeric:tabular-nums}
+    #status{overflow-wrap:anywhere;font-size:12px}#viewport{min-width:0;min-height:0;position:relative;background:radial-gradient(ellipse at center,#323c42,#171d22)}
+    #viewport canvas{display:block;width:100%;height:100%}code{font-size:12px}small{display:block;color:#aab8be;line-height:1.5}
+  </style>
+</head>
+<body><main>
+  <aside><h1>Glitter material study</h1>
+    <p>Isolated lighting comparison on the studio head. Experimental browser materials; no game parity claim. Your studio draft and library are untouched.</p>
+    <fieldset id="controls" disabled>
+      <label>Study texture size<select id="size" aria-label="Study texture size"><option value="1024">1K</option><option value="2048">2K</option></select></label>
+      <label>Material candidate<select id="variant" aria-label="Material candidate">
+        <option value="legacy">Legacy regular dots</option><option value="sparse">Irregular - sparse</option>
+        <option value="default" selected>Irregular - default</option><option value="default-16sample">Irregular - 16 samples</option>
+        <option value="dense">Irregular - dense</option><option value="maximum">Irregular - maximum bounds</option>
+        <option value="fine160k">Fine glitter - 160k field</option><option value="fine350k">Fine glitter - 350k field</option>
+        <option value="fine350k-covered">Fine glitter - 350k, covered normals</option>
+      </select></label>
+      <label><input id="mixture" type="checkbox">Separate pigment and flake reflections</label>
+      <label>Flake roughness (separate reflections only)<input id="flake-roughness" type="range" min=".02" max=".5" step=".01" value=".2" aria-label="Flake roughness"></label>
+      <label>Room environment intensity<input id="environment" type="range" min="0" max="1" step=".1" value="1" aria-label="Room environment intensity"></label>
+      <label><input id="zero-normal" type="checkbox">Zero flake normal perturbation</label>
+      <label><input id="zero-metalness" type="checkbox">Zero flake metalness</label>
+      <label>Key-light angle <output id="light-value">-31°</output><input id="light" type="range" min="-180" max="180" value="-31" aria-label="Key-light angle"></label>
+      <div class="views"><button id="front">Front</button><button id="close">Close eye</button><button id="distant">Distant</button></div>
+      <label>Blink <output id="blink-value">0%</output><input id="blink" type="range" min="0" max="1" step=".01" value="0" aria-label="Blink amount"></label>
+      <label><input id="idle" type="checkbox">Character-creator idle</label>
+      <label><input id="pause" type="checkbox" checked>Pause idle</label>
+    </fieldset>
+    <p id="status" role="status">Preparing the fixed makeup mask...</p>
+    <small>Purple base pigment, identical shape and lighting for every candidate. Changing texture size reloads this isolated study. Orbit and zoom with the mouse. Normal and metalness switches are diagnostic ablations, not saved material settings.</small>
+  </aside><section id="viewport" aria-label="Material study head preview"></section>
+</main><script type="module" src="/build/glitter-head-study.js"></script></body>
+</html>

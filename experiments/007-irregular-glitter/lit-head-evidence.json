@@ -1,0 +1,44 @@
+{
+  "date": "2026-09-23",
+  "scope": "isolated local browser study; no production recipe, material, install or game session",
+  "fixedMask": {
+    "size2048Sha256": "09ff9a3ab62ac1b5e92a391ea5bf3b01a498384e0f4c8a38cb3bc4ef35ad50ad",
+    "size1024Sha256": "8488cd9b5855e2a8af960e1e5bb2cee6e74fe29a4c3a147fd58202547ef1d6f1",
+    "unsupportedPaintPixels": 0
+  },
+  "comparison": {
+    "variants": ["fine350k", "fine350k-covered"],
+    "catalogueCount": 350000,
+    "retainedNearEyes": 15760,
+    "normalModeChangeOnly": true,
+    "surfaceAndColourRawSha256EqualAt1024And2048": true,
+    "normalRawSha256": {
+      "1024": ["236aa96d4a393788b9dad1f9098d4a9d851df29b1728e65f295ba6d83c9ef0cb", "09e26e99ed5f90f21ac1e7608ca9e29f40297a3bdf997e39c2986ba5cc34654d"],
+      "2048": ["e35157d9e6a12face5fef06de2b591ad329df3a004e4179333c6737ff37e44f5", "26148a56e5f885fb3635c861c53dd75b32df86ccf49350305462d3187a96c0d2"]
+    },
+    "coveredBakeMs": {"1024": 120.782, "2048": 461.664},
+    "coveredMaximumMeasuredSliceMs": {"1024": 3.734, "2048": 3.688}
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/glitter-study.html?size=2048",
+    "cameraPosition": [0.05, 1.702, -0.17],
+    "cameraTarget": [0.026, 1.702, 0.004],
+    "fov": 30,
+    "blink": 0.7,
+    "keyLightAngleDegrees": 25,
+    "environmentIntensity": 0.2,
+    "separateReflections": true,
+    "flakeRoughness": 0.05,
+    "normalAndMetalnessAblations": false,
+    "skinProgramKey": "full-skin-2-0.00008|xfs-glitter-two-brdf-study-r186-1",
+    "textureMemoryAfterVariantSwitch": 20,
+    "consoleErrors": 0,
+    "ninetyFrameCadenceMs": {
+      "twoReflectionMedian": 16.7,
+      "twoReflectionP95": 16.8,
+      "stockMedian": 16.7,
+      "stockP95": 16.7
+    }
+  },
+  "visualConclusion": "Smaller irregular flecks and separate highlights improve the preview, but neither normal averaging mode reproduces convincing fine photographic glitter; inspect coherent filtered glints before integration."
+}

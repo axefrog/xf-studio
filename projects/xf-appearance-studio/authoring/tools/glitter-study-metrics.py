@@ -3,11 +3,22 @@ This is texture-input evidence, not a lit material/game-fidelity claim.
 """
 from pathlib import Path
 import json
+import sys
 import numpy as np
 from PIL import Image, ImageDraw
 
 root = Path(__file__).resolve().parents[4]
 folder = root / 'experiments/007-irregular-glitter/generated'
+if '--fine' in sys.argv or '--covered' in sys.argv:
+    # This catalogue is only complete in its declared regions. Encode the
+    # owned pixels without applying global FFT/coverage claims to its empty exterior.
+    fine = json.loads((folder / ('covered-manifest.json' if '--covered' in sys.argv else 'fine-manifest.json')).read_text(encoding='utf-8'))
+    for row in fine['records']:
+        name, size = row['name'], row['size']
+        for kind in ['normal', 'surface', 'color']:
+            Image.frombytes('RGBA', (size, size), (folder / f'{name}-{size}-{kind}.rgba').read_bytes()).save(folder / f'{name}-{size}-{kind}.png')
+    print('Encoded region-limited fine study PNGs; no full-atlas statistics claimed.')
+    sys.exit(0)
 manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
 metrics = []
 coverage_by_variant = {}

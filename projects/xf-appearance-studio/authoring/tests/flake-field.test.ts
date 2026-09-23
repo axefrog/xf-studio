@@ -1,5 +1,5 @@
 import {describe, expect, test} from "bun:test";
-import {composeFlakeColour, createFlakeBakeJob, createFlakeCatalogue, createFlakeColourJob, defaultIrregularFlakes, FLAKE_LIMITS, FLAKE_MATERIAL, type Flake, type IrregularFlakes} from "../src/flake-field";
+import {composeFlakeColour, createFlakeBakeJob, createFlakeCatalogue, createRegionFlakeCatalogueJob, createFlakeColourJob, defaultIrregularFlakes, FLAKE_LIMITS, FLAKE_MATERIAL, type Flake, type IrregularFlakes} from "../src/flake-field";
 
 function inside(f: Flake, u: number, v: number) {
   // Independent enclosing-radius rejection; no reuse of raster bounds or tile index.
@@ -57,22 +57,31 @@ describe("isolated irregular planar flake study", () => {
   });
   for(const sampleAxis of [2,4] as const) test(`${sampleAxis}x${sampleAxis} tile boundaries and topmost overlap agree with independent exhaustive samples`, () => {
     const catalogue=createFlakeCatalogue({...defaultIrregularFlakes(),count:1600,radius:.003,spread:1,tilt:1});
-    const size=65,job=createFlakeBakeJob(catalogue,size,sampleAxis); job.advance(Infinity);
+    const size=65,job=createFlakeBakeJob(catalogue,size,sampleAxis),conditional=createFlakeBakeJob(catalogue,size,sampleAxis,"covered-average");
+    job.advance(Infinity);conditional.advance(Infinity);
+    expect(conditional.surface).toEqual(job.surface);
     const samples=Array.from({length:sampleAxis**2},(_,i)=>[(i%sampleAxis+.5)/sampleAxis,(Math.floor(i/sampleAxis)+.5)/sampleAxis]);
-    let overlapSamples=0,edgeHits=0;
+    let overlapSamples=0,edgeHits=0,mixedFacets=0,emptyPixels=0,partialPixels=0;
     for(let y=0;y<size;y++) for(let x=0;x<size;x++) {
-      let nx=0,ny=0,nz=0,n=0;
+      let nx=0,ny=0,nz=0,coveredZ=0,n=0;
+      const facets=new Set<number>();
       for(const s of samples) {
         const hits=catalogue.flakes.filter(f=>inside(f,(x+s[0]!)/size,(y+s[1]!)/size));
         if(hits.length>1) overlapSamples++;
         const f=hits.at(-1);
-        if(f) {nx+=f.normal[0];ny+=f.normal[1];nz+=f.normal[2];n++;if(x===31||x===32||y===31||y===32)edgeHits++;} else nz++;
+        if(f) {nx+=f.normal[0];ny+=f.normal[1];nz+=f.normal[2];coveredZ+=f.normal[2];n++;facets.add(f.id);if(x===31||x===32||y===31||y===32)edgeHits++;} else nz++;
       }
       const i=(y*size+x)*4, length=Math.hypot(nx,ny,nz),c=n/sampleAxis**2;
       expect(Array.from(job.normal.subarray(i,i+4))).toEqual([byte(nx/length*.5+.5),byte(ny/length*.5+.5),byte(nz/length*.5+.5),255]);
       expect(Array.from(job.surface.subarray(i,i+4))).toEqual([byte(c),byte(FLAKE_MATERIAL.baseRoughness*(1-c)+FLAKE_MATERIAL.flakeRoughness*c),byte(FLAKE_MATERIAL.flakeMetalness*c),255]);
+      if(!n){emptyPixels++;coveredZ=1;}else if(n<samples.length)partialPixels++;
+      if(facets.size>1)mixedFacets++;
+      const coveredLength=Math.hypot(nx,ny,coveredZ);
+      expect(Array.from(conditional.normal.subarray(i,i+4))).toEqual([byte(nx/coveredLength*.5+.5),byte(ny/coveredLength*.5+.5),byte(coveredZ/coveredLength*.5+.5),255]);
     }
     expect(overlapSamples).toBeGreaterThan(0); expect(edgeHits).toBeGreaterThan(0);
+    expect(mixedFacets).toBeGreaterThan(0);expect(emptyPixels).toBeGreaterThan(0);expect(partialPixels).toBeGreaterThan(0);
+    expect(conditional.normal).not.toEqual(job.normal);expect(conditional.diagnostics.normalMode).toBe("covered-average");
     expect(job.diagnostics.sampleCount).toBe(sampleAxis**2);
     expect(job.diagnostics.subsampleTests).toBe(job.diagnostics.candidateVisits*sampleAxis**2);
     expect(job.diagnostics.scratchBytes).toBe(32*32*sampleAxis**2*4);
@@ -110,11 +119,40 @@ describe("isolated irregular planar flake study", () => {
     const catalogue=createFlakeCatalogue({...defaultIrregularFlakes(),count:0});
     for(const size of [0,31,4097,NaN,Infinity,32.1]) expect(()=>createFlakeBakeJob(catalogue,size)).toThrow();
     for(const axis of [0,1,3,5,NaN,Infinity]) expect(()=>createFlakeBakeJob(catalogue,32,axis as 2)).toThrow();
+    expect(()=>createFlakeBakeJob(catalogue,32,2,"other" as "surface-average")).toThrow();
     expect(()=>createFlakeBakeJob({...catalogue},32)).toThrow();
     const job=createFlakeBakeJob(catalogue,32);
     for(const work of [0,-1,.5,NaN]) expect(()=>job.advance(work)).toThrow();
     expect(()=>composeFlakeColour(new Uint8Array(3),"#000000","#ffffff")).toThrow();
     expect(()=>composeFlakeColour(new Uint8Array(4),"#000000","#ffffff",new Uint8Array(2))).toThrow();
     expect(()=>composeFlakeColour(new Uint8Array(4),"#abc","#ffffff")).toThrow();
+  });
+  test("bounded region catalogue preserves global IDs, prefix and complete-map samples inside its ROI",()=>{
+    const settings={...defaultIrregularFlakes(),count:16000,radius:.0006},regions=[{minU:.27,maxU:.47,minV:.17,maxV:.28}];
+    const whole=createFlakeCatalogue(settings),generation=createRegionFlakeCatalogueJob(settings,regions);
+    expect(generation.advance(17)).toBe(false);expect(generation.catalogue).toBeUndefined();expect(generation.diagnostics().scanned).toBe(17);
+    settings.color="#000000";regions[0]!.minU=.1;
+    while(!generation.advance(97)){}
+    const subset=generation.catalogue!;
+    expect(subset.settings.color).toBe(defaultIrregularFlakes().color);expect(subset.studyRegion!.regions[0]!.minU).toBe(.27);
+    expect(subset.flakes.length).toBeLessThan(1000);
+    expect(subset.flakes.every(f=>JSON.stringify(f)===JSON.stringify(whole.flakes[f.id]))).toBe(true);
+    const size=512,full=createFlakeBakeJob(whole,size,4),region=createFlakeBakeJob(subset,size,4);full.advance(Infinity);region.advance(Infinity);
+    const roi=subset.studyRegion!.regions[0]!;
+    for(let y=Math.ceil(roi.minV*size);y<Math.floor(roi.maxV*size);y++)for(let x=Math.ceil(roi.minU*size);x<Math.floor(roi.maxU*size);x++){
+      const i=(y*size+x)*4;expect(region.normal.subarray(i,i+4)).toEqual(full.normal.subarray(i,i+4));expect(region.surface.subarray(i,i+4)).toEqual(full.surface.subarray(i,i+4));
+    }
+    const larger=createRegionFlakeCatalogueJob({...subset.settings,count:32000},subset.studyRegion!.regions);larger.advance(Infinity);
+    expect(larger.catalogue!.flakes.filter(f=>f.id<16000)).toEqual([...subset.flakes]);
+  });
+  test("fine region study has separate bounds and yields without creating a partial catalogue",()=>{
+    const regions=[{minU:.27,maxU:.47,minV:.17,maxV:.28}],settings={...defaultIrregularFlakes(),count:350000,radius:.00045};
+    expect(()=>createFlakeCatalogue(settings)).toThrow();
+    const job=createRegionFlakeCatalogueJob(settings,regions);job.advance(2048);
+    expect(job.diagnostics().scanned).toBe(2048);expect(job.catalogue).toBeUndefined();expect(job.done).toBe(false);
+    for(const invalid of [{...settings,count:500001},{...settings,radius:.0001},{...settings,radius:.0007}])expect(()=>createRegionFlakeCatalogueJob(invalid,regions)).toThrow();
+    expect(()=>createRegionFlakeCatalogueJob(settings,[{minU:0,minV:0,maxU:1,maxV:1}])).toThrow();
+    expect(()=>createRegionFlakeCatalogueJob(settings,[{...regions[0]!,minU:NaN}])).toThrow();
+    expect(()=>job.advance(0)).toThrow();
   });
 });

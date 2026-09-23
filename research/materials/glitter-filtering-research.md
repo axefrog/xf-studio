@@ -1,0 +1,19 @@
+# Glitter filtering: why smaller dots are not the whole solution
+
+23 September 2026. This is source-grounded direction for an isolated browser study, not a production shader or a claim about REDengine support. The [lit-head follow-up](../../experiments/007-irregular-glitter/lit-head-findings.md) now confirms the predicted loss of visual detail under normal-map filtering at 1K/2K.
+
+The first lit-head candidate improves fragment silhouettes but looks like sparse foil. Reducing radius and increasing count is the immediate experiment. It also makes the normal-map filtering limitation more important: averaging multiple facet normals and then shading that average does not preserve each facet's individual reflection. More texture samples improve coverage edges; they do not by themselves preserve the distribution of reflected light.
+
+## Primary sources consulted
+
+- **Wenzel Jakob, Miloš Hašan, Ling-Qi Yan, Jason Lawrence, Ravi Ramamoorthi and Steve Marschner**, *Discrete Stochastic Microfacet Models*, SIGGRAPH 2014. [Author-hosted project](https://research.cs.cornell.edu/stochastic-sg14/). Its abstract explains that tiny normal-map features alias under narrow illumination, and motivates a discrete, temporally coherent microfacet distribution evaluated across scales. Concrete value here: evaluate lighting/view changes and minification, not just whether a static texture contains irregular bright marks. This is conceptual learning; no code copied.
+- **Tom Kneiphof and Reinhard Klein**, *Real-time Image-based Lighting of Glints*, 2025, [arXiv v1](https://arxiv.org/abs/2507.02674v1), [publication](https://doi.org/10.1111/cgf.70175). Its abstract describes environment partitioning, filtered probabilities and hierarchical statistical sampling, with extra environment-map storage. Concrete value here: our room environment is part of the glitter problem; adding a directional-light sparkle alone would not validate environment lighting. Full implementation and performance remain to study. No code or algorithm ported.
+- **Thomas Deliot and Laurent Belcour**, *Real-Time Rendering of Glinty Appearances using Distributed Binomial Laws on Anisotropic Grids*, HPG 2023, [arXiv v1](https://arxiv.org/abs/2306.05051v1). Authorship is confirmed by the [paper's HTML title block](https://arxiv.org/html/2306.05051v1) (T. Deliot and L. Belcour, Intel); the abstract page splits their names awkwardly. The abstract identifies counting reflecting facets over the pixel footprint and anisotropic parameterization as the core task. Concrete value: keep pixel footprint and view direction in a future shader design instead of treating a higher-resolution atlas as sufficient. Abstract and introduction inspected; no implementation copied.
+
+## Application to this study
+
+Keep the existing standard material as a bounded baseline while comparing smaller, denser physical fragments at 1K and 2K. Inspect close, face-framed and distant views; key-light sweeps; idle motion; and zero-normal/zero-metalness ablations. Keep UV-anchored locations stable. Never introduce frame-seeded noise to manufacture sparkle.
+
+The fine facets read partly as static paint at 1K and 2K even after using a separate pigment/flake lighting mixture and covered-sample normal averaging. A statistically filtered glint BRDF is the next research step. That is a browser shading change with separate game-material feasibility work, not something that can be fixed merely by exporting a larger colour texture. Preserve this limitation in UI/export claims. Do not freeze a new production recipe model until the chosen approach has a useful visual result and a performance contract.
+
+See [integration constraints](glitter-quality-integration.md) and [the irregular-field experiment](../../experiments/007-irregular-glitter/findings.md).

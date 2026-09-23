@@ -5,10 +5,12 @@ export type IrregularFlakes = {
   tilt: number; seed: number; color: string;
 };
 export const FLAKE_LIMITS = Object.freeze({count: 32768, minRadius: .0004, maxRadius: .003, maxSeed: 2147483647, minSize: 32, maxSize: 4096});
+export const REGION_FLAKE_STUDY_LIMITS=Object.freeze({count:500000,minRadius:.00025,maxRadius:.0006,maxRegions:2,maxArea:.12,maxRetained:80000});
 export const FLAKE_MATERIAL = Object.freeze({baseRoughness: .7, flakeRoughness: .2, baseMetalness: 0, flakeMetalness: .95});
 export const FLAKE_TILE_SIZE = 32;
 export const FLAKE_SUBSAMPLES = Object.freeze([Object.freeze([.25, .25]), Object.freeze([.75, .25]), Object.freeze([.25, .75]), Object.freeze([.75, .75])]);
 export const FLAKE_SUBSAMPLES_16 = Object.freeze(Array.from({length: 16}, (_, i) => Object.freeze([(i % 4 + .5) / 4, (Math.floor(i / 4) + .5) / 4])));
+export type FlakeNormalStudyMode="surface-average"|"covered-average";
 export const defaultIrregularFlakes = (): IrregularFlakes => ({model: "irregular-planar-1", count: 16000, radius: .0012, spread: .7, tilt: .35, seed: 2077, color: "#f5df9f"});
 export type Flake = Readonly<{
   id: number; u: number; v: number; radius: number; aspect: number; angle: number;
@@ -16,14 +18,16 @@ export type Flake = Readonly<{
   vertices: readonly Readonly<{u: number; v: number}>[];
   bounds: Readonly<{minU: number; minV: number; maxU: number; maxV: number}>;
 }>;
-export type FlakeCatalogue = Readonly<{settings: Readonly<IrregularFlakes>; flakes: readonly Flake[]}>;
+export type FlakeRegion=Readonly<{minU:number;minV:number;maxU:number;maxV:number}>;
+export type FlakeCatalogue = Readonly<{settings: Readonly<IrregularFlakes>; flakes: readonly Flake[];
+  studyRegion?:Readonly<{regions:readonly FlakeRegion[];globalCount:number;retained:number;centreHalo:number}>}>;
 const catalogues = new WeakSet<FlakeCatalogue>();
 const validHex = (s: unknown): s is string => typeof s === "string" && /^#[\da-f]{6}$/i.test(s);
-function validateSettings(p: IrregularFlakes) {
+function validateSettings(p: IrregularFlakes,limits:{count:number;minRadius:number;maxRadius:number}=FLAKE_LIMITS) {
   if (!p || typeof p !== "object" || Array.isArray(p) ||
       Object.keys(p).sort().join() !== "color,count,model,radius,seed,spread,tilt" || p.model !== "irregular-planar-1" ||
-      !Number.isInteger(p.count) || p.count < 0 || p.count > FLAKE_LIMITS.count ||
-      !Number.isFinite(p.radius) || p.radius < FLAKE_LIMITS.minRadius || p.radius > FLAKE_LIMITS.maxRadius ||
+      !Number.isInteger(p.count) || p.count < 0 || p.count > limits.count ||
+      !Number.isFinite(p.radius) || p.radius < limits.minRadius || p.radius > limits.maxRadius ||
       !Number.isFinite(p.spread) || p.spread < 0 || p.spread > 1 ||
       !Number.isFinite(p.tilt) || p.tilt < 0 || p.tilt > 1 ||
       !Number.isInteger(p.seed) || p.seed < 0 || p.seed > FLAKE_LIMITS.maxSeed || !validHex(p.color))
@@ -38,10 +42,7 @@ function random(seed: number, id: number, salt: number) {
 /** Each ID owns independent hash lanes, so count appends a stable prefix.
  * Six ordered ellipse points stay strictly convex; unequal angular gaps provide
  * fragment silhouettes without radial normal domes or grid-centred placement. */
-export function createFlakeCatalogue(input: IrregularFlakes): FlakeCatalogue {
-  validateSettings(input);
-  const settings = Object.freeze({...input}), flakes: Flake[] = [];
-  for (let id = 0; id < settings.count; id++) {
+function createFragment(settings:Readonly<IrregularFlakes>,id:number):Flake {
     const q = random(settings.seed, id, 2), u = random(settings.seed, id, 0), v = random(settings.seed, id, 1);
     const radius = settings.radius * (1 + settings.spread * (1.8 * q * q - .8));
     const angle = random(settings.seed, id, 3) * Math.PI * 2, aspect = .48 + .52 * random(settings.seed, id, 4);
@@ -55,11 +56,50 @@ export function createFlakeCatalogue(input: IrregularFlakes): FlakeCatalogue {
       return Object.freeze({u: u + x * c - y * s, v: v + x * s + y * c});
     });
     const bounds = Object.freeze({minU: Math.min(...vertices.map(p => p.u)), maxU: Math.max(...vertices.map(p => p.u)), minV: Math.min(...vertices.map(p => p.v)), maxV: Math.max(...vertices.map(p => p.v))});
-    flakes.push(Object.freeze({id,u,v,radius,aspect,angle,normal,vertices: Object.freeze(vertices),bounds}));
-  }
+    return Object.freeze({id,u,v,radius,aspect,angle,normal,vertices: Object.freeze(vertices),bounds});
+}
+export function createFlakeCatalogue(input: IrregularFlakes): FlakeCatalogue {
+  validateSettings(input);
+  const settings = Object.freeze({...input}), flakes: Flake[] = [];
+  for (let id = 0; id < settings.count; id++) flakes.push(createFragment(settings,id));
   const catalogue = Object.freeze({settings, flakes: Object.freeze(flakes)});
   catalogues.add(catalogue);
   return catalogue;
+}
+/** Bounded study-only alternative to materializing half a million JS objects.
+ * Scans the SAME resolution-independent global IDs and retains every fragment
+ * that could reach one of the explicit valid regions. Output outside those
+ * regions is incomplete; this is not a portable recipe or automatic LOD.
+ * Dropping the job cancels work; no catalogue is exposed before completion. */
+export function createRegionFlakeCatalogueJob(input:IrregularFlakes,inputRegions:readonly FlakeRegion[]){
+  validateSettings(input,REGION_FLAKE_STUDY_LIMITS);
+  const limits=REGION_FLAKE_STUDY_LIMITS;
+  if(!Array.isArray(inputRegions)||!inputRegions.length||inputRegions.length>limits.maxRegions||inputRegions.some(r=>
+    !r||Object.keys(r).sort().join()!=="maxU,maxV,minU,minV"||
+    ![r.minU,r.minV,r.maxU,r.maxV].every(Number.isFinite)||r.minU<0||r.minV<0||r.maxU>1||r.maxV>1||r.maxU<=r.minU||r.maxV<=r.minV)||
+    inputRegions.reduce((a,r)=>a+(r.maxU-r.minU)*(r.maxV-r.minV),0)>limits.maxArea)throw Error("Invalid bounded flake study regions");
+  const settings=Object.freeze({...input}),regions=Object.freeze(inputRegions.map(r=>Object.freeze({...r}))),
+    centreHalo=settings.radius*(1+settings.spread),flakes:Flake[]=[];
+  let next=0,catalogue:FlakeCatalogue|undefined;
+  return {get done(){return !!catalogue;},get catalogue(){return catalogue;},
+    diagnostics:()=>({scanned:next,retained:flakes.length,globalCount:settings.count,centreHalo,regions}),
+    advance(workBudget:number){
+      validateWork(workBudget);
+      const end=Math.min(settings.count,next+workBudget);
+      for(;next<end;next++){
+        const u=random(settings.seed,next,0),v=random(settings.seed,next,1);
+        if(regions.some(r=>u>=r.minU-centreHalo&&u<=r.maxU+centreHalo&&v>=r.minV-centreHalo&&v<=r.maxV+centreHalo)){
+          if(flakes.length>=limits.maxRetained)throw Error("Flake study retained-fragment budget exceeded; narrow the regions");
+          flakes.push(createFragment(settings,next));
+        }
+      }
+      if(next===settings.count&&!catalogue){
+        catalogue=Object.freeze({settings,flakes:Object.freeze(flakes),studyRegion:Object.freeze({regions,globalCount:settings.count,retained:flakes.length,centreHalo})});
+        catalogues.add(catalogue);
+      }
+      return !!catalogue;
+    },
+  };
 }
 function contains(f: Flake, u: number, v: number) {
   for (let k = 0; k < 6; k++) {
@@ -75,18 +115,21 @@ const byte = (x: number) => Math.round(Math.max(0, Math.min(1, x)) * 255);
 /** Only the two output atlases are full size. Scratch holds 32x32x(4 or 16) IDs.
  * advance() accounts for indexing, tile setup, candidate pixels and output pixels;
  * candidate tests within one unit are bounded to sixteen six-edge polygon queries.
- * sampleAxis is a study-only ablation, not a released model/schema property. */
-export function createFlakeBakeJob(catalogue: FlakeCatalogue, size: number, sampleAxis: 2 | 4 = 2) {
+ * sampleAxis and normalMode are study-only ablations, not released schema
+ * properties. Covered averaging excludes uncovered base-Z samples; it cannot
+ * recover individual facets or their normal distribution after filtering. */
+export function createFlakeBakeJob(catalogue: FlakeCatalogue, size: number, sampleAxis: 2 | 4 = 2,normalMode:FlakeNormalStudyMode="surface-average") {
   if (!catalogues.has(catalogue)) throw Error("Expected a catalogue created by createFlakeCatalogue");
   if (!Number.isInteger(size) || size < FLAKE_LIMITS.minSize || size > FLAKE_LIMITS.maxSize) throw Error("Invalid flake map size");
   if (sampleAxis !== 2 && sampleAxis !== 4) throw Error("Invalid flake sampling study axis");
+  if(normalMode!=="surface-average"&&normalMode!=="covered-average")throw Error("Invalid flake normal study mode");
   const samples = sampleAxis === 2 ? FLAKE_SUBSAMPLES : FLAKE_SUBSAMPLES_16, sampleCount = sampleAxis * sampleAxis;
   const normal = new Uint8Array(size * size * 4), surface = new Uint8Array(normal.length);
   const edge = FLAKE_TILE_SIZE, across = Math.ceil(size / edge), bins: number[][] = Array.from({length: across * across}, () => []);
   const winners = new Int32Array(edge * edge * sampleCount);
-  const diagnostics = {sampleCount, candidateVisits: 0, subsampleTests: 0, coveredSamples: 0, pixels: 0, tiles: 0, indexedFlakes: 0, slices: 0, scratchBytes: winners.byteLength};
+  const diagnostics = {sampleCount,normalMode, candidateVisits: 0, subsampleTests: 0, coveredSamples: 0, pixels: 0, tiles: 0, indexedFlakes: 0, slices: 0, scratchBytes: winners.byteLength};
   let indexed = 0, tile = -1, nextCandidate = 0, done = false, output = 0;
-  let x0 = 0, y0 = 0, width = 0, height = 0, candidate: Flake | undefined;
+  let x0 = 0, y0 = 0, width = 0, height = 0, candidate: Flake | undefined,candidateIndex=0;
   let px = 0, py = 0, cx0 = 0, cx1 = 0, cy1 = 0;
   const bounds = (f: Flake) => ({
     x0: Math.max(0, Math.floor(f.bounds.minU * size)), y0: Math.max(0, Math.floor(f.bounds.minV * size)),
@@ -110,7 +153,7 @@ export function createFlakeBakeJob(catalogue: FlakeCatalogue, size: number, samp
           winners.fill(-1); output = 0; nextCandidate = 0; diagnostics.tiles++; candidate = undefined; continue;
         }
         if (!candidate && nextCandidate < bins[tile]!.length) {
-          candidate = catalogue.flakes[bins[tile]![nextCandidate++]!]!;
+          candidateIndex=bins[tile]![nextCandidate++]!;candidate = catalogue.flakes[candidateIndex]!;
           const b = bounds(candidate);
           cx0 = Math.max(x0, b.x0); cx1 = Math.min(x0 + width - 1, b.x1); cy1 = Math.min(y0 + height - 1, b.y1);
           px = cx0; py = Math.max(y0, b.y0);
@@ -121,7 +164,9 @@ export function createFlakeBakeJob(catalogue: FlakeCatalogue, size: number, samp
           for (let s = 0; s < sampleCount; s++) {
             const sample = samples[s]!;
             diagnostics.subsampleTests++;
-            if (contains(candidate, (px + sample[0]!) / size, (py + sample[1]!) / size) && candidate.id > winners[local + s]!) winners[local + s] = candidate.id;
+            const previous=winners[local+s]!;
+            if (contains(candidate, (px + sample[0]!) / size, (py + sample[1]!) / size) &&
+              (previous<0||candidate.id>catalogue.flakes[previous]!.id)) winners[local + s] = candidateIndex;
           }
           if (++px > cx1) {px = cx0; if (++py > cy1) candidate = undefined;}
           continue;
@@ -131,9 +176,10 @@ export function createFlakeBakeJob(catalogue: FlakeCatalogue, size: number, samp
         let nx = 0, ny = 0, nz = 0, covered = 0;
         for (let s = 0; s < sampleCount; s++) {
           const id = winners[local + s]!;
-          if (id < 0) nz++;
+          if (id < 0) {if(normalMode==="surface-average")nz++;}
           else {const n = catalogue.flakes[id]!.normal; nx += n[0]; ny += n[1]; nz += n[2]; covered++;}
         }
+        if(!covered&&normalMode==="covered-average")nz=1;
         const length = Math.hypot(nx, ny, nz), coverage = covered / sampleCount;
         normal[i] = byte(nx / length * .5 + .5); normal[i + 1] = byte(ny / length * .5 + .5); normal[i + 2] = byte(nz / length * .5 + .5); normal[i + 3] = 255;
         surface[i] = byte(coverage);

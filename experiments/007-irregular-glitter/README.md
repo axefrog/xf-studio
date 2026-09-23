@@ -1,6 +1,6 @@
 # Irregular planar glitter study
 
-First results: [measured findings](findings.md) and [versioned evidence](evidence.json). Four- versus sixteen-sample coverage exposes a meaningful quality/performance trade-off; no production material was switched.
+First results: [measured findings](findings.md) and [versioned evidence](evidence.json). The [lit-head follow-up](lit-head-findings.md) compares fine fields, normal filtering and separate pigment/flake reflections; no production material was switched.
 
 Owned procedural texture research for the user-supplied glitter references. This experiment evaluates the proposed `irregular-planar-1` field before freezing a portable recipe contract or replacing the studio material. The current editor and historical glitter recipes remain unchanged until explicit integration.
 
@@ -16,6 +16,26 @@ python tools/glitter-study-metrics.py
 The Bun study uses the same pure field/baker intended for the later worker adapter. It compares legacy, sparse, default, dense and worst permitted count/radius/variation at 1024 and 2048. Generated files remain in this experiment's ignored `generated/` directory. The Python script requires NumPy and Pillow and only encodes/analyzes project-generated pixels; it does not edit the photographic references.
 
 `manifest.json` records full inputs, channel hashes, elapsed times, maximum measured cooperative slice, work counts and radius quantiles. `metrics.json` reports covered area, axis correlations, legacy lattice-frequency power and resolution-sampling error. `coverage-colour-comparison.png` shows identical UV crops of coverage and linear-light mixed albedo, enlarged with nearest sampling to expose footprints.
+
+### Fine-field and head comparisons
+
+The follow-up keeps complete fragments only around two explicitly declared eye-UV regions. Its 160k/350k settings describe the deterministic global field; only 7,275/15,760 fragments need retaining. The factory includes a centre halo so fragments entering the region are not lost. Outside these regions the maps are incomplete. These are study-only settings and must never use the full-atlas cache keys or be exported as general-purpose materials.
+
+```powershell
+bun tools/glitter-study.ts --fine
+python tools/glitter-study-metrics.py --fine
+python tools/glitter-fine-metrics.py
+bun tools/glitter-study.ts --covered
+python tools/glitter-study-metrics.py --covered
+$studyOutput = '../../../experiments/007-irregular-glitter/generated'
+New-Item -ItemType Directory -Force public/assets/glitter-study
+Copy-Item "$studyOutput/*-1024-*.png", "$studyOutput/*-2048-*.png", "$studyOutput/*manifest.json" public/assets/glitter-study/
+bun build tools/glitter-head-study.ts --outdir public/build --target browser
+```
+
+With the studio server running, open `http://127.0.0.1:4317/glitter-study.html`. This isolated page has no workspace/library controller. Compare candidates at 1K/2K, front/close/distant views, key-light angles, blink and actual idle. The two-reflection diagnostic separates matte pigment from flakes and exposes flake roughness and room illumination. Normal/metalness ablations distinguish coloured marks from reflective response. The `fine350k-covered` option changes normal averaging only; its coverage and colour maps are byte-identical to `fine350k`. `window.glitterStudyDiagnostics()` reports bound maps, source hashes, pose and renderer state. The derived head remains a required ignored local asset.
+
+Fine-region measurements must restrict their scope to valid regions or the verified fixed paint mask; global atlas averages and spectral probes would mostly measure the ungenerated exterior. The original unflagged study remains separate. The covered-normal ablation is also region-limited and does not establish a production normal encoding.
 
 ## Interpretation
 
