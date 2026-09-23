@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
-from catalog_readonly import Candidate, fnv64, merge_catalog, saved_appearance_matches, visible_files, xl_customizations
+from catalog_readonly import (Candidate, apply_app_fix, fnv64, merge_catalog, saved_appearance_matches,
+                              scope_leaves, visible_files, xl_customizations, xl_resource_meta)
 
 
 def appearance(name, slot, choices, provider, app="base\\example.app"):
@@ -56,6 +57,39 @@ class CatalogProbeTests(unittest.TestCase):
         self.assertEqual(len(saved_appearance_matches(merged, hash_, "eye_16")), 1)
         self.assertEqual(saved_appearance_matches(merged, hash_, "eye_17"), [])
         self.assertEqual(saved_appearance_matches(merged, str(int(hash_) + 1), "eye_16"), [])
+
+    def test_installed_style_fix_scope_and_custom_choice_compose(self):
+        old = r"base\characters\head\basehead.app"
+        dynamic = r"archive_xl\characters\head\basehead_pwa.app"
+        with tempfile.TemporaryDirectory() as folder:
+            fix = Path(folder) / "fix.xl"
+            scope = Path(folder) / "scope.xl"
+            fix.write_text("resource:\n  fix:\n    base\\female.inkcharcustomization: &Female\n"
+                           f"      paths:\n        {old}: {dynamic}\n"
+                           "    base\\male.inkcharcustomization: *Female\n"
+                           "    base\\face.mesh:\n      names:\n        old: new\n")
+            scope.write_text("resource:\n  scope:\n    player_customization.app:\n"
+                             "      - player_wa_eyes.app\n    player_wa_eyes.app:\n"
+                             f"      - {dynamic}\n")
+            fixes, _ = xl_resource_meta(fix)
+            _, scopes = xl_resource_meta(scope)
+            self.assertEqual(fixes[r"base\female.inkcharcustomization"][old], dynamic)
+            self.assertEqual(scope_leaves("player_customization.app", scopes), {dynamic})
+            base = {"options": {"head": [appearance("eyes_color", "eyes_color", ["vanilla"], "game", old)],
+                                "body": [], "arms": []}}
+            mod = {"provider": "Unique Eyes", "options": {"head": [appearance("None", "eyes_color", ["eye_16_diffuse"], "Unique Eyes", "")],
+                                                         "body": [], "arms": []}}
+            fixed = apply_app_fix(base, fixes[r"base\female.inkcharcustomization"],
+                                  scope_leaves("player_customization.app", scopes), {"provider": "ArchiveXL"})
+            merged = merge_catalog(fixed, [mod])
+            matches = saved_appearance_matches(merged, fnv64(dynamic), "eye_16_diffuse")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0]["choice_provider"], "Unique Eyes")
+            self.assertEqual(matches[0]["app_original"], old)
+            self.assertEqual(matches[0]["app_resolution"]["provider"], "ArchiveXL")
+            self.assertEqual(saved_appearance_matches(merged, fnv64(dynamic), "vanilla_missing"), [])
+            unscoped = apply_app_fix(base, fixes[r"base\female.inkcharcustomization"], set(), {})
+            self.assertEqual(saved_appearance_matches(merge_catalog(unscoped, [mod]), fnv64(dynamic), "eye_16_diffuse"), [])
 
 
 if __name__ == "__main__":

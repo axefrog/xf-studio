@@ -134,9 +134,79 @@ def fnv64(path: str) -> str:
     return str(value)
 
 
+def xl_resource_meta(path: Path) -> tuple[dict[str, dict[str, str]], dict[str, list[str]]]:
+    """Read the small resource.fix.paths/resource.scope subset used by the catalog."""
+    fixes: dict[str, dict[str, str]] = {}
+    scopes: dict[str, list[str]] = {}
+    section = subsection = target = None
+    in_paths = False
+    for raw in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        line = raw.split(" #", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        value = line.strip()
+        if indent == 0:
+            section = value if value == "resource:" else None
+            subsection = target = None
+            in_paths = False
+        elif section and indent == 2:
+            subsection = value[:-1] if value in ("fix:", "scope:") else None
+            target = None
+            in_paths = False
+        elif subsection == "fix" and indent == 4:
+            target = value.split(":", 1)[0].casefold() if value.endswith(":") or ": &" in value else None
+            in_paths = False
+        elif subsection == "fix" and indent == 6:
+            in_paths = value == "paths:"
+        elif subsection == "fix" and indent == 8 and target and in_paths and ": " in value:
+            old, new = value.split(": ", 1)
+            fixes.setdefault(target, {})[old.casefold()] = new.strip().strip("\"'")
+        elif subsection == "scope" and indent == 4 and value.endswith(":"):
+            target = value[:-1].casefold()
+        elif subsection == "scope" and indent == 6 and target and value.startswith("- "):
+            scopes.setdefault(target, []).append(value[2:].strip().strip("\"'"))
+    return fixes, scopes
+
+
+def scope_leaves(scope: str, scopes: dict[str, list[str]]) -> set[str]:
+    """Expand a scope chain as ArchiveXL does; reject cycles instead of guessing."""
+    visiting: set[str] = set()
+
+    def expand(path: str) -> set[str]:
+        key = path.casefold()
+        if key in visiting:
+            raise ValueError(f"cyclic resource scope: {path}")
+        if key not in scopes:
+            return {key}
+        visiting.add(key)
+        leaves = set().union(*(expand(child) for child in scopes[key]))
+        visiting.remove(key)
+        return leaves
+
+    return expand(scope)
+
+
+def apply_app_fix(base: dict, mappings: dict[str, str], allowed_apps: set[str], evidence: dict) -> dict:
+    """Apply an evidenced base-resource path fix before custom choice overlays."""
+    rows = {area: [] for area in ("head", "body", "arms")}
+    for area, options in base["options"].items():
+        for option in options:
+            copy = dict(option)
+            old = option.get("app", "")
+            mapped = mappings.get(old.casefold()) if old else None
+            if mapped and mapped.casefold() in allowed_apps:
+                copy["app_original"] = old
+                copy["app"] = mapped
+                copy["app_resolution"] = evidence
+            rows[area].append(copy)
+    return dict(base, options=rows)
+
+
 def saved_appearance_matches(catalog: dict, app_hash: str, definition: str) -> list[dict]:
     return [{"area": area, "option": option["name"], "app": option["app"],
-             "definition": definition, "choice_provider": choice["provider"], "sources": option["sources"]}
+             "definition": definition, "choice_provider": choice["provider"], "sources": option["sources"],
+             "app_original": option.get("app_original"), "app_resolution": option.get("app_resolution")}
             for area, options in catalog["options"].items() for option in options
             if option["type"] == "gameuiAppearanceInfo" and option["app"] and fnv64(option["app"]) == app_hash
             for choice in option["choices"] if choice["name"] == definition]
@@ -226,6 +296,8 @@ def main() -> None:
     parser.add_argument("--custom", action="append", default=[], metavar="PROVIDER=DEPOT=JSON")
     parser.add_argument("--saved-app-hash", default="")
     parser.add_argument("--saved-definition", default="")
+    parser.add_argument("--app-fix-xl", type=Path, help="Active ArchiveXL bundle resource fix .xl")
+    parser.add_argument("--app-scope-xl", type=Path, help="Active ArchiveXL bundle resource scope .xl")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     mo, profile = mo2_snapshot(args.mo2_root, args.profile)
@@ -239,6 +311,27 @@ def main() -> None:
             declarations.append({"provider": entry["provider"], "xl": entry["virtual_path"],
                                  "customizations": found, "gaps": gaps})
     base = normalize_resource(args.base_json, "installed game base", args.base_depot)
+    if bool(args.app_fix_xl) != bool(args.app_scope_xl):
+        raise ValueError("app fix and scope .xl must be supplied together")
+    app_meta = None
+    if args.app_fix_xl:
+        active_paths = {str(Path(entry["physical_path"]).resolve()).casefold(): entry for entry in active_xl}
+        fix_entry = active_paths.get(str(args.app_fix_xl.resolve()).casefold())
+        scope_entry = active_paths.get(str(args.app_scope_xl.resolve()).casefold())
+        if not fix_entry or not scope_entry or fix_entry["provider"] != scope_entry["provider"]:
+            raise ValueError("app fix and scope must be active visible .xl files from one provider")
+        fixes, _ = xl_resource_meta(args.app_fix_xl)
+        _, scopes = xl_resource_meta(args.app_scope_xl)
+        mappings = fixes.get(base["depot"].casefold(), {})
+        allowed = scope_leaves("player_customization.app", scopes)
+        if not mappings or "player_customization.app" not in scopes or not allowed:
+            raise ValueError("no customization app fix/scope found")
+        app_meta = {"provider": fix_entry["provider"], "fix_xl": fix_entry["virtual_path"],
+                    "scope_xl": scope_entry["virtual_path"],
+                    "fix_sha256": hashlib.sha256(args.app_fix_xl.read_bytes()).hexdigest(),
+                    "scope_sha256": hashlib.sha256(args.app_scope_xl.read_bytes()).hexdigest(),
+                    "basis": "active loose XL config and pinned ArchiveXL source; effective archive winner unproven"}
+        base = apply_app_fix(base, mappings, allowed, app_meta)
     additions = []
     for spec in args.custom:
         provider, depot, path = spec.split("=", 2)
@@ -256,12 +349,13 @@ def main() -> None:
             raise ValueError("saved selection needs decimal uint64 app hash and definition")
         catalog["saved_selection"] = {"app_hash": args.saved_app_hash, "definition": args.saved_definition,
                                        "matches": saved_appearance_matches(catalog, args.saved_app_hash, args.saved_definition)}
-    output = {"schema": "xfs/read-only-cc-catalog-probe-1", "source": profile,
+    output = {"schema": "xfs/read-only-cc-catalog-probe-2", "source": profile,
               "inventory": {"mo2_files": len(mo), "manual_files": len(manual),
                             "active_xl_customization_declarations": len(declarations),
                             "decoded_custom_resources": len(additions),
                             "excluded": ["archive index conflicts and effective resource hashes", "unexported .inkcharcustomization payloads",
-                                         "ArchiveXL merge ordering, resource patches, runtime script/UI changes", "Vortex deployment and direct-launch context"]},
+                                         "ArchiveXL merge ordering beyond appearance overlay, resource patches, runtime script/UI changes", "Vortex deployment and direct-launch context"]},
+              "app_fix": app_meta,
               "declarations": declarations, "resources": [{"provider": x["provider"], "depot": x["depot"],
                                                                 "json_sha256": x["json_sha256"], "gameVersion": x["gameVersion"]}
                                                                for x in [base] + additions],
