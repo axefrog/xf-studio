@@ -49,7 +49,10 @@ export function extendSkin(
     .slice(1)
     .map((s) => `attribute vec4 ${s.j}; attribute vec4 ${s.w};`)
     .join("\n");
-  material.onBeforeCompile = (shader) => {
+  const previousCompile = material.onBeforeCompile.bind(material);
+  const previousKey = material.customProgramCacheKey.bind(material);
+  material.onBeforeCompile = (shader, renderer) => {
+    previousCompile(shader, renderer);
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `#include <common>\n${declarations}`)
       .replace(
@@ -65,7 +68,7 @@ export function extendSkin(
         `#ifdef USE_SKINNING\ntransformed = (bindMatrixInverse * fullSkin * bindMatrix * vec4(transformed,1.0)).xyz;\n#endif\ntransformed += normalize(objectNormal) * ${offset.toFixed(7)};`,
       );
   };
-  material.customProgramCacheKey = () => `full-skin-${sets.length}-${offset}`;
+  material.customProgramCacheKey = () => `full-skin-${sets.length}-${offset}|${previousKey()}`;
   const base = new THREE.Vector4(),
     point = new THREE.Vector4(),
     result = new THREE.Vector4(),

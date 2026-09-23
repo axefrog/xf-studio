@@ -11,6 +11,8 @@ import { previewNearPlane } from "./camera-depth";
 import { prepareEyeAppearances } from "./eye-appearance";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
 import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
+import { loadSavedBrowMaterial } from "./brow-material";
+import { loadSavedLashColor } from "./lash-profile";
 
 export async function createScene(
   host: HTMLElement,
@@ -151,6 +153,18 @@ export async function createScene(
     }
   > = {};
   const detailErrors: string[] = [];
+  let savedBrowMaterial: THREE.MeshStandardMaterial | undefined;
+  let savedLashColor: THREE.Color | undefined;
+  try {
+    savedBrowMaterial = await loadSavedBrowMaterial(loader, renderer.capabilities.getMaxAnisotropy());
+  } catch (error) {
+    detailErrors.push(`brows: ${(error as Error).message}; using the provisional material`);
+  }
+  try {
+    savedLashColor = await loadSavedLashColor();
+  } catch (error) {
+    detailErrors.push(`lashes: ${(error as Error).message}; using the provisional colour`);
+  }
   for (const [name, color, hash, definition] of [
     ["brows", "#675147", "10685882159528859062", "10_brown_ombre"],
     ["lashes", "#30221b", "6047185506343464350", "05_brown_liquorice"],
@@ -159,7 +173,7 @@ export async function createScene(
       const buffer = await (await fetch(`/assets/${name}.glb`)).arrayBuffer(),
         original = restoreFirstWeights(buffer);
       const asset = await new GLTFLoader().parseAsync(buffer, "/assets/"),
-        alpha = await texture(`${name}-alpha`);
+        alpha = name === "brows" && savedBrowMaterial ? undefined : await texture(`${name}-alpha`);
       const parts: THREE.SkinnedMesh[] = [];
       asset.scene.traverse((o) => {
         if (!(o instanceof THREE.SkinnedMesh)) return;
@@ -171,8 +185,8 @@ export async function createScene(
           new THREE.BufferAttribute(raw, 4),
         );
         o.frustumCulled = false;
-        const mat = new THREE.MeshStandardMaterial({
-          color,
+        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new THREE.MeshStandardMaterial({
+          color: name === "lashes" && savedLashColor ? savedLashColor : color,
           alphaMap: alpha,
           transparent: true,
           depthWrite: false,
@@ -599,6 +613,8 @@ export async function createScene(
     })),
     blinkBones: bones.length,
     detailErrors,
+    browMaterial: savedBrowMaterial ? "saved-double-diffuse" : "provisional",
+    lashColor: savedLashColor ? "saved-profile-swatch-approximation" : "provisional",
     hairError,
     piercingError,
     piercing: { source: piercingManifest?.source, styles: piercingManifest?.styles.length ?? 0,

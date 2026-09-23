@@ -636,6 +636,10 @@ try {
   if (viewer.evidence.detailErrors.length)
     $("detail-note").textContent =
       `Some details unavailable: ${viewer.evidence.detailErrors.join("; ")}`;
+  else if (viewer.evidence.browMaterial === "saved-double-diffuse")
+    $("detail-note").textContent = viewer.evidence.lashColor === "saved-profile-swatch-approximation"
+      ? "Saved Arkhe brow maps · brown liquorice lash profile, colour preview approximate"
+      : "Saved Arkhe brow maps + installed brown ombre gradient · lash shading approximate";
   setupMotionControls(viewer, preview);
   shape.onchange = () => viewer!.eyeShape(+shape.value);
   input("exposure").oninput = () =>
