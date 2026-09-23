@@ -116,6 +116,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       let glint=direct.get(material);
       if(!glint){glint=installProceduralGlintStudy(material);direct.set(material,glint);}
       glint.setShape("polygon");glint.setProductionProfile(true);glint.setEnabled(true);glint.setDensity(directSettings.density);
+      glint.setClusteredProfile(directSettings.model==="uv-cell-direct-2");
       glint.setFineShare(directSettings.fineShare);glint.setStrength(directSettings.strength);
       glint.setSeed(directSettings.seed);glint.setColor(directSettings.color);glint.setBodyColor(layer.color);
     }else clearDirect(material);

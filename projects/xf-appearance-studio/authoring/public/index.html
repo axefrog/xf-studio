@@ -235,6 +235,7 @@
         <div id="flake-controls" hidden>
           <button id="flake-opt-in" type="button">Try irregular glitter</button>
           <button id="flake-direct-opt-in" type="button">Try direct-light glints</button>
+          <button id="flake-cluster-opt-in" type="button">Try clustered fine glints</button>
           <div id="flake-irregular" hidden>
             <div class="eyebrow">EXPERIMENTAL BROWSER GLITTER</div>
             <p class="help">Fine irregular facets sit over a separate base colour. The dense setting is limited to the eye UV area. Browser preview only: this raster candidate still lacks the photographs' bright, clustered glints at face distance.</p>
@@ -252,8 +253,8 @@
           </div>
           <div id="flake-direct" hidden>
             <div class="eyebrow">EXPERIMENTAL DIRECT-LIGHT GLITTER</div>
-            <p class="help">Fine and occasional larger UV-anchored facets catch the preview light over a continuous sheen. Browser only; appearance and speed depend on this device and have no game-material equivalence.</p>
-            <label class="control">Facet density <output id="direct-density-value"></output>
+            <p class="help" id="direct-model-note">Fine and occasional larger UV-anchored facets catch the preview light over a continuous sheen. Browser only; appearance and speed depend on this device and have no game-material equivalence.</p>
+            <label class="control"><span id="direct-density-label">Facet density</span> <output id="direct-density-value"></output>
               <input id="direct-density" type="range" min="0" max="1" step=".01" /></label>
             <label class="control">Fine-facet share <output id="direct-fineShare-value"></output>
               <input id="direct-fineShare" type="range" min="0" max="1" step=".01" /></label>
@@ -261,6 +262,7 @@
               <input id="direct-strength" type="range" min="0" max="16" step=".5" /></label>
             <label class="control">Facet colour <input id="direct-color" type="color" /></label>
             <p class="help">Layer colour controls the base pigment. The UV pane shows shape coverage.</p>
+            <button id="flake-direct-original" type="button">Use original direct-light study</button>
             <button id="flake-raster-switch" type="button">Use raster glitter study</button>
           </div>
           <div id="flake-legacy">

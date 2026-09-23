@@ -22,9 +22,10 @@ test("UV-cell glint pilot chains existing shader ownership and restores it",()=>
   expect(shader.fragmentShader).toContain("linear height ramp drawn on each");
   expect(shader.fragmentShader).toContain("vec2( cos( rampAngle ), sin( rampAngle ) )");
   expect(shader.fragmentShader).toContain("float distanceUv = length( uv - centre )");
-  expect(shader.fragmentShader).toContain("xfsGlintUnit( cell, 14u ) >= xfsGlintDensity");
+  expect(shader.fragmentShader).toContain("xfsGlintUnit( cell, 14u ) >= occupancy");
+  expect(shader.fragmentShader).toContain("if ( xfsGlintShape == 1 && xfsGlintClusteredProfile )");
   expect(shader.fragmentShader).toContain("min( bodyCoverage, 1.0 )");
-  expect(shader.fragmentShader).toContain("max( 20.0, xfsGlintPower * 0.35 ) : xfsGlintPower");
+  expect(shader.fragmentShader).toContain(": max( 20.0, xfsGlintPower * 0.35 ) ) : xfsGlintPower");
   expect(shader.fragmentShader).not.toContain("gl_FragCoord");
   expect(shader.fragmentShader).not.toContain("transpose( tbn )");
   expect(shader.fragmentShader).toContain("#include <opaque_fragment>");

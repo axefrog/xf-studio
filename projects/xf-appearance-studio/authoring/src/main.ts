@@ -37,7 +37,7 @@ import {
   finishDescription,
 } from "./finish";
 import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
-import {defaultDirectGlintFlakes,isDirectGlint} from "./direct-glint-settings";
+import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,isDirectGlint} from "./direct-glint-settings";
 import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -231,6 +231,8 @@ function sync() {
   $("flake-direct").hidden = !(isDirectGlint(l.flakes) && l.finish === "glitter");
   $("flake-opt-in").hidden = l.finish !== "glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes);
   $("flake-direct-opt-in").hidden = l.finish !== "glitter" || isDirectGlint(l.flakes);
+  $("flake-cluster-opt-in").hidden = l.finish !== "glitter" || (isDirectGlint(l.flakes) && l.flakes.model === "uv-cell-direct-2");
+  $("flake-direct-original").hidden = l.finish !== "glitter" || !isDirectGlint(l.flakes) || l.flakes.model !== "uv-cell-direct-2";
   const flakes = l.flakes ?? defaultFlakes();
   for (const id of ["cells", "density", "tilt"] as const) {
     const legacy = isIrregular(flakes) || isDirectGlint(flakes) ? defaultFlakes() : flakes;
@@ -247,6 +249,12 @@ function sync() {
     if(id!=="color") $("irregular-"+id+"-value").textContent=id==="count"?`${Math.round(flakes.count/5000)}%`:id==="radius"?`${(flakes[id]*100).toFixed(3)}% UV`:`${Math.round(flakes[id]*100)}%`;
   }
   if(isIrregular(flakes))showGlitterMeasurement();
+  if(isDirectGlint(flakes)){
+    $("direct-model-note").textContent=flakes.model==="uv-cell-direct-2"
+      ? "Fine UV-anchored facets gather in soft clusters over a continuous sheen. Density is the local maximum; quieter patches have fewer facets. Browser only, with no game-material equivalence."
+      : "Fine and occasional larger UV-anchored facets catch the preview light over a continuous sheen. Browser only; appearance and speed depend on this device and have no game-material equivalence.";
+    $("direct-density-label").textContent=flakes.model==="uv-cell-direct-2"?"Maximum facet density":"Facet density";
+  }
   if(isDirectGlint(flakes))for(const id of ["density","fineShare","strength","color"] as const){
     input("direct-"+id).value=String(flakes[id]);
     if(id!=="color")$("direct-"+id+"-value").textContent=id==="strength"?flakes.strength.toFixed(1):`${Math.round(flakes[id]*100)}%`;
@@ -410,6 +418,15 @@ $("flake-opt-in").onclick = () => {
 $("flake-direct-opt-in").onclick=()=>{
   const l=current();if(!l||l.finish!=="glitter"||isDirectGlint(l.flakes))return;
   checkpoint();recipe.schema="xfs/recipe-8";l.flakes=defaultDirectGlintFlakes();render();
+};
+$("flake-cluster-opt-in").onclick=()=>{
+  const l=current();if(!l||l.finish!=="glitter"||(isDirectGlint(l.flakes)&&l.flakes.model==="uv-cell-direct-2"))return;
+  checkpoint();recipe.schema="xfs/recipe-9";
+  l.flakes=isDirectGlint(l.flakes)?{...l.flakes,model:"uv-cell-direct-2"}:defaultClusteredGlintFlakes();render();
+};
+$("flake-direct-original").onclick=()=>{
+  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes)||l.flakes.model!=="uv-cell-direct-2")return;
+  checkpoint();l.flakes={...l.flakes,model:"uv-cell-direct-1"};render();
 };
 $("flake-raster-switch").onclick=()=>{
   const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes))return;

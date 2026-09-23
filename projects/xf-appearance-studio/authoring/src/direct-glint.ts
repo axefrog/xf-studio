@@ -17,6 +17,7 @@ export function installProceduralGlintStudy(material: THREE.MeshPhysicalMaterial
     xfsGlintDensity: {value: 0.9},
     xfsGlintFineShare: {value: 0.65},
     xfsGlintProductionProfile: {value:false},
+    xfsGlintClusteredProfile: {value:false},
     xfsGlintBodyColor: {value: new THREE.Color("#d2aca8")},
   };
   let disposed = false;
@@ -47,6 +48,7 @@ uniform int xfsGlintSeed;
 uniform float xfsGlintDensity;
 uniform float xfsGlintFineShare;
 uniform bool xfsGlintProductionProfile;
+uniform bool xfsGlintClusteredProfile;
 uniform vec3 xfsGlintBodyColor;
 
 mat3 xfsGlintFrame( vec3 surfaceNormal, vec2 uv ) {
@@ -80,6 +82,19 @@ uint xfsGlintHash( uvec2 cell, uint salt ) {
 }
 float xfsGlintUnit( uvec2 cell, uint salt ) {
   return float( xfsGlintHash( cell, salt ) & 16777215u ) / 16777216.0;
+}
+float xfsGlintCluster( uvec2 cell ) {
+  // Slowly varying, UV-locked occupancy. The 18-cell patches break the
+  // grid's uniform Bernoulli spread without allocating a texture or time seed.
+  vec2 coarse = vec2( cell ) / 18.0;
+  uvec2 corner = uvec2( floor( coarse ) );
+  vec2 t = fract( coarse );
+  t = t * t * ( 3.0 - 2.0 * t );
+  float a = mix( xfsGlintUnit( corner, 29u ),
+    xfsGlintUnit( corner + uvec2( 1u, 0u ), 29u ), t.x );
+  float b = mix( xfsGlintUnit( corner + uvec2( 0u, 1u ), 29u ),
+    xfsGlintUnit( corner + uvec2( 1u, 1u ), 29u ), t.x );
+  return mix( a, b, t.y );
 }
 vec2 xfsGlintVertexDirection( int sides, int vertex ) {
   if ( vertex == 0 ) return vec2( 1.0, 0.0 );
@@ -127,7 +142,9 @@ vec4 xfsGlintDirect( vec2 uv, vec3 halfTangent, vec3 lightColor ) {
   vec2 pixelFootprint = vec2( length( dFdx( uv ) ), length( dFdy( uv ) ) );
   float widthUv = 0.5 * length( pixelFootprint );
   float footprintCells = grid * max( pixelFootprint.x, pixelFootprint.y );
-  float discreteWeight = 1.0 - smoothstep( 0.8, 2.0, footprintCells );
+  float discreteWeight = xfsGlintClusteredProfile
+    ? 1.0 - smoothstep( 1.5, 3.5, footprintCells )
+    : 1.0 - smoothstep( 0.8, 2.0, footprintCells );
   float response = 0.0;
   float bodyCoverage = 0.0;
   for ( int y = -1; y <= 1; y ++ ) {
@@ -135,7 +152,14 @@ vec4 xfsGlintDirect( vec2 uv, vec3 halfTangent, vec3 lightColor ) {
       uvec2 cell = uvec2( base + ivec2( x, y ) );
       // Each UV cell has a stable candidate. Density changes the occupied
       // fraction without adding fragment loops or reshuffling retained flakes.
-      if ( xfsGlintShape == 1 && xfsGlintUnit( cell, 14u ) >= xfsGlintDensity ) continue;
+      float occupancy = xfsGlintDensity;
+      if ( xfsGlintShape == 1 && xfsGlintClusteredProfile ) {
+        // The authored density is an upper envelope. Dark patches become
+        // visibly thinner, while bright patches retain fine coverage.
+        float cluster = smoothstep( 0.22, 0.72, xfsGlintCluster( cell ) );
+        occupancy *= mix( 0.07, 1.0, cluster );
+      }
+      if ( xfsGlintShape == 1 && xfsGlintUnit( cell, 14u ) >= occupancy ) continue;
       vec2 jitter = vec2( xfsGlintUnit( cell, 1u ), xfsGlintUnit( cell, 2u ) );
       vec2 centre = ( vec2( base + ivec2( x, y ) ) + 0.1 + 0.8 * jitter ) / grid;
       // More, smaller facets create fine areal coverage. The largest vertex
@@ -145,7 +169,9 @@ vec4 xfsGlintDirect( vec2 uv, vec3 halfTangent, vec3 lightColor ) {
       bool fine = xfsGlintUnit( cell, 15u ) < xfsGlintFineShare;
       float radius = xfsGlintShape == 1
         ? ( xfsGlintProductionProfile
-          ? ( fine ? 0.00005 + 0.00010 * sizeNoise : 0.00018 + 0.00014 * sizeNoise )
+          ? ( xfsGlintClusteredProfile
+            ? ( fine ? 0.000055 + 0.000065 * sizeNoise : 0.00015 + 0.00009 * sizeNoise )
+            : ( fine ? 0.00005 + 0.00010 * sizeNoise : 0.00018 + 0.00014 * sizeNoise ) )
           : ( fine ? 0.000075 + 0.00012 * sizeNoise : 0.00025 + 0.00020 * sizeNoise ) )
         : 0.00015 + 0.00035 * sizeNoise;
       float spatial;
@@ -163,6 +189,13 @@ vec4 xfsGlintDirect( vec2 uv, vec3 halfTangent, vec3 lightColor ) {
           float angle = 6.2831853 * xfsGlintUnit( cell, 7u );
           float signedCells = xfsGlintPolygonDistance( cell, offsetCells, radius * grid, angle );
           spatial = 1.0 - smoothstep( -widthCells, widthCells, signedCells );
+          if ( xfsGlintClusteredProfile ) {
+            // A tiny facet must not become a bright whole-pixel stroke just
+            // because the antialias ramp covers its centre. Approximate its
+            // projected area relative to the pixel's UV footprint.
+            float footprintArea = max( pixelFootprint.x * pixelFootprint.y, 1e-12 );
+            spatial *= sqrt( min( 1.0, 5.5 * radius * radius / footprintArea ) );
+          }
         }
       }
       // For the polygon study, imagine a linear height ramp drawn on each
@@ -190,13 +223,16 @@ vec4 xfsGlintDirect( vec2 uv, vec3 halfTangent, vec3 lightColor ) {
       // A wider angular response makes more of the densely placed facets
       // sparkle under a fixed key light. The circular baseline keeps its
       // original sharpness and output arithmetic.
-      float angularPower = xfsGlintShape == 1 ? max( 20.0, xfsGlintPower * 0.35 ) : xfsGlintPower;
+      float angularPower = xfsGlintShape == 1
+        ? ( xfsGlintClusteredProfile ? max( 12.0, xfsGlintPower * 0.10 )
+          : max( 20.0, xfsGlintPower * 0.35 ) ) : xfsGlintPower;
       response += spatial * pow( max( dot( facet, halfTangent ), 0.0 ), angularPower );
     }
   }
   // At minification the exact cell set becomes too large for fixed work. Fade
   // toward a low-energy broad mean instead of inventing frame-random glints.
-  float meanResponse = ( xfsGlintShape == 1 ? xfsGlintDensity : 1.0 ) *
+  float meanResponse = ( xfsGlintShape == 1 ? xfsGlintDensity *
+    ( xfsGlintClusteredProfile ? 0.85 : 1.0 ) : 1.0 ) *
     0.055 * pow( max( halfTangent.z, 0.0 ), 32.0 );
   float coverage = xfsGlintShape == 1
     ? mix( 0.34 * xfsGlintDensity, min( bodyCoverage, 1.0 ), discreteWeight )
@@ -232,7 +268,7 @@ if ( xfsGlintEnabled ) {
 `);
   };
   const cacheKey = function(this: THREE.MeshPhysicalMaterial) {
-    return `${priorKey.call(this)}|xfs-uv-cell-glint-study-r186-4`;
+    return `${priorKey.call(this)}|xfs-uv-cell-glint-study-r186-5`;
   };
   material.onBeforeCompile = compile;
   material.customProgramCacheKey = cacheKey;
@@ -275,6 +311,10 @@ if ( xfsGlintEnabled ) {
     setProductionProfile(value:boolean){
       if(disposed)throw Error("Glint study disposed");
       uniforms.xfsGlintProductionProfile.value=value;
+    },
+    setClusteredProfile(value:boolean){
+      if(disposed)throw Error("Glint study disposed");
+      uniforms.xfsGlintClusteredProfile.value=value;
     },
     setColor(value:string){
       if(disposed)throw Error("Glint study disposed");
