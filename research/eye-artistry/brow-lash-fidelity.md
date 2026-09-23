@@ -22,7 +22,7 @@ The isolated branch server ran at `127.0.0.1:4451/?verify=1`. AutoSave-12 was im
 | Texels above 0.1 | 302,276 | 226,122 |
 | Texels above 0.5 | 162,962 | 95,726 |
 
-The supplied [in-game close-up](visual-reference-manifest.json) remains visibly darker and slimmer than the old preview. The new render moves in that direction but the photographs differ in perspective, makeup, illumination, expression and possibly runtime resource state. No geometry was thinned to match the photograph. A future batch game capture should hold pose/camera/light as closely as practical and record actual resource winners. Brow normal/shading and the saved skin material are the next offline comparison gates.
+The supplied [in-game close-up](visual-reference-manifest.json) remains visibly darker and slimmer than the old preview. The new render moves in that direction but the photographs differ in perspective, makeup, illumination, expression and possibly runtime resource state. No geometry was thinned to match the photograph. The [shape follow-up](brow-shape-followup.md) checks the installed style registration, copied vanilla render buffer, partial mesh metadata and remaining shading/mip limits. A future batch game capture should hold pose/camera/light as closely as practical and record actual resource winners. Brow normal/shading and the saved skin material are the next offline comparison gates.
 
 ## Lash colour: source-based approximation, unresolved hair shader
 
