@@ -95,3 +95,7 @@ Source foundations: [plate intake and conversion](../004-plate-import/README.md)
 ## Failure-region classification follow-up
 
 The [73-pose incident-face visibility audit](research/fixed-failure-classification.md) finds all 40 failure-region faces become exposed. Sixteen of 30 certificate entries are exposed at their decisive pose; vertices 5631, 5981 and 6471 retain entirely exposed failure certificates at the original margin/bound. Permanently deleting these faces or simply dropping hidden constraints is therefore not a validated remedy. The note defines the next explicit exposure-aware margin benchmark and subsequent finite-surface/contact gates, including previously untested active frame 490. No plate was changed.
+
+## Exposure-aware margin follow-up
+
+[Denser visibility and mixed-margin feasibility](research/visibility_margin.md) retain all original geometry and native weights. Of 2,920 tested face/poses, 2,901 are exposed and 19 sampled-hidden; ten cases previously classified hidden become exposed with wider views. Mixed positive/zero constraints permit three additional independent vertex corrections at the original margin, six at 0.00004 or 0.000025, but four severe crease vertices remain certified failures. Independent verification passes all 30 cases and rechecks the original 1,625 feasible vectors. No geometry was synthesized or imported. Next investigate finite-triangle distances and actual contacts with an explicit local orientation policy; further shrinking supporting-plane margins is not a promising correction strategy.

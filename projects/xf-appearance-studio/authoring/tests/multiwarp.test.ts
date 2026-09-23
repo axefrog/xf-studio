@@ -4,7 +4,7 @@ import {
   type Field, type Layer, type Point, type WarpField,
 } from "../src/recipe";
 
-type LegacyLayer = Omit<Layer, "fields"> & { field: Field };
+type LegacyLayer = Omit<Layer, "fields" | "strength"> & { field: Field };
 const oldLayer = (): LegacyLayer => ({
   id: "legacy-eye", name: "Legacy shape", enabled: true, color: "#905774",
   finish: "matte", opacity: 0.85, feather: 0.012, symmetry: true,
@@ -36,13 +36,16 @@ function oldPolygon(points: Point[]): Point[] {
   }
   return polygon;
 }
-function oldCoverage(u: number, v: number, layer: LegacyLayer, polygon: Point[]): number {
+function oldCoverage(u: number, v: number, layer: LegacyLayer, polygon: Point[], fields = [layer.field]): number {
   if (!layer.enabled) return 0;
   const at = (u: number, v: number) => {
-    const f = layer.field;
-    const influence = Math.exp(-((u - f.u) ** 2 + (v - f.v) ** 2) / (2 * f.radius ** 2));
-    u -= f.du * influence;
-    v -= f.dv * influence;
+    let du = 0, dv = 0;
+    for (const f of fields) {
+      const influence = Math.exp(-((u - f.u) ** 2 + (v - f.v) ** 2) / (2 * f.radius ** 2));
+      du += f.du * influence;
+      dv += f.dv * influence;
+    }
+    u -= du; v -= dv;
     let inside = false, best = Infinity, weight = 1;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       const a = polygon[j], b = polygon[i];
@@ -73,6 +76,22 @@ const field = (id: string, overrides: Partial<Field> = {}): WarpField => ({
 });
 
 describe("multiple local warp fields", () => {
+  test("v1 and v3 migration retain independent old pixels with varied strength and eight fields", () => {
+    const old = oldLayer(), polygon = oldPolygon(old.points);
+    const first = { schema: "eye-artistry/recipe-1", uv: "gltf-uv0-top-left",
+      layers: Array.from({length:4},(_,i)=>({...old,id:`old-${i}`})) };
+    expect(raster(parseRecipe(first).layers[0],256))
+      .toEqual(fullRaster(256,(u,v)=>oldCoverage(u,v,old,polygon)));
+    const fields = Array.from({length:8},(_,i)=>field(`field-${i}`,{
+      u:.31+i*.02, v:.22+i*.003, du:(i%2?1:-1)*.017, dv:.004, radius:.025+i*.005,
+    }));
+    const {field:_field,...settings} = old;
+    const third = {schema:"xfs/recipe-3",uv:"gltf-uv0-top-left",layers:[{...settings,fields}]};
+    const migrated = parseRecipe(third);
+    expect(migrated.layers[0].strength).toEqual({mode:"legacy-nearest"});
+    expect(raster(migrated.layers[0],256))
+      .toEqual(fullRaster(256,(u,v)=>oldCoverage(u,v,old,polygon,fields)));
+  });
   test("legacy migration preserves independent old mask pixels, symmetry and displacement", () => {
     for (const symmetry of [false, true]) {
       for (const vector of [[0, 0], [0.035, -0.02], [-0.1, 0.1]]) {
@@ -81,7 +100,7 @@ describe("multiple local warp fields", () => {
         [old.field.du, old.field.dv] = vector;
         const input = legacyRecipe(old), before = JSON.stringify(input);
         const migrated = parseRecipe(input), polygon = oldPolygon(old.points);
-        expect(migrated.schema).toBe("xfs/recipe-3");
+        expect(migrated.schema).toBe("xfs/recipe-4");
         expect(migrated.layers[0].fields).toEqual([{ ...old.field, id: "legacy-eye-field-1" }]);
         expect("field" in migrated.layers[0]).toBe(false);
         expect(raster(migrated.layers[0], 256)).toEqual(fullRaster(256, (u, v) => oldCoverage(u, v, old, polygon)));

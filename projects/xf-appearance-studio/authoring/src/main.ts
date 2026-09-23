@@ -14,6 +14,8 @@ import { createSurfaceEditor } from "./surface-editor";
 import { layerRenderQueue } from "./layer-render-queue";
 import { selectedWarp, type FieldSelection } from "./field-selection";
 import { setupFields } from "./field-ui";
+import { editPigment, type PigmentCommand } from "./pigment-edit";
+import { setupPigment } from "./pigment-ui";
 import { createUVEditor } from "./uv-editor";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
@@ -115,6 +117,7 @@ panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
 let refreshFields: (() => void) | undefined;
+let refreshPigment: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
@@ -152,6 +155,7 @@ layerName.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commit
 function sync() {
   presetLibrary?.refreshSummary();
   refreshFields?.();
+  refreshPigment?.();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
@@ -262,7 +266,7 @@ for (const id of ["weight", "feather", "opacity", "color"]) {
   control.oninput = () => {
     const l = current();
     if (id === "color") l.color = control.value;
-    else if (id === "weight") l.points[selected].weight = +control.value;
+    else if (id === "weight") l.points = editPigment(l, { kind: "point-strength", index: selected, value: +control.value }).points;
     else if (id === "feather") l.feather = +control.value;
     else l.opacity = +control.value;
     schedule();
@@ -289,6 +293,16 @@ for (const id of ["cells", "density", "tilt"] as const) {
     schedule();
   };
 }
+function changePigment(command: PigmentCommand) {
+  const layer = current(); if (!layer) return;
+  try {
+    Object.assign(layer, editPigment(layer, command)); schedule(); sync(); persist();
+  } catch (error) { status((error as Error).message); sync(); }
+}
+refreshPigment = setupPigment({
+  smooth: input("smooth-strength"), blend: input("strength-blend"),
+  value: $("strength-blend-value"), note: $("strength-note"),
+}, { layer: current, begin: checkpoint, edit: changePigment });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),

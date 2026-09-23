@@ -1,0 +1,106 @@
+{
+  "date": "2026-09-23",
+  "schema": "xfs/recipe-4",
+  "tests": {
+    "pass": 85,
+    "fail": 0,
+    "assertions": 414893,
+    "files": 22,
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "contract": {
+    "legacy": "v1/v2/v3 migrate to explicit legacy-nearest; uniform new masks and frozen old mask fixtures are byte-identical",
+    "smooth": "positive regularized arclength boundary blend",
+    "defaultBlend": 0.0005,
+    "minBlend": 0.000125,
+    "maxBlend": 0.02,
+    "coordinates": "inverse-warped control UV; reflection matches layer symmetry",
+    "collapsedPath": "mean pigment if all edge lengths are zero; geometry independently supplies coverage"
+  },
+  "numeric": {
+    "oldSeamJump": 1,
+    "newSeamJumpAt2eMinus8Separation": 4.9999744e-08,
+    "quadratureTolerance": 2e-08,
+    "coveredCases": [
+      "thin opposing edges",
+      "self-crossings",
+      "boundary and exterior samples",
+      "collinear subdivision",
+      "rotation/reflection/reversal",
+      "uniform weights",
+      "collapsed/repeated/tiny edges",
+      "mirrored multiple warps",
+      "immutable prepared samples and rerender",
+      "v1/v2/v3 frozen legacy evaluation"
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/?verify=1",
+    "legacyLoadedWithoutUpgrade": true,
+    "explicitUpgradeUndoExact": true,
+    "zeroPointPigmentEditedWithKeyboard": true,
+    "blendEditedWithKeyboard": 0.00025,
+    "previewVisuallyInspected": true,
+    "reloadRecipeExact": true,
+    "newLayerSmoothDefault": true,
+    "legacyLayerDisablesBlend": true,
+    "sqliteSavedCopy": "Verification \u2014 continuous pigment",
+    "sqliteReopenedRecipeExact": true,
+    "warningsOrErrors": 0,
+    "verificationTabClosed": true
+  },
+  "backup": "data/backups/2026-09-23T06-30-30.044Z",
+  "serverPid": 51900,
+  "limits": [
+    "No game launch or installation.",
+    "Knot values are blend targets, not exact interpolation constraints.",
+    "Finite-resolution aliasing of thin or sharply varying fields remains possible.",
+    "Directional softness and Bezier curves remain separate work."
+  ],
+  "offlineMaskAndCompiler": {
+    "tool": "tools/validate-pigment.ts",
+    "resultsSha256": "650076068b7ebbec2fe4174d5e5b89be8f233762ea8b4aacb96ac8504c697b2c",
+    "plotSha256": "ae5cf910d6981a85ec0fd93e41927b7dfa06a089c88305b0f1fc3212a31fe1f1",
+    "fixtures": [
+      "varied petal",
+      "thin opposed edges",
+      "two-field warped petal"
+    ],
+    "rasterSizes": [
+      1024,
+      2048
+    ],
+    "compilerSizes": [
+      128,
+      256
+    ],
+    "compilerPixelChecks": 491520,
+    "compilerAlphaMismatches": 0,
+    "compilerContract": "round(255 * sqrt(quantized mask alpha / 255)); this is engine destination encoding, not direct equality to preview alpha",
+    "warmMedianMs": {
+      "6knots": {
+        "1024": 49.0052,
+        "2048": 185.6733
+      },
+      "24knots": {
+        "1024": 181.5621,
+        "2048": 845.914
+      }
+    },
+    "downsampleComparisonMaxAlphaByteDifference": {
+      "smooth": {
+        "petal": 1,
+        "warped": 3,
+        "thin": 27
+      },
+      "legacy": {
+        "petal": 9,
+        "warped": 8,
+        "thin": 27
+      }
+    },
+    "comparisonImageReviewed": true,
+    "limits": "Single-layer CPU timings only; no GPU/UI latency or maximum 32-layer stress claim. Thin edge sampling remains unresolved."
+  }
+}

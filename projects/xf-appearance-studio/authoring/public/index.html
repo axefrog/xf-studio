@@ -164,9 +164,14 @@
         >
         <div class="rule"></div>
         <label class="control"
-          >Selected point weight <output id="weight-value"></output
+          >Selected point pigment <output id="weight-value"></output
           ><input id="weight" type="range" min="0" max="1" step=".01" /></label
-        ><label class="control"
+        >
+        <label class="toggle"><input type="checkbox" id="smooth-strength" /> Smooth point gradients</label>
+        <label class="control">Point blend <output id="strength-blend-value"></output>
+          <input id="strength-blend" type="range" aria-describedby="strength-note" /></label>
+        <p class="help" id="strength-note"></p>
+        <label class="control"
           >Edge softness <output id="feather-value"></output
           ><input
             id="feather"

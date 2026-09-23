@@ -1,3 +1,4 @@
+import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
 export type Point = { u: number; v: number; weight: number };
 export type Field = {
@@ -8,6 +9,10 @@ export type Field = {
   radius: number;
 };
 export type WarpField = Field & { id: string };
+export type Strength = { mode: "legacy-nearest" } | { mode: "smooth-boundary"; blend: number };
+export const DEFAULT_STRENGTH_BLEND = 0.0005;
+export const MIN_STRENGTH_BLEND = 0.000125;
+export const MAX_STRENGTH_BLEND = 0.02;
 export type Layer = {
   id: string;
   name: string;
@@ -20,9 +25,10 @@ export type Layer = {
   symmetry: boolean;
   points: Point[];
   fields: WarpField[];
+  strength: Strength;
 };
 export type Recipe = {
-  schema: "xfs/recipe-3";
+  schema: "xfs/recipe-4";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -32,7 +38,7 @@ export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-3",
+    schema: "xfs/recipe-4",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => ({
       id: `layer-${i + 1}`,
@@ -41,6 +47,7 @@ export function initialRecipe(): Recipe {
       color: ["#905774", "#201b29", "#d4ae86", "#328c94"][i],
       finish: i === 2 ? "regular" : "matte",
       opacity: 0.85,
+      strength: { mode: "smooth-boundary", blend: DEFAULT_STRENGTH_BLEND },
       feather: i === 1 ? 0.0015 : 0.012,
       symmetry: true,
       points: (i === 1
@@ -67,11 +74,11 @@ export function initialRecipe(): Recipe {
 }
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
-  type ImportedLayer = Omit<Layer, "fields"> & { field?: Field; fields?: WarpField[] };
+  type ImportedLayer = Omit<Layer, "fields" | "strength"> & { field?: Field; fields?: WarpField[]; strength?: Strength };
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -127,7 +134,19 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const current = r.schema === "xfs/recipe-3";
+    const currentStrength = r.schema === "xfs/recipe-4";
+    if (!currentStrength && "strength" in l) throw Error("Ambiguous pigment strength format.");
+    let strength: Strength = { mode: "legacy-nearest" };
+    if (currentStrength) {
+      const s = l.strength;
+      if (!s || typeof s !== "object" || Array.isArray(s) ||
+        (s.mode === "legacy-nearest" ? Object.keys(s).some(k => k !== "mode") :
+          s.mode !== "smooth-boundary" || !num(s.blend, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND) ||
+          Object.keys(s).some(k => k !== "mode" && k !== "blend")))
+        throw Error("Invalid pigment strength settings.");
+      strength = s;
+    }
+    const current = r.schema === "xfs/recipe-3" || currentStrength;
     if (current ? "field" in l : "fields" in l)
       throw Error("Ambiguous vector field format.");
     const fields = current ? l.fields : [{ ...l.field, id: `${l.id.slice(0, 72)}-field-1` }];
@@ -151,9 +170,9 @@ export function parseRecipe(value: unknown): Recipe {
       fieldIds.add(f.id);
     }
     const { field: _legacyField, fields: _fields, ...settings } = l;
-    layers.push({ ...settings, fields: fields as WarpField[] });
+    layers.push({ ...settings, fields: fields as WarpField[], strength });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-3", layers });
+  return structuredClone({ ...r, schema: "xfs/recipe-4", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   const out: Point[] = [];
@@ -210,11 +229,20 @@ export function coverage(
   polygon = curve(l.points),
 ): number {
   if (!l.enabled) return 0;
-  return l.symmetry
-    ? Math.max(coverageAt(u, v, l, polygon), coverageAt(1 - u, v, l, polygon))
-    : coverageAt(u, v, l, polygon);
+  return preparedCoverage(u, v, l, polygon, prepareLayerStrength(l, polygon));
 }
-function coverageAt(u: number, v: number, l: Layer, polygon: Point[]): number {
+function prepareLayerStrength(l: Layer, polygon: Point[]): PigmentStrength | undefined {
+  // Keep the legacy arithmetic for uniform knots, including its last-bit linear
+  // interpolation rounding. This preserves their mask bytes exactly.
+  return l.strength.mode === "smooth-boundary" && !l.points.every(p => p.weight === l.points[0].weight)
+    ? preparePigmentStrength(polygon, l.strength.blend) : undefined;
+}
+function preparedCoverage(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength): number {
+  return l.symmetry
+    ? Math.max(coverageAt(u, v, l, polygon, strength), coverageAt(1 - u, v, l, polygon, strength))
+    : coverageAt(u, v, l, polygon, strength);
+}
+function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength): number {
   [u, v] = warpFields(u, v, l.fields);
   let inside = false,
     best = Infinity,
@@ -239,7 +267,8 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[]): number {
     }
   }
   const x = clamp(0.5 + ((inside ? 1 : -1) * Math.sqrt(best)) / l.feather);
-  return x * x * (3 - 2 * x) * weight * l.opacity;
+  if (x === 0) return 0;
+  return x * x * (3 - 2 * x) * (strength ? strength(u, v) : weight) * l.opacity;
 }
 // Alpha-only design: white RGB provides colour-independent masks and clean edges.
 export function raster(l: Layer, size: number): Uint8ClampedArray {
@@ -248,6 +277,7 @@ export function raster(l: Layer, size: number): Uint8ClampedArray {
   for (let i = 0; i < data.length; i += 4)
     data[i] = data[i + 1] = data[i + 2] = 255;
   if (!l.enabled) return data;
+  const strength = prepareLayerStrength(l, polygon);
   const pad = l.feather + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   let minU = Math.min(...polygon.map((p) => p.u)) - pad,
     maxU = Math.max(...polygon.map((p) => p.u)) + pad;
@@ -267,7 +297,7 @@ export function raster(l: Layer, size: number): Uint8ClampedArray {
       x++
     )
       data[(y * size + x) * 4 + 3] = Math.round(
-        255 * coverage((x + 0.5) / size, (y + 0.5) / size, l, polygon),
+        255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength),
       );
   return data;
 }

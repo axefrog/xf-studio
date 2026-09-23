@@ -1,5 +1,7 @@
 # Continuous pigment strength: measured candidates
 
+**Implementation follow-up:** the chosen positive boundary blend is now integrated in recipe-4 with explicit legacy preservation, user-controlled blend and Undo. See the [authoring guide](../../projects/xf-appearance-studio/authoring/README.md#continuous-point-pigment). The measurements below describe the original research checkpoint. The runner now explicitly selects legacy mode for its old-evaluator baselines so v4 defaults do not invalidate comparisons.
+
 23 September 2026. Research prototype only: no production evaluator, recipe schema, library data, UI or compiled mask was changed. This follows the confirmed [nearest-edge seam](path-and-falloff-design.md#3-confirmed-nearest-segment-weight-discontinuity).
 
 **Recommendation:** use a positive, regularized **arclength boundary integral** as the next versioned strength-field prototype. It blends boundary strengths continuously, respects geometric symmetry and does not change merely because an unchanged edge gets more control/sample points. Do not adopt an unweighted average over control points. Do not adopt an exact-boundary/unregularized variant without prohibiting ambiguous self-crossing paths. Keep `recipe-2` masks available unchanged.

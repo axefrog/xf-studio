@@ -56,7 +56,7 @@ for(const [name,polygon] of Object.entries(fixtures)) {
 
 const square=fixtures.opposing;
 const b=boundaryKernel(square,epsilon),p=pointKernel(square,epsilon),h=harmonicGrid(square,144,b);
-const legacy=initialRecipe().layers[0]; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,fields:[{id:"study",u:.5,v:.5,du:0,dv:0,radius:.07}]});
+const legacy=initialRecipe().layers[0]; legacy.strength={mode:"legacy-nearest"}; Object.assign(legacy,{symmetry:false,opacity:1,feather:.01,points:square,fields:[{id:"study",u:.5,v:.5,du:0,dv:0,radius:.07}]});
 results.centerContinuity=[.01,.0001,.000001,.00000001].map(e=>({e,
   old:coverage(.5,.5+e,legacy)-coverage(.5,.5-e,legacy),
   point:p(.5,.5+e)-p(.5,.5-e),boundary:b(.5,.5+e)-b(.5,.5-e),harmonic:h.at(.5,.5+e)-h.at(.5,.5-e),
@@ -111,7 +111,7 @@ function bakedField(polygon:Point[],cells:number,field:Field) {
     return (data[i]*(1-tx)+data[i+1]*tx)*(1-ty)+(data[i+n]*(1-tx)+data[i+n+1]*tx)*ty;
   };
 }
-const layer=initialRecipe().layers[0];layer.points=layer.points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}));
+const layer=initialRecipe().layers[0]; layer.strength={mode:"legacy-nearest"};layer.points=layer.points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}));
 const methods:Record<string,(size:number)=>Uint8ClampedArray>={
   legacy:size=>raster(layer,size),
   point:size=>candidateRaster(layer,size,poly=>pointKernel(poly,epsilon)),

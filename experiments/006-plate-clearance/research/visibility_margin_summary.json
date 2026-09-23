@@ -1,0 +1,947 @@
+{
+  "build": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800",
+  "passed": true,
+  "optimizerImported": false,
+  "verification": {
+    "bounded-failure-certified": 15,
+    "feasible": 15
+  },
+  "worstAcceptedSlackRatio": -6.8833827526759706e-15,
+  "smallestCertificateSeparation": 0.0036143909378214545,
+  "negativeControlOriginalCertificatesRetained": [
+    266,
+    275,
+    805,
+    5631,
+    5981,
+    6471
+  ],
+  "originalFeasibleVectorsIndependentlyRechecked": 1625,
+  "visibility": {
+    "frames": 73,
+    "views": 50,
+    "strictInteriorSamplesPerFaceView": 25,
+    "faces": 40,
+    "counts": {
+      "exposed": 2901,
+      "ambiguous": 0,
+      "sampled-hidden": 19
+    },
+    "newPositiveFacePoses": 10
+  },
+  "newPositiveFacePoses": [
+    {
+      "frame": 25,
+      "headTriangle": 1990,
+      "category": "exposed",
+      "visibleRayCount": 1,
+      "witness": {
+        "viewIndex": 15,
+        "barycentricIndex": 8,
+        "depthGap": -9.065317513323734e-08,
+        "facingDot": 0.05560098871019167,
+        "firstHeadFace": 1990
+      }
+    },
+    {
+      "frame": 25,
+      "headTriangle": 2424,
+      "category": "exposed",
+      "visibleRayCount": 18,
+      "witness": {
+        "viewIndex": 31,
+        "barycentricIndex": 0,
+        "depthGap": -2.962509931814239e-08,
+        "facingDot": 0.04299634779470303,
+        "firstHeadFace": 2424
+      }
+    },
+    {
+      "frame": 25,
+      "headTriangle": 12419,
+      "category": "exposed",
+      "visibleRayCount": 111,
+      "witness": {
+        "viewIndex": 7,
+        "barycentricIndex": 0,
+        "depthGap": -1.2007552008252986e-08,
+        "facingDot": 0.2315412808167736,
+        "firstHeadFace": 12419
+      }
+    },
+    {
+      "frame": 25,
+      "headTriangle": 12421,
+      "category": "exposed",
+      "visibleRayCount": 146,
+      "witness": {
+        "viewIndex": 7,
+        "barycentricIndex": 0,
+        "depthGap": -2.6755252069410318e-08,
+        "facingDot": 0.22418836844063195,
+        "firstHeadFace": 12421
+      }
+    },
+    {
+      "frame": 25,
+      "headTriangle": 12423,
+      "category": "exposed",
+      "visibleRayCount": 143,
+      "witness": {
+        "viewIndex": 8,
+        "barycentricIndex": 0,
+        "depthGap": -5.705220273988232e-08,
+        "facingDot": 0.37906938349202757,
+        "firstHeadFace": 12423
+      }
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1990,
+      "category": "exposed",
+      "visibleRayCount": 6,
+      "witness": {
+        "viewIndex": 4,
+        "barycentricIndex": 7,
+        "depthGap": 6.832019561198166e-08,
+        "facingDot": 0.12236601054859961,
+        "firstHeadFace": 1990
+      }
+    },
+    {
+      "frame": 169,
+      "headTriangle": 12419,
+      "category": "exposed",
+      "visibleRayCount": 107,
+      "witness": {
+        "viewIndex": 7,
+        "barycentricIndex": 0,
+        "depthGap": -6.179402195494177e-08,
+        "facingDot": 0.23163353067109954,
+        "firstHeadFace": 12419
+      }
+    },
+    {
+      "frame": 169,
+      "headTriangle": 12421,
+      "category": "exposed",
+      "visibleRayCount": 112,
+      "witness": {
+        "viewIndex": 7,
+        "barycentricIndex": 0,
+        "depthGap": -6.403433483459509e-08,
+        "facingDot": 0.21915650793086117,
+        "firstHeadFace": 12421
+      }
+    },
+    {
+      "frame": 169,
+      "headTriangle": 12423,
+      "category": "exposed",
+      "visibleRayCount": 146,
+      "witness": {
+        "viewIndex": 8,
+        "barycentricIndex": 0,
+        "depthGap": 8.79393069475043e-09,
+        "facingDot": 0.39666314929466495,
+        "firstHeadFace": 12423
+      }
+    },
+    {
+      "frame": 170,
+      "headTriangle": 12419,
+      "category": "exposed",
+      "visibleRayCount": 139,
+      "witness": {
+        "viewIndex": 7,
+        "barycentricIndex": 0,
+        "depthGap": 2.8295407628053937e-08,
+        "facingDot": 0.2795494224187475,
+        "firstHeadFace": 12419
+      }
+    }
+  ],
+  "sampledHiddenFacePoses": [
+    {
+      "frame": 25,
+      "headTriangle": 1988
+    },
+    {
+      "frame": 25,
+      "headTriangle": 1989
+    },
+    {
+      "frame": 25,
+      "headTriangle": 1991
+    },
+    {
+      "frame": 25,
+      "headTriangle": 1992
+    },
+    {
+      "frame": 25,
+      "headTriangle": 1993
+    },
+    {
+      "frame": 25,
+      "headTriangle": 2422
+    },
+    {
+      "frame": 120,
+      "headTriangle": 1991
+    },
+    {
+      "frame": 120,
+      "headTriangle": 1992
+    },
+    {
+      "frame": 120,
+      "headTriangle": 1993
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1988
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1989
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1991
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1992
+    },
+    {
+      "frame": 169,
+      "headTriangle": 1993
+    },
+    {
+      "frame": 169,
+      "headTriangle": 2422
+    },
+    {
+      "frame": 169,
+      "headTriangle": 2424
+    },
+    {
+      "frame": 170,
+      "headTriangle": 1991
+    },
+    {
+      "frame": 170,
+      "headTriangle": 1992
+    },
+    {
+      "frame": 170,
+      "headTriangle": 1993
+    }
+  ],
+  "margins": [
+    {
+      "margin": 5e-05,
+      "newlyFeasibleOfTen": 3,
+      "totalIndependentFeasibleByMonotonicity": 1628,
+      "remainingFailedVertices": [
+        266,
+        275,
+        277,
+        805,
+        5631,
+        5981,
+        6471
+      ]
+    },
+    {
+      "margin": 4e-05,
+      "newlyFeasibleOfTen": 6,
+      "totalIndependentFeasibleByMonotonicity": 1631,
+      "remainingFailedVertices": [
+        266,
+        275,
+        277,
+        805
+      ]
+    },
+    {
+      "margin": 2.5e-05,
+      "newlyFeasibleOfTen": 6,
+      "totalIndependentFeasibleByMonotonicity": 1631,
+      "remainingFailedVertices": [
+        266,
+        275,
+        277,
+        805
+      ]
+    }
+  ],
+  "vertices": [
+    {
+      "headVertex": 266,
+      "plateVertex": 109,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 510,
+      "zeroConstraints": 1,
+      "verifiedCertificateSeparation": 0.9051578676041778,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.49993338451597874
+        },
+        {
+          "frame": 169,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.5000666154840212
+        }
+      ]
+    },
+    {
+      "headVertex": 266,
+      "plateVertex": 109,
+      "margin": 4e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 510,
+      "zeroConstraints": 1,
+      "verifiedCertificateSeparation": 0.7051578676041779,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.49993338451597885
+        },
+        {
+          "frame": 169,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.5000666154840212
+        }
+      ]
+    },
+    {
+      "headVertex": 266,
+      "plateVertex": 109,
+      "margin": 2.5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 510,
+      "zeroConstraints": 1,
+      "verifiedCertificateSeparation": 0.40515786760417777,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.4999333845159788
+        },
+        {
+          "frame": 169,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.5000666154840211
+        }
+      ]
+    },
+    {
+      "headVertex": 275,
+      "plateVertex": 118,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 502,
+      "zeroConstraints": 9,
+      "verifiedCertificateSeparation": 0.9999999999999997,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.49954232086524947
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.31498129985644696
+        },
+        {
+          "frame": 410,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.1475589782453361
+        },
+        {
+          "frame": 600,
+          "headTriangle": 2422,
+          "category": "exposed",
+          "weight": 0.03791740103296748
+        }
+      ]
+    },
+    {
+      "headVertex": 275,
+      "plateVertex": 118,
+      "margin": 4e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 502,
+      "zeroConstraints": 9,
+      "verifiedCertificateSeparation": 0.7999999999999995,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.4989887830098624
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.33930379652748777
+        },
+        {
+          "frame": 300,
+          "headTriangle": 1992,
+          "category": "exposed",
+          "weight": 0.005113316812368142
+        },
+        {
+          "frame": 410,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.15659410365028165
+        }
+      ]
+    },
+    {
+      "headVertex": 275,
+      "plateVertex": 118,
+      "margin": 2.5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 502,
+      "zeroConstraints": 9,
+      "verifiedCertificateSeparation": 0.4999999999999998,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 2424,
+          "category": "exposed",
+          "weight": 0.4989887830098625
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.3393037965274878
+        },
+        {
+          "frame": 300,
+          "headTriangle": 1992,
+          "category": "exposed",
+          "weight": 0.005113316812368183
+        },
+        {
+          "frame": 410,
+          "headTriangle": 2425,
+          "category": "exposed",
+          "weight": 0.1565941036502816
+        }
+      ]
+    },
+    {
+      "headVertex": 276,
+      "plateVertex": 119,
+      "margin": 5e-05,
+      "status": "feasible",
+      "positiveConstraints": 570,
+      "zeroConstraints": 14,
+      "displacementNorm": 0.00022632349552039033,
+      "minimumSlackUnits": -1.332267629550188e-19
+    },
+    {
+      "headVertex": 276,
+      "plateVertex": 119,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 570,
+      "zeroConstraints": 14,
+      "displacementNorm": 0.00018105879641631346,
+      "minimumSlackUnits": -1.3149986351360939e-19
+    },
+    {
+      "headVertex": 276,
+      "plateVertex": 119,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 570,
+      "zeroConstraints": 14,
+      "displacementNorm": 0.00011316174776019512,
+      "minimumSlackUnits": -1.2212453270876723e-19
+    },
+    {
+      "headVertex": 277,
+      "plateVertex": 120,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 353,
+      "zeroConstraints": 12,
+      "verifiedCertificateSeparation": 0.4994617577936163,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.05909531844080151
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.00139893359886443
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.4400439901667176
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.4994617577936166
+        }
+      ]
+    },
+    {
+      "headVertex": 277,
+      "plateVertex": 120,
+      "margin": 4e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 353,
+      "zeroConstraints": 12,
+      "verifiedCertificateSeparation": 0.3995694062348927,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.05909531844080166
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.001398933598864416
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.4400439901667173
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.49946175779361657
+        }
+      ]
+    },
+    {
+      "headVertex": 277,
+      "plateVertex": 120,
+      "margin": 2.5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 353,
+      "zeroConstraints": 12,
+      "verifiedCertificateSeparation": 0.24973087889680795,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.05909531844080151
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.00139893359886443
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1992,
+          "category": "sampled-hidden",
+          "weight": 0.4400439901667176
+        },
+        {
+          "frame": 170,
+          "headTriangle": 1989,
+          "category": "exposed",
+          "weight": 0.4994617577936166
+        }
+      ]
+    },
+    {
+      "headVertex": 278,
+      "plateVertex": 121,
+      "margin": 5e-05,
+      "status": "feasible",
+      "positiveConstraints": 435,
+      "zeroConstraints": 3,
+      "displacementNorm": 0.00024212490559711607,
+      "minimumSlackUnits": 1.4432899320127037e-19
+    },
+    {
+      "headVertex": 278,
+      "plateVertex": 121,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 435,
+      "zeroConstraints": 3,
+      "displacementNorm": 0.00019369992447769132,
+      "minimumSlackUnits": -2.1649348980190554e-19
+    },
+    {
+      "headVertex": 278,
+      "plateVertex": 121,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 435,
+      "zeroConstraints": 3,
+      "displacementNorm": 0.00012106245279855699,
+      "minimumSlackUnits": -1.8318679906315083e-19
+    },
+    {
+      "headVertex": 805,
+      "plateVertex": 321,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 211,
+      "zeroConstraints": 8,
+      "verifiedCertificateSeparation": 0.4992131150136982,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.38180837436309306
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.04281822354155208
+        },
+        {
+          "frame": 169,
+          "headTriangle": 1993,
+          "category": "sampled-hidden",
+          "weight": 0.07616028708165641
+        },
+        {
+          "frame": 590,
+          "headTriangle": 1990,
+          "category": "exposed",
+          "weight": 0.49921311501369847
+        }
+      ]
+    },
+    {
+      "headVertex": 805,
+      "plateVertex": 321,
+      "margin": 4e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 211,
+      "zeroConstraints": 8,
+      "verifiedCertificateSeparation": 0.399370492010958,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.38180837436309306
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.042818223541552035
+        },
+        {
+          "frame": 169,
+          "headTriangle": 1993,
+          "category": "sampled-hidden",
+          "weight": 0.07616028708165642
+        },
+        {
+          "frame": 590,
+          "headTriangle": 1990,
+          "category": "exposed",
+          "weight": 0.4992131150136985
+        }
+      ]
+    },
+    {
+      "headVertex": 805,
+      "plateVertex": 321,
+      "margin": 2.5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 211,
+      "zeroConstraints": 8,
+      "verifiedCertificateSeparation": 0.24960655750684896,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.38180837436309306
+        },
+        {
+          "frame": 120,
+          "headTriangle": 1991,
+          "category": "sampled-hidden",
+          "weight": 0.04281822354155208
+        },
+        {
+          "frame": 169,
+          "headTriangle": 1993,
+          "category": "sampled-hidden",
+          "weight": 0.07616028708165641
+        },
+        {
+          "frame": 590,
+          "headTriangle": 1990,
+          "category": "exposed",
+          "weight": 0.49921311501369847
+        }
+      ]
+    },
+    {
+      "headVertex": 806,
+      "plateVertex": 322,
+      "margin": 5e-05,
+      "status": "feasible",
+      "positiveConstraints": 142,
+      "zeroConstraints": 4,
+      "displacementNorm": 0.00020655893717256465,
+      "minimumSlackUnits": 5.19234857121577e-20
+    },
+    {
+      "headVertex": 806,
+      "plateVertex": 322,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 142,
+      "zeroConstraints": 4,
+      "displacementNorm": 0.000165247149738051,
+      "minimumSlackUnits": 2.5577646931159763e-20
+    },
+    {
+      "headVertex": 806,
+      "plateVertex": 322,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 142,
+      "zeroConstraints": 4,
+      "displacementNorm": 0.00010327946858628137,
+      "minimumSlackUnits": -6.312985508891627e-20
+    },
+    {
+      "headVertex": 5631,
+      "plateVertex": 1267,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "verifiedCertificateSeparation": 0.0036143909378214545,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 12435,
+          "category": "exposed",
+          "weight": 0.46336480566506405
+        },
+        {
+          "frame": 190,
+          "headTriangle": 12419,
+          "category": "exposed",
+          "weight": 0.4958798555260949
+        },
+        {
+          "frame": 330,
+          "headTriangle": 12423,
+          "category": "exposed",
+          "weight": 0.04075533880884112
+        }
+      ]
+    },
+    {
+      "headVertex": 5631,
+      "plateVertex": 1267,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.00020072550339961858,
+      "minimumSlackUnits": -3.4416913763379856e-19
+    },
+    {
+      "headVertex": 5631,
+      "plateVertex": 1267,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.0001254534396247617,
+      "minimumSlackUnits": -1.6653345369377348e-19
+    },
+    {
+      "headVertex": 5981,
+      "plateVertex": 1452,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "verifiedCertificateSeparation": 0.19138310982832607,
+      "activePlanes": [
+        {
+          "frame": 490,
+          "headTriangle": 3666,
+          "category": "exposed",
+          "weight": 0.49999908664747517
+        },
+        {
+          "frame": 490,
+          "headTriangle": 3668,
+          "category": "exposed",
+          "weight": 0.5000009133525248
+        }
+      ]
+    },
+    {
+      "headVertex": 5981,
+      "plateVertex": 1452,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.0002473359169600583,
+      "minimumSlackUnits": 3.3306690738754697e-19
+    },
+    {
+      "headVertex": 5981,
+      "plateVertex": 1452,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.00015458494810003504,
+      "minimumSlackUnits": -9.71445146547012e-20
+    },
+    {
+      "headVertex": 6471,
+      "plateVertex": 1606,
+      "margin": 5e-05,
+      "status": "bounded-failure-certified",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "verifiedCertificateSeparation": 0.08019199971325741,
+      "activePlanes": [
+        {
+          "frame": 25,
+          "headTriangle": 12496,
+          "category": "exposed",
+          "weight": 0.5084066617918584
+        },
+        {
+          "frame": 169,
+          "headTriangle": 12494,
+          "category": "exposed",
+          "weight": 0.4745846809975409
+        },
+        {
+          "frame": 480,
+          "headTriangle": 12494,
+          "category": "exposed",
+          "weight": 0.017008657210600603
+        }
+      ]
+    },
+    {
+      "headVertex": 6471,
+      "plateVertex": 1606,
+      "margin": 4e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.000217436682370289,
+      "minimumSlackUnits": -2.4980018054066025e-19
+    },
+    {
+      "headVertex": 6471,
+      "plateVertex": 1606,
+      "margin": 2.5e-05,
+      "status": "feasible",
+      "positiveConstraints": 438,
+      "zeroConstraints": 0,
+      "displacementNorm": 0.00013589792648143116,
+      "minimumSlackUnits": -1.1102230246251566e-19
+    }
+  ],
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\fixed_feasibility.json",
+      "sha256": "29c2500efac6a7962f1d073178f1bd834105ce305c39f6b8affcebf6f95a8045"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\visibility_margin_samples.json",
+      "sha256": "fc62da6725472f70a8963e89b77979cf24fce6758a593988ed25b14b046d92cc"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\fixed_linear.f64",
+      "sha256": "a15b2ea0b6233b60a55981bcff7c02b93c25e4ba133780d54168cecc635c13aa"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\posed\\head.positions.f64",
+      "sha256": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\visibility_margin_solutions.json",
+      "sha256": "c9024f94074fa8ce2274a701a0f8a9a7b671a9382102fec875435b62f883d5f6"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\fixed_displacement_diagnostic.f64",
+      "sha256": "99ac1687e0616b6151bb450e4dcf0b4b1d5dfaa5e2505185f527b52a3283ba09"
+    }
+  ],
+  "limits": [
+    "Finite views/poses, saved-V shape only. Hidden is sampled-hidden, never proven invisible.",
+    "Infinite incident-plane constraints remain more restrictive than finite-surface collision avoidance.",
+    "No full field, smoothness/contact/morph/import check or game-render evidence is created.",
+    "No geometry or original experimental output was modified."
+  ],
+  "scripts": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\research\\visibility_margin_sample.py",
+      "sha256": "37461466d903e7f4eececbf7f90622c7bd2976d6db9606cc1246d27d1dff666a"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\research\\visibility_margin_solve.py",
+      "sha256": "fc413d33ba8daf74bf73f0e142224512d0798d301211e3c988202c644942bec3"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\research\\visibility_margin_verify.py",
+      "sha256": "c038386dda90b7cb61db24d2060cc02161ac7b2b229afc40a5d2cc51676a7b15"
+    }
+  ]
+}
