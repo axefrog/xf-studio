@@ -626,9 +626,14 @@ export async function createScene(
     amount = 0;
   const start = performance.now();
   let previous = start;
+  let totalFrames=0,zeroIntervals=0,lastFrameAt=start;
+  const frameIntervals:number[]=[],renderDurations:number[]=[];
+  const record=(items:number[],value:number)=>{items.push(value);if(items.length>180)items.shift();};
   const frameListeners = new Set<() => void>();
   renderer.setAnimationLoop(() => {
     const now = performance.now(), t = (now - start) / 1000, dt = (now - previous) / 1000;
+    totalFrames++;lastFrameAt=now;
+    if(dt>0 && dt<5)record(frameIntervals,dt*1000);else if(dt===0)zeroIntervals++;
     previous = now;
     if (idle?.enabled) idle.update(dt);
     else blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
@@ -642,7 +647,9 @@ export async function createScene(
       scene.updateMatrixWorld(true);
       for (const update of frameListeners) update();
     }
+    const renderStart=performance.now();
     renderer.render(scene, camera);
+    record(renderDurations,performance.now()-renderStart);
   });
   const evidence = {
     meshes: meshes.map((m) => ({
@@ -693,6 +700,13 @@ export async function createScene(
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
+    frameTiming:()=>{
+      const summarize=(values:number[])=>{const ordered=[...values].sort((a,b)=>a-b);
+        return {samples:ordered.length,medianMs:ordered[Math.floor(ordered.length*.5)]??0,
+          p95Ms:ordered[Math.floor(ordered.length*.95)]??0};};
+      return {interval:summarize(frameIntervals),cpuRender:summarize(renderDurations),
+        totalFrames,zeroIntervals,elapsedMs:lastFrameAt-start};
+    },
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape,
     applySavedV,

@@ -3,6 +3,7 @@ import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength
 import type { Finish, Flakes } from "./finish";
 import { validStudioIrregularSettings } from "./flake-field";
 import type {IrregularFlakes} from "./flake-field";
+import {isDirectGlint,type DirectGlintFlakes} from "./direct-glint-settings";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -28,7 +29,7 @@ export type Layer = {
   enabled: boolean;
   color: string;
   finish: Finish;
-  flakes?: Flakes | IrregularFlakes;
+  flakes?: Flakes | IrregularFlakes | DirectGlintFlakes;
   opacity: number;
   feather: number;
   symmetry: boolean;
@@ -39,7 +40,7 @@ export type Layer = {
   softness: Softness;
 };
 export type Recipe = {
-  schema: "xfs/recipe-6" | "xfs/recipe-7";
+  schema: "xfs/recipe-6" | "xfs/recipe-7" | "xfs/recipe-8";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -91,7 +92,7 @@ export function parseRecipe(value: unknown): Recipe {
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -130,8 +131,10 @@ export function parseRecipe(value: unknown): Recipe {
       const f = l.flakes;
       if (!f || typeof f !== "object" || Array.isArray(f)) throw Error("Invalid flake settings.");
       if ("model" in f) {
-        if (r.schema !== "xfs/recipe-7" || l.finish !== "glitter" || !validStudioIrregularSettings(f))
-          throw Error("Invalid irregular flake settings.");
+        const raster = (r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8") && validStudioIrregularSettings(f);
+        const direct = r.schema === "xfs/recipe-8" && isDirectGlint(f);
+        if (l.finish !== "glitter" || !(raster || direct))
+          throw Error("Invalid experimental Glitter settings.");
       } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) ||
         !num(f.density, 0, 1) || !num(f.tilt, 0, 1) ||
         !Number.isInteger(f.seed) || !num(f.seed, 0, 2147483647))
@@ -146,7 +149,7 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7";
+    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8";
     if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
       throw Error("Ambiguous edge softness format.");
     let softness: Softness = {mode: "uniform"};
@@ -224,7 +227,7 @@ export function parseRecipe(value: unknown): Recipe {
     const { field: _legacyField, fields: _fields, ...settings } = l;
     layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-7", layers });
+  return structuredClone({ ...r, schema: r.schema === "xfs/recipe-8" ? "xfs/recipe-8" : "xfs/recipe-7", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);

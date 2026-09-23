@@ -3,6 +3,8 @@ import { extendSkin } from "./skin";
 import { canonicalFinish, defaultFlakes, isIrregular } from "./finish";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
 import type { Layer } from "./recipe";
+import {installProceduralGlintStudy} from "./direct-glint";
+import {isDirectGlint} from "./direct-glint-settings";
 
 export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> };
 export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
@@ -11,12 +13,14 @@ export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
 export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number) {
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
+  const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
   anchor.visible = false;
   const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
   anchor.material = anchorMaterial;
   extendSkin(anchor, anchorMaterial);
   let wireframe = false;
-  const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish));
+  const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
+    !isDirectGlint(layer.flakes);
   const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? studioIrregularOpticalKey(layer.flakes,size)
     : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
@@ -36,12 +40,15 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       maps.normal.dispose(); maps.surface.dispose(); maps.albedo?.dispose(); flakes.delete(material);
     }
   }
+  function clearDirect(material:THREE.MeshPhysicalMaterial){
+    direct.get(material)?.dispose();direct.delete(material);
+  }
   function setCanvases(canvases: HTMLCanvasElement[]) {
     // A preset/stack replacement owns fresh slot identities, even at equal length.
     // Never let an old slot's optical maps survive into a different authored layer.
     while (plates.length) {
       const material = materials.pop()!;
-      clearFlakes(material); material.dispose(); textures.pop()!.dispose(); plates.pop()!.removeFromParent();
+      clearFlakes(material); clearDirect(material); material.dispose(); textures.pop()!.dispose(); plates.pop()!.removeFromParent();
     }
     for (let i = 0; i < canvases.length; i++) {
       const mesh = anchor.clone(), texture = maskTexture(canvases[i]);
@@ -75,13 +82,17 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     const key=albedoKeyFor(layer,size);
     return !!layer.enabled && !!key && flakes.get(materials[i])?.albedoKey!==key;
   }
-  function updateLayer(i: number, layer: Layer, optics?: BakedOptics, albedo?: BakedAlbedo) {
+  function updateLayer(i: number, layer: Layer, optics?: BakedOptics, albedo?: BakedAlbedo, completeMask=false) {
     const material = materials[i];
     if (!material) return;
-    if (!layer.enabled) { clearFlakes(material); plates[i].visible = false; return; }
+    if (!layer.enabled) { clearFlakes(material);clearDirect(material); plates[i].visible = false; return; }
+    // The shader is cheap to configure, but must never run against a prior
+    // layer/shape mask while the cancellable raster worker is still pending.
+    if(layer.finish==="glitter" && isDirectGlint(layer.flakes) && !completeMask)return;
     const size = (textures[i].image as HTMLCanvasElement).width;
     if (size<32 && layer.finish==="glitter" && isIrregular(layer.flakes)) return;
     const useMaps = textured(layer), key = keyFor(layer, size);
+    const directSettings=layer.finish==="glitter" && isDirectGlint(layer.flakes)?layer.flakes:undefined;
     const candidateKey=albedoKeyFor(layer,size);
     if (candidateKey && (!albedo || albedo.key!==candidateKey || albedo.data.length!==size*size*4)) return;
     if (useMaps && flakes.get(material)?.key !== key) {
@@ -101,6 +112,13 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
         { key, normal: map(optics.normal), surface: map(optics.surface) };
       clearFlakes(material); flakes.set(material, next);
     } else if (!useMaps) clearFlakes(material);
+    if(directSettings){
+      let glint=direct.get(material);
+      if(!glint){glint=installProceduralGlintStudy(material);direct.set(material,glint);}
+      glint.setShape("polygon");glint.setProductionProfile(true);glint.setEnabled(true);glint.setDensity(directSettings.density);
+      glint.setFineShare(directSettings.fineShare);glint.setStrength(directSettings.strength);
+      glint.setSeed(directSettings.seed);glint.setColor(directSettings.color);glint.setBodyColor(layer.color);
+    }else clearDirect(material);
     const maps = flakes.get(material), changed = Boolean(material.normalMap) !== Boolean(maps);
     if (candidateKey && maps && maps.albedoKey!==candidateKey) {
       if (maps.albedo) maps.albedo.dispose();
@@ -114,9 +132,9 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     material.normalMap = maps?.normal ?? null;
     material.roughnessMap = material.metalnessMap = maps?.surface ?? null;
     const finish = canonicalFinish(layer.finish);
-    material.roughness = useMaps ? 1 : finish === "matte" ? .88 : finish === "metallic" || finish === "iridescent" ? .27 : finish === "glossy" ? .16 : .38;
+    material.roughness = directSettings ? .55 : useMaps ? 1 : finish === "matte" ? .88 : finish === "metallic" || finish === "iridescent" ? .27 : finish === "glossy" ? .16 : .38;
     material.metalness = useMaps ? 1 : finish === "metallic" || finish === "iridescent" ? .65 : 0;
-    material.clearcoat = finish === "glossy" ? 1 : 0; material.clearcoatRoughness = .08;
+    material.clearcoat = directSettings ? .4 : finish === "glossy" ? 1 : 0; material.clearcoatRoughness = directSettings ? .24 : .08;
     material.iridescence = finish === "iridescent" ? 1 : 0; material.iridescenceIOR = 1.3;
     material.iridescenceThicknessRange = [400, 400];
     if (changed) material.needsUpdate = true;
@@ -131,7 +149,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       const mask = dimensions(textures[i]), normal = dimensions(material.normalMap), surface = dimensions(material.roughnessMap), albedo=dimensions(flakes.get(material)?.albedo);
       const allocated = [mask, normal, surface, albedo].filter((value): value is { width: number; height: number } => value !== null);
       const baseBytes = allocated.reduce((sum, image) => sum + image.width * image.height * 4, 0);
-      return { i, visible: plates[i].visible, mask, normal, surface, albedo, albedoKey:flakes.get(material)?.albedoKey,
+      return { i, visible: plates[i].visible, directGlints:direct.has(material), mask, normal, surface, albedo, albedoKey:flakes.get(material)?.albedoKey,
         opticalKey:flakes.get(material)?.key, mapCount: allocated.length, baseBytes,
         estimatedGPUBytesWithMips: allocated.reduce((sum, image) => {
           let width = image.width, height = image.height, bytes = 0;

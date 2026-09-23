@@ -1,6 +1,7 @@
 import type { Layer } from "./recipe";
 import type { RasterRequest, RasterResponse } from "./raster-processor";
 import {isIrregular} from "./finish";
+import {isDirectGlint} from "./direct-glint-settings";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeup-dependencies";
 
 export type RasterPort = {
@@ -15,7 +16,8 @@ function validResult(data: Completed, request: RasterRequest): boolean {
   const length = request.size * request.size * 4;
   if (data.size !== request.size || !(data.data instanceof Uint8ClampedArray) || data.data.length !== length ||
     !Number.isFinite(data.ms) || data.ms < 0) return false;
-  const expectsOptics = !!request.bakeOptics && request.layer.enabled && (request.layer.finish === "shimmer" || request.layer.finish === "glitter");
+  const expectsOptics = !!request.bakeOptics && request.layer.enabled &&
+    (request.layer.finish === "shimmer" || request.layer.finish === "glitter" && !isDirectGlint(request.layer.flakes));
   const settings=request.layer.flakes;
   const irregular = request.layer.enabled && request.layer.finish === "glitter" && isIrregular(settings);
   if (expectsOptics && !data.optics) return false;
@@ -105,7 +107,7 @@ export function createRasterClient(makeWorker: () => RasterPort,
     request(i: number, layer: Layer, prioritize = true, sizeOverride?: number, bakeOptics = false) {
       const requestedSize = sizeOverride ?? size;
       if (!Number.isInteger(requestedSize) || requestedSize < 1 || requestedSize > 4096 || typeof bakeOptics !== "boolean" ||
-        (bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter") && requestedSize < 32))
+        (bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter" && !isDirectGlint(layer.flakes)) && requestedSize < 32))
         throw Error("Invalid preview raster request.");
       const version = ++sequence;
       versions.set(i, version);

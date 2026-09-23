@@ -37,6 +37,7 @@ import {
   finishDescription,
 } from "./finish";
 import {defaultStudioIrregularFlakes,FLAKE_LIMITS} from "./flake-field";
+import {defaultDirectGlintFlakes,isDirectGlint} from "./direct-glint-settings";
 import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -225,12 +226,14 @@ function sync() {
   $("flake-controls").hidden = !["shimmer", "glitter"].includes(
     canonicalFinish(l.finish),
   );
-  $("flake-legacy").hidden = isIrregular(l.flakes) && l.finish === "glitter";
+  $("flake-legacy").hidden = l.finish === "glitter" && (isIrregular(l.flakes) || isDirectGlint(l.flakes));
   $("flake-irregular").hidden = !(isIrregular(l.flakes) && l.finish === "glitter");
-  $("flake-opt-in").hidden = l.finish !== "glitter" || isIrregular(l.flakes);
+  $("flake-direct").hidden = !(isDirectGlint(l.flakes) && l.finish === "glitter");
+  $("flake-opt-in").hidden = l.finish !== "glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes);
+  $("flake-direct-opt-in").hidden = l.finish !== "glitter" || isDirectGlint(l.flakes);
   const flakes = l.flakes ?? defaultFlakes();
   for (const id of ["cells", "density", "tilt"] as const) {
-    const legacy = isIrregular(flakes) ? defaultFlakes() : flakes;
+    const legacy = isIrregular(flakes) || isDirectGlint(flakes) ? defaultFlakes() : flakes;
     input("flake-" + id).value = String(legacy[id]);
     $("flake-" + id + "-value").textContent =
       id === "cells" ? String(legacy[id]) : `${Math.round(legacy[id] * 100)}%`;
@@ -244,6 +247,10 @@ function sync() {
     if(id!=="color") $("irregular-"+id+"-value").textContent=id==="count"?`${Math.round(flakes.count/5000)}%`:id==="radius"?`${(flakes[id]*100).toFixed(3)}% UV`:`${Math.round(flakes[id]*100)}%`;
   }
   if(isIrregular(flakes))showGlitterMeasurement();
+  if(isDirectGlint(flakes))for(const id of ["density","fineShare","strength","color"] as const){
+    input("direct-"+id).value=String(flakes[id]);
+    if(id!=="color")$("direct-"+id+"-value").textContent=id==="strength"?flakes.strength.toFixed(1):`${Math.round(flakes[id]*100)}%`;
+  }
   for (const [id, value] of Object.entries({
     weight: l.points[selected].weight,
     opacity: l.opacity,
@@ -272,7 +279,7 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
       .getContext("2d")!
       .putImageData(new ImageData(data, size, size), 0, 0);
     viewer?.setLayerCanvas(i, canvases[i]);
-    if (viewer) { viewer.updateLayer(i, layer, optics, albedo); initialOptics[i] = undefined; }
+    if (viewer) { viewer.updateLayer(i, layer, optics, albedo, true); initialOptics[i] = undefined; }
     else if (optics || albedo) {
       const key=opticalKey(layer,size), prior=initialOptics[i];
       initialOptics[i] = { key, data:optics ?? (prior?.key===key?prior.data:undefined), albedo };
@@ -336,7 +343,7 @@ function render(i = active) {
   }
   qualityError = "";
   const size = layer.enabled ? textureSize : 1;
-  const needsOptics = layer.enabled && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
+  const needsOptics = layer.enabled && !isDirectGlint(layer.flakes) && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     (viewer ? viewer.needsOptics(i, layer, size) : initialOptics[i]?.key !== opticalKey(layer, size));
   maskClient.request(i, layer, i === active, size, needsOptics);
   viewer?.updateLayer(i, recipe.layers[i]);
@@ -380,7 +387,7 @@ input("symmetry").onchange = () => {
 $<HTMLSelectElement>("finish").onchange = () => {
   checkpoint();
   const l=current(), finish=$<HTMLSelectElement>("finish").value as Layer["finish"];
-  if (finish!=="glitter" && isIrregular(l.flakes)) l.flakes=defaultFlakes();
+  if (finish!=="glitter" && (isIrregular(l.flakes)||isDirectGlint(l.flakes))) l.flakes=defaultFlakes();
   l.finish = finish;
   render();
 };
@@ -390,15 +397,23 @@ for (const id of ["cells", "density", "tilt"] as const) {
   control.addEventListener("keydown", checkpoint);
   control.oninput = () => {
     const l = current();
-    if (isIrregular(l.flakes)) return;
+    if (isIrregular(l.flakes)||isDirectGlint(l.flakes)) return;
     l.flakes ??= defaultFlakes();
     l.flakes[id] = +control.value;
     schedule();
   };
 }
 $("flake-opt-in").onclick = () => {
-  const l=current(); if (!l || l.finish!=="glitter" || isIrregular(l.flakes)) return;
+  const l=current(); if (!l || l.finish!=="glitter" || isIrregular(l.flakes) || isDirectGlint(l.flakes)) return;
   checkpoint(); l.flakes=defaultStudioIrregularFlakes(); render();
+};
+$("flake-direct-opt-in").onclick=()=>{
+  const l=current();if(!l||l.finish!=="glitter"||isDirectGlint(l.flakes))return;
+  checkpoint();recipe.schema="xfs/recipe-8";l.flakes=defaultDirectGlintFlakes();render();
+};
+$("flake-raster-switch").onclick=()=>{
+  const l=current();if(!l||l.finish!=="glitter"||!isDirectGlint(l.flakes))return;
+  checkpoint();l.flakes=defaultStudioIrregularFlakes();render();
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
@@ -414,6 +429,17 @@ for (const id of ["count","radius","spread","tilt","color"] as const) {
     catch {status("This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount.");sync();return;}
     l.flakes=next;
     schedule();
+  };
+}
+for(const id of ["density","fineShare","strength","color"] as const){
+  const control=input("direct-"+id);
+  control.addEventListener("pointerdown",checkpoint);
+  control.addEventListener("keydown",checkpoint);
+  control.oninput=()=>{
+    const l=current();if(!l||!isDirectGlint(l.flakes))return;
+    const next={...l.flakes,[id]:id==="color"?control.value:+control.value};
+    if(!isDirectGlint(next))return;
+    l.flakes=next;schedule();
   };
 }
 function changePath(command: PathCommand) {
@@ -684,9 +710,10 @@ try {
     surface.setEnabled(input("surface-controls").checked);
   for (let i = 0; i < recipe.layers.length; i++) {
     const stored = initialOptics[i];
-    if (initialQuality.accepted && !(recipe.layers[i].finish==="glitter" && isIrregular(recipe.layers[i].flakes) && canvases[i].width<32))
+    if (initialQuality.accepted && !(recipe.layers[i].finish==="glitter" &&
+      (isIrregular(recipe.layers[i].flakes) || isDirectGlint(recipe.layers[i].flakes)) && canvases[i].width<32))
       viewer.updateLayer(i, recipe.layers[i], stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.data : undefined,
-        stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.albedo : undefined);
+        stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.albedo : undefined,true);
     initialOptics[i] = undefined;
   }
   $("loading").hidden = true;
@@ -766,6 +793,7 @@ try {
         ]),
       ),
       lastRasterMs: lastRaster,
+      frameTiming:viewer!.frameTiming(),
       rasterQueue: maskClient.diagnostics(),
       previewQuality: { requestedSize: textureSize, canvases: canvases.map(c => c.width),
         materials: viewer!.makeupDiagnostics(), assessment: qualityAssessment(), error: qualityError },

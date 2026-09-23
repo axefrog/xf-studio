@@ -2,7 +2,7 @@
 
 First results: [measured findings](findings.md) and [versioned evidence](evidence.json). The [lit-head follow-up](lit-head-findings.md) compares fine fields, normal filtering and separate pigment/flake reflections. The [CPU glint reference](glint-oracle-findings.md) measures facet-response integration against averaged maps at 1K/2K. A separate [UV-cell browser pilot](uv-cell-glint-findings.md) tests fixed procedural facets under direct light. No production material was switched.
 
-Owned procedural texture research for the user-supplied glitter references. The main editor now carries an opt-in `irregular-planar-1` recipe-7 browser candidate; historical glitter recipes remain unchanged. [Visibility audit](visibility-audit.md) records why candidate IDs vastly exceed visible glints and why visual acceptance remains open.
+Owned procedural texture research for the user-supplied glitter references. The main editor carries an opt-in `irregular-planar-1` recipe-7 raster candidate and a separate `uv-cell-direct-1` recipe-8 browser model informed by the polygon shader pilot. Historical glitter recipes remain unchanged. [Visibility audit](visibility-audit.md) records why raster candidate IDs vastly exceed visible glints; the [direct-light checkpoint](../../research/materials/direct-glint-browser-checkpoint.md) compares the new model at 1K and 2K.
 
 ## Reproduce
 

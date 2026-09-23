@@ -4,7 +4,7 @@ Makeup raster performance: exact bounds, mirrored-pixel reuse and fair backgroun
 
 Whole-shape translation, selected-point rotation/scaling and persistent UV pan/zoom now work in both applicable editing views. Pure transform/view actions are separate from their gesture adapters; [details](../../research/authoring/shape-gesture-contract.md).
 
-Latest authoring checkpoint: the editor offers an opt-in irregular Glitter browser study with independent base and flake colours, an honest density control and measured coverage readout. It saves in recipe-7, while older glitter retains its original appearance. Its photo-like visual target remains unmet; game export still rejects Glitter. [Editor use and limits](authoring/README.md).
+Latest authoring checkpoint: the editor offers opt-in raster and separately versioned direct-light Glitter browser studies with independent base and facet colours. The direct-light recipe-8 candidate produces finer, more numerous glints at face and close-eye scales, but the supplied photographs remain a visual target rather than a validated match. Older glitter retains its original appearance, and game export still rejects Glitter. [Editor use and limits](authoring/README.md).
 
 Renamed by Nathan on 2026-09-23. Current product: users author their own eye-makeup presets in the studio, save a local library and compile a collection for **one in-game selector**. This supersedes four in-game layer selectors and the design/colour/finish matrix. Editable layers, expanded plate coverage, predictable stacking and seven familiar finish families remain the first delivery area. See the [product direction and later-feature discussion gates](data/product-direction.md).
 

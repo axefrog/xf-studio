@@ -1,4 +1,5 @@
 import type { Recipe } from "./recipe";
+import {isDirectGlint} from "./direct-glint-settings";
 
 export const PREVIEW_TEXTURE_SIZES = [512, 1024, 2048, 4096] as const;
 export type PreviewTextureSize = (typeof PREVIEW_TEXTURE_SIZES)[number];
@@ -46,7 +47,8 @@ export function assessPreviewQuality(
   budgetBytes = DEFAULT_PREVIEW_BUDGET_BYTES,
 ): PreviewQualityAssessment {
   const enabled = recipe.layers.filter(layer => layer.enabled);
-  const opticalLayers = enabled.filter(layer => layer.finish === "shimmer" || layer.finish === "glitter").length;
+  const opticalLayers = enabled.filter(layer => layer.finish === "shimmer" ||
+    layer.finish === "glitter" && !isDirectGlint(layer.flakes)).length;
   const irregularLayers=enabled.filter(layer=>layer.finish==="glitter" && layer.flakes && "model" in layer.flakes && layer.flakes.model==="irregular-planar-1").length;
   const plainLayers = enabled.length - opticalLayers, generatedMaps = plainLayers + opticalLayers * 3 + irregularLayers;
   const result: PreviewQualityAssessment = {

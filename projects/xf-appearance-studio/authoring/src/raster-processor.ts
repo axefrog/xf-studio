@@ -3,6 +3,7 @@ import { createFlakeJob, defaultFlakes, isIrregular, type FlakeMaps } from "./fi
 import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob,
   FLAKE_LIMITS, STUDIO_FINE_REGIONS } from "./flake-field";
 import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
+import {isDirectGlint} from "./direct-glint-settings";
 
 export type RasterRequest = { i: number; version: number; layer: Layer; size: number; bakeOptics?: boolean };
 export type GlitterStats={generated:number;regionRetained:number;maskCentres:number;
@@ -164,10 +165,12 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
               if(centres)cachedCentres={key:opticalKey,uv:centres};
             }
           }
-        } else if (!token.cancelled && snapshot.bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter")) {
+        } else if (!token.cancelled && snapshot.bakeOptics && layer.enabled &&
+          (layer.finish === "shimmer" || layer.finish === "glitter" && !isDirectGlint(layer.flakes))) {
           await pause();
           if (!token.cancelled) {
-            const optical = createFlakeJob(size,layer.finish,isIrregular(layer.flakes) ? defaultFlakes() : layer.flakes ?? defaultFlakes());
+            const optical = createFlakeJob(size,layer.finish,
+              isIrregular(layer.flakes) || isDirectGlint(layer.flakes) ? defaultFlakes() : layer.flakes ?? defaultFlakes());
             await drain(optical,256);
             if (!token.cancelled) optics = {size: optical.size,normal: optical.normal,surface: optical.surface};
           }

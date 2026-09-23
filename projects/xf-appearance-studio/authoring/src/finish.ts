@@ -18,7 +18,7 @@ export type LegacyFlakes = {
   seed: number;
 };
 export type Flakes = LegacyFlakes;
-export const isIrregular = (flakes: Flakes | import("./flake-field").IrregularFlakes | undefined): flakes is import("./flake-field").IrregularFlakes =>
+export const isIrregular = (flakes: Flakes | import("./flake-field").IrregularFlakes | import("./direct-glint-settings").DirectGlintFlakes | undefined): flakes is import("./flake-field").IrregularFlakes =>
   !!flakes && "model" in flakes && flakes.model === "irregular-planar-1";
 export const defaultFlakes = (): LegacyFlakes => ({
   cells: 128,
@@ -108,8 +108,8 @@ export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: L
 }
 
 /** Synchronous export callers retain identical normal/surface byte output. */
-export function bakeFlakes(size: number, finish: "shimmer" | "glitter", p: LegacyFlakes | import("./flake-field").IrregularFlakes): FlakeMaps {
-  if (isIrregular(p)) throw Error("Irregular glitter requires the separate field bake.");
+export function bakeFlakes(size: number, finish: "shimmer" | "glitter", p: LegacyFlakes | import("./flake-field").IrregularFlakes | import("./direct-glint-settings").DirectGlintFlakes): FlakeMaps {
+  if (isIrregular(p) || "model" in p) throw Error("Experimental glitter is not a legacy flake bake.");
   const job = createFlakeJob(size,finish,p);
   job.advance(Infinity);
   return {size: job.size, normal: job.normal, surface: job.surface};
