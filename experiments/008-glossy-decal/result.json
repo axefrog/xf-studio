@@ -1,0 +1,29 @@
+{
+  "status": "offline material and texture fixture only",
+  "templateSha256": "ddfacaf5894b6aba9cfde35d796ccad415d5db16d6c8e4851d7f3875d8266bbe",
+  "maskSha256": "e652b1addb13a44fc5322bcb2329d3631e385e886b723547f820937666143d01",
+  "materialSha256": "26298973cd007f1f57331ec13b6e6d188744a94a02f30c7b87ae5a9a07523bda",
+  "textures": {
+    "diffuse": {
+      "xbmSha256": "1f6fe70461700c54df537fc772c7cecbb5d887eb320bca0a2d01a2af8ffc7ed8",
+      "inputSha256": "346b7f0f3b2b10722d8e67fb8fa47691c215ed27e9ab0394c804f8ef8ed92d3b"
+    },
+    "roughness": {
+      "xbmSha256": "3614864fa7043e3491b5f5eea1cc4aaeadee3ded0481f348182ebd99dfe9198f",
+      "inputSha256": "500362a8a2c1eb9ec8e8fbe2d0b7d5a30e7bf23f561f21f0b8f49ac41c8a5cb3",
+      "meanDecodedRedByteError": 0.0
+    },
+    "metalness": {
+      "xbmSha256": "c31899076ebabe7993a5b366051dad14ba266183478559fac95a9ca27b18ed73",
+      "inputSha256": "0f4b1668d119f77ceb6b86645573f088ab2341d7b284314d5df0be7226ea5d91",
+      "meanDecodedRedByteError": 0.0
+    }
+  },
+  "partialCoverageTexels": 11496,
+  "meanPartialCoverageError": 0.003946272738631428,
+  "roughnessByte": 20,
+  "metalnessByte": 0,
+  "deployed": false,
+  "gameRendered": false,
+  "limit": "No mesh/app/CCXL binding or second specular lobe; lower mips and runtime appearance unverified."
+}
