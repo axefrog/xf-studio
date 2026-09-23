@@ -10,6 +10,8 @@
 
 There is **no demonstrated supported custom-shader injection path** in the resources inspected here. A stronger physically filtered glint shader might require engine-level work; do not treat a modified `.mt` blend state as a way to add missing shader computations. A bounded hybrid with one or more skinned decals remains worth game-testing under the single preset selector, provided it is labelled as an approximation.
 
+**24 September offline update:** the [2.31 material fixture](../../experiments/009-glitter-game-fixture/README.md) now round-trips a same-placement comparison between fixed polygon normals and independently generated axial-height normals, plus the sparse emission option. The [minification audit](../../experiments/009-glitter-game-fixture/shader-and-minification-audit.md) measures axial strong-tilt coverage falling from 57.9% at source 1024 to 18.1% under source BOX 256 and zero at 64; the fixed-normal control retains 35.0% and 2.7%. This supports an even narrower conclusion than the early feasibility lead: directional height structure can improve source-level variation yet lose its signal faster as texels combine. Imported XBM base levels and current 2.31 template parameters were verified, but compressed lower mips and game shading were not. The [proposed authoring bridge](../../experiments/009-glitter-game-fixture/authoring-export-bridge.md) keeps the browser recipe intact and labels any future stock-material adapter as lossy. The Glitter game-export guard remains in force.
+
 ## Resource and compiled-pass evidence
 
 | Candidate | Inspected evidence | Practical consequence |

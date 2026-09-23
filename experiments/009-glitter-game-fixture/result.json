@@ -27,6 +27,10 @@
       "sha256": "7cd265521cd3a252b2053ea085038edf3f9401191486f8df68a0cf126045239b",
       "base": "base\\materials\\mesh_decal.mt"
     },
+    "xfs_glitter_axial_pbr": {
+      "sha256": "5a13e007ef8f5d60e383cd2c0e1128a17f6eb5f6346bc5c13848fdf214624155",
+      "base": "base\\materials\\mesh_decal.mt"
+    },
     "xfs_glitter_sparse_emission": {
       "sha256": "b152d3bcc78555f510f02dfacca1bab012ac72b416be1dc18d0a836eb805cdc7",
       "base": "base\\materials\\mesh_decal_emissive_subsurface.mt"
@@ -39,11 +43,33 @@
       "mipchainFlag": true,
       "isGamma": true
     },
+    "xfs_glitter_axial_normal": {
+      "sha256": "40c54e85314615b6a37110dc3c483e628fd10a91987afd9157d819751f976d2d",
+      "compression": "TCM_Normalmap",
+      "mipchainFlag": true,
+      "isGamma": false,
+      "decodedTangentMeanAbsByteError": [
+        0.14283180236816406,
+        0.14665603637695312
+      ],
+      "decodedTangentCoveredMeanAbsByteError": [
+        2.066432513798294,
+        2.115102860010035
+      ]
+    },
     "xfs_glitter_facet_normal": {
       "sha256": "01a67a04a44a70359d2edb19fa55102dc92a285655ef013530870f518f63d1b4",
       "compression": "TCM_Normalmap",
       "mipchainFlag": true,
-      "isGamma": false
+      "isGamma": false,
+      "decodedTangentMeanAbsByteError": [
+        0.02754497528076172,
+        0.028046607971191406
+      ],
+      "decodedTangentCoveredMeanAbsByteError": [
+        0.40689556304207586,
+        0.414235538671063
+      ]
     },
     "xfs_glitter_emissive_mask": {
       "sha256": "00e727c66e0672d68ef7b8beff66b6e58350860d0c27c5123c741e3c93896ca4",
@@ -104,43 +130,79 @@
       "highContrastFraction": 0.0
     }
   ],
-  "sourceBoxNormalTilt": [
-    {
-      "size": 1024,
-      "coveredPixels": 69755,
-      "meanTangentSlope": 0.244236065261109,
-      "strongTiltFraction": 0.473371084510071
-    },
-    {
-      "size": 512,
-      "coveredPixels": 17441,
-      "meanTangentSlope": 0.22671255170111615,
-      "strongTiltFraction": 0.4273264147697953
-    },
-    {
-      "size": 256,
-      "coveredPixels": 4354,
-      "meanTangentSlope": 0.20237578406470955,
-      "strongTiltFraction": 0.35002296738631145
-    },
-    {
-      "size": 128,
-      "coveredPixels": 1077,
-      "meanTangentSlope": 0.16548433026532466,
-      "strongTiltFraction": 0.2191272051996286
-    },
-    {
-      "size": 64,
-      "coveredPixels": 260,
-      "meanTangentSlope": 0.10924157272212516,
-      "strongTiltFraction": 0.026923076923076925
-    }
-  ],
+  "sourceBoxNormalTilt": {
+    "xfs_glitter_facet_normal": [
+      {
+        "size": 1024,
+        "coveredPixels": 69755,
+        "meanTangentSlope": 0.244236065261109,
+        "strongTiltFraction": 0.473371084510071
+      },
+      {
+        "size": 512,
+        "coveredPixels": 17441,
+        "meanTangentSlope": 0.22671255170111615,
+        "strongTiltFraction": 0.4273264147697953
+      },
+      {
+        "size": 256,
+        "coveredPixels": 4354,
+        "meanTangentSlope": 0.20237578406470955,
+        "strongTiltFraction": 0.35002296738631145
+      },
+      {
+        "size": 128,
+        "coveredPixels": 1077,
+        "meanTangentSlope": 0.16548433026532466,
+        "strongTiltFraction": 0.2191272051996286
+      },
+      {
+        "size": 64,
+        "coveredPixels": 260,
+        "meanTangentSlope": 0.10924157272212516,
+        "strongTiltFraction": 0.026923076923076925
+      }
+    ],
+    "xfs_glitter_axial_normal": [
+      {
+        "size": 1024,
+        "coveredPixels": 69755,
+        "meanTangentSlope": 0.30721295254007625,
+        "strongTiltFraction": 0.5794710056626765
+      },
+      {
+        "size": 512,
+        "coveredPixels": 17441,
+        "meanTangentSlope": 0.23549477109001482,
+        "strongTiltFraction": 0.46379221374921165
+      },
+      {
+        "size": 256,
+        "coveredPixels": 4354,
+        "meanTangentSlope": 0.14814408208270158,
+        "strongTiltFraction": 0.18121267799724392
+      },
+      {
+        "size": 128,
+        "coveredPixels": 1077,
+        "meanTangentSlope": 0.06666884234224704,
+        "strongTiltFraction": 0.009285051067780872
+      },
+      {
+        "size": 64,
+        "coveredPixels": 260,
+        "meanTangentSlope": 0.028050877447412758,
+        "strongTiltFraction": 0.0
+      }
+    ]
+  },
   "comparisons": [
-    "PBR only",
+    "Off",
+    "flat-normal PBR",
+    "axial-height PBR",
     "emission only",
-    "combined (two components)",
-    "Off"
+    "flat-normal PBR plus emission (two components)",
+    "axial-height PBR plus emission (two components)"
   ],
   "meshBound": false,
   "selectorRegistered": false,

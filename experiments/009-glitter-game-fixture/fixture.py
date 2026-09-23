@@ -24,6 +24,7 @@ GAME = Path('F:/Games/Cyberpunk 2077')
 SIZE = 1024
 DEPOT = 'axefrog/appearance_studio/studies/glitter_game'
 PBR = 'xfs_glitter_resolved_pbr'
+AXIAL_PBR = 'xfs_glitter_axial_pbr'
 EMISSION = 'xfs_glitter_sparse_emission'
 TEMPLATES = {
     'mesh_decal': ('b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019', 'renderstage_post_gbuffer'),
@@ -119,9 +120,9 @@ def material(name, template, values):
             'Data': {'Version': 195, 'BuildVersion': 0, 'RootChunk': root, 'EmbeddedFiles': []}}
 
 
-def materials():
+def pbr_values(normal_name):
     pbr = [tex('DiffuseTexture', 'xfs_glitter_pigment'),
-           tex('NormalTexture', 'xfs_glitter_facet_normal'),
+           tex('NormalTexture', normal_name),
            tex('NormalAlphaTex', 'xfs_glitter_shape'),
            tex('RoughnessTexture', 'xfs_glitter_roughness'),
            tex('MetalnessTexture', 'xfs_glitter_metalness'),
@@ -132,12 +133,36 @@ def materials():
         'RoughnessBias': 0, 'MetalnessBias': 0,
         'AlphaMaskContrast': 0, 'SecondaryMaskInfluence': 0, 'NormalsBlendingMode': 0,
     }.items()]
+    return pbr
+
+
+def materials():
     emission = [tex('EmissiveMask', 'xfs_glitter_emissive_mask'),
                 {'$type': 'Vector4', 'EmissiveMaskChannel': {'$type': 'Vector4', 'W': 0, 'X': 1, 'Y': 0, 'Z': 0}},
                 {'$type': 'Color', 'EmissiveColor': {'$type': 'Color', 'Red': 255, 'Green': 222, 'Blue': 171, 'Alpha': 255}},
                 scalar('EmissiveEV', 0.0), scalar('AlphaThreshold', 0.0)]
-    return {PBR: material(PBR, 'mesh_decal', pbr),
+    return {PBR: material(PBR, 'mesh_decal', pbr_values('xfs_glitter_facet_normal')),
+            AXIAL_PBR: material(AXIAL_PBR, 'mesh_decal', pbr_values('xfs_glitter_axial_normal')),
             EMISSION: material(EMISSION, 'mesh_decal_emissive_subsurface', emission)}
+
+
+def axial_normal_from_height(height):
+    """Finite-difference tangent normal from a deliberately simple axial height field."""
+    source = height.load()
+    image = Image.new('RGB', height.size, (128, 128, 255))
+    target = image.load()
+    for y in range(1, SIZE - 1):
+        for x in range(1, SIZE - 1):
+            # One pixel of source height is 1/32 tangent-slope unit. This
+            # artistic scale is a fixture parameter, not a REDengine unit.
+            nx = (source[x - 1, y] - source[x + 1, y]) / 64
+            ny = (source[x, y - 1] - source[x, y + 1]) / 64
+            length = math.hypot(nx, ny)
+            if length > .85:
+                nx *= .85 / length
+                ny *= .85 / length
+            target[x, y] = (round(127.5 * (nx + 1)), round(127.5 * (ny + 1)), 255)
+    return image
 
 
 def generate_pixels():
@@ -152,6 +177,8 @@ def generate_pixels():
             d = u * u + v * v
             pixels[x, y] = round(210 * max(0.0, min(1.0, (1.0 - d) * 8)))
     normal = Image.new('RGB', (SIZE, SIZE), (128, 128, 255))
+    height = Image.new('L', (SIZE, SIZE), 128)
+    hp = height.load()
     rough = Image.new('L', (SIZE, SIZE), 168)
     metal = Image.new('L', (SIZE, SIZE), 0)
     flecks = Image.new('L', (SIZE, SIZE), 0)
@@ -170,6 +197,16 @@ def generate_pixels():
         slope = rng.uniform(.22, .73)
         nx, ny = slope * math.cos(tilt), slope * math.sin(tilt)
         nd.polygon(points, fill=(round(127.5 * (nx + 1)), round(127.5 * (ny + 1)), 255))
+        left, right = max(0, min(p[0] for p in points)), min(SIZE - 1, max(p[0] for p in points))
+        top, bottom = max(0, min(p[1] for p in points)), min(SIZE - 1, max(p[1] for p in points))
+        local = Image.new('1', (right - left + 1, bottom - top + 1), 0)
+        ImageDraw.Draw(local).polygon([(px - left, py - top) for px, py in points], fill=1)
+        lp = local.load()
+        for yy in range(top, bottom + 1):
+            for xx in range(left, right + 1):
+                if lp[xx - left, yy - top]:
+                    along = (xx - x) * math.cos(tilt) + (yy - y) * math.sin(tilt)
+                    hp[xx, yy] = max(0, min(255, round(128 + 12 * along)))
         rd.polygon(points, fill=rng.randrange(38, 105))
         md.polygon(points, fill=rng.randrange(180, 246))
         if accepted % 7 == 0:
@@ -184,6 +221,9 @@ def generate_pixels():
                                    Image.new('L', mask.size, 85), square_root))
     pigment.save(inputs / 'colour/xfs_glitter_pigment.png')
     normal.save(inputs / 'normal/xfs_glitter_facet_normal.png')
+    axial_normal_from_height(height).save(inputs / 'normal/xfs_glitter_axial_normal.png')
+    (OUT / 'diagnostic').mkdir(parents=True, exist_ok=True)
+    height.save(OUT / 'diagnostic/xfs_glitter_axial_height.png')
     for name, image in [('shape', mask), ('roughness', rough), ('metalness', metal), ('emissive_mask', flecks)]:
         image.save(inputs / 'scalar' / f'xfs_glitter_{name}.png')
     return accepted
@@ -239,6 +279,8 @@ def verify(paths):
         assert binary.is_file() and binary.name.startswith('xfs_')
         material_evidence[name] = {'sha256': sha(binary), 'base': expected['baseMaterial']['DepotPath']['$value']}
     textures = {}
+    wanted = Image.open(OUT / 'input/scalar/xfs_glitter_shape.png').getchannel('L').tobytes()
+    covered_count = sum(cover >= 128 for cover in wanted)
     for source in sorted((OUT / 'input').glob('*/*.png')):
         name = source.stem
         binary = OUT / 'archive' / DEPOT / (name + '.xbm')
@@ -261,7 +303,16 @@ def verify(paths):
                           'mipchainFlag': True, 'isGamma': bool(setup['isGamma'])}
         if red_error is not None:
             textures[name]['decodedRedMeanByteError'] = red_error
-    wanted = Image.open(OUT / 'input/scalar/xfs_glitter_shape.png').getchannel('L').tobytes()
+        if group == 'normal':
+            channel_errors = [sum(abs(a - b) for a, b in zip(decoded.getchannel(channel).tobytes(),
+                                                              original.getchannel(channel).tobytes())) / (SIZE * SIZE)
+                              for channel in ('R', 'G')]
+            textures[name]['decodedTangentMeanAbsByteError'] = channel_errors
+            covered_errors = [sum(abs(a - b) for a, b, cover in zip(decoded.getchannel(channel).tobytes(),
+                                                                      original.getchannel(channel).tobytes(), wanted)
+                                  if cover >= 128) / covered_count
+                              for channel in ('R', 'G')]
+            textures[name]['decodedTangentCoveredMeanAbsByteError'] = covered_errors
     decoded_alpha = Image.open(OUT / 'export/xfs_glitter_pigment.png').convert('RGBA').getchannel('A').tobytes()
     edge = [abs((a / 255) ** 2 - b / 255) for a, b in zip(decoded_alpha, wanted) if 0 < b < 255]
     assert edge and sum(edge) / len(edge) < .035
@@ -270,30 +321,37 @@ def verify(paths):
     assert leak == 0, f'emissive bleed outside pigment: {leak} texels'
     # PIL BOX is a diagnostic source-map minification, not REDengine's decoded mip chain.
     mip = []
-    normal_mip = []
+    normal_mip = {}
     emission = Image.open(OUT / 'input/scalar/xfs_glitter_emissive_mask.png').getchannel('L')
-    normal = Image.open(OUT / 'input/normal/xfs_glitter_facet_normal.png').convert('RGB')
     shape = Image.open(OUT / 'input/scalar/xfs_glitter_shape.png').getchannel('L')
     for size in (1024, 512, 256, 128, 64):
         reduced = emission.resize((size, size), Image.Resampling.BOX)
         data = reduced.tobytes()
         mip.append({'size': size, 'nonzeroFraction': sum(v > 0 for v in data) / len(data),
                     'highContrastFraction': sum(v >= 96 for v in data) / len(data)})
-        n = normal.resize((size, size), Image.Resampling.BOX)
-        r, g = n.getchannel('R').tobytes(), n.getchannel('G').tobytes()
-        coverage = shape.resize((size, size), Image.Resampling.BOX).tobytes()
-        slopes = [math.hypot(2 * r[i] / 255 - 1, 2 * g[i] / 255 - 1)
-                  for i, v in enumerate(coverage) if v >= 128]
-        assert slopes
-        normal_mip.append({'size': size, 'coveredPixels': len(slopes),
-                           'meanTangentSlope': sum(slopes) / len(slopes),
-                           'strongTiltFraction': sum(v >= .25 for v in slopes) / len(slopes)})
+    coverage_by_size = {size: shape.resize((size, size), Image.Resampling.BOX).tobytes()
+                        for size in (1024, 512, 256, 128, 64)}
+    for name in ('xfs_glitter_facet_normal', 'xfs_glitter_axial_normal'):
+        normal = Image.open(OUT / 'input/normal' / (name + '.png')).convert('RGB')
+        measurements = []
+        for size, coverage in coverage_by_size.items():
+            n = normal.resize((size, size), Image.Resampling.BOX)
+            r, g = n.getchannel('R').tobytes(), n.getchannel('G').tobytes()
+            slopes = [math.hypot(2 * r[i] / 255 - 1, 2 * g[i] / 255 - 1)
+                      for i, v in enumerate(coverage) if v >= 128]
+            assert slopes
+            measurements.append({'size': size, 'coveredPixels': len(slopes),
+                                 'meanTangentSlope': sum(slopes) / len(slopes),
+                                 'strongTiltFraction': sum(v >= .25 for v in slopes) / len(slopes)})
+        normal_mip[name] = measurements
     report = {'status': 'offline material-only comparison', 'gameVersion': 2310,
               'templates': template_evidence, 'materials': material_evidence, 'textures': textures,
               'partialCoverageTexels': len(edge), 'meanPartialCoverageError': sum(edge) / len(edge),
               'emissiveOutsideShapeTexels': leak, 'sourceBoxMinification': mip,
               'sourceBoxNormalTilt': normal_mip,
-              'comparisons': ['PBR only', 'emission only', 'combined (two components)', 'Off'],
+              'comparisons': ['Off', 'flat-normal PBR', 'axial-height PBR', 'emission only',
+                              'flat-normal PBR plus emission (two components)',
+                              'axial-height PBR plus emission (two components)'],
               'meshBound': False, 'selectorRegistered': False, 'gameRendered': False,
               'limit': 'BOX minification is source-map diagnostic, not decoded REDengine mip data; material order, glow, and appearance are unverified.'}
     save(OUT / 'verification.json', report)
