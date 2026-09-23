@@ -1,6 +1,10 @@
 import type { SavedV } from "./save-reader";
 
-export type PiercingPart = { mesh: string; mask: string };
+export type PiercingPart = {
+  mesh: string; mask: string;
+  /** Source-specific, approximate colour for a mesh chunk that does not follow the selected appearance. */
+  chunkColors?: { index: number; color: string }[];
+};
 export type PiercingChoice = {
   definition: string; index: number; label: string; swatch: string; previewColor: string; parts: PiercingPart[];
 };
@@ -67,7 +71,11 @@ export function parsePiercingManifest(value: unknown): PiercingManifest {
         c.index < 1 || !text(c.label) || !/^#[0-9a-f]{6}$/i.test(c.swatch) ||
         !/^#[0-9a-f]{6}$/i.test(c.previewColor) ||
         !Array.isArray(c.parts) || c.parts.length < 1 || c.parts.length > 8 ||
-        c.parts.some(p => !p || !assets.has(p.mesh) || !uint64(p.mask)))
+        c.parts.some(p => !p || !assets.has(p.mesh) || !uint64(p.mask) ||
+          (p.chunkColors !== undefined && (!Array.isArray(p.chunkColors) || p.chunkColors.length > 8 ||
+            new Set(p.chunkColors.map(x => x?.index)).size !== p.chunkColors.length ||
+            p.chunkColors.some(x => !x || !Number.isSafeInteger(x.index) || x.index < 0 || x.index >= 64 ||
+              !chunkEnabled(p.mask, x.index) || !/^#[0-9a-f]{6}$/i.test(x.color))))))
         throw Error("Invalid local piercing appearance");
       definitions.add(c.definition);
     }
@@ -89,6 +97,10 @@ export function savedPiercing(manifest: PiercingManifest, save?: SavedV):
 export function chunkEnabled(mask: string, chunk: number): boolean {
   if (!uint64(mask) || !Number.isSafeInteger(chunk) || chunk < 0 || chunk >= 64) return false;
   return (BigInt(mask) & (1n << BigInt(chunk))) !== 0n;
+}
+
+export function piercingPartColor(part: PiercingPart, chunk: number, selectedColor: string): string {
+  return part.chunkColors?.find(x => x.index === chunk)?.color ?? selectedColor;
 }
 
 export async function verifyPiercingBytes(bytes: Uint8Array, expected: string) {

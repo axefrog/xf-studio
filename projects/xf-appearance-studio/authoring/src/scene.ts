@@ -13,7 +13,7 @@ import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
 import { attachHairColor, hairGradientTexture } from "./hair-shading";
-import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
+import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { loadSavedBrowMaterial } from "./brow-material";
 import { loadSavedLashColor } from "./lash-profile";
 
@@ -562,7 +562,8 @@ export async function createScene(
     if (!selected) return;
     for (const part of selected.choice.parts) for (const mesh of piercingMeshes.get(part.mesh) ?? []) {
       mesh.visible = chunkEnabled(part.mask, mesh.userData.piercingChunk);
-      (mesh.material as THREE.MeshStandardMaterial).color.set(selected.choice.previewColor);
+      (mesh.material as THREE.MeshStandardMaterial).color.set(
+        piercingPartColor(part, mesh.userData.piercingChunk, selected.choice.previewColor));
     }
   }
   function setPiercings(enabled: boolean) { piercingEnabled = enabled; refreshPiercings(); }

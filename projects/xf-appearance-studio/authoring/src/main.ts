@@ -665,9 +665,9 @@ function setupPiercingControls() {
     $("piercing-note").textContent = !viewer!.prcManifest
       ? "A preview choice changes only this viewport. PRC resources are unavailable; vanilla material colours remain approximate."
       : style.value === "prc_active_bank"
-        ? "Private PRC preview: active candidate slots 50, 72 and 74 together, sharing one approximate framework colour. Stud stone material and effective game winners remain unresolved. Viewport only."
+        ? "Private PRC preview: active candidate slots 50, 72 and 74 together. The stud's small second chunk stays approximate silver across framework colours; exact material response and game winners remain unverified. Viewport only."
         : style.value.startsWith("prc_")
-          ? "Single PRC slot for inspection only; the game framework includes the active slots together. Colours, stud stone material and effective winners are approximate or unresolved. Viewport only."
+          ? "Single PRC slot for inspection only; the game framework includes the active slots together. The stud's second chunk stays source-derived approximate silver; other colours and effective winners remain approximate or unresolved. Viewport only."
           : "Vanilla and private PRC choices change only this viewport. PRC has an aggregate active-slot view and separate diagnostic slot views; materials and runtime winners remain unverified.";
   }
   input("piercings").disabled = false;

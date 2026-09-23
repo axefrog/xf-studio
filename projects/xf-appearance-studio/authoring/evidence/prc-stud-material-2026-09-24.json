@@ -1,0 +1,24 @@
+{
+  "date": "2026-09-24",
+  "source": "MO2 2025 (again) enabled PRC nose stud candidate and installed Cyberpunk 2077 2.31 basegame_4_appearance.archive",
+  "sourceChain": "fpm50_linked.mesh appearance * -> chunk 1 default__02 -> base\\eagul\\mat_1.mi -> male earring-01 silver.mlsetup and common.mlmask -> opaque brushed silver layer",
+  "sourcePins": {
+    "mat1MiSha256": "4a80b70f8b5391ce0ff317cef1012118c74a46ccf799d481df69fb8f41920d80",
+    "silverMlsetupSha256": "9fa81fa675862cc29d9df59905a7c795b3e0805d36930e4222e11a9841ac6cb1",
+    "earringMlmaskSha256": "970713a741875f4c8d20054e85225673b31295cbfe68dd6424cb5ab12b5b0cd4"
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4441/?verify=1",
+    "isolatedWorktree": "D:/Dev/worktrees/prc-stud-material",
+    "selection": "PRC inspect nose stud slot 50, 2. gold",
+    "observation": "Gold-colour stud with light second chunk visibly present on the viewer's right nostril; source-aware note shown; no console warnings or errors",
+    "limitation": "Visual smoke check of the small detail, not a matched game comparison or proof of runtime archive precedence"
+  },
+  "validation": {
+    "privateIntake": "passes and regenerates ignored PRC manifest with fixed chunk-1 colour",
+    "tests": "237 pass, 0 fail",
+    "typecheck": "passes",
+    "browserBuild": "passes"
+  },
+  "distribution": "No extracted game or PRC payload committed; only digest and relationship evidence"
+}

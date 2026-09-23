@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { aggregatePrcStyle, chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes,
+import { aggregatePrcStyle, chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes,
   type PiercingStyle } from "../src/piercing-preview";
 import { piercingPaletteColor } from "../src/piercing-palette";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
@@ -85,6 +85,29 @@ test("PRC aggregate shares one colour across all resolved slots and preserves di
   divergent[1]!.choices[1]!.previewColor = colours[1]!.previewColor;
   divergent[2]!.choices[0]!.parts[0]!.mesh = "prc_fpm50";
   expect(() => aggregatePrcStyle(divergent)).toThrow("Duplicate PRC aggregate mesh");
+});
+
+test("a source-fixed PRC stud chunk stays silver under every shared framework colour", () => {
+  const part = { mesh: "prc_fpm50", mask: "9223372036854775807",
+    chunkColors: [{ index: 1, color: "#efeae7" }] };
+  const fixture = { schema: "xfs/local-prc-piercings-1", source: "private fixture",
+    assets: [{ id: part.mesh, url: "/assets/prc/prc_fpm50.glb", sha256: "a".repeat(64) }],
+    styles: [{ id: part.mesh, index: 50, label: "Stud", resourceHash: "13134131550013307257",
+      choices: [{ definition: "silver", index: 1, label: "Silver", swatch: "#efeae7",
+        previewColor: "#efeae7", parts: [part] },
+        { definition: "gold", index: 2, label: "Gold", swatch: "#b87123",
+          previewColor: "#b87123", parts: [part] }] }] };
+  const parsed = parsePiercingManifest(fixture);
+  const gold = parsed.styles[0]!.choices[1]!;
+  expect(piercingPartColor(gold.parts[0]!, 0, gold.previewColor)).toBe("#b87123");
+  expect(piercingPartColor(gold.parts[0]!, 1, gold.previewColor)).toBe("#efeae7");
+  expect(piercingPartColor(parsed.styles[0]!.choices[0]!.parts[0]!, 1, "#efeae7")).toBe("#efeae7");
+  expect(() => parsePiercingManifest({ ...fixture, styles: [{ ...fixture.styles[0],
+    choices: [{ ...fixture.styles[0]!.choices[0], parts: [{ ...part,
+      chunkColors: [{ index: 64, color: "#efeae7" }] }] }] }] })).toThrow();
+  expect(() => parsePiercingManifest({ ...fixture, styles: [{ ...fixture.styles[0],
+    choices: [{ ...fixture.styles[0]!.choices[0], parts: [{ ...part,
+      chunkColors: [{ index: 1, color: "black" }] }] }] }] })).toThrow();
 });
 
 test("visible source palette layers produce a nonblack linear-to-display preview tint", () => {

@@ -5,6 +5,17 @@
   "appSha256": "01d4cf980d5531a76fd7424555356103979f48a4d4a60e297ba67074529abe13",
   "appJsonSha256": "3c35aa9cb66bdaf8b318bd34e561fa1b5f24cda2b674eb9039ae53e3f8674294",
   "vanillaOption12ManifestSha256": "7784a2df255dbdf45403a8d99d8d41aa86f10dd21e9907d11958b2cd76e2f7cd",
+  "studFixedChunk": {
+    "chunk": 1,
+    "materialDepot": "base\\eagul\\mat_1.mi",
+    "materialSha256": "4a80b70f8b5391ce0ff317cef1012118c74a46ccf799d481df69fb8f41920d80",
+    "setupDepot": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_silver.mlsetup",
+    "setupSha256": "9fa81fa675862cc29d9df59905a7c795b3e0805d36930e4222e11a9841ac6cb1",
+    "maskDepot": "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01.mlmask",
+    "maskSha256": "970713a741875f4c8d20054e85225673b31295cbfe68dd6424cb5ab12b5b0cd4",
+    "browserColor": "#efeae7",
+    "note": "All inspected fpm50 colour appearances use default__02 on chunk 1. Its candidate material links game silver brushed multilayer setup. Browser colour is an approximation; runtime winner and exact surface response unverified."
+  },
   "frameworkColours": [
     {
       "definition": "i0_000_pwa__earring__01_silver",
@@ -136,5 +147,5 @@
       "chunkMask": "9223372036854775807"
     }
   ],
-  "status": "Three local skinned slots, combined under a shared approximate colour or individually inspectable. Stud stone material, other materials and runtime archive winners unverified. Not redistributable."
+  "status": "Three local skinned slots, combined under a shared approximate framework colour or individually inspectable. Stud chunk 1 uses a fixed silver approximation from its installed-candidate source chain; exact REDengine response and runtime archive winners unverified. Not redistributable."
 }

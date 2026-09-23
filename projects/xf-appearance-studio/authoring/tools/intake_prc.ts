@@ -36,6 +36,34 @@ const vanilla = parsePiercingManifest(JSON.parse(vanillaBytes.toString()));
 if (vanilla.schema !== "xfs/local-vanilla-piercings-2") throw Error("Missing current vanilla colour reference");
 const reference = vanilla.styles.find(s => s.id === "piercings_12" && s.resourceHash === fnv64(appDepot));
 if (!reference || reference.choices.length !== 16) throw Error("Missing option-12 colour reference");
+const silverPreview = reference.choices.find(c => c.definition.endsWith("__01_silver"))?.previewColor;
+if (!silverPreview) throw Error("Missing silver colour reference for the fixed stud chunk");
+// The stud's second chunk is always default__02. Its installed candidate .mi
+// links a game silver multilayer setup, independently of the framework colour.
+const studMiDepot = "base\\eagul\\mat_1.mi";
+const studMiPath = resolve(root, "raw/silver", ...studMiDepot.split("\\"));
+const studMiBytes = pinnedRead(studMiPath, "4a80b70f8b5391ce0ff317cef1012118c74a46ccf799d481df69fb8f41920d80");
+const studMi = JSON.parse(pinnedRead(`${studMiPath}.json`, "22b4f3a8ee29a19655777fe55295f728b3532add17b6460eaebd898bb6056349").toString());
+const silverSetupDepot = "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01_silver.mlsetup";
+const silverMaskDepot = "base\\characters\\common\\character_customisation_items\\earrings\\textures\\i1_000_pma_c__basehead_earring_01.mlmask";
+if (unwrap(studMi.Data.RootChunk.baseMaterial.DepotPath) !== "engine\\materials\\multilayered.mt" ||
+  unwrap(studMi.Data.RootChunk.values.find((v: any) => v.$type === "rRef:Multilayer_Setup")?.MultilayerSetup?.DepotPath) !== silverSetupDepot ||
+  unwrap(studMi.Data.RootChunk.values.find((v: any) => v.$type === "rRef:Multilayer_Mask")?.MultilayerMask?.DepotPath) !== silverMaskDepot)
+  throw Error("PRC stud second-chunk material chain changed");
+const gameMaterialRoot = resolve(import.meta.dir, "../../../../research/consumers/prc-stud-material/raw");
+const setupPath = resolve(gameMaterialRoot, ...silverSetupDepot.split("\\"));
+const maskPath = resolve(gameMaterialRoot, ...silverMaskDepot.split("\\"));
+const setupBytes = pinnedRead(setupPath, "9fa81fa675862cc29d9df59905a7c795b3e0805d36930e4222e11a9841ac6cb1");
+const setup = JSON.parse(pinnedRead(`${setupPath}.json`, "abaa96721ef4db53da364552ccd9c16cba1e35e970d4d70a55409b514636eb7d").toString());
+const maskBytes = pinnedRead(maskPath, "970713a741875f4c8d20054e85225673b31295cbfe68dd6424cb5ab12b5b0cd4");
+const mask = JSON.parse(pinnedRead(`${maskPath}.json`, "5c762796b88c6ff7151aaa0266745a0155156c8256b9eeb8438305a14fbcba86").toString());
+const setupLayers = setup.Data.RootChunk.layers;
+if (setupLayers.length !== 3 ||
+  unwrap(setupLayers[0].material.DepotPath) !== "base\\surfaces\\materials\\metal\\silver\\silver_brushed_01_300.mltemplate" ||
+  setupLayers[0].opacity !== 1 || setupLayers[1].opacity !== 0 ||
+  Math.abs(setupLayers[2].opacity - .07) > 1e-6 ||
+  mask.Data.RootChunk.$type !== "Multilayer_Mask")
+  throw Error("PRC stud silver multilayer source changed");
 const femaleAppearances = app.Data.RootChunk.appearances.map((a: any) => a.Data)
   .filter((a: any) => unwrap(a.name)?.startsWith("i0_000_pwa__earring__"));
 if (femaleAppearances.length !== 16) throw Error("Unexpected PRC female colour bank");
@@ -104,6 +132,16 @@ for (const slot of slots) {
     const baseJson = JSON.parse(pinnedRead(`${basePath}.json`, slot.baseJsonSha).toString());
     if (baseJson.Header.GameVersion !== 2310 || baseJson.Data.RootChunk.boneNames.length !== slot.bones)
       throw Error(`PRC ${name} linked mesh/rig changed`);
+    if (slot.index === 50) {
+      const mesh = baseJson.Data.RootChunk;
+      const entry = mesh.materialEntries.find((e: any) => unwrap(e.name) === "default__02");
+      if (entry?.index !== 3 || unwrap(mesh.localMaterialBuffer.materials[entry.index]?.baseMaterial?.DepotPath) !== studMiDepot ||
+        mesh.appearances.some((a: any) => !reference.choices.some(c =>
+          unwrap(a.Data.name) === appearances.get(c.definition)?.compiledData?.Data?.Chunks[49]?.meshAppearance?.$value) &&
+          unwrap(a.Data.name) !== "default") ||
+        mesh.appearances.some((a: any) => unwrap(a.Data.chunkMaterials[1]) !== "default__02"))
+        throw Error("PRC stud second mesh chunk no longer resolves the fixed silver material");
+    }
   }
   const choices = reference.choices.map(colour => {
     const component = appearances.get(colour.definition).compiledData.Data.Chunks[slot.index - 1];
@@ -117,7 +155,8 @@ for (const slot of slots) {
     return { definition: colour.definition, index: colour.index,
       label: `${colour.label} (approx.)`, swatch: colour.previewColor,
       previewColor: colour.previewColor,
-      parts: [{ mesh: `prc_${name}`, mask: component.chunkMask as string }] };
+      parts: [{ mesh: `prc_${name}`, mask: component.chunkMask as string,
+        ...(slot.index === 50 ? { chunkColors: [{ index: 1, color: silverPreview }] } : {}) }] };
   });
   if (glbBytes.toString("ascii", 0, 4) !== "glTF" || glbBytes.byteLength > 4 * 1024 * 1024)
     throw Error(`PRC ${name} GLB exceeds private preview budget`);
@@ -161,9 +200,13 @@ writeFileSync(resolve(import.meta.dir, "../evidence/prc-piercing-intake.json"), 
   source: manifest.source, frameworkArchiveSha256: "6e73610b3cdd85552aeb61f6a5a7c7fd3a9cf0f26b4d4f475977b255c8e17499",
   appDepot, appSha256: digest(appBytes), appJsonSha256: digest(appJsonBytes),
   vanillaOption12ManifestSha256: digest(vanillaBytes),
+  studFixedChunk: { chunk: 1, materialDepot: studMiDepot, materialSha256: digest(studMiBytes),
+    setupDepot: silverSetupDepot, setupSha256: digest(setupBytes), maskDepot: silverMaskDepot,
+    maskSha256: digest(maskBytes), browserColor: silverPreview,
+    note: "All inspected fpm50 colour appearances use default__02 on chunk 1. Its candidate material links game silver brushed multilayer setup. Browser colour is an approximation; runtime winner and exact surface response unverified." },
   frameworkColours: reference.choices.map(choice => ({ definition: choice.definition,
     meshAppearance: sharedMaterials.get(choice.definition), previewColor: choice.previewColor })),
   aggregateStyle: styles[0]!.id, definition: styles[0]!.choices[0]!.definition, slots: evidence,
-  status: "Three local skinned slots, combined under a shared approximate colour or individually inspectable. Stud stone material, other materials and runtime archive winners unverified. Not redistributable.",
+  status: "Three local skinned slots, combined under a shared approximate framework colour or individually inspectable. Stud chunk 1 uses a fixed silver approximation from its installed-candidate source chain; exact REDengine response and runtime archive winners unverified. Not redistributable.",
 }, null, 2) + "\n");
 console.log("Prepared one aggregate and three diagnostic private PRC styles, each with 16 approximate colours");
