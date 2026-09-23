@@ -24,6 +24,10 @@ The corrected round trip preserves all morph normal/tangent deltas exactly. Maxi
 
 ## Still to prove
 
-Rig/inverse-bind transform fidelity, closed/open eyelid clearance, overlap/intersections under representative poses, deterministic material layering and actual in-game shading. Some eye morphs rotate narrow faces through more than 90 degrees; this also comes from the parent head and is not alone evidence of broken geometry. One dropped secondary vertex-colour set also requires semantic review. Serialization and numeric agreement do not prove runtime rendering.
+`python experiments/004-plate-import/verify_binding_clearance.py` now checks equivalent rig world/inverse-bind transforms by bone name, rather than requiring identical orphan-bone hierarchy. [Evidence](binding-clearance.json): maximum world-transform element error 8.67e-8, inverse-bind error 1.19e-7, and rest-skinning identity errors below 7.60e-8. Those numeric binding checks pass.
+
+The zero-offset plate has no intentional clearance from its source head. Comparing corresponding vertex tangent planes across Basis, all 105 individual morphs and the saved five-morph combination found a minimum signed distance of -1.55e-5 units after packing. Thus quantization can put some vertices slightly beneath the head. Preserve this neutral control and build a controlled outward-offset candidate; this measurement is not a complete triangle-intersection or animated-contact test.
+
+Closed/open eyelid clearance, posed overlap/intersections, deterministic material layering and actual in-game shading remain to prove. Some eye morphs rotate narrow faces through more than 90 degrees; this also comes from the parent head and is not alone evidence of broken geometry. One dropped secondary vertex-colour set also requires semantic review. Serialization and numeric agreement do not prove runtime rendering.
 
 No topology edits have been justified yet. Nathan authorizes necessary remediation while preserving source art and design intent.
