@@ -10,6 +10,7 @@ import type { CameraState } from "./workspace-state";
 import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
 import { prepareEyeAppearances } from "./eye-appearance";
+import { eyeRoughnessMap } from "./eye-optics";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
 import { attachHairColor, hairGradientTexture } from "./hair-shading";
 import { chunkEnabled, parsePiercingManifest, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
@@ -117,12 +118,18 @@ export async function createScene(
   });
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
-  const eyeAppearances = await prepareEyeAppearances(async (bytes, entry) => {
+  const eyeAppearances = await prepareEyeAppearances(async (bytes, entry, role) => {
     const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
     try {
       const t = await loader.loadAsync(url);
-      if (t.image.width !== entry.width || t.image.height !== entry.height) {
+      const dimensions = role === "roughness" ? entry.roughness! : entry;
+      if (t.image.width !== dimensions.width || t.image.height !== dimensions.height) {
         t.dispose(); throw Error("Local eye image dimensions do not match its manifest");
+      }
+      if (role === "roughness") {
+        const map = eyeRoughnessMap(t.image as HTMLImageElement, renderer.capabilities.getMaxAnisotropy());
+        t.dispose();
+        return map;
       }
       // Existing eye UV0 is already folded to one tile. Do not crop/translate it again.
       t.flipY = false;
@@ -132,7 +139,17 @@ export async function createScene(
       return t;
     } finally { URL.revokeObjectURL(url); }
   });
-  let eyeAppearanceStatus = eyeAppearances.select().status;
+  let selectedEye = eyeAppearances.select();
+  let eyeAppearanceStatus = selectedEye.status;
+  let eyeOpticsEnabled = false;
+  function applyEyeMaterial() {
+    eyeMat.map = selectedEye.texture ?? eyeColor;
+    eyeMat.roughnessMap = eyeOpticsEnabled ? selectedEye.roughness ?? null : null;
+    eyeMat.roughness = eyeMat.roughnessMap ? selectedEye.status.asset!.roughness!.scale : 0.18;
+    eyeMat.needsUpdate = true;
+    eyeAppearanceStatus = selectedEye.status;
+  }
+  function setEyeOptics(enabled: boolean) { eyeOpticsEnabled = enabled; applyEyeMaterial(); }
   function eyeAppearance() {
     const map = eyeMat.map, reference = map === eyeColor;
     const image = map?.image as HTMLImageElement | undefined;
@@ -141,7 +158,11 @@ export async function createScene(
         sha256: reference ? undefined : eyeAppearanceStatus.asset?.sha256,
         width: image?.width, height: image?.height, flipY: map?.flipY, colorSpace: map?.colorSpace },
       material: { transparent: eyeMat.transparent, depthWrite: eyeMat.depthWrite, alphaTest: eyeMat.alphaTest,
-        normalMap: !!eyeMat.normalMap, roughnessMap: !!eyeMat.roughnessMap },
+        normalMap: !!eyeMat.normalMap, roughnessMap: !!eyeMat.roughnessMap, roughnessScale: eyeMat.roughness },
+      optics: { requested: eyeOpticsEnabled, active: !!eyeMat.roughnessMap,
+        ...(selectedEye.roughnessError ? { error: selectedEye.roughnessError } : {}),
+        reason: !eyeOpticsEnabled ? "off" : eyeMat.roughnessMap ? "source-roughness-r" :
+          selectedEye.roughnessError ? "unavailable" : "no-matching-optics" },
     };
   }
   const details: Record<
@@ -582,11 +603,9 @@ export async function createScene(
         ),
       )
       .map(([name]) => name);
-    const selectedEye = eyeAppearances.select(group.appearances);
+    selectedEye = eyeAppearances.select(group.appearances);
     // Reset explicitly on every accepted save, including unresolved/missing images.
-    eyeMat.map = selectedEye.texture ?? eyeColor;
-    eyeMat.needsUpdate = true;
-    eyeAppearanceStatus = selectedEye.status;
+    applyEyeMaterial();
     currentSave = v;
     refreshPiercings();
     const selectedHair = selectSavedHair(hair.map(h => h.asset), v);
@@ -719,6 +738,7 @@ export async function createScene(
     eyeShape,
     applySavedV,
     eyeAppearance,
+    setEyeOptics,
     details,
     hair,
     setHair,

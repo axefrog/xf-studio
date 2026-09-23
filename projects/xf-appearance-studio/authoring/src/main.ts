@@ -115,6 +115,7 @@ function snapshot(): WorkspaceState {
       brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked,
       piercings: input("piercings").checked, piercingStyle: $<HTMLSelectElement>("piercing-style").value,
       piercingDefinition: $<HTMLSelectElement>("piercing-colour").value, normals: input("normals").checked,
+      eyeOptics: input("eye-optics").checked,
       exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
       idle: viewer?.idle?.enabled ?? workspace.preview.idle,
@@ -639,9 +640,19 @@ function showSavedV(v: SavedV) {
     ? "Saved vanilla piercing reference matched; materials and game lighting remain approximate."
     : "No matching vanilla piercing is selected in this save. You can try a viewport-only style below.";
   $("v-eyes").textContent = result.eyeAppearance.message;
+  refreshEyeOpticsNote();
   $("v-card").hidden = false;
   $("v-summary").textContent =
     `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
+}
+function refreshEyeOpticsNote() {
+  if (!viewer) return;
+  const eye = viewer.eyeAppearance();
+  $("eye-optics-note").textContent = eye.optics.active
+    ? "Source roughness R × material scale. Browser study only; eye normals, refraction and game lighting remain unmatched."
+    : !eye.optics.requested ? "Off: original diffuse-only eye preview. Enable for the exactly matched saved eye."
+    : eye.optics.error ? `Source eye roughness unavailable: ${eye.optics.error}. Diffuse-only fallback is active.`
+    : "No matching source roughness map is loaded. Diffuse-only fallback is active.";
 }
 function setupPiercingControls() {
   const style = $<HTMLSelectElement>("piercing-style"), colour = $<HTMLSelectElement>("piercing-colour"),
@@ -715,7 +726,9 @@ try {
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
     brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
-    normals: preview.normals })) input(id).checked = checked;
+    normals: preview.normals, "eye-optics": preview.eyeOptics })) input(id).checked = checked;
+  viewer.setEyeOptics(preview.eyeOptics);
+  refreshEyeOpticsNote();
   setupPiercingControls();
   input("blink").value = String(preview.blink);
   input("exposure").value = String(preview.exposure);
@@ -789,6 +802,10 @@ try {
     viewer!.setLightAngle(+input("light-angle").value);
   input("normals").onchange = () =>
     viewer!.setNormals(input("normals").checked);
+  input("eye-optics").onchange = () => {
+    viewer!.setEyeOptics(input("eye-optics").checked);
+    refreshEyeOpticsNote();
+  };
   input("fov").oninput = () => {
     const limited = viewer!.setFov(+input("fov").value);
     $("fov-value").textContent = `${input("fov").value}°`;

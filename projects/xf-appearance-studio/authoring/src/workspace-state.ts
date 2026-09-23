@@ -12,7 +12,7 @@ export type PreviewState = {
   textureSize: PreviewTextureSize;
   camera?: CameraState;
   eyeShape: number;
-  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean;
+  surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   piercingStyle: string; piercingDefinition: string;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
@@ -35,7 +35,7 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
     uvView: defaultUVView(), fieldSelection: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
-      normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
+      normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
     panels: { lighting: false, previewQuality: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
@@ -61,7 +61,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   const p = v.preview;
   if (p && typeof p === "object") {
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
-    for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
+    for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
     if (typeof p.piercingStyle === "string" && p.piercingStyle.length <= 128) state.preview.piercingStyle = p.piercingStyle;
     if (typeof p.piercingDefinition === "string" && p.piercingDefinition.length <= 128) state.preview.piercingDefinition = p.piercingDefinition;

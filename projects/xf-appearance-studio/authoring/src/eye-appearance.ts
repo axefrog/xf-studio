@@ -9,6 +9,8 @@ export type EyeAsset = {
   sha256: string;
   width: number;
   height: number;
+  /** Exact local source map for the opt-in, browser-only eye material study. */
+  roughness?: { url: string; sha256: string; width: number; height: number; scale: number };
   providers: { name: string; author: string; version: string; url: string }[];
 };
 export type EyeAppearanceStatus = {
@@ -22,19 +24,26 @@ type Reference = Pick<Appearance, "resourceHash" | "definition">;
 
 export function parseEyeManifest(value: unknown): EyeAsset[] {
   const manifest = value as { schema?: unknown; entries?: unknown } | null;
-  if (!manifest || manifest.schema !== "xfs/local-eye-assets-1" || !Array.isArray(manifest.entries) || manifest.entries.length > 32)
+  if (!manifest || !["xfs/local-eye-assets-1", "xfs/local-eye-assets-2"].includes(String(manifest.schema)) ||
+      !Array.isArray(manifest.entries) || manifest.entries.length > 32)
     throw Error("Unsupported local eye asset manifest");
   const keys = new Set<string>();
   return manifest.entries.map((entry: unknown) => {
     if (!entry || typeof entry !== "object") throw Error("Invalid eye asset entry");
     const e = entry as EyeAsset;
     const string = (s: unknown, max: number) => typeof s === "string" && s.length > 0 && s.length <= max;
+    const image = (url: unknown, sha256: unknown, width: unknown, height: unknown) =>
+      typeof url === "string" && /^\/assets\/eyes\/[a-z0-9_-]+\.png$/.test(url) &&
+      typeof sha256 === "string" && /^[0-9a-f]{64}$/.test(sha256) &&
+      Number.isInteger(width) && (width as number) >= 1 && (width as number) <= 4096 &&
+      Number.isInteger(height) && (height as number) >= 1 && (height as number) <= 4096;
     if (!string(e.resourceHash, 20) || !/^[1-9][0-9]*$/.test(e.resourceHash) || BigInt(e.resourceHash) > 18446744073709551615n ||
         !string(e.definition, 256) || !string(e.label, 256) ||
-        typeof e.url !== "string" || !/^\/assets\/eyes\/[a-z0-9_-]+\.png$/.test(e.url) ||
-        typeof e.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(e.sha256) ||
-        !Number.isInteger(e.width) || e.width < 1 || e.width > 4096 ||
-        !Number.isInteger(e.height) || e.height < 1 || e.height > 4096 ||
+        !image(e.url, e.sha256, e.width, e.height) ||
+        (e.roughness !== undefined && (manifest.schema !== "xfs/local-eye-assets-2" ||
+          !e.roughness || !image(e.roughness.url, e.roughness.sha256, e.roughness.width, e.roughness.height) ||
+          typeof e.roughness.scale !== "number" || !Number.isFinite(e.roughness.scale) ||
+          e.roughness.scale <= 0 || e.roughness.scale > 5)) ||
         !Array.isArray(e.providers) || e.providers.length < 1 || e.providers.length > 8 ||
         e.providers.some(p => !p || !string(p.name, 256) || !string(p.author, 256) || !string(p.version, 64) ||
           !string(p.url, 1024) || !/^https:\/\//.test(p.url))) throw Error("Invalid eye asset entry");
@@ -42,7 +51,8 @@ export function parseEyeManifest(value: unknown): EyeAsset[] {
     if (keys.has(key)) throw Error("Duplicate local eye appearance identity");
     keys.add(key);
     return { resourceHash: e.resourceHash, definition: e.definition, label: e.label, url: e.url,
-      sha256: e.sha256, width: e.width, height: e.height, providers: e.providers.map(p => ({ ...p })) };
+      sha256: e.sha256, width: e.width, height: e.height,
+      ...(e.roughness ? { roughness: { ...e.roughness } } : {}), providers: e.providers.map(p => ({ ...p })) };
   });
 }
 
@@ -64,23 +74,29 @@ const request = async (url: string) => {
 
 /** Preload before the scene is exposed. Every later selection is synchronous,
  * so an old save's delayed request can never replace a newer save's eye map. */
-export async function prepareEyeAppearances<T>(decode: (bytes: Uint8Array, entry: EyeAsset) => Promise<T>, io = {
+export async function prepareEyeAppearances<T>(decode: (bytes: Uint8Array, entry: EyeAsset, role: "diffuse" | "roughness") => Promise<T>, io = {
   manifest: async (): Promise<unknown> => (await request("/assets/eyes/manifest.json")).json(),
   bytes: async (url: string) => new Uint8Array(await (await request(url)).arrayBuffer()),
 }) {
   let entries: EyeAsset[] = [], manifestError: string | undefined;
   const loaded = new Map<EyeAsset, T>(), errors = new Map<EyeAsset, string>();
+  const roughness = new Map<EyeAsset, T>(), roughnessErrors = new Map<EyeAsset, string>();
   try { entries = parseEyeManifest(await io.manifest()); }
   catch (error) { manifestError = (error as Error).message; }
   await Promise.all(entries.map(async entry => {
     try {
       const bytes = await io.bytes(entry.url);
       await verifyEyeBytes(bytes, entry.sha256);
-      loaded.set(entry, await decode(bytes, entry));
+      loaded.set(entry, await decode(bytes, entry, "diffuse"));
     } catch (error) { errors.set(entry, (error as Error).message); }
+    if (entry.roughness) try {
+      const bytes = await io.bytes(entry.roughness.url);
+      await verifyEyeBytes(bytes, entry.roughness.sha256);
+      roughness.set(entry, await decode(bytes, entry, "roughness"));
+    } catch (error) { roughnessErrors.set(entry, (error as Error).message); }
   }));
   return {
-    select(appearances?: readonly Reference[]): { texture?: T; status: EyeAppearanceStatus } {
+    select(appearances?: readonly Reference[]): { texture?: T; roughness?: T; roughnessError?: string; status: EyeAppearanceStatus } {
       const fallback = (reason: EyeAppearanceStatus["reason"], message: string, error?: string, asset?: EyeAsset) =>
         ({ status: { kind: "reference" as const, reason, message, ...(error ? { error } : {}), ...(asset ? { asset } : {}) } });
       if (!appearances) return fallback("no-save", "Eye colour uses the reference texture until a saved V is loaded.");
@@ -90,7 +106,8 @@ export async function prepareEyeAppearances<T>(decode: (bytes: Uint8Array, entry
       const asset = matches[0];
       if (!asset) return fallback("unresolved", "Saved eye colour is unresolved; using the reference eye texture.");
       if (!loaded.has(asset)) return fallback("unavailable", "The saved eye image is unavailable; using the reference eye texture.", errors.get(asset), asset);
-      return { texture: loaded.get(asset)!, status: { kind: "matched", reason: "matched", asset,
+      return { texture: loaded.get(asset)!, roughness: roughness.get(asset), roughnessError: roughnessErrors.get(asset),
+        status: { kind: "matched", reason: "matched", asset,
         message: `Eye colour: ${asset.label}. Saved references match the local diffuse; eye shading remains approximate.` } };
     },
   };

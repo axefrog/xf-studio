@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseEyeManifest, prepareEyeAppearances, resolveEyeAsset, verifyEyeBytes, type EyeAsset } from "../src/eye-appearance";
+import { roughnessRedToGreen } from "../src/eye-optics";
 
 const bytes = new TextEncoder().encode("abc");
 const asset: EyeAsset = {
@@ -84,5 +85,32 @@ describe("local saved-eye diffuse resolution", () => {
       { url: "/assets/eyes/%2e%2e/fixture.png" }, { sha256: "bad" }, { width: 0 }, { height: 4097 },
       { providers: [] }, { definition: "" },
     ]) expect(() => parseEyeManifest(manifest([{ ...asset, ...patch }]))).toThrow();
+  });
+
+  test("version-2 source roughness is independently checked and never costs the matched diffuse fallback", async () => {
+    const optical: EyeAsset = { ...asset, roughness: {
+      url: "/assets/eyes/fixture-roughness.png", sha256: asset.sha256, width: 512, height: 512, scale: 0.493420988,
+    } };
+    const v2 = { schema: "xfs/local-eye-assets-2", entries: [optical] };
+    expect(parseEyeManifest(v2)).toEqual([optical]);
+    for (const bad of [{ scale: 0 }, { scale: Infinity }, { url: "/assets/eyes/../bad.png" }, { sha256: "bad" }])
+      expect(() => parseEyeManifest({ ...v2, entries: [{ ...optical, roughness: { ...optical.roughness, ...bad } }] })).toThrow();
+    expect(() => parseEyeManifest({ schema: "xfs/local-eye-assets-1", entries: [optical] })).toThrow();
+    const prepared = await prepareEyeAppearances(async (_, __, role) => role, {
+      manifest: async () => v2,
+      bytes: async url => url.endsWith("roughness.png") ? new TextEncoder().encode("abd") : bytes,
+    });
+    const match = prepared.select([ref]);
+    expect(match.status.reason).toBe("matched");
+    expect(match.texture).toBe("diffuse");
+    expect(match.roughness).toBeUndefined();
+    expect(match.roughnessError).toContain("SHA-256");
+  });
+
+  test("browser roughness channel adapter copies exact red bytes to Three's green channel", () => {
+    const input = new Uint8Array([8, 43, 90, 255, 132, 4, 16, 255]);
+    expect([...roughnessRedToGreen(input)]).toEqual([8, 8, 90, 255, 132, 132, 16, 255]);
+    expect([...input]).toEqual([8, 43, 90, 255, 132, 4, 16, 255]);
+    expect(() => roughnessRedToGreen(new Uint8Array(3))).toThrow();
   });
 });
