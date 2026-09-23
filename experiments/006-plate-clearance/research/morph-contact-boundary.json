@@ -1,0 +1,1297 @@
+{
+  "purpose": "Diagnose necessary morph-aware smoothness changes; no corrected geometry produced.",
+  "candidate": "geometry-0.00005000",
+  "cases": 107,
+  "edges": 4642,
+  "certifiedEdges": 25,
+  "components": [
+    {
+      "edges": [
+        1704,
+        1931,
+        1932,
+        2284
+      ],
+      "count": 4,
+      "uvBounds": [
+        [
+          0.4278564453125,
+          0.2451171875
+        ],
+        [
+          0.4283447265625,
+          0.24560546875
+        ]
+      ],
+      "maxExcess": 5.07447138933576e-05
+    },
+    {
+      "edges": [
+        361,
+        1890,
+        1891
+      ],
+      "count": 3,
+      "uvBounds": [
+        [
+          0.4163818359375,
+          0.23046875
+        ],
+        [
+          0.4222412109375,
+          0.23193359375
+        ]
+      ],
+      "maxExcess": 5.6495161610166784e-06
+    },
+    {
+      "edges": [
+        2761,
+        2767,
+        4631
+      ],
+      "count": 3,
+      "uvBounds": [
+        [
+          0.569091796875,
+          0.245849609375
+        ],
+        [
+          0.569580078125,
+          0.24609375
+        ]
+      ],
+      "maxExcess": 2.104510080518756e-05
+    },
+    {
+      "edges": [
+        130,
+        137
+      ],
+      "count": 2,
+      "uvBounds": [
+        [
+          0.4212646484375,
+          0.239501953125
+        ],
+        [
+          0.42333984375,
+          0.239990234375
+        ]
+      ],
+      "maxExcess": 1.3185402841632275e-05
+    },
+    {
+      "edges": [
+        308,
+        311
+      ],
+      "count": 2,
+      "uvBounds": [
+        [
+          0.4058837890625,
+          0.230224609375
+        ],
+        [
+          0.4095458984375,
+          0.230224609375
+        ]
+      ],
+      "maxExcess": 9.812551323925403e-06
+    },
+    {
+      "edges": [
+        2492,
+        4344
+      ],
+      "count": 2,
+      "uvBounds": [
+        [
+          0.56689453125,
+          0.244873046875
+        ],
+        [
+          0.5673828125,
+          0.245361328125
+        ]
+      ],
+      "maxExcess": 3.730110031958215e-06
+    },
+    {
+      "edges": [
+        2637,
+        4214
+      ],
+      "count": 2,
+      "uvBounds": [
+        [
+          0.583251953125,
+          0.22998046875
+        ],
+        [
+          0.586669921875,
+          0.23046875
+        ]
+      ],
+      "maxExcess": 6.378159167324095e-06
+    },
+    {
+      "edges": [
+        4255,
+        4599
+      ],
+      "count": 2,
+      "uvBounds": [
+        [
+          0.571533203125,
+          0.24560546875
+        ],
+        [
+          0.57177734375,
+          0.24560546875
+        ]
+      ],
+      "maxExcess": 1.109397450481957e-05
+    },
+    {
+      "edges": [
+        111
+      ],
+      "count": 1,
+      "uvBounds": [
+        [
+          0.40625,
+          0.240478515625
+        ],
+        [
+          0.40625,
+          0.240478515625
+        ]
+      ],
+      "maxExcess": 1.4571118767862386e-05
+    },
+    {
+      "edges": [
+        167
+      ],
+      "count": 1,
+      "uvBounds": [
+        [
+          0.4339599609375,
+          0.245361328125
+        ],
+        [
+          0.4339599609375,
+          0.245361328125
+        ]
+      ],
+      "maxExcess": 4.011978491534e-07
+    },
+    {
+      "edges": [
+        1892
+      ],
+      "count": 1,
+      "uvBounds": [
+        [
+          0.4154052734375,
+          0.239501953125
+        ],
+        [
+          0.4154052734375,
+          0.239501953125
+        ]
+      ],
+      "maxExcess": 5.752112991597627e-06
+    },
+    {
+      "edges": [
+        2018
+      ],
+      "count": 1,
+      "uvBounds": [
+        [
+          0.427490234375,
+          0.24560546875
+        ],
+        [
+          0.427490234375,
+          0.24560546875
+        ]
+      ],
+      "maxExcess": 1.6082922981781146e-05
+    },
+    {
+      "edges": [
+        2680
+      ],
+      "count": 1,
+      "uvBounds": [
+        [
+          0.577392578125,
+          0.23193359375
+        ],
+        [
+          0.577392578125,
+          0.23193359375
+        ]
+      ],
+      "maxExcess": 5.827111487809514e-07
+    }
+  ],
+  "minimumUniformNeighborCapMultiplierToRemovePairwiseCertificates": 1.8163994616039385,
+  "worst": {
+    "edge": 1931,
+    "plateVertices": [
+      572,
+      781
+    ],
+    "headVertices": [
+      2424,
+      3017
+    ],
+    "uvMidpoint": [
+      0.4281005859375,
+      0.24560546875
+    ],
+    "cases": [
+      "h041_eyes",
+      "h201_eyes"
+    ],
+    "excess": 5.07447138933576e-05,
+    "minimumCombinedCaseSpecificEdgeChange": 5.07447138933576e-05,
+    "equalShareRequirementIfSplitEvenly": 2.53723569466788e-05,
+    "incidentPlateFaces": [
+      1116,
+      1117
+    ],
+    "exposedNewContactAtSampledFrames": {
+      "0": false,
+      "25": false
+    },
+    "anyExposedContactAtSampledFrames": {
+      "0": true,
+      "25": false
+    },
+    "graphHopsToExposedNewContact": {
+      "0": null,
+      "25": 11
+    }
+  },
+  "caseFrequencyInWorstPairs": {
+    "h171_eyes": 16,
+    "h181_eyes": 3,
+    "h021_eyes": 4,
+    "h191_eyes": 2,
+    "h161_eyes": 1,
+    "h211_eyes": 4,
+    "h041_eyes": 4,
+    "h201_eyes": 2,
+    "h111_eyes": 1,
+    "h031_eyes": 3,
+    "h061_eyes": 2,
+    "h151_eyes": 1,
+    "h011_eyes": 2,
+    "h101_eyes": 3,
+    "saved_v": 1,
+    "h141_eyes": 1
+  },
+  "observedVisibilitySubset": [
+    {
+      "frame": 0,
+      "exposedNewNonadjacentPlateFaces": 0
+    },
+    {
+      "frame": 25,
+      "exposedNewNonadjacentPlateFaces": 2
+    }
+  ],
+  "certificateEdgesIncidentToObservedExposedNewContact": {
+    "0": 0,
+    "25": 0
+  },
+  "certificateEdgesIncidentToAnyObservedExposedContact": {
+    "0": 2,
+    "25": 3
+  },
+  "minimumCertificateVertexGraphHopsToObservedExposedNewContact": {
+    "0": null,
+    "25": 7
+  },
+  "certificates": [
+    {
+      "edge": 111,
+      "plateVertices": [
+        24,
+        25
+      ],
+      "headVertices": [
+        181,
+        182
+      ],
+      "uvMidpoint": [
+        0.40625,
+        0.240478515625
+      ],
+      "cases": [
+        "h171_eyes",
+        "h181_eyes"
+      ],
+      "excess": 1.4571118767862386e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.4571118767862386e-05,
+      "equalShareRequirementIfSplitEvenly": 7.285559383931193e-06,
+      "incidentPlateFaces": [
+        673,
+        726
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 7
+      }
+    },
+    {
+      "edge": 130,
+      "plateVertices": [
+        28,
+        29
+      ],
+      "headVertices": [
+        185,
+        186
+      ],
+      "uvMidpoint": [
+        0.42333984375,
+        0.239990234375
+      ],
+      "cases": [
+        "h021_eyes",
+        "h171_eyes"
+      ],
+      "excess": 7.2528129998600515e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 7.2528129998600515e-06,
+      "equalShareRequirementIfSplitEvenly": 3.6264064999300257e-06,
+      "incidentPlateFaces": [
+        667,
+        675
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 9
+      }
+    },
+    {
+      "edge": 137,
+      "plateVertices": [
+        29,
+        31
+      ],
+      "headVertices": [
+        186,
+        188
+      ],
+      "uvMidpoint": [
+        0.4212646484375,
+        0.239501953125
+      ],
+      "cases": [
+        "h171_eyes",
+        "h191_eyes"
+      ],
+      "excess": 1.3185402841632275e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.3185402841632275e-05,
+      "equalShareRequirementIfSplitEvenly": 6.5927014208161375e-06,
+      "incidentPlateFaces": [
+        666,
+        667
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 9
+      }
+    },
+    {
+      "edge": 167,
+      "plateVertices": [
+        36,
+        37
+      ],
+      "headVertices": [
+        193,
+        194
+      ],
+      "uvMidpoint": [
+        0.4339599609375,
+        0.245361328125
+      ],
+      "cases": [
+        "h021_eyes",
+        "h161_eyes"
+      ],
+      "excess": 4.011978491534e-07,
+      "minimumCombinedCaseSpecificEdgeChange": 4.011978491534e-07,
+      "equalShareRequirementIfSplitEvenly": 2.005989245767e-07,
+      "incidentPlateFaces": [
+        1062,
+        1065
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 16
+      }
+    },
+    {
+      "edge": 308,
+      "plateVertices": [
+        65,
+        632
+      ],
+      "headVertices": [
+        222,
+        2515
+      ],
+      "uvMidpoint": [
+        0.4058837890625,
+        0.230224609375
+      ],
+      "cases": [
+        "h171_eyes",
+        "h211_eyes"
+      ],
+      "excess": 9.812551323925403e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 9.812551323925403e-06,
+      "equalShareRequirementIfSplitEvenly": 4.906275661962702e-06,
+      "incidentPlateFaces": [
+        619,
+        624
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 8
+      }
+    },
+    {
+      "edge": 311,
+      "plateVertices": [
+        66,
+        632
+      ],
+      "headVertices": [
+        223,
+        2515
+      ],
+      "uvMidpoint": [
+        0.4095458984375,
+        0.230224609375
+      ],
+      "cases": [
+        "h171_eyes",
+        "h211_eyes"
+      ],
+      "excess": 7.832611168652581e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 7.832611168652581e-06,
+      "equalShareRequirementIfSplitEvenly": 3.916305584326291e-06,
+      "incidentPlateFaces": [
+        619,
+        623
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 8
+      }
+    },
+    {
+      "edge": 361,
+      "plateVertices": [
+        77,
+        634
+      ],
+      "headVertices": [
+        234,
+        2517
+      ],
+      "uvMidpoint": [
+        0.4222412109375,
+        0.23193359375
+      ],
+      "cases": [
+        "h171_eyes",
+        "h211_eyes"
+      ],
+      "excess": 2.2187110989935432e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 2.2187110989935432e-06,
+      "equalShareRequirementIfSplitEvenly": 1.1093555494967716e-06,
+      "incidentPlateFaces": [
+        629,
+        651
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 10
+      }
+    },
+    {
+      "edge": 1704,
+      "plateVertices": [
+        449,
+        781
+      ],
+      "headVertices": [
+        2158,
+        3017
+      ],
+      "uvMidpoint": [
+        0.4283447265625,
+        0.2451171875
+      ],
+      "cases": [
+        "h041_eyes",
+        "h201_eyes"
+      ],
+      "excess": 1.249718324251609e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.249718324251609e-05,
+      "equalShareRequirementIfSplitEvenly": 6.248591621258045e-06,
+      "incidentPlateFaces": [
+        1115,
+        1116
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": true,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 11
+      }
+    },
+    {
+      "edge": 1890,
+      "plateVertices": [
+        549,
+        633
+      ],
+      "headVertices": [
+        2374,
+        2516
+      ],
+      "uvMidpoint": [
+        0.4163818359375,
+        0.23046875
+      ],
+      "cases": [
+        "h111_eyes",
+        "h171_eyes"
+      ],
+      "excess": 5.6495161610166784e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 5.6495161610166784e-06,
+      "equalShareRequirementIfSplitEvenly": 2.8247580805083392e-06,
+      "incidentPlateFaces": [
+        622,
+        625
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 9
+      }
+    },
+    {
+      "edge": 1891,
+      "plateVertices": [
+        549,
+        634
+      ],
+      "headVertices": [
+        2374,
+        2517
+      ],
+      "uvMidpoint": [
+        0.4195556640625,
+        0.23095703125
+      ],
+      "cases": [
+        "h171_eyes",
+        "h211_eyes"
+      ],
+      "excess": 7.827855648014618e-07,
+      "minimumCombinedCaseSpecificEdgeChange": 7.827855648014618e-07,
+      "equalShareRequirementIfSplitEvenly": 3.913927824007309e-07,
+      "incidentPlateFaces": [
+        625,
+        629
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 10
+      }
+    },
+    {
+      "edge": 1892,
+      "plateVertices": [
+        550,
+        551
+      ],
+      "headVertices": [
+        2375,
+        2376
+      ],
+      "uvMidpoint": [
+        0.4154052734375,
+        0.239501953125
+      ],
+      "cases": [
+        "h171_eyes",
+        "h191_eyes"
+      ],
+      "excess": 5.752112991597627e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 5.752112991597627e-06,
+      "equalShareRequirementIfSplitEvenly": 2.8760564957988136e-06,
+      "incidentPlateFaces": [
+        668,
+        669
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 8
+      }
+    },
+    {
+      "edge": 1931,
+      "plateVertices": [
+        572,
+        781
+      ],
+      "headVertices": [
+        2424,
+        3017
+      ],
+      "uvMidpoint": [
+        0.4281005859375,
+        0.24560546875
+      ],
+      "cases": [
+        "h041_eyes",
+        "h201_eyes"
+      ],
+      "excess": 5.07447138933576e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 5.07447138933576e-05,
+      "equalShareRequirementIfSplitEvenly": 2.53723569466788e-05,
+      "incidentPlateFaces": [
+        1116,
+        1117
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": true,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 11
+      }
+    },
+    {
+      "edge": 1932,
+      "plateVertices": [
+        572,
+        810
+      ],
+      "headVertices": [
+        2424,
+        3143
+      ],
+      "uvMidpoint": [
+        0.4278564453125,
+        0.24560546875
+      ],
+      "cases": [
+        "h031_eyes",
+        "h041_eyes"
+      ],
+      "excess": 3.753219662208861e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 3.753219662208861e-05,
+      "equalShareRequirementIfSplitEvenly": 1.8766098311044306e-05,
+      "incidentPlateFaces": [
+        1117
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 11
+      }
+    },
+    {
+      "edge": 2018,
+      "plateVertices": [
+        602,
+        809
+      ],
+      "headVertices": [
+        2486,
+        3142
+      ],
+      "uvMidpoint": [
+        0.427490234375,
+        0.24560546875
+      ],
+      "cases": [
+        "h061_eyes",
+        "h151_eyes"
+      ],
+      "excess": 1.6082922981781146e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.6082922981781146e-05,
+      "equalShareRequirementIfSplitEvenly": 8.041461490890573e-06,
+      "incidentPlateFaces": [
+        1138
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 14
+      }
+    },
+    {
+      "edge": 2284,
+      "plateVertices": [
+        781,
+        810
+      ],
+      "headVertices": [
+        3017,
+        3143
+      ],
+      "uvMidpoint": [
+        0.427978515625,
+        0.24560546875
+      ],
+      "cases": [
+        "h041_eyes",
+        "h061_eyes"
+      ],
+      "excess": 2.0047836280951857e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 2.0047836280951857e-05,
+      "equalShareRequirementIfSplitEvenly": 1.0023918140475928e-05,
+      "incidentPlateFaces": [
+        1117,
+        1119
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": 12
+      }
+    },
+    {
+      "edge": 2492,
+      "plateVertices": [
+        853,
+        1424
+      ],
+      "headVertices": [
+        3755,
+        5953
+      ],
+      "uvMidpoint": [
+        0.56689453125,
+        0.244873046875
+      ],
+      "cases": [
+        "h011_eyes",
+        "h021_eyes"
+      ],
+      "excess": 6.734241191235272e-07,
+      "minimumCombinedCaseSpecificEdgeChange": 6.734241191235272e-07,
+      "equalShareRequirementIfSplitEvenly": 3.367120595617636e-07,
+      "incidentPlateFaces": [
+        2337,
+        2938
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 2637,
+      "plateVertices": [
+        883,
+        1451
+      ],
+      "headVertices": [
+        3785,
+        5980
+      ],
+      "uvMidpoint": [
+        0.586669921875,
+        0.22998046875
+      ],
+      "cases": [
+        "h101_eyes",
+        "h171_eyes"
+      ],
+      "excess": 6.378159167324095e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 6.378159167324095e-06,
+      "equalShareRequirementIfSplitEvenly": 3.1890795836620476e-06,
+      "incidentPlateFaces": [
+        2017,
+        2018
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 2680,
+      "plateVertices": [
+        893,
+        1452
+      ],
+      "headVertices": [
+        3795,
+        5981
+      ],
+      "uvMidpoint": [
+        0.577392578125,
+        0.23193359375
+      ],
+      "cases": [
+        "h101_eyes",
+        "h171_eyes"
+      ],
+      "excess": 5.827111487809514e-07,
+      "minimumCombinedCaseSpecificEdgeChange": 5.827111487809514e-07,
+      "equalShareRequirementIfSplitEvenly": 2.913555743904757e-07,
+      "incidentPlateFaces": [
+        2019,
+        2022
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 2761,
+      "plateVertices": [
+        911,
+        1621
+      ],
+      "headVertices": [
+        3813,
+        6488
+      ],
+      "uvMidpoint": [
+        0.569091796875,
+        0.245849609375
+      ],
+      "cases": [
+        "h171_eyes",
+        "saved_v"
+      ],
+      "excess": 5.6820770110984844e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 5.6820770110984844e-06,
+      "equalShareRequirementIfSplitEvenly": 2.8410385055492422e-06,
+      "incidentPlateFaces": [
+        2990,
+        2992
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": true
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 2767,
+      "plateVertices": [
+        913,
+        1621
+      ],
+      "headVertices": [
+        3815,
+        6488
+      ],
+      "uvMidpoint": [
+        0.569580078125,
+        0.24609375
+      ],
+      "cases": [
+        "h171_eyes",
+        "h181_eyes"
+      ],
+      "excess": 1.125330573721023e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.125330573721023e-05,
+      "equalShareRequirementIfSplitEvenly": 5.626652868605115e-06,
+      "incidentPlateFaces": [
+        2988,
+        2990
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": true
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 4214,
+      "plateVertices": [
+        1367,
+        1451
+      ],
+      "headVertices": [
+        5840,
+        5980
+      ],
+      "uvMidpoint": [
+        0.583251953125,
+        0.23046875
+      ],
+      "cases": [
+        "h101_eyes",
+        "h171_eyes"
+      ],
+      "excess": 4.755252957897024e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 4.755252957897024e-06,
+      "equalShareRequirementIfSplitEvenly": 2.377626478948512e-06,
+      "incidentPlateFaces": [
+        2017,
+        2020
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 4255,
+      "plateVertices": [
+        1390,
+        1628
+      ],
+      "headVertices": [
+        5890,
+        6590
+      ],
+      "uvMidpoint": [
+        0.57177734375,
+        0.24560546875
+      ],
+      "cases": [
+        "h011_eyes",
+        "h031_eyes"
+      ],
+      "excess": 2.8381398382801043e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 2.8381398382801043e-06,
+      "equalShareRequirementIfSplitEvenly": 1.4190699191400522e-06,
+      "incidentPlateFaces": [
+        2883
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 4344,
+      "plateVertices": [
+        1424,
+        1425
+      ],
+      "headVertices": [
+        5953,
+        5954
+      ],
+      "uvMidpoint": [
+        0.5673828125,
+        0.245361328125
+      ],
+      "cases": [
+        "h021_eyes",
+        "h171_eyes"
+      ],
+      "excess": 3.730110031958215e-06,
+      "minimumCombinedCaseSpecificEdgeChange": 3.730110031958215e-06,
+      "equalShareRequirementIfSplitEvenly": 1.8650550159791075e-06,
+      "incidentPlateFaces": [
+        2327,
+        2328
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 4599,
+      "plateVertices": [
+        1594,
+        1628
+      ],
+      "headVertices": [
+        6461,
+        6590
+      ],
+      "uvMidpoint": [
+        0.571533203125,
+        0.24560546875
+      ],
+      "cases": [
+        "h031_eyes",
+        "h141_eyes"
+      ],
+      "excess": 1.109397450481957e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 1.109397450481957e-05,
+      "equalShareRequirementIfSplitEvenly": 5.546987252409785e-06,
+      "incidentPlateFaces": [
+        2883,
+        2885
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    },
+    {
+      "edge": 4631,
+      "plateVertices": [
+        1621,
+        1622
+      ],
+      "headVertices": [
+        6488,
+        6489
+      ],
+      "uvMidpoint": [
+        0.569580078125,
+        0.245849609375
+      ],
+      "cases": [
+        "h171_eyes",
+        "h181_eyes"
+      ],
+      "excess": 2.104510080518756e-05,
+      "minimumCombinedCaseSpecificEdgeChange": 2.104510080518756e-05,
+      "equalShareRequirementIfSplitEvenly": 1.052255040259378e-05,
+      "incidentPlateFaces": [
+        2988,
+        2989
+      ],
+      "exposedNewContactAtSampledFrames": {
+        "0": false,
+        "25": false
+      },
+      "anyExposedContactAtSampledFrames": {
+        "0": false,
+        "25": true
+      },
+      "graphHopsToExposedNewContact": {
+        "0": null,
+        "25": null
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\head.glb",
+      "sha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\geometry-0.00005000\\roundtrip\\xfas_eye_plate.glb",
+      "sha256": "44966e01b94e618d2705d3f3839c17a929d2a3447df9cde03c37be9d3a40049c"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\004-plate-import\\head-shading-transfer.json",
+      "sha256": "13100c7e03c071b75854af6f8b877e4d226ca679d73bf14906cb204a9a58ce87"
+    },
+    {
+      "path": "D:\\Dev\\worktrees\\plate-clearance-next\\experiments\\006-plate-clearance\\research\\finite_correction_summary.json",
+      "sha256": "1862af615671bfe281e7041e6317bf925c81d3072c6ae4b11858a02f20ee16ea"
+    },
+    {
+      "path": "D:\\Dev\\cp2077-modding-hq\\experiments\\006-plate-clearance\\generated\\build-1790134714546030800\\contact-visibility-details.json",
+      "sha256": "7ddb1f2e0526ed1dbe9c7b8a1e611e26f93306148c8b1cf8ca7e1ddf4a60e877"
+    }
+  ],
+  "limits": [
+    "Necessary pairwise condition only. Morph-delta edits could remove this incompatibility but may create other contacts or alter expression.",
+    "Equal-share number applies only if the two case-specific edge corrections split the necessary change evenly; it is not a per-case lower bound or proposed morph correction.",
+    "Exposed contact overlap checks only frames 0 and 25; all 73 poses and 107 static cases remain required."
+  ]
+}
