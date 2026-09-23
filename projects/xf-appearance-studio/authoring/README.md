@@ -130,3 +130,7 @@ Reproduce offline comparisons with `bun tools/validate-pigment.ts` (Python/Pillo
 ### Mask responsiveness
 
 Preview calculations now yield cooperatively and cancel obsolete snapshots. Only complete masks for the latest recipe are displayed; preset switching invalidates old versions, and active-layer work can preempt another layer without dropping it. Worker failures preserve queued newer edits and retry lazily, avoiding a restart loop if the script cannot load. Synchronous raster/compiler output is unchanged. The displayed mask time includes cooperative waiting. Preparation and each small pixel batch remain synchronous; this improves responsiveness, not the inherent cost of extreme curves.
+
+### Per-point softness and sharp UV guides
+
+Enable **Per-point edge softness**, select a point in UV or on the head, then adjust **Selected point softness**. Disable it to return to one global width; custom widths remain stored. Widths blend smoothly, so close opposing edges can influence one another. Older designs migrate unchanged to recipe-6. UV paths and handles now use the pane size and display density, staying sharp in widened sidebars. [Contract and validation](../../../research/authoring/directional-softness-contract.md).

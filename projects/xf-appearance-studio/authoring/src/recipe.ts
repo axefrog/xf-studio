@@ -1,7 +1,7 @@
-import { convertToBezier, tessellateBezier, type Handles } from "./bezier-path";
+import { convertToBezier, tessellateBezier, interpolatedFeather, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
-export type Point = { u: number; v: number; weight: number; handles?: Handles };
+export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
   v: number;
@@ -10,6 +10,12 @@ export type Field = {
   radius: number;
 };
 export type WarpField = Field & { id: string };
+export type Softness = { mode: "uniform" } | { mode: "boundary"; blend: number };
+export const DEFAULT_SOFTNESS_BLEND = 0.0000078125;
+export const MIN_SOFTNESS_BLEND = 0.0000001;
+export const MAX_SOFTNESS_BLEND = 0.001;
+export const MIN_FEATHER = 0.0005;
+export const MAX_FEATHER = 0.06;
 export type Strength = { mode: "legacy-nearest" } | { mode: "smooth-boundary"; blend: number };
 export const DEFAULT_STRENGTH_BLEND = 0.0005;
 export const MIN_STRENGTH_BLEND = 0.000125;
@@ -28,9 +34,10 @@ export type Layer = {
   points: Point[];
   fields: WarpField[];
   strength: Strength;
+  softness: Softness;
 };
 export type Recipe = {
-  schema: "xfs/recipe-5";
+  schema: "xfs/recipe-6";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -40,7 +47,7 @@ export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-5",
+    schema: "xfs/recipe-6",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => convertToBezier({
       id: `layer-${i + 1}`,
@@ -50,6 +57,7 @@ export function initialRecipe(): Recipe {
       finish: i === 2 ? "regular" : "matte",
       opacity: 0.85,
       strength: { mode: "smooth-boundary", blend: DEFAULT_STRENGTH_BLEND },
+      softness: { mode: "uniform" },
       feather: i === 1 ? 0.0015 : 0.012,
       symmetry: true,
       pathMode: "catmull-rom",
@@ -77,11 +85,11 @@ export function initialRecipe(): Recipe {
 }
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
-  type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"] };
+  type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -112,7 +120,7 @@ export function parseRecipe(value: unknown): Recipe {
       typeof l.enabled !== "boolean" ||
       typeof l.symmetry !== "boolean" ||
       !num(l.opacity, 0, 1) ||
-      !num(l.feather, 0.0005, 0.06)
+      !num(l.feather, MIN_FEATHER, MAX_FEATHER)
     )
       throw Error("Invalid layer settings.");
     ids.add(l.id);
@@ -137,7 +145,22 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentPath = r.schema === "xfs/recipe-5";
+    const currentSoftness = r.schema === "xfs/recipe-6";
+    if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
+      throw Error("Ambiguous edge softness format.");
+    let softness: Softness = {mode: "uniform"};
+    if (currentSoftness) {
+      const s = l.softness;
+      if (!s || typeof s !== "object" || Array.isArray(s) ||
+        (s.mode === "uniform" ? Object.keys(s).some(k => k !== "mode") :
+          s.mode !== "boundary" || !num(s.blend, MIN_SOFTNESS_BLEND, MAX_SOFTNESS_BLEND) ||
+          Object.keys(s).some(k => k !== "mode" && k !== "blend")))
+        throw Error("Invalid edge softness settings.");
+      softness = s;
+      if (l.points.some(p => (s.mode === "boundary" || "feather" in p) && !num(p.feather, MIN_FEATHER, MAX_FEATHER)))
+        throw Error("Point edge softness is outside the supported range.");
+    }
+    const currentPath = r.schema === "xfs/recipe-5" || currentSoftness;
     if (!currentPath && ("pathMode" in l || l.points.some(p => "handles" in p)))
       throw Error("Ambiguous path format.");
     const pathMode = currentPath ? l.pathMode : "catmull-rom";
@@ -198,9 +221,9 @@ export function parseRecipe(value: unknown): Recipe {
       fieldIds.add(f.id);
     }
     const { field: _legacyField, fields: _fields, ...settings } = l;
-    layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode });
+    layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  return structuredClone({ ...r, schema: "xfs/recipe-5", layers });
+  return structuredClone({ ...r, schema: "xfs/recipe-6", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);
@@ -225,6 +248,7 @@ export function curve(points: Point[], steps = 10): Point[] {
         u: at("u"),
         v: at("v"),
         weight: b.weight * (1 - t) + c.weight * t,
+        ...interpolatedFeather(b,c,t),
       });
     }
   }
@@ -258,7 +282,7 @@ export function coverage(
   polygon = curve(l.points),
 ): number {
   if (!l.enabled) return 0;
-  return preparedCoverage(u, v, l, polygon, prepareLayerStrength(l, polygon));
+  return preparedCoverage(u, v, l, polygon, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon).width);
 }
 function prepareLayerStrength(l: Layer, polygon: Point[]): PigmentStrength | undefined {
   // Keep the legacy arithmetic for uniform knots, including its last-bit linear
@@ -266,12 +290,22 @@ function prepareLayerStrength(l: Layer, polygon: Point[]): PigmentStrength | und
   return l.strength.mode === "smooth-boundary" && !l.points.every(p => p.weight === l.points[0].weight)
     ? preparePigmentStrength(polygon, l.strength.blend) : undefined;
 }
-function preparedCoverage(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength): number {
-  return l.symmetry
-    ? Math.max(coverageAt(u, v, l, polygon, strength), coverageAt(1 - u, v, l, polygon, strength))
-    : coverageAt(u, v, l, polygon, strength);
+function prepareLayerSoftness(l: Layer, polygon: Point[]): {maxWidth: number; width: number | PigmentStrength} {
+  if (l.softness.mode === "uniform") return {maxWidth: l.feather, width: l.feather};
+  const widths = l.points.map(p => p.feather!);
+  const min = Math.min(...widths), max = Math.max(...widths);
+  // Constant point widths take the same arithmetic path as a global width.
+  if (min === max) return {maxWidth: max, width: min};
+  const span = max - min;
+  const field = preparePigmentStrength(polygon.map(p => ({...p, weight: ((p.feather ?? l.feather) - min) / span})), l.softness.blend);
+  return {maxWidth: max, width: (u,v) => min + span * field(u,v)};
 }
-function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength): number {
+function preparedCoverage(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength, softness?: number | PigmentStrength): number {
+  return l.symmetry
+    ? Math.max(coverageAt(u, v, l, polygon, strength, softness), coverageAt(1 - u, v, l, polygon, strength, softness))
+    : coverageAt(u, v, l, polygon, strength, softness);
+}
+function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?: PigmentStrength, softness?: number | PigmentStrength): number {
   [u, v] = warpFields(u, v, l.fields);
   let inside = false,
     best = Infinity,
@@ -295,7 +329,8 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?:
       weight = a.weight * (1 - t) + b.weight * t;
     }
   }
-  const x = clamp(0.5 + ((inside ? 1 : -1) * Math.sqrt(best)) / l.feather);
+  const feather = typeof softness === "function" ? softness(u,v) : softness ?? l.feather;
+  const x = clamp(0.5 + ((inside ? 1 : -1) * Math.sqrt(best)) / feather);
   if (x === 0) return 0;
   return x * x * (3 - 2 * x) * (strength ? strength(u, v) : weight) * l.opacity;
 }
@@ -308,7 +343,8 @@ export function createRasterJob(l: Layer, size: number) {
   for (let i = 0; i < data.length; i += 4)
     data[i] = data[i + 1] = data[i + 2] = 255;
   const strength = prepareLayerStrength(l, polygon);
-  const pad = l.feather + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
+  const softness = prepareLayerSoftness(l, polygon);
+  const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   let minU = Math.min(...polygon.map((p) => p.u)) - pad,
     maxU = Math.max(...polygon.map((p) => p.u)) + pad;
   if (l.symmetry) {
@@ -329,7 +365,7 @@ export function createRasterJob(l: Layer, size: number) {
       let count = 0;
       while (!done && count++ < maxPixels) {
         data[(y * size + x) * 4 + 3] = Math.round(
-          255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength));
+          255 * preparedCoverage((x + 0.5) / size, (y + 0.5) / size, l, polygon, strength, softness.width));
         if (++x >= x1) { x = x0; if (++y >= y1) done = true; }
       }
       return done;

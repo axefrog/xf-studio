@@ -21,6 +21,14 @@ const vector = (a: UV, b: UV): UV => ({ u: a.u - b.u, v: a.v - b.v });
 const finite = (p: UV) => Number.isFinite(p.u) && Number.isFinite(p.v);
 const bounded = (p: UV) => finite(p) && Math.abs(p.u) <= 1 && Math.abs(p.v) <= 1;
 
+/** Keep absent legacy attributes absent; clamp only interpolation roundoff so
+ * splitting a width at a schema bound cannot invent an out-of-range value. */
+export function interpolatedFeather(a: Point, b: Point, t: number): {feather?: number} {
+  if (a.feather === undefined || b.feather === undefined) return {};
+  if (a.feather === b.feather) return {feather: a.feather};
+  return {feather: Math.max(Math.min(a.feather,b.feather), Math.min(Math.max(a.feather,b.feather), a.feather*(1-t)+b.feather*t))};
+}
+
 export function tangentEndpoint(point: Point, side: TangentSide): UV {
   const h = point.handles?.[side];
   return { u: point.u + (h?.u ?? 0), v: point.v + (h?.v ?? 0) };
@@ -78,7 +86,7 @@ export function bezierAt(points: readonly Point[], segment: number, t: number): 
   const a = points[segment], b = points[(segment + 1) % points.length];
   const p = mix(a, tangentEndpoint(a, "out"), t), q = mix(tangentEndpoint(a, "out"), tangentEndpoint(b, "in"), t), r = mix(tangentEndpoint(b, "in"), b, t);
   const uv = mix(mix(p, q, t), mix(q, r, t), t);
-  return { ...uv, weight: a.weight * (1 - t) + b.weight * t };
+  return { ...uv, weight: a.weight * (1 - t) + b.weight * t, ...interpolatedFeather(a,b,t) };
 }
 
 /** Common deterministic polygon for guides, alpha masks and compiler. */
@@ -92,7 +100,7 @@ export function tessellateBezier(points: readonly Point[]): BezierSample[] {
       const c1 = mix(p, s, 1 / 3), c2 = mix(p, s, 2 / 3);
       const error = Math.max(Math.hypot(q.u - c1.u, q.v - c1.v), Math.hypot(r.u - c2.u, r.v - c2.v));
       if (error <= BEZIER_TOLERANCE || depth === BEZIER_MAX_DEPTH) {
-        result.push({ ...p, weight: a.weight * (1 - t0) + b.weight * t0, segment, t: t0 });
+        result.push({ ...p, weight: a.weight * (1 - t0) + b.weight * t0, ...interpolatedFeather(a,b,t0), segment, t: t0 });
         return;
       }
       const pq = mix(p, q, .5), qr = mix(q, r, .5), rs = mix(r, s, .5), left = mix(pq, qr, .5), right = mix(qr, rs, .5), center = mix(left, right, .5), tm = (t0 + t1) / 2;
@@ -123,6 +131,6 @@ export function splitBezierSegment(points: readonly Point[], segment: number, t:
   // A split changes arm lengths; retain collinearity but never relabel unequal
   // arms symmetric. Corner mode remains independent, including coincident ends.
   for (const i of [ai, bi]) if (next[i].handles!.mode === "symmetric") next[i].handles!.mode = "aligned";
-  next.splice(segment + 1, 0, { ...middle, weight: a.weight * (1 - t) + b.weight * t, handles });
+  next.splice(segment + 1, 0, { ...middle, weight: a.weight * (1 - t) + b.weight * t, ...interpolatedFeather(a,b,t), handles });
   return next;
 }

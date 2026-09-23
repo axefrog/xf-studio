@@ -105,10 +105,11 @@ describe("explicit closed cubic paths", () => {
   });
 
   test("legacy loading remains exact; new path data is strict and explicit", () => {
-    const l = legacy(), v4 = {schema: "xfs/recipe-4", uv: "gltf-uv0-top-left", layers: [l]} as any;
-    delete v4.layers[0].pathMode;
+    const l = legacy(), v4 = {schema: "xfs/recipe-4", uv: "gltf-uv0-top-left", layers: [structuredClone(l)]} as any;
+    delete v4.layers[0].pathMode; delete v4.layers[0].softness;
+    v4.layers[0].points.forEach((p:any) => delete p.feather);
     const before = raster(l, 128), loaded = parseRecipe(v4);
-    expect(loaded.schema).toBe("xfs/recipe-5"); expect(loaded.layers[0].pathMode).toBe("catmull-rom");
+    expect(loaded.schema).toBe("xfs/recipe-6"); expect(loaded.layers[0].pathMode).toBe("catmull-rom");
     expect(raster(loaded.layers[0], 128)).toEqual(before);
     const recipe = initialRecipe();
     expect(parseRecipe(JSON.parse(JSON.stringify(recipe)))).toEqual(recipe);

@@ -177,15 +177,17 @@
         <label class="control">Point blend <output id="strength-blend-value"></output>
           <input id="strength-blend" type="range" aria-describedby="strength-note" /></label>
         <p class="help" id="strength-note"></p>
+        <label class="toggle"><input type="checkbox" id="variable-softness" /> Per-point edge softness</label>
         <label class="control"
-          >Edge softness <output id="feather-value"></output
+          ><span id="feather-label">Edge softness</span> <output id="feather-value"></output
           ><input
             id="feather"
             type="range"
             min=".0005"
-            max=".04"
+            max=".06"
             step=".0005" /></label
         >
+        <p class="help" id="softness-note"></p>
         <div class="field-controls">
           <div class="label-row"><span>Warp controls</span><button id="field-add" type="button">Add warp</button></div>
           <div id="field-list" class="field-list" role="group" aria-label="Warp controls"></div>

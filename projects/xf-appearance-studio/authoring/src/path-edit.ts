@@ -1,4 +1,4 @@
-import { bezierAt, splitBezierSegment, tessellateBezier } from "./bezier-path";
+import { bezierAt, interpolatedFeather, splitBezierSegment, tessellateBezier } from "./bezier-path";
 import { clamp, curve, type Point } from "./recipe";
 
 export type PathUV = { u: number; v: number };
@@ -118,7 +118,9 @@ export function insertPathPoint(
     if (!next) return null;
     return { ...section, point: next[section.index], points: next };
   }
-  const point = { u: clamp(click.u), v: clamp(click.v), weight: section.weight };
+  const a = points[section.segment], b = points[(section.segment + 1) % points.length];
+  const point: Point = { u: clamp(click.u), v: clamp(click.v), weight: section.weight,
+    ...interpolatedFeather(a,b,section.t) };
   const next = points.map(p => ({ ...p }));
   next.splice(section.index, 0, point);
   return { ...section, point, points: next };

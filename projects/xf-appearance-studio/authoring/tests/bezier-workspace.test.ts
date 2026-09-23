@@ -5,8 +5,8 @@ import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { editLayers } from "../src/layer-stack";
 
 test("old v4 shapes stay unchanged; edited handles and legacy Undo coexist through workspace reload", () => {
-  const old = { ...initialRecipe(), schema: "xfs/recipe-4", layers: initialRecipe().layers.map(({ pathMode: _mode, points, ...layer }) =>
-    ({ ...layer, points: points.map(({ handles: _handles, ...point }) => point) })) };
+  const old = { ...initialRecipe(), schema: "xfs/recipe-4", layers: initialRecipe().layers.map(({ pathMode: _mode, softness: _softness, points, ...layer }) =>
+    ({ ...layer, points: points.map(({ handles: _handles, feather: _feather, ...point }) => point) })) };
   old.layers[0].points[2].weight = .2;
   const oldText = JSON.stringify(old), migrated = parseRecipe(old);
   expect(migrated.layers.every(layer => layer.pathMode === "catmull-rom")).toBe(true);

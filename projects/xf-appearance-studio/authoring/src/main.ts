@@ -16,6 +16,8 @@ import { createRasterClient } from "./raster-client";
 import { selectedWarp, type FieldSelection } from "./field-selection";
 import { setupFields } from "./field-ui";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
+import { editSoftness, type SoftnessCommand } from "./softness-edit";
+import { setupSoftness } from "./softness-ui";
 import { setupPigment } from "./pigment-ui";
 import { convertToBezier, setPointMode } from "./bezier-path";
 import { setupPathControls, type PathCommand } from "./path-ui";
@@ -121,6 +123,7 @@ layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
 let refreshFields: (() => void) | undefined;
 let refreshPigment: (() => void) | undefined;
+let refreshSoftness: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
@@ -160,6 +163,7 @@ function sync() {
   presetLibrary?.refreshSummary();
   refreshFields?.();
   refreshPigment?.();
+  refreshSoftness?.();
   refreshPath?.();
   const l = current();
   $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
@@ -188,7 +192,6 @@ function sync() {
   }
   for (const [id, value] of Object.entries({
     weight: l.points[selected].weight,
-    feather: l.feather,
     opacity: l.opacity,
   })) {
     input(id).value = String(value);
@@ -211,7 +214,7 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
     viewer?.updateLayer(i, recipe.layers[i]);
     lastRaster = ms;
     drawUV();
-    status(`Live mask · 1024² · ${Math.round(ms)} ms · layer ${i + 1}`);
+    status(`Live mask Â· 1024Â² Â· ${Math.round(ms)} ms Â· layer ${i + 1}`);
   }, () => status("Mask calculation failed. Edit again to retry."));
 function render(i = active) {
   if (!recipe.layers[i]) return;
@@ -237,7 +240,7 @@ window.addEventListener("keydown", (e) => {
     undo();
   }
 });
-for (const id of ["weight", "feather", "opacity", "color"]) {
+for (const id of ["weight", "opacity", "color"]) {
   const control = input(id);
   control.addEventListener("pointerdown", checkpoint);
   control.addEventListener("keydown", () => checkpoint());
@@ -245,7 +248,6 @@ for (const id of ["weight", "feather", "opacity", "color"]) {
     const l = current();
     if (id === "color") l.color = control.value;
     else if (id === "weight") l.points = editPigment(l, { kind: "point-strength", index: selected, value: +control.value }).points;
-    else if (id === "feather") l.feather = +control.value;
     else l.opacity = +control.value;
     schedule();
   };
@@ -293,6 +295,16 @@ refreshPigment = setupPigment({
   smooth: input("smooth-strength"), blend: input("strength-blend"),
   value: $("strength-blend-value"), note: $("strength-note"),
 }, { layer: current, begin: checkpoint, edit: changePigment });
+function changeSoftness(command: SoftnessCommand) {
+  const layer = current(); if (!layer) return;
+  try {
+    Object.assign(layer, editSoftness(layer, command)); schedule(); sync(); persist();
+  } catch (error) { status((error as Error).message); sync(); }
+}
+refreshSoftness = setupSoftness({
+  variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
+  value: $("feather-value"), note: $("softness-note"),
+}, { layer: current, selected: () => selected, begin: checkpoint, edit: changeSoftness });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),

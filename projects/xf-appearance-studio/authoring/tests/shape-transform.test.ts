@@ -107,7 +107,7 @@ describe("whole authored shape transformations", () => {
     for (const radians of [.0000001, .3, -.7, Math.PI]) {
       const result = transformLayer(layer, {kind: "rotate", pivot: {u: .37, v: .23}, radians})!;
       expect(result).not.toBeNull();
-      expect(parseRecipe({schema: "xfs/recipe-5", uv: "gltf-uv0-top-left", layers: [result]}).layers[0]).toEqual(result);
+      expect(parseRecipe({schema: "xfs/recipe-6", uv: "gltf-uv0-top-left", layers: [result]}).layers[0]).toEqual(result);
     }
   });
 

@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-23",
+  "schema": "xfs/recipe-6",
+  "tests": {
+    "passed": 141,
+    "failed": 0,
+    "assertions": 493326,
+    "files": 34,
+    "typecheck": "pass",
+    "build": "pass"
+  },
+  "independentReview": {
+    "boundaryWidthSplitChecks": 1998,
+    "scalarRasterCompilerPixelChecks": 49152,
+    "failures": 0
+  },
+  "browser": {
+    "isolated": true,
+    "pointWidthEdits": [
+      0.06,
+      0.0005
+    ],
+    "toggleRetainsWidths": true,
+    "undoRestoresWidth": true,
+    "reloadRetainsWidths": true,
+    "collectionCopy": "41fea280-313c-4569-9be2-2c262a17cad6",
+    "collectionRevision": 1,
+    "sqliteReadbackMatches": true,
+    "dpr2": {
+      "cssWidth": 1191,
+      "cssHeight": 859.609375,
+      "bufferWidth": 2382,
+      "bufferHeight": 1719,
+      "pointSelected": 4,
+      "dragAndUndo": true
+    },
+    "dpr1Restored": {
+      "cssWidth": 661,
+      "cssHeight": 476.828125,
+      "bufferWidth": 661,
+      "bufferHeight": 477
+    },
+    "uvViewPreserved": true,
+    "consoleWarningsAndErrors": [],
+    "maskExport2048": "completed"
+  },
+  "backup": "2026-09-23T07-36-58.212Z",
+  "limitations": [
+    "Opposing edge widths blend in narrow shapes",
+    "Subpixel edge antialiasing remains separate",
+    "Fixed-resolution background textures can still blur when enlarged",
+    "Game appearance not validated by these checks"
+  ]
+}

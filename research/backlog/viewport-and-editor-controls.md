@@ -15,7 +15,7 @@ Verify gesture feedback in the isolated browser, camera/motion state across relo
 
 [Idle control design](../animation/idle-controls-design.md) now identifies validated body/facial composition boundaries and pause/framing invariants. The coarse idle controls are now implemented; the note remains their design record. [Detailed camera diagnosis](../authoring/camera-zoom-design.md) measures surface depth, framing and FOV compensation. Camera/FOV changes remain pending; the exact zoom-in symptom is not yet reproduced.
 
-## Sidebar width follow-up — 23 September 2026
+## Sidebar width follow-up â€” 23 September 2026
 
 Removed the fixed 640px maximum. Both handles now use available main-grid width, preserving a 320px viewport, 220px layers sidebar, 280px properties sidebar and 16px total handles. Dragging a panel wider shrinks the opposing panel only as needed. Escape restores both preferred widths; window resize still temporarily fits without overwriting preferences. Persistence accepts widths beyond the old cap.
 

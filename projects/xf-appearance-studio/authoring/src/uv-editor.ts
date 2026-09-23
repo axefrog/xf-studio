@@ -2,6 +2,7 @@ import { clamp, curve, type Layer, type Recipe } from "./recipe";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, transformLayer, wheelScaleFactor } from "./shape-transform";
+import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 
 type Hooks = {
@@ -23,6 +24,9 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
   tinted.width = tinted.height = 1024;
   let view = parseUVView(initial);
+  // Establish layout before observing it; the initial observer callback must not
+  // itself change the canvas aspect and trigger a resize-observer feedback pass.
+  if (canvas.style) canvas.style.aspectRatio = String(uvAspect(view.mode));
   type HandleDrag = { kind: "handle"; handle: Handle; layer: Layer; recipe: Recipe;
     target: Layer["points"][number] | Layer["fields"][number]; start: UV; endpoint?: UV };
   type ShapeDrag = { kind: "translate" | "rotate"; layer: Layer; recipe: Recipe; original: Layer;
@@ -30,9 +34,15 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   type PanDrag = { kind: "pan"; original: UVView; screen: { x: number; y: number } };
   let drag: ((HandleDrag | ShapeDrag | PanDrag) & { pointer: number; changed: boolean }) | undefined;
   let wheel: { layer: Layer; recipe: Recipe; expected: Layer["points"]; state: string; selected: number; timer?: ReturnType<typeof setTimeout> } | undefined;
-  const bounds = () => canvas.getBoundingClientRect();
-  const region = () => uvRegion(view);
-  const pixel = (p: UV) => uvToPixel(p, region(), canvas.width, canvas.height);
+  const bounds = () => {
+    const r = canvas.getBoundingClientRect();
+    // #uv has equal borders and no padding. Pointer/drawing coordinates describe
+    // its content box, not the extra border pixels returned by the DOM rectangle.
+    const borderX = canvas.clientLeft || 0, borderY = canvas.clientTop || 0;
+    return { left: r.left + borderX, top: r.top + borderY,
+      width: Math.max(1, r.width - 2 * borderX), height: Math.max(1, r.height - 2 * borderY) };
+  };
+  const region = () => { const b = bounds(); return uvRegion(view, b.width / b.height); };
   const coordinate = (e: PointerEvent | MouseEvent) => {
     const b = bounds();
     return pixelToUV({ x: e.clientX - b.left, y: e.clientY - b.top }, region(), b.width, b.height);
@@ -60,16 +70,26 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     ]);
   }
   function draw() {
-    canvas.width = 720; canvas.height = view.mode === "both" ? 310 : 520;
+    // Explicit CSS aspect breaks the intrinsic-size feedback cycle: resizing the
+    // backing buffer must never change layout and trigger another resize.
+    const aspect = String(uvAspect(view.mode));
+    if (canvas.style && canvas.style.aspectRatio !== aspect) canvas.style.aspectRatio = aspect;
+    const b = bounds(), resolution = canvasResolution(b.width, b.height, window.devicePixelRatio);
+    if (canvas.width !== resolution.pixelWidth) canvas.width = resolution.pixelWidth;
+    if (canvas.height !== resolution.pixelHeight) canvas.height = resolution.pixelHeight;
+    ctx.setTransform(resolution.scaleX, 0, 0, resolution.scaleY, 0, 0);
+    ctx.globalAlpha = 1;
+    const width = b.width, height = b.height;
     elements.both.setAttribute("aria-pressed", String(view.mode === "both"));
     elements.single.setAttribute("aria-pressed", String(view.mode === "single"));
     elements.other.disabled = view.mode !== "single";
-    const r = region(), unit = canvas.width / (bounds().width || canvas.width);
-    ctx.fillStyle = "#253132"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const r = uvRegion(view, width / height), unit = 1;
+    const pixel = (p: UV) => uvToPixel(p, r, width, height);
+    ctx.fillStyle = "#253132"; ctx.fillRect(0, 0, width, height);
     const image = hooks.albedo();
     if (image) {
       ctx.globalAlpha = .55;
-      ctx.drawImage(image, r.u * image.width, r.v * image.height, r.w * image.width, r.h * image.height, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, r.u * image.width, r.v * image.height, r.w * image.width, r.h * image.height, 0, 0, width, height);
       ctx.globalAlpha = 1;
     }
     const layers = hooks.recipe().layers, masks = hooks.canvases();
@@ -78,11 +98,11 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       t.clearRect(0, 0, 1024, 1024); t.globalCompositeOperation = "source-over";
       t.drawImage(masks[i], 0, 0); t.globalCompositeOperation = "source-in";
       t.fillStyle = layers[i].color; t.fillRect(0, 0, 1024, 1024); t.globalCompositeOperation = "source-over";
-      ctx.drawImage(tinted, r.u * 1024, r.v * 1024, r.w * 1024, r.h * 1024, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(tinted, r.u * 1024, r.v * 1024, r.w * 1024, r.h * 1024, 0, 0, width, height);
     }
     const centre = pixel({ u: .5, v: r.v });
     ctx.setLineDash([3 * unit, 4 * unit]); ctx.strokeStyle = "#c4ddca55";
-    ctx.beginPath(); ctx.moveTo(centre.x, 0); ctx.lineTo(centre.x, canvas.height); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(centre.x, 0); ctx.lineTo(centre.x, height); ctx.stroke(); ctx.setLineDash([]);
     const l = hooks.layer();
     if (!l) { elements.note.textContent = "Add a layer to edit its shape."; return; }
     for (const mirror of l.symmetry ? [false, true] : [false]) {
@@ -97,14 +117,14 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
         if (selected) {
           ctx.setLineDash([4 * unit, 4 * unit]); ctx.strokeStyle = "#b1ebc966";
-          ctx.beginPath(); ctx.arc(a.x, a.y, f.radius / r.w * canvas.width, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(a.x, a.y, f.radius / r.w * width, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
         }
       }
     }
     let selectedVisible = false;
     for (const h of handles()) {
       const p = pixel(h.uv), selected = isKnotHandle(h) ? h.index === hooks.selected() : h.fieldId === hooks.selectedField();
-      if (h.kind === "point" && selected && p.x >= 0 && p.x <= canvas.width && p.y >= 0 && p.y <= canvas.height) selectedVisible = true;
+      if (h.kind === "point" && selected && p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height) selectedVisible = true;
       if (h.kind === "tangent") {
         const knot = pixel(reflectUV(l.points[h.index], h.mirror));
         ctx.strokeStyle = "#f4ca8a"; ctx.lineWidth = unit;
@@ -207,7 +227,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (!drag || e.pointerId !== drag.pointer) return;
     if (!validDrag()) { stop(); return; }
     if (drag.kind === "pan") {
-      const b = bounds(), r = uvRegion(drag.original);
+      const b = bounds(), r = uvRegion(drag.original, b.width / b.height);
       const next = panUVView(drag.original, -(e.clientX - drag.screen.x) / b.width * r.w, -(e.clientY - drag.screen.y) / b.height * r.h);
       if (next.u === view.u && next.v === view.v) return;
       view = next; drag.changed = true; draw(); hooks.persist(); return;
@@ -300,9 +320,23 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     hooks.change();
   };
   const resize = new ResizeObserver(draw); resize.observe(canvas);
+  // Browser zoom / moving between screens can change DPR without a CSS resize.
+  window.addEventListener("resize", draw);
+  let dprQuery: MediaQueryList | undefined;
+  function trackDPR() {
+    dprQuery?.removeEventListener("change", changedDPR);
+    if (typeof window.matchMedia === "function") {
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      dprQuery.addEventListener("change", changedDPR, { once: true });
+    }
+  }
+  function changedDPR() { trackDPR(); draw(); }
+  trackDPR();
   return { draw, snapshot: () => ({ ...view }), diagnostics: () => {
     const b = bounds();
-    return { view: { ...view }, region: region(), aspect: uvAspect(view.mode), dragging: !!drag, gesture: drag?.kind ?? (wheel ? "scale" : null),
+    return { view: { ...view }, region: region(), aspect: b.width / b.height,
+      resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),
+        actualWidth: canvas.width, actualHeight: canvas.height }, dragging: !!drag, gesture: drag?.kind ?? (wheel ? "scale" : null),
       handles: handles().map(h => ({ ...h, screen: (() => { const p = uvToPixel(h.uv, region(), b.width, b.height);
         return { x: b.left + p.x, y: b.top + p.y }; })() })) };
   } };

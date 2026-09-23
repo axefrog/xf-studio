@@ -41,12 +41,13 @@ export function transformLayer(layer: Layer, command: ShapeTransform): Layer | n
   try {
     // Validate before transforming, so invalid source data cannot be repaired
     // accidentally and accepted as an otherwise valid edit.
-    const next = parseRecipe({schema: "xfs/recipe-5", uv: "gltf-uv0-top-left", layers: [layer]}).layers[0];
+    const next = parseRecipe({schema: "xfs/recipe-6", uv: "gltf-uv0-top-left", layers: [layer]}).layers[0];
     if ((command.kind === "translate" && command.du === 0 && command.dv === 0) ||
       (command.kind === "scale" && command.factor === 1) ||
       (command.kind === "rotate" && command.radians === 0)) return next;
     next.points = next.points.map(p => ({
       ...p, ...position(p),
+      ...(p.feather !== undefined ? {feather: p.feather * scale} : {}),
       ...(p.handles ? {handles: {...p.handles, in: vector(p.handles.in), out: vector(p.handles.out)}} : {}),
     }));
     next.fields = next.fields.map(f => {
@@ -54,8 +55,9 @@ export function transformLayer(layer: Layer, command: ShapeTransform): Layer | n
       return {...f, ...position(f), du: direction.u, dv: direction.v, radius: f.radius * scale};
     });
     next.feather *= scale;
+    if (next.softness.mode === "boundary") next.softness.blend *= scale;
     if (next.strength.mode === "smooth-boundary") next.strength.blend *= scale;
-    return parseRecipe({schema: "xfs/recipe-5", uv: "gltf-uv0-top-left", layers: [next]}).layers[0];
+    return parseRecipe({schema: "xfs/recipe-6", uv: "gltf-uv0-top-left", layers: [next]}).layers[0];
   } catch { return null; }
 }
 
