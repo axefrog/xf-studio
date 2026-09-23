@@ -87,6 +87,25 @@ def directory_snapshot(root: Path, provider: str, kind: str, virtual_prefix: str
     return out
 
 
+def launch_sources(launch_context: str, game_mod_root: Path,
+                   mo2_root: Path | None = None, profile: str | None = None) -> tuple[list[Candidate], list[Candidate], dict]:
+    """Enumerate only mounts visible to the selected launch route.
+
+    This selects physical-file candidates; archive hash order and whether a
+    particular launch used this route remain separate unresolved questions.
+    """
+    manual = directory_snapshot(game_mod_root, "manual game mod", "manual", "archive\\pc\\mod\\")
+    if launch_context == "direct":
+        return [], manual, {"kind": "direct", "profile": None,
+                            "archive_order_status": "unresolved; no per-hash index/order proof"}
+    if launch_context == "mo2":
+        if mo2_root is None or not profile:
+            raise ValueError("MO2 launch context requires --mo2-root and --profile")
+        mo, metadata = mo2_snapshot(mo2_root, profile)
+        return mo, manual, dict(metadata, kind="mo2")
+    raise ValueError(f"unsupported launch context: {launch_context}")
+
+
 def xl_customizations(path: Path) -> tuple[dict[str, list[str]], list[str]]:
     """Read only the scalar/list customizations stanza; flag unfamiliar syntax."""
     result = {"female": [], "male": []}
@@ -288,8 +307,10 @@ def merge_catalog(base: dict, additions: list[dict]) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mo2-root", type=Path, required=True)
-    parser.add_argument("--profile", required=True)
+    parser.add_argument("--launch-context", choices=("mo2", "direct"), default="mo2",
+                        help="Physical-file view to inspect; default preserves the MO2 probe")
+    parser.add_argument("--mo2-root", type=Path)
+    parser.add_argument("--profile")
     parser.add_argument("--game-mod-root", type=Path, required=True)
     parser.add_argument("--base-json", type=Path, required=True)
     parser.add_argument("--base-depot", default=r"base\gameplay\gui\fullscreen\main_menu\female_cco.inkcharcustomization")
@@ -300,8 +321,7 @@ def main() -> None:
     parser.add_argument("--app-scope-xl", type=Path, help="Active ArchiveXL bundle resource scope .xl")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    mo, profile = mo2_snapshot(args.mo2_root, args.profile)
-    manual = directory_snapshot(args.game_mod_root, "manual game mod", "manual", "archive\\pc\\mod\\")
+    mo, manual, launch = launch_sources(args.launch_context, args.game_mod_root, args.mo2_root, args.profile)
     files = visible_files(mo + manual)
     active_xl = [v["winner"] for k, v in files.items() if k.endswith(".xl") and v["winner"]]
     declarations = []
@@ -349,12 +369,15 @@ def main() -> None:
             raise ValueError("saved selection needs decimal uint64 app hash and definition")
         catalog["saved_selection"] = {"app_hash": args.saved_app_hash, "definition": args.saved_definition,
                                        "matches": saved_appearance_matches(catalog, args.saved_app_hash, args.saved_definition)}
-    output = {"schema": "xfs/read-only-cc-catalog-probe-2", "source": profile,
+    output = {"schema": "xfs/read-only-cc-catalog-probe-2",
+              "source": args.profile if args.launch_context == "mo2" else "direct game",
+              "launch_context": launch,
               "inventory": {"mo2_files": len(mo), "manual_files": len(manual),
                             "active_xl_customization_declarations": len(declarations),
                             "decoded_custom_resources": len(additions),
                             "excluded": ["archive index conflicts and effective resource hashes", "unexported .inkcharcustomization payloads",
-                                         "ArchiveXL merge ordering beyond appearance overlay, resource patches, runtime script/UI changes", "Vortex deployment and direct-launch context"]},
+                                         "ArchiveXL merge ordering beyond appearance overlay, resource patches, runtime script/UI changes",
+                                         "Vortex deployment and actual runtime launch route"]},
               "app_fix": app_meta,
               "declarations": declarations, "resources": [{"provider": x["provider"], "depot": x["depot"],
                                                                 "json_sha256": x["json_sha256"], "gameVersion": x["gameVersion"]}

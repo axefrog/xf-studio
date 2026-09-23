@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
-from catalog_readonly import (Candidate, apply_app_fix, fnv64, merge_catalog, saved_appearance_matches,
+from catalog_readonly import (Candidate, apply_app_fix, fnv64, launch_sources, merge_catalog, saved_appearance_matches,
                               scope_leaves, visible_files, xl_customizations, xl_resource_meta)
 
 
@@ -15,6 +15,38 @@ def appearance(name, slot, choices, provider, app="base\\example.app"):
 
 
 class CatalogProbeTests(unittest.TestCase):
+    def test_launch_route_excludes_staged_mo2_from_direct_game_view(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manual = root / "game" / "archive" / "pc" / "mod"
+            manual.mkdir(parents=True)
+            (manual / "eyes.xl").write_text("customizations: {}\n")
+            mo2 = root / "MO2"
+            staged = mo2 / "mods" / "Eye Pack" / "archive" / "pc" / "mod"
+            staged.mkdir(parents=True)
+            (staged / "eyes.xl").write_text("customizations: {}\n")
+            selected = mo2 / "profiles" / "Active"
+            selected.mkdir(parents=True)
+            (selected / "modlist.txt").write_text("+Eye Pack\n")
+            (mo2 / "ModOrganizer.ini").write_text("selected_profile=@ByteArray(Active)\n"
+                                                   "enforce_archive_load_order=false\n"
+                                                   "reverse_archive_load_order=false\n")
+
+            direct_mo, direct_manual, direct_meta = launch_sources("direct", manual, mo2, "Active")
+            self.assertEqual(direct_mo, [])
+            self.assertEqual(len(direct_manual), 1)
+            self.assertEqual(direct_meta["kind"], "direct")
+            self.assertEqual(visible_files(direct_mo + direct_manual)
+                             [r"archive\pc\mod\eyes.xl"]["winner"]["provider"], "manual game mod")
+
+            staged_mo, staged_manual, staged_meta = launch_sources("mo2", manual, mo2, "Active")
+            self.assertEqual((len(staged_mo), len(staged_manual)), (1, 1))
+            self.assertEqual(staged_meta["kind"], "mo2")
+            self.assertIsNone(visible_files(staged_mo + staged_manual)
+                              [r"archive\pc\mod\eyes.xl"]["winner"])
+            with self.assertRaisesRegex(ValueError, "requires --mo2-root"):
+                launch_sources("mo2", manual)
+
     def test_file_priority_disabled_and_cross_provider_ambiguity(self):
         rows = [Candidate("low", r"archive\pc\mod\a.xl", "low", True, 1, "mo2"),
                 Candidate("high", r"archive\pc\mod\a.xl", "high", True, 2, "mo2"),
