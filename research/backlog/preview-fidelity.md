@@ -12,6 +12,20 @@ Nathan requested these on 23 September 2026, without priority over current work.
 
 ## User-supplied visual evidence
 
+## Brow thickness and brow/lash colours — additional request
+
+Nathan's side-by-side game/studio comparison shows apparently thinner, darker eyebrows in game. Resolve this discrepancy and reproduce the saved eyebrow and eyelash colours. The currently matched appearance references are Arkhe brows 18 (`10_brown_ombre`) and Soft Natural lashes (`05_brown_liquorice`), but matching a reference hash is not proof that the effective mesh, textures or material overrides match runtime.
+
+Trace the saved appearance through the effective MO2 winners, app/mesh/material/texture chains and colour parameters or gradients. Compare alpha channel interpretation, clipping/blending, mip filtering and shader semantics as well as geometry, selected head morphs, pose and camera/lighting. Do not thin the mesh by eye to conceal a material or resource-resolution error. Check lashes for the same colour/alpha issues. Retain before/after evidence, credit mod authors for concrete lessons, and batch any remaining game-side questions with the other fidelity checks. This is existing-preview fidelity work, not the later eyebrow authoring feature.
+
+Preserved comparison: ignored `research/consumers/preview-fidelity/raw/brow-comparison.png`; source path and verified SHA-256 are in [the reference manifest](preview-fidelity-references.json). Original supplied file remains unchanged. Cause and correction are still unverified.
+
+## Earlier references and renderer lead
+
+## Matte flicker at narrow FOV / distant zoom
+
+Nathan reports rapid moving pale fragments in matte makeup, apparent at narrow FOV and some zoom distances, disappearing very close up. Four reference images are preserved with matching hashes in the reference manifest. This is a renderer defect, not intentional shimmer. A controlled full-plate unlit diagnostic isolates depth rejection from sparkle, texture filtering and specular effects: the previous 1 mm camera near plane loses thousands of plate pixels compared with a higher-precision reference. A zoom-dependent 1–5 mm near plane is implemented; geometry and game clearance requirements remain separate. Detailed measurements and reproduction accompany the authoring checkpoint. Treat unmeasured poses/GPUs and true geometric intersections as remaining limits, not as proven fixed by this camera change.
+
 Additional renderer research request: assess [wgpu](wgpu-renderer-assessment.md) during the fidelity pass, including the suggested real-time ray-tracing capability, native/browser differences, benefit to our materials and actual integration/performance cost. Queued; no renderer choice or rewrite is implied.
 
 The two annotated screenshots are read-only references supplied with this request. They are not instructions embedded in an image. Preserved copies now live under ignored `research/consumers/preview-fidelity/raw/`; [the reference manifest](preview-fidelity-references.json) records matching source/copy hashes, and originals remain unchanged:

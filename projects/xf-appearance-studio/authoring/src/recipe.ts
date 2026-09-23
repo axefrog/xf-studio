@@ -21,14 +21,16 @@ export type Layer = {
   field: Field;
 };
 export type Recipe = {
-  schema: "eye-artistry/recipe-1";
+  schema: "xfs/recipe-2";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
+// Operational import/preview budget, separate from preset catalogue size.
+export const MAX_LAYERS = 32;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "eye-artistry/recipe-1",
+    schema: "xfs/recipe-2",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => ({
       id: `layer-${i + 1}`,
@@ -63,16 +65,17 @@ export function initialRecipe(): Recipe {
 }
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
-  const r = value as Recipe;
+  const r = value as Omit<Recipe, "schema"> & { schema: string };
   if (
     !r ||
-    r.schema !== "eye-artistry/recipe-1" ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
-    r.layers.length !== 4
+    r.layers.length > MAX_LAYERS ||
+    (r.schema === "eye-artistry/recipe-1" && r.layers.length !== 4)
   )
     throw Error(
-      "Expected an XF Studio makeup recipe with four layers.",
+      `Expected an XF Studio recipe with up to ${MAX_LAYERS} layers, or a legacy four-layer recipe.`,
     );
   const num = (x: unknown, a: number, b: number) =>
     typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;
@@ -81,9 +84,11 @@ export function parseRecipe(value: unknown): Recipe {
     if (
       !l ||
       typeof l.id !== "string" ||
+      !l.id.trim() ||
       l.id.length > 80 ||
       ids.has(l.id) ||
       typeof l.name !== "string" ||
+      !l.name.trim() ||
       l.name.length > 80 ||
       !/^#[0-9a-f]{6}$/i.test(l.color) ||
       !["matte", "regular", "shimmer", "glitter", "satin", "metallic", "glossy", "iridescent"].includes(
@@ -128,7 +133,7 @@ export function parseRecipe(value: unknown): Recipe {
     )
       throw Error("Invalid vector field.");
   }
-  return structuredClone(r);
+  return structuredClone({ ...r, schema: "xfs/recipe-2" });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   const out: Point[] = [];

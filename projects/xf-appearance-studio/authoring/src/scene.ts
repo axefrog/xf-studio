@@ -3,11 +3,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { extendSkin, restoreFirstWeights, skinSets } from "./skin";
-import type { Layer } from "./recipe";
 import type { SavedV } from "./save-reader";
-import { bakeFlakes, canonicalFinish, defaultFlakes } from "./finish";
+import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
 import type { CameraState } from "./workspace-state";
+import { previewNearPlane } from "./camera-depth";
 
 export async function createScene(
   host: HTMLElement,
@@ -24,7 +24,7 @@ export async function createScene(
   renderer.toneMappingExposure = 1.2;
   host.prepend(renderer.domElement);
   const scene = new THREE.Scene(),
-    camera = new THREE.PerspectiveCamera(30, 1, 0.001, 10);
+    camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = 0.1;
@@ -152,7 +152,8 @@ export async function createScene(
         });
         // Geometry is the local game's/mod's source. Hair/decal shading is provisional.
         o.material = mat;
-        o.renderOrder = name === "brows" ? 20 : 21;
+        // Keep context details above the entire editable makeup stack (orders 10–41).
+        o.renderOrder = name === "brows" ? 100 : 101;
         extendSkin(o, mat);
         for (const [key, i] of Object.entries(o.morphTargetDictionary ?? {}))
           o.morphTargetInfluences![i] =
@@ -170,32 +171,9 @@ export async function createScene(
       detailErrors.push(`${name}: ${(error as Error).message}`);
     }
   }
-  const plates: THREE.SkinnedMesh[] = [],
-    textures: THREE.CanvasTexture[] = [],
-    materials: THREE.MeshPhysicalMaterial[] = [];
-  for (let i = 0; i < 4; i++) {
-    const m = i === 0 ? plate : plate.clone();
-    if (i) plate.parent!.add(m);
-    m.name = `makeup_layer_${i + 1}`;
-    m.skeleton = plate.skeleton;
-    m.renderOrder = 10 + i;
-    const t = new THREE.CanvasTexture(canvases[i]);
-    t.flipY = false;
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const mat = new THREE.MeshPhysicalMaterial({
-      map: t,
-      transparent: true,
-      depthWrite: false,
-      roughness: 0.85,
-      side: THREE.DoubleSide,
-    });
-    m.material = mat;
-    extendSkin(m, mat, 0.00008 * (i + 1));
-    plates.push(m);
-    textures.push(t);
-    materials.push(mat);
-  }
+  const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
+  const { plates, materials, updateLayer } = makeup;
+  makeup.setCanvases(canvases);
   const bones: {
     bone: THREE.Bone;
     base: THREE.Vector3;
@@ -283,67 +261,9 @@ export async function createScene(
   } catch (error) {
     idle = undefined; idleError = (error as Error).message;
   }
-  const flakeMaps = new Map<
-    number,
-    { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture }
-  >();
-  function updateLayer(i: number, l: Layer) {
-    const m = materials[i];
-    m.color.set(l.color);
-    const finish = canonicalFinish(l.finish),
-      p = l.flakes ?? defaultFlakes();
-    const textured = finish === "shimmer" || finish === "glitter";
-    const old = flakeMaps.get(i),
-      key = JSON.stringify([finish, p]);
-    if (old && (!textured || key !== old.key)) {
-      old.normal.dispose();
-      old.surface.dispose();
-      flakeMaps.delete(i);
-    }
-    if (textured && !flakeMaps.has(i)) {
-      const baked = bakeFlakes(1024, finish, p);
-      const map = (data: Uint8Array) => {
-        const t = new THREE.DataTexture(data, baked.size, baked.size);
-        t.flipY = false;
-        t.generateMipmaps = true;
-        t.minFilter = THREE.LinearMipmapLinearFilter;
-        t.magFilter = THREE.LinearFilter;
-        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        t.needsUpdate = true;
-        return t;
-      };
-      flakeMaps.set(i, {
-        key,
-        normal: map(baked.normal),
-        surface: map(baked.surface),
-      });
-    }
-    const maps = flakeMaps.get(i);
-    const changed = Boolean(m.normalMap) !== Boolean(maps);
-    m.normalMap = maps?.normal ?? null;
-    m.roughnessMap = m.metalnessMap = maps?.surface ?? null;
-    m.roughness = textured
-      ? 1
-      : finish === "matte"
-        ? 0.88
-        : finish === "metallic" || finish === "iridescent"
-          ? 0.27
-          : finish === "glossy" ? 0.16 : 0.38;
-    m.metalness = textured ? 1 : finish === "metallic" || finish === "iridescent" ? 0.65 : 0;
-    // Optical studies only: these values have no proven REDengine mapping yet.
-    // PhysicalMaterial setters recompile when a lobe is enabled/disabled.
-    m.clearcoat = finish === "glossy" ? 1 : 0;
-    m.clearcoatRoughness = 0.08;
-    m.iridescence = finish === "iridescent" ? 1 : 0;
-    m.iridescenceIOR = 1.3;
-    m.iridescenceThicknessRange = [400, 400];
-    if (changed) m.needsUpdate = true;
-    plates[i].visible = l.enabled;
-    textures[i].needsUpdate = true;
-  }
   const deforming = [
     head,
-    ...plates,
+    plate,
     ...Object.values(details).flatMap((d) => d.meshes),
   ];
   function eyeShape(index: number) {
@@ -423,6 +343,11 @@ export async function createScene(
     if (idle?.enabled) idle.update(dt);
     else blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
     if (controls.enabled) controls.update();
+    // A 1 mm near plane wastes precision at the 1.2 m orbit limit, making the
+    // 0.08 mm plate separation comparable to one depth-buffer step. Keep the
+    // close-up limit while using a 5 mm plane at ordinary/far viewing distances.
+    const near = previewNearPlane(controls.getDistance());
+    if (near !== camera.near) { camera.near = near; camera.updateProjectionMatrix(); }
     if (frameListeners.size) {
       scene.updateMatrixWorld(true);
       for (const update of frameListeners) update();
@@ -462,6 +387,7 @@ export async function createScene(
     front,
     pick,
     updateLayer,
+    setLayerCanvases: makeup.setCanvases,
     eyeShape,
     applySavedV,
     details,
@@ -501,9 +427,7 @@ export async function createScene(
       animation = false;
     },
     animateBlink: (v: boolean) => (animation = v),
-    setWire: (v: boolean) => {
-      for (const m of materials) m.wireframe = v;
-    },
+    setWire: makeup.setWire,
     setNormals: (v: boolean) => {
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
     },

@@ -4,6 +4,33 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { initialRecipe } from "../src/recipe";
+import { Database } from "bun:sqlite";
+
+test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {
+  const dir = mkdtempSync(join(tmpdir(), "xfs-variable-library-")), path = join(dir, "library.sqlite");
+  let db = new LookLibrary(path);
+  try {
+    const recipe = initialRecipe(), original = db.save({ name: "Legacy", recipe });
+    db.close();
+    const legacy = JSON.stringify({ ...recipe, schema: "eye-artistry/recipe-1" });
+    const raw = new Database(path);
+    raw.query("UPDATE look_revisions SET recipe_json=? WHERE look_id=?").run(legacy, original.id); raw.close();
+    db = new LookLibrary(path);
+    expect(db.get(original.id).recipe.schema).toBe("xfs/recipe-2");
+    const empty = { ...recipe, layers: [] };
+    db.save({ name: "Empty", recipe: empty, revision: 1 }, original.id);
+    const expanded = structuredClone(recipe);
+    expanded.layers.push({ ...structuredClone(recipe.layers[0]), id: crypto.randomUUID() });
+    db.save({ name: "Five layers", recipe: expanded, revision: 2 }, original.id);
+    db.close(); db = new LookLibrary(path);
+    expect(db.get(original.id, 2).recipe).toEqual(empty);
+    expect(db.get(original.id).recipe).toEqual(expanded);
+    const verify = new Database(path, { readonly: true });
+    expect(verify.query("SELECT recipe_json FROM look_revisions WHERE look_id=? AND revision=1").get(original.id))
+      .toEqual({ recipe_json: legacy });
+    verify.close();
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
 
 test("library persists editable revisions and rejects stale or invalid writes atomically", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfas-library-")), path = join(dir, "library.sqlite");

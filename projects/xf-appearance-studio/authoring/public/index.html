@@ -31,16 +31,17 @@
       </div>
     </header>
     <main>
-      <aside class="layers-panel">
+      <aside class="layers-panel" id="layers-panel">
         <div class="eyebrow">COMPOSITION</div>
         <h1>A study in<br />expression.</h1>
         <p class="intro">
           Shape the makeup.<br />Keep every decision editable.
         </p>
-        <div class="section-title">MAKEUP LAYERS <span>04</span></div>
+        <div class="section-title">MAKEUP LAYERS <span id="layer-count">04</span></div>
+        <div class="two-col"><button id="layer-add">Add layer</button><button id="layer-copy">Duplicate layer</button></div>
         <div id="layers"></div>
         <div class="layer-note">
-          Higher layers sit above lower layers in this preview.
+          Top of the list = front of the makeup. Drag the arrow handle to reorder, or use the up/down buttons. Remove is undoable.
         </div>
         <div class="session-card" id="v-card" hidden>
           <span class="eyebrow">V FROM YOUR SAVE</span>
@@ -76,6 +77,7 @@
           <span id="save-state">Autosave ready</span>
         </div>
       </aside>
+      <div id="resize-layers" class="sidebar-resizer" role="separator" tabindex="0" aria-label="Resize layers sidebar" aria-orientation="vertical" aria-controls="layers-panel" title="Drag to resize · Arrow keys to adjust · Double-click to reset"></div>
       <section class="viewport" id="viewport">
         <div class="stage-top">
           <span class="tag">V / EXPANDED EYE PLATE</span
@@ -119,9 +121,12 @@
           </div>
         </div>
       </section>
-      <aside class="properties">
+      <div id="resize-properties" class="sidebar-resizer" role="separator" tabindex="0" aria-label="Resize properties sidebar" aria-orientation="vertical" aria-controls="properties-panel" title="Drag to resize · Arrow keys to adjust · Double-click to reset"></div>
+      <aside class="properties" id="properties-panel">
+        <fieldset id="layer-properties">
         <div class="eyebrow">SHAPE &amp; SURFACE</div>
         <h2 id="active-name">Petal wash</h2>
+        <label>Layer name<input id="layer-name" maxlength="80" /></label>
         <div class="canvas-heading">
           <span>UV control points</span
           ><span id="point-label">Point 1 / 6</span>
@@ -230,6 +235,7 @@
             matching and distant sparkle filtering are still being studied.
           </p>
         </div>
+        </fieldset>
         <div class="eyebrow">FACE DETAILS</div>
         <label class="toggle"
           ><input type="checkbox" id="brows" checked /> Eyebrows</label

@@ -16,6 +16,41 @@
       "localCopy": "research\\consumers\\preview-fidelity\\raw\\lip-seam.png",
       "sha256": "6b29b33eb1367a771619849b79a9d6e55f59a163b40fe111d9ca6e8ecf777f8e",
       "bytes": 84640
+    },
+    {
+      "label": "brow-comparison",
+      "source": "C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-cef63179-8f47-4c74-b52e-ce3261d7df53.png",
+      "localCopy": "research/consumers/preview-fidelity/raw/brow-comparison.png",
+      "sha256": "a1fd12a45213cabeecd8d350aa07a0e7efa4f96c85acb15b25a5d0f8e78f4d97",
+      "bytes": 1644973
+    },
+    {
+      "label": "matte-flicker-1",
+      "source": "F:/Media/Other/ShareX/2026-09/chrome_2026-09-23_14-02-47.jpg",
+      "localCopy": "research/consumers/preview-fidelity/raw/matte-flicker-1.jpg",
+      "sha256": "ef62076dfb7f979656df47936f8c4127e4f59ebbdc4aff19659d2305af0f2331",
+      "bytes": 37337
+    },
+    {
+      "label": "matte-flicker-2",
+      "source": "F:/Media/Other/ShareX/2026-09/2026-09-23_14-03-18.png",
+      "localCopy": "research/consumers/preview-fidelity/raw/matte-flicker-2.png",
+      "sha256": "e33d0e22b76cfb07e11efdc176d8d070cb57d9e390001b259a5bdcf782a86e91",
+      "bytes": 114846
+    },
+    {
+      "label": "matte-flicker-3",
+      "source": "F:/Media/Other/ShareX/2026-09/2026-09-23_14-03-10.png",
+      "localCopy": "research/consumers/preview-fidelity/raw/matte-flicker-3.png",
+      "sha256": "af934a1013dea5c74b4b74dbc63dd013bae32de226eafefbe2e066702f012d0f",
+      "bytes": 115209
+    },
+    {
+      "label": "matte-flicker-4",
+      "source": "F:/Media/Other/ShareX/2026-09/chrome_2026-09-23_14-03-05.jpg",
+      "localCopy": "research/consumers/preview-fidelity/raw/matte-flicker-4.jpg",
+      "sha256": "ac00150d647c6916a45e70d37e48012e3982e2e767e66247eb7f3cbf7080b747",
+      "bytes": 8577
     }
   ]
 }

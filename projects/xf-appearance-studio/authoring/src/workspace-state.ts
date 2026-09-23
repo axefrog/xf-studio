@@ -16,7 +16,8 @@ export type WorkspaceState = {
   savedV?: SavedV;
   preview: PreviewState;
   library: LibraryState;
-  panels: { lighting: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number };
+  panels: { lighting: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
+    sidebarLeft: number; sidebarRight: number };
 };
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
@@ -24,7 +25,7 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
     preview: { eyeShape: 9, surface: true, wire: false, brows: true, lashes: true,
       normals: true, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0 },
     library: { selected: "", name: "Untitled look" },
-    panels: { lighting: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0 },
+    panels: { lighting: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
   };
 }
 const finite = (x: unknown, min: number, max: number): x is number =>
@@ -37,7 +38,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
   if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active;
-  if (Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
+  if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
     try { state.history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
   }
@@ -66,6 +67,8 @@ export function parseWorkspace(value: unknown): WorkspaceState {
       state.library.current = { id: c.id, revision: c.revision };
   }
   if (v.panels) {
+    for (const [key, min] of [["sidebarLeft", 220], ["sidebarRight", 280]] as const)
+      if (finite(v.panels[key], min, 640)) state.panels[key] = v.panels[key];
     if (typeof v.panels.lighting === "boolean") state.panels.lighting = v.panels.lighting;
     for (const key of ["layersScroll", "propertiesScroll", "pageX", "pageY"] as const)
       if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];

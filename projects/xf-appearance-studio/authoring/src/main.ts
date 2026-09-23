@@ -1,11 +1,14 @@
 import {
-  initialRecipe,
+  MAX_LAYERS,
   parseRecipe,
   curve,
   clamp,
   type Recipe,
   type Layer,
 } from "./recipe";
+import { editLayers, type LayerCommand } from "./layer-stack";
+import { layerList } from "./layer-ui";
+import { setupSidebars } from "./sidebar-ui";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { setupLibrary } from "./library-ui";
@@ -34,7 +37,7 @@ function checkpoint() {
   if (history.at(-1) !== s) history.push(s);
   if (history.length > 80) history.shift();
 }
-const canvases = Array.from({ length: 4 }, () => {
+const canvases = Array.from({ length: recipe.layers.length }, () => {
   const c = document.createElement("canvas");
   c.width = c.height = 1024;
   return c;
@@ -51,11 +54,12 @@ let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
+const sidebars = setupSidebars(workspace.panels, persist);
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
   const editing = { recipe, active, selected, history: history.map(s => JSON.parse(s)), savedV,
     library: lookLibrary.snapshot() };
-  if (!previewRestored) return { ...workspace, ...editing };
+  if (!previewRestored) return { ...workspace, ...editing, panels: { ...workspace.panels, ...sidebars.snapshot() } };
   return {
     schema: "xfas/workspace-1", ...editing,
     preview: {
@@ -66,7 +70,7 @@ function snapshot(): WorkspaceState {
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
       idle: input("cc-idle").checked, idleTime: viewer?.idle?.time ?? 0,
     },
-    panels: { lighting: $<HTMLDetailsElement>("lighting-panel").open,
+    panels: { ...sidebars.snapshot(), lighting: $<HTMLDetailsElement>("lighting-panel").open,
       layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
   };
 }
@@ -119,7 +123,7 @@ function drawUV() {
     );
     ctx.globalAlpha = 1;
   }
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < recipe.layers.length; i++)
     if (recipe.layers[i].enabled) {
       const t = tinted.getContext("2d")!;
       t.clearRect(0, 0, 1024, 1024);
@@ -148,8 +152,9 @@ function drawUV() {
   ctx.lineTo(px(0.5), uv.height);
   ctx.stroke();
   ctx.setLineDash([]);
-  const l = current(),
-    path = curve(l.points);
+  const l = current();
+  if (!l) return;
+  const path = curve(l.points);
   for (const mirrored of l.symmetry ? [false, true] : [false]) {
     ctx.strokeStyle = mirrored ? "#ead1e877" : "#f1dbee";
     ctx.lineWidth = 2;
@@ -194,45 +199,49 @@ function drawUV() {
   ctx.fillStyle = "#c6e2d0";
   ctx.fillText("FIELD", x + 12, y + 5);
 }
-function layerCards() {
-  $("layers").replaceChildren();
-  recipe.layers.forEach((l, i) => {
-    const row = document.createElement("div");
-    row.className = "layer" + (i === active ? " selected" : "");
-    const button = document.createElement("button");
-    button.setAttribute("aria-label", `Select ${l.name}`);
-    const swatch = document.createElement("span");
-    swatch.className = "swatch";
-    swatch.style.background = l.color;
-    const label = document.createElement("span");
-    label.className = "layer-name";
-    label.append(document.createTextNode(l.name));
-    const small = document.createElement("small");
-    small.textContent = `0${i + 1} / ${finishLabel(l.finish)}`;
-    label.append(small);
-    button.append(swatch, label);
-    button.onclick = () => {
-      active = i;
-      selected = 0;
-      sync();
-      drawUV();
-      persist();
-    };
-    const toggle = document.createElement("input");
-    toggle.type = "checkbox";
-    toggle.checked = l.enabled;
-    toggle.setAttribute("aria-label", `Show ${l.name}`);
-    toggle.onchange = () => {
-      checkpoint();
-      l.enabled = toggle.checked;
-      render(i);
-    };
-    row.append(button, toggle);
-    $("layers").append(row);
-  });
+const paintLayerList = layerList($("layers"), {
+  select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
+  toggle(i, enabled) { checkpoint(); recipe.layers[i].enabled = enabled; render(i); },
+  edit: changeLayers,
+});
+function layerCards() { paintLayerList(recipe, active); }
+function replaceRecipe(next: Recipe, nextActive = 0) {
+  recipe = next; active = Math.max(0, Math.min(nextActive, recipe.layers.length - 1)); selected = 0;
+  queue.clear(); versions.length = recipe.layers.length; versions.fill(0);
+  // A structure change cannot reuse an in-flight mask or an old slot's pixels.
+  canvases.splice(0, canvases.length, ...recipe.layers.map(() => {
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1024; return canvas;
+  }));
+  viewer?.setLayerCanvases(canvases);
+  for (let i = 0; i < recipe.layers.length; i++) render(i);
+  sync(); drawUV(); persist();
 }
+function changeLayers(command: LayerCommand) {
+  try {
+    const next = editLayers(recipe, current()?.id, command);
+    checkpoint(); replaceRecipe(next.recipe, next.active);
+  } catch (error) { status((error as Error).message); sync(); }
+}
+$("layer-add").onclick = () => changeLayers({ kind: "add" });
+$("layer-copy").onclick = () => { if (current()) changeLayers({ kind: "duplicate", id: current().id }); };
+const layerName = input("layer-name");
+function commitLayerName() {
+  if (current() && layerName.value !== current().name)
+    changeLayers({ kind: "rename", id: current().id, name: layerName.value });
+}
+layerName.onchange = layerName.onblur = commitLayerName;
+layerName.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitLayerName(); } };
 function sync() {
   const l = current();
+  $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
+  $<HTMLFieldSetElement>("layer-properties").disabled = !l;
+  $("layer-properties").inert = !l;
+  $<HTMLButtonElement>("export").disabled = !l;
+  $<HTMLButtonElement>("layer-add").disabled = recipe.layers.length >= MAX_LAYERS;
+  $<HTMLButtonElement>("layer-copy").disabled = !l || recipe.layers.length >= MAX_LAYERS;
+  $<HTMLButtonElement>("undo").disabled = history.length === 0;
+  if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
+  input("layer-name").value = l.name;
   $("active-name").textContent = l.name;
   $("point-label").textContent = `Point ${selected + 1} / ${l.points.length}`;
   input("color").value = l.color;
@@ -267,8 +276,8 @@ function sync() {
 let lastRaster = 0;
 const worker = new Worker("/build/raster-worker.js", { type: "module" }),
   queue = new Map<number, { version: number; layer: Layer }>(),
-  versions = [0, 0, 0, 0];
-let busy = false;
+  versions = recipe.layers.map(() => 0);
+let busy = false, requestVersion = 0;
 function dispatch() {
   if (busy || !queue.size) return;
   const [i, job] = queue.entries().next().value!;
@@ -286,7 +295,7 @@ worker.onmessage = (
 ) => {
   const { i, version, data, ms } = e.data;
   busy = false;
-  if (version === versions[i]) {
+  if (recipe.layers[i] && version === versions[i]) {
     canvases[i]
       .getContext("2d")!
       .putImageData(new ImageData(data, 1024, 1024), 0, 0);
@@ -300,8 +309,9 @@ worker.onmessage = (
 worker.onerror = () =>
   status("Mask worker failed — reload the editor to recover.");
 function render(i = active) {
+  if (!recipe.layers[i]) return;
   queue.set(i, {
-    version: ++versions[i],
+    version: (versions[i] = ++requestVersion),
     layer: structuredClone(recipe.layers[i]),
   });
   dispatch();
@@ -322,14 +332,12 @@ function schedule() {
 function undo() {
   const s = history.pop();
   if (!s) return;
-  recipe = parseRecipe(JSON.parse(s));
-  selected = 0;
-  for (let i = 0; i < 4; i++) render(i);
-  sync();
+  const next = parseRecipe(JSON.parse(s));
+  replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
 }
 $("undo").onclick = undo;
 window.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+  if ((e.ctrlKey || e.metaKey) && e.key === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
     e.preventDefault();
     undo();
   }
@@ -374,12 +382,7 @@ $("clear-field").onclick = () => {
   current().field.du = current().field.dv = 0;
   render();
 };
-$("reset").onclick = () => {
-  checkpoint();
-  recipe.layers[active] = initialRecipe().layers[active];
-  selected = 0;
-  render();
-};
+$("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
   if (current().points.length <= 3) return;
   checkpoint();
@@ -396,6 +399,7 @@ const coord = (e: PointerEvent | MouseEvent) => {
 };
 let drag: "point" | "field" | "origin" | undefined;
 uv.onpointerdown = (e) => {
+  if (!current()) return;
   const p = coord(e),
     l = current(),
     f = l.field;
@@ -425,7 +429,7 @@ uv.onpointerdown = (e) => {
   persist();
 };
 uv.onpointermove = (e) => {
-  if (!drag) return;
+  if (!drag || !current()) return;
   const p = coord(e),
     l = current();
   if (drag === "point") {
@@ -443,6 +447,7 @@ uv.onpointermove = (e) => {
 uv.onpointerup = () => (drag = undefined);
 uv.onpointercancel = () => (drag = undefined);
 uv.ondblclick = (e) => {
+  if (!current()) return;
   const l = current();
   if (l.points.length >= 24) return;
   checkpoint();
@@ -469,9 +474,7 @@ $("save").onclick = () => {
 $("load").onclick = () => input("file").click();
 const lookLibrary = setupLibrary(() => recipe, (next) => {
   checkpoint();
-  recipe = next;
-  selected = 0;
-  for (let i = 0; i < 4; i++) render(i);
+  replaceRecipe(next);
 }, workspace.library, persist);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
@@ -480,10 +483,8 @@ input("file").onchange = async () => {
     if (file.size > 1_000_000) throw Error("Recipe is too large.");
     const next = parseRecipe(JSON.parse(await file.text()));
     checkpoint();
-    recipe = next;
+    replaceRecipe(next);
     lookLibrary.detach();
-    selected = 0;
-    for (let i = 0; i < 4; i++) render(i);
     status(`Opened ${file.name}`);
   } catch (error) {
     status(`Could not open recipe: ${(error as Error).message}`);
@@ -491,6 +492,7 @@ input("file").onchange = async () => {
   input("file").value = "";
 };
 $("export").onclick = () => {
+  if (!current()) return;
   const layer = structuredClone(current()),
     bake = new Worker("/build/raster-worker.js", { type: "module" });
   $<HTMLButtonElement>("export").disabled = true;
@@ -504,7 +506,7 @@ $("export").onclick = () => {
       0,
     );
     bake.terminate();
-    $<HTMLButtonElement>("export").disabled = false;
+    $<HTMLButtonElement>("export").disabled = !current();
     c.toBlob((blob) => {
       if (blob) {
         download(blob, `xfs-${layer.id}-alpha.png`);
@@ -514,7 +516,7 @@ $("export").onclick = () => {
   };
   bake.onerror = () => {
     bake.terminate();
-    $<HTMLButtonElement>("export").disabled = false;
+    $<HTMLButtonElement>("export").disabled = !current();
     status("Mask export failed.");
   };
   bake.postMessage({
@@ -578,11 +580,12 @@ for (let i = 0; i <= 21; i++) {
   o.selected = i === workspace.preview.eyeShape;
   shape.append(o);
 }
-for (let i = 0; i < 4; i++) render(i);
+for (let i = 0; i < recipe.layers.length; i++) render(i);
 sync();
 workspaceReady = true;
 try {
   viewer = await createScene($("viewport"), canvases);
+  viewer.setLayerCanvases(canvases);
   if (savedV) showSavedV(savedV);
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
@@ -615,7 +618,7 @@ try {
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
     surface.setEnabled(input("surface-controls").checked);
-  for (let i = 0; i < 4; i++) viewer.updateLayer(i, recipe.layers[i]);
+  for (let i = 0; i < recipe.layers.length; i++) viewer.updateLayer(i, recipe.layers[i]);
   $("loading").hidden = true;
   drawUV();
   $("front").onclick = () => viewer!.front();
@@ -685,7 +688,7 @@ try {
   viewer.renderer.domElement.addEventListener(
     "pointerdown",
     (e) => {
-      if (!e.shiftKey) return;
+      if (!e.shiftKey || !current()) return;
       e.preventDefault();
       const uv = viewer!.pick(e);
       if (!uv) return;
@@ -732,9 +735,11 @@ try {
         .filter(([n, i]) => viewer!.head.morphTargetInfluences![i] > 0)
         .map(([n]) => n),
       renderer: {
+        near: viewer!.camera.near, far: viewer!.camera.far,
         calls: viewer!.renderer.info.render.calls,
         triangles: viewer!.renderer.info.render.triangles,
       },
+      plateLayers: viewer!.plates.map(m => ({ name: m.name, visible: m.visible, renderOrder: m.renderOrder, morphs: [...(m.morphTargetInfluences ?? [])] })),
       materials: viewer!.materials.map((m) => ({
         color: m.color.getHexString(),
         roughness: m.roughness,

@@ -17,7 +17,7 @@ type Handle = {
   world: THREE.Vector3;
 };
 type Hooks = {
-  layer: () => Layer;
+  layer: () => Layer | undefined;
   selected: () => number;
   select: (i: number) => void;
   begin: () => void;
@@ -95,8 +95,9 @@ export function createSurfaceEditor(
     mouse = new THREE.Vector2();
 
   function rebuild() {
-    const layer = hooks.layer(),
-      key = JSON.stringify([
+    const layer = hooks.layer();
+    if (!layer) return;
+    const key = JSON.stringify([
         layer.points,
         layer.field,
         layer.symmetry,
@@ -152,7 +153,7 @@ export function createSurfaceEditor(
     lineGeometry.setDrawRange(0, segments.length * 2);
   }
   function update() {
-    group.visible = enabled && hooks.layer().enabled;
+    group.visible = enabled && !!hooks.layer()?.enabled;
     if (!group.visible) return;
     rebuild();
     const vertices = new Map<number, THREE.Vector3>();
@@ -228,7 +229,7 @@ export function createSurfaceEditor(
     return { u: result.uv.x, v: result.uv.y };
   }
   function handleAt(x: number, y: number) {
-    if (!enabled || !hooks.layer().enabled) return;
+    if (!enabled || !hooks.layer()?.enabled) return;
     const r = canvas.getBoundingClientRect();
     let best: Handle | undefined,
       distance = 13;
@@ -305,8 +306,9 @@ export function createSurfaceEditor(
         hooks.begin();
         drag.changed = true;
       }
-      const l = hooks.layer(),
-        h = drag.handle,
+      const l = hooks.layer();
+      if (!l) { stop(); return; }
+      const h = drag.handle,
         u = h.mirror ? 1 - uv.u : uv.u,
         v = uv.v;
       if (h.kind === "point") {
