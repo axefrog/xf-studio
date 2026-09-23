@@ -1,0 +1,375 @@
+{
+  "sourceReportSha256": "5af9191abb793af9132a2bf6eccc113410142087d2c351e5e18b6169e681d28c",
+  "sourceNumericSha256": "76aee92975bd6fdf044bcba8da7ac9e0f93cf3eed9b16cf77aa78b800c49454c",
+  "resumedFromSha256": "76aee92975bd6fdf044bcba8da7ac9e0f93cf3eed9b16cf77aa78b800c49454c",
+  "numericResult": "experiments/006-plate-clearance/generated/morph-aware/finite-pair-search.npz",
+  "numericResultSha256": "16b805128b406abe6ef1729c081b9df551253c2a1a3a221f4d1137f9f5438083",
+  "method": "finite triangle separating-axis translations with local one-ring taper and bounded exact-contact line search",
+  "history": [
+    {
+      "pass": 0,
+      "case": "h031_eyes",
+      "before": 2,
+      "after": 1,
+      "scale": 1.0,
+      "maxSatTranslation": 6.822216393792346e-05
+    },
+    {
+      "pass": 0,
+      "case": "h141_eyes",
+      "before": 1,
+      "after": 0,
+      "scale": 1.0,
+      "maxSatTranslation": 2.145599955788247e-05
+    },
+    {
+      "pass": 0,
+      "case": "sampled_poses",
+      "before": 48,
+      "after": 34,
+      "scale": 1.0
+    },
+    {
+      "pass": 1,
+      "case": "h031_eyes",
+      "before": 1,
+      "after": 0,
+      "scale": 1.0,
+      "maxSatTranslation": 1.0170386882055957e-05
+    },
+    {
+      "pass": "pairwise-0",
+      "case": "sampled_poses",
+      "before": 34,
+      "after": 26,
+      "scale": 1.0,
+      "sourceFrame": 169,
+      "plateFace": 791,
+      "headFace": 722
+    },
+    {
+      "pass": "pairwise-1",
+      "case": "sampled_poses",
+      "before": 26,
+      "after": 18,
+      "scale": 1.0,
+      "sourceFrame": 25,
+      "plateFace": 794,
+      "headFace": 722
+    },
+    {
+      "pass": "pairwise-2",
+      "case": "sampled_poses",
+      "before": 18,
+      "after": 14,
+      "scale": 1.0,
+      "sourceFrame": 120,
+      "plateFace": 796,
+      "headFace": 722
+    }
+  ],
+  "criticalContactCounts": {
+    "static": {
+      "h031_eyes": 0,
+      "h141_eyes": 0,
+      "h171_eyes": 4
+    },
+    "poses": {
+      "25": 7,
+      "120": 0,
+      "169": 7,
+      "170": 0
+    }
+  },
+  "remainingFinitePairs": [
+    {
+      "case": "h171_eyes",
+      "plateFace": 674,
+      "headFace": 1854,
+      "plateVertices": [
+        614,
+        29,
+        550
+      ],
+      "satMove": [
+        4.166265925720744e-06,
+        -5.439761856845807e-06,
+        4.005158294725216e-06
+      ],
+      "satMoveLength": 7.93662861603228e-06
+    },
+    {
+      "case": "h171_eyes",
+      "plateFace": 2784,
+      "headFace": 3672,
+      "plateVertices": [
+        845,
+        1433,
+        1368
+      ],
+      "satMove": [
+        -2.8865183262973784e-06,
+        -1.602394183170545e-06,
+        5.5123707905755945e-06
+      ],
+      "satMoveLength": 6.425409473263196e-06
+    },
+    {
+      "case": "h171_eyes",
+      "plateFace": 2788,
+      "headFace": 12326,
+      "plateVertices": [
+        845,
+        1432,
+        1433
+      ],
+      "satMove": [
+        -1.2982579018466503e-06,
+        1.714341402611502e-06,
+        3.7177706768505233e-06
+      ],
+      "satMoveLength": 4.294910805833438e-06
+    },
+    {
+      "case": "h171_eyes",
+      "plateFace": 2789,
+      "headFace": 12326,
+      "plateVertices": [
+        847,
+        1432,
+        845
+      ],
+      "satMove": [
+        -1.2982579018466503e-06,
+        1.714341402611502e-06,
+        3.7177706768505233e-06
+      ],
+      "satMoveLength": 4.294910805833438e-06
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 792,
+      "headFace": 2419,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -9.834955541262244e-07,
+        9.684367304459094e-06,
+        -2.099776034650795e-06
+      ],
+      "satMoveLength": 9.958076771563682e-06
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 792,
+      "headFace": 2420,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -9.834955541262244e-07,
+        9.684367304459094e-06,
+        -2.099776034650795e-06
+      ],
+      "satMoveLength": 9.958076771563682e-06
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 792,
+      "headFace": 2423,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -1.1553835972592119e-06,
+        9.955525976573568e-06,
+        -2.2281720497706795e-06
+      ],
+      "satMoveLength": 1.0267042388654388e-05
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 795,
+      "headFace": 1994,
+      "plateVertices": [
+        159,
+        118,
+        120
+      ],
+      "satMove": [
+        1.4179097811815128e-06,
+        -1.5430265117770215e-05,
+        6.4228513600806084e-06
+      ],
+      "satMoveLength": 1.6773686814351096e-05
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 795,
+      "headFace": 1995,
+      "plateVertices": [
+        159,
+        118,
+        120
+      ],
+      "satMove": [
+        -3.000912282046088e-06,
+        -6.789923634054679e-06,
+        5.015476720278781e-06
+      ],
+      "satMoveLength": 8.958992365913019e-06
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 797,
+      "headFace": 722,
+      "plateVertices": [
+        119,
+        321,
+        120
+      ],
+      "satMove": [
+        -8.90872214678854e-07,
+        1.5627445713858794e-05,
+        -3.149784193076788e-07
+      ],
+      "satMoveLength": 1.565598684999192e-05
+    },
+    {
+      "case": "frame-25",
+      "plateFace": 801,
+      "headFace": 1981,
+      "plateVertices": [
+        525,
+        119,
+        130
+      ],
+      "satMove": [
+        4.164169008649504e-06,
+        -7.536154088514617e-06,
+        1.003966607145766e-06
+      ],
+      "satMoveLength": 8.668441089763277e-06
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 792,
+      "headFace": 2419,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -7.976056842113265e-07,
+        8.44332798200862e-06,
+        -2.1166315838781035e-06
+      ],
+      "satMoveLength": 8.74105780218426e-06
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 792,
+      "headFace": 2420,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -7.976056842113265e-07,
+        8.44332798200862e-06,
+        -2.1166315838781035e-06
+      ],
+      "satMoveLength": 8.74105780218426e-06
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 792,
+      "headFace": 2423,
+      "plateVertices": [
+        118,
+        156,
+        622
+      ],
+      "satMove": [
+        -9.508426576117731e-07,
+        8.684077997536352e-06,
+        -2.245283837934374e-06
+      ],
+      "satMoveLength": 9.019900883031837e-06
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 795,
+      "headFace": 1994,
+      "plateVertices": [
+        159,
+        118,
+        120
+      ],
+      "satMove": [
+        1.3260713002496968e-06,
+        -1.66990119660293e-05,
+        7.587483292794648e-06
+      ],
+      "satMoveLength": 1.8389816977158135e-05
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 795,
+      "headFace": 1995,
+      "plateVertices": [
+        159,
+        118,
+        120
+      ],
+      "satMove": [
+        -4.531684899536021e-06,
+        -9.208005294383686e-06,
+        7.271437691982887e-06
+      ],
+      "satMoveLength": 1.2577652230780998e-05
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 797,
+      "headFace": 722,
+      "plateVertices": [
+        119,
+        321,
+        120
+      ],
+      "satMove": [
+        -6.540559731044686e-07,
+        1.3772873254717447e-05,
+        -5.017585436536323e-07
+      ],
+      "satMoveLength": 1.3797521101364338e-05
+    },
+    {
+      "case": "frame-169",
+      "plateFace": 801,
+      "headFace": 1981,
+      "plateVertices": [
+        525,
+        119,
+        130
+      ],
+      "satMove": [
+        4.60485811025926e-06,
+        -8.58314253434957e-06,
+        1.5559775969675541e-06
+      ],
+      "satMoveLength": 9.863879574632193e-06
+    }
+  ],
+  "warning": "Diagnostic numeric search only. Full static, posed, resource, and skin gates remain independent."
+}
