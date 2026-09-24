@@ -1,21 +1,26 @@
-# XF Studio desktop trial (Electrobun, Windows)
+# XF Studio desktop app (Electrobun, Windows)
 
-A **private desktop packaging trial**, not a public release or configured update feed. It wraps the shared Studio UI (first packaged from the committed Opus UI entry at `cec7089`) with Electrobun 2.0.1, a Bun main process and Windows WebView2. The independent localhost editor (`authoring/`, `bun start`) is unchanged and remains the primary development route. Follow the [desktop architecture](../../../../research/authoring/desktop-packaging.md) before expanding this host.
+The Windows desktop host for XF Studio. Alpha builds are published as **unsigned GitHub pre-releases** through a CI draft that a maintainer publishes by hand, with no update feed ([release decisions](../../../../research/authoring/desktop-release-decisions.md)). No release has been published yet. It wraps the shared Studio UI (first packaged from the committed Opus UI entry at `cec7089`) with Electrobun 2.0.1, a Bun main process and Windows WebView2. The independent localhost editor (`authoring/`, `bun start`) is unchanged and remains the primary development route. Follow the [desktop architecture](../../../../research/authoring/desktop-packaging.md) before expanding this host.
 
 ## Build and launch
 
 From this directory, after `bun install --frozen-lockfile` in `authoring/` and here:
 
 ```powershell
+bun run prepare:devkit  # once per clone: Hutch toolchain + SDK types the typecheck extends
 bun run check        # TypeScript 5.9.3 --noEmit
 bun test tests       # desktop host tests (also run by authoring `bun test`)
 bun run build:dev    # prepare static view + build tools, then Electrobun dev build
 bun run run:dev      # launch the dev build in a WebView2 window
 ```
 
-**Last verified 25 September 2026:** 35 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 448.
+**Last verified 25 September 2026:** 45 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 468 with the private preview assets present.
 
-For a **private, unsigned Windows installer candidate**, run `bun run build:canary` after the same frozen installs. It creates `artifacts/canary-win-x64-XFStudio-Setup-canary.zip` with the setup executable and its required hidden payload. `verify-canary.ts` checks the actual installer ZIP, update archive and packaged `version.json` against the pinned `dev.axefrog.xf-studio` identity, version `0.1.0`, canary channel and build hash; checks the seven-file Studio view allowlist and the hashed build-tool manifest; and refuses game assets, saved data and any unexpected update-feed URL. The archive and update JSON are local build byproducts only; nothing is uploaded or offered as an in-app update. `build:dev` remains the faster source-run trial.
+**Version.** `package.json` `version` (now `0.1.0-alpha.1`) is the only place the app version is set. `electrobun.config.ts` imports it, and `release.ts` derives the tag (`v0.1.0-alpha.1`), release title, asset name and changelog section from it. Change it together with the **Unreleased** section of the [changelog](../../CHANGELOG.md) when cutting a release.
+
+**Release build.** `.github/workflows/desktop-release.yml` runs the same steps on a clean `windows-2025` runner. Pull requests build only, manual runs upload a 14-day artifact, and a matching `v*` tag creates a draft pre-release. `bun release.ts metadata|stage|notes` is the tooling it calls. Five authoring tests read ignored game-derived assets; CI skips them with `XFS_PRIVATE_ASSETS=absent` after proving the folder is absent. Never set that variable locally.
+
+For an **unsigned Windows installer**, run `bun run build:canary` after the same frozen installs. It creates `artifacts/canary-win-x64-XFStudio-Setup-canary.zip` with the setup executable and its required hidden payload. `verify-canary.ts` checks the actual installer ZIP, update archive and packaged `version.json` against the pinned `dev.axefrog.xf-studio` identity, version `0.1.0`, canary channel and build hash; checks the seven-file Studio view allowlist and the hashed build-tool manifest; and refuses game assets, saved data and any unexpected update-feed URL. The archive and update JSON are local build byproducts only: CI never publishes them, and the packaged `baseUrl` must stay empty. `verify-canary.ts` uses Windows' own `tar.exe` (bsdtar), because a GNU `tar` earlier on `PATH` cannot read `.tar.zst` or ZIP. `build:dev` remains the faster source-run trial.
 
 `prepare-static.ts` copies the HTML/CSS, bundles `desktop-bootstrap.js` with the typed `LocalSetupActions` browser device, bundles `studio-main.ts` and `raster-worker.ts`, and bundles a separate Bun `check-worker.js`. Electrobun copies only those seven allowlisted files to `Resources/app/views/studio`; Bun main reads them from `PATHS.VIEWS_FOLDER`. `prepare-build-tools.ts` copies four asset-free Experiment 005 Python sources and the shared Python wrapper and bundles the shared TypeScript preflight and bake entries into an integrity-manifested host resource outside the served view. Neither step copies `public/assets`, SQLite, credentials or game/mod files. `build/dev-win-x64/`, `artifacts/` and generated `static/` are ignored. The script fails if the shared Studio script tag changes, forcing review of this bootstrap.
 
@@ -29,10 +34,11 @@ For a **private, unsigned Windows installer candidate**, run `bun run build:cana
 | Check | Bounded worker, same filtered snapshot/identities as localhost ([details](#package-check-and-build)) | — |
 | Build | Host-gated build with private plate, game and WolvenKit inputs; exercised in an installed canary ([details](#installed-build-acceptance-25-september)) | Archive-byte reproducibility; release notices |
 | Workspace persistence | Host-owned workspace file survives port changes, full restart ([details](#installed-webview-acceptance-and-restart-repair-25-september)) and native window close ([details](#desktop-close-flush-acceptance-25-september)) | Process kill, OS crash, power loss |
-| Updates | Disabled consent state machine and restart-save guard, tested with fake ports ([details](#updater-gate-25-september)) | Signed A→B feed, native apply, rollback |
+| Release | Version source, tag/changelog gates, checksums, attestations and draft release in CI; clean-clone rehearsal passed locally | First GitHub run; licence and third-party notices; signing |
+| Updates | Disabled consent state machine and restart-save guard, tested with fake ports ([details](#updater-gate-25-september)) | Authenticated A→B feed, native apply, rollback |
 | Game | Nothing installed into the game or MO2 by this host | All runtime rendering |
 
-Disposable Windows installs have exercised the WebView editor, Build, restart and close persistence and quiet full-data uninstall. A public release, real updater, general asset resolution, standard-user installation, signing and game rendering remain unavailable or unproved.
+Disposable Windows installs have exercised the WebView editor, Build, restart and close persistence and quiet full-data uninstall. A published release, real updater, general asset resolution, standard-user installation, signing and game rendering remain unavailable or unproved.
 
 ## Host design
 
@@ -102,9 +108,24 @@ Each passed the view/tool allowlist and no-private-input gate. The 24 September 
 
 ## Build environment notes
 
-The pinned npm bootstrap repeatedly timed out fetching its paired Hutch artifact index and fell back to the installed compatible global Hutch 0.24.3 through the Electrobun 2.0.1 resolver; the global launcher alone selects 0.26.0 without the npm shim's paired defaults. A clean builder without the paired artifact or a compatible global fallback would fail, so cross-machine reproducibility needs a clean Windows build machine. The dev bundle (`build/dev-win-x64/XFStudioDesktopSpike-dev`, from the package's original spike name) is neither signed nor an update candidate; it keeps its data under `%LOCALAPPDATA%/dev.axefrog.xf-studio-spike/dev/`, separate from the bundle. Its first smoke run reported `interactive; WebGL2=true; Worker=true`, and `missing-assets` with the head GLB held aside.
+`bunx electrobun@2.0.1` is a shim: it downloads the paired Hutch 0.24.3 from the Electrobun v2.0.1 GitHub release (SHA-256 checked against that release's index), and Hutch fetches the Electrobun core, a Cottontail runtime and a Bun toolchain into `HUTCH_HOME` (default `~/.hutch`). Set `HUTCH_HOME` to a scratch folder for a clean-machine build; CI uses a job-local one. The shim gives up on that index after 30 seconds. On a slow link it then falls back to a compatible global Hutch, and when it has to install one it **adds that Hutch's `bin` folder to the user PATH**. Remove the entry afterwards if the Hutch home was temporary. Which Hutch runs decides the bundled Cottontail: the paired 0.24.3 recorded Cottontail 0.5.0, while a build through a globally selected 0.26.0 recorded 0.6.0. `.hutch/dependencies.lock` (copied into `build-info.json` by `release.ts stage`) records what was used. A clean rehearsal (fresh shallow clone, empty Hutch home, no assets) passed on 25 September: devkit preparation took 130 s, mostly downloads, and `build:canary` took 31 s.
+
+The dev bundle (`build/dev-win-x64/XFStudioDesktopSpike-dev`, from the package's original spike name) is neither signed nor an update candidate; it keeps its data under `%LOCALAPPDATA%/dev.axefrog.xf-studio-spike/dev/`, separate from the bundle. Its first smoke run reported `interactive; WebGL2=true; Worker=true`, and `missing-assets` with the head GLB held aside.
 
 Installer trials so far ran from a sandboxed agent process whose `LOCALAPPDATA` had to be redirected to the sandbox's own LocalAppData before launch (otherwise setup reported `InvalidUninstallLocation`). This is a test-environment workaround, not standard-user evidence. Some disposable trial roots (`dev.axefrog.xf-studio-*-trial-*` under that redirected LocalAppData) and asset-free installer extractions (`xfs-*` folders under the Windows Temp directory) remain on the development machine because guarded recursive cleanup was refused by command policy; they contain no game assets, but the `sep25bld05` root holds a private candidate. Remove them deliberately.
+
+## Clean-machine first run
+
+Windows Sandbox gives a disposable Windows session with no Studio data, Bun or developer paths. It is an optional Windows feature that the machine owner must enable (it is not enabled on the development machine). `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit. Opening its `.wsb` file starts an offline sandbox that runs `tools/sandbox-first-run.ps1`: it records the environment and WebView2 version, checks the ZIP checksum, runs setup, launches the app and saves `report.json` plus a screenshot to `artifacts/sandbox-trial/results/`. This automation has not yet run in a sandbox. Then check by hand:
+
+1. Local setup opens; **Continue without paths** reaches the Studio, and the head pane says preview assets are unavailable.
+2. Add a layer, edit its shape, Undo and Redo; save a preset to the library.
+3. Run Check; it reports the collection without needing game files.
+4. Close the window, reopen from the Start menu, and confirm that the preset and selection return and setup does not reappear.
+5. About shows `0.1.0-alpha.1`, channel `canary` and the build hash from `build-info.json`.
+6. Uninstall with the default **App** choice, and note what remains under `%LOCALAPPDATA%\dev.axefrog.xf-studio`.
+
+Mapped files carry no Mark-of-the-Web, so SmartScreen will not appear; enable networking and download from the release page inside the sandbox to see it. The sandbox account does not prove standard-user behaviour, which still needs a non-administrator account.
 
 ## Icon candidate and install behavior
 
@@ -114,4 +135,4 @@ Electrobun's [Windows distribution guide](https://framework.blackboard.sh/electr
 
 ## Next gates
 
-Production asset provenance; clean standard-user install/reinstall and interactive uninstall choices; WebView2-missing bootstrap; GPU fallback and 4K memory/frame cadence in the packaged app; notices/licensing; signing; a two-version private feed proving consented check/download/apply, authenticity, restart, rollback and library preservation before enabling updates; and a separate game session. The private plate and finish-export gates still apply. Do not treat an offline archive as game-tested.
+Licence and third-party notices before the first publication; the first GitHub workflow run; production asset provenance; clean standard-user install/reinstall and interactive uninstall choices; WebView2-missing bootstrap; GPU fallback and 4K memory/frame cadence in the packaged app; notices/licensing; signing ([options](../../../../research/authoring/desktop-release-decisions.md#signing-improvement-path)); an authenticated two-version feed proving consented check/download/apply, envelope verification, downgrade refusal, restart, rollback and library preservation before enabling updates; and a separate game session. The private plate and finish-export gates still apply. Do not treat an offline archive as game-tested.

@@ -60,7 +60,7 @@ for (const e of [.01, .0001, .000001, .00000001]) {
 }
 ```
 
-All four rows returned **0 above and 1 below**. At exactly `(.5,.5)`, coverage was `0.47970910979806514`; the tessellated polygon contained 40 points. Thus a 0→1 alpha jump persists at just `2e-8` UV separation, away from the outside edge. This is a deterministic algorithm defect, not temporal shimmer or texture quantization. These values diagnose this fixture, not the exact shape Nathan was editing.
+All four rows returned **0 above and 1 below**. At exactly `(.5,.5)`, coverage was `0.47970910979806514`; the tessellated polygon contained 40 points. Thus a 0→1 alpha jump persists at just `2e-8` UV separation, away from the outside edge. This is a deterministic algorithm defect, not temporal shimmer or texture quantization. These values diagnose this fixture, not the exact shape being edited when the defect was reported.
 
 A replacement needs a continuous pigment-strength field independent of whichever edge wins the distance test. Before choosing one, compare a small set of bounded smooth-field prototypes on this fixture, narrow wings, concavities, closely opposed edges and all-zero/all-one weights. A normalized smooth kernel interpolation is a small first prototype; it must document that controls blend rather than promising exact interpolation at every knot. A harmonic extension of boundary values is an alternative if exact boundary conditions become necessary, but adds solve/domain complexity. Do not add a large field framework before these cases show a need.
 

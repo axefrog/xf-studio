@@ -1,5 +1,6 @@
 import type { PackageBuild, PackageCheck } from "../../package-action";
 import type { LocalSetupFields } from "../../local-settings-server";
+import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
@@ -303,7 +304,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
   }
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note("Creates private Cyberpunk mod files for ONE in-game eye-makeup selector (plus Off) from the current draft, including unsaved edits. Your collection and library revisions are never changed."),
+    section("Mod package", note(`Builds your own ${EYE_MAKEUP_MOD.modName} mod: private Cyberpunk mod files for ONE in-game eye-makeup selector, labelled “${EYE_MAKEUP_MOD.selectorLabel}” (plus Off), from the current draft, including unsaved edits. Your collection and library revisions are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     h("details", { class: "section" }, h("summary", { text: "Local setup" }),
@@ -366,6 +367,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
       pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — draft changed since", "warning")),
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
+  // Results restored from before mod branding lack these fields; show them only when present.
+  if (r.modName) card.append(h("p", { class: "muted small" }, "Mod ", h("strong", { text: r.modName }),
+    r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
   if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
     h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
   if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),

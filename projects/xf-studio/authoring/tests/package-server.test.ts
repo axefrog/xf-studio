@@ -19,7 +19,7 @@ const request = (body: unknown, origin = "http://127.0.0.1:4317") => new Request
 const summary = (collection: unknown = fixture): PackageCheck => {
   const { source, packaged, plan, omissions } = preparePackageCollection(collection);
   return { ready: true, collectionId: plan.collectionId, namespace: plan.namespace,
-    originalPresetCount: source.presets.length, omissions,
+    modName: plan.modName, selectorLabel: plan.selectorLabel, originalPresetCount: source.presets.length, omissions,
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(packaged)).digest("hex"),
     presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })) };
 };

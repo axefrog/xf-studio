@@ -1,0 +1,134 @@
+# XF Studio desktop release decisions
+
+Decided 25 September 2026. The maintainer set the direction and delegated the details. This record holds the decisions, how the pipeline carries them out, the improvement path, and the few questions still open. Architecture and acceptance gates: [desktop packaging](desktop-packaging.md). Updater gate: [A→B plan](desktop-update-ab-gate.md). Build details: [desktop README](../../projects/xf-studio/authoring/desktop/README.md).
+
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Channel | **GitHub Releases** on `axefrog/xf-studio`. Every alpha is marked **pre-release**. Channels run alpha → beta → stable later. |
+| Versioning | SemVer with a pre-release suffix. Tags are `v0.MINOR.PATCH-alpha.N` (first: `v0.1.0-alpha.1`) and titles read “XF Studio 0.1.0 alpha 1”. The app version is independent of recipe, collection, library and manifest schema versions. |
+| Version source | `projects/xf-studio/authoring/desktop/package.json` `version` only. `electrobun.config.ts` imports it, so packaged `version.json`, About, the canary gate, the tag check, the title and the asset name all derive from it. CI fails if a pushed tag is not exactly `v` + that version. |
+| Signing | Alphas ship **unsigned**. Instead: SmartScreen guidance on the site and in every release body, SHA-256 checksums for every asset, and GitHub build-provenance attestations. Signing is the improvement path below, not a blocker. |
+| Publication | CI creates a **draft** release only. A person reviews and publishes it. Agents never push tags, create releases or publish. |
+| Changelog | `projects/xf-studio/CHANGELOG.md`, hand-curated and user-facing, newest first. Each version has exactly **New and improved** and **Fixes and under the hood**. Changes are added under **Unreleased** as they land. The release job copies the tagged version's section into the release body and fails if it is missing, empty or malformed. Auto-generated commit lists are not the notes; only a “full commit list” link is appended. No personal names; name the in-game mod **XF Eye Artistry**. |
+| Updates | The in-app updater stays **disabled** in this pass. Users update by downloading the next release. See [Updater](#updater-github-feed-and-authenticity). |
+| Site | The `#download` section is driven by `site.config.json`. It stays in the honest “nothing to download yet” state until the first draft is published, then switches to `releaseStatus: "prerelease"` with the tag and title. |
+
+## Release pipeline
+
+Workflow: [`.github/workflows/desktop-release.yml`](../../.github/workflows/desktop-release.yml). Tooling: `desktop/release.ts` (tests in `desktop/tests/release.test.ts`).
+
+| Trigger | What runs | Output |
+|---|---|---|
+| Pull request touching `desktop/`, the changelog or the workflow | Metadata, private-input refusal, install, Electrobun toolchain/devkit, both typechecks, the full authoring suite (including desktop tests), `build:canary` with `verify-canary.ts`, staging | Nothing uploaded |
+| Manual run (`workflow_dispatch`) | Same | 14-day workflow artifact: setup ZIP, `build-info.json`, `SHA256SUMS.txt` |
+| Pushed `v*` tag | Same, plus: tag equals the version and the changelog section is complete; then a separate job checks the tag is on `main` and has no existing release, re-verifies the checksums after transfer, composes the notes, attests the ZIP and `build-info.json`, and creates the draft | Draft GitHub release (pre-release for `-alpha`/`-beta`/`-rc`) |
+
+Gates and properties:
+
+- The build job has `contents: read` only. The release job alone gets `contents: write`, `id-token: write` and `attestations: write`, on an Ubuntu runner, and only for tag pushes.
+- Every action is pinned by commit SHA, with its version in a comment: checkout v7.0.1, setup-bun v2.2.0, upload-artifact v7.0.1, download-artifact v8.0.1, attest-build-provenance v4.2.2. Bun is 1.4.2.
+- **Private inputs.** `public/assets` must be absent and no asset, SQLite, `.glb`, `.blend`, `.sav`, `.archive` or `.xl` file may be tracked under `authoring/`. `verify-canary.ts` then checks the actual update archive and setup ZIP: a seven-file view allowlist, hashed build tools, no data or asset paths, pinned identity/version/channel, and an **empty** update `baseUrl`. Five authoring tests read game-derived preview assets; they skip only because CI sets `XFS_PRIVATE_ASSETS=absent` after proving the folder is missing. Locally they still fail loudly.
+- **Toolchain.** `HUTCH_HOME` is job-local. The Electrobun npm shim downloads its paired Hutch 0.24.3 (SHA-256 checked against the Electrobun release index), and Hutch fetches Electrobun 2.0.1 core, Cottontail and a Bun toolchain. Their versions and archive hashes are recorded in `build-info.json` (`toolchain`). CRLF conversion is disabled before checkout.
+- **Release assets:** `XFStudio-<version>-win-x64-setup.zip` (the Electrobun setup ZIP, renamed), `build-info.json` (commit, version, Electrobun build hash, toolchain, `signed: false`, `updater: "disabled"`, `includesGameAssets: false`) and `SHA256SUMS.txt`. The update archive and `update.json` are **not** published, so no release can serve as an accidental update feed.
+- **Release body:** the changelog section, an alpha warning, install steps with SmartScreen guidance, a checksum table plus the PowerShell command, the `gh attestation verify <file> --repo axefrog/xf-studio` command, and a commit-list link.
+
+**Verified so far.** Unit tests cover the version, tag, changelog, staging and notes rules. A PowerShell rehearsal of the build job ran in a fresh shallow clone with an empty Hutch home and no assets: installs, devkit preparation (130 s, mostly downloads), both typechecks, `bun test` (455 pass, 5 private-asset skips, before the later XF Eye Artistry merge), `build:canary` with the allowlist gate (31 s) and staging all passed, producing a 35.4 MB setup ZIP for `0.1.0-alpha.1`. The workflow itself **has not yet run on GitHub**, so the first manual run is the real CI proof. Two local findings:
+
+- On this network the paired-Hutch index download exceeded the shim's 30-second limit and Hutch fell back to a newly installed global copy. That fallback **adds its bin folder to the user PATH** (it did so for the scratch rehearsal, and the entry was removed afterwards). This is harmless on ephemeral runners but worth knowing for local clean builds.
+- Toolchain selection is not fully pinned by the repository: a build started through a globally selected Hutch 0.26.0 recorded Cottontail 0.6.0, while the paired 0.24.3 path used 0.5.0. CI always starts from an empty Hutch home, and `build-info.json` records which one was used.
+
+Builds are repeatable but **not byte-reproducible**, because Electrobun's archives carry build-time timestamps. Attestations and checksums prove origin and integrity; they do not prove reproducibility.
+
+### Cutting a release
+
+1. Set `version` in `desktop/package.json` and rename **Unreleased** in the changelog to that version, with a new empty **Unreleased** above it. Merge to `main`.
+2. Optionally run the workflow manually on `main` and try the artifact.
+3. Tag the merged commit (`git tag v0.1.0-alpha.1 <sha>`) and push the tag. CI creates the draft.
+4. Review the draft (body, assets, checksums, attestations), then **publish by hand**.
+5. Set `releaseStatus: "prerelease"` and `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }` in `site.config.json`, run `bun run verify` and `bun run qa`, and merge. The Pages workflow deploys it.
+
+A mistaken tag fails before any release exists. A bad draft is deleted by hand and the version bumped; published tags are never reused.
+
+### Implications to keep in view
+
+- **Channel data roots.** Electrobun 2.0.1 knows only `dev`, `canary` and `stable`. Alphas and betas build as `canary`, so the setup is named `XF Studio-Setup-canary.exe` and user data lives under `%LOCALAPPDATA%\dev.axefrog.xf-studio\canary\`. A later `stable` build gets a **separate** root, and alpha libraries will not appear there automatically. Before the first stable release, add an explicit, tested import or migration (portable collection export already works as a manual path). Keep the identifier `dev.axefrog.xf-studio` fixed.
+- **Artifacts are semi-public.** On a public repository, anyone signed in to GitHub can download workflow artifacts. Manual-run artifacts are therefore effectively unsigned preview builds for 14 days; pull-request runs upload nothing.
+- **Install over an older version is unmeasured.** The first alpha's notes say so and recommend exporting looks first.
+
+## Signing improvement path
+
+Researched 25 September 2026. Prices and eligibility change; re-check them before applying.
+
+| Option | Cost | Shown publisher | SmartScreen | Fit |
+|---|---|---|---|---|
+| Unsigned (current) | Free | “Unknown publisher” | Warns on every new file hash; reputation per hash restarts with each version | Works now. Smart App Control blocks it outright on machines where SAC is on. |
+| [SignPath Foundation](https://signpath.org/terms.html) | Free for qualifying open source | **SignPath Foundation**, not the maintainer | Reputation accrues to that certificate | Needs an OSI licence with no proprietary parts, an already released product, a published code-signing policy with the Foundation's credit line, MFA, Author/Reviewer/Approver roles with **manual approval per release**, and builds on GitHub-hosted runners submitted with `signpath/github-action-submit-signing-request@v3`. The terms page is marked as a draft; the application form could not be inspected. |
+| [Azure Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart) (formerly Trusted Signing) | About $9.99/month (Basic) | The validated individual or organisation | No instant reputation; it accrues to a stable identity | Individual identity validation is documented for **US and Canada only**, and a Microsoft Q&A answer says individual onboarding is paused. `azure/artifact-signing-action@v2` runs on Windows runners with OIDC. Certificates last 72 hours, so timestamping is mandatory. |
+| Certum Open Source certificate | About €49 cloud (SimplySign) or €69 with card | Maintainer's name | Reputation accrues | Hardware-backed key since the June 2023 CA/B rules. Cloud signing through SimplySign is hard to automate in CI, and whether the 459-day validity cap covers this product is unconfirmed. |
+| OV or EV certificate (Sectigo, SSL.com, DigiCert) with cloud HSM | OV about $130–300/year; SSL.com eSigner from $20/month for 20 signatures | Maintainer or company | EV no longer gives instant reputation (since 2024) | Validity is now at most 460 days (CA/B ballot CSC-31, from 1 March 2026). |
+
+**Recommendation.** Publish the first unsigned alphas, then apply to **SignPath Foundation**, which costs nothing and fits a GitHub-built open-source project. The prerequisites are a repository licence (see the open questions) and a short code-signing policy page on the site. Use Azure Artifact Signing instead only if the maintainer is eligible (US/Canada individual, or a qualifying organisation) and prefers their own name as publisher; the Certum open-source certificate is the low-cost fallback if both fail. Once a stable publisher identity signs every build, SmartScreen reputation carries over between versions.
+
+**Technical caveat for any signing route.** Electrobun 2.0.1 does not sign Windows output. The setup ZIP contains `XF Studio-Setup-canary.exe` plus a `.tar.zst` payload holding the unsigned `launcher.exe`, `bun.exe` and native DLLs. Signing only the outer setup removes the installer warning but leaves the installed binaries unsigned, which Smart App Control can still block. Signing the inner binaries needs the `postWrap` hook (which receives `ELECTROBUN_WRAPPER_BUNDLE_PATH`) to sign them before compression, then a second step for the setup executable. That fits a synchronous signer such as Azure or a cloud-HSM `signtool` in the same job. SignPath signs asynchronously outside the job, so it would need the build split around that hook, or SignPath's support for signing files nested in the payload. Prove either with a disposable identity before relying on it.
+
+### SignPath application preparation
+
+- An OSI licence file at the repository root, with notices for bundled third-party components (below).
+- A code-signing policy page on the site: which builds are signed, the roles, the manual approval step and the Foundation's required credit line.
+- MFA on GitHub and SignPath. Assign Author, Reviewer and Approver; whether one maintainer may hold all three is unconfirmed, so ask SignPath.
+- The workflow already builds on GitHub-hosted runners and uploads with `actions/upload-artifact`. A signing job would submit that artifact with `signpath/github-action-submit-signing-request@v3` before the draft release step.
+- A published, unsigned alpha whose download page describes its functionality (the site's `#download` section).
+
+## Updater: GitHub feed and authenticity
+
+These findings come from Electrobun 2.0.1's `Updater.ts` and the [updates guide](https://framework.blackboard.sh/electrobun/guides/updates/).
+
+- **Feed shape.** The app fetches `<baseUrl>/<channel>-win-x64-update.json?<random>`, then `<baseUrl>/<artifact>.tar.zst`, or `<baseUrl>/<prefix>-<hash>.patch` files chained from the installed hash. `baseUrl` is baked into version A at build time. The manifest must match the installed identifier, channel, OS and architecture.
+- **GitHub Releases as the host.** The guide names `https://github.com/<owner>/<repo>/releases/latest/download` as a base URL, but `/latest` **excludes pre-releases**, so it cannot serve alpha builds. Workable alternatives:
+  - a dedicated rolling release (for example tag `feed-canary`) whose assets are replaced with each version, carrying `update.json`, the full archive and patches;
+  - a separate static host.
+
+  GitHub Pages is already used by the site, whose content policy forbids archives.
+- **Authenticity.** None beyond HTTPS. The guide calls the bundle hash a routing identifier, not authentication. The updater also treats **any different hash** as an update, with no version comparison, so a replaced feed could push a downgrade.
+- **Proposed safe design (not implemented).**
+  1. CI signs a small release envelope with an Ed25519 key held as a protected GitHub environment secret. The envelope contains identifier, channel, version, Electrobun hash, the SHA-256 of the full `.tar.zst`, and the SHA-256 of the decompressed tar.
+  2. The public key is embedded in the app at build time.
+  3. After Electrobun's `downloadUpdate()`, and before `applyUpdate()`, the Studio host verifies the envelope and requires a strictly newer SemVer. It then hashes the retained `self-extraction/<hash>.tar`, the exact file that 2.0.1's prepared-update record requires for apply. Any mismatch refuses the update.
+
+  This covers delta-patch output too. The remaining exposure is a local attacker who can already write to the user profile. Key compromise would allow malicious updates to every install, so the key needs an environment with required reviewers, and a rotation plan (which itself requires an app update).
+- **Recommendation.** Keep the updater disabled until the envelope verifier exists and the [A→B gate](desktop-update-ab-gate.md) passes with a disposable identity, including a tampered-archive refusal and a downgrade refusal. Choose the feed host at that point; the rolling-release option keeps everything on GitHub.
+
+## Clean-machine and standard-user readiness
+
+**Windows Sandbox is not enabled on the development machine.** `WindowsSandbox.exe` is absent, and the feature state cannot be read without elevation. The hypervisor is present and the edition (Windows 11 Pro) supports Sandbox. Enabling it is a system change for the machine owner (Settings → Optional features → Windows Sandbox, then reboot). No feature was enabled and nothing was installed system-wide.
+
+A trial kit is ready for when it is enabled: `bun tools/sandbox-trial.ts [setup.zip]` in `desktop/` writes an ignored `artifacts/sandbox-trial/` with the ZIP, its checksum, `first-run.ps1` and `XFStudio-first-run.wsb`. The sandbox has **networking disabled**, maps the input read-only and one results folder writable, and on logon:
+
+1. records the OS, whether the session is elevated and the WebView2 runtime version;
+2. checks the ZIP against its checksum, extracts it and runs setup (complete any installer prompts by hand);
+3. records install roots and packaged `version.json`;
+4. launches the app, then after 25 seconds records its windows and a screenshot to `results/`.
+
+The generator and the script's syntax are checked; the in-sandbox run itself has **not been executed**. Afterwards, follow the manual checklist in the desktop README. Limits: files mapped into the sandbox carry no Mark-of-the-Web, so SmartScreen will not appear. To see the real download experience, enable networking and download the published asset in Edge inside the sandbox. The sandbox account is not a proof of standard-user behaviour; that still needs a non-administrator Windows account.
+
+## Before publishing the first alpha
+
+1. **Licence — done.** The repository and app are MIT-licensed (top-level `LICENSE`, decided 25 September 2026). MIT is OSI-approved, which also satisfies SignPath's prerequisite.
+2. **Third-party notices.** The installer ships Electrobun 2.0.1 binaries (`launcher.exe`, `ElectrobunCore.dll`, `libNativeWrapper.dll`, `libasar.dll`, `bspatch.exe`, `zig-zstd.exe`; MIT, whose notice must accompany copies), `bun.exe` (Bun is MIT; its licensing page lists bundled components under other licences, including LGPL JavaScriptCore) and Three.js (MIT) inside the Studio bundle. Add a `THIRD-PARTY-NOTICES` file to the packaged view allowlist and the release assets, built from the actual shipped components. No notices file exists yet.
+3. **First CI run.** Run the workflow manually on `main`, then install the artifact on a clean machine or in the sandbox.
+4. **Draft review.** Read the release body and check that the checksums and `gh attestation verify` work on the downloaded files.
+
+## Decided 25 September 2026
+
+- **Licence:** MIT, matching ArchiveXL, TweakXL, Codeware, RED4ext and CET.
+- **Clean-machine trial:** Windows Sandbox is enabled on the development machine.
+- **WolvenKit delivery:** Build downloads the pinned official WolvenKit CLI release on first use, with the user's consent, and verifies it by SHA-256. We don't redistribute it. A path override remains for advanced users. Bundling may be reconsidered later.
+- **Mod sources:** auto-detect Steam, GOG and Epic installs and MO2 instances. Vortex and manual installs are treated as the game's own `archive/pc/mod` folder. The separate "manual mod folder" setting is dropped.
+
+## Open questions
+
+1. **Signing route, when ready to improve:** in which country is the maintainer resident (this decides Azure eligibility), and is **SignPath Foundation** acceptable as the publisher name users see?
+
+Asked later, when updater work starts: may an Ed25519 update-signing key live in a GitHub environment secret with required reviewers? That is a repository-settings change for the maintainer.

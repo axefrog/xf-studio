@@ -1,25 +1,25 @@
 {
-  "providedBy": "Nathan",
+  "providedBy": "maintainer",
   "date": "2026-09-23",
   "originalsUnchanged": true,
   "references": [
     {
       "label": "eye",
-      "source": "C:\\Users\\Nathan\\AppData\\Local\\Temp\\codex-clipboard-a7c47d12-b418-4cf2-9cc2-4dd64dc813da.png",
+      "source": "a local clipboard image (personal Temp path withheld)",
       "localCopy": "research\\consumers\\preview-fidelity\\raw\\eye.png",
       "sha256": "0a33c9da36b14494cb3f6e298ae737097b6b226d10d37f39af7c46b1efd60fbb",
       "bytes": 283772
     },
     {
       "label": "lip-seam",
-      "source": "C:\\Users\\Nathan\\AppData\\Local\\Temp\\codex-clipboard-deb9b284-1f69-44d8-92b5-61d06cb40561.png",
+      "source": "a local clipboard image (personal Temp path withheld)",
       "localCopy": "research\\consumers\\preview-fidelity\\raw\\lip-seam.png",
       "sha256": "6b29b33eb1367a771619849b79a9d6e55f59a163b40fe111d9ca6e8ecf777f8e",
       "bytes": 84640
     },
     {
       "label": "brow-comparison",
-      "source": "C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-cef63179-8f47-4c74-b52e-ce3261d7df53.png",
+      "source": "a local clipboard image (personal Temp path withheld)",
       "localCopy": "research/consumers/preview-fidelity/raw/brow-comparison.png",
       "sha256": "a1fd12a45213cabeecd8d350aa07a0e7efa4f96c85acb15b25a5d0f8e78f4d97",
       "bytes": 1644973
@@ -68,7 +68,7 @@
     },
     {
       "label": "brow-texture-comparison",
-      "source": "C:\\Users\\Nathan\\AppData\\Local\\Temp\\codex-clipboard-2843978c-711d-4025-a722-9aa046b8384c.png",
+      "source": "a local clipboard image (personal Temp path withheld)",
       "localCopy": "research\\consumers\\preview-fidelity\\raw\\brow-texture-comparison.png",
       "sha256": "4987c4ed33948d16e74c8069ae78e2efe30115e2046cda0d42d3de1b8cae162a",
       "bytes": 432144

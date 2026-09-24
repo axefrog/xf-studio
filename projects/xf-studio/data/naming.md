@@ -1,6 +1,12 @@
 # XF Studio: scope and naming
 
-Latest user decisions, 23 September 2026: **XF Studio** supersedes XF Appearance Studio and XF Eye Artistry. New generated resources use **`xfs_`**, replacing the earlier `xfas_` prefix. The broader product name leaves room for capabilities such as quest design, while eye makeup remains the first delivery area. Future feature implementation still requires discussion.
+**XF Studio** is the name of the *application*; it superseded the app names XF Appearance Studio and XF Eye Artistry on 23 September 2026. New generated resources use **`xfs_`**, replacing the earlier `xfas_` prefix. The broader product name leaves room for capabilities such as quest design, while eye makeup remains the first delivery area. Future feature implementation still requires discussion.
+
+## Mod branding
+
+Mods produced with or by XF Studio carry their own **XF-branded** names in game and in mod managers, distinct from the app name (a hypothetical spell-casting mod might be "XF Wizardry"). The eye-makeup export is **XF Eye Artistry**: its selector label, mod-manager entry and install folder use that name. Unlike a conventional one-size-fits-all mod, each player builds their own XF Eye Artistry package from the looks they authored. Internal resource identifiers are not branding and keep the `xfs_` prefix below.
+
+The name is defined once, as `EYE_MAKEUP_MOD` in [`authoring/src/mod-branding.ts`](../authoring/src/mod-branding.ts). The export plan carries it (`modName`, `selectorLabel`) to the Python builder, verifier, package wrapper and manifest. The MO2 install and diagnostic tools use it as the mod folder. Never spell it anywhere else; a test enforces this. The 25 September diagnostic promotion predates the name and created an MO2 folder called `XF Studio`. The tools treat that folder as a legacy install of the same mod: install and promotion refuse to add a second copy beside it, while rollback and recovery of that promotion still work. The [pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md#mod-name-and-mo2-folder) has the details. The unrelated legacy development mod `XF Eye Artistry CCXL - Dev` keeps its name.
 
 The current product model is [one selector for complete authored presets](product-direction.md), not the historical four-selector matrix.
 

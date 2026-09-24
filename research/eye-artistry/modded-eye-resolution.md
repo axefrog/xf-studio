@@ -1,4 +1,4 @@
-# Nathan’s saved modded eyes — 23 September 2026
+# Reference save's modded eyes — 23 September 2026
 
 **The saved choice resolves to Kala’s Eyes Standalone V2, exposed through nutboy’s Unique Eyes to CCXL.** It is not the Photoreal Eyes CCXL option initially suspected. Current installed-resource inspection and an existing September 16 runtime log agree on the CCXL material source. This does not yet establish browser rendering parity or a new live-game capture.
 

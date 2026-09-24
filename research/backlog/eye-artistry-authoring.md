@@ -1,6 +1,6 @@
 # XF Studio authoring requests
 
-Nathan's persistent authoring requests (from 23 September 2026). Read this across context changes; conversation history is not the only record. Ranking lives in the [queue](README.md). All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-studio/data/naming.md).
+Persistent authoring requests (from 23 September 2026). Read this across context changes; conversation history is not the only record. Ranking lives in the [queue](README.md). All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-studio/data/naming.md).
 
 ## Status (25 Sep 2026)
 
@@ -23,7 +23,7 @@ Nathan's persistent authoring requests (from 23 September 2026). Read this acros
 | Desktop packaging | Electrobun trial functional; release/updater paused ([desktop packaging](../authoring/desktop-packaging.md)) |
 | Resizable sidebars with persisted widths | **Obsolete** — replaced by the dock UI (`95516b2`) |
 
-Later features, in order, each requiring discussion with Nathan before building: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, tattoos (full body), then full body customisation and world integration.
+Later features, in order, each requiring discussion with the maintainer before building: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, tattoos (full body), then full body customisation and world integration.
 
 ## Surface-editing requirements
 
@@ -35,8 +35,8 @@ Later features, in order, each requiring discussion with Nathan before building:
 
 ## Content and references
 
-Nathan explicitly permits replacing every old Eye Artistry design, name, preset identity and ID. The layered concept matters; the tools should enable a fresh collection. Saved legacy choices are references, not compatibility requirements.
+Replacing every old Eye Artistry design, name, preset identity and ID is explicitly permitted. The layered concept matters; the tools should enable a fresh collection. Saved legacy choices are references, not compatibility requirements.
 
-Nathan supplied two in-game V reference images; paths/hashes and observations are in [save-import research](../eye-artistry/save-import.md#user-provided-visual-references). Use them for fidelity comparisons without treating photographed colours or apparent shape as exact resource parameters.
+Two in-game V reference images were supplied; paths/hashes and observations are in [save-import research](../eye-artistry/save-import.md#user-provided-visual-references). Use them for fidelity comparisons without treating photographed colours or apparent shape as exact resource parameters.
 
 Related: [XF Studio authoring README](../../projects/xf-studio/authoring/README.md), [saved V](../eye-artistry/save-import.md), [CCXL research](ccxl-character-creator-capabilities.md).

@@ -32,18 +32,21 @@ test("final package identity verification works under a relocated host-owned dis
     const manifest = { schema: "xfs/local-package-1", collectionId: collection.id,
       collectionSha256: sha(source), packagedCollectionSha256: packagedHash,
       originalPresetCount: collection.presets.length, omissions, namespace: prepared.plan.namespace,
+      modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
       presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
       verifiedPresetCount: prepared.packaged.presets.length, files: [
         { path: `archive/pc/mod/${archiveName}`, bytes: 15, sha256: archiveHash },
         { path: `archive/pc/mod/${xlName}`, bytes: 10, sha256: sha("xl fixture") }],
       installed: false, gameRenderingVerified: false };
-    const built = { package: final, manifest: manifestPath, archiveSha256: archiveHash,
+    const built = { package: final, manifest: manifestPath, modName: prepared.plan.modName,
+      selectorLabel: prepared.plan.selectorLabel, archiveSha256: archiveHash,
       presetCount: prepared.packaged.presets.length, originalPresetCount: collection.presets.length,
       omissions, packagedCollectionSha256: packagedHash, installed: false as const, gameRenderingVerified: false as const };
     writeFileSync(manifestPath, JSON.stringify(manifest));
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).not.toThrow();
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, join(root, "other"))).toThrow("outside the local dist");
     expect(() => verifyPackageBuildResult({ ...built, archiveSha256: "b".repeat(64) }, collection, prepared, source, dist)).toThrow("does not match");
+    expect(() => verifyPackageBuildResult({ ...built, modName: "XF Studio" }, collection, prepared, source, dist)).toThrow("does not match");
     expect(() => verifyPackageBuildResult(built, collection, prepared, source + " ", dist)).toThrow("does not match");
     writeFileSync(join(payloadRoot, xlName), "changed XL");
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).toThrow("payload");

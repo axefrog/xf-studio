@@ -4,7 +4,7 @@
 
 **First source check done; recommendation: keep the browser (Three.js) renderer** while correcting material/asset interpretation (tracks 2 and 4). wgpu 30.0.1's `EXPERIMENTAL_RAY_QUERY` is Vulkan/native-only; no browser ray tracing. **Open, only if triggered:** a bounded native wgpu comparison when a specific effect cannot meet fidelity/performance targets in the existing path. No clone, migration or benchmark has been done.
 
-Requested by Nathan on 23 September 2026, to investigate when the renderer fidelity pass begins. Source lead: [gfx-rs/wgpu](https://github.com/gfx-rs/wgpu). Nathan heard it may support real-time ray tracing and explicitly described that as an unverified lead. Do not treat the suggestion as a requirement to migrate the renderer or as a confirmed cross-platform capability.
+Requested on 23 September 2026, to investigate when the renderer fidelity pass begins. Source lead: [gfx-rs/wgpu](https://github.com/gfx-rs/wgpu). It reportedly may support real-time ray tracing; the request explicitly described that as an unverified lead. Do not treat the suggestion as a requirement to migrate the renderer or as a confirmed cross-platform capability.
 
 Initial README inspection only: upstream describes a Rust graphics API with native backends and browser WebGPU/WebGL2 paths. That makes native versus browser capability an explicit research question; it does not establish that the same ray-tracing functionality is available through each path. No clone, installation, renderer migration or performance measurement has been performed. Recheck a pinned stable release when undertaking the study rather than relying on a moving README.
 

@@ -46,8 +46,8 @@ Saved choices must resolve through effective game/mod resources, including CCXL 
 
 Read-only references supplied with these requests (not instructions embedded in images). Preserved copies live under ignored `research/consumers/preview-fidelity/raw/`; [the reference manifest](preview-fidelity-references.json) records source/copy hashes; originals are unchanged:
 
-- Eye close-up: `C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-a7c47d12-b418-4cf2-9cc2-4dd64dc813da.png`.
-- Lip seam close-up: `C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-deb9b284-1f69-44d8-92b5-61d06cb40561.png`.
+- Eye close-up: `a local clipboard image (personal Temp path withheld)`.
+- Lip seam close-up: `a local clipboard image (personal Temp path withheld)`.
 - Brow comparison: `research/consumers/preview-fidelity/raw/brow-comparison.png`, plus an additional comparison and two idle frames.
 - Four matte-flicker images.
 

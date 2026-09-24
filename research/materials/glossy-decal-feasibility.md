@@ -1,6 +1,6 @@
 # Glossy eye makeup: why the stock wet decal is not a safe shortcut
 
-23 September 2026. Read-only inspection of the installed game's compiled shader cache and local WolvenKit-exported material templates. This is a **shader/pass assessment**, not a game-rendered result. Nathan's current recipe has two enabled glossy eyeliner layers, which the flat preset compiler deliberately rejects.
+23 September 2026. Read-only inspection of the installed game's compiled shader cache and local WolvenKit-exported material templates. This is a **shader/pass assessment**, not a game-rendered result. The current reference recipe has two enabled glossy eyeliner layers, which the flat preset compiler deliberately rejects.
 
 ## Relevant compilation and template
 

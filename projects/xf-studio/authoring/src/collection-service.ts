@@ -280,7 +280,7 @@ export class CollectionService {
           } else {
             const built = response as PackageBuild;
             result = { kind: "packageBuild", result: built };
-            message = `Verified local mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}`;
+            message = `Verified local ${built.modName ? `${built.modName} ` : ""}mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}`;
           }
           break;
         }

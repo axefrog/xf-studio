@@ -2,7 +2,7 @@
 
 23 September 2026. **The proposed all-incident-plane shell cannot satisfy the requested margin across these 73 idle poses within the displacement budget.** This is useful negative evidence, not a failed import: no mesh, morph resource, original source, owned master or existing evidence was changed. A different collision-free surface construction is not ruled out.
 
-The experiment follows [the next-step proposal](research/corrective-next-step.md). It uses the retained-native-weight build `generated/build-1790134714546030800`, Nathan's five customization morphs, all 1,635 mapped vertices and the existing 73 sample phases. The desired minimum signed incident-plane distance is **0.00005** mesh units; total fixed displacement from the saved head surface is bounded by **0.00025**. This is a total displacement budget, not an additional 0.00025 on top of the old candidate.
+The experiment follows [the next-step proposal](research/corrective-next-step.md). It uses the retained-native-weight build `generated/build-1790134714546030800`, the reference save's five customization morphs, all 1,635 mapped vertices and the existing 73 sample phases. The desired minimum signed incident-plane distance is **0.00005** mesh units; total fixed displacement from the saved head surface is bounded by **0.00025**. This is a total displacement budget, not an additional 0.00025 on top of the old candidate.
 
 ## Verified transport
 
@@ -66,7 +66,7 @@ From HQ:
 
 ```powershell
 python -m pip install -r experiments/006-plate-clearance/fixed_requirements.txt --target experiments/006-plate-clearance/generated/fixed_python
-& 'C:/Users/Nathan/.bun/bin/bun.exe' projects/xf-studio/authoring/tools/export_plate_skin_matrices.ts
+bun projects/xf-studio/authoring/tools/export_plate_skin_matrices.ts
 python experiments/006-plate-clearance/fixed_feasibility.py
 python experiments/006-plate-clearance/fixed_verify.py
 ```

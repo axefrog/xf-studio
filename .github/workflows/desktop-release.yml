@@ -1,0 +1,201 @@
+# XF Studio desktop app (Windows): test, build the unsigned Electrobun installer from source and
+# run the asset-free allowlist gate (verify-canary.ts) on the actual setup ZIP and update archive.
+#
+# - Pull request touching the desktop app: tests and build only; nothing is uploaded.
+# - Manual run (Actions -> Desktop release -> Run workflow): also uploads the unsigned build as a
+#   14-day workflow artifact. No tag, release or Pages change.
+# - Pushed tag v<version>: the tag must equal projects/xf-studio/authoring/desktop/package.json
+#   "version", the tagged commit must be on main, and projects/xf-studio/CHANGELOG.md must have a
+#   complete section for that version. Creates a DRAFT GitHub release (pre-release for -alpha/-beta/-rc)
+#   with the setup ZIP, build-info.json, SHA256SUMS.txt and build-provenance attestations.
+#   A maintainer reviews and publishes the draft by hand; nothing here publishes it.
+#
+# Decisions, verification and maintenance: research/authoring/desktop-release-decisions.md
+name: Desktop release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "projects/xf-studio/authoring/desktop/**"
+      - "projects/xf-studio/CHANGELOG.md"
+      - ".github/workflows/desktop-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    concurrency:
+      group: desktop-build-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: projects/xf-studio/authoring
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      title: ${{ steps.meta.outputs.title }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      release: ${{ steps.meta.outputs.release }}
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      # Keep LF checkouts so bundled sources and hashed build tools match other machines.
+      - name: Disable CRLF conversion
+        working-directory: ${{ runner.temp }}
+        run: git config --global core.autocrlf false
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      # On a tag push this fails unless the tag equals v<package.json version> and the
+      # changelog section for that version is complete.
+      - name: Release metadata
+        id: meta
+        run: |
+          $out = bun desktop/release.ts metadata --ref "$env:GITHUB_REF"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $out
+          $out | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Private preview assets, libraries and game files are ignored locally; prove none are tracked
+      # or present before anything is bundled. verify-canary.ts checks the built archive again.
+      - name: Refuse private inputs
+        run: |
+          if (Test-Path public/assets) { throw "public/assets must not exist in a CI checkout." }
+          $tracked = git ls-files -- . | Where-Object { $_ -match '(^|/)(assets|preview-assets)/|\.(sqlite|sqlite-wal|sqlite-shm|glb|blend|sav|archive|xl)$' }
+          if ($tracked) { $tracked; throw "Private or game-format files are tracked under authoring/." }
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          bun install --frozen-lockfile --cwd desktop
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Electrobun's npm shim downloads its paired Hutch (SHA-256 checked against the Electrobun
+      # release index); Hutch then fetches the pinned Electrobun/Cottontail toolchain into this
+      # job-local HUTCH_HOME and generates the SDK type devkit the desktop typecheck extends.
+      - name: Prepare Electrobun toolchain
+        working-directory: projects/xf-studio/authoring/desktop
+        run: |
+          "HUTCH_HOME=$(Join-Path $env:RUNNER_TEMP 'hutch')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $env:HUTCH_HOME = Join-Path $env:RUNNER_TEMP "hutch"
+          bun run prepare:devkit
+
+      - name: Typecheck
+        run: |
+          bun run check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          bun run --cwd desktop check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # The authoring suite includes the desktop host tests. Five tests read ignored game-derived
+      # preview assets; the step above proved they are absent, so they are skipped explicitly.
+      - name: Test
+        env:
+          XFS_PRIVATE_ASSETS: absent
+        run: bun test
+
+      - name: Build and verify unsigned installer
+        working-directory: projects/xf-studio/authoring/desktop
+        run: bun run build:canary
+
+      - name: Stage checksums and build information
+        working-directory: projects/xf-studio/authoring/desktop
+        run: |
+          bun release.ts stage --commit "$env:GITHUB_SHA" --out artifacts/release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Content artifacts/release/SHA256SUMS.txt
+
+      - name: Name artifact
+        id: name
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: "\"artifact=xf-studio-desktop-$env:VERSION-$($env:GITHUB_SHA.Substring(0, 7))\" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8"
+
+      - name: Upload unsigned build
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.name.outputs.artifact }}
+          path: projects/xf-studio/authoring/desktop/artifacts/release/
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.build.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: desktop-release
+      cancel-in-progress: false
+    permissions:
+      contents: write     # create the draft release
+      id-token: write     # sign build-provenance attestations with this workflow's identity
+      attestations: write # store them
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.build.outputs.tag }}
+      TITLE: ${{ needs.build.outputs.title }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+      ASSETS: projects/xf-studio/authoring/desktop/artifacts/release
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Require a tag on main with no existing release
+        run: |
+          status=$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq .status)
+          if [ "$status" != "identical" ] && [ "$status" != "behind" ]; then
+            echo "::error::$TAG ($GITHUB_SHA) is not on main (compare status: $status)."; exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::A release for $TAG already exists; delete the draft or tag a new version."; exit 1
+          fi
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: ${{ env.ASSETS }}
+
+      # Re-verifies SHA256SUMS.txt against the transferred files and fails on a missing or empty changelog section.
+      - name: Compose release notes
+        working-directory: projects/xf-studio/authoring/desktop
+        run: bun release.ts notes --assets artifacts/release --out "$RUNNER_TEMP/notes.md"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ env.ASSETS }}/*.zip
+            ${{ env.ASSETS }}/build-info.json
+
+      - name: Create draft release
+        run: |
+          flags=(--draft --verify-tag --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md")
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}" "$ASSETS"/*.zip "$ASSETS/build-info.json" "$ASSETS/SHA256SUMS.txt"
+          echo "Draft release for $TAG created. Review it on GitHub and publish it by hand." >> "$GITHUB_STEP_SUMMARY"

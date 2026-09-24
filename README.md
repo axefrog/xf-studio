@@ -25,3 +25,7 @@ Open [127.0.0.1:4317](http://127.0.0.1:4317/) while the server runs. The [editor
 The repository also keeps an agent-facing [knowledge base](knowledge/README.md) of how the game's resources fit together, [focused experiments](experiments/), [source-grounded research](research/) and [validation notes](docs/validation.md) beside the projects. [Community credits](docs/community-credits.md) record what we learned from other creators and the boundaries on reuse. Contributors can start with the [developer orientation](docs/developer-orientation.md) and [working rules](AGENTS.md).
 
 XF Studio was previously called XF Appearance Studio and XF Eye Artistry. The project now lives at `projects/xf-studio`; older data identifiers remain for compatibility. [The naming contract](projects/xf-studio/data/naming.md) explains which new resources use `xfs_`.
+
+## License
+
+XF Studio is released under the [MIT License](LICENSE). Third-party components keep their own licences; see the [community credits](docs/community-credits.md).

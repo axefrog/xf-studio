@@ -4,12 +4,14 @@
   "repoUrl": "https://github.com/axefrog/xf-studio",
   "repoBranch": "main",
   "author": { "name": "axefrog", "url": "https://github.com/axefrog" },
-  "statusReviewed": "2026-09-24",
+  "statusReviewed": "2026-09-25",
   "releaseStatus": "unreleased",
+  "release": null,
   "nav": [
     { "id": "overview", "label": "Overview", "href": "./" },
     { "id": "eye-makeup", "label": "Eye makeup", "href": "./#eye-makeup" },
     { "id": "status", "label": "Status", "href": "./#status" },
+    { "id": "download", "label": "Download", "href": "./#download" },
     { "id": "roadmap", "label": "Directions", "href": "./#directions" },
     { "id": "credits", "label": "Credits", "href": "credits.html" }
   ],

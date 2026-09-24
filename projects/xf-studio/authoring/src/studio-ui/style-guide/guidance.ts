@@ -96,7 +96,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "k-compact": { combine: "Head, UV map and one inspector remain visible together; everything else is one tab away.",
     adapt: "At 640 px the head cell narrows but stays portrait and visible; maximize it (double-click its tab bar) for close judgement, or float a panel when two inspectors are needed at once.", drives: "defaultCompact() and the compact DockTree." },
   "k-future": { adapt: "Follows the same wide/compact defaults as eye makeup.",
-    drives: "Would need a category registry, the category's own typed actions and catalogue entries, and discussion with Nathan first." },
+    drives: "Would need a category registry, the category's own typed actions and catalogue entries, and discussion with the maintainer first." },
   "x-history": { combine: "Library panel below Saved collections; opening a revision uses the same recoverable-draft rules as Open.", adapt: "Timeline collapses to the latest five with “Show all”." },
   "x-gallery": { combine: "A view toggle on the Presets panel; selection and rename behave as in rows.", adapt: "Grid columns follow panel width; list view below 260 px." },
   "x-palette": { combine: "Opens from the colour field's swatch; picking applies layer.setColor as one Undo step.", adapt: "Grid reflows to panel width." },

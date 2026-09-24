@@ -20,9 +20,11 @@ export type CheckReport = { issues: Issue[]; pages: number; files: number; bytes
 export const ALLOWED_EXTENSIONS = new Set([".html", ".css", ".js", ".svg", ".xml", ".txt"]);
 const PRIVATE_PATH = /\b[A-Za-z]:[\\/](?:Dev|Games|Users|Program Files|RedModding|MO2)\b/i;
 const DOWNLOADABLE = /\.(?:zip|7z|rar|archive|xl|exe|msi|dmg|glb|gltf|blend|xbm|mesh|sav)$/i;
-/** Phrases that would imply a release, download or in-game verification that does not exist yet. */
+/** Phrases that would imply a release or download while releaseStatus is "unreleased". */
 export const UNRELEASED_CLAIMS = ["download now", "now available", "available now", "install now", "get it now", "latest release",
-  "release notes", "coming soon", "tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
+  "release notes", "coming soon"];
+/** In-game verification has not happened; these are rejected in every release state until runtime evidence exists. */
+export const GAME_CLAIMS = ["tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
 /** Dates and schedule language that future-direction copy ([data-future]) must not use: directions are discussed, not scheduled.
  *  “May” is omitted because it is also the modal verb, and the game's title is not a year. */
 export const FUTURE_SCHEDULE = /\b(?:(?<!Cyberpunk )(?:19|20)\d{2}|Q[1-4]|H[12]|January|February|March|April|June|July|August|September|October|November|December|soon|upcoming|coming|imminent|this (?:week|month|year|quarter)|next (?:week|month|year|quarter|release|update|version)|by the end of|scheduled|due (?:in|by|for)|(?:is|are) planned for|will (?:ship|launch|arrive|land|release|be (?:released|available|ready|added)))\b/i;
@@ -43,13 +45,13 @@ function walk(dir: string, root = dir): string[] {
 type PageScan = {
   lang: string | null; title: string; description: string | null; canonical: string | null; robots: string | null;
   csp: boolean; charset: boolean; viewport: boolean; headings: number[]; ids: string[];
-  links: { attr: string; value: string; tag: string }[]; text: string; releaseStatus: boolean; main: boolean;
+  links: { attr: string; value: string; tag: string }[]; text: string; releaseStatus: boolean; download: string[]; main: boolean;
   problems: string[]; labelledBy: string[]; futureSections: number; futureText: string;
 };
 
 async function scanPage(html: string): Promise<PageScan> {
   const scan: PageScan = { lang: null, title: "", description: null, canonical: null, robots: null, csp: false, charset: false, viewport: false,
-    headings: [], ids: [], links: [], text: "", releaseStatus: false, main: false, problems: [], labelledBy: [], futureSections: 0, futureText: "" };
+    headings: [], ids: [], links: [], text: "", releaseStatus: false, download: [], main: false, problems: [], labelledBy: [], futureSections: 0, futureText: "" };
   const named: { what: string; label: string | null; text: string }[] = [];
   const nameHandler = (what: string) => ({
     element(el: HTMLRewriterTypes.Element) {
@@ -80,6 +82,7 @@ async function scanPage(html: string): Promise<PageScan> {
     .on("[href]", { element(el) { scan.links.push({ attr: "href", value: el.getAttribute("href")!, tag: el.tagName }); } })
     .on("[src]", { element(el) { scan.links.push({ attr: "src", value: el.getAttribute("src")!, tag: el.tagName }); } })
     .on("[data-release-status]", { element() { scan.releaseStatus = true; } })
+    .on("[data-download]", { element(el) { scan.download.push(el.getAttribute("data-download")!); } })
     .on("[data-future]", { element() { scan.futureSections++; scan.futureText += " "; }, text(chunk) { scan.futureText += chunk.text; } })
     .on("[aria-labelledby]", { element(el) { scan.labelledBy.push(...el.getAttribute("aria-labelledby")!.split(/\s+/)); } })
     .on("*", { element(el) {
@@ -176,10 +179,14 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
     for (const id of scan.labelledBy) if (!seen.has(id)) add(page, `aria-labelledby references missing id "${id}"`);
     if (!scan.main) add(page, "missing <main id=\"main\">");
     if (!scan.links.some(link => link.value === "#main")) add(page, "missing skip link to #main");
-    if (config.releaseStatus === "unreleased") {
-      const text = scan.text.toLowerCase().replace(/\s+/g, " ");
+    const text = scan.text.toLowerCase().replace(/\s+/g, " ");
+    for (const phrase of GAME_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}”, but nothing has been tested in the game`);
+    if (config.releaseStatus === "unreleased")
       for (const phrase of UNRELEASED_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}” while releaseStatus is unreleased`);
-      if (page === "index.html" && !scan.releaseStatus) add(page, "home page must keep a visible [data-release-status] statement while unreleased");
+    if (page === "index.html") {
+      if (!scan.releaseStatus) add(page, "home page must keep a visible [data-release-status] statement");
+      if (scan.download.length !== 1 || scan.download[0] !== config.releaseStatus)
+        add(page, `home page needs one #download section rendered for releaseStatus "${config.releaseStatus}" (found: ${scan.download.join(", ") || "none"})`);
     }
     const schedule = FUTURE_SCHEDULE.exec(scan.futureText.replace(/\s+/g, " "));
     if (schedule) add(page, `future-direction text ([data-future]) contains a date or schedule: “${schedule[0]}”`);
@@ -196,7 +203,14 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
       if (/\b(?:127\.0\.0\.1|localhost)\b/.test(value)) { add(page, `link to localhost: ${value}`); continue; }
       const url = new URL(value, pageUrl);
       if (DOWNLOADABLE.test(url.pathname)) add(page, `link to a downloadable package/asset: ${value}`);
-      if (config.releaseStatus === "unreleased" && /\/releases(?:\/|$)/.test(url.pathname)) add(page, `link to releases while unreleased: ${value}`);
+      if (/\/releases(?:\/|$)/.test(url.pathname)) {
+        const allowed = config.release ? [`/releases`, `/releases/tag/${encodeURIComponent(config.release.tag)}`] : [];
+        const repoPath = new URL(config.repoUrl + "/").pathname.replace(/\/$/, "");
+        if (config.releaseStatus === "unreleased") add(page, `link to releases while unreleased: ${value}`);
+        // /releases/latest skips pre-releases and /releases/download/ is a direct asset; link the configured tag page.
+        else if (url.origin !== "https://github.com" || !allowed.some(path => url.pathname === repoPath + path))
+          add(page, `release link must be ${config.repoUrl}/releases or the configured tag page: ${value}`);
+      }
       if (url.origin !== base.origin || !url.pathname.startsWith(baseDir)) {
         const repoPrefix = new URL(config.repoUrl + "/").pathname;
         if (url.origin === "https://github.com" && url.pathname.startsWith(repoPrefix)) {

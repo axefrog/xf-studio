@@ -1,6 +1,6 @@
 # UI handoff cross-surface check — 24 September 2026
 
-Isolated verification browser at `http://127.0.0.1:4317/?verify=1` with a disposable verification library. Nathan's active draft was not used. This is a browser/application boundary check, not a game install or a visual-design acceptance. The [scenario](ui-handoff-acceptance.md) and [architecture assessment](ui-architecture-boundary.md) define the scope.
+Isolated verification browser at `http://127.0.0.1:4317/?verify=1` with a disposable verification library. The active working draft was not used. This is a browser/application boundary check, not a game install or a visual-design acceptance. The [scenario](ui-handoff-acceptance.md) and [architecture assessment](ui-architecture-boundary.md) define the scope.
 
 | Scenario | Observation |
 | --- | --- |

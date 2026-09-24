@@ -1,6 +1,6 @@
 # Trusted-bootstrap browser smoke check — 24 September 2026
 
-The main-branch build after the trusted core/bootstrap extraction ran from a separate local server on port 4322, with a disposable data directory and `?verify=1` browser storage. Nathan's active draft and library were not used.
+The main-branch build after the trusted core/bootstrap extraction ran from a separate local server on port 4322, with a disposable data directory and `?verify=1` browser storage. The active working draft and library were not used.
 
 The page loaded the actual head and expanded plate and reported Ready. Adding a fifth layer enabled Undo; one Undo restored the original four layers and disabled Undo. Switching the UV pane to Single eye enabled Other eye, and a reload restored Single eye and the four-layer draft. The head and plate returned to Ready after reload. The browser error/warning log was empty. The isolated tab and server were closed after the check.
 

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { SurfaceMap, type UV } from "../src/surface-map";
+import { privateAssetTest } from "./private-assets";
 
 // Bypass only the new broad phase in the comparison instance. This retains the
 // pre-index exhaustive triangle order and exact barycentric/clipping arithmetic.
@@ -43,7 +44,7 @@ test("UV index preserves overlaps, relaxed edges, tiny gaps and outside-atlas qu
   expect(map.continuous({ u: Infinity, v: 0 }, { u: 0, v: 0 })).toBe(false);
 });
 
-test("real plate index matches exhaustive anchors and gap clipping with reduced search work", async () => {
+privateAssetTest("real plate index matches exhaustive anchors and gap clipping with reduced search work", async () => {
   const buffer = await Bun.file(new URL("../public/assets/head.glb", import.meta.url)).arrayBuffer();
   const view = new DataView(buffer), length = view.getUint32(12, true);
   const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, length)));

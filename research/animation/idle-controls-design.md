@@ -44,7 +44,7 @@ The existing `setTime` loop approach already clamps frame increments to 0.1 seco
 3. Disable from paused and muted combinations; assert exact original local position/quaternion/scale and zero clock. Re-enable starts at zero with chosen subset preferences. Seek while paused changes the held pose but does not resume.
 4. Add workspace tests for old records, valid new settings, malformed fields, disabled+paused normalization and round-trip restoration of phase/subsets. Preserve recipes, per-preset history and saved-V morph choices.
 5. Extend the asset-backed offline check with facial-only sampling across the full 22.07-second facial loop: fixed structural Head world transform, varying gaze/jaw/lids, finite vertices, consistent duplicate-rig transforms, exact reset. Keep all eight skin weights and customization morphs unchanged. Record output separately from the existing historical report.
-6. Isolated browser check: pause a visibly non-neutral pose; orbit/pan and edit a layer without moving the expression; reload and verify held phase, settings and framing; resume; toggle body off while face continues; toggle face off; disable and restore exploratory blink. Check surface handles still track the actual deformed mesh. Do not alter Nathan's active draft.
+6. Isolated browser check: pause a visibly non-neutral pose; orbit/pan and edit a layer without moving the expression; reload and verify held phase, settings and framing; resume; toggle body off while face continues; toggle face off; disable and restore exploratory blink. Check surface handles still track the actual deformed mesh. Do not alter the active working draft.
 
 ## Limits and next groups
 

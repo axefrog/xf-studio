@@ -1,6 +1,6 @@
 # XF Studio UI/UX overhaul — delivery record, 24 September 2026
 
-**Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until Nathan accepts the new interface in depth (so far reviewed only cursorily). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
+**Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until the new interface is accepted after in-depth review (so far reviewed only cursorily). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
 
 Built on branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul` (both removed on 25 September after integration was verified). This record was written for the primary agent's review against the [handoff brief](../backlog/claude-ui-overhaul.md) and the [architecture contract](architecture-contract.md).
 
@@ -192,7 +192,7 @@ The pass was re-run after the portrait-head follow-up (24/24), which regenerated
 
 ## Follow-up — portrait head in the factory layouts (24 September)
 
-Nathan observed that the factory arrangement gave the head a landscape, letterboxed viewport although the subject is portrait. Only the factory defaults changed (`src/studio-ui/layout-defaults.ts`). The dock engine, drag/float/tab/magnetic/cursor-position behaviour, the `xfs/dock` v1 format, per-size-class persistence and recovery, application actions, recipes and packages are untouched. Every saved arrangement restores exactly as saved; a new test restores a layout saved with the previous defaults unchanged. An existing workspace keeps its layout and camera: *Panels › Reset this layout* (per size class) adopts the new default, then *Front view* (F) reframes for the new viewport.
+Review found that the factory arrangement gave the head a landscape, letterboxed viewport although the subject is portrait. Only the factory defaults changed (`src/studio-ui/layout-defaults.ts`). The dock engine, drag/float/tab/magnetic/cursor-position behaviour, the `xfs/dock` v1 format, per-size-class persistence and recovery, application actions, recipes and packages are untouched. Every saved arrangement restores exactly as saved; a new test restores a layout saved with the previous defaults unchanged. An existing workspace keeps its layout and camera: *Panels › Reset this layout* (per size class) adopts the new default, then *Front view* (F) reframes for the new viewport.
 
 **Why these shapes.** Front framing fits 0.26 m of width (`frontCameraDistance`), so a portrait viewport shows the whole head larger instead of empty sides. The UV map's both-eyes view is 720:310, so it needs a full-width cell rather than height. Head and UV map are always visible together because an edit in either is judged in the other.
 
@@ -243,7 +243,7 @@ Updated 25 September 2026.
 4. Presentation follow-ups: arrow-key nudging once A-5 exists; relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification; a shorter stage hint for narrow head cells.
 5. Primary-agent review of the API commit (`ebe6a1f`; the one-line file-snapshot change) versus presentation commits. The merge itself is done; this review is still owed.
 6. Move `StudioFileOperations` IDs into the `StudioApplication` descriptor registry, and verify the context-menu/command-registry claims end to end.
-7. Retire `legacy.html` once Nathan accepts the new interface in depth.
+7. Retire `legacy.html` once the new interface is accepted after in-depth review.
 
 ## Appendix — proposed signatures (from the audit, unchanged)
 

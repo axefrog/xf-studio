@@ -45,14 +45,14 @@ The selected MO2 profile is `2025 (again)` (920 enabled actual mods). Game-root 
 30 external reference repositories were checked against their configured upstream branch; 22 advanced since the original census. Core top-level references are current to their tracked branches. [Combined revision record](../inventory/reference-revisions.json) (local-only) preserves the original and final revision for every checked repository. The separate first/second pass records explain Windows line-ending normalization and an initially slow historical clone status check.
 
 - `D:/Dev/clones/WolvenKit` is the **xf-hq fork**, still at a May 2025 commit current to that fork. It is intentionally preserved; prefer the updated official `D:/Dev/WolvenKit` source.
-- `D:/Dev/Cyberpunk-Modding-Docs` retains Nathan's fork as `origin`; on 23 September 2026 its clean `main` fast-forwarded from `e7b65fab` to canonical `upstream/main` at `be2f44ee` (99 commits ahead of the fork). The linked GitBook images are present locally and must be read with their guides. No fork push was made.
+- `D:/Dev/Cyberpunk-Modding-Docs` retains the maintainer's older fork as `origin`; on 23 September 2026 its clean `main` fast-forwarded from `e7b65fab` to canonical `upstream/main` at `be2f44ee` (99 commits ahead of the fork). The linked GitBook images are present locally and must be read with their guides. No fork push was made.
 - The older `clones` ArchiveXL/SDK/RTTIDumper checkouts now align with their respective refreshed branch tips; the pre-update census preserves their earlier provenance.
 - `redscript` tracks upstream `1.0.x`, which is a development line. Runtime-compatible research should inspect release tag `v0.5.31` where compiler behavior matters. `redscript-ide` tracks upstream default `0.2.x`.
 - Reference checkouts were not compiled; submodule dependency trees were not mass-updated/installed. Source availability is not a claim of a ready native build environment.
 
 ## Offline tools actually exercised
 
-- Python 3.14.6: `C:/Users/Nathan/AppData/Local/Python/bin/python.exe`.
+- Python 3.14.6: `%USERPROFILE%/AppData/Local/Python/bin/python.exe`.
 - Blender 5.0.0: `C:/Program Files/Blender Foundation/Blender 5.0/blender.exe`. Also installed: 4.4 and 4.5 directories. Headless inspection works; no callable Blender MCP tool was exposed in this session. No upgrade needed to open the source successfully.
 - WolvenKit CLI 8.17.4: `F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe`. Verified archive extraction and JSON/CR2W material round-trip; still the production default. Official [CLI 9.0.1](https://github.com/WolvenKit/WolvenKit/releases/tag/9.0.1) is now installed side by side at `F:/Games/RedModding/WolvenKit.Console-9.0.1/WolvenKit.CLI.exe`, with the published ZIP SHA-256 verified. Its [private four-preset round trip](../research/authoring/wolvenkit-9-roundtrip-2026-09-24.md) passed independent verification and reproduced all 16 archive members byte for byte against the validated 8.17.4 build. This is offline fixture compatibility, not game verification or a production-default change. GUI and CLI versions are separate tools.
 - Older MLSB CLI 8.16.2-nightly.2025-06-16: `F:/Games/RedModding/MLSB_WolvenKit.CLI/WolvenKit.CLI.exe`; preserve for historical compatibility, not default builds.
@@ -60,6 +60,6 @@ The selected MO2 profile is `2025 (again)` (920 enabled actual mods). Game-root 
 
 ## Nexus connection
 
-Nathan supplied a personal API key via `temp.txt`. It was extracted, saved using Windows CurrentUser DPAPI at `%LOCALAPPDATA%/CP2077ModdingHQ/credentials/nexus-api-key.dpapi`, verified by local readback and the official `https://api.nexusmods.com/v1/users/validate.json` endpoint, then `temp.txt` was deleted. The validation response confirmed a premium account. [Non-secret connection record](../inventory/nexus-connection.json) (local-only).
+A personal API key was supplied via `temp.txt`. It was extracted, saved using Windows CurrentUser DPAPI at `%LOCALAPPDATA%/CP2077ModdingHQ/credentials/nexus-api-key.dpapi`, verified by local readback and the official `https://api.nexusmods.com/v1/users/validate.json` endpoint, then `temp.txt` was deleted. The validation response confirmed a premium account. [Non-secret connection record](../inventory/nexus-connection.json) (local-only).
 
 Do not display the decrypted key or write it into project files. Future download helpers can decrypt it in-process for requests to the official Nexus API. Prefer official public GitHub assets for frameworks that publish them. Check version, game compatibility, selected optional files and rollback manifests before updating a mod; a valid key alone does not select the right archive variant.

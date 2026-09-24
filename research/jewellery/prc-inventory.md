@@ -1,6 +1,6 @@
 # PRC piercing inventory and implementation boundary
 
-Read-only survey, 23 September 2026. This is an inventory of installed candidates and a resource-level inspection, **not** a claim about effective game load order or rendered results. Nothing here authorizes redistribution of third-party meshes, morphs, materials or archives. Piercing authoring is a later XF Studio feature that requires discussion with Nathan before implementation.
+Read-only survey, 23 September 2026. This is an inventory of installed candidates and a resource-level inspection, **not** a claim about effective game load order or rendered results. Nothing here authorizes redistribution of third-party meshes, morphs, materials or archives. Piercing authoring is a later XF Studio feature that requires discussion with the maintainer before implementation.
 
 ## What the installed framework does
 
@@ -12,7 +12,7 @@ This is a **pre-CCXL** design. In an [August 2026 author reply](https://www.nexu
 
 ## Installed candidates and slot collisions
 
-Profile flags below come from `F:/Games/MO2/profiles/2025 (again)/modlist.txt`; version and Nexus ID come from each folder's `meta.ini`; target resources come from individual archive listings. `+` means selected in that saved profile. It does **not** prove the archive was loaded, won a conflict, or rendered on Nathan's V. All listed item morph targets are female; framework placeholders also cover male slots.
+Profile flags below come from `F:/Games/MO2/profiles/2025 (again)/modlist.txt`; version and Nexus ID come from each folder's `meta.ini`; target resources come from individual archive listings. `+` means selected in that saved profile. It does **not** prove the archive was loaded, won a conflict, or rendered on the reference V. All listed item morph targets are female; framework placeholders also cover male slots.
 
 | MO2 folder (under `F:/Games/MO2/mods/`) | Profile | Nexus ID / installed version | Archive target or other payload |
 | --- | :---: | --- | --- |
@@ -40,7 +40,7 @@ The two selected item folders target distinct morph slots (`50`, `72`, `74`). Po
 
 The selected profile also has `Equipment-EX` (Nexus 6945 metadata version 1.0.0.0), `Facial Customisation Rig Fix - No more clipping Eyes` (7179 / 4.2.1.0), and `Kwek's Small Fancy Hoop Earrings with Physics - Designed for EquipmentEX - req ArchiveXL TweakXL` (7020 / 1.1.0.0) enabled. These are nearby implementation references, not PRC slot providers. The Equipment-EX installation file in MO2 metadata is a `HideHubButtons` variant; that metadata alone cannot establish the running core version.
 
-Nathan's earlier `F:/Games/RedModding/Projects/xf-prc-piercings` is a separate, untouched 1.0 WolvenKit project. It contains `eagul\piercingmorphs\female\fpm73.morphtarget` and `fpm75.morphtarget`, `wa_linked.mesh`, and a vanilla `i1_000_pwa_c__basehead_earring_03` mesh/raw GLB/material reference. It is a local research lead for attachment, deformation and historical intent, not evidence that a build was installed or that those source files may be distributed.
+The maintainer's earlier `F:/Games/RedModding/Projects/xf-prc-piercings` is a separate, untouched 1.0 WolvenKit project. It contains `eagul\piercingmorphs\female\fpm73.morphtarget` and `fpm75.morphtarget`, `wa_linked.mesh`, and a vanilla `i1_000_pwa_c__basehead_earring_03` mesh/raw GLB/material reference. It is a local research lead for attachment, deformation and historical intent, not evidence that a build was installed or that those source files may be distributed.
 
 ## Preview and future implementation routes
 
