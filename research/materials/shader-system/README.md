@@ -11,6 +11,7 @@ Evidence note behind [knowledge/materials-and-shaders.md](../../../knowledge/mat
 | `PATH_TO_GAME/archive/pc/content/memoryresident_1_general.archive` | SHA-256 `71d3d4116eee455b75309e0c36f5af5aa2fef17ecf509639c3e3a622fcf32295`; holds all 373 `.mt`/`.remt` templates |
 | WolvenKit CLI 8.17.4 | `unbundle -r "\.(mt|remt)$"`, then `convert serialize`; JSON header `GameVersion: 2310` |
 | Windows SDK 10.0.22621 x64 `dxc.exe -dumpbin` | SHA-256 `e51ba98aee7656b05ecea156107398d2b62224eb185d90d0fea9d45d62733ad5` |
+| Optional decompiler: [dxil-spirv](https://github.com/HansKristian-Work/dxil-spirv) commit `f2d1b554` + [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) commit `aa217aeb` | Built from source with CMake + MSVC 2022 (neither publishes a Windows binary outside the Vulkan SDK). Full commits, build flags and binary SHA-256s are in the lab's downloaded-tools register. |
 
 The installed tree also ships PS4/PS5/Xbox/Vulkan caches (`shadervulkan*.cache` etc.); they were not examined.
 
@@ -56,23 +57,42 @@ Format notes:
 - each pixel input by the vertex inputs it depends on;
 - each render target by its template blend state, plus its G-buffer role in G-buffer passes.
 
-No DXIL decompiler is installed, so the tool does its own lifting in pure Python, using only the Windows SDK `dxc` that step 3 already needs. Output is written to the ignored `research/consumers/shader-system/raw/annotated/` as `<GUID>.hlsl` plus `<GUID>.annotated.ll`, the original disassembly with name comments.
+By default the tool does its own lifting in pure Python, using only the Windows SDK `dxc` that step 3 already needs. Output is written to the ignored `research/consumers/shader-system/raw/annotated/` as `<GUID>.hlsl` plus `<GUID>.annotated.ll`, the original disassembly with name comments.
+
+`--decompile` adds a structured listing, `<GUID>.decompiled.hlsl`:
+
+1. dxil-spirv converts the extracted DXBC container to SPIR-V, and SPIRV-Cross emits HLSL. Where SPIRV-Cross cannot express the module in HLSL, it emits GLSL instead (`<GUID>.decompiled.glsl`).
+2. The same names are then applied as text rewrites:
+   - `cb4` is redeclared with one `packoffset` field per template parameter, so `_46_m0[12u].x` becomes `EmissiveEV`;
+   - bindless reads become `#define`d texture names (`Emissive.Sample(…)`);
+   - engine buffers take their DXIL struct names;
+   - interface variables take their signature names and semantics.
+3. HLSL output is compiled with `dxc` as a syntax check.
+
+Intermediates (`.spv` and the unrenamed SPIRV-Cross source) go to `raw/decompiled/`.
+
+Tool lookup: `DXIL_SPIRV_EXE` and `SPIRV_CROSS_EXE`, else the newest `<XF_TOOLS_DIR>/dxil-spirv/<version>/dxil-spirv.exe` and `<XF_TOOLS_DIR>/spirv-cross/<version>/spirv-cross.exe`. `XF_TOOLS_DIR` defaults to a `tools` folder beside the repository checkout. dxil-spirv needs its `dxil-spirv-c-shared.dll` next to the executable. To build either tool: clone it (dxil-spirv with `--recursive`), then run `cmake -S src -B build -G "Visual Studio 17 2022" -A x64` and `cmake --build build --config Release`.
 
 ```powershell
 # Prerequisites: shader_cache.py index, and template_summary.py (writes json/template-summary.json)
 # Annotate every matching compilation of a template (pixel + vertex programs)
 python research/materials/shader-system/shader_annotate.py annotate "base/materials/mesh_decal.mt" --info "post_gbuffer'.*VF: MeshSkinned\]"
-# Annotate one known pixel program of a template
-python research/materials/shader-system/shader_annotate.py annotate "base/materials/skin.mt" --guid 12806642364631437234
+# Annotate one known pixel program of a template (add --decompile for the structured listing)
+python research/materials/shader-system/shader_annotate.py annotate "base/materials/skin.mt" --guid 12806642364631437234 --decompile
 # Find which programs contain a code pattern (all regexes must match the pseudo-HLSL)
 python research/materials/shader-system/shader_annotate.py search "metal_base.*|cable" "if \(EmissiveEV > 0\.0\)" "\+ EmissiveEV, 0\.0\)"
 ```
 
 It uses the same `CP2077_GAME_DIR` and `DXC_EXE` overrides as `shader_cache.py`.
 
-Read `_N` as SSA `%N` of that program's `.ll`. Loops stay as labelled `goto`, and the listing is a reading aid, not compilable source.
+In the lifted `.hlsl`, read `_N` as SSA `%N` of that program's `.ll`. Loops stay as labelled `goto`, and the listing is a reading aid, not compilable source. In `.decompiled.hlsl`, `_N` are SPIRV-Cross ids and do **not** match the `.ll`. Cite SSA numbers from the lifted listing.
 
-Recovered names, what stays anonymous, a coverage run over all templates and three validation programs are in [annotation results](annotation-results.md).
+[Annotation results](annotation-results.md) covers:
+
+- recovered names and what stays anonymous;
+- a coverage run over all templates;
+- three validation programs;
+- the decompile path's coverage, equivalence check and limits.
 
 ## Programs examined in this pass
 

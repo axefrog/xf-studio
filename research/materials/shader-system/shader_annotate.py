@@ -20,6 +20,10 @@ Everything it writes goes to the git-ignored research/consumers/shader-system/ra
       for each; the pixel header lists which vertex inputs feed each interpolator.
       --info filters on the compilation string, e.g. "post_gbuffer'.*VF: MeshSkinned\\]".
       --guid annotates only the given pixel program(s) of that template.
+      --decompile also writes <GUID>.decompiled.hlsl: dxil-spirv + SPIRV-Cross structured source
+      with the same names (GLSL, .decompiled.glsl, where SPIRV-Cross cannot emit HLSL). Tools come
+      from DXIL_SPIRV_EXE / SPIRV_CROSS_EXE or <XF_TOOLS_DIR>/<tool>/<version>/; HLSL output is
+      syntax-checked with dxc.
 
   python shader_annotate.py search TEMPLATE_REGEX PATTERN [PATTERN ...] [--info REGEX]
       Annotate every pixel program of templates whose cache name matches, and report
@@ -958,6 +962,256 @@ def annotate_ll(lf: Lifter) -> str:
     return "\n".join(out)
 
 
+# --------------------------------------------------------------------------- decompile (optional)
+#
+# DXIL -> SPIR-V (dxil-spirv) -> structured HLSL, or GLSL where SPIRV-Cross cannot express the
+# module in HLSL (SPIRV-Cross), then the lifter's names applied as text rewrites. Tool locations:
+# DXIL_SPIRV_EXE / SPIRV_CROSS_EXE, else the newest <XF_TOOLS_DIR>/<tool>/<version>/<exe>, where
+# XF_TOOLS_DIR defaults to a `tools` folder beside the repository checkout (see the README).
+
+TOOLS_DIR = Path(sc.os.environ.get("XF_TOOLS_DIR", sc.HQ.parent / "tools"))
+DEC = sc.RAW / "decompiled"
+RESERVED = {"Texture", "texture", "Buffer", "sampler", "Sampler", "vector", "matrix", "point", "line",
+            "triangle", "linear", "centroid", "sample", "precise", "register", "packoffset", "in", "out",
+            "inout", "static", "const", "uniform", "default", "switch", "case", "break", "main", "Bindless",
+            "layout", "flat", "smooth", "buffer", "shared", "patch", "subroutine", "input", "output"}
+# Per-language spellings of what SPIRV-Cross emits for dxil-spirv's cbuffer-as-float4-array blocks.
+LANG = {
+    "hlsl": {"cast": "asuint", "float": "float", "float4": "float4", "uint": "uint"},
+    "glsl": {"cast": "floatBitsToUint", "float": "float", "float4": "vec4", "uint": "uint"},
+}
+
+
+def find_tool(env: str, tool: str, exe: str) -> Path:
+    if sc.os.environ.get(env):
+        p = Path(sc.os.environ[env])
+        if not p.exists():
+            raise SystemExit(f"{env} points to a missing file: {p}")
+        return p
+    cands = sorted(TOOLS_DIR.glob(f"{tool}/*/{exe}"), key=lambda q: q.stat().st_mtime)
+    if not cands:
+        raise SystemExit(f"{exe} not found: set {env}, or build it into {TOOLS_DIR}/{tool}/<version>/ "
+                         "(see research/materials/shader-system/README.md)")
+    return cands[-1]
+
+
+def _ident(name: str, text: str, taken: set) -> str:
+    n = re.sub(r"\W", "_", name)
+    text = re.sub(r"\b(register|packoffset)\([^)]*\)|: \w+;", "", text)  # binding/semantic text is not a name
+    while n in RESERVED or n in taken or re.search(rf"\b{re.escape(n)}\b", text):
+        n += "_"
+    taken.add(n)
+    return n
+
+
+def _bind_key(bind: str):
+    m = re.match(r"(cb|t|s|u)(\d+)(?:,space(\d+))?", bind.replace(" ", ""))
+    return (m.group(1), int(m.group(2)), int(m.group(3) or 0)) if m else None
+
+
+def _resource_name(cls, reg, space, is_table, taken, src, have_bindless):
+    if is_table:
+        return "Bindless" if not have_bindless else _ident(f"Bindless_{cls}{reg}_space{space}", src, taken)
+    return _ident((f"s{reg}" if cls == "s" else f"engine_{cls}{reg}") + (f"_space{space}" if space else ""), src, taken)
+
+
+def rename_decompiled(src: str, lf: Lifter, lang: str) -> tuple[str, list[str]]:
+    """Apply the lifter's names to SPIRV-Cross output. Returns (text, notes)."""
+    p, notes, taken = lf.p, [], set()
+    by_bind = {k: b for b in p.bindings if (k := _bind_key(b.get("HLSL Bind", "")))}
+    ren: dict[str, str] = {}
+    bindless = None
+    # 1. Resource variables, keyed by (class, register, space).
+    if lang == "hlsl":
+        res = [(m.group(4), int(m.group(5)), int(m.group(6)), m.group(2), bool(m.group(3))) for m in re.finditer(
+            r"^(\w+(?:<[^>]*>)?) (_\d+)(\[\d*\])? : register\(([tsu])(\d+), space(\d+)\);$", src, re.M)]
+    else:
+        res = []
+        for m in re.finditer(r"^layout\(set = (\d+), binding = (\d+)[^)]*\) uniform (\w+) (_\d+)(\[\d*\])?;$", src, re.M):
+            ty = m.group(3)
+            cls = "s" if ty.startswith("sampler") and "Buffer" not in ty else "u" if ty.startswith(("image", "uimage", "iimage")) else "t"
+            res.append((cls, int(m.group(2)), int(m.group(1)), m.group(4), bool(m.group(5))))
+    for cls, reg, space, tok, arr in res:
+        table = arr and int(by_bind.get((cls, reg, space), {}).get("Count") or 2) > 1
+        ren[tok] = _resource_name(cls, reg, space, table, taken, src, bindless is not None)
+        if table and bindless is None:
+            bindless = tok
+    # 2. Constant buffers. HLSL: `cbuffer _44_46 : register(b4, space0) { float4 _46_m0[19] : packoffset(c0); };`
+    #    GLSL: `layout(set = 0, binding = 4, std140) uniform _44_46 { vec4 _m0[19]; } _46;`
+    if lang == "hlsl":
+        cbs = [(m, int(m.group(2)), int(m.group(3)), rf"\b{re.escape(m.group(4))}", True) for m in re.finditer(
+            r"^cbuffer (_\d+_\d+) : register\(b(\d+), space(\d+)\)\s*\{\s*float4 (_\d+_m0)\[(\d+)\] "
+            r": packoffset\(c0\);\s*\};", src, re.M)]
+    else:
+        cbs = [(m, int(m.group(2)), int(m.group(1)), rf"\b{m.group(6)}\._m0", m.group(5) == "vec4") for m in re.finditer(
+            r"^layout\(set = (\d+), binding = (\d+), (\w+)\) uniform (_\d+_\d+)\n\{\n\s+(\w+) _m0\[\d+\];\n\} (_\d+);",
+            src, re.M)]
+    cb4 = None
+    for m, reg, space, access, vec4 in cbs:
+        rng = next((int(re.sub(r"\D", "", b["ID"])) for k, b in by_bind.items() if k == ("cb", reg, space)), None)
+        struct_ = p.cb_struct.get(rng, "") if rng is not None else ""
+        if reg == 4 and space == 0 and lf.params and cb4 is None and vec4:
+            cb4 = (m, access)
+            continue
+        # dxil-spirv adds a float-granular view (GLSL `float _m0[]`) for dynamically indexed reads;
+        # element i is register i / 4, component i % 4. Those cb4 reads stay unnamed.
+        name = _ident((struct_ or f"cb{reg}") + ("" if vec4 else "_floats"), src, taken)
+        block = _ident(f"cb{reg}_{struct_ or 'block'}" + ("" if vec4 else "_floats"), src, taken)
+        if lang == "hlsl":
+            decl = m.group(0).replace(f"cbuffer {m.group(1)} ", f"cbuffer {block} ")
+        else:
+            decl = re.sub(r"\} _\d+;$", "};", m.group(0).replace(" _m0[", f" {name}["))
+            decl = decl.replace(f" uniform {m.group(4)}\n", f" uniform {block}\n")
+        src = re.sub(access, name, src.replace(m.group(0), decl))
+    if cb4 is not None:
+        src = _rename_cb4(src, cb4[0], cb4[1], lf, bindless, taken, notes, lang)
+    if ren:
+        rx = re.compile(r"\b(" + "|".join(sorted(map(re.escape, ren), key=len, reverse=True)) + r")\b")
+        src = rx.sub(lambda m: ren[m.group(1)], src)
+    src = re.sub(r"\b([A-Za-z]\w*)\[(\d+)u\]", r"\1[\2]", src)  # Struct[12u] -> Struct[12]
+    return src, notes
+
+
+def _rename_cb4(src, m, access, lf: Lifter, bindless_tok, taken, notes, lang):
+    L = LANG[lang]
+    cast = L["cast"]
+    reg_rx = rf"{access}\[(\d+)u\]"
+    regs = sorted({int(r) for r in re.findall(reg_rx, src)})
+    a1 = re.compile(rf"{cast}\({reg_rx}\)\.x")    # asuint(cb[10]).x   (bindless index / raw bits)
+    a2 = re.compile(rf"{cast}\({reg_rx}\.x\)")    # asuint(cb[10].x)
+    bx = re.compile(rf"{reg_rx}\.x(?!\w)")        # cb[12].x            (scalar)
+    anyr = re.compile(reg_rx)
+    count = lambda rx, r: sum(1 for x in rx.finditer(src) if int(x.group(1)) == r)  # noqa: E731
+    decl, names, kinds = [], {}, {}
+    for r in regs:
+        q = lf.params.get(r)
+        base = q["name"] if q else f"cb4_r{r}"
+        n_a = count(a1, r) + count(a2, r)
+        n_b = count(bx, r) - count(a2, r)
+        n_all = count(anyr, r)
+        is_tex = bool(q and EXPECTED_FIELD.get(q["type"]) == "i32")
+        if n_a == n_all:
+            kind, ty, nm = "index", L["uint"], _ident(base + ("_bindlessIndex" if is_tex else "_bits"), src, taken)
+        elif n_a + n_b == n_all and q and not is_tex:
+            kind, ty, nm = "scalar", L["float"], _ident(base, src, taken)
+        else:
+            kind, ty, nm = "vector", L["float4"], _ident(base, src, taken)
+        if not q:
+            notes.append(f"cb4 register {r} is read but no template parameter owns it")
+        names[r], kinds[r] = nm, kind
+        note = f"  // {q['type']} default {fmt_default(q['default'])}" if q else "  // unmapped"
+        decl.append(f"    {ty} {nm} : packoffset(c{r});{note}" if lang == "hlsl"
+                    else f"    layout(offset = {16 * r}) {ty} {nm};{note}")
+
+    def sub_a(x):
+        r = int(x.group(1))
+        return names[r] if kinds[r] == "index" else f"{cast}({names[r]})" if kinds[r] == "scalar" else f"{cast}({names[r]}).x"
+
+    src = a1.sub(sub_a, src)
+    src = a2.sub(sub_a, src)
+    src = bx.sub(lambda x: names[int(x.group(1))] + ("" if kinds[int(x.group(1))] == "scalar" else ".x"), src)
+    src = anyr.sub(lambda x: names[int(x.group(1))], src)
+    if lang == "hlsl":
+        cb_decl = "cbuffer cb4_ShaderSpecificConstants : register(b4, space0)\n{\n" + "\n".join(decl) + "\n};"
+    else:
+        head = re.match(r"layout\([^)]*\)", m.group(0)).group(0)
+        cb_decl = f"{head} uniform cb4_ShaderSpecificConstants\n{{\n" + "\n".join(decl) + "\n};"
+    src = src.replace(m.group(0), cb_decl)  # the declaration has no `[Nu]` access, so it survived the rewrites
+    # Bindless reads -> texture parameter names; a #define keeps HLSL compilable.
+    defines = []
+    if bindless_tok:
+        tex = {names[r]: lf.params[r]["name"] for r in regs if kinds[r] == "index" and names[r].endswith("_bindlessIndex")}
+        temps = {t: v for t, v in re.findall(r"\buint (_\d+) = (\w+_bindlessIndex)(?: \+ 0u)?;", src) if v in tex}
+
+        def sub_t(x):
+            idx = temps.get(x.group(1), x.group(1))
+            if idx not in tex:
+                return x.group(0)
+            if tex[idx] not in [d[0] for d in defines]:
+                defines.append((_ident(tex[idx], src, taken), idx))
+            return next(d[0] for d in defines if d[1] == idx)
+        B = rf"\b{re.escape(bindless_tok)}"
+        src = re.sub(rf"{B}\[(?:NonUniformResourceIndex\(|nonuniformEXT\()?(\w+)(?: \+ 0u)?\)?\]", sub_t, src)
+        left = len(re.findall(rf"{B}\[", src)) - 1  # minus the declaration
+        if left > 0:
+            notes.append(f"{left} bindless access(es) not traced to a cb4 texture parameter (e.g. multilayer layers)")
+    if defines:  # after the last resource declaration
+        dtext = "\n".join(f"#define {nm} Bindless[{idx}]" for nm, idx in defines)
+        last = [x.end() for x in re.finditer(r"^.*\b(register\(|uniform ).*;$", src, re.M)]
+        at = last[-1] if last else 0
+        src = src[:at] + "\n\n" + dtext + src[at:]
+    return src
+
+
+def _short_floats(text: str) -> str:
+    """SPIRV-Cross prints exact decimal expansions (0.3333333432674407958984375f); use the shortest
+    literal that round-trips to the same float32."""
+    def sub(m):
+        try:
+            v = float(m.group(1))
+        except ValueError:
+            return m.group(0)
+        f32 = struct.unpack("<f", struct.pack("<f", v))[0] if abs(v) < 3.4e38 else v
+        for p in range(1, 10):
+            s = f"{f32:.{p}g}"
+            if struct.pack("<f", float(s)) == struct.pack("<f", f32):
+                break
+        if "e" not in s and "." not in s:
+            s += ".0"
+        return s + (m.group(2) or "")
+    return re.sub(r"(?<![\w.])(\d+\.\d{9,}(?:e[+-]?\d+)?)(f)?(?![\w.])", sub, text)
+
+
+def decompile(guid: str, lf: Lifter) -> tuple[str | None, str, str]:
+    """dxil-spirv + SPIRV-Cross on <guid>.dxbc. Returns (named source or None, language, status)."""
+    dxs = find_tool("DXIL_SPIRV_EXE", "dxil-spirv", "dxil-spirv.exe")
+    spc = find_tool("SPIRV_CROSS_EXE", "spirv-cross", "spirv-cross.exe")
+    DEC.mkdir(parents=True, exist_ok=True)
+    spv = DEC / f"{guid}.spv"
+    r = sc.subprocess.run([str(dxs), str(sc.RAW / f"{guid}.dxbc"), "--output", str(spv)], capture_output=True, text=True)
+    if r.returncode or not spv.exists():
+        return None, "", f"dxil-spirv failed (rc {r.returncode}): {(r.stderr or r.stdout).strip()[:300]}"
+    # Interface variables: dxil-spirv uses the signature register as Location. Name each after its
+    # signature element (vertex-program outputs get `out_`), except packed rows sharing a register.
+    sems, renames = {}, []
+    for rows, kind in ((lf.p.inputs, "in"), (lf.p.outputs, "out")):
+        regs = defaultdict(list)
+        for row in rows:
+            if row.get("Register", "").isdigit() and row.get("SysValue") in ("NONE", "TARGET"):
+                regs[int(row["Register"])].append(f"{row['Name']}{row.get('Index', '')}")
+        sems[kind] = {reg: names[0] for reg, names in regs.items() if len(names) == 1}
+        for reg, sem in sems[kind].items():
+            renames += ["--rename-interface-variable", kind, str(reg),
+                        f"out_{sem}" if kind == "out" and lf.stage != "pixel" else sem]
+    errors = []
+    for lang, flags in (("hlsl", ["--hlsl", "--shader-model", "60"]), ("glsl", ["--version", "460", "--vulkan-semantics"])):
+        raw = DEC / f"{guid}.spirv-cross.{lang}"
+        r = sc.subprocess.run([str(spc), str(spv), *flags, *renames, "--output", str(raw)], capture_output=True, text=True)
+        if r.returncode == 0 and raw.exists():
+            break
+        errors.append(f"{lang}: {(r.stderr or r.stdout).strip().splitlines()[-1][:200] if (r.stderr or r.stdout).strip() else r.returncode}")
+    else:
+        return None, "", "spirv-cross failed: " + "; ".join(errors)
+    text, notes = rename_decompiled(_short_floats(raw.read_text()), lf, lang)
+    if lang == "hlsl":  # SPIRV-Cross numbers user varyings TEXCOORD<location>; restore the DXIL semantics
+        for struct_, kind in (("SPIRV_Cross_Input", "in"), ("SPIRV_Cross_Output", "out")):
+            m = re.search(rf"^struct {struct_}\n\{{\n(.*?)\n\}};", text, re.S | re.M)
+            if m:
+                body = re.sub(r" : TEXCOORD(\d+);$", lambda x: f" : {sems[kind].get(int(x.group(1)), 'TEXCOORD' + x.group(1))};",
+                              m.group(1), flags=re.M)
+                text = text[:m.start(1)] + body + text[m.end(1):]
+    status = f"dxil-spirv {dxs.parent.name} -> SPIRV-Cross {spc.parent.name} {lang.upper()}"
+    if errors:
+        status += f" (HLSL refused: {errors[0][6:]})"
+    return text, lang, status + ("; " + "; ".join(notes) if notes else "")
+
+
+def dxc_check(path: Path, model: str) -> str:
+    r = sc.subprocess.run([str(sc.DXC), "-T", model, "-E", "main", "-HV", "2021", "-Fo", sc.os.devnull, str(path)],
+                          capture_output=True, text=True)
+    return "compiles with dxc" if r.returncode == 0 else "dxc: " + " ".join(r.stderr.split())[:200]
+
+
 # --------------------------------------------------------------------------- commands
 
 def disassembly(guid: str) -> tuple[Program, str]:
@@ -981,17 +1235,32 @@ def pass_for(tpl, info):
     return next((p for p in tpl["passes"] if p["stage"] == m.group(1)), None)
 
 
-def annotate_one(tpl, ps_guid, vs_guid, info, write=True):
+def annotate_one(tpl, ps_guid, vs_guid, info, write=True, decomp=False):
     prog, sha = disassembly(ps_guid)
     vs = disassembly(vs_guid)[0] if vs_guid else None
     stage = "pixel" if prog.model.startswith("ps") else "vertex" if prog.model.startswith("vs") else prog.model
     lf = Lifter(prog, tpl, stage, vs)
     body = lf.lift()
-    text = header(lf, ps_guid, vs_guid, sha, info, pass_for(tpl, info), vs) + "\n\nvoid main()\n{\n" + body + "\n}\n"
+    head = header(lf, ps_guid, vs_guid, sha, info, pass_for(tpl, info), vs)
+    text = head + "\n\nvoid main()\n{\n" + body + "\n}\n"
     if write:
         ANN.mkdir(parents=True, exist_ok=True)
         (ANN / f"{ps_guid}.hlsl").write_text(text)
         (ANN / f"{ps_guid}.annotated.ll").write_text(annotate_ll(lf))
+    lf.decompiled = None
+    if decomp:
+        dec, lang, status = decompile(ps_guid, lf)
+        if dec is None:
+            lf.decompiled = status
+        else:
+            out = ANN / f"{ps_guid}.decompiled.{lang}"
+            banner = (f"// Structured {lang.upper()} decompiled from the same DXIL ({status}).\n"
+                      "// Renamed: cb4 registers -> template parameters (cb4 redeclared per register), bindless reads\n"
+                      "// -> #define'd texture names, engine buffers -> DXIL struct names, interface variables ->\n"
+                      "// signature elements. _N are SPIRV-Cross ids, NOT the .ll SSA numbers. Header is the lifter's.\n")
+            out.write_text(banner + head.split("\n", 1)[1] + "\n\n" + dec)  # drop the lifter's own title line
+            check = dxc_check(out, prog.model) if lang == "hlsl" else "GLSL fallback, not compile-checked"
+            lf.decompiled = f"{out}  ({check})"
     return text, lf
 
 
@@ -1023,13 +1292,17 @@ def cmd_annotate(args):
         if not ps or ps in done:
             continue
         done.add(ps)
-        text, lf = annotate_one(tpl, ps, vs, c["info"] if c else None)
+        text, lf = annotate_one(tpl, ps, vs, c["info"] if c else None, decomp=args.decompile)
+        vlf = None
         if vs and vs not in done:
             done.add(vs)
-            annotate_one(tpl, vs, None, c["info"] if c else None)
+            vlf = annotate_one(tpl, vs, None, c["info"] if c else None, decomp=args.decompile)[1]
         used = sum(1 for r in lf.params if lf.used_params.get(r))
         print(f"{ps}  {c['info'] if c else ''}\n    -> {ANN / (ps + '.hlsl')}  params used {used}/{len(lf.params)}"
               f"  unmapped cb4 {sorted(r for r in lf.used_params if r not in lf.params)}")
+        for x in (lf, vlf):
+            if x is not None and x.decompiled:
+                print(f"    -> {x.decompiled}")
     if not done:
         print("no pixel programs matched")
 
@@ -1064,6 +1337,8 @@ def main():
     p.add_argument("template")
     p.add_argument("--info")
     p.add_argument("--guid", nargs="+")
+    p.add_argument("--decompile", action="store_true",
+                   help="also write <GUID>.decompiled.hlsl (or .glsl) via dxil-spirv + SPIRV-Cross, same names")
     p.set_defaults(fn=cmd_annotate)
     p = sub.add_parser("search")
     p.add_argument("template")

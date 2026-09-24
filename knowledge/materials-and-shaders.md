@@ -28,6 +28,7 @@ Hair is covered only at overview level here. See [hair shading](hair-shading.md)
 | RED4ext.SDK | `ad727771` |
 | ArchiveXL | `5474e34d` |
 | Cyberpunk Blender add-on | 2.1.0 at `7a4ee793` |
+| dxil-spirv / SPIRV-Cross (optional decompile) | `f2d1b554` / `aa217aeb` |
 
 Compiled-program hashes and the reproducible method are in the [shader-system evidence note](../research/materials/shader-system/README.md).
 
@@ -248,7 +249,7 @@ All [source]/[resource] ([mesh-decal contract](../research/materials/mesh-decal-
 
 - `shader_cache.py` (index / find / static / extract / summary);
 - `template_summary.py` (parameters, registers, passes and blend states for all 373 templates);
-- `shader_annotate.py` (annotate / search).
+- `shader_annotate.py` (annotate, optionally `--decompile` / search).
 
 Recipe:
 
@@ -261,8 +262,13 @@ Recipe:
    - G-buffer and blend roles for each target.
 
    `shader_annotate.py search` finds the programs that contain a code pattern. `extract` and `summary` remain for raw work.
-4. **Check the listing against the disassembly** (`<GUID>.annotated.ll`) before relying on it. The lifter folds expressions and keeps loops as `goto`, and it is a reading aid, not compilable source. No DXIL decompiler is installed; dxil-spirv + SPIRV-Cross would be the upgrade path ([annotation results](../research/materials/shader-system/annotation-results.md#decompiler-availability)).
-5. **Write it down.** Record the program GUID, the SHA-256 and SSA ranges. SSA numbers are only valid within that one program.
+4. **Read structured source if needed.** `--decompile` adds `<GUID>.decompiled.hlsl`: dxil-spirv (DXIL to SPIR-V) and SPIRV-Cross (to HLSL), both built from source, with the same names applied.
+   - It gives real loops, typed values and a named per-register `cb4`. HLSL output compiles with `dxc` for 244 of 253 templates.
+   - It is HLSL for about three quarters of templates; forward programs with wave ops or float-granular cbuffer views fall back to GLSL.
+   - Renaming was checked not to change the compiled program. The decompilers themselves are a second reading, not proof.
+   - Its `_N` are not SSA numbers ([annotation results](../research/materials/shader-system/annotation-results.md#two-listings-lifted-and-decompiled)).
+5. **Check against the disassembly** (`<GUID>.annotated.ll`) before relying on either listing. The lifted pseudo-HLSL folds expressions and keeps loops as `goto`; it is a reading aid, not compilable source.
+6. **Write it down.** Record the program GUID, the SHA-256 and SSA ranges. SSA numbers are only valid within that one program.
 
 Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cache.ts`, `extract-brow-shader.ts`, `inspect-eye-skin-cache.ts`, `experiments/014-native-eye-gradient/inspect-cache.ts`) cover the same v10 format for single studies.
 
