@@ -6,6 +6,8 @@ New features follow the [XF Studio architecture contract](../../research/authori
 
 The [Studio-to-mod pipeline guide](../../research/authoring/studio-to-mod-pipeline.md) diagrams how editable collections become private, offline-verified Cyberpunk mod candidates and where runtime proof is still missing.
 
+Generated archive resources now pass an exact plan/path/hash inventory gate before packing and again during independent verification. This protects the private package candidate when the final files are later transported through an approved install route; it does not claim game runtime proof.
+
 A [read-only study of Nathan's separate CharacterCreator](../../research/eye-artistry/charactercreator-rendering-reference.md) records useful lighting and material isolation methods, its rejected skin-response trial, and a bounded lip-seam adapter test. Its shader values and assets were not imported into XF Studio.
 
 Viewport FOV changes now preserve scale at the viewed face area when camera bounds permit. Narrow 10° Front view fits a 324px editor pane; panned eye close zoom still reaches the original 0.1-unit limit. [Camera evidence and limits](../../research/authoring/camera-zoom-design.md#implementation-checkpoint--24-september-2026).

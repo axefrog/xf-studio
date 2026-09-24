@@ -10,6 +10,7 @@ import subprocess
 import numpy as np
 from PIL import Image
 from mip_maps import destination_contributions, mip_levels, read_dds_levels
+from archive_inventory import inventory
 
 HERE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser()
@@ -25,6 +26,7 @@ if not (out/'build.json').is_file(): parser.error(f'Build manifest is missing: {
 if not (out/'export-dds').is_dir():
     raise RuntimeError('The selected build predates supplied mip chains; rerun build.py before verify.py')
 build=load(out/'build.json');plan=build['plan'];rt=out/'roundtrip';archive=out/'archive'
+assert inventory(archive,plan)==build['artifacts'], 'Generated resource inventory changed after pack'
 def root(name): return load(rt/name)['Data']['RootChunk']
 def value(x): return x['$value']
 def dep(x): return value(x['DepotPath']).replace('\\','/')
@@ -177,6 +179,7 @@ p=subprocess.run([str(WK),'unbundle',str(packed),'-o',str(unpacked)],capture_out
 assert p.returncode==0 and 'Error' not in p.stdout,p.stdout[-2000:]
 files=list(unpacked.rglob('*'));files=[x for x in files if x.is_file()]
 assert len(files)==len(build['artifacts']),(len(files),len(build['artifacts']))
+assert {x.relative_to(unpacked).as_posix() for x in files}=={a['path'] for a in build['artifacts']}
 for artifact in build['artifacts']:
     result=unpacked/artifact['path']
     assert result.is_file(),str(result)

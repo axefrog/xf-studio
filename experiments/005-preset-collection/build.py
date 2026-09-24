@@ -15,6 +15,7 @@ import sys
 import time
 from PIL import Image
 from mip_maps import dds_bytes, mip_levels
+from archive_inventory import inventory
 
 HERE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser()
@@ -134,13 +135,14 @@ run('export-textures',[WK,'export',texturedir,'-o',OUT/'export','--uext','png','
 run('export-texture-mips',[WK,'export',texturedir,'-o',OUT/'export-dds','--uext','dds','--gamepath',GAME])
 
 package=OUT/'package/archive/pc/mod';filename=plan['namespace']
+artifacts=inventory(archive,plan)
 run('pack',[WK,'pack',archive,'-o',package])
 (package/'archive.archive').rename(package/(filename+'.archive'))
 xl='customizations:\n  female: '+plan['customization'].replace('/','\\')+'\nresource:\n  scope:\n    player_customization.app:\n      - '+plan['app'].replace('/','\\')+'\n'
 (package/(filename+'.archive.xl')).write_text(xl,encoding='utf-8')
 write(OUT/'build.json',{'plan':plan,'compiled':compiled,'steps':steps,
     'plateInputs':[{'path':str(p),'sha256':sha(p)} for p in plate.glob('xfas_eye_plate.*')],
-    'artifacts':[{'path':str(p.relative_to(archive)).replace('\\','/'),'bytes':p.stat().st_size,'sha256':sha(p)} for p in archive.rglob('*') if p.is_file()],
+    'artifacts':artifacts,
     'archiveSha256':sha(package/(filename+'.archive')),'installed':False,'gameRenderingVerified':False})
 print('BUILD',OUT,flush=True)
 # Written only after all expected operations succeeded; validator is a separate step.

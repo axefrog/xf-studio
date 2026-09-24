@@ -1,5 +1,7 @@
 # Local collection-to-package boundary
 
+The archive builder now checks generated resources immediately before packing: the physical tree must equal the collection plan's mesh, morph, app, customization and three texture paths per retained preset. Every depot path must already be canonical and have an allowed extension; symlinks, unexpected/missing files and path-hash collisions fail the build. The independent verifier rechecks the tree against the recorded canonical path, 64-bit depot hash and SHA-256 inventory, then requires the exact same unpacked archive member set. This is independent of how a future approved installer transports the verified package.
+
 For a detailed diagram and plain-language walkthrough of this path, see [From XF Studio collection to a Cyberpunk mod candidate](studio-to-mod-pipeline.md).
 
 The Studio's **Export collection** action downloads an editable `xfas/collection-1` snapshot with stable collection/preset UUIDs. Experiment 005 already compiles this format into one ArchiveXL character-creator selector, using the project-owned eye plate and the flat `mesh_decal.mt` adapter. The authoring [package CLI](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py) is a separate, local build action around that compiler. Direct CLI use does not save a collection revision, install a mod, or launch the game.
