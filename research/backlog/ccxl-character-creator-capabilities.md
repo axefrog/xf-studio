@@ -1,6 +1,13 @@
-# Queued research: CCXL and the character creator's unexplored capabilities
+# CCXL and the character creator's unexplored capabilities
 
-Requested by Nathan, 2026-09-23. Status: **source and resource boundary mapped; runtime and UI capability probes remain queued**. The first pass found what ArchiveXL actually merges and inspected the wiki's linked diagrams. Preserve findings/prototypes in this headquarters. Coordinate it with XF Studio rather than postponing the eye-makeup pipeline.
+## Status (25 Sep 2026)
+
+Queued explicit request from Nathan (23 September), **track 8** in the [ranked queue](README.md). Keep it; pull findings forward when they unblock [CC controls and presets](cc-controls-and-presets.md) (track 3) or the [CC file-chain study](cc-file-chain.md) (track 5).
+
+- **Done:** source and resource merge boundary mapped for ArchiveXL 1.27.3 ([merge boundary](../character-customization/ccxl-merge-boundary.md), [wiki file-chain map](../character-customization/file-chain-map.md)); read-only [catalogue probe](../character-customization/catalog-prototype.md) normalises vanilla plus one mod-added customisation resource.
+- **Open:** creator implementation trace (step 2), extension-hook audit (3), production-consumer study (4), capability matrix (5), prototypes (6), published conclusions (7). One-selector A/B/Off save and display behaviour needs the batched game probe (the first smoke test covers selector registration, clearing and persistence).
+
+Preserve findings/prototypes in this headquarters; coordinate with XF Studio rather than postponing the eye-makeup pipeline.
 
 ## Objective
 
@@ -17,7 +24,7 @@ The current 1.27.3 source merges sex-specific `.inkcharcustomization` declaratio
 3. **Audit extension hooks.** ArchiveXL Customization/ResourceMeta/ResourceLink/Mesh/Garment, Codeware reflection/UI/resource/event facilities, redscript wrapping/replacement, CET observations and RED4ext hooks. Establish where native fields exist but are not script-accessible, where widgets can be injected, and where options are hard-coded or cached.
 4. **Study production consumers.** Hair/eye colours, heterochromia, makeup/tattoos, body/skin switches, morph controls and any custom creator UI in the MO2 inventory. Compare mature mods with small examples; record exactly what has already been demonstrated.
 5. **Build a capability matrix.** Each candidate gets a user benefit, required layer, confirmed APIs/fields, strongest evidence, likely compatibility/persistence risks, smallest offline experiment and a single-session runtime validation recipe.
-6. **Prototype the most useful discoveries.** Current XF Appearance Studio priority is ONE selector switching complete authored presets: atomically select all components/materials, handle Off, and preserve stable save identities across collection updates. Independent design/colour/finish selectors are no longer its product target. Broader research into linked/conditional controls, grouping/paging, extra morphs and richer previews remains useful, but later feature implementations require discussion with Nathan first.
+6. **Prototype the most useful discoveries.** The current XF Studio priority is ONE selector switching complete authored presets: atomically select all components/materials, handle Off, and preserve stable save identities across collection updates. Independent design/colour/finish selectors are no longer its product target. Broader research into linked/conditional controls, grouping/paging, extra morphs and richer previews remains useful, but later feature implementations require discussion with Nathan first.
 7. **Publish durable conclusions.** A navigable architecture map, evidence-backed capability matrix, reproducible probes and an explicitly ranked implementation backlog. Record negative findings too, including UI/save limits and conflicts with popular frameworks.
 
 ## Concrete questions

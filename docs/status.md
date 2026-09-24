@@ -16,7 +16,7 @@ XF Studio's eye-makeup editor works as a local prototype and can build verified 
 | **Library** | Local SQLite (`bun:sqlite`) with immutable collection and preset versions, and portable recipe and collection files. |
 | **Packaging** | Check reports unsupported details. Build produces an independently verified private candidate for **Matte, Satin and Metallic** and omits other finishes with reporting. See the [pipeline guide](../research/authoring/studio-to-mod-pipeline.md). |
 | **Desktop** | Electrobun trial: first-run setup, UV-only mode without assets, asset intake, Check/Build and workspace persistence across restarts are accepted in installed canaries. Unsigned, with the updater disabled and no public release. See the [desktop README](../projects/xf-studio/authoring/desktop/README.md). |
-| **Site** | Public GitHub Pages site and style guide, built and checked in CI. |
+| **Site** | Public GitHub Pages site and style guide, **live** at https://axefrog.github.io/xf-studio/ and deployed from `main` by CI. It says there is no release or download yet. |
 | **Checks** | 448 Studio and desktop tests, both typechecks, site tests and site build/check all pass (25 September). |
 
 ## Proven only offline or not at all
@@ -39,7 +39,8 @@ Product and R&D run in parallel, like a commercial team beside a research lab:
 
 - **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (later: save write-back and shareable CC presets); remaining finish adapters.
 - **R&D lab:** the game's material and shader system, and the character-customisation file chain (mining Nathan's legacy xf-omega code and the Modding Docs screenshots). Findings are distilled into the agent-facing [knowledge base](../knowledge/README.md).
-- **Paused pending in-game evidence:** plate clearance, native eye assembly, and the desktop release and updater.
+- **Desktop app and public site (standing request):** the Pages site is live at https://axefrog.github.io/xf-studio/. The desktop app needs signing, a release channel, a signed updater and a clean-machine first run before it can be published.
+- **Paused pending in-game evidence:** plate clearance and native eye assembly.
 
 See the [ranked backlog](../research/backlog/README.md) for owners and details, and [AGENTS.md](../AGENTS.md) for the standing rules.
 

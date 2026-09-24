@@ -32,7 +32,7 @@ R&D is a permanent, first-class mandate, run like a research lab beside the prod
 - **Worktrees for code-changing subagents.** Create a separate worktree at `D:/Dev/worktrees/<slug>` on a `claude/<slug>` branch and give the agent that absolute path and a bounded ownership scope. It edits, tests and commits there, never in the shared checkout. Read-only research agents may use the primary checkout.
 - **Integrate centrally.** The coordinator reviews and merges or cherry-picks verified results into `main`, then updates shared status and provenance.
 - **Clean up after integration.** Check for uncommitted work, then move any ignored private outputs (e.g. `experiments/*/generated/`) into the main checkout's canonical ignored locations. Old worktrees may contain directory junctions into the main checkout (e.g. `node_modules`, `.hutch`, private assets). Unlink each junction non-recursively (`cmd /c rmdir <link>`) before deleting a worktree, or the deletion empties the main checkout's target. Only then remove the worktree and branch. Never leave unique evidence only inside a worktree. Never remove an active worktree or force its branch.
-- **Commits and pushes** to the private `axefrog/xf-studio` repository are authorised as coherent verified checkpoints. Never force-push over remote work.
+- **Commits and pushes** to the **public** `axefrog/xf-studio` repository are authorised as coherent verified checkpoints. Never force-push over remote work. Because the repository and its Pages site are public, never commit personal paths (user folders, save locations, Downloads/Temp paths), credentials or private identifiers; use placeholders such as `PATH_TO_GAME`.
 
 ## Architecture contract
 
@@ -67,7 +67,7 @@ The Studio architecture is a maintained contract, not a one-time cleanup. Follow
 - **Palette size.** The palette must exceed the legacy 49 colours and be configurable. The old matrix made WolvenKit unusably slow; benchmark UI, atlas and cache costs, not only generator speed.
 - **Naming.** The product is **XF Studio** at `projects/xf-studio`. Every newly generated archive appearance name (app and mesh) starts with lowercase `xfs_`, e.g. `xfs_eye_layer1__xfs_e01+000+matte`. Keep existing browser keys, serialized schema IDs, historical inputs and evidence, original external resource names and saved legacy identifiers unchanged; no bulk renames. See the [naming contract](projects/xf-studio/data/naming.md).
 - **Character context.** All character details should eventually render in the viewport, and CC values should be editable so users can check work on characters other than their own. Later, CC values can save back to a save file and be shared as reusable presets.
-- **Desktop packaging.** The Electrobun trial is functional. Keep localhost development and portable recipe import/export working alongside it.
+- **Desktop app and site.** Nathan's standing request is a finished desktop app build (Electrobun Windows trial is functional) and a preliminary public GitHub Pages site for it (live, deployed from `main` by CI). Keep localhost development and portable recipe import/export working alongside the desktop host.
 
 ## Evidence and honesty
 

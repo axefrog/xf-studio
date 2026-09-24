@@ -1,42 +1,42 @@
 # XF Studio authoring requests
 
-Scope expanded by Nathan on 2026-09-23: this is now XF Studio, with other appearance details and potentially full-body editing later. Continue the first makeup milestone while designing reusable surface, asset-resolution and material tools. All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-studio/data/naming.md).
+Nathan's persistent authoring requests (from 23 September 2026). Read this across context changes; conversation history is not the only record. Ranking lives in the [queue](README.md). All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-studio/data/naming.md).
 
-Persistent user requests, 23 September 2026. Read this across context changes; conversation history is not the only record.
+## Status (25 Sep 2026)
 
-**Execution order, 23 September:** complete the makeup tasks, then investigate eyebrow shape and correct brow/lash colours (including the newly reported missing brow-area idle motion), then add optional hair-mesh rendering. Other queue items follow. These are preview improvements; later feature authoring still requires discussion.
+**Product decision:** users author [complete presets, keep them in a local SQLite library and export a collection for ONE eye-makeup selector](../../projects/xf-studio/data/product-direction.md). Collection editing, portable export and an offline-verified Check/Build for Matte/Satin/Metallic work; the first in-game test is prepared but not run.
 
-**Latest product decision:** [complete authored presets, SQLite library, one eye-makeup selector](../../projects/xf-studio/data/product-direction.md). Collection editing and portable source export work; a [separate local CLI](../authoring/local-package-build.md) now verifies flat-finish collection packages before placing them in ignored `dist`. Mixed optical finishes, runtime selector/save proof and a release-safe plate remain open. Later features are ordered: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, full-body tattoos. Discuss each with Nathan before building it. Desktop Electron/Electrobun assessment is [recorded](../authoring/desktop-packaging.md); no wrapper chosen yet.
+| Request | State |
+|---|---|
+| Editable layer and preset collections (add/remove/copy/rename/reorder, no preset dropdown, per-preset drafts and Undo, SQLite collection snapshots, stable IDs) | **Done** (`xfs/recipe-2` onwards, 0–32 layer preview budget; recipe-1 imports still supported) |
+| Edit makeup live on the model surface (points, guides, field handles on either mirrored side, following skinning/morphs/blink; one Undo per gesture; Escape) | **Done** (first slice). Open: surface-distance falloff, optional layer isolation, arbitrary overlapping UVs, surface reach controls — see [surface-editing requirements](#surface-editing-requirements) |
+| Richer procedural tools (Bézier/corners, multiple warp fields, continuous strength, directional softness, whole-shape transforms, UV navigation, preview resolution) | **Done** — see [path and falloff](path-and-falloff-controls.md). Open: multiple contours/holes per layer, asset library; prioritise from authoring sessions |
+| Default character-creator idle with on/off toggle | **Done** (female UI close-up body + solved facial clip, 387 bones; pause and head/facial subsets). Open: exact live animation-graph selection/synchronisation, wrinkle shading, scale-driven effects. [Guide](../../docs/idle-animation-guide.md) |
+| Modded eyes, FOV, all-state persistence, imported-V reload fix | Persistence/FOV/reload **done**; saved-eye diffuse **done**; eye/lip material fidelity **open** — see [preview fidelity](preview-fidelity.md) |
+| Optional head details (brows, lashes, hair, piercings) to judge makeup against | Rendered with independent toggles, morphs and blink; **colours open** (track 2) — see [preview fidelity](preview-fidelity.md) |
+| Preview current V from a save | Whole appearance node read; five facial morphs applied; eyes, brows, lashes, hair, piercings resolved for the captured save. **Open:** assemble all referenced resources with an explicit missing-assets report; save import stays read-only/local. See [CC controls](cc-controls-and-presets.md). |
+| Configurable game/mod asset sources | **In progress.** Read-only [catalogue probe](../character-customization/catalog-prototype.md) and [source discovery](../authoring/source-discovery-foundation.md) separate MO2 and direct routes. Open: physical/payload winner resolution, Vortex/REDmod, ArchiveXL transformations. A source-derived candidate is not a measured runtime winner. |
+| Convincing materials and blinking | **Open.** Material adaptation and synthesised blink remain exploratory; extract/calibrate authoritative parameters and motion (track 4). |
+| Familiar makeup finish families incl. convincing glitter | **Open** — see [finishes and glitter](glitter-material.md) |
+| Facial expressions and custom idle animations | **Later; discuss before building** (static/animated photo-mode expressions, varied idles) |
+| Browser character rendering for other mods/users | **Later.** Tested project-local pieces consuming users' own game/mod assets and portable manifests; no reference dumps, no new all-in-one toolbox. |
+| Desktop packaging | Electrobun trial functional; release/updater paused ([desktop packaging](../authoring/desktop-packaging.md)) |
+| Resizable sidebars with persisted widths | **Obsolete** — replaced by the dock UI (`95516b2`) |
 
-| Priority | Requested outcome | Current state / acceptance criterion |
-|---|---|---|
-| FOV/persistence/reload fix implemented; eye/material work open | Modded eyes, adjustable FOV, all-state persistence, SSS/material fidelity, imported-V reload bug | [Detailed requirements, checkpoint and screenshot references](preview-fidelity.md). Imported V and preview controls now survive reload. Still resolve modded eye winners and diagnose eye/lip highlights rather than treating SSS as a universal fix. |
-| Playback slice implemented; fidelity follow-up remains | Actual default character-creator idle animation, with on/off toggle | Female UI close-up body + IO Suite-solved facial clip now play together, including mouth, eyelids and separately rigged gaze. 387 preview bones mapped; on/off restores editing pose and leaves recipe intact. [Guide](../../docs/idle-animation-guide.md). Exact default animation-graph selection/synchronization, wrinkle shading and scale-driven effects remain to verify. Return primary focus to the preset compiler. |
-| Later; discuss before editor work | Facial expressions and custom idle animations | Static/animated photo-mode expressions plus new varied idle animations; added before the full-body tattoo milestone. Early idle playback is authorized now, full authoring tools remain a later discussion. |
-| Fidelity follow-up open | Optional head details, especially brows, to judge makeup against | Saved Arkhe brows 18 and Soft Natural lashes render with independent toggles, morphs and exploratory blink. The brow now uses source primary/secondary alpha and gradient; the lash tint remains approximate. [Shape](../eye-artistry/brow-shape-followup.md) and [mip](../eye-artistry/brow-lash-mip-gate.md) audits found no basis to thin geometry from the unmatched comparison. Matched in-game camera/light/effective bindings remain the next fidelity gate. Saved hair and piercing preview context are implemented with documented limits. |
-| First slice implemented | **Edit makeup live on the model surface** | Face curve points, pre-warp guides and field origin/direction handles now drag live on either mirrored side, following skinning/morphs/blink. One Undo per gesture, Escape cancellation, head/eye occlusion and UV gap guards implemented. Browser checks passed. Surface reach controls, layer isolation, arbitrary overlapping UVs and surface-distance falloff remain. |
-| Next | Preview current V from a save | Whole appearance node read; five facial morphs applied. Assemble referenced mod/game resources with an explicit missing-assets report. Save import stays read-only/local. |
-| In progress | Configurable game/mod asset sources | The read-only [catalog probe](../character-customization/catalog-prototype.md) separates MO2 and direct-game routes and can query selected archive hashes with conservative source-derived precedence. Nathan's saved Kala eye maps have one indexed provider in the selected MO2 view. Full physical/payload winner resolution, Vortex/REDmod and ArchiveXL transformations remain open; a source-derived candidate is not a measured runtime winner. |
-| Next | Convincing materials and blinking | Real geometry/maps/full skin weights work. Material adaptation and synthesized blink remain exploratory; extract/calibrate authoritative parameters and motion. |
-| Required | Familiar makeup finish families, including convincing glitter | [Seven-family taxonomy](../materials/makeup-finish-taxonomy.md): matte, satin, shimmer/pearl, metallic/foil, glitter, glossy/wet look, colour-shifting. Preview candidates exist; exact optical/game mapping and selectable duochrome/multichrome pigments remain research. [Material investigation](glitter-material.md) tracks this. |
-| Later | Richer procedural tools | Multiple contours/holes and fields, weights/falloffs, tangent controls, symmetry, undo/redo, UV navigation, resolution/performance controls and an asset library. Prioritize from authoring sessions. |
-| Not urgent; explicit request | Editable layer and preset collections | Add/remove makeup layers and drag to reorder. Above the layers, an accordion list of presets with add/remove, rename and reorder; NO preset dropdown. Editable layers are now implemented (0–32 preview budget), with stable IDs, add/copy/rename/remove, pointer reordering, up/down controls, empty stacks and Undo. Recipe-1 imports remain supported. Preset accordions, CRUD/order and SQLite collection snapshots are now implemented, with independent per-preset drafts/Undo and recoverable removal. Preserve stable IDs, selection, undo/recovery and explicit order through saving and export. |
-| Later | Browser character rendering for other mods/users | Develop tested project-local pieces. Consume users' own game/mod assets and portable manifests; do not distribute reference dumps or build another all-in-one modding toolbox. |
+Later features, in order, each requiring discussion with Nathan before building: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, tattoos (full body), then full body customisation and world integration.
 
 ## Surface-editing requirements
 
-- Map UV anchors to barycentric positions on the current deformed plate, using the same full skin weights/morphs as rendering. Handles must follow blinking and eye-shape changes.
-- Drag raycasts against the visible front surface; handle missed rays, occlusion, UV seams, symmetry and eyelid openings. Separate camera gestures from editing. No jumping onto the back of the mesh or across seams.
-- Keep controls and field parameters non-destructive. Distinguish pre-warp handles from the resulting contour. Eventually evaluate spatial falloff using surface distance, not only UV distance.
-- Provide readable selection/hover states and optional layer isolation. Desktop mouse/pen first.
-- Verify poses, morph changes, undo, export agreement and off-surface dragging offline. Batch remaining game-fidelity comparisons.
+- Map UV anchors to barycentric positions on the current deformed plate using the same full skin weights/morphs as rendering; handles follow blinking and eye-shape changes. *(Done.)*
+- Drag raycasts against the visible front surface; handle missed rays, occlusion, UV seams, symmetry and eyelid openings. Separate camera gestures from editing. No jumping onto the back of the mesh or across seams. *(Done; keep the guards.)*
+- Keep controls and field parameters non-destructive. Distinguish pre-warp handles from the resulting contour. **Open:** eventually evaluate spatial falloff using surface distance, not only UV distance.
+- Readable selection/hover states *(done)* and **optional layer isolation (open)**. Desktop mouse/pen first.
+- Verify poses, morph changes, Undo, export agreement and off-surface dragging offline; batch remaining game-fidelity comparisons.
+
+## Content and references
 
 Nathan explicitly permits replacing every old Eye Artistry design, name, preset identity and ID. The layered concept matters; the tools should enable a fresh collection. Saved legacy choices are references, not compatibility requirements.
 
-Nathan supplied two current in-game V reference images; paths/hashes and appearance observations are saved in [save-import research](../eye-artistry/save-import.md#user-provided-visual-references). Use them for fidelity comparisons without treating photographed colours or apparent shape as exact resource parameters.
+Nathan supplied two in-game V reference images; paths/hashes and observations are in [save-import research](../eye-artistry/save-import.md#user-provided-visual-references). Use them for fidelity comparisons without treating photographed colours or apparent shape as exact resource parameters.
 
-Related: [XF Appearance Studio](../../projects/xf-studio/authoring/README.md), [saved V](../eye-artistry/save-import.md), [CCXL research](ccxl-character-creator-capabilities.md).
-
-Sidebar request implemented: both sidebars resize by pointer/keyboard and retain preferred widths across reload. Responsive limits keep preview space; narrow layouts retain both panels. Scrollbars are themed.
-
-Latest detailed feedback: [seven path/falloff/surface-control requests](path-and-falloff-controls.md). Point weight currently controls nearest-edge strength, not directional softness; its seams require correction.
+Related: [XF Studio authoring README](../../projects/xf-studio/authoring/README.md), [saved V](../eye-artistry/save-import.md), [CCXL research](ccxl-character-creator-capabilities.md).

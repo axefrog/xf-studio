@@ -1,6 +1,8 @@
 # XF Studio UI/UX overhaul — delivery record, 24 September 2026
 
-Branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul`. Not merged, pushed or installed. This record is for the primary agent's review against the [handoff brief](../backlog/claude-ui-overhaul.md) and the [architecture contract](architecture-contract.md).
+**Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until Nathan accepts the new interface in depth (so far reviewed only cursorily). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
+
+Built on branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul` (both removed on 25 September after integration was verified). This record was written for the primary agent's review against the [handoff brief](../backlog/claude-ui-overhaul.md) and the [architecture contract](architecture-contract.md).
 
 ## Harness
 
@@ -8,7 +10,7 @@ Branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul`. Not merg
 |---|---|---|
 | Harness | Claude Code `2.1.281`, non-interactive stream, `permissionMode: auto` | init record of `.opus-run.jsonl` (worktree root, untracked) |
 | Model | `claude-opus-5-5` for every turn (488 model records) | same log |
-| Reasoning | `per_turn_effort_active: true`; fast mode off. The init record does not echo the effort value, so the exact `xhigh` flag must be confirmed from the primary agent's dispatch command. | same log |
+| Reasoning | `per_turn_effort_active: true`; fast mode off. The init record does not echo the effort value; the primary agent's dispatch command passed `--model claude-opus-5-5 --effort xhigh`. | same log; dispatch command |
 | Subagent | One read-only `general-purpose` audit agent (same session and model) produced the legacy-UI audit below; it changed no files. Every high-severity core item was then reproduced independently. | this record |
 
 ## What was delivered
@@ -219,11 +221,13 @@ No horizontal overflow or console error at any size, in either theme, on fresh l
 - The compact inspector strip at 640 px still clips its last two tabs (Motion, Quality; 55 px), with the same group and width as before. They remain reachable by arrow keys (the strip scrolls), the Panels menu and the palette. Fractions cannot fix this: the two lower strips need about 720 px together.
 - In head cells narrower than about 420 px, the stage hint wraps to three or four lines over the chin and neck, never the eyes; below 720 px the existing rule hides it. A shorter hint for narrow stages needs a `studio.css` change and is outside this defaults-only change.
 - At 1024×768 (compact, landscape window) the head cell is about square (1.09), and the 0.55 m minimum front distance puts the crown near the top edge. Not letterboxed; not one of the reviewed sizes.
-- The style guide embeds `studio.css` verbatim. This branch does not change `studio.css`; if main's row-text centering fix does, regenerate the guide (`bun tools/build-style-guide.ts`) when merging, or the sync test fails.
+- The style guide embeds `studio.css` verbatim; regenerate it (`bun tools/build-style-guide.ts`) after any `studio.css` change, or the sync test fails.
 
 Evidence: [`evidence/ui-layout-portrait-2026-09-24/`](../../projects/xf-studio/authoring/evidence/ui-layout-portrait-2026-09-24/) holds `layout-review.json` (every size, both themes, fresh loads and the resize pass) and masked `load-{1600x1000,1100x800,900x900,640x900}-{dark,light}.png`. Unmasked renders were inspected locally in `evidence/screenshots/` (ignored). The style guide's size-class maps (now drawn at real window proportions), the wide editing and compact compositions, and their guidance were updated, regenerated and inspected in both themes.
 
 ## Verification
+
+Current (25 September, after later work): **448 authoring tests** plus the desktop tests pass.
 
 Authoring suite after the portrait-head follow-up: **355 tests pass** (two new: portrait/visible-UV/inspector-width geometry at the reviewed dock areas, and exact restoration of a layout saved with the previous defaults); `tsc --noEmit` is clean; the build succeeds; acceptance 24/24.
 
@@ -231,11 +235,15 @@ Original delivery: **353 tests pass** (330 before this work plus 23 new: dock mo
 
 ## Remaining work
 
-1. Core fix for B-3, adapter items B-7 (case-sensitive cancel) and B-17, and the two core notes from the code review (control transaction vs gesture; layer add without a selected preset).
-2. API proposals A-1, A-2, A-5, A-7, A-8, A-9, A-10, A-12, A-13, A-14 (appendix signatures).
+Updated 25 September 2026.
+
+1. ~~Core fix for B-3~~ — **done** (`6c0e46f`), with B-1 (`f552ff6`) and B-2 (`da76361`, `c6b2866`). Still open: adapter items B-7 (case-sensitive Ctrl+Z gesture cancel) and B-17 (Shift overload on the head), and the two core notes from the code review (control transaction vs gesture; layer add without a selected preset).
+2. API proposals A-1, A-5, A-7, A-8, A-9, A-10, A-12, A-13, A-14 (appendix signatures); remaining parts of A-2 (consequence metadata) and A-3 (unified activity model).
 3. Core performance: `CollectionService.capability()` for export/package and `lastPackageIsCurrent()` re-parse the whole workspace including every Undo history (~27 ms); validate the collection without editor histories or cache by draft version.
-4. Presentation follow-ups: arrow-key nudging once A-5 exists; relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification.
-5. Primary-agent review of the API commits (read extensions; the one-line file-snapshot change) versus presentation commits, then merge decision. `legacy.html` can be retired once Nathan accepts the new interface.
+4. Presentation follow-ups: arrow-key nudging once A-5 exists; relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification; a shorter stage hint for narrow head cells.
+5. Primary-agent review of the API commit (`ebe6a1f`; the one-line file-snapshot change) versus presentation commits. The merge itself is done; this review is still owed.
+6. Move `StudioFileOperations` IDs into the `StudioApplication` descriptor registry, and verify the context-menu/command-registry claims end to end.
+7. Retire `legacy.html` once Nathan accepts the new interface in depth.
 
 ## Appendix — proposed signatures (from the audit, unchanged)
 

@@ -1,6 +1,13 @@
 # Hair, piercings, jewellery and character customization roadmap
 
-Nathan's requests of 23 September 2026. These are part of the general XF Studio roadmap; "asap" expresses interest, not a demand to interrupt every active makeup checkpoint. Coordinate independent slices in worktrees and review outcomes before promoting them. Eye-makeup reliability, the expanded plate and export remain active work.
+## Status (25 Sep 2026)
+
+- **Preview context done (with documented fidelity gaps):** optional saved-V hair ([preview](../eye-artistry/saved-v-hair-preview.md)), vanilla female piercings with source palette tints for colours 8–16 ([preview](../jewellery/vanilla-piercing-preview.md)), and three private PRC slots ([slice](../jewellery/prc-preview-slice.md), [catalogue audit](../jewellery/prc-catalog-audit.md)). Hair colour/material is open under [preview fidelity](preview-fidelity.md) (track 2).
+- **Awaiting Nathan's review:** the [jewellery construction-set proposal](../jewellery/construction-set-design.md) and [earring reference inventory](../jewellery/earring-reference-inventory.md). Piercing/earring *authoring* is the first later feature and needs discussion before building.
+- **Moved to its own track:** the data-driven character-creator editor below is now [CC controls and presets](cc-controls-and-presets.md) (track 3). Portable mod-source discovery below remains the shared requirement for tracks 2, 3 and 5.
+- **Open:** CCXL vs EquipmentEx piercing export route (unproven either way); effective runtime winners for all preview assets.
+
+Nathan's requests of 23 September 2026. These are part of the general XF Studio roadmap; "asap" expresses interest, not a demand to interrupt every active makeup checkpoint. Coordinate independent slices in worktrees and review outcomes before promoting them. Priorities are in the [ranked queue](README.md).
 
 ## Shared head-preview foundation
 
@@ -37,7 +44,7 @@ Do not bake `F:/Games/MO2` or Nathan's game paths into browser-facing recipes. U
 
 ## Acceptance and order
 
-1. Continue Glitter browser/photo acceptance, optical game-material adapters and the eye-plate clearance/export gates. Current Glitter and Shimmer fixtures are offline studies, not production exports.
+1. Makeup work comes first per the [ranked queue](README.md) (smoke test, then fidelity and finish adapters; plate clearance is paused pending in-game evidence). Current Glitter and Shimmer fixtures are offline studies, not production exports.
 2. Optional saved hair, vanilla piercing and three PRC candidate slots now render as preview context with documented material/asset fidelity gaps; compare exact saved choices in a later matched game session.
 3. PRC inventory and a private representative combined preview exist. Investigate CCXL and EquipmentEx export choices separately from that preview.
 4. Review jewellery construction-set design with Nathan before committing to its editor/export surface.

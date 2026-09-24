@@ -1,22 +1,30 @@
 # Viewport and editor controls
 
-Nathan's additional requests, 23 September 2026. Preserve these independently of conversation history. Preset/collection functionality is now checkpointed. Layer compactness, rename and reorder feedback were completed alongside it; coarse idle controls are also implemented; camera/FOV work remains queued.
+## Status (25 Sep 2026)
 
-- **Pause/resume idle — completed:** Pause/Resume now holds/restarts phase independently of disable/reset, with browser reload verification; pausing must hold the current body and face pose/phase and resume from there. Persist the paused state across reloads.
-- **Idle subsets — completed for the two decoded clips:** Head movement and Facial movement are independent, with real-asset and browser verification. Finer masks remain future expression work. Original requirement: inspect source channels and expose meaningful independent motion controls, especially a stationary head while gaze, eyelids, mouth and other facial motion continue. The two decoded clips and inherited bone drivers need inspection; do not freeze facial children accidentally or describe approximate channel separation as engine graph parity. This extends the authorized early idle-preview work, not full expression authoring.
-- **FOV-aware zoom range — bounded improvement:** 10° Front view now fits at 324/504px pane widths through a 3.5-unit orbit ceiling and conservative distance-aware clipping. A panned eye zooms visibly to the unchanged 0.1 close limit with no observed near-plane hole. Nathan's specific close-zoom symptom remains unreproduced; see the [implementation checkpoint](../authoring/camera-zoom-design.md#implementation-checkpoint--24-september-2026).
-- **Keep framing while changing FOV — implemented for the viewed surface plane:** camera distance follows the centre ray's first visible head/plate/eye hit, held through the slider gesture; bounds show a visible warning when they prevent preservation. Perspective changes elsewhere remain expected. A selected off-centre control is not yet an anchor, so pan it toward the viewport centre for the most stable edit.
-- **Layer reorder feedback:** show an obvious live insertion position and dragged-row state during movement, including edge scrolling/cancellation and keyboard alternatives. **Completed:** floating Move label, bright insertion line, dimmed source, edge scroll and Escape/pointer cancellation; up/down alternatives remain. Actual held-pointer browser verification showed the feedback before dropping.
-- **Compact makeup layers:** **Completed:** rows reduced from about 89 to 46 px, with secondary actions in the ⋯ menu while selection/visibility remain direct.
-- **Layer rename discoverability:** **Completed:** each row’s ⋯ → Rename selects the layer and focuses/selects the Layer name field. Stable IDs, workspace persistence and Undo are retained.
-- **Pan:** **Existing gesture verified and documented:** right-drag pans; the on-screen hint now explains it. Camera and target translate together and survive reload. See [camera findings](../authoring/camera-control-findings.md). A more visible pan mode remains an optional refinement for narrow viewports. Inspect current OrbitControls bindings, preserve target/camera together and persist framing. Do not confuse orbit with pan or break direct surface dragging. Consider a visible mode/gesture hint in addition to the mouse shortcut.
+Nathan's 23 September viewport/layer requests are implemented, with two bounded caveats.
 
-Verify gesture feedback in the isolated browser, camera/motion state across reload, and relevant source animation composition offline. Avoid using Nathan's active draft for tests.
+| Request | State |
+|---|---|
+| Pause/resume idle — hold current body/face phase, resume from there, persist across reload; never via the reset path | **Done** |
+| Idle subsets — independent *Head movement* and *Facial movement* (stationary head while gaze, lids, mouth continue) | **Done** for the two decoded clips. Finer facial masks are later expression work; approximate channel separation is not engine graph parity. [Design record](../animation/idle-controls-design.md) |
+| FOV-aware close zoom | **Bounded improvement** — 10° front view fits at narrow widths; zoom reaches the 0.1 close limit with no observed near-plane hole. **Nathan's specific close-zoom symptom is still unreproduced**; reopen if he sees it again. [Checkpoint](../authoring/camera-zoom-design.md#implementation-checkpoint--24-september-2026) |
+| Keep framing while changing FOV | **Done** for the viewed surface plane (centre-ray hit held through the slider gesture; visible warning when bounds prevent it). A selected off-centre control is not yet an anchor — open refinement. |
+| Pan | **Done** — right-drag pans camera and target together; persists. A more visible pan mode for narrow viewports is an optional refinement. [Findings](../authoring/camera-control-findings.md) |
+| Layer reorder feedback (live insertion line, dragged-row state, edge scroll, Escape, keyboard alternative) | **Done**; the dock UI keeps keyed rows and Alt+↑/↓ reordering |
+| Compact layer rows | **Done** |
+| Discoverable layer rename | **Done** (dock UI: inline F2 rename) |
+| Sidebar width follow-up (640 px cap removal, per-panel widths) | **Obsolete** — the dock UI replaced fixed sidebars (`95516b2`); layout is now a versioned dock preference with its own recovery |
 
-[Idle control design](../animation/idle-controls-design.md) now identifies validated body/facial composition boundaries and pause/framing invariants. The coarse idle controls are now implemented; the note remains their design record. [Detailed camera diagnosis and bounded implementation](../authoring/camera-zoom-design.md) measure surface depth, framing and FOV compensation. The exact reported zoom-in symptom is still not reproduced.
+## Invariants
+
+- Pausing never uses the reset path; muting both subsets stays enabled and retains phase.
+- Keep phase-zero neutral-space camera normalisation consistent across subset changes and reload.
+- Preserve camera/motion state across reload and context changes; do not confuse orbit with pan or break direct surface dragging.
+- Verify gesture feedback in the isolated `?verify=1` browser, never Nathan's active draft; check source animation composition offline.
 
 ## Sidebar width follow-up — 23 September 2026
 
-Removed the fixed 640px maximum. Both handles now use available main-grid width, preserving a 320px viewport, 220px layers sidebar, 280px properties sidebar and 16px total handles. Dragging a panel wider shrinks the opposing panel only as needed. Escape restores both preferred widths; window resize still temporarily fits without overwriting preferences. Persistence accepts widths beyond the old cap.
+**Obsolete.** The 640 px cap removal and per-sidebar preferred widths applied to the legacy fixed-sidebar shell (still at `/legacy.html`); the dock UI replaced sidebars on 24 September.
 
-Verified in the isolated browser at main width 1456px: properties End yields left220/viewport320/right900; layers End yields left840/viewport320/right280. A right-handle drag rebalances to left568/right552; Escape restores840/280. Reload retains900px properties width. Existing workspace round-trip test now covers1370/1410px preferences; four tests, typecheck and build pass.
+The brow-area idle motion question (default `ui_closeup_shot` vs the stronger `ui_closeup_shot_eyes` brow tracks) belongs to [preview fidelity](preview-fidelity.md#missing-brow-area-idle-movement).
