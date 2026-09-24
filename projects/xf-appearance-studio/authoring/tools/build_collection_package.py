@@ -71,10 +71,15 @@ def main(argv=None):
         bun = args.bun.resolve(strict=True)
         if not bun.is_file(): raise ValueError(f'Bun executable is missing: {bun}')
         preflight = subprocess.run([str(bun), str(APP/'tools/validate_collection_build.ts'), str(collection)],
-            cwd=HQ, capture_output=True, text=True, timeout=120)
+            cwd=HQ, capture_output=True, text=True, encoding='utf-8', timeout=120)
         if preflight.returncode:
             raise ValueError('Collection preflight rejected input: ' + preflight.stderr[-3000:])
         summary = json.loads(preflight.stdout)
+        packaged_json = summary.pop('packagedCollectionJson')
+        packaged_hash = hashlib.sha256(packaged_json.encode('utf-8')).hexdigest()
+        summary['packagedCollectionSha256'] = packaged_hash
+        if file_hash(collection) != source_hash:
+            raise ValueError('Collection changed during preflight; export a stable snapshot and retry.')
         if args.check:
             result = {'ready': True, **summary}
             print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
@@ -96,10 +101,10 @@ def main(argv=None):
         snapshot = BUILD / f'source-{token}.json'
         if file_hash(collection) != source_hash:
             raise ValueError('Collection changed during preflight; export a stable snapshot and retry.')
-        shutil.copyfile(collection, snapshot)
-        if file_hash(snapshot) != source_hash:
+        snapshot.write_text(packaged_json, encoding='utf-8')
+        if file_hash(snapshot) != packaged_hash:
             snapshot.unlink(missing_ok=True)
-            raise ValueError('Collection changed while copying the build snapshot; retry.')
+            raise ValueError('Filtered collection snapshot changed while writing; retry.')
         print(f'Building {len(summary["presets"])} preset(s) in ignored local intermediates: {intermediate}', flush=True)
         try:
             run([sys.executable, STUDY/'build.py', '--collection', snapshot, '--output', intermediate,
@@ -129,6 +134,8 @@ def main(argv=None):
             manifest = {
                 'schema': 'xfs/local-package-1', 'collectionId': summary['collectionId'],
                 'collectionSha256': source_hash, 'namespace': summary['namespace'],
+                'packagedCollectionSha256': packaged_hash,
+                'originalPresetCount': summary['originalPresetCount'], 'omissions': summary['omissions'],
                 'presets': summary['presets'], 'verifiedPresetCount': verification['presetCount'],
                 'verifiedUnpackedFiles': verification['unpackedFilesVerified'],
                 'files': [{'path': f'archive/pc/mod/{name}', 'sha256': file_hash(target/name),
@@ -143,7 +150,8 @@ def main(argv=None):
         finally:
             if staging.exists(): shutil.rmtree(staging)
         result = {'package': str(final), 'manifest': str(final/'manifest.json'), 'archiveSha256': verification['archiveSha256'],
-            'presetCount': verification['presetCount'], 'installed': False,
+            'presetCount': verification['presetCount'], 'originalPresetCount': summary['originalPresetCount'],
+            'omissions': summary['omissions'], 'packagedCollectionSha256': packaged_hash, 'installed': False,
             'gameRenderingVerified': False}
         print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
         return 0

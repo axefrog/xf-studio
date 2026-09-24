@@ -5,6 +5,7 @@ import { parseCollection, planCollection, type PresetCollection } from "./preset
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
+import { describePackageOmissions } from "./package-filter";
 
 export type CollectionRequest =
   | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportCollection" | "exportPlan" }
@@ -145,11 +146,11 @@ export class CollectionService {
           if (request.action === "check") {
             const checked = response as PackageCheck;
             result = { kind: "packageCheck", result: checked };
-            message = `${checked.presets.length} preset(s) can become mod files. This check created no files.`;
+            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${describePackageOmissions(checked.omissions)}`;
           } else {
             const built = response as PackageBuild;
             result = { kind: "packageBuild", result: built };
-            message = `Verified local mod files for ${built.presetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.`;
+            message = `Verified local mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}`;
           }
           break;
         }

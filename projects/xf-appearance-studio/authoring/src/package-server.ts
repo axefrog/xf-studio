@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
-import { parseCollection, planCollection } from "./preset-collection";
-import { finishLabel } from "./finish";
-import { unsupportedFlatLayers } from "./preset-compiler";
+import { parseCollection } from "./preset-collection";
+import { preparePackageCollection } from "./package-filter";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 
 const app = resolve(import.meta.dir, "..");
@@ -15,24 +14,6 @@ const script = resolve(app, "tools/build_collection_package.py");
 const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const within = (path: string, root: string) => path.startsWith(root + sep);
-const displayFinish = (finish: string) => finish === "glitter" ? "Glitter" :
-  finish === "shimmer" ? "Shimmer" : finish === "glossy" ? "Glossy" :
-  finish === "iridescent" ? "Colour-shifting" : finish;
-
-/** Keep compiler diagnostics local; users need the specific editable location and a next step. */
-function unsupportedFinishFailure(collection: ReturnType<typeof parseCollection>) {
-  const details = collection.presets.flatMap(preset => unsupportedFlatLayers(preset.recipe).map(layer => ({
-    presetId: preset.id, presetName: preset.name, layerId: layer.id,
-    layerName: preset.recipe.layers.find(candidate => candidate.id === layer.id)?.name ?? layer.id,
-    finish: layer.finish,
-  })));
-  if (!details.length) return undefined;
-  const shown = details.slice(0, 3).map(item =>
-    `${displayFinish(finishLabel(item.finish))} in preset “${item.presetName}”, layer “${item.layerName}”`).join("; ");
-  const rest = details.length > 3 ? `; and ${details.length - 3} more unsupported layer(s)` : "";
-  return { details, message: `Mod export cannot include ${shown}${rest}. Cyberpunk mod files currently support Matte, Satin and Metallic. Change or disable the affected layers, then check again. Your draft is unchanged; no mod files were created.` };
-}
-
 export type PackageTools = { python: string; bun: string; plate: string; wolvenkit: string; gamepath: string };
 export function localPackageTools(): PackageTools {
   return {
@@ -96,14 +77,13 @@ export function createPackageHandler(tools = localPackageTools(), runner: Runner
       collection = parseCollection(input.collection);
     } catch (error) { return json({ error: (error as Error).message }, 400); }
     if (building) return json({ error: "A local package build is already running. Wait for its result before starting another." }, 409);
-    const finishFailure = unsupportedFinishFailure(collection);
-    if (finishFailure) {
-      console.warn("Local package preflight rejected unsupported finish(s):", finishFailure.details);
-      return json({ error: finishFailure.message, code: "unsupported_finish" }, 422);
-    }
-    const plan = planCollection(collection);
+    let prepared: ReturnType<typeof preparePackageCollection>;
+    try { prepared = preparePackageCollection(collection); }
+    catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
+    const { plan, omissions, packaged } = prepared;
     const source = JSON.stringify(collection);
     const sourceHash = createHash("sha256").update(source).digest("hex");
+    const packagedHash = createHash("sha256").update(JSON.stringify(packaged)).digest("hex");
     const work = mkdtempSync(resolve(tmpdir(), "xfs-ui-package-"));
     const file = resolve(work, "collection.json");
     writeFileSync(file, source);
@@ -113,6 +93,8 @@ export function createPackageHandler(tools = localPackageTools(), runner: Runner
       if (action === "check") {
         const checked = result as PackageCheck;
         if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||
+            checked.originalPresetCount !== collection.presets.length || checked.packagedCollectionSha256 !== packagedHash ||
+            JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.presets) !== JSON.stringify(plan.presets.map(p =>
               ({ id: p.id, revision: p.revision, appearance: p.appearance }))))
           throw Error("Package preflight returned a different collection identity.");
@@ -124,11 +106,17 @@ export function createPackageHandler(tools = localPackageTools(), runner: Runner
         throw Error("Package result is outside the local dist directory.");
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       if (manifest.schema !== "xfs/local-package-1" || manifest.collectionId !== collection.id ||
-          manifest.collectionSha256 !== sourceHash || manifest.namespace !== plan.namespace ||
+          manifest.collectionSha256 !== sourceHash || manifest.packagedCollectionSha256 !== packagedHash ||
+          manifest.originalPresetCount !== collection.presets.length ||
+          JSON.stringify(manifest.omissions) !== JSON.stringify(omissions) || manifest.namespace !== plan.namespace ||
           JSON.stringify(manifest.presets) !== JSON.stringify(plan.presets.map(p =>
             ({ id: p.id, revision: p.revision, appearance: p.appearance }))) ||
-          built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== collection.presets.length ||
-          built.installed !== false || built.gameRenderingVerified !== false)
+          manifest.verifiedPresetCount !== packaged.presets.length ||
+          built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== packaged.presets.length ||
+          built.originalPresetCount !== collection.presets.length ||
+          built.packagedCollectionSha256 !== packagedHash || JSON.stringify(built.omissions) !== JSON.stringify(omissions) ||
+          built.installed !== false || built.gameRenderingVerified !== false ||
+          manifest.installed !== false || manifest.gameRenderingVerified !== false)
         throw Error("Package manifest does not match this collection snapshot.");
       return json(built);
     } catch (error) {

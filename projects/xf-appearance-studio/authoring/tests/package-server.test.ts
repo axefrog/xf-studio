@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createPackageHandler, localPackageTools } from "../src/package-server";
-import { planCollection } from "../src/preset-collection";
+import { preparePackageCollection } from "../src/package-filter";
+import { createHash } from "node:crypto";
 import type { PackageAction, PackageCheck } from "../src/package-action";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -10,15 +11,19 @@ const url = "http://127.0.0.1:4317/api/package";
 const request = (body: unknown, origin = "http://127.0.0.1:4317") => new Request(url, {
   method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
-const summary = (): PackageCheck => {
-  const plan = planCollection(fixture);
+const summary = (collection: unknown = fixture): PackageCheck => {
+  const { source, packaged, plan, omissions } = preparePackageCollection(collection);
   return { ready: true, collectionId: plan.collectionId, namespace: plan.namespace,
+    originalPresetCount: source.presets.length, omissions,
+    packagedCollectionSha256: createHash("sha256").update(JSON.stringify(packaged)).digest("hex"),
     presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })) };
 };
 
 test("package boundary accepts only same-origin validated collection snapshots and ignores browser paths", async () => {
   let calls = 0;
-  const handler = createPackageHandler(localPackageTools(), async () => { calls++; return summary(); });
+  const handler = createPackageHandler(localPackageTools(), async (_action, file) => {
+    calls++; return summary(JSON.parse(readFileSync(file, "utf8")));
+  });
   expect((await handler(request({ action: "check", collection: fixture }, "https://other.example"))).status).toBe(403);
   expect((await handler(request({ action: "check", collection: fixture, outputRoot: "F:/Games/Cyberpunk 2077" }))).status).toBe(400);
   expect((await handler(request({ action: "check", collection: { ...fixture, presets: [] } }))).status).toBe(400);
@@ -26,7 +31,7 @@ test("package boundary accepts only same-origin validated collection snapshots a
     "Content-Type": "application/json", "Content-Length": "16000001" }, body: "{}" }))).status).toBe(413);
   const valid = await handler(request({ action: "check", collection: fixture }));
   expect(valid.status).toBe(200);
-  expect((await valid.json()).namespace).toBe(summary().namespace);
+  expect((await valid.json()).namespace).toBe(summary(fixture).namespace);
   expect(calls).toBe(1);
 });
 
@@ -46,42 +51,44 @@ test("a running package build blocks a second build without blocking the HTTP ev
   expect((await result.json()).error).toContain("Simulated local tool failure");
 });
 
-test("real local preflight checks compiler finish support and keeps unsupported finish visible", async () => {
+test("real local preflight omits unsupported active layers and identifies them", async () => {
   const handler = createPackageHandler();
   const accepted = await handler(request({ action: "check", collection: fixture }));
   expect(accepted.status).toBe(200);
   const unsupported = structuredClone(fixture);
   unsupported.presets[0].recipe.layers[0].finish = "glitter";
-  const rejected = await handler(request({ action: "check", collection: unsupported }));
-  expect(rejected.status).toBe(422);
-  const response = await rejected.json();
-  expect(response.code).toBe("unsupported_finish");
-  expect(response.error).toContain("Glitter in preset “Verification — metallic copy”, layer “Petal wash”");
-  expect(response.error).toContain("Matte, Satin and Metallic");
-  expect(response.error).toContain("Change or disable");
-  expect(response.error).not.toContain("Stack trace");
+  unsupported.presets[0].recipe.layers.push({ ...structuredClone(unsupported.presets[2].recipe.layers[0]), id: "supported-extra" });
+  const checked = await handler(request({ action: "check", collection: unsupported }));
+  expect(checked.status).toBe(200);
+  const response = await checked.json();
+  expect(response.presets).toHaveLength(4);
+  expect(response.omissions).toEqual([expect.objectContaining({ kind: "layer", presetName: "Verification — metallic copy",
+    layerName: "Petal wash", finish: "glitter" })]);
 });
 
-test("check and build reject every enabled unsupported finish before invoking package tools", async () => {
-  let calls = 0;
-  const handler = createPackageHandler(localPackageTools(), async () => { calls++; return summary(); });
+test("check derives the filtered plan from an immutable original request snapshot", async () => {
+  let calls = 0, captured: unknown;
+  const handler = createPackageHandler(localPackageTools(), async (_action, file) => {
+    calls++; captured = JSON.parse(readFileSync(file, "utf8")); return summary(captured);
+  });
   const unsupported = structuredClone(fixture);
   unsupported.presets[0].recipe.layers[0].finish = "glitter";
   unsupported.presets[1].recipe.layers[0].finish = "shimmer";
-  for (const action of ["check", "build"] as const) {
-    const response = await handler(request({ action, collection: unsupported }));
-    expect(response.status).toBe(422);
-    const message = (await response.json()).error as string;
-    expect(message).toContain("Glitter in preset");
-    expect(message).toContain("Shimmer in preset");
-    expect(message).toContain("no mod files were created");
-    expect(message).not.toContain("at compileFlatPreset");
-  }
-  expect(calls).toBe(0);
+  const response = await handler(request({ action: "check", collection: unsupported }));
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.omissions).toHaveLength(4);
+  expect(result.omissions.filter((item: {kind: string}) => item.kind === "layer")).toHaveLength(2);
+  expect(result.omissions.filter((item: {kind: string}) => item.kind === "preset")).toHaveLength(2);
+  expect(result.presets).toHaveLength(2);
+  expect(result.presets.map((preset: {id: string}) => preset.id)).toEqual(unsupported.presets.slice(2).map((preset: {id: string}) => preset.id));
+  expect(calls).toBe(1);
+  expect((captured as typeof fixture).presets[0].recipe.layers[0].finish).toBe("glitter");
+  expect(unsupported.presets[0].recipe.layers[0].finish).toBe("glitter");
 });
 
 test("inactive and transparent experimental layers keep the current compiler eligibility", async () => {
-  const handler = createPackageHandler(localPackageTools(), async () => summary());
+  const handler = createPackageHandler(localPackageTools(), async (_action, file) => summary(JSON.parse(readFileSync(file, "utf8"))));
   const collection = structuredClone(fixture);
   collection.presets[0].recipe.layers[0].finish = "glitter";
   collection.presets[0].recipe.layers[0].enabled = false;
@@ -89,4 +96,19 @@ test("inactive and transparent experimental layers keep the current compiler eli
   collection.presets[1].recipe.layers[0].opacity = 0;
   const response = await handler(request({ action: "check", collection }));
   expect(response.status).toBe(200);
+  expect((await response.json()).omissions.every((item: {kind: string}) => item.kind === "preset")).toBe(true);
+});
+
+test("check and build both refuse a wholly unsupported collection before invoking tools", async () => {
+  let calls = 0;
+  const handler = createPackageHandler(localPackageTools(), async () => { calls++; return summary(); });
+  const collection = structuredClone(fixture);
+  for (const preset of collection.presets) for (const layer of preset.recipe.layers)
+    if (layer.enabled && layer.opacity > 0) layer.finish = "glitter";
+  for (const action of ["check", "build"] as const) {
+    const response = await handler(request({ action, collection }));
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe("no_exportable_content");
+  }
+  expect(calls).toBe(0);
 });

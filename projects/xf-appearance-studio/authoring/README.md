@@ -1,6 +1,6 @@
 # XF Studio — authoring editor
 
-For the complete path from a draft or exported collection through layer merging, resource generation, independent verification and private mod files, see the illustrated [Studio-to-mod pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md). Check mod export tests eligibility; Build mod files creates an offline-verified candidate but does not install or game-test it.
+For the complete path from a draft or exported collection through layer merging, resource generation, independent verification and private mod files, see the illustrated [Studio-to-mod pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md). Check mod export tests eligibility and names any active unsupported layers or whole presets that a package would omit. Build mod files uses that same filtered snapshot and creates an offline-verified candidate while leaving the authored collection unchanged; it does not install or game-test the files.
 
 **Camera framing:** changing Field of view moves the camera to retain the viewed face area's apparent scale, within the 0.1–3.5 orbit range. Pan with right-drag to put an eye near the viewport centre before a close lens change; scroll then zooms further. Front view at 10° fits even a narrow editor pane. If the camera range prevents full scale preservation, the lens control shows a note and Front view restores a useful frame. The 0.1 close limit is unchanged; [measurements and remaining limits](../../../research/authoring/camera-zoom-design.md#implementation-checkpoint--24-september-2026).
 

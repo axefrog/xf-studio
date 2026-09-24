@@ -20,7 +20,7 @@ test("package preflight accepts a Studio collection without writing a package", 
   expect(summary.presets[0].appearance).toStartWith("xfs_");
 });
 
-test("package preflight rejects unsupported optical finishes before packaging", () => {
+test("package preflight reports partial export and keeps the source collection unchanged", () => {
   const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-check-"));
   try {
     const collection = JSON.parse(readFileSync(fixture, "utf8"));
@@ -28,8 +28,28 @@ test("package preflight rejects unsupported optical finishes before packaging", 
     const file = resolve(dir, "glitter.json");
     writeFileSync(file, JSON.stringify(collection));
     const result = run(file);
+    expect(result.exitCode).toBe(0);
+    const summary = JSON.parse(result.stdout.toString());
+    expect(summary.omissions).toEqual([
+      expect.objectContaining({ kind: "layer", finish: "glitter", layerName: "Petal wash" }),
+      expect.objectContaining({ kind: "preset", presetName: "Verification — metallic copy" }),
+    ]);
+    expect(summary.presets).toHaveLength(3);
+    expect(JSON.parse(readFileSync(file, "utf8")).presets[0].recipe.layers[0].finish).toBe("glitter");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("package preflight refuses a collection with no exportable content", () => {
+  const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-empty-"));
+  try {
+    const collection = JSON.parse(readFileSync(fixture, "utf8"));
+    for (const preset of collection.presets) for (const layer of preset.recipe.layers)
+      if (layer.enabled && layer.opacity > 0) layer.finish = "glitter";
+    const file = resolve(dir, "glitter-only.json");
+    writeFileSync(file, JSON.stringify(collection));
+    const result = run(file);
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toString()).toContain("glitter");
+    expect(result.stderr.toString()).toContain("No mod files can be made");
     expect(result.stderr.toString()).toContain("No package was installed or promoted");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

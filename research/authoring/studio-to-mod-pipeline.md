@@ -2,11 +2,11 @@
 
 24 September 2026. This is a map of the **current local pipeline**, for a reviewer who knows the idea of a mod but not the file formats. The result is an offline-verified, private **candidate**. No XF Studio package has yet been installed and observed rendering in Cyberpunk 2077. “Loadable” here means the expected archive/declaration files have been built and independently unpacked and checked; it does **not** mean ArchiveXL registration, selector switching, visual fidelity or save persistence have passed an in-game test.
 
-The short version: the Studio saves editable makeup as data. When asked to build, it merges each preset's eligible visible layers into three 1024-pixel texture maps, attaches those maps to one shared eye-plate material pattern, writes a character-creator selector with an Off choice, packs the resources, independently checks the package, and places only a verified copy in a private `dist` folder. It never installs the files. [Product decision](../../projects/xf-appearance-studio/data/product-direction.md), [local build boundary](local-package-build.md), [runtime test card](../../docs/validation.md#prepared-single-session-test-card).
+The short version: the Studio saves editable makeup as data. Check and Build make a package-only copy that omits active layers with unsupported finishes and presets left without active exportable layers. They report every omission while leaving the authored collection untouched. Build then merges each retained preset's visible layers into three 1024-pixel texture maps, attaches those maps to one shared eye-plate material pattern, writes a character-creator selector with an Off choice, packs the resources, independently checks the package, and places only a verified copy in a private `dist` folder. It never installs the files. [Product decision](../../projects/xf-appearance-studio/data/product-direction.md), [local build boundary](local-package-build.md), [runtime test card](../../docs/validation.md#prepared-single-session-test-card).
 
 ## The pipeline at a glance
 
-Solid arrows below are implemented local data/build steps. The final dashed arrow is **work still to be observed in game**. A red rejection stops before any package is promoted. The first diagram follows authoring through eligibility; the second begins with the same validated build snapshot.
+Solid arrows below are implemented local data/build steps. The final dashed arrow is **work still to be observed in game**. A red rejection means no eligible preset remains; structural or integrity failures also prevent promotion. A partial result carries explicit omissions. The first diagram follows authoring through eligibility; the second begins with the same validated build snapshot.
 
 ```mermaid
 flowchart TB
@@ -17,13 +17,17 @@ flowchart TB
     draft --> ui["Check mod export / Build mod files<br/>snapshot includes unsaved edits"]
   end
 
-  ui --> server["Local server<br/>validate collection and finish eligibility"]
-  server --> decision{"Any active<br/>unsupported finish?"}
-  decision -- Yes --> reject["Explain preset and layer<br/>no build starts"]
-  decision -- No --> cli["Local package CLI<br/>32-pixel compiler preflight"]
-  export --> cli
-  cli -- Check only --> ready["Eligibility result<br/>no package created"]
-  cli -- Build --> snapshot["Hash and copy source snapshot<br/>continue to build below"]
+  ui --> server["Local server<br/>validate original draft and snapshot"]
+  server --> filter["Shared export filter<br/>package-only copy"]
+  export --> filter
+  filter --> decision{"Any exportable<br/>preset remains?"}
+  decision -- No --> reject["Refuse empty package<br/>original collection unchanged"]
+  decision -- Yes --> omitted{"Any active layer or<br/>whole preset omitted?"}
+  omitted -- Yes --> warn["Report every excluded<br/>preset and layer"]
+  omitted -- No --> cli["Local package CLI<br/>32-pixel compiler preflight"]
+  warn --> cli
+  cli -- Check only --> ready["Eligibility and omissions<br/>no package created"]
+  cli -- Build --> snapshot["Hash original and filtered snapshots<br/>continue with filtered copy below"]
 
   classDef blocked fill:#ffe7e7,stroke:#b42318,color:#6e1611;
   class reject blocked;
@@ -31,11 +35,11 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-  snapshot["Validated, hashed build snapshot<br/>private intermediate directory"] --> bake["Experiment 005 build<br/>1024-pixel maps, plate and resources"]
+  snapshot["Filtered, hashed build snapshot<br/>private intermediate directory"] --> bake["Experiment 005 build<br/>1024-pixel maps, plate and resources"]
   bake --> resources["Archive resources and<br/>ArchiveXL declaration"]
   resources --> verifier["Independent verifier<br/>round trip, pixels, mips, archive"]
   verifier -- Fail --> stop["No promotion<br/>diagnostics retained locally"]
-  verifier -- Pass --> dist["Private dist candidate<br/>archive, .archive.xl, manifest"]
+  verifier -- Pass --> dist["Private dist candidate<br/>archive, .archive.xl, manifest with omissions"]
   dist -. "not installed or game-tested" .-> runtime["Future game session<br/>selector, A/B/Off, rendering, save"]
 
   classDef blocked fill:#ffe7e7,stroke:#b42318,color:#6e1611;
@@ -44,7 +48,7 @@ flowchart TB
   class runtime pending;
 ```
 
-The diagram has two independent entries into the same CLI: a Studio request and an exported collection JSON file. **Check mod export** stops after validation and a small 32-pixel compile; it does not require the local plate, WolvenKit or game files. **Build mod files** needs those inputs and takes longer. Studio requests pass a validated collection snapshot to a same-origin localhost server. The browser cannot choose executables, source-resource paths or output paths. The server runs one build at a time and checks the returned identity and manifest against its own snapshot. An exported collection goes to the same Python CLI manually. [Server boundary](../../projects/xf-appearance-studio/authoring/src/package-server.ts), [CLI](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py).
+The diagram has two entries into the same TypeScript export filter: a Studio request and an exported collection JSON file passed to the CLI. Both use that filter and compiler preflight. **Check mod export** stops after validation and a small 32-pixel compile; it does not require the local plate, WolvenKit or game files. **Build mod files** needs those inputs and takes longer. Studio requests pass a validated original collection snapshot to a same-origin localhost server. The browser cannot choose executables, source-resource paths or output paths. The server runs one build at a time and checks the returned filtered identity, omissions and manifest against its own filter of that exact snapshot. [Server boundary](../../projects/xf-appearance-studio/authoring/src/package-server.ts), [filter](../../projects/xf-appearance-studio/authoring/src/package-filter.ts), [CLI](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py).
 
 ## What each kind of data means
 
@@ -54,7 +58,8 @@ The diagram has two independent entries into the same CLI: a Studio request and 
 | Collection | `xfas/collection-1` JSON with a stable collection UUID and named preset UUIDs/revisions, each carrying a recipe. The `xfas` schema name is retained for compatibility after the XF Studio rename. | A game selector by itself. It can travel between Studio installations. |
 | Browser draft | Unsaved collection edits plus editor selections and preview context in local workspace storage. | A new SQLite revision or packaged mod. |
 | SQLite revision | Explicit, immutable local library snapshot with conflict protection. | The latest browser draft unless the user saved it. |
-| Build plan | Deterministic proposed resource names/paths for one collection. | An installable mod. |
+| Package-only filtered snapshot | A validated copy with unsupported **active** layers removed and any now-empty preset removed. It keeps IDs/revisions of included presets; Check and Build use the same filter. | A change to the authored recipe, browser draft or SQLite library. |
+| Build plan | Deterministic proposed resource names/paths for the **retained subset**. | An installable mod. |
 | Intermediate build | Generated maps, JSON resources, conversion logs, packed archive and verifier evidence in ignored `build/`. | Public distribution content. |
 | `dist` candidate | Verified `.archive`, `.archive.xl` and a manifest in ignored project `dist/`. | An installed, activated or game-proven mod. |
 
@@ -81,7 +86,7 @@ flowchart TB
   shared --> choice["One selector choice<br/>for the complete look"]
 ```
 
-Currently only active **Matte, Satin** (stored as `regular`) **and Metallic** pass the flat export gate. Shimmer, Glitter, Glossy and Colour-shifting are meaningful **browser previews** but have no faithful production game adapter; the preflight names the affected preset/layer and rejects them. A disabled or zero-opacity experimental layer does not contribute and does not block the compiler. The individual **Export mask** command is a different output: a 2048 × 2048 white-RGB/coverage-alpha PNG for one layer, independent of its enabled state and not the three-map preset package. Preview quality at 512/1K/2K/4K changes generated browser textures only. [Finish gate](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts), [preflight message evidence](../../projects/xf-appearance-studio/authoring/evidence/mod-export-preflight-2026-09-24.md).
+Currently only active **Matte, Satin** (stored as `regular`) **and Metallic** enter the flat package. Shimmer, Glitter, Glossy and Colour-shifting are meaningful **browser previews** but have no faithful production game adapter. The package filter omits those active layers, then omits any preset left without active exportable layers. Check and Build both report each excluded layer and whole preset; they refuse the collection only when no exportable preset remains. A disabled or zero-opacity experimental layer does not contribute and is not reported as an omission. The compiler itself still strictly rejects unsupported active layers if called without the package filter; it never silently flattens them. The individual **Export mask** command is a different output: a 2048 × 2048 white-RGB/coverage-alpha PNG for one layer, independent of its enabled state and not the three-map preset package. Preview quality at 512/1K/2K/4K changes generated browser textures only. [Package filter](../../projects/xf-appearance-studio/authoring/src/package-filter.ts), [compiler gate](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts).
 
 ## How those maps become game resources
 
@@ -94,7 +99,7 @@ The resource graph is deliberately small:
 - **One** copied/referenced `xfs_eye_plate.mesh` and **one** `xfs_eye_plate.morphtarget` serve the collection. The morph resource points to the new mesh path and seed appearance. The model retains 105 morphs, native skin data and one material entry. A single `base/materials/mesh_decal.mt` local material instance uses soft texture paths with `{material}` substitution. Each preset adds a mesh appearance identity and its own three XBM textures, not a separate plate copy.
 - **One** `.archive.xl` text declaration tells ArchiveXL about the female customization resource and scope in `player_customization.app`. The `.archive` holds the binary resources. The declaration is beside the archive in `archive/pc/mod/`, not inside it.
 
-For a collection of **N** presets, the intended resource count is `4 + 3N`: mesh, morph, app and customization plus three XBM maps per preset. The four-preset fixture therefore has 16 unpacked resources, four mesh appearances, four selector looks **plus Off**, and one shared material template. These are verifier results, not observed game options. [Experiment 005](../../experiments/005-preset-collection/README.md), [source build](../../experiments/005-preset-collection/build.py).
+For a package of **N retained** presets, the intended resource count is `4 + 3N`: mesh, morph, app and customization plus three XBM maps per preset. The unchanged four-preset fixture has 16 unpacked resources, four mesh appearances, four selector looks **plus Off**, and one shared material template. In a local partial-export test, making the fixture's first preset Glitter-only retained three presets and verified 13 unpacked resources; the omitted preset kept its authored ID in the original source but received no selector entry. These are verifier results, not observed game options. [Experiment 005](../../experiments/005-preset-collection/README.md), [source build](../../experiments/005-preset-collection/build.py).
 
 The output tree is conceptually:
 
@@ -121,13 +126,13 @@ The exact real texture filenames concatenate `xfs_p` with the **full hyphenless 
 
 ## What Check, Build and Verify each prove
 
-1. **Check mod export** validates the collection and active finish support. For a Studio request the local server checks finish names first; the CLI also runs a small 32-pixel compile for every preset. Check makes no archive or SQLite save. It does not need the plate/game/WolvenKit files. An invalid or empty collection and a collection above 16 MB fail. This is an eligibility check, not a visual promise.
-2. **Build mod files** captures the current Studio draft, even when it has unsaved edits, without creating a SQLite revision. The server accepts only a same-origin request on `127.0.0.1`, computes its own collection plan and SHA-256, and writes a temporary snapshot. The CLI hashes the source file, validates it, checks that it has not changed, and copies it to an ignored intermediate snapshot. Its source plate, WolvenKit and game paths come from the **server environment**, never browser input. Direct CLI use takes an exported collection file instead.
+1. **Check mod export** validates the complete collection, filters a package-only copy, and runs a small 32-pixel compile for each retained preset. It reports the original preset count, packaged identities, every omitted layer/preset, and the filtered snapshot SHA-256. Check makes no archive or SQLite save. It does not need the plate/game/WolvenKit files. An invalid or empty collection, one above 16 MB, or one with no exportable preset fails. This is an eligibility check, not a visual promise.
+2. **Build mod files** captures the current Studio draft, even when it has unsaved edits, without creating a SQLite revision. The server accepts only a same-origin request on `127.0.0.1`, computes its own filtered plan and both original/filtered hashes, and writes a temporary original snapshot. The CLI checks that source has not changed, uses the **same filter**, writes an immutable filtered build snapshot, and checks its hash. Its source plate, WolvenKit and game paths come from the **server environment**, never browser input. Direct CLI use takes an exported collection file instead.
 3. **Build conversion** produces the three texture maps per preset, full mip chains, mesh/morph/app/customization resources, `.archive`, `.archive.xl`, and `build.json`. That build record includes per-recipe and map hashes, source plate path/hash entries, archive-member path/hashes and the packed archive hash. Build output stays under ignored project `build/`; the fixture's checked-in `latest-build.json` is not changed by this wrapper.
 4. **Independent verification** is a separate Experiment 005 program. It checks resource structure and names; preserved model and morph buffers; the Off/template/preset links; source-derived `{material}` texture paths; imported XBM metadata; decoded base-map colour/coverage/scalar tolerances; the entire decoded mip chain against coverage-space reductions; archive hash; and every unpacked archive member against its recorded hash. It reports `installed: false`, `gameRenderingVerified: false` and explicit limits. It cannot establish actual game shader filtering or executed ArchiveXL expansion.
-5. **Promotion** happens only after the verifier succeeds. The wrapper compares the plan identities and verification/archive hashes, copies just `.archive` and `.archive.xl` to a staging folder under ignored `dist/`, writes `manifest.json`, checks the promoted archive hash and atomically renames staging to a unique final directory. The server then checks that directory is within project `dist/`, confirms the manifest's collection ID, source hash, namespace, preset IDs/revisions/appearances and file hash, and returns the path. `--output-root` cannot direct a build into the game or MO2 directory. A failed preflight/verifier does not promote a candidate.
+5. **Promotion** happens only after the verifier succeeds. The wrapper compares the filtered plan identities and verification/archive hashes, copies just `.archive` and `.archive.xl` to a staging folder under ignored `dist/`, writes `manifest.json`, checks the promoted archive hash and atomically renames staging to a unique final directory. The server then checks that directory is within project `dist/`, confirms the manifest's original source hash, filtered snapshot hash, omission list, original count, retained preset identities and file hash, and returns the path. `--output-root` cannot direct a build into the game or MO2 directory. A failed preflight/verifier does not promote a candidate.
 
-The `xfs/local-package-1` manifest identifies the collection and source SHA-256, preset IDs/revisions/appearance names, verified file count, hashes and sizes of the archive and `.archive.xl`, and explicit `installed: false` / `gameRenderingVerified: false`. It currently does **not** record an explicit compiler version or complete toolchain/version/provenance lock; those are release-traceability gaps. WolvenKit may place timestamps in the archive index, so two builds from identical resource artifact paths/hashes can have different packed archive hashes. Compare source/resource hashes as well as the packed hash. [Local wrapper](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py), [recorded checkpoint](local-package-build.md#offline-checkpoint--24-september-2026).
+The `xfs/local-package-1` manifest identifies the original collection SHA-256 and original preset count, the exact filtered snapshot SHA-256, each excluded layer/whole preset, packaged preset IDs/revisions/appearance names, verified file count, hashes and sizes of the archive and `.archive.xl`, and explicit `installed: false` / `gameRenderingVerified: false`. It currently does **not** record an explicit compiler version or complete toolchain/version/provenance lock; those are release-traceability gaps. WolvenKit may place timestamps in the archive index, so two builds from identical resource artifact paths/hashes can have different packed archive hashes. Compare source/resource hashes as well as the packed hash. [Local wrapper](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py), [recorded checkpoint](local-package-build.md#offline-checkpoint--24-september-2026).
 
 ## Boundaries still needing evidence
 
@@ -142,5 +147,6 @@ After any change to collection/recipe schema, finish eligibility, map compilatio
 | Date | Render/review method | Result |
 |---|---|---|
 | 2026-09-24 | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to PNG, inspected full-size and 800px-wide versions. [Authoring](evidence/studio-to-mod-authoring-2026-09-24.png), [build](evidence/studio-to-mod-build-2026-09-24.png), [layer merge](evidence/studio-to-mod-merge-2026-09-24.png). | The first overview was too wide, so it was divided into authoring/preflight and build/verification diagrams; the merge diagram was made vertical. Labels, pass/fail branches and the dashed untested-game boundary remain legible at 800px. The authoring flow is tall and requires scrolling. All images are generated from documentation text and contain no game assets. |
+| 2026-09-24, partial export | Mermaid CLI 11.17.0 with Chrome; rerendered all three and inspected original resolution and 800px-width images. [Updated authoring](evidence/studio-to-mod-authoring-partial-2026-09-24.png), [updated build](evidence/studio-to-mod-build-partial-2026-09-24.png); the [layer merge](evidence/studio-to-mod-merge-2026-09-24.png) remains visually unchanged. | The new No/Yes exportability branches, partial-warning path, Check/Build split, filtered snapshot, verifier failure and dashed untested-game boundary are visually distinct and legible at 800px. The authoring diagram remains vertically long. These renders contain no game assets. |
 
 Primary implementation sources: [recipe](../../projects/xf-appearance-studio/authoring/src/recipe.ts), [collection plan](../../projects/xf-appearance-studio/authoring/src/preset-collection.ts), [flat compiler](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts), [package server](../../projects/xf-appearance-studio/authoring/src/package-server.ts), [CLI wrapper](../../projects/xf-appearance-studio/authoring/tools/build_collection_package.py), [Experiment 005 builder](../../experiments/005-preset-collection/build.py) and [independent verifier](../../experiments/005-preset-collection/verify.py). The guide explains the code as checked on this date; it is not a runtime observation.

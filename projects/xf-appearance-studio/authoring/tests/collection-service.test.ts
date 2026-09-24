@@ -16,7 +16,8 @@ function fixture() {
     get: async () => saved,
     save: async (value, revision) => { saves++; return { collection: structuredClone(value), revision: (revision ?? 0) + 1, updatedAt: "now" }; },
     package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
-      namespace: "xfs_test", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+      namespace: "xfs_test", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "test",
+      presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
   };
   const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
@@ -39,6 +40,21 @@ test("async collection service preserves an unsaved draft in package snapshots w
   expect(f.service.view().draft!.collection.presets[0].name).toBe("Eye");
 });
 
+test("successful partial check names omitted layers and whole presets in the Studio result", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  f.transport.package = async (_action, value) => ({ ready: true, collectionId: value.id,
+    namespace: "xfs_test", originalPresetCount: 2, packagedCollectionSha256: "test",
+    presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }],
+    omissions: [
+      { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
+        finish: "glitter", reason: "Active finish has no supported game-export adapter." },
+      { kind: "preset", presetId: "other", presetName: "Glitter only", reason: "No active exportable layers remain." },
+    ] });
+  expect((await f.service.execute({ kind: "package", action: "check" })).ok).toBe(true);
+  expect(f.service.view().progress?.message).toContain("omitted layer “Sparkle” (Glitter) from preset “Eye”");
+  expect(f.service.view().progress?.message).toContain("omitted whole preset “Glitter only”");
+});
+
 test("save reconciliation retains edits made while the immutable request is in flight", async () => {
   const f = fixture(); await f.service.execute({ kind: "initialize" });
   let release!: (value: any) => void;
@@ -53,14 +69,14 @@ test("save reconciliation retains edits made while the immutable request is in f
   expect(f.service.snapshot()!.revision).toBe(2);
 });
 
-test("unsupported finish errors retain a stable code and an actionable message", async () => {
+test("no-exportable-content errors retain a stable code and an actionable message", async () => {
   const f = fixture(); await f.service.execute({ kind: "initialize" });
   f.editor().recipe.layers[0].finish = "glitter";
-  f.transport.package = async () => { throw new CollectionServiceError("unsupported_finish",
-    "Glitter in preset “Eye”, layer “Petal wash” cannot become mod files yet. Change that finish or remove the layer, then check again."); };
+  f.transport.package = async () => { throw new CollectionServiceError("no_exportable_content",
+    "No mod files can be made: every preset has no active Matte, Satin or Metallic layer. Your collection is unchanged."); };
   const outcome = await f.service.execute({ kind: "package", action: "check" });
-  expect(outcome).toMatchObject({ ok: false, code: "unsupported_finish" });
-  expect(f.service.view().progress?.message).toContain("Change that finish");
+  expect(outcome).toMatchObject({ ok: false, code: "no_exportable_content" });
+  expect(f.service.view().progress?.message).toContain("Your collection is unchanged");
   expect(f.service.view().busy).toBe(false);
   expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].finish).toBe("glitter");
 });
