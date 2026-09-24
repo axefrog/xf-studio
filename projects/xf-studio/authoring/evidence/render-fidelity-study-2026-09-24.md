@@ -43,6 +43,8 @@ Visual inspection in Chrome at the isolated local study URL used the same ignore
 
 No private pixels or paired captures were committed. TypeScript check, browser build and all 423 Bun tests pass. Neutral and saved five-morph views were inspected with the D05 diffuse/reflection split; the mouth shape moved in the same way in both panes. The opt-in study adds no production renderer change or game launch.
 
+The next [geometry and UV-island gate](render-fidelity-ownership-gate-2026-09-25.md) adds front, quarter and mouth-close cameras plus a conservative exclusion preview. It finds that visible lips still share one large face UV island and keeps the diffuse transport trial closed.
+
 **Provenance for the parent checkpoint:** existing `docs/community-credits.md` entries for CD PROJEKT RED resources, Kala / guidethisonekalaheria, nutboy / brocreate, WolvenKit contributors and Three.js contributors need the additional concrete lessons from this comparison. The exact source/use distinction and links are in `research/eye-artistry/eye-lip-optics-audit.md`; no third-party pixels, code or extracted resource was added to Git.
 
 Verification in the isolated worktree: TypeScript check and browser build pass; 251 Bun tests pass after staging the ignored local brow/lash GLBs required by two existing asset tests. Chrome displayed both comparisons without a shader or asset-load error. No game launch or install occurred.

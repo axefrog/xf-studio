@@ -10,8 +10,9 @@ import { browScreenMetrics } from "./brow-study-metrics";
 
 type View = "lip" | "eye" | "brow";
 type Pose = "neutral" | "saved";
-type LipDisplay = "material" | "components" | "ownership";
-type LightComponent = "full" | "diffuse" | "reflection" | "albedo" | "ownership";
+type LipDisplay = "material" | "components" | "ownership" | "islands" | "guard";
+type LipCamera = "front" | "quarter" | "mouth";
+type LightComponent = "full" | "diffuse" | "reflection" | "albedo" | "ownership" | "islands" | "guard";
 type Variant = { value: string; label: string };
 const lipVariants: Variant[] = [
   { value: "baseline", label: "Unchanged baseline" },
@@ -47,6 +48,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const controls = $<HTMLFieldSetElement>("controls"), status = $<HTMLParagraphElement>("status");
 const variant = $<HTMLSelectElement>("variant"), pose = $<HTMLSelectElement>("pose");
 const lipDisplay = $<HTMLSelectElement>("lip-display"), lipDisplayLabel = $<HTMLElement>("lip-display-label");
+const lipCamera = $<HTMLSelectElement>("lip-camera"), lipCameraLabel = $<HTMLElement>("lip-camera-label");
 const light = $<HTMLInputElement>("light");
 const exposure = $<HTMLInputElement>("exposure"), height = $<HTMLInputElement>("height");
 const distance = $<HTMLInputElement>("distance"), rightLabel = $<HTMLElement>("right-label");
@@ -199,6 +201,41 @@ type Pane = {
   headMesh: THREE.SkinnedMesh; brows: THREE.SkinnedMesh[];
 };
 
+function labelHeadUvIslands(geometry: THREE.BufferGeometry) {
+  const indices = geometry.index, position = geometry.getAttribute("position");
+  if (!indices || position.count !== 7189 || indices.count !== 13186 * 3)
+    throw Error("Pinned head UV-island topology changed");
+  const parent = Uint32Array.from({ length: position.count }, (_, i) => i);
+  const find = (start: number) => {
+    let i = start;
+    while (parent[i] !== i) { parent[i] = parent[parent[i]]!; i = parent[i]!; }
+    return i;
+  };
+  const join = (a: number, b: number) => { parent[find(b)] = find(a); };
+  for (let i = 0; i < indices.count; i += 3) {
+    const a = indices.getX(i), b = indices.getX(i + 1), c = indices.getX(i + 2);
+    join(a, b); join(b, c);
+  }
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < position.count; i++) {
+    const root = find(i), group = groups.get(root) ?? [];
+    group.push(i); groups.set(root, group);
+  }
+  const counts = [...groups.values()].map(group => group.length).sort((a, b) => b - a);
+  if (counts.length !== 16 || counts[0] !== 4830 || counts[2] !== 449 ||
+      counts.filter(n => n === 131).length !== 2)
+    throw Error("Pinned head UV-island sizes changed");
+  const classes = new Float32Array(position.count);
+  for (const group of groups.values()) {
+    // Numeric island classes are topology facts, not semantic lip labels.
+    const code = group.length === 4830 ? 0 : group.length === 449 ? 1
+      : group.length === 131 ? group.reduce((sum, i) => sum + position.getY(i), 0) / group.length > 1.625 ? 2 : 3
+      : 4;
+    for (const i of group) classes[i] = code;
+  }
+  geometry.setAttribute("studyIsland", new THREE.BufferAttribute(classes, 1));
+}
+
 // Keep Three's standard BRDF, maps, morphs and extended eight-weight skinning.
 // Only the final linear-light term changes for these opt-in diagnostic displays.
 function addLightComponent(material: THREE.MeshStandardMaterial, owner: "head" | "eye" | "brow") {
@@ -209,9 +246,22 @@ function addLightComponent(material: THREE.MeshStandardMaterial, owner: "head" |
     previousCompile(shader, renderer);
     if (component === "full") return;
     const marker = "vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;";
+    if ((component === "guard" || component === "islands") && owner === "head") {
+      // Both diagnostics ride the original vertices through skinning/morphs.
+      // The guard uses neutral coordinates; island colours use UV-split IDs.
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", `#include <common>\n${component === "guard" ? "varying vec3 vStudyBasePosition;" : "attribute float studyIsland; varying float vStudyIsland;"}`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>\n${component === "guard" ? "vStudyBasePosition = position;" : "vStudyIsland = studyIsland;"}`);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>", `#include <common>\n${component === "guard" ? "varying vec3 vStudyBasePosition;" : "varying float vStudyIsland;"}`);
+    }
     const replacement = component === "diffuse" ? "vec3 outgoingLight = totalDiffuse;"
       : component === "reflection" ? "vec3 outgoingLight = totalSpecular;"
       : component === "albedo" ? "vec3 outgoingLight = diffuseColor.rgb;"
+      : component === "guard" && owner === "head"
+        ? "float mouthBand = step(1.595, vStudyBasePosition.y) * (1.0 - step(1.675, vStudyBasePosition.y)); vec3 outgoingLight = mix(vec3(0.10, 0.55, 0.28), vec3(0.78, 0.18, 0.45), mouthBand);"
+      : component === "islands" && owner === "head"
+        ? "vec3 outgoingLight = vStudyIsland < 0.5 ? vec3(0.10, 0.55, 0.28) : vStudyIsland < 1.5 ? vec3(0.90, 0.35, 0.07) : vStudyIsland < 2.5 ? vec3(0.92, 0.78, 0.08) : vStudyIsland < 3.5 ? vec3(0.28, 0.22, 0.85) : vec3(0.45, 0.45, 0.45);"
       : `vec3 outgoingLight = ${owner === "head" ? "vec3(0.72, 0.24, 0.52)" : owner === "eye" ? "vec3(0.08, 0.72, 0.80)" : "vec3(0.90, 0.70, 0.10)"};`;
     if (!shader.fragmentShader.includes(marker)) throw Error("Three standard lighting output changed; diagnostic unavailable");
     shader.fragmentShader = shader.fragmentShader.replace(marker, replacement);
@@ -220,7 +270,7 @@ function addLightComponent(material: THREE.MeshStandardMaterial, owner: "head" |
   return (next: LightComponent) => {
     if (component === next) return;
     component = next;
-    material.toneMapped = next !== "albedo" && next !== "ownership";
+    material.toneMapped = next !== "albedo" && next !== "ownership" && next !== "islands" && next !== "guard";
     material.needsUpdate = true;
   };
 }
@@ -249,7 +299,7 @@ async function createPane(host: HTMLElement, maps: {
   fill.position.set(0.4, 1.65, -0.2);
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
-  const bytes = await loadBytes("/assets/head.glb", headHash);
+  const bytes = await loadBytes("/assets/head.glb", headHash ?? EXPECTED_SKIN_HASHES.head);
   const weightSets = restoreFirstWeights(bytes.buffer as ArrayBuffer);
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer as ArrayBuffer, "/assets/");
   scene.add(gltf.scene);
@@ -274,6 +324,7 @@ async function createPane(host: HTMLElement, maps: {
     }
     if (object.name === "head") {
       if (!(object instanceof THREE.SkinnedMesh)) throw Error("Head is not skinned");
+      labelHeadUvIslands(object.geometry);
       object.material = head; extendSkin(object, head); headMesh = object;
     } else if (object.name === "eyes") {
       object.material = eye;
@@ -384,10 +435,11 @@ async function main() {
       distance.value = "0"; height.value = "0";
       pose.value = poseByView[view];
       lipDisplayLabel.hidden = view !== "lip";
+      lipCameraLabel.hidden = view !== "lip";
       setOptions(view, !!sourceMaps, !!browNormal); markView(); render();
     }));
   pose.addEventListener("change", () => { poseByView[view] = pose.value as Pose; render(); });
-  for (const input of [variant, lipDisplay, light, exposure, height, distance]) input.addEventListener("input", render);
+  for (const input of [variant, lipDisplay, lipCamera, light, exposure, height, distance]) input.addEventListener("input", render);
   window.addEventListener("resize", render);
   $<HTMLButtonElement>("capture").addEventListener("click", () => {
     render();
@@ -398,7 +450,7 @@ async function main() {
     if (!context) return;
     context.drawImage(a, 0, 0); context.drawImage(b, a.width, 0);
     const link = document.createElement("a");
-    link.download = `xfs-render-study-${view}-${pose.value}-${variant.value}-${view === "lip" ? lipDisplay.value : "material"}.png`;
+    link.download = `xfs-render-study-${view}-${pose.value}-${variant.value}-${view === "lip" ? `${lipDisplay.value}-${lipCamera.value}` : "material"}.png`;
     link.href = canvas.toDataURL("image/png"); link.click();
   });
   controls.disabled = false;
@@ -457,10 +509,11 @@ async function main() {
   function render() {
     const selected = variant.value;
     const display: LipDisplay = view === "lip" ? lipDisplay.value as LipDisplay : "material";
+    const cameraPreset: LipCamera = view === "lip" ? lipCamera.value as LipCamera : "front";
     const angle = Number(light.value) * Math.PI / 180;
-    const y = (view === "brow" ? 1.71 : view === "eye" ? 1.67 : 1.55) + Number(height.value);
+    const y = (view === "brow" ? 1.71 : view === "eye" ? 1.67 : cameraPreset === "mouth" ? 1.625 : 1.55) + Number(height.value);
     const x = view === "eye" || view === "brow" ? -0.036 : 0;
-    const z = (view === "brow" ? 0.28 : 0.44) + Number(distance.value);
+    const z = (view === "brow" ? 0.28 : cameraPreset === "mouth" ? 0.25 : 0.44) + Number(distance.value);
     // Both screen masks must use an identical pixel grid, even when the right
     // figure loses a CSS pixel to its dividing border or viewport rounding.
     const widthPx = Math.min(...panes.map(pane => pane.renderer.domElement.parentElement!.clientWidth));
@@ -471,13 +524,15 @@ async function main() {
     $<HTMLOutputElement>("distance-value").textContent = Number(distance.value).toFixed(3);
     const selectedLabel = variant.selectedOptions[0]?.textContent ?? "Selected inputs";
     leftLabel.textContent = display === "components" ? `Diffuse only · ${selectedLabel}`
-      : display === "ownership" ? `Unlit albedo · ${selectedLabel}` : "Current browser baseline";
+      : display === "ownership" || display === "islands" || display === "guard" ? `Unlit albedo · ${selectedLabel}` : "Current browser baseline";
     rightLabel.textContent = display === "components" ? `Reflection only · ${selectedLabel}`
-      : display === "ownership" ? "Mesh ownership: head / eyes / brow" : selectedLabel;
+      : display === "ownership" ? "Mesh ownership: head / eyes / brow"
+      : display === "islands" ? "Head UV islands (topology classes)"
+      : display === "guard" ? "Provisional mouth exclusion band" : selectedLabel;
     for (const [index, pane] of panes.entries()) {
       const active = display === "material" && index === 0 ? "baseline" : selected;
       const component: LightComponent = display === "components" ? index === 0 ? "diffuse" : "reflection"
-        : display === "ownership" ? index === 0 ? "albedo" : "ownership" : "full";
+        : display === "ownership" || display === "islands" || display === "guard" ? index === 0 ? "albedo" : display : "full";
       const match = /^(base|arkhe)-(r|rb)-(packed|flat)$/.exec(active);
       const browSource = view === "brow" ? /^(base|arkhe)-brow-/.exec(active) : null;
       const sourceKey = match?.[1] ?? browSource?.[1];
@@ -513,7 +568,8 @@ async function main() {
       pane.renderer.domElement.style.width = `${widthPx}px`;
       pane.renderer.domElement.style.height = `${heightPx}px`;
       pane.camera.aspect = widthPx / heightPx;
-      pane.camera.position.set(x, y, -z);
+      pane.camera.position.set(x + (cameraPreset === "quarter" ? z * 0.5 : 0), y,
+        -z * (cameraPreset === "quarter" ? Math.sqrt(3) / 2 : 1));
       pane.camera.lookAt(x, y, 0);
       pane.camera.updateProjectionMatrix();
       const silhouette = view === "brow" ? browSilhouette(pane) : null;
@@ -523,8 +579,12 @@ async function main() {
     if (view === "lip" && display !== "material") {
       metrics.textContent = display === "components"
         ? "Both panes use identical selected maps and roughness. Each includes direct lights and room IBL; the left omits standard specular and the right omits standard diffuse. ACES exposure acts on each separately, so displayed pixels do not add back to the full image."
-        : "Left: unlit sampled colour on the deformed surface. Right: head mesh = magenta, separate eye mesh = cyan, brow mesh = yellow, background/missing mouth parts = dark. Upper and lower lip share the head mesh; this does not mark a safe lip boundary.";
-    } else if (view === "lip" && pose.value === "neutral" && height.value === "0" && distance.value === "0") {
+        : display === "islands"
+          ? "Right: largest head UV island green; 449-vertex central island orange; the two 131-vertex islands yellow/blue; other islands grey. Eye mesh cyan. UV seams split geometry for mapping but do not prove different tissues or transport ownership."
+        : display === "guard"
+          ? "Left: unlit colour. Right: a broad magenta no-transport band bound to neutral head coordinates y=1.595–1.675; green head lies outside it, cyan eyes are separate, and dark gaps have no mesh. This excludes nearby skin too and cannot identify upper versus lower lip. No blur is applied."
+          : "Left: unlit sampled colour on the deformed surface. Right: head mesh = magenta, separate eye mesh = cyan, brow mesh = yellow, background/missing mouth parts = dark. Upper and lower lip share the head mesh; this does not mark a safe lip boundary.";
+    } else if (view === "lip" && cameraPreset === "front" && pose.value === "neutral" && height.value === "0" && distance.value === "0") {
       const [left, right] = panes.map(pane => lipMetric(pane.renderer.domElement));
       metrics.textContent = `Default-frame broad lip crop (${left.pixels} pixels): near-white RGB>220 ${left.bright} → ${right.bright}; mean linear luminance ${left.meanLinear.toFixed(4)} → ${right.meanLinear.toFixed(4)}.`;
     } else if (view === "brow") {
@@ -533,12 +593,16 @@ async function main() {
     } else metrics.textContent = view === "lip"
       ? pose.value === "saved"
         ? "The fixed lip crop was calibrated only for the neutral face. Saved-pose pixels are shown without that crop metric."
-        : "Reset framing height and distance to 0 for comparable fixed-crop metrics."
+        : "Use Front camera and reset framing height and distance to 0 for comparable fixed-crop metrics."
       : "";
     const diagnosticNote = display === "components"
       ? " Standard diffuse and specular lobes are separated before tone mapping, with no skin transport, transmission or REDengine parity claim."
       : display === "ownership"
         ? " Albedo bypasses lights and tone mapping; ownership is per rendered mesh, not upper/lower-lip anatomy."
+        : display === "islands"
+          ? " Colours show connected components before welding UV seams. The 449- and 131-vertex groups cluster near the mouth, but material and topology provide no validated upper/lower-lip semantics."
+        : display === "guard"
+          ? " The mouth band is an intentionally overinclusive geometry-coordinate exclusion preview. It is not semantic lip ownership or a validated transport mask; eyes and teeth still need source/depth checks."
         : "";
     status.textContent = view === "lip"
       ? sourceMaps
