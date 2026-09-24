@@ -320,7 +320,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .item-grip .icon { width: 12px; height: 12px; }
 .item-lead { display: flex; align-items: center; gap: var(--sp-3); }
 .item-lead:empty { display: none; }
-.item-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--sp-4); height: var(--row-h); padding: 0 var(--sp-2); border: 0; background: transparent; text-align: left; }
+.item-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-4); height: var(--row-h); padding: 0 var(--sp-2); border: 0; background: transparent; text-align: left; }
 .item-main:focus-visible { outline-offset: -2px; }
 .item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .item-row.selected .item-name { font-weight: 650; }
@@ -929,7 +929,7 @@ body.guide { overflow: auto; height: auto; }
 </article>
 <article class="pattern" id="d-persist" data-status="implemented">
   <header class="pattern-head"><h3>Persistence and recovery</h3><span class="status-tag implemented">Implemented</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>Layouts persist as a versioned, bounded workspace preference (format xfs/dock, version 1) beside theme choice — never in recipes, collections, SQLite or exports.</dd><dt>When</dt><dd>Restored at start through the ui-preferences recovery gate: malformed trees are rejected, unknown panels dropped, duplicates removed, missing (new) panels re-added beside their default siblings, and floating windows pulled back on screen. Invalid saved layouts fall back to defaults with a visible notice.</dd><dt>Combine</dt><dd>Theme preference is stored beside the layout; both change without touching recipes, Undo or the library.</dd><dt>Adapt</dt><dd>Each size class is recovered against the current window, so a layout saved on a large monitor opens safely on a laptop.</dd><dt>Driven by</dt><dd><code>preferences.dispatch({kind:'layout.set', layout})</code>, <code>recoverDockLayout</code>, <code>parseTree</code>, <code>recoverWindows</code>.</dd></dl>
 </article>
 <article class="pattern wide" id="d-live" data-status="implemented">
@@ -1102,7 +1102,7 @@ body.guide { overflow: auto; height: auto; }
 </article>
 <article class="pattern" id="t-undo" data-status="implemented">
   <header class="pattern-head"><h3>Undo, recovery and view changes</h3><span class="status-tag implemented">Implemented</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>Three scopes, named consistently: recipe Undo (Ctrl+Z; per preset; content edits, one step per gesture or slider drag), recovery (restore removed preset, recover previous collection draft — separate stacks) and view changes (camera, UV pan/zoom, panels, theme — never undoable, never in recipes).</dd><dt>When</dt><dd>Toasts offer the matching scope: “Undo” after layer removal or reset, “Restore” after preset removal, “Undo open” after opening a collection.</dd><dt>Combine</dt><dd>Menus mark view commands “View changes are not edits”. Removal commands say “Undo with Ctrl+Z” or “Restorable from the Presets panel”.</dd><dt>Adapt</dt><dd>The same wording in toasts, menus and the palette at every size.</dd><dt>Driven by</dt><dd>recipe.undo capability; preset.edit restore; collection.recover; views never enter recipe history.</dd></dl>
 </article>
 <article class="pattern" id="t-async" data-status="implemented">
@@ -1122,12 +1122,12 @@ body.guide { overflow: auto; height: auto; }
 </article>
 <article class="pattern" id="t-stale" data-status="implemented">
   <header class="pattern-head"><h3>Stale results</h3><span class="status-tag implemented">Implemented</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>A result computed from an earlier snapshot stays visible but is labelled Stale with a prompt to run again.</dd><dt>When</dt><dd>Package results after the draft changes (freshness), Glitter flake measurements after the layer or tier changes.</dd><dt>Combine</dt><dd>Stale results keep their content and add a warning note with the next step.</dd><dt>Adapt</dt><dd>The badge wraps under the title in narrow panels.</dd><dt>Driven by</dt><dd><code>files.package.freshness</code>, <code>status.glitter[].current</code>.</dd></dl>
 </article>
 <article class="pattern" id="t-gesture" data-status="implemented">
   <header class="pattern-head"><h3>Gesture transactions</h3><span class="status-tag implemented">Implemented</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>A pointer drag, wheel burst or slider drag is one transaction: one Undo step on completion; Escape, pointer cancel or focus loss restores the start. The status bar says “Gesture in progress · Esc cancels” or “Adjusting · Esc restores”.</dd><dt>When</dt><dd>Every continuous edit on the head, the UV map or a slider. Moving panels and changing the layout cancels an active viewport gesture first.</dd><dt>Combine</dt><dd>Panel moves cancel an active viewport gesture first so a layout change never commits a half-finished edit.</dd><dt>Adapt</dt><dd>Identical in every layout.</dd><dt>Driven by</dt><dd><code>previewState().gesture / control</code>.</dd></dl>
 </article></div>
 </section>
@@ -1260,12 +1260,12 @@ body.guide { overflow: auto; height: auto; }
 </article>
 <article class="pattern" id="x-bulk" data-status="future">
   <header class="pattern-head"><h3>Multi-select and bulk actions</h3><span class="status-tag future">Future direction · not built</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>Shift/Ctrl selection in ordered rows with batch move, duplicate, finish change and removal as one transaction.</dd><dt>When</dt><dd>Large presets and collections.</dd><dt>Combine</dt><dd>Adds a selection count to list heads and batch commands to row menus.</dd><dt>Adapt</dt><dd>Keyboard Shift/Ctrl selection at every size.</dd><dt>Driven by</dt><dd>Missing API: batch transactions with one Undo step.</dd></dl>
 </article>
 <article class="pattern" id="x-release" data-status="future">
   <header class="pattern-head"><h3>Runtime test checklist and release</h3><span class="status-tag future">Future direction · not built</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>A checklist beside a built package for the single batched game session: selector registration, A→B→Off, saved identity, posed clearance — each marked observed/unobserved.</dd><dt>When</dt><dd>After Build, before any release packaging.</dd><dt>Combine</dt><dd>A section of Mod package beneath the result card.</dd><dt>Adapt</dt><dd>Checklist rows wrap.</dd><dt>Driven by</dt><dd>Missing API: runtime evidence records; install remains out of scope.</dd></dl>
 </article></div>
 </section>
@@ -1294,7 +1294,7 @@ body.guide { overflow: auto; height: auto; }
 </article>
 <article class="pattern" id="r-a11y" data-status="rule">
   <header class="pattern-head"><h3>Accessibility checklist</h3><span class="status-tag rule">Rule</span></header>
-  
+
   <dl class="guidance"><dt>What</dt><dd>Text ≥4.5:1 and control boundaries ≥3:1 in both themes; visible focus on everything; every icon-only control named; disabled reasons in text; menus/tabs/lists follow ARIA patterns; live regions for results; reduced motion honoured; forced-colors fallbacks; no information by colour alone.</dd><dt>When</dt><dd>Every change. Verify light and dark at 1600 px and 900 px, keyboard-only.</dd></dl>
 </article>
 <article class="pattern wide" id="r-rules" data-status="rule">

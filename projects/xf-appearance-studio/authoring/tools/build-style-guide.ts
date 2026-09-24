@@ -10,7 +10,7 @@ export async function buildGuide(generated = new Date().toISOString().slice(0, 1
   if (!bundle.success) throw Error(bundle.logs.map(String).join("\n"));
   // An inline module must never contain a literal closing script tag.
   const script = (await bundle.outputs[0].text()).replace(/<\/script/gi, "<\\/script");
-  return guideDocument({ css, script, generated });
+  return guideDocument({ css, script, generated }).replace(/[ \t]+$/gm, "");
 }
 if (import.meta.main) {
   const html = await buildGuide(process.argv[2]);
