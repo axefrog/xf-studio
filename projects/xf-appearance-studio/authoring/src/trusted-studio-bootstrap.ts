@@ -1,4 +1,5 @@
 import { CollectionApplication } from "./collection-application";
+import type { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import type { CollectionTransport } from "./collection-service";
 import type { SavedAppearanceState } from "./saved-appearance-actions";
 import type { SavedV } from "./save-reader";
@@ -17,6 +18,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   core: Core;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
+  previewReadiness: Pick<AuthoringPreviewCoordinator, "readiness" | "subscribe">;
   fileDevice: StudioFilePort;
   transport: CollectionTransport;
   onEditorRestored(): void;
@@ -49,7 +51,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   collection = new CollectionApplication(workspace.collections, workspace.library,
     core.document, options.onEditorRestored, options.transport, core.app, files);
   const port = createStudioPresentation({ authoring: core.app, library: collection,
-    files, viewport: options.viewport, preferences: options.preferences });
+    files, viewport: options.viewport, preferences: options.preferences,
+    previewReadiness: options.previewReadiness });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

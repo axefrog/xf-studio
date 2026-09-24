@@ -1,5 +1,7 @@
 # XF Studio
 
+New features follow the [XF Studio architecture contract](../../research/authoring/architecture-contract.md): validated application actions and detached state, browser/renderer device ports, and replaceable presentation. The independent [presentation-port acceptance](../../research/authoring/ui-port-acceptance-2026-09-24.md) is the current boundary baseline.
+
 The [Studio-to-mod pipeline guide](../../research/authoring/studio-to-mod-pipeline.md) diagrams how editable collections become private, offline-verified Cyberpunk mod candidates and where runtime proof is still missing.
 
 A [read-only study of Nathan's separate CharacterCreator](../../research/eye-artistry/charactercreator-rendering-reference.md) records useful lighting and material isolation methods, its rejected skin-response trial, and a bounded lip-seam adapter test. Its shader values and assets were not imported into XF Studio.

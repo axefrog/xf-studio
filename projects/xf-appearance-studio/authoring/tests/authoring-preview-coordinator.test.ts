@@ -86,9 +86,14 @@ test("publication rejects obsolete quality and removed slots before touching ren
 
 test("quality status reflects queue and texture readiness without knowing canvas or worker types", () => {
   const h = harness();
+  const phases: string[] = [];
+  const unsubscribe = h.coordinator.subscribe(() => phases.push(h.coordinator.readiness().phase));
+  expect(h.coordinator.readiness()).toMatchObject({ phase: "updating", size: 1024, waiting: true });
   expect(h.coordinator.describeQuality()).toStartWith("Updating · 1024");
   h.coordinator.publish({ i: 0, size: 1024, ms: 1, version: 1,
     data: new Uint8ClampedArray(1024 * 1024 * 4) });
+  expect(h.coordinator.readiness()).toMatchObject({ phase: "ready", size: 1024, waiting: false });
+  expect(phases).toContain("ready");
   expect(h.coordinator.describeQuality()).toStartWith("Ready · 1024");
   h.setQueue(1, null);
   expect(h.coordinator.describeQuality()).toStartWith("Updating · 1024");
@@ -96,4 +101,5 @@ test("quality status reflects queue and texture readiness without knowing canvas
   expect(h.coordinator.describeQuality()).toStartWith("Updating · 1024");
   h.setQueue(0, null); h.setPresentationMaps(true);
   expect(h.coordinator.describeQuality()).toStartWith("Updating · 1024");
+  unsubscribe();
 });

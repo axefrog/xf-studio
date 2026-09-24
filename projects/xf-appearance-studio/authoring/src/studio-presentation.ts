@@ -1,4 +1,5 @@
 import type { CollectionViewPort } from "./collection-application";
+import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication } from "./studio-application";
 import type { StudioFileOperations } from "./studio-file-operations";
@@ -28,12 +29,14 @@ export type StudioPresentationPort<Slot> = {
   readonly preferences: Pick<UIPreferenceActions, "capability" | "dispatch"> & {
     snapshot(): ReadonlyDeep<ReturnType<UIPreferenceActions["snapshot"]>>;
   };
+  readonly previewReadiness: { snapshot(): Readonly<PreviewReadiness> };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
     files: ReturnType<StudioFileOperations["snapshot"]>;
     viewport: ReturnType<ViewportAttachment<Slot>["snapshot"]>;
     preferences: ReturnType<UIPreferenceActions["snapshot"]>;
+    previewReadiness: PreviewReadiness;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -45,9 +48,10 @@ export function createStudioPresentation<Slot>(sources: {
   files: StudioFileOperations;
   viewport: ViewportAttachment<Slot>;
   preferences: UIPreferenceActions;
+  previewReadiness: { readiness(): PreviewReadiness; subscribe(listener: () => void): () => void };
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
-    v = sources.viewport, p = sources.preferences;
+    v = sources.viewport, p = sources.preferences, r = sources.previewReadiness;
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -95,13 +99,15 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => p.snapshot(), capability: action => p.capability(action),
     dispatch: action => p.dispatch(action),
   };
+  const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
+    previewReadiness,
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
-      viewport: v.snapshot(), preferences: p.snapshot() }),
+      viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
-        v.subscribe(listener), p.subscribe(listener)];
+        v.subscribe(listener), p.subscribe(listener), r.subscribe(listener)];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

@@ -77,17 +77,21 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
   });
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
-  return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences }),
+  const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
+    pending: 0, waiting: false, estimatedBytes: 1024 }), subscribe: (_listener: () => void) => () => {} };
+  return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
+    previewReadiness }),
     packageInput: () => packageInput, downloads, locations };
 }
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
   expect(Object.keys(shell).sort()).toEqual(["authoring", "files", "library", "preferences",
-    "snapshot", "subscribe", "viewport"]);
+    "previewReadiness", "snapshot", "subscribe", "viewport"]);
   expect("document" in shell.authoring).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);
   const initial = shell.snapshot(), firstLayer = initial.authoring.document.recipe.layers[0];
+  expect(initial.previewReadiness).toMatchObject({ phase: "ready", size: 1024 });
   (initial.authoring.document.recipe.layers[0] as any).name = "Tampered";
   expect(shell.snapshot().authoring.document.recipe.layers[0].name).not.toBe("Tampered");
 

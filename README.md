@@ -13,6 +13,7 @@ Source repository: [axefrog/xf-studio](https://github.com/axefrog/xf-studio). Th
 | [ArchiveXL strategy](research/archive-xl/eye-artistry-strategy.md) | Concrete expansion design and its evidence/limits |
 | [Art and project lineage](research/eye-artistry/lineage.md) | Which historical sources contain what |
 | [Validation workflow](docs/validation.md) | Offline checks and batched runtime evidence |
+| [XF Studio architecture contract](research/authoring/architecture-contract.md) | Mandatory ownership, action/port, persistence and verification rules for future features |
 | [Community credits](docs/community-credits.md) | Who taught us what, sources, and distinctions between learning and reuse |
 | [Toolchain](docs/toolchain.md) | Installed tools, runtime versions and update needs |
 | [Research queue](research/backlog/README.md) | Requested CCXL/character-creator capability study and later investigations |

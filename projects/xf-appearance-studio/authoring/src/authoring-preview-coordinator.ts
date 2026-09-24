@@ -6,6 +6,9 @@ import type { Layer } from "./recipe";
 import type { RasterResponse } from "./raster-processor";
 
 export type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
+export type PreviewReadiness = { phase: "ready" | "updating" | "blocked";
+  size: PreviewTextureSize; pending: number; waiting: boolean;
+  estimatedBytes: number; error?: string };
 
 /** Device resources stay behind this port; it has no DOM, Three or worker types. */
 export type PreviewRenderPort = {
@@ -30,6 +33,7 @@ export type PreviewRenderPort = {
 export class AuthoringPreviewCoordinator {
   readonly quality: PreviewQualityActions;
   private lastRaster = 0;
+  private listeners = new Set<() => void>();
   constructor(private document: AuthoringDocument, initialSize: PreviewTextureSize,
     private port: PreviewRenderPort) {
     this.quality = new PreviewQualityActions(initialSize, {
@@ -40,23 +44,33 @@ export class AuthoringPreviewCoordinator {
         this.port.renderAll();
       },
     });
+    this.quality.subscribe(() => this.notify());
   }
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  }
+  private notify() { for (const listener of this.listeners) listener(); }
   get size() { return this.quality.snapshot().size; }
   get lastRasterMs() { return this.lastRaster; }
   assess(size: PreviewTextureSize = this.size) {
     return assessPreviewQuality(this.document.recipe, size, this.port.maxTextureSize());
   }
-  describeQuality() {
-    const error = this.quality.snapshot().error;
-    if (error) return error;
-    const assessment = this.assess();
-    if (!assessment.accepted) return assessment.error!;
+  readiness(): PreviewReadiness {
+    const quality = this.quality.snapshot(), assessment = this.assess();
     const queue = this.port.queue();
     const pending = queue.queued + (queue.running ? 1 : 0);
     const waiting = this.document.recipe.layers.some((layer, index) => layer.enabled &&
       (this.port.resourceSize(index) !== this.size ||
         this.port.needsPresentationMaps(index, layer, this.size)));
-    return `${pending || waiting ? "Updating" : "Ready"} · ${this.size} × ${this.size} · estimated generated-texture peak ${Math.ceil(assessment.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
+    const error = quality.error || (!assessment.accepted ? assessment.error : undefined);
+    return { phase: error ? "blocked" : pending || waiting ? "updating" : "ready",
+      size: this.size, pending, waiting, estimatedBytes: assessment.estimatedBytes,
+      ...(error ? { error } : {}) };
+  }
+  describeQuality() {
+    const state = this.readiness();
+    if (state.error) return state.error;
+    return `${state.phase === "ready" ? "Ready" : "Updating"} · ${state.size} × ${state.size} · estimated generated-texture peak ${Math.ceil(state.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
   }
   render(index = this.document.active) {
     const plan = planLayerPreview({ recipe: this.document.recipe, index, active: this.document.active,
@@ -76,6 +90,7 @@ export class AuthoringPreviewCoordinator {
     this.quality.recover();
     this.port.request(index, layer, plan.priority, plan.size, plan.needsOptics);
     this.port.updateLayer(index, layer);
+    this.notify();
     this.port.refresh();
   }
   /** RasterClient validates a complete bundle and its version first; this guards replacement tiers/slots. */
@@ -84,6 +99,7 @@ export class AuthoringPreviewCoordinator {
     if (!layer || result.size !== (layer.enabled ? this.size : 1)) return false;
     this.port.publish(result, layer);
     this.lastRaster = result.ms;
+    this.notify();
     this.port.refreshQuality();
     this.port.report(`Live makeup · ${result.size}² · ${Math.round(result.ms)} ms · layer ${result.i + 1}`);
     return true;
@@ -95,6 +111,7 @@ export class AuthoringPreviewCoordinator {
   }
   resetStack() {
     this.port.reset(); this.port.replaceResources(); this.port.renderAll("stack"); this.port.refresh();
+    this.notify();
   }
   rejectInitialCapacity() {
     const assessment = this.assess();

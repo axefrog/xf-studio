@@ -1,6 +1,6 @@
 # XF Studio UI/UX overhaul — queued Claude / Opus 5.5 handoff
 
-Explicit user request, updated 24 September 2026. **UI quality is now a priority. Queued, not delegated yet.** The full presentation/core decoupling gate below still controls dispatch; priority does not permit the redesign to alter functional behavior. Once the gate is demonstrably ready, prepare the handoff rather than continuing to defer the request by habit.
+Explicit user request, updated 24 September 2026. **UI quality is now a priority. Queued, not delegated yet.** The current-workflow presentation/core decoupling gate below has passed through an independent browser entry and [port-only acceptance](../authoring/ui-port-acceptance-2026-09-24.md). Dispatch now awaits authenticated access to the exact requested Claude CLI model and effort; priority does not permit the redesign to alter functional behavior.
 
 Earlier functionality-first scheduling described the previous priority. Continue useful makeup work while establishing the boundary, but treat the UI handoff as the next priority once the gate passes. Decoupling is not a reason to block unrelated functional fixes now.
 
@@ -10,7 +10,7 @@ Delegate this work through the **`claude` CLI with the exact Opus 5.5 model and 
 
 ## Required prerequisite: presentation/functionality decoupling
 
-Nathan explicitly requires the architecture to be fully decoupled before delegation, so Claude can reimagine UI strategy without changing the functional logic. This prerequisite is **not yet met**: typed collection, recipe, gesture, preview, motion, quality and saved-V services now exist, but `authoring/src/main.ts` still coordinates DOM/file adapters, renderer jobs and some view/persistence state. [The source-audited action catalogue](../authoring/ui-action-catalogue.md) identifies exact implemented IDs and remaining command/capability gaps; documenting them alone does not pass the handoff gate.
+Nathan explicitly requires the architecture to be fully decoupled before delegation, so Claude can reimagine UI strategy without changing the functional logic. This prerequisite is **met for current workflows**: typed application services and browser devices are assembled by a second `/port-smoke.html?verify=1` entry, which mounts only `StudioPresentationPort` and does not import `main.ts` or reuse its control IDs. [The port-only acceptance](../authoring/ui-port-acceptance-2026-09-24.md) covers edit/Undo, persistence, library conflict/recovery, package filtering and preview readiness, and records browser-automation limits. [The source-audited action catalogue](../authoring/ui-action-catalogue.md) remains the scope reference. `main.ts` is a trusted legacy composition root, not a freely replaceable UI module.
 
 1. Extract UI-independent application state, commands, undo/history, document/library identity and asynchronous operation coordination. Expose typed commands and observable read-only state, not direct mutable access to recipes or database internals.
 2. Keep recipe schemas, shape/raster evaluator, save reader, SQLite/revision rules, asset resolver, material behavior and compiler/export contracts in owned core/adapters with contract checks. Desktop/browser transports must not determine domain behavior.

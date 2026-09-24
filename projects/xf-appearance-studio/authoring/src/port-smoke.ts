@@ -98,6 +98,7 @@ async function start() {
   }, workspace.uvView);
   bootstrap = createTrustedStudioBootstrap({
     workspace, core, preferences, viewport: viewportDevice.attachment,
+    previewReadiness: previewDevice.coordinator,
     transport: collectionTransport("/api/verification/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
     onRecipeImported: persist,
@@ -259,7 +260,8 @@ function paint(port: StudioPresentationPort<HTMLElement>) {
     preset: state.library.draft?.selected, presetCount: state.library.draft?.collection.presets.length,
     layers: documentState.recipe.layers.map(layer => ({ id: layer.id, name: layer.name, enabled: layer.enabled })),
     active: documentState.active, selected: documentState.selected, history: documentState.history.length,
-    viewport: state.viewport, preview, quality, motion: state.authoring.motion,
+    viewport: state.viewport, preview, quality, previewReadiness: state.previewReadiness,
+    motion: state.authoring.motion,
     savedV: !!state.authoring.savedV?.savedV, file: state.files.last,
     package: state.files.package,
   }, null, 2);

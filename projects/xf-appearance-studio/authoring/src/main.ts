@@ -398,6 +398,7 @@ uvEditor = viewportDevice.mountUV($<HTMLCanvasElement>("uv"), {
 }, workspace.uvView);
 const studioBootstrap = createTrustedStudioBootstrap({
   workspace, core, preferences: uiPreferences, viewport: viewportAttachment,
+  previewReadiness: previewCoordinator,
   transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
   onEditorRestored: resetStackResources,
   onRecipeImported: () => { presetLibrary?.refresh(); persist(); },
