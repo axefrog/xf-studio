@@ -21,13 +21,19 @@ function requireFile(path: string) {
   if (!existsSync(path) || !statSync(path).isFile()) throw Error(`Missing packaging artifact: ${path}`);
 }
 
+// Windows' bundled bsdtar reads .tar.zst and .zip; a GNU tar earlier on PATH (e.g. Git's
+// usr/bin on CI runners) cannot, so prefer the system copy explicitly.
+const systemTar = process.platform === "win32" && process.env.SystemRoot ?
+  resolve(process.env.SystemRoot, "System32", "tar.exe") : "";
+const tarCommand = systemTar && existsSync(systemTar) ? systemTar : "tar";
+
 function tar(args: string[]): string {
-  const result = spawnSync("tar", args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+  const result = spawnSync(tarCommand, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw Error(`Cannot inspect archive: ${result.error?.message ?? result.stderr}`);
   return result.stdout;
 }
 function tarBytes(args: string[]): Buffer {
-  const result = spawnSync("tar", args, { maxBuffer: 32 * 1024 * 1024 });
+  const result = spawnSync(tarCommand, args, { maxBuffer: 32 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw Error(`Cannot inspect archive: ${result.error?.message ?? result.stderr}`);
   return result.stdout;
 }
@@ -82,6 +88,6 @@ sameMembers(setupMembers, [
 ], "Windows setup ZIP");
 
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
-console.log(`Verified private Windows setup: ${installer}`);
+console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
 console.log("Seven allowlisted Studio view files and seven hashed asset-free build tools; no private preview assets or update feed.");

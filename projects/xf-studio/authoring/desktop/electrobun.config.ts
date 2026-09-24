@@ -1,4 +1,8 @@
 import type { ElectrobunConfig } from "electrobun";
+import desktopPackage from "./package.json";
+
+// package.json `version` is the single source of truth for the app version; release
+// tags, About, packaged version.json and the artifact gate all derive from it.
 
 // A distinct disposable app identity/entry can exercise the packaged host
 // without borrowing or overwriting an installed user's Studio data.
@@ -15,7 +19,7 @@ export default {
     name: trialSuffix ? "XF Studio Build Trial" : uiTrialSuffix ? "XF Studio UI Trial" : "XF Studio",
     identifier: trialSuffix ? `dev.axefrog.xf-studio-build-trial-${trialSuffix}` :
       uiTrialSuffix ? `dev.axefrog.xf-studio-ui-trial-${uiTrialSuffix}` : "dev.axefrog.xf-studio",
-    version: "0.1.0",
+    version: desktopPackage.version,
   },
   build: {
     mainProcess: "bun",
