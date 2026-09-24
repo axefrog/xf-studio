@@ -10,6 +10,8 @@ import { browScreenMetrics } from "./brow-study-metrics";
 
 type View = "lip" | "eye" | "brow";
 type Pose = "neutral" | "saved";
+type LipDisplay = "material" | "components" | "ownership";
+type LightComponent = "full" | "diffuse" | "reflection" | "albedo" | "ownership";
 type Variant = { value: string; label: string };
 const lipVariants: Variant[] = [
   { value: "baseline", label: "Unchanged baseline" },
@@ -44,9 +46,11 @@ const browVariants: Variant[] = [
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const controls = $<HTMLFieldSetElement>("controls"), status = $<HTMLParagraphElement>("status");
 const variant = $<HTMLSelectElement>("variant"), pose = $<HTMLSelectElement>("pose");
+const lipDisplay = $<HTMLSelectElement>("lip-display"), lipDisplayLabel = $<HTMLElement>("lip-display-label");
 const light = $<HTMLInputElement>("light");
 const exposure = $<HTMLInputElement>("exposure"), height = $<HTMLInputElement>("height");
 const distance = $<HTMLInputElement>("distance"), rightLabel = $<HTMLElement>("right-label");
+const leftLabel = $<HTMLElement>("left-label");
 const metrics = $<HTMLParagraphElement>("metrics");
 
 type PrivateMap = { url: string; sha256: string };
@@ -186,10 +190,40 @@ async function loadBrowNormal() {
 
 type Pane = {
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera;
+  environmentTarget: THREE.WebGLRenderTarget;
   key: THREE.DirectionalLight; head: THREE.MeshStandardMaterial; eye: THREE.MeshStandardMaterial;
+  setHeadComponent: (component: LightComponent) => void;
+  setEyeComponent: (component: LightComponent) => void;
+  setBrowComponent?: (component: LightComponent) => void;
   brow?: THREE.MeshStandardMaterial; browError?: string;
   headMesh: THREE.SkinnedMesh; brows: THREE.SkinnedMesh[];
 };
+
+// Keep Three's standard BRDF, maps, morphs and extended eight-weight skinning.
+// Only the final linear-light term changes for these opt-in diagnostic displays.
+function addLightComponent(material: THREE.MeshStandardMaterial, owner: "head" | "eye" | "brow") {
+  let component: LightComponent = "full";
+  const previousCompile = material.onBeforeCompile.bind(material);
+  const previousKey = material.customProgramCacheKey.bind(material);
+  material.onBeforeCompile = (shader, renderer) => {
+    previousCompile(shader, renderer);
+    if (component === "full") return;
+    const marker = "vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;";
+    const replacement = component === "diffuse" ? "vec3 outgoingLight = totalDiffuse;"
+      : component === "reflection" ? "vec3 outgoingLight = totalSpecular;"
+      : component === "albedo" ? "vec3 outgoingLight = diffuseColor.rgb;"
+      : `vec3 outgoingLight = ${owner === "head" ? "vec3(0.72, 0.24, 0.52)" : owner === "eye" ? "vec3(0.08, 0.72, 0.80)" : "vec3(0.90, 0.70, 0.10)"};`;
+    if (!shader.fragmentShader.includes(marker)) throw Error("Three standard lighting output changed; diagnostic unavailable");
+    shader.fragmentShader = shader.fragmentShader.replace(marker, replacement);
+  };
+  material.customProgramCacheKey = () => `study-${component}|${previousKey()}`;
+  return (next: LightComponent) => {
+    if (component === next) return;
+    component = next;
+    material.toneMapped = next !== "albedo" && next !== "ownership";
+    material.needsUpdate = true;
+  };
+}
 
 async function createPane(host: HTMLElement, maps: {
   skinColor: THREE.Texture; skinNormal: THREE.Texture; skinRoughness: THREE.Texture;
@@ -205,7 +239,8 @@ async function createPane(host: HTMLElement, maps: {
   const camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
-  scene.environment = pmrem.fromScene(room, 0.04).texture;
+  const environmentTarget = pmrem.fromScene(room, 0.04);
+  scene.environment = environmentTarget.texture;
   pmrem.dispose(); room.dispose();
   const key = new THREE.DirectionalLight(0xfff2e9, 2.5);
   key.target.position.set(0, 1.67, 0);
@@ -223,6 +258,8 @@ async function createPane(host: HTMLElement, maps: {
     normalMap: maps.skinNormal, normalScale: new THREE.Vector2(0.35, -0.35),
   });
   const eye = new THREE.MeshStandardMaterial({ map: maps.eyeColor, roughness: 0.18 });
+  const setHeadComponent = addLightComponent(head, "head");
+  const setEyeComponent = addLightComponent(eye, "eye");
   let headMesh: THREE.SkinnedMesh | undefined;
   let foundEyes = false;
   gltf.scene.traverse(object => {
@@ -246,10 +283,12 @@ async function createPane(host: HTMLElement, maps: {
   });
   if (!headMesh || !foundEyes) throw Error("Head preview is missing its head or eye mesh");
   let brow: THREE.MeshStandardMaterial | undefined, browError: string | undefined;
+  let setBrowComponent: ((component: LightComponent) => void) | undefined;
   const brows: THREE.SkinnedMesh[] = [];
   try {
     brow = await loadSavedBrowMaterial(new THREE.TextureLoader(), 8);
     if (brow) {
+      setBrowComponent = addLightComponent(brow, "brow");
       const browBytes = await loadBytes("/assets/brows.glb", BROW_GLB_HASH);
       const browWeights = restoreFirstWeights(browBytes.buffer as ArrayBuffer);
       const browGltf = await new GLTFLoader().parseAsync(browBytes.buffer as ArrayBuffer, "/assets/");
@@ -270,7 +309,9 @@ async function createPane(host: HTMLElement, maps: {
       scene.add(browGltf.scene);
     }
   } catch (error) { browError = (error as Error).message; }
-  return { renderer, scene, camera, key, head, eye, brow, browError, headMesh, brows } satisfies Pane;
+  return { renderer, scene, camera, environmentTarget, key, head, eye,
+    setHeadComponent, setEyeComponent, setBrowComponent,
+    brow, browError, headMesh, brows } satisfies Pane;
 }
 
 function setOptions(view: View, sourceReady: boolean, browNormalReady: boolean) {
@@ -342,10 +383,11 @@ async function main() {
       view = button.dataset.view as View;
       distance.value = "0"; height.value = "0";
       pose.value = poseByView[view];
+      lipDisplayLabel.hidden = view !== "lip";
       setOptions(view, !!sourceMaps, !!browNormal); markView(); render();
     }));
   pose.addEventListener("change", () => { poseByView[view] = pose.value as Pose; render(); });
-  for (const input of [variant, light, exposure, height, distance]) input.addEventListener("input", render);
+  for (const input of [variant, lipDisplay, light, exposure, height, distance]) input.addEventListener("input", render);
   window.addEventListener("resize", render);
   $<HTMLButtonElement>("capture").addEventListener("click", () => {
     render();
@@ -356,10 +398,31 @@ async function main() {
     if (!context) return;
     context.drawImage(a, 0, 0); context.drawImage(b, a.width, 0);
     const link = document.createElement("a");
-    link.download = `xfs-render-study-${view}-${pose.value}-${variant.value}.png`;
+    link.download = `xfs-render-study-${view}-${pose.value}-${variant.value}-${view === "lip" ? lipDisplay.value : "material"}.png`;
     link.href = canvas.toDataURL("image/png"); link.click();
   });
   controls.disabled = false;
+  window.addEventListener("pagehide", () => {
+    const textures = new Set<THREE.Texture>([skinColor, skinNormal, skinRoughness, eyeColor, roughness,
+      roughnessRed, roughnessGreen]);
+    if (browNormal) textures.add(browNormal);
+    if (sourceMaps) for (const source of [sourceMaps.base, sourceMaps.arkhe])
+      for (const map of [source.color, source.normal, source.roughnessR, source.roughnessRB]) textures.add(map);
+    for (const pane of panes) {
+      pane.scene.traverse(object => {
+        if (object instanceof THREE.Mesh) object.geometry.dispose();
+      });
+      for (const material of [pane.head, pane.eye, pane.brow]) {
+        if (!material) continue;
+        for (const map of [material.map, material.alphaMap, material.normalMap, material.roughnessMap])
+          if (map) textures.add(map);
+        material.dispose();
+      }
+      pane.environmentTarget.dispose();
+      pane.renderer.dispose();
+    }
+    for (const texture of textures) texture.dispose();
+  }, { once: true });
   function setPose(pane: Pane, saved: boolean) {
     for (const mesh of [pane.headMesh, ...pane.brows]) {
       if (!mesh.morphTargetInfluences) throw Error("A study mesh has no morphs");
@@ -393,6 +456,7 @@ async function main() {
   }
   function render() {
     const selected = variant.value;
+    const display: LipDisplay = view === "lip" ? lipDisplay.value as LipDisplay : "material";
     const angle = Number(light.value) * Math.PI / 180;
     const y = (view === "brow" ? 1.71 : view === "eye" ? 1.67 : 1.55) + Number(height.value);
     const x = view === "eye" || view === "brow" ? -0.036 : 0;
@@ -405,9 +469,15 @@ async function main() {
     $<HTMLOutputElement>("exposure-value").textContent = Number(exposure.value).toFixed(2);
     $<HTMLOutputElement>("height-value").textContent = Number(height.value).toFixed(3);
     $<HTMLOutputElement>("distance-value").textContent = Number(distance.value).toFixed(3);
-    rightLabel.textContent = variant.selectedOptions[0]?.textContent ?? "Test";
+    const selectedLabel = variant.selectedOptions[0]?.textContent ?? "Selected inputs";
+    leftLabel.textContent = display === "components" ? `Diffuse only · ${selectedLabel}`
+      : display === "ownership" ? `Unlit albedo · ${selectedLabel}` : "Current browser baseline";
+    rightLabel.textContent = display === "components" ? `Reflection only · ${selectedLabel}`
+      : display === "ownership" ? "Mesh ownership: head / eyes / brow" : selectedLabel;
     for (const [index, pane] of panes.entries()) {
-      const active = index === 1 ? selected : "baseline";
+      const active = display === "material" && index === 0 ? "baseline" : selected;
+      const component: LightComponent = display === "components" ? index === 0 ? "diffuse" : "reflection"
+        : display === "ownership" ? index === 0 ? "albedo" : "ownership" : "full";
       const match = /^(base|arkhe)-(r|rb)-(packed|flat)$/.exec(active);
       const browSource = view === "brow" ? /^(base|arkhe)-brow-/.exec(active) : null;
       const sourceKey = match?.[1] ?? browSource?.[1];
@@ -420,17 +490,20 @@ async function main() {
         ? match?.[2] === "rb" ? source.roughnessRB : source.roughnessR
         : active === "uniform-roughness" || active === "high-roughness" ? null : skinRoughness;
       pane.head.roughness = source ? 1 : active === "high-roughness" ? 1 : 0.85;
-      pane.head.wireframe = active === "wireframe";
+      pane.head.wireframe = display === "material" && active === "wireframe";
+      pane.setHeadComponent(component);
       pane.head.needsUpdate = true;
       pane.eye.roughnessMap = active === "roughness-red" ? roughnessRed :
         active === "roughness-green" ? roughnessGreen : null;
       pane.eye.roughness = pane.eye.roughnessMap ? savedEyeRoughnessScale : 0.18;
+      pane.setEyeComponent(component);
       pane.eye.needsUpdate = true;
       setPose(pane, pose.value === "saved");
       for (const browMesh of pane.brows) browMesh.visible = view === "brow";
       if (pane.brow) {
         pane.brow.normalMap = view === "brow" && active.endsWith("normal") ? browNormal : null;
         pane.brow.normalScale.set(0.8, -0.8);
+        pane.setBrowComponent?.(component);
         pane.brow.needsUpdate = true;
       }
       pane.scene.environmentIntensity = active === "no-environment" ? 0 : 1;
@@ -447,7 +520,11 @@ async function main() {
       pane.renderer.render(pane.scene, pane.camera);
       if (silhouette) (pane as Pane & { silhouette?: typeof silhouette }).silhouette = silhouette;
     }
-    if (view === "lip" && pose.value === "neutral" && height.value === "0" && distance.value === "0") {
+    if (view === "lip" && display !== "material") {
+      metrics.textContent = display === "components"
+        ? "Both panes use identical selected maps and roughness. Each includes direct lights and room IBL; the left omits standard specular and the right omits standard diffuse. ACES exposure acts on each separately, so displayed pixels do not add back to the full image."
+        : "Left: unlit sampled colour on the deformed surface. Right: head mesh = magenta, separate eye mesh = cyan, brow mesh = yellow, background/missing mouth parts = dark. Upper and lower lip share the head mesh; this does not mark a safe lip boundary.";
+    } else if (view === "lip" && pose.value === "neutral" && height.value === "0" && distance.value === "0") {
       const [left, right] = panes.map(pane => lipMetric(pane.renderer.domElement));
       metrics.textContent = `Default-frame broad lip crop (${left.pixels} pixels): near-white RGB>220 ${left.bright} → ${right.bright}; mean linear luminance ${left.meanLinear.toFixed(4)} → ${right.meanLinear.toFixed(4)}.`;
     } else if (view === "brow") {
@@ -458,10 +535,15 @@ async function main() {
         ? "The fixed lip crop was calibrated only for the neutral face. Saved-pose pixels are shown without that crop metric."
         : "Reset framing height and distance to 0 for comparable fixed-crop metrics."
       : "";
+    const diagnosticNote = display === "components"
+      ? " Standard diffuse and specular lobes are separated before tone mapping, with no skin transport, transmission or REDengine parity claim."
+      : display === "ownership"
+        ? " Albedo bypasses lights and tone mapping; ownership is per rendered mesh, not upper/lower-lip anatomy."
+        : "";
     status.textContent = view === "lip"
       ? sourceMaps
-        ? `Source-map inputs are private and SHA-256 checked. Left: old Blender maps. Right: selected installed base or current-MO2 Arkhe candidate. Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
-        : `Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
+        ? `Source-map inputs are private and SHA-256 checked. ${display === "material" ? "Left: old Blender maps. Right: selected test." : "Both panes: identical selected inputs."} Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved.${diagnosticNote}${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
+        : `Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B.${diagnosticNote}${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
       : view === "eye" ? `Eye: exact local Kala eye-16 diffuse and roughness hashes verified. Source R/G tests use the same 0.493 scale; the game shader reads R, but its normal, UV transform and refraction are absent here.`
       : `Brow: ${pose.value === "saved" ? "saved five-morph" : "neutral"} static face; verified Arkhe Fuller style-18 mesh and double-diffuse primary/secondary alpha plus Alliekat gradient. ${sourceMaps ? "Base/Arkhe skin candidates verified." : "Private D05 skin maps unavailable."} ${browNormal ? "Normal study uses verified style-18 packed RG decoded for Three at a provisional scale." : "Style-18 packed normal not staged."} Same geometry and coverage in both panes; no matched game capture or runtime winner.`;
   }

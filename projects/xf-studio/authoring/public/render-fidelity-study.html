@@ -18,11 +18,12 @@
 </head>
 <body><main><aside>
   <h1>Render fidelity study</h1>
-  <p>Locked A/B view of the current preview head. The left side keeps the current browser material; the right tests a labelled material change or private source-map set. This page does not read or save your studio draft.</p>
+  <p>Locked comparison of the current preview head. Choose a right-hand material test, or inspect the same selected inputs as separate light components. This page does not read or save your studio draft.</p>
   <fieldset id="controls" disabled>
     <div class="views"><button type="button" data-view="lip">Lip seam</button><button type="button" data-view="eye">Saved eye</button><button type="button" data-view="brow">Saved brow</button></div>
     <label>Face pose in both panes<select id="pose"><option value="neutral">Neutral</option><option value="saved">Saved five-morph face</option></select></label>
-    <label>Right-hand test<select id="variant"></select></label>
+    <label>Material inputs / right-hand test<select id="variant"></select></label>
+    <label id="lip-display-label">Lip study display<select id="lip-display"><option value="material">Current material → selected test</option><option value="components">Same inputs: diffuse → reflection</option><option value="ownership">Same inputs: unlit albedo → mesh ownership</option></select></label>
     <label>Key light direction <output id="light-value">−31°</output><input id="light" type="range" min="-90" max="90" value="-31"></label>
     <label>Exposure <output id="exposure-value">1.2</output><input id="exposure" type="range" min="0.5" max="2" step="0.05" value="1.2"></label>
     <label>Framing height <output id="height-value">0</output><input id="height" type="range" min="-0.15" max="0.15" step="0.005" value="0"></label>
@@ -33,7 +34,7 @@
   <p id="metrics" aria-live="polite"></p>
   <small id="normal-note">The selected face pose is identical in both panes. Camera, light and exposure are shared. Browser shading is an approximation; this is not game rendering.</small>
 </aside><section id="compare" aria-label="Locked material comparison">
-  <figure id="left"><figcaption>Current browser baseline</figcaption></figure>
+  <figure id="left"><figcaption id="left-label">Current browser baseline</figcaption></figure>
   <figure id="right"><figcaption id="right-label">Test</figcaption></figure>
 </section></main><script type="module" src="/build/render-fidelity-study.js"></script></body>
 </html>
