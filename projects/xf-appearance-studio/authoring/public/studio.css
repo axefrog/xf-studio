@@ -9,7 +9,7 @@
   --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-display: "Bahnschrift SemiCondensed", "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
   --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
-  --fs-2xs: 10.5px; --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 19px;
+  --fs-2xs: 11px; --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 19px;
   --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px; --sp-5: 12px; --sp-6: 16px; --sp-7: 20px; --sp-8: 28px;
   --control-h: 28px; --control-h-sm: 24px; --row-h: 32px; --header-h: 44px; --status-h: 26px; --tab-h: 32px;
   --radius: 2px; --bevel: 7px; --bevel-sm: 4px;
@@ -145,6 +145,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .readout { font: var(--fs-xs) var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
 .control-help, .control-note { font-size: var(--fs-xs); color: var(--text-muted); }
 .control-note { color: var(--warning); }
+.control-note.info { color: var(--text-muted); }
 .field { height: var(--control-h); padding: 0 var(--sp-4); background: var(--bg-sunken); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel-sm) 0 0; min-width: 0; width: 100%; }
 .field:hover:not(:disabled) { border-color: var(--text-muted); }
 .field:focus-visible { outline-offset: 0; }

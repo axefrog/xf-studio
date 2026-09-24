@@ -42,6 +42,10 @@ test("floating panels magnetize into a composite that grows instead of squeezing
   expect(tree.floating).toHaveLength(1);
   expect(tree.floating[0]).toMatchObject({ x: 300, w: 600 });
   expect(tree.floating[0].node.kind === "split" && tree.floating[0].node.axis).toBe("row");
+  // A member leaving the composite gives its share back instead of stretching the rest.
+  const shrunk = applyDrop(tree, { kind: "panel", panelId: "motion" }, { kind: "tab", groupId: "g-layers", index: 1 });
+  expect(shrunk.floating[0].node.kind).toBe("group");
+  expect(shrunk.floating[0].w).toBe(320);
   // Moving the whole composite into a docked group merges its panels as tabs.
   tree = applyDrop(tree, { kind: "window", windowId: tree.floating[0].id }, { kind: "tab", groupId: "g-layers", index: 1 });
   expect(tree.floating).toHaveLength(0);

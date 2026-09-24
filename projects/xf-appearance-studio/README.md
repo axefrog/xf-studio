@@ -2,6 +2,8 @@
 
 New features follow the [XF Studio architecture contract](../../research/authoring/architecture-contract.md): validated application actions and detached state, browser/renderer device ports, and replaceable presentation. The independent [presentation-port acceptance](../../research/authoring/ui-port-acceptance-2026-09-24.md) is the current boundary baseline.
 
+**Interface overhaul (24 September, review branch):** the Studio's default interface is now a dockable panel workspace with cursor-position snapping, magnetic floating composites, tab groups, target-aware context menus, a command palette and system/light/dark themes, mounted only through `StudioPresentationPort`. The authoritative [interface style guide](authoring/public/style-guide.html) documents every pattern; the [delivery record](../../research/authoring/ui-overhaul-2026-09-24.md) holds the audit, API extensions and acceptance evidence. The previous interface remains at `/legacy.html`.
+
 The [Studio-to-mod pipeline guide](../../research/authoring/studio-to-mod-pipeline.md) diagrams how editable collections become private, offline-verified Cyberpunk mod candidates and where runtime proof is still missing.
 
 A [read-only study of Nathan's separate CharacterCreator](../../research/eye-artistry/charactercreator-rendering-reference.md) records useful lighting and material isolation methods, its rejected skin-response trial, and a bounded lip-seam adapter test. Its shader values and assets were not imported into XF Studio.

@@ -34,6 +34,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const commitName = () => {
     const current = port.library.summary().draft?.name;
     if (!current || nameInput.value.trim() === current) { nameInput.value = current ?? ""; return; }
+    if (!nameInput.value.trim()) { rt.feedback.toast("warning", "Presets", "A collection needs a name; the previous name was kept."); nameInput.value = current; return; }
     if (!rt.dispatch({ kind: "collection.rename", name: nameInput.value })) nameInput.value = current;
   };
   nameInput.addEventListener("change", commitName);
@@ -82,16 +83,17 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     onClick: () => { if (rt.dispatch({ kind: "preset.edit", command: { kind: "restore" } })) rt.feedback.announce("Preset restored"); } });
   const importRecipe = button({ label: "Import recipe as preset…", icon: "import", small: true, variant: "quiet",
     onClick: () => void rt.file({ kind: "recipe.import" }) });
+  const failed = emptyState("Library unavailable", "The local library could not be read. Your draft layers are still editable; retry once the studio server is running.",
+    button({ label: "Retry", icon: "refresh", onClick: () => void rt.request({ kind: "initialize" }) }));
   const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
   const element = h("div", { class: "panel-content" },
     h("div", { class: "panel-head" }, h("label", { class: "eyebrow", text: "Collection" }), h("div", { class: "row" }, nameInput, collectionMore),
       h("div", { class: "row wrap gap-s" }, libraryChip)),
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Presets ", count), addButton),
-    empty, list.element,
+    failed, empty, list.element,
     h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe),
     note("Each preset becomes one choice in the game's single eye-makeup selector, alongside Off."));
-  nameInput.addEventListener("contextmenu", event => event.stopPropagation());
   return {
     spec: { id: "presets", ...PANEL_META["presets"], element },
     update(frame) {
@@ -102,6 +104,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       setText(libraryChip, state.label); libraryChip.className = `chip ${state.tone}`; libraryChip.title = state.detail;
       const presets = draft?.presets ?? [];
       setText(count, String(presets.length));
+      failed.hidden = !!draft || library.busy || library.progress?.phase !== "error";
       empty.hidden = !draft || presets.length > 0;
       list.update(presets.map(preset => ({ id: preset.id, name: preset.name, meta: plural(preset.layers, "layer") })), draft?.selected, busy);
       applyCapability(addButton, port.library.capability({ kind: "preset.edit", command: { kind: "add" } }));
@@ -114,10 +117,24 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   };
 }
 
+/**
+ * The application keeps ONE previous draft for recovery (audit B-1). Before an open or
+ * import would push an existing recoverable draft out, say so and let the user decide.
+ */
+export function confirmReplace(rt: StudioRuntime, anchor: Element, title: string, run: () => void) {
+  const previous = rt.port.library.summary().draft?.previous;
+  if (!previous) { run(); return; }
+  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft becomes the recoverable draft, and the older recoverable draft “${previous.name}” will be discarded. Save it to the library first if you need it.` },
+    { kind: "action", label: "Continue", icon: "import", run },
+    { kind: "action", label: "Save current draft first", icon: "save", capability: rt.port.authoring.requestCapability({ kind: "save" }), run: () => void rt.request({ kind: "save" }) }],
+  anchor, { label: `${title} confirmation`, invoker: anchor });
+}
+
 export function libraryPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const save = button({ label: "Save to library", icon: "save", variant: "primary", onClick: () => void rt.request({ kind: "save" }) });
-  const saveCopy = button({ label: "Save a copy", icon: "duplicate", onClick: () => void rt.request({ kind: "saveCopy" }) });
+  const saveCopy = button({ label: "Save as new collection", icon: "duplicate", title: "Stores a copy with a new identity; you continue editing the copy.",
+    onClick: () => void rt.request({ kind: "saveCopy" }) });
   const stateLine = h("p", { class: "state-line" });
   const progress = h("div", { class: "progress indeterminate", hidden: true, role: "progressbar", "aria-label": "Library request in progress" });
   const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => void rt.request({ kind: "refresh" }, { quietSuccess: true }) });
@@ -127,9 +144,10 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library creates revision 1 of this collection. Drafts still autosave in this browser.");
   const fileButtons = {
-    importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: () => void rt.file({ kind: "collection.import" }) }),
+    importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => confirmReplace(rt, event.currentTarget as Element,
+      "Import a collection", () => void rt.file({ kind: "collection.import" }, { actions: [{ label: "Undo import", run: () => void rt.file({ kind: "collection.recover" }) }] })) }),
     exportCollection: button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) }),
-    exportPlan: button({ label: "Export build plan", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.plan" }) }),
+    exportPlan: button({ label: "Export compiler plan", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.plan" }) }),
     importRecipe: button({ label: "Import recipe as preset…", icon: "import", small: true, onClick: () => void rt.file({ kind: "recipe.import" }) }),
     exportRecipe: button({ label: "Export preset recipe", icon: "export", small: true, onClick: () => void rt.file({ kind: "recipe.export" }) }),
     exportMask: button({ label: "Export layer mask", icon: "export", small: true, onClick: () => void rt.file({ kind: "mask.export" }) }),
@@ -142,7 +160,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
     section("Files", h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection, fileButtons.exportPlan,
       fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask),
-    note("Collection and recipe files keep editable work. Exporting a collection or build plan saves a library revision first. A build plan is compiler input, not a mod. Masks are 2048² white + alpha PNGs of the selected layer.")));
+    note("Collection and recipe files keep editable work. Exporting a collection or compiler plan saves a library revision first. A compiler plan is input for the offline compiler, not a mod. Masks are 2048² white + alpha PNGs of the selected layer.")));
   return {
     spec: { id: "library", ...PANEL_META["library"], element },
     update(frame) {
@@ -164,7 +182,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         saved.replaceChildren(...library.summaries.map(item => {
           const current = item.id === draft?.id;
           const open = button({ label: current ? "Reopen" : "Open", small: true, variant: current ? "quiet" : undefined,
-            onClick: () => void rt.request({ kind: "open", id: item.id }, { actions: [{ label: "Undo open", run: () => void rt.file({ kind: "collection.recover" }) }] }) });
+            onClick: event => confirmReplace(rt, event.currentTarget as Element, `Open “${item.name}”`,
+              () => void rt.request({ kind: "open", id: item.id }, { actions: [{ label: "Undo open", run: () => void rt.file({ kind: "collection.recover" }) }] })) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
           return h("li", { class: `saved-row${current ? " current" : ""}` },
             h("div", { class: "saved-main" }, h("strong", { text: item.name }),

@@ -110,8 +110,30 @@ function containsNode(node: DockNode | null, id: string): boolean {
   return node.kind === "split" && node.children.some(child => containsNode(child, id));
 }
 
+/**
+ * When a member leaves a floating composite, the window gives back that member's share
+ * along the composite's axis instead of stretching the remaining panels.
+ */
+function shrinkWindows(before: DockTree, after: DockTree): DockTree {
+  after.floating = after.floating.map(window => {
+    const old = before.floating.find(item => item.id === window.id);
+    if (!old || old.node.kind !== "split") return window;
+    const kept = window.node.kind === "split" && window.node.id === old.node.id
+      ? new Set(window.node.children.map(child => child.id)) : new Set([window.node.id]);
+    const removed = old.node.children.reduce((sum, child, i) => sum + (kept.has(child.id) ? 0 : old.node.kind === "split" ? old.node.sizes[i] : 0), 0);
+    if (removed <= 0 || removed >= 1) return window;
+    return old.node.axis === "row"
+      ? { ...window, w: Math.max(MIN_WINDOW.w, Math.round(window.w * (1 - removed))) }
+      : { ...window, h: Math.max(MIN_WINDOW.h, Math.round(window.h * (1 - removed))) };
+  });
+  return after;
+}
+
 /** Detach a panel from wherever it is. Empty groups/windows disappear; closed entries are removed. */
 export function detachPanel(tree: DockTree, panel: PanelId): DockTree {
+  return shrinkWindows(tree, detachPanelOnly(tree, panel));
+}
+function detachPanelOnly(tree: DockTree, panel: PanelId): DockTree {
   const next = mapGroups(clone(tree), item => {
     if (!item.panels.includes(panel)) return item;
     const panels = item.panels.filter(id => id !== panel);
@@ -138,7 +160,7 @@ function detachNode(tree: DockTree, id: string): { tree: DockTree; node?: DockNo
   }
   next.floating = next.floating.filter(window => window.node);
   if (next.maximized && !findGroup(next, next.maximized)) delete next.maximized;
-  return { tree: next, node: node && clone(node) };
+  return { tree: shrinkWindows(tree, next), node: node && clone(node) };
 }
 
 function flattenPanels(node: DockNode): PanelId[] { return [...groups(node)].flatMap(item => item.panels); }

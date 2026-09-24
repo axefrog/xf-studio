@@ -24,24 +24,41 @@ export class Slider {
     this.element = h("div", { class: "control" },
       h("label", { class: "control-label", for: id }, h("span", { text: options.label }), this.output),
       this.input, options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note);
-    const begin = () => { if (!this.active && !this.input.disabled) { this.active = true; options.transaction.begin?.(); } };
-    const commit = () => { if (this.active) { this.active = false; options.transaction.commit?.(); } };
-    this.input.addEventListener("pointerdown", begin);
+    // Pointer drags commit on release. Browsers fire `change` for every arrow key, so a
+    // keyboard burst stays one transaction until a short pause or blur. After Escape the
+    // control ignores further input until the pointer is released or focus leaves.
+    let mode: "pointer" | "keyboard" | undefined, cancelled = false, idle: ReturnType<typeof setTimeout> | undefined;
+    const begin = (kind: "pointer" | "keyboard") => {
+      if (this.active || this.input.disabled) return;
+      this.active = true; mode = kind; options.transaction.begin?.();
+    };
+    const commit = () => {
+      clearTimeout(idle);
+      if (this.active) { this.active = false; mode = undefined; options.transaction.commit?.(); }
+    };
+    this.input.addEventListener("pointerdown", () => { cancelled = false; begin("pointer"); });
+    this.input.addEventListener("pointerup", () => { if (cancelled) cancelled = false; });
     this.input.addEventListener("keydown", event => {
-      if (editKeys.has(event.key)) begin();
+      if (editKeys.has(event.key)) { cancelled = false; begin("keyboard"); }
       else if (event.key === "Escape" && this.active) {
-        event.preventDefault(); event.stopPropagation(); this.active = false; options.transaction.cancel?.();
+        event.preventDefault(); event.stopPropagation();
+        clearTimeout(idle); this.active = false; mode = undefined; cancelled = true;
+        options.transaction.cancel?.();
       }
     });
     this.input.addEventListener("input", () => {
-      begin();
+      if (cancelled) return;
+      if (!this.active) begin("keyboard");
       const value = Number(this.input.value);
       this.fill();
       this.output.textContent = options.format(value);
       options.transaction.edit(value);
     });
-    this.input.addEventListener("change", commit);
-    this.input.addEventListener("blur", commit);
+    this.input.addEventListener("change", () => {
+      if (mode === "keyboard") { clearTimeout(idle); idle = setTimeout(commit, 700); }
+      else commit();
+    });
+    this.input.addEventListener("blur", () => { cancelled = false; commit(); });
     this.input.addEventListener("pointercancel", commit);
   }
   private fill() {
@@ -57,6 +74,7 @@ export class Slider {
     setDisabled(this.input, !!state.disabled, state.reason);
     setText(this.note, state.disabled && state.reason ? state.reason : state.note ?? "");
     this.note.hidden = !this.note.textContent;
+    this.note.classList.toggle("info", !(state.disabled && state.reason));
   }
 }
 
@@ -79,6 +97,7 @@ export class Toggle {
     setDisabled(this.input, !!state.disabled, state.reason);
     setText(this.note, state.disabled && state.reason ? state.reason : state.note ?? "");
     this.note.hidden = !this.note.textContent;
+    this.note.classList.toggle("info", !(state.disabled && state.reason));
   }
 }
 

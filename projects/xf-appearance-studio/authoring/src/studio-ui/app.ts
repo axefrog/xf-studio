@@ -74,7 +74,23 @@ export function mountStudio(port: Port, root: HTMLElement) {
       else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
     }
     header.update(frame); status.update(frame);
-    for (const panel of panels) if (dock.isVisible(panel.spec.id)) panel.update(frame);
+    for (const panel of panels) {
+      if (!dock.isVisible(panel.spec.id)) continue;
+      if (heavy.has(panel.spec.id) && !heavyDue(frame)) continue;
+      panel.update(frame);
+    }
+  };
+  // Library and Mod package read file-operation capabilities that re-validate the whole
+  // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
+  // at most every 400 ms unless the library's busy/progress state changes.
+  const heavy = new Set<PanelId>(["library", "package"]);
+  let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
+  const heavyDue = (frame: Frame) => {
+    const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);
+    const now = performance.now(), busy = !!(frame.preview.gesture || frame.preview.control);
+    if (!busy && (key !== heavyKey || now - heavyAt >= 400)) { heavyAt = now; heavyKey = key; return true; }
+    if (!heavyTimer) heavyTimer = setTimeout(() => { heavyTimer = undefined; schedule(); }, 420);
+    return false;
   };
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
   port.subscribe(schedule); rt.subscribe(schedule); feedback.subscribe(schedule);
@@ -99,7 +115,13 @@ export function mountStudio(port: Port, root: HTMLElement) {
     const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
     if (mod && (key === "k" || (event.shiftKey && key === "p"))) { event.preventDefault(); closeMenus(false); openPalette(commands); return; }
     if (mod && key === "s") { event.preventDefault(); void rt.request({ kind: "save" }); return; }
-    if (mod && key === "z" && !event.shiftKey && !isTextInput(event.target)) { event.preventDefault(); rt.dispatch({ kind: "recipe.undo" }); return; }
+    if (mod && key === "z" && !event.shiftKey && !isTextInput(event.target)) {
+      event.preventDefault();
+      // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
+      const state = port.authoring.previewState();
+      if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
+      rt.dispatch({ kind: "recipe.undo" }); return;
+    }
     if (event.key === "F6") { event.preventDefault(); cycleRegions(root, event.shiftKey); return; }
     if (event.key === "?" && !isTextInput(event.target) && !mod) { event.preventDefault(); openShortcuts(); }
   });
@@ -260,12 +282,12 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
       { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview study" : "exports" })),
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: "Ctrl+S" }),
-    request("library.copy", "Save a copy", "Library", { kind: "saveCopy" }, { icon: "duplicate" }),
+    request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),
     file("library.recover", "Recover previous collection draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
     file("collection.import", "Import collection…", "Files", { kind: "collection.import" }, { icon: "import" }),
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
-    file("collection.plan", "Export build plan (saves first)", "Files", { kind: "collection.plan" }, { icon: "export" }),
+    file("collection.plan", "Export compiler plan (saves first; not a mod)", "Files", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" }),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
     file("recipe.export", "Export preset recipe", "Files", { kind: "recipe.export" }, { icon: "export" }),
     file("mask.export", "Export selected layer mask (2048²)", "Files", { kind: "mask.export" }, { icon: "export" }),

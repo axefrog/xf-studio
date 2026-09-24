@@ -66,7 +66,8 @@ export function viewportMenu(rt: StudioRuntime, kind: ViewportHostKind, anchor: 
 }
 
 function readinessBadge() {
-  const element = h("span", { class: "ready-badge", role: "status" });
+  // Not a live region: it changes on every raster and would flood assistive technology (audit B-25).
+  const element = h("span", { class: "ready-badge" });
   return { element, update(frame: Frame) {
     const r = frame.readiness, label = r.size >= 1024 ? `${r.size / 1024}K` : String(r.size);
     element.dataset.phase = r.phase;

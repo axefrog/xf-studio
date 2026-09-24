@@ -81,7 +81,8 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     spec: { id: "layers", ...PANEL_META["layers"], element },
     update(frame) {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
-      const hasPreset = !!frame.library.draft?.selected;
+      // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
+      const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
       noPreset.hidden = hasPreset;
       empty.hidden = !hasPreset || layers.length > 0;
       setText(count, String(layers.length));

@@ -89,7 +89,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     tilt: new Slider({ label: "Orientation spread", ...rt.range("glitter.setClassic", "value", "tilt"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "flake-tilt", (layer, value) => ({ kind: "glitter.setClassic", layerId: layer.id, key: "tilt", value })) }),
   };
-  const irregularFailure = "This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount.";
+  const irregularFailure = "That amount and flake size are outside the Glitter preview range. Fields denser than 32,768 flakes need small flakes; larger flakes need a lower density.";
   const irregular = {
     count: new Slider({ label: "Flake field density", min: 0, max: rt.range("glitter.setIrregular", "value", "count").max / 5000, step: 1, format: value => `${Math.round(value)}%`,
       transaction: recipeTransaction<number>(rt, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(value) * 5000 }), irregularFailure) }),
@@ -210,10 +210,6 @@ export function shapePanel(rt: StudioRuntime): PanelController {
   const mirror = new Toggle({ label: "Mirror across the face", onChange: checked => {
     const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
   } });
-  const reset = button({ label: "Reset layer", icon: "reset", small: true, variant: "quiet", onClick: () => {
-    const layer = port.editor.layer(); if (layer && rt.dispatch({ kind: "layer.edit", command: { kind: "reset", id: layer.id } }))
-      rt.feedback.toast("info", "Shape", `Reset “${layer.name}”.`, [rt.undoAction()]);
-  } });
   const gestures = h("details", { class: "help-block" }, h("summary", { text: "Editing gestures" }),
     h("dl", { class: "shortcut-list" },
       ...[["Drag point / handle", "Reshape (UV map or on the head)"], ["Drag inside the shape", "Move the whole shape"],
@@ -224,7 +220,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
   const body = h("div", { class: "stack" },
     section("Contour point", h("div", { class: "row between" }, h("div", { class: "row gap-xs" }, prev, pointLabel, next), remove)),
     section("Curve", enable, modes.element, pathNote),
-    section("Symmetry", mirror.element, h("div", { class: "row" }, reset)),
+    section("Symmetry", mirror.element),
     gestures);
   const element = h("div", { class: "panel-content" }, strip.element, empty, body);
   return {
@@ -319,7 +315,7 @@ export function warpPanel(rt: StudioRuntime): PanelController {
         port.authoring.controlEdit("radius", { kind: "field.setReach", layerId: layer.id, fieldId: field.id, radius: value }); },
       commit: () => port.authoring.controlCommit("radius"), cancel: () => port.authoring.controlCancel("radius"),
     } });
-  const clear = button({ label: "Reset direction", icon: "reset", small: true, variant: "quiet", onClick: () => {
+  const clear = button({ label: "Reset pull", icon: "reset", small: true, variant: "quiet", onClick: () => {
     const layer = port.editor.layer(), field = port.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
   } });
   const remove = button({ label: "Remove warp", icon: "trash", small: true, variant: "quiet", onClick: () => {
