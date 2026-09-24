@@ -13,5 +13,5 @@
     { "id": "roadmap", "label": "Directions", "href": "./#directions" },
     { "id": "credits", "label": "Credits", "href": "credits.html" }
   ],
-  "budgets": { "totalBytes": 262144, "fileBytes": 98304 }
+  "budgets": { "totalBytes": 524288, "fileBytes": 98304, "styleGuideBytes": 393216 }
 }

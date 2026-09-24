@@ -3,9 +3,10 @@
  * Structure and accessibility basics, link integrity (including repository links against tracked files),
  * the content/asset policy, the release-claim guard and the no-dates guard for future directions. Exits non-zero on any issue.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import { basePath, loadConfig, repoRoot, siteRoot, type SiteConfig } from "./config";
+import { buildGuide } from "../../authoring/tools/build-style-guide";
+import { basePath, loadConfig, repoRoot, siteRoot, styleGuideSource, type SiteConfig } from "./config";
 
 export type Issue = { file: string; message: string };
 export type CheckOptions = {
@@ -108,12 +109,29 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
   const issues: Issue[] = [];
   const add = (file: string, message: string) => issues.push({ file, message });
   const files = walk(dir).sort();
+  const guideFile = "style-guide.html";
+  if (!files.includes(guideFile)) add(guideFile, "missing published Studio style guide");
+  else if (!existsSync(styleGuideSource)) add(guideFile, "missing generated Studio style-guide source");
+  else if (!readFileSync(join(dir, guideFile)).equals(readFileSync(styleGuideSource)))
+    add(guideFile, "published style guide differs from the generated Studio source");
+  if (existsSync(styleGuideSource)) {
+    const source = readFileSync(styleGuideSource, "utf8");
+    const generatedDate = /Authoritative reference · generated (\d{4}-\d{2}-\d{2})/.exec(source)?.[1];
+    if (!generatedDate) add(guideFile, "generated Studio style-guide source has no build date");
+    else {
+      try {
+        if (source !== await buildGuide(generatedDate))
+          add(guideFile, "generated Studio style-guide source is stale against its design sources");
+      } catch (error) { add(guideFile, `could not rebuild Studio style guide: ${String(error)}`); }
+    }
+  }
   let bytes = 0;
   for (const file of files) {
     const size = statSync(join(dir, file)).size;
     bytes += size;
     if (!ALLOWED_EXTENSIONS.has(extname(file).toLowerCase())) add(file, `file type ${extname(file) || "(none)"} is not allowed on the public site; see README “Content policy”`);
-    if (size > config.budgets.fileBytes) add(file, `${size} bytes exceeds the per-file budget of ${config.budgets.fileBytes}`);
+    const fileBudget = file === guideFile ? config.budgets.styleGuideBytes : config.budgets.fileBytes;
+    if (size > fileBudget) add(file, `${size} bytes exceeds the per-file budget of ${fileBudget}`);
     if ([".html", ".css", ".js", ".svg", ".xml", ".txt"].includes(extname(file))) {
       const text = readFileSync(join(dir, file), "utf8");
       if (PRIVATE_PATH.test(text)) add(file, `contains a local machine path: ${PRIVATE_PATH.exec(text)![0]}`);
@@ -127,7 +145,10 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
   }
   if (bytes > config.budgets.totalBytes) add(".", `site is ${bytes} bytes, over the ${config.budgets.totalBytes}-byte budget`);
 
-  const pages = files.filter(file => file.endsWith(".html"));
+  // The generated guide intentionally carries inline CSS, live demos and specimen styles.
+  // Byte equality with the reviewed, freshly rebuilt Studio source is its publishing gate; the public
+  // marketing pages retain their stricter CSP/structure/link checks below.
+  const pages = files.filter(file => file.endsWith(".html") && file !== guideFile);
   const scans = new Map<string, PageScan>();
   for (const page of pages) {
     const html = readFileSync(join(dir, page), "utf8");

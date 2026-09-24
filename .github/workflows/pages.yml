@@ -1,5 +1,5 @@
 # Public XF Studio site: test, build, check and deploy projects/xf-appearance-studio/site to GitHub Pages.
-# Only site changes (or a manual run) trigger it; the Studio app and its local Bun builds are not involved.
+# Site or style-guide design changes (or a manual run) trigger it; the Studio app is not built.
 # Required repository settings and maintenance: projects/xf-appearance-studio/site/README.md
 name: Pages site
 
@@ -8,10 +8,18 @@ on:
     branches: [main]
     paths:
       - "projects/xf-appearance-studio/site/**"
+      - "projects/xf-appearance-studio/authoring/public/style-guide.html"
+      - "projects/xf-appearance-studio/authoring/public/studio.css"
+      - "projects/xf-appearance-studio/authoring/tools/build-style-guide.ts"
+      - "projects/xf-appearance-studio/authoring/src/studio-ui/**"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
       - "projects/xf-appearance-studio/site/**"
+      - "projects/xf-appearance-studio/authoring/public/style-guide.html"
+      - "projects/xf-appearance-studio/authoring/public/studio.css"
+      - "projects/xf-appearance-studio/authoring/tools/build-style-guide.ts"
+      - "projects/xf-appearance-studio/authoring/src/studio-ui/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

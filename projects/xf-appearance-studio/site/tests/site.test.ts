@@ -27,6 +27,16 @@ describe("build", () => {
     }
   });
 
+  test("publishes the complete generated style guide verbatim and rejects drift", async () => {
+    const result = fresh();
+    const published = join(result.outDir, "style-guide.html");
+    const source = readFileSync(join(import.meta.dir, "../../authoring/public/style-guide.html"));
+    expect(readFileSync(published).equals(source)).toBe(true);
+    expect(result.files).toContain("style-guide.html");
+    writeFileSync(published, Buffer.concat([source, Buffer.from("\n<!-- drift -->\n")]));
+    expect((await messages(result.outDir)).some(m => m.includes("differs from the generated Studio source"))).toBe(true);
+  });
+
   test("normal pages use relative links; 404 uses base-path links so it works at any depth", () => {
     const result = fresh("https://example.github.io/other-repo");
     const index = readFileSync(join(result.outDir, "index.html"), "utf8");

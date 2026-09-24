@@ -2,7 +2,7 @@
 
 The public face of XF Studio: a small static site describing the product, its verified current capabilities, honest status, future directions, documentation and community credits. It presents XF Studio as a customisation studio for Cyberpunk 2077 that starts with the user's own V and may grow into other areas of the game, with eye makeup as its first working feature. It deploys to GitHub Pages at **https://axefrog.github.io/xf-studio/** once Pages is enabled (see [Repository settings](#repository-settings-one-time)).
 
-The site is independent of the Studio app. It has no dependencies, imports nothing from `../authoring`, and has its own `package.json`, tests and ignore rules. The deploy workflow runs only when files here (or the workflow itself) change, so local Studio builds and tests are unaffected. It uses the Studio's visual language, copied rather than imported from the [interface style guide](../authoring/public/style-guide.html), so either can change without breaking the other.
+The public site is independent of the Studio app at runtime and has its own `package.json`, tests and ignore rules. Its design follows the Studio's visual language. The [authoritative interface style guide](https://axefrog.github.io/xf-studio/style-guide.html) is published as a separate, directly viewable reference from the [generated local source](../authoring/public/style-guide.html); it is not a marketing page. The deployment workflow also watches the guide and its design sources. The site check rebuilds the guide and rejects stale source or a published copy that differs from it. Pages must be enabled before the public link works.
 
 ## Commands
 
@@ -11,7 +11,7 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 | Command | What it does |
 |---|---|
 | `bun run build` | Renders `src/` to `dist/` (ignored). `SITE_BASE_URL` overrides the base URL; CI sets it from `actions/configure-pages`. |
-| `bun run check` | Static checks over `dist/` (structure, accessibility basics, links, content policy, release-claim and no-dates guards). |
+| `bun run check` | Static checks over `dist/` (structure, accessibility basics, links, content policy, release-claim and no-dates guards), plus exact and fresh style-guide verification. |
 | `bun test` | Build/check unit tests, including negative tests proving each guard fires. |
 | `bun run verify` | Build, check and test: the same gates CI runs. |
 | `bun run preview` | Build, then serve at `http://127.0.0.1:4400/xf-studio/` with the Pages base path and 404 behaviour. |
@@ -25,6 +25,7 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 | `src/layout.html` | Shared head, header, theme switch and footer. |
 | `src/pages/*.html` | One file per page, starting with a `<!--page {json} -->` header. |
 | `src/assets/` | `site.css`, `theme.js` and `favicon.svg`. All original; no fonts or raster images. |
+| `../authoring/public/style-guide.html` | Generated Studio reference copied byte-for-byte to `dist/style-guide.html`; design source changes require regeneration. |
 | `tools/build.ts`, `check.ts`, `serve.ts`, `qa.ts`, `cdp.ts`, `config.ts` | Build, checks, local server and browser QA. |
 | `tests/site.test.ts` | Unit tests. |
 | `evidence/` | Concise, committed QA records. Screenshots stay in ignored `.evidence/`. |
@@ -53,7 +54,7 @@ A strict meta Content-Security-Policy allows only same-origin styles, scripts an
 
 ## Content policy
 
-The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`.
+The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`. The self-contained style guide has a separate 384 KiB file budget and intentionally uses inline CSS, live demo script and specimen styles. The public site's own pages retain their stricter Content-Security-Policy and page checks. Guide publication requires a byte-exact copy of the generated Studio source and a fresh rebuild from its design inputs.
 
 - No extracted game or mod assets, game-derived renders, Studio viewport screenshots (the preview head is game-derived), personal saves, libraries, inventories or credentials.
 - Visuals are original CSS/SVG and are labelled as illustrations, not renders.
@@ -78,7 +79,7 @@ It also captures a forced-colours view. Screenshots and `summary.json` go to `.e
 
 `.github/workflows/pages.yml` (repository root):
 
-- **Triggers.** Pushes to `main` that touch this folder or the workflow; pull requests that touch them (build, test and check only); and manual runs from the Actions tab (**Run workflow**). Manual runs on another branch build but do not deploy.
+- **Triggers.** Pushes to `main` that touch this folder, the generated style guide, its design CSS/source or the workflow; pull requests that touch them (build, test and check only); and manual runs from the Actions tab (**Run workflow**). Manual runs on another branch build but do not deploy.
 - **Build job.** Full shallow checkout (needed to validate repository links), Bun 1.4.2, `bun test`, build with the base URL from `actions/configure-pages`, `bun tools/check.ts`, then `actions/upload-pages-artifact` of `dist/`.
 - **Deploy job.** `actions/deploy-pages` into the `github-pages` environment, with only `pages: write` and `id-token: write`. Deployments are serialised and never cancelled mid-run.
 - **Actions.** Checked on 24 September 2026: `actions/checkout@v7`, `actions/configure-pages@v6`, `actions/upload-pages-artifact@v5` and `actions/deploy-pages@v5` (GitHub-owned, major tags), plus `oven-sh/setup-bun` pinned by commit SHA (v2.2.0). The official custom-workflow guide showed older majors on that date; the release pages are authoritative. When updating, read each action's release notes, keep `setup-bun` SHA-pinned, and keep `bun-version` in step with [docs/toolchain.md](../../../docs/toolchain.md).

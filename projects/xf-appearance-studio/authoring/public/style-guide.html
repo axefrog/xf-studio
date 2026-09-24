@@ -680,7 +680,8 @@ body.guide { overflow: auto; height: auto; }
 .snap-sandbox .sandbox-panel { position: absolute; z-index: 5; box-shadow: var(--shadow); }
 .snap-sandbox .sandbox-panel .dock-tabbar-fill { cursor: grab; }
 .snap-sandbox .dock-overlay { z-index: 10; }
-@media (max-width: 1000px) { .guide-layout { grid-template-columns: 1fr; padding: var(--sp-5); } .guide-toc { display: none; } .patterns { grid-template-columns: 1fr; } .specimen.compare { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .guide-layout { grid-template-columns: minmax(0, 1fr); padding: var(--sp-5); } .guide-layout main { min-width: 0; overflow-x: clip; } .guide-toc { display: none; } .patterns { grid-template-columns: minmax(0, 1fr); } .specimen.compare { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .guide-top { position: static; flex-wrap: wrap; } .guide-top .meta { flex: 1 1 100%; } .guide-controls { width: 100%; margin-left: 0; } .guidance { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body class="guide">

@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 
 export const siteRoot = resolve(import.meta.dir, "..");
 export const repoRoot = resolve(siteRoot, "../../..");
+/** Generated, self-contained Studio design reference published verbatim beside the site. */
+export const styleGuideSource = resolve(siteRoot, "../authoring/public/style-guide.html");
 
 export type NavItem = { id: string; label: string; href: string };
 export type SiteConfig = {
@@ -18,7 +20,7 @@ export type SiteConfig = {
   /** "unreleased" requires the home page to carry a visible [data-release-status] statement. */
   releaseStatus: "unreleased" | "released";
   nav: NavItem[];
-  budgets: { totalBytes: number; fileBytes: number };
+  budgets: { totalBytes: number; fileBytes: number; styleGuideBytes: number };
 };
 
 export function normalizeBaseUrl(value: string): string {
