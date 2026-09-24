@@ -1,3 +1,4 @@
+import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { parseRecipe, type Recipe } from "./recipe";
 
 export type PresetCollection = {
@@ -31,7 +32,9 @@ export function planCollection(value: unknown) {
     return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`,
       textures:Object.fromEntries(["diffuse","roughness","metalness"].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as Record<"diffuse"|"roughness"|"metalness",string> };
   });
-  return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name, namespace, depot,
+  // Branding (modName/selectorLabel) is display text, never part of a resource identity.
+  return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name,
+    modName:EYE_MAKEUP_MOD.modName, selectorLabel:EYE_MAKEUP_MOD.selectorLabel, namespace, depot,
     selector:namespace, component:`${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
     app:`${depot}/xfs_collection.app`, customization:`${depot}/xfs_collection.inkcharcustomization`,
     mesh:`${depot}/models/xfs_eye_plate.mesh`, morph:`${depot}/models/xfs_eye_plate.morphtarget`,

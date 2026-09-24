@@ -87,7 +87,9 @@ assert component['isEnabled']==1
 assert len(cc['headCustomizationOptions'])==1
 option=cc['headCustomizationOptions'][0]['Data']
 assert option['$type']=='gameuiAppearanceInfo' and option['enabled']==1 and option['hidden']==0
-assert option['localizedName']=='XF Studio · Eye makeup'
+# Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
+assert isinstance(plan['selectorLabel'],str) and plan['selectorLabel'].startswith('XF ')
+assert option['localizedName']==plan['selectorLabel']
 assert all(name.startswith('xfs_') for name in [plan['namespace'],plan['selector'],plan['component'],
     value(off['name']),value(template['name']),*[p['appearance'] for p in plan['presets']],
     *[p['appAppearance'] for p in plan['presets']]])

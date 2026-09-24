@@ -2,14 +2,14 @@
 
 User decisions, 2026-09-23. This supersedes the original four in-game layer selectors and the palette/design/finish option matrix. Eye makeup is the active **authoring** feature. Also authorized: a faithful, toggleable preview of all saved head details, and research plus a reviewable construction-set architecture for future jewellery authoring; see [the broader roadmap](../../../research/backlog/jewellery-and-customization.md). These preview and design tasks do not imply that jewellery, hair or other later game exports already work.
 
-Product name: **XF Studio**, formerly XF Appearance Studio / XF Eye Artistry. The broader name leaves room for future capabilities such as quest design; that is a future direction to discuss, not a current implementation task or a revival of the old xf-omega toolbox. Eye makeup remains the current focus. See [naming and compatibility](naming.md).
+Product name: **XF Studio**, formerly XF Appearance Studio / XF Eye Artistry as an app name. XF Studio is the *app*; each mod it produces carries its own XF-branded name. The eye-makeup export mod is **XF Eye Artistry**, the name used for its in-game selector, mod-manager entry and install folder. Each player builds their own copy from the looks they authored ([mod branding](naming.md#mod-branding)). The broader app name leaves room for future capabilities such as quest design; that is a future direction to discuss, not a current implementation task or a revival of the old xf-omega toolbox. Eye makeup remains the current focus. See [naming and compatibility](naming.md).
 
 ## User workflow
 
 1. Author as many named eye-makeup presets as desired in the studio. Each is an editable composition of shapes, layers, colours, finishes and order.
 2. Keep the collection in a local SQLite library. Preserve portable recipe import/export for sharing and backup; browser drafts remain a recovery convenience.
 3. Choose a collection to compile into a personal game mod. Generate only actual authored presets, reuse identical assets, and never enumerate all possible combinations.
-4. One character-creator selector switches between complete eye-makeup presets, including an Off choice. Internal layer count is not the in-game selector count.
+4. One character-creator selector, labelled **XF Eye Artistry**, switches between complete eye-makeup presets, including an Off choice. Internal layer count is not the in-game selector count.
 
 “Any number” means no arbitrary small product catalogue cap. Actual CCXL option, atlas, memory and export-size limits need measurement. The current recipe supports 0–32 authoring layers as a preview budget; this is independent of the number of game selector options. Collections have a 16 MB import/storage request budget; larger-scale performance remains to measure.
 

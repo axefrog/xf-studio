@@ -19,7 +19,7 @@ function fixture() {
     get: async () => ({ collection, revision: 1, updatedAt: "now" }),
     save: async value => { saved++; return { collection: structuredClone(value), revision: 2, updatedAt: "now" }; },
     package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
-      namespace: "xfs_test", originalPresetCount: 2, omissions: [
+      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 2, omissions: [
         { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
           finish: "glitter", reason: "Active finish has no supported game-export adapter." },
       ], packagedCollectionSha256: "hash", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },

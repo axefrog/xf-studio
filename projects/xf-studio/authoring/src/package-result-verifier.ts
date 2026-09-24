@@ -62,7 +62,10 @@ export function verifyPackageBuildResult(
       manifest.collectionSha256 !== sourceHash || manifest.packagedCollectionSha256 !== packagedHash ||
       manifest.originalPresetCount !== collection.presets.length ||
       JSON.stringify(manifest.omissions) !== JSON.stringify(prepared.omissions) ||
-      manifest.namespace !== prepared.plan.namespace || JSON.stringify(manifest.presets) !== JSON.stringify(identities) ||
+      manifest.namespace !== prepared.plan.namespace ||
+      manifest.modName !== prepared.plan.modName || manifest.selectorLabel !== prepared.plan.selectorLabel ||
+      built.modName !== prepared.plan.modName || built.selectorLabel !== prepared.plan.selectorLabel ||
+      JSON.stringify(manifest.presets) !== JSON.stringify(identities) ||
       manifest.verifiedPresetCount !== prepared.packaged.presets.length ||
       built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== prepared.packaged.presets.length ||
       built.originalPresetCount !== collection.presets.length || built.packagedCollectionSha256 !== packagedHash ||
