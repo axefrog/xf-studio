@@ -215,3 +215,41 @@ Use [the verifier](verify_repair.py) on the final NPZ with `--candidate`, then
 `--packed-glb --roundtrip-report`. `quantization_attribution.py` takes the
 float32 and packed GLBs for the crossed-array comparison. The named evidence
 files include every exact input hash so a different local source fails review.
+
+## Measured resource-readback compensation: three rejected trials — 25 September
+
+The third bounded experiment used [the readback compensation script](repair_readback_compensation.py)
+to modify only the private native cut's base and 105 morph **position**
+accessors. Trial 1 subtracted the earlier measured WolvenKit import-to-readback
+error from the passing numeric field. Trial 2 multiplied that correction by
+1.2. Trial 3 adjusted trial 1's import by its newly measured error against the
+same passing numeric target. The input GLBs kept exact native triangle order,
+both UV sets, and all other source accessors, including shading and skin. Each
+trial was separately imported as a mesh and morph resource, had exact native
+skin bytes restored and independently audited in **both** serialized buffers,
+then was exported and checked by `verify_repair.py` against all 107 static
+cases, 73 selected idle poses, and 664 dense idle frames. The displacement,
+edge caps, and finite-contact test were unchanged.
+
+| Actual packed readback | New static pairs | Static edge violations | 73-pose new pairs | 664-frame new pairs |
+|---|---:|---:|---:|---:|
+| Earlier uncompensated candidate | 1 | 14 | 44 | 359 |
+| 1.0× measured compensation | 0 | **1** (−0.291 µm slack) | 0 | **1**, frame 299 |
+| 1.2× measured compensation | 0 | **3** (−3.413 µm) | 0 | **1**, frame 299 |
+| Iterated correction from 1.0× | 0 | **9** (−2.908 µm) | 0 | **1**, frame 298 |
+
+The best packed trial is close but still **fails** the unchanged gates. A
+global scalar or blind error iteration is unstable at this serialization
+resolution: both later trials worsened edge compliance and moved or retained
+the dense contact. The [asset-free evidence](repair-readback-search.json) pins
+every import GLB, packed GLB, private mesh and morph hash, along with the exact
+input and gate counts. Full private per-case and per-frame reports remain in
+ignored `generated/`. No candidate was promoted to the preview, package,
+owned master, game, or MO2.
+
+A subsequent attempt should fit **localized** readback-aware slack at the
+remaining `h091_eyes` edge and the finite frame-298/299 witness, reserve a
+strict positive packed margin on nearby short edges, and re-evaluate after
+each actual mesh+morph serialization. The three failures do not establish an
+impossibility result. Even a future sampled packed pass would still require
+separate continuous-motion, combined-scene visual, and game-runtime review.

@@ -1,0 +1,86 @@
+{
+  "schema": "xfs/native-plate-readback-search-1",
+  "date": "2026-09-25",
+  "status": "NO_PACKED_SURVIVOR",
+  "toolchain": "WolvenKit CLI 8.17.4; project morph importer; independent verify_repair.py",
+  "inputSha256": {
+    "nativeHeadGlb": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "nativeCutGlb": "0571c4da09595009dbc7e4e305518e95f18a58ba4c59bf51e97e7d56d0f060ea",
+    "numericCandidate": "e17284d81dc2a2bd38f25be909e5ac7ba829a42321c056bf91cf366fcf6046d2",
+    "priorImportGlb": "9e4d8960e78d1ea6648417f501f4e9ae33effb40542192f9d5f68b5752202218",
+    "priorPackedGlb": "66da683c6acf86b7e7762aa5aa08873dbfc293366d8efca1642f1aff9c533b1e",
+    "posedManifest": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382",
+    "denseManifest": "d7987db6dbfb8de5f8f30643ffdd9085c36159029aaca37328af29b6e8c02969"
+  },
+  "unchangedGates": {
+    "staticCases": 107,
+    "selectedPoseSamples": 73,
+    "denseIdleFrames": 664,
+    "maximumDisplacement": 0.00025,
+    "neighborCap": "min(0.00005, quarter of source edge)",
+    "contactTest": "new nonadjacent finite triangle pairs, independently checked"
+  },
+  "trials": [
+    {
+      "name": "one-to-one prior readback compensation",
+      "scale": 1.0,
+      "importGlbSha256": "d53c4d6d4e696c64a831af1a3df4b461d90a85fdeb33c16976c9a657200dc7cf",
+      "packedGlbSha256": "94dfffd6391c5b021e90f043609a612372b92872d3333e099f8fbd942d8e4d1f",
+      "meshSha256": "a78ee93bf17949d90594411bf6c88740c87811d959443d072fcc6c2fe9282c60",
+      "morphSha256": "11fd879fc5610f8bb4ec306c0e0c972b0c192f68631810e9cc87ebf34820eb82",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 1,
+      "minimumStaticNeighborSlack": -2.9090225034375853e-7,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 1,
+      "denseFrame": 299,
+      "densePlateHeadFace": [799, 1989],
+      "maximumStaticDisplacement": 8.70348333011628e-5,
+      "gate": "FAIL"
+    },
+    {
+      "name": "1.2 times prior readback compensation",
+      "scale": 1.2,
+      "importGlbSha256": "ad66b6e22aeb0e3a7cd9fef103911946451dc0121dadfcb73b6b66ed158d26e9",
+      "packedGlbSha256": "8f4cfd852086d37b41ee815f174084a353f79f43655688dfd869057136a0c7db",
+      "meshSha256": "290c140e9436f56b25f8727369d4ee999604f878afbdc69003f14da3de3a5e85",
+      "morphSha256": "85532095130f599e472b67a45d3b6d9e140c7278cb03da7b6a39c6b0cba64153",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 3,
+      "minimumStaticNeighborSlack": -3.4133157444053285e-6,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 1,
+      "denseFrame": 299,
+      "densePlateHeadFace": [799, 1989],
+      "maximumStaticDisplacement": 8.49699273354572e-5,
+      "gate": "FAIL"
+    },
+    {
+      "name": "one-step correction from first packed trial",
+      "scale": 1.0,
+      "importGlbSha256": "45d2ab96a8441346d8d0e9180d954671423e6890b3294cb9a410bbf63128cb41",
+      "packedGlbSha256": "8c2345d5a6ea75229b59de6a230c36b816aa9b3074d7495a121d014fb872aec7",
+      "meshSha256": "957646489fd23d89227f7a664f34f08348b516a6987686cba5e64a4dffe75f6a",
+      "morphSha256": "a1304f28b61b11bfbfc9f5b61a77ff7572e333b89e39a0683585d6cf3b3102e7",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 9,
+      "minimumStaticNeighborSlack": -2.907740223592834e-6,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 1,
+      "denseFrame": 298,
+      "densePlateHeadFace": [800, 1987],
+      "maximumStaticDisplacement": 8.70136967355389e-5,
+      "gate": "FAIL"
+    }
+  ],
+  "commonResourceProof": {
+    "nativeSkinBytesInMeshAndMorphBase": true,
+    "meshMorphSkinRowsEqual": true,
+    "triangleIndicesExact": true,
+    "bothUvSetsExact": true,
+    "morphNamesAndOrderExact": true,
+    "sourceShadingAccessorsUneditedBeforeImport": true,
+    "serializedResourceProof": true
+  },
+  "limit": "Three actual WolvenKit imports/readbacks, not exhaustive search. All outputs are private rejected resources; no game rendering or continuous-time motion was checked."
+}
