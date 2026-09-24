@@ -82,10 +82,26 @@ def guard_private_roots(build_arg, dist_arg, output_arg, protected, collection):
     return build_root, dist_root, output_root
 
 
+def plate_provenance(manifest_path, plate_files):
+    """Record which eye plate was packaged: the host-derived built-in plate or a developer override."""
+    hashes = {path.suffix[1:]: file_hash(path) for path in plate_files}
+    if manifest_path is None:
+        return {'source': 'override', 'meshSha256': hashes['mesh'], 'morphSha256': hashes['morphtarget']}
+    manifest = json.loads(manifest_path.resolve(strict=True).read_text(encoding='utf-8'))
+    files = manifest.get('files', {})
+    if (manifest.get('schema') != 'xfs/eye-plate-cache-1' or files.get('mesh', {}).get('sha256') != hashes['mesh'] or
+            files.get('morph', {}).get('sha256') != hashes['morphtarget']):
+        raise ValueError('The eye plate manifest does not match the plate resources.')
+    return {'source': 'derived', 'recipeId': manifest['recipeId'], 'recipeRevision': manifest['recipeRevision'],
+            'sourceRevision': manifest['source']['revisionId'], 'cacheKey': manifest['cacheKey'],
+            'meshSha256': hashes['mesh'], 'morphSha256': hashes['morphtarget']}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--collection', type=Path, required=True, help='Studio Export collection JSON')
-    parser.add_argument('--plate', type=Path, help='Local experiment-004 plate resource directory')
+    parser.add_argument('--plate', type=Path, help='Eye plate resource directory prepared by the Studio host')
+    parser.add_argument('--plate-manifest', type=Path, help='Verified built-in plate manifest from the Studio host')
     parser.add_argument('--wolvenkit', type=Path, help='WolvenKit.CLI executable')
     parser.add_argument('--gamepath', type=Path, help='Local Cyberpunk 2077 directory for texture conversion')
     parser.add_argument('--bun', type=Path, default=Path(shutil.which('bun') or ''), help='Bun executable')
@@ -139,8 +155,11 @@ def main(argv=None):
         plate = args.plate.resolve(strict=True)
         wolvenkit = args.wolvenkit.resolve(strict=True)
         gamepath = args.gamepath.resolve(strict=True)
-        for name in ('xfas_eye_plate.mesh', 'xfas_eye_plate.morphtarget'):
-            if not (plate/name).is_file(): raise ValueError(f'Missing source plate resource: {plate/name}')
+        plate_files = [plate/(stem + suffix) for stem in ('xfs_eye_plate', 'xfas_eye_plate')
+                       for suffix in ('.mesh', '.morphtarget') if (plate/(stem + suffix)).is_file()]
+        if len(plate_files) != 2 or plate_files[0].stem != plate_files[1].stem:
+            raise ValueError(f'Plate directory must hold exactly one mesh/morphtarget pair: {plate}')
+        plate_record = plate_provenance(args.plate_manifest, plate_files)
         if not wolvenkit.is_file() or not gamepath.is_dir():
             raise ValueError('WolvenKit must be a file and gamepath must be a directory.')
         protected = [('game root', gamepath), ('plate source', plate), ('app source', app),
@@ -203,6 +222,7 @@ def main(argv=None):
                 'verifiedUnpackedFiles': verification['unpackedFilesVerified'],
                 'files': [{'path': f'archive/pc/mod/{name}', 'sha256': file_hash(target/name),
                            'bytes': (target/name).stat().st_size} for name in names],
+                'plate': plate_record,
                 'installed': False, 'gameRenderingVerified': False,
                 'limits': verification['limits'],
             }
@@ -215,7 +235,7 @@ def main(argv=None):
         result = {'package': str(final), 'manifest': str(final/'manifest.json'),
             'modName': summary['modName'], 'selectorLabel': summary['selectorLabel'], 'archiveSha256': verification['archiveSha256'],
             'presetCount': verification['presetCount'], 'originalPresetCount': summary['originalPresetCount'],
-            'omissions': summary['omissions'], 'packagedCollectionSha256': packaged_hash, 'installed': False,
+            'omissions': summary['omissions'], 'packagedCollectionSha256': packaged_hash, 'plate': plate_record, 'installed': False,
             'gameRenderingVerified': False}
         print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
         return 0

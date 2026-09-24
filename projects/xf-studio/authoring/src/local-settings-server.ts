@@ -3,7 +3,7 @@ import { evaluateLocalReadiness, packageToolPaths, type HostFeatures, type Local
 import { LocalSettingsStore } from "./local-settings-store";
 
 export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
-  "manualModRoot" | "plateInput" | "wolvenKitCli" | "pythonExecutable" | "bunExecutable">;
+  "manualModRoot" | "wolvenKitCli" | "pythonExecutable" | "bunExecutable">;
 export type LocalSetupView = {
   revision: number;
   source: "new" | "primary" | "backup";
@@ -11,7 +11,7 @@ export type LocalSetupView = {
   readiness: LocalReadiness;
   overridden: string[];
 };
-const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot", "plateInput",
+const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
   "wolvenKitCli", "pythonExecutable", "bunExecutable"] as const;
 const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE_WOLVENKIT", "XFS_PACKAGE_PYTHON"] as const;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -22,7 +22,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
   const view = (): LocalSetupView => {
     const loaded = store.load();
     const paths = packageToolPaths(loaded.settings, env);
-    const effective = { ...loaded.settings, gameRoot: paths.gamepath, plateInput: paths.plate,
+    const effective = { ...loaded.settings, gameRoot: paths.gamepath,
       wolvenKitCli: paths.wolvenkit, pythonExecutable: paths.python, bunExecutable: paths.bun };
     return { revision: loaded.settings.revision, source: loaded.source,
       fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,

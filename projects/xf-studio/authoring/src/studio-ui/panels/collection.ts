@@ -225,7 +225,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const setupFields = [
-    ["gameRoot", "Cyberpunk 2077 folder"], ["plateInput", "Private plate input folder"],
+    ["gameRoot", "Cyberpunk 2077 folder"],
     ["wolvenKitCli", "WolvenKit CLI executable"], ["pythonExecutable", "Python executable (optional)"],
     ["bunExecutable", "Bun executable (optional)"], ["mo2Root", "MO2 instance folder"],
     ["mo2ProfileId", "MO2 profile name"], ["manualModRoot", "Additional direct mod folder (optional)"],

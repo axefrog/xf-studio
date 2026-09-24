@@ -14,7 +14,7 @@ const withDirectory = (run: (dir: string) => void) => {
 test("local settings are path-free by default, strict and separate from portable data", () => {
   const defaults = defaultLocalSettings();
   expect(defaults.gameRoot).toBeNull();
-  expect(defaults.plateInput).toBeNull();
+  expect("plateInput" in defaults).toBe(false);
   expect(defaults.updates.checkAutomatically).toBe(false);
   expect(parseLocalSettings(defaults)).toEqual(defaults);
   expect(() => parseLocalSettings({ ...defaults, token: "private" })).toThrow("unsupported field");
@@ -32,7 +32,26 @@ test("explicit v0 migration preserves known local paths and rejects unknown fiel
   expect(migrated.settings.launchRoute).toBe("mo2");
   expect(migrated.settings.mo2ProfileId).toBe("Default");
   expect(migrated.settings.gameRoot).toBe(old.gamePath);
+  expect("plateInput" in migrated.settings).toBe(false);
   expect(() => migrateLocalSettings({ ...old, credential: "secret" })).toThrow("unsupported field");
+}));
+
+test("a saved private plate folder from earlier versions is ignored without error", () => withDirectory(dir => {
+  const saved = { ...defaultLocalSettings(), revision: 3, gameRoot: join(dir, "game"), plateInput: join(dir, "plate") };
+  const loaded = migrateLocalSettings(saved);
+  expect(loaded.migrated).toBe(true);
+  expect(loaded.settings.gameRoot).toBe(join(dir, "game"));
+  expect(loaded.settings.revision).toBe(3);
+  expect("plateInput" in loaded.settings).toBe(false);
+  expect(migrateLocalSettings(loaded.settings).migrated).toBe(false);
+  // Only migration drops it; a fresh strict parse still rejects the retired field.
+  expect(() => parseLocalSettings(saved)).toThrow("unsupported field");
+  const store = new LocalSettingsStore(dir);
+  writeFileSync(store.file, JSON.stringify(saved));
+  expect(store.load()).toMatchObject({ source: "primary", migrated: true });
+  const next = store.save({ ...store.load().settings, wolvenKitCli: join(dir, "cli.exe") }, 3);
+  expect(JSON.parse(readFileSync(store.file, "utf8"))).not.toHaveProperty("plateInput");
+  expect(next.revision).toBe(4);
 }));
 
 test("atomic save retains previous-good settings and rejects a stale revision", () => withDirectory(dir => {
@@ -60,20 +79,20 @@ test("readiness distinguishes Check, build and route evidence without exposing p
   const defaults = defaultLocalSettings();
   const blank = evaluateLocalReadiness(defaults);
   expect(blank.check.ready).toBe(true);
-  expect(blank.build.issues.map(x => x.code)).toContain("plate_unset");
+  expect(blank.build.issues.map(x => x.code)).toEqual(["wolvenkit_unset", "game_root_unset"]);
+  expect(blank.build.issues.map(x => x.code).some(code => code.startsWith("plate"))).toBe(false);
   expect(blank.install.issues.map(x => x.code)).toContain("install_host_unavailable");
   expect(blank.updates.ready).toBe(false);
-  const game = join(dir, "game"), mo2 = join(dir, "mo2"), plate = join(dir, "plate"), cli = join(dir, "cli.exe");
+  const game = join(dir, "game"), mo2 = join(dir, "mo2"), cli = join(dir, "cli.exe");
   mkdirSync(join(game, "bin", "x64"), { recursive: true });
   mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
   writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "");
   mkdirSync(join(mo2, "mods"), { recursive: true });
   mkdirSync(join(mo2, "profiles", "Default"), { recursive: true });
   writeFileSync(join(mo2, "profiles", "Default", "modlist.txt"), "+Example\n");
-  mkdirSync(plate);
   writeFileSync(cli, "");
   const configured = parseLocalSettings({ ...defaults, gameRoot: game, launchRoute: "mo2", mo2Root: mo2,
-    mo2ProfileId: "Default", plateInput: plate, wolvenKitCli: cli, installMode: "mo2" });
+    mo2ProfileId: "Default", wolvenKitCli: cli, installMode: "mo2" });
   const readiness = evaluateLocalReadiness(configured, { installer: true, updater: false });
   expect(readiness.sourceDiscovery.ready).toBe(true);
   expect(readiness.sourceDiscovery.limits.join(" ")).toContain("not prove a runtime winner");
@@ -81,6 +100,13 @@ test("readiness distinguishes Check, build and route evidence without exposing p
   expect(readiness.install.ready).toBe(true);
   expect(JSON.stringify(readiness)).not.toContain(dir);
   expect(packageToolPaths(configured, { XFS_PACKAGE_PLATE: join(dir, "override") }).plate).toBe(join(dir, "override"));
+  expect(packageToolPaths(configured, {}).plate).toBeNull();
+  const plateIssue = { code: "plate_source_unsupported", reason: "Update XF Studio." };
+  const blocked = evaluateLocalReadiness(configured, { installer: true, updater: false, eyePlate: { issue: plateIssue, limit: "Built in." } });
+  expect(blocked.build.issues).toEqual([plateIssue]);
+  expect(blocked.build.limits).toContain("Built in.");
+  expect(evaluateLocalReadiness({ ...configured, gameRoot: null }, { installer: true, updater: false,
+    eyePlate: { issue: plateIssue, limit: "Built in." } }).build.issues.map(x => x.code)).toEqual(["game_root_unset"]);
   expect(packageToolPaths(configured, {}).gamepath).toBe(game);
   const unavailable = evaluateLocalReadiness(parseLocalSettings({ ...configured,
     sourceCache: { ...configured.sourceCache, directory: join(dir, "missing", "cache") },

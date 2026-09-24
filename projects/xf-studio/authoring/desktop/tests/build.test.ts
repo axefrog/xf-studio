@@ -8,7 +8,8 @@ import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { parseCollection } from "../../src/preset-collection";
 import { preparePackageCollection } from "../../src/package-filter";
-import { desktopBuildIssue, probeBun, runDesktopBuild } from "../build";
+import { desktopBuildIssue, probeBun, runDesktopBuild, type DesktopPlatePreparer } from "../build";
+import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"));
@@ -18,6 +19,22 @@ const python = spawnSync("python", ["-c", "import sys; print(sys.executable)"],
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const fixtureWolvenKit = () => null;
+const plateManifest = { schema: "xfs/eye-plate-cache-1", recipeId: "xfs-expanded-eye-plate", recipeRevision: 1,
+  recipeSha256: "1".repeat(64), deriverVersion: 1, cacheKey: "2".repeat(64),
+  source: { revisionId: "cp2077-2.31", label: "Cyberpunk 2077 2.31", meshDepotPath: "base\\head.mesh", morphDepotPath: "base\\head.morphtarget",
+    meshSha256: "3".repeat(64), morphSha256: "4".repeat(64) },
+  files: { mesh: { name: "xfs_eye_plate.mesh", sha256: "5".repeat(64), bytes: 1 }, morph: { name: "xfs_eye_plate.morphtarget", sha256: "6".repeat(64), bytes: 1 } },
+  verification: {}, limits: [] } as unknown as EyePlateManifest;
+/** Stands in for WolvenKit derivation; records the cache root the host chose. */
+const fixturePlate = (seen: string[] = []): DesktopPlatePreparer => async (_settings, cacheRoot) => {
+  seen.push(cacheRoot);
+  const directory = resolve(cacheRoot, "fixture", "resources");
+  mkdirSync(directory, { recursive: true });
+  const manifestFile = resolve(cacheRoot, "fixture", "plate-manifest.json");
+  writeFileSync(manifestFile, JSON.stringify(plateManifest));
+  return { directory, meshFile: resolve(directory, "xfs_eye_plate.mesh"), morphFile: resolve(directory, "xfs_eye_plate.morphtarget"),
+    manifestFile, manifest: plateManifest, reused: false };
+};
 
 function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling" | "installed" | "work" = "sibling") {
   const data = resolve(root, `data-${crypto.randomUUID()}`);
@@ -25,14 +42,11 @@ function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling
     toolPlacement === "work" ? resolve(data, "package-work/build-tools") :
       resolve(root, `tools-${crypto.randomUUID()}`);
   const game = resolve(root, `game-${crypto.randomUUID()}`);
-  const plate = resolve(root, `plate-${crypto.randomUUID()}`);
   const wk = resolve(root, `wk-${crypto.randomUUID()}.exe`);
-  for (const path of [data, tools, game, plate, resolve(game, "bin/x64"), resolve(game, "archive/pc")])
+  for (const path of [data, tools, game, resolve(game, "bin/x64"), resolve(game, "archive/pc")])
     mkdirSync(path, { recursive: true });
   writeFileSync(resolve(game, "bin/x64/Cyberpunk2077.exe"), "MZ fixture");
   writeFileSync(wk, "MZ fixture");
-  for (const name of ["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"])
-    writeFileSync(resolve(plate, name), "CR2W fixture");
   const files = ["build_collection_package.py", "study/build.py", "study/verify.py", "study/mip_maps.py",
     "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"];
   const hashes: Record<string, string> = {};
@@ -43,7 +57,7 @@ function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling
     hashes[name] = createHash("sha256").update(readFileSync(path)).digest("hex");
   }
   writeFileSync(resolve(tools, "manifest.json"), JSON.stringify({ schema: "xfs/desktop-build-tools-1", files: hashes }));
-  const settings = { ...defaultLocalSettings(), gameRoot: game, plateInput: plate,
+  const settings = { ...defaultLocalSettings(), gameRoot: game,
     wolvenKitCli: wk, pythonExecutable: python };
   return { data, tools, settings, game };
 }
@@ -59,7 +73,8 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
   if (process.platform === "win32")
     expect(desktopBuildIssue({ ...h.settings, mo2Root: h.data.toUpperCase() }, h.data, h.tools,
       fixtureWolvenKit)).toContain("overlaps");
-  expect(desktopBuildIssue({ ...h.settings, plateInput: null }, h.data, h.tools, fixtureWolvenKit)).toContain("plate");
+  // No plate path exists any more: the built-in plate needs only the game and WolvenKit.
+  expect(desktopBuildIssue({ ...h.settings, gameRoot: null }, h.data, h.tools, fixtureWolvenKit)).toContain("game directory");
   try {
     symlinkSync(h.game, resolve(h.data, "package-candidates"), process.platform === "win32" ? "junction" : "dir");
     expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("linked path");
@@ -104,7 +119,7 @@ test("a desktop Build deadline stops the process tree and publishes no candidate
   const childCode = `import time,pathlib; time.sleep(1); pathlib.Path(${JSON.stringify(marker)}).write_text('survived')`;
   const wrapper = `import subprocess,sys,time\nsubprocess.Popen([sys.executable,'-c',${JSON.stringify(childCode)}])\ntime.sleep(30)\n`;
   const h = host(wrapper);
-  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit);
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit, fixturePlate());
   expect(result).toMatchObject({ kind: "failure", code: "package_build_timeout" });
   await Bun.sleep(1200);
   expect(existsSync(marker)).toBe(false);
@@ -113,9 +128,30 @@ test("a desktop Build deadline stops the process tree and publishes no candidate
 
 test("an invalid collection is refused before starting the builder", async () => {
   const h = host();
+  const seen: string[] = [];
   const result = await runDesktopBuild({ collectionPath: h.game }, h.settings, h.data, h.tools, 100,
-    undefined, fixtureWolvenKit);
+    undefined, fixtureWolvenKit, fixturePlate(seen));
   expect(result).toMatchObject({ kind: "failure", code: "invalid_collection" });
+  expect(seen).toEqual([]);
+});
+
+test("an unsupported game head stops Build with its explanation before the builder starts", async () => {
+  const marker = resolve(root, `wrapper-${crypto.randomUUID()}`);
+  const h = host(`import pathlib\npathlib.Path(${JSON.stringify(marker)}).write_text('ran')\n`);
+  const unsupported: DesktopPlatePreparer = async () => {
+    throw new EyePlateError("plate_source_unsupported", "Update XF Studio to a version that supports your game.");
+  };
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 3000, undefined, fixtureWolvenKit, unsupported);
+  expect(result).toEqual({ kind: "failure", code: "plate_source_unsupported", message: "Update XF Studio to a version that supports your game." });
+  expect(existsSync(marker)).toBe(false);
+  const slow: DesktopPlatePreparer = (_settings, _cache, signal) => new Promise((_, reject) =>
+    signal.addEventListener("abort", () => reject(new EyePlateError("plate_cancelled", "cancelled"))));
+  expect(await runDesktopBuild(fixture, h.settings, h.data, h.tools, 200, undefined, fixtureWolvenKit, slow))
+    .toMatchObject({ kind: "failure", code: "package_build_timeout" });
+  const cancel = new AbortController();
+  const pending = runDesktopBuild(fixture, h.settings, h.data, h.tools, 3000, cancel.signal, fixtureWolvenKit, slow);
+  cancel.abort();
+  expect(await pending).toMatchObject({ kind: "failure", code: "package_build_cancelled" });
 });
 
 test("a matching staged result is promoted with partial-export identities and no install", async () => {
@@ -135,9 +171,13 @@ test("a matching staged result is promoted with partial-export identities and no
     verifiedPresetCount: prepared.packaged.presets.length,
     files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex") })),
+    plate: { source: "derived", recipeId: plateManifest.recipeId, recipeRevision: plateManifest.recipeRevision,
+      sourceRevision: plateManifest.source.revisionId, cacheKey: plateManifest.cacheKey,
+      meshSha256: plateManifest.files.mesh.sha256, morphSha256: plateManifest.files.morph.sha256 },
     installed: false, gameRenderingVerified: false };
   const wrapper = `import argparse,hashlib,json,pathlib\n` +
-    `p=argparse.ArgumentParser();p.add_argument('--collection');p.add_argument('--dist-root');p.add_argument('--build-root');a,_=p.parse_known_args()\n` +
+    `p=argparse.ArgumentParser();p.add_argument('--collection');p.add_argument('--dist-root');p.add_argument('--build-root');p.add_argument('--plate');p.add_argument('--plate-manifest');a,_=p.parse_known_args()\n` +
+    `assert json.loads(pathlib.Path(a.plate_manifest).read_text())['cacheKey']=='${"2".repeat(64)}' and pathlib.Path(a.plate).is_dir()\n` +
     `work=pathlib.Path(a.build_root);work.mkdir(parents=True);(work/'private-intermediate').write_text('fixture')\n` +
     `final=pathlib.Path(a.dist_root)/'candidate-fixture';payload=final/'archive/pc/mod';payload.mkdir(parents=True)\n` +
     `m=json.loads(${JSON.stringify(JSON.stringify(manifest))});m['collectionSha256']=hashlib.sha256(pathlib.Path(a.collection).read_bytes()).hexdigest()\n` +
@@ -147,10 +187,12 @@ test("a matching staged result is promoted with partial-export identities and no
     `'modName':m['modName'],'selectorLabel':m['selectorLabel'],` +
     `'archiveSha256':m['files'][0]['sha256'],'presetCount':m['verifiedPresetCount'],` +
     `'originalPresetCount':m['originalPresetCount'],'omissions':m['omissions'],` +
-    `'packagedCollectionSha256':m['packagedCollectionSha256'],'installed':False,'gameRenderingVerified':False}))\n`;
+    `'packagedCollectionSha256':m['packagedCollectionSha256'],'plate':m['plate'],'installed':False,'gameRenderingVerified':False}))\n`;
   const h = host(wrapper);
+  const seen: string[] = [];
   const result = await runDesktopBuild(collection, h.settings, h.data, h.tools, 3000,
-    undefined, fixtureWolvenKit);
+    undefined, fixtureWolvenKit, fixturePlate(seen));
+  expect(seen).toEqual([resolve(h.data, "plate-cache")]);
   expect(result.kind).toBe("success");
   if (result.kind !== "success") return;
   expect(result.result.omissions).toEqual(prepared.omissions);

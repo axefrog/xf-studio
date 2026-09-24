@@ -24,17 +24,22 @@ test("local setup edits control package paths without accepting paths in package
     expect((await actions.dispatch({ kind: "setup.refresh" })).ok).toBe(true);
     expect(actions.snapshot().view?.readiness.check.ready).toBe(true);
     expect(actions.snapshot().view?.readiness.build.ready).toBe(false);
-    const game = join(dir, "game"), plate = join(dir, "plate"), cli = join(dir, "WolvenKit.CLI.exe");
+    const game = join(dir, "game"), cli = join(dir, "WolvenKit.CLI.exe");
     mkdirSync(join(game, "bin", "x64"), { recursive: true });
     mkdirSync(join(game, "archive", "pc"), { recursive: true });
-    mkdirSync(plate);
     writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "");
     writeFileSync(cli, "");
-    const fields = { ...actions.snapshot().view!.fields, gameRoot: game, plateInput: plate, wolvenKitCli: cli };
+    expect(Object.keys(actions.snapshot().view!.fields)).not.toContain("plateInput");
+    // The eye plate is built in: game root and WolvenKit are the only required Build paths.
+    const fields = { ...actions.snapshot().view!.fields, gameRoot: game, wolvenKitCli: cli };
     expect((await actions.dispatch({ kind: "setup.save", fields })).ok).toBe(true);
     expect(actions.snapshot().view?.readiness.build.ready).toBe(true);
+    const retired = await transport("PATCH", { revision: 1, fields: { plateInput: join(dir, "plate") } });
+    expect(retired.status).toBe(400);
     expect(localPackageTools(store.load().settings, {}).gamepath).toBe(game);
     expect(localPackageTools(store.load().settings, { XFS_PACKAGE_PLATE: join(dir, "override") }).plate).toBe(join(dir, "override"));
+    expect(localPackageTools(store.load().settings, {}).plate).toBe("");
+    expect(localPackageTools(store.load().settings, { XFS_PACKAGE_PLATE_CACHE: join(dir, "cache") }).plateCache).toBe(join(dir, "cache"));
     expect(JSON.parse(readFileSync(store.file, "utf8")).gameRoot).toBe(game);
     const stale = await transport("PATCH", { revision: 0, fields });
     expect(stale.status).toBe(409);
