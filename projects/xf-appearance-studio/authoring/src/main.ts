@@ -5,7 +5,9 @@ import {
   type Layer,
 } from "./recipe";
 import { type LayerCommand } from "./layer-stack";
-import { applyLayerAction, layerCapability, RecipeHistory, type LayerAction } from "./editor-actions";
+import { applyLayerAction, layerCapability, type LayerAction } from "./editor-actions";
+import { AuthoringDocument } from "./authoring-document";
+import { WorkspacePersistence } from "./workspace-persistence";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
@@ -13,7 +15,7 @@ import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { layerRenderQueue } from "./layer-render-queue";
 import { createRasterClient } from "./raster-client";
-import { selectedWarp, type FieldSelection } from "./field-selection";
+import { selectedWarp } from "./field-selection";
 import { setupFields } from "./field-ui";
 import type { PigmentCommand } from "./pigment-edit";
 import type { SoftnessCommand } from "./softness-edit";
@@ -62,29 +64,28 @@ let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo }
 const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
   ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
-let recipe = workspace.recipe, active = workspace.active, selected = workspace.selected;
+const authoring = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
+  selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
-let fieldSelection: FieldSelection = workspace.fieldSelection;
-const history = new RecipeHistory(workspace.history);
-let workspaceReady = false, previewRestored = false, persistTimer: ReturnType<typeof setTimeout> | undefined;
+let previewRestored = false;
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 function checkpoint() {
-  history.checkpoint(recipe);
+  authoring.checkpoint();
 }
-const canvases = Array.from({ length: recipe.layers.length }, () => {
+const canvases = Array.from({ length: authoring.recipe.layers.length }, () => {
   const c = document.createElement("canvas");
   c.width = c.height = 1;
   return c;
 });
 function emptyPreviewCanvases() {
-  return recipe.layers.map(() => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas; });
+  return authoring.recipe.layers.map(() => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas; });
 }
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let previewActions: PreviewActions | undefined;
 let motionActions: MotionActions | undefined;
 let savedAppearance: SavedAppearanceActions | undefined;
-const current = () => recipe.layers[active];
+const current = () => authoring.recipe.layers[authoring.active];
 function showGlitterMeasurement(){
   const layer=current();
   if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
@@ -97,7 +98,7 @@ function showGlitterMeasurement(){
     ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${textureSize}²; these are not visible screen glints.`
     : "Calculating flakes in this painted shape. Field density is not a visible flake count.";
 }
-const currentField = () => selectedWarp(current(), fieldSelection);
+const currentField = () => selectedWarp(current(), authoring.fieldSelection);
 function selectField(id: string) {
   const l = current(); if (l) dispatchRecipeAction({ kind: "field.select", layerId: l.id, fieldId: id });
 }
@@ -107,7 +108,7 @@ const viewport = new ViewportAdapter();
 const sidebars = setupSidebars(workspace.panels, () => { persist(); viewport.resize(); });
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.snapshot(),
+  const editing = { ...authoring.export(), uvView: uvEditor?.snapshot() ?? workspace.uvView,
     savedV: savedAppearance?.snapshot().savedV ?? workspace.savedV,
     glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
@@ -144,25 +145,13 @@ function snapshot(): WorkspaceState {
       layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
   };
 }
-function flushWorkspace() {
-  clearTimeout(persistTimer);
-  if (!workspaceReady) return;
-  if (!restored.writable) {
-    $("save-state").textContent = `${restored.error}. Original storage kept; export your recipe before closing.`;
-    return;
-  }
-  try {
-    localStorage.setItem(workspaceKeys(verification).workspace, JSON.stringify(snapshot()));
-    $("save-state").textContent = "Workspace saved in this browser";
-  } catch {
-    $("save-state").textContent = "Browser storage unavailable — save a recipe";
-  }
-}
-function persist() {
-  if (!workspaceReady) return;
-  clearTimeout(persistTimer);
-  persistTimer = setTimeout(flushWorkspace, 180);
-}
+const workspacePersistence = new WorkspacePersistence({ storage: localStorage,
+  key: workspaceKeys(verification).workspace, writable: restored.writable,
+  restoreError: restored.error, capture: snapshot });
+workspacePersistence.subscribe(state => { $("save-state").textContent = state.message; });
+authoring.subscribe(() => workspacePersistence.request());
+function flushWorkspace() { workspacePersistence.flush(); }
+function persist() { workspacePersistence.request(); }
 window.addEventListener("pagehide", flushWorkspace);
 window.addEventListener("scroll", persist);
 document.addEventListener("visibilitychange", () => { if (document.hidden) flushWorkspace(); });
@@ -183,23 +172,23 @@ let refreshQuality: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
-  select(i) { dispatchRecipeAction({ kind: "layer.select", layerId: recipe.layers[i].id }); },
-  rename(i) { dispatchRecipeAction({ kind: "layer.select", layerId: recipe.layers[i].id });
+  select(i) { dispatchRecipeAction({ kind: "layer.select", layerId: authoring.recipe.layers[i].id }); },
+  rename(i) { dispatchRecipeAction({ kind: "layer.select", layerId: authoring.recipe.layers[i].id });
     input("layer-name").focus(); input("layer-name").select(); },
-  toggle(i, enabled) { dispatchLayer({ kind: "layer.setEnabled", id: recipe.layers[i].id, enabled }); },
+  toggle(i, enabled) { dispatchLayer({ kind: "layer.setEnabled", id: authoring.recipe.layers[i].id, enabled }); },
   edit: changeLayers,
 });
-function layerCards() { paintLayerList(recipe, active); }
+function layerCards() { paintLayerList(authoring.recipe, authoring.active); }
 function replaceRecipe(next: Recipe, nextActive = 0) {
-  recipe = next; active = Math.max(0, Math.min(nextActive, recipe.layers.length - 1)); selected = 0;
+  authoring.recipe = next; authoring.active = Math.max(0, Math.min(nextActive, authoring.recipe.layers.length - 1)); authoring.selected = 0;
   maskClient.reset();
   initialOptics = [];
   // A structure change cannot reuse an in-flight mask or an old slot's pixels.
-  canvases.splice(0, canvases.length, ...recipe.layers.map(() => {
+  canvases.splice(0, canvases.length, ...authoring.recipe.layers.map(() => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas;
   }));
   viewer?.setLayerCanvases(canvases);
-  for (let i = 0; i < recipe.layers.length; i++) render(i);
+  for (let i = 0; i < authoring.recipe.layers.length; i++) render(i);
   sync(); drawUV(); persist();
 }
 function changeLayers(command: LayerCommand) {
@@ -207,12 +196,12 @@ function changeLayers(command: LayerCommand) {
 }
 function dispatchLayer(action: LayerAction) {
   try {
-    const capability = layerCapability(recipe, action);
+    const capability = layerCapability(authoring.recipe, action);
     if (!capability.available) throw Error(capability.reason);
-    const next = applyLayerAction(recipe, current()?.id, action);
+    const next = applyLayerAction(authoring.recipe, current()?.id, action);
     checkpoint();
     if (next.structure) replaceRecipe(next.recipe, next.active);
-    else { recipe = next.recipe; render(next.changed); }
+    else { authoring.recipe = next.recipe; render(next.changed); }
   } catch (error) { status((error as Error).message); sync(); }
 }
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
@@ -232,17 +221,17 @@ function sync() {
   refreshQuality?.();
   refreshPath?.();
   const l = current();
-  $("layer-count").textContent = String(recipe.layers.length).padStart(2, "0");
+  $("layer-count").textContent = String(authoring.recipe.layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
   $("layer-properties").inert = !l;
   $<HTMLButtonElement>("export").disabled = !l;
-  $<HTMLButtonElement>("layer-add").disabled = recipe.layers.length >= MAX_LAYERS;
-  $<HTMLButtonElement>("layer-copy").disabled = !l || recipe.layers.length >= MAX_LAYERS;
-  $<HTMLButtonElement>("undo").disabled = !history.canUndo;
+  $<HTMLButtonElement>("layer-add").disabled = authoring.recipe.layers.length >= MAX_LAYERS;
+  $<HTMLButtonElement>("layer-copy").disabled = !l || authoring.recipe.layers.length >= MAX_LAYERS;
+  $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
   input("layer-name").value = l.name;
   $("active-name").textContent = l.name;
-  $("point-label").textContent = `Point ${selected + 1} / ${l.points.length}`;
+  $("point-label").textContent = `Point ${authoring.selected + 1} / ${l.points.length}`;
   input("color").value = l.color;
   input("symmetry").checked = l.symmetry;
   $<HTMLSelectElement>("finish").value = canonicalFinish(l.finish);
@@ -290,7 +279,7 @@ function sync() {
     if(id!=="color")$("direct-"+id+"-value").textContent=id==="strength"?flakes.strength.toFixed(1):`${Math.round(flakes[id]*100)}%`;
   }
   for (const [id, value] of Object.entries({
-    weight: l.points[selected].weight,
+    weight: l.points[authoring.selected].weight,
     opacity: l.opacity,
   })) {
     input(id).value = String(value);
@@ -300,14 +289,14 @@ function sync() {
         : `${Math.round(value * 100)}%`;
   }
   $<HTMLButtonElement>("remove").disabled = l.points.length <= 3;
-  $<HTMLButtonElement>("undo").disabled = !history.canUndo;
+  $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   layerCards();
 }
 let lastRaster = 0;
 const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
   ({ i, data, ms, size, optics, albedo, glitterStats }) => {
-    if (!recipe.layers[i]) return;
-    const layer = recipe.layers[i];
+    if (!authoring.recipe.layers[i]) return;
+    const layer = authoring.recipe.layers[i];
     if (size !== (layer.enabled ? textureSize : 1)) return;
     if (canvases[i].width !== size) {
       const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
@@ -325,7 +314,7 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
     else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
     if(glitterStats && layer.finish==="glitter" && isIrregular(layer.flakes)){
       glitterMeasurements.set(layer.id,{opticalKey:opticalKey(layer,size),maskKey:maskAlphaKey(layer,size),stats:glitterStats});
-      if(i===active)showGlitterMeasurement();
+      if(i===authoring.active)showGlitterMeasurement();
     }
     lastRaster = ms;
     drawUV();
@@ -333,14 +322,14 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
     status(`Live makeup · ${size}² · ${Math.round(ms)} ms · layer ${i + 1}`);
   }, reason => { qualityActions.fail(reason); status(qualityActions.snapshot().error); refreshQuality?.(); });
 function qualityAssessment(size = textureSize) {
-  return assessPreviewQuality(recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
+  return assessPreviewQuality(authoring.recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
 }
 function describeQuality() {
   if (qualityActions.snapshot().error) return qualityActions.snapshot().error;
   const assessment = qualityAssessment(), queue = maskClient.diagnostics();
   if (!assessment.accepted) return assessment.error!;
   const pending = queue.queued + (queue.running ? 1 : 0);
-  const waiting = recipe.layers.some((l,i) => l.enabled && (canvases[i]?.width !== textureSize ||
+  const waiting = authoring.recipe.layers.some((l,i) => l.enabled && (canvases[i]?.width !== textureSize ||
     (viewer && (viewer.needsOptics(i,l,textureSize) || viewer.needsAlbedo(i,l,textureSize)))));
   return `${pending || waiting ? "Updating" : "Ready"} · ${textureSize} × ${textureSize} · estimated generated-texture peak ${Math.ceil(assessment.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
 }
@@ -351,16 +340,16 @@ qualityActions = new PreviewQualityActions(textureSize, { assess: size => qualit
   // the target-only budget assesses the smaller replacement.
   canvases.splice(0,canvases.length,...emptyPreviewCanvases());
   initialOptics=[]; viewer?.setLayerCanvases(canvases);
-  for (const i of [active, ...recipe.layers.map((_,i) => i).filter(i => i !== active)]) render(i);
+  for (const i of [authoring.active, ...authoring.recipe.layers.map((_,i) => i).filter(i => i !== authoring.active)]) render(i);
 } });
 qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
   { current: () => qualityActions.snapshot().size, describe: describeQuality,
     set: size => { qualityActions.dispatch({ kind: "quality.set", size }); },
     rebuild: () => { qualityActions.dispatch({ kind: "quality.rebuild" }); } });
-function render(i = active) {
-  if (!recipe.layers[i]) return;
-  const layer = recipe.layers[i], assessment = qualityAssessment();
+function render(i = authoring.active) {
+  if (!authoring.recipe.layers[i]) return;
+  const layer = authoring.recipe.layers[i], assessment = qualityAssessment();
   if (!layer.enabled) {
     // Release large hidden resources immediately, even if a bake is being cancelled.
     if (canvases[i].width !== 1) {
@@ -376,31 +365,32 @@ function render(i = active) {
   if (qualityActions.snapshot().blocked) {
     // Capacity/failure recovery rebuilds every potentially stale slot.
     qualityActions.recover(); maskClient.reset();
-    for (const slot of [active, ...recipe.layers.map((_,slot) => slot).filter(slot => slot !== active)]) render(slot);
+    for (const slot of [authoring.active, ...authoring.recipe.layers.map((_,slot) => slot).filter(slot => slot !== authoring.active)]) render(slot);
     return;
   }
   qualityActions.recover();
   const size = layer.enabled ? textureSize : 1;
   const needsOptics = layer.enabled && !isDirectGlint(layer.flakes) && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     (viewer ? viewer.needsOptics(i, layer, size) : initialOptics[i]?.key !== opticalKey(layer, size));
-  maskClient.request(i, layer, i === active, size, needsOptics);
-  viewer?.updateLayer(i, recipe.layers[i]);
+  maskClient.request(i, layer, i === authoring.active, size, needsOptics);
+  viewer?.updateLayer(i, authoring.recipe.layers[i]);
   persist();
   sync();
   drawUV();
 }
-const scheduleLayer = layerRenderQueue(() => recipe.layers, run => requestAnimationFrame(run), render);
+const scheduleLayer = layerRenderQueue(() => authoring.recipe.layers, run => requestAnimationFrame(run), render);
 function schedule() { scheduleLayer(current()); }
 const recipeActions = new RecipeActions(
-  () => ({ recipe, active, selected, fieldSelection }),
+  () => ({ recipe: authoring.recipe, active: authoring.active,
+    selected: authoring.selected, fieldSelection: authoring.fieldSelection }),
   (next, effect) => {
-    recipe = next.recipe; active = next.active; selected = next.selected; fieldSelection = next.fieldSelection;
+    authoring.recipe = next.recipe; authoring.active = next.active; authoring.selected = next.selected; authoring.fieldSelection = next.fieldSelection;
     if (effect.kind === "selection") { sync(); drawUV(); persist(); }
     else if (effect.kind === "immediate") render(effect.layerIndex);
-    else if (effect.layerIndex !== active) render(effect.layerIndex);
+    else if (effect.layerIndex !== authoring.active) render(effect.layerIndex);
     else { schedule(); sync(); persist(); }
-  }, history, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
-  i => scheduleLayer(recipe.layers[i]));
+  }, authoring, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
+  i => { authoring.gestureChanged(); scheduleLayer(authoring.recipe.layers[i]); });
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -412,7 +402,7 @@ function dispatchRecipeAction(action: RecipeAction, record = false) {
 }
 
 function undo() {
-  const next = history.undo();
+  const next = authoring.undoRecipe();
   if (!next) return;
   replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
 }
@@ -432,7 +422,7 @@ for (const id of ["weight", "opacity", "color"]) {
     if (!l) return;
     if (id === "color") dispatchRecipeAction({ kind: "layer.setColor", layerId: l.id, color: control.value });
     else if (id === "weight") dispatchRecipeAction({ kind: "pigment.edit", layerId: l.id,
-      command: { kind: "point-strength", index: selected, value: +control.value } });
+      command: { kind: "point-strength", index: authoring.selected, value: +control.value } });
     else dispatchRecipeAction({ kind: "layer.setOpacity", layerId: l.id, opacity: +control.value });
   };
 }
@@ -483,7 +473,7 @@ function changePath(command: PathCommand) {
 refreshPath = setupPathControls({
   enable: $("path-enable"), modes: $("point-modes"), note: $("path-note"),
   aligned: $("point-aligned"), symmetric: $("point-symmetric"), corner: $("point-corner"),
-}, { layer: current, selected: () => selected, edit: changePath });
+}, { layer: current, selected: () => authoring.selected, edit: changePath });
 function changePigment(command: PigmentCommand) {
   const layer = current(); if (layer) dispatchRecipeAction({ kind: "pigment.edit", layerId: layer.id, command });
 }
@@ -497,19 +487,19 @@ function changeSoftness(command: SoftnessCommand) {
 refreshSoftness = setupSoftness({
   variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
   value: $("feather-value"), note: $("softness-note"),
-}, { layer: current, selected: () => selected, begin: checkpoint, edit: changeSoftness });
+}, { layer: current, selected: () => authoring.selected, begin: checkpoint, edit: changeSoftness });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),
 }, { layer: current, selected: currentField, select: selectField, begin: checkpoint, edit: dispatchRecipeAction });
 $("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
-  const l = current(); if (l) dispatchRecipeAction({ kind: "point.remove", layerId: l.id, index: selected }, true);
+  const l = current(); if (l) dispatchRecipeAction({ kind: "point.remove", layerId: l.id, index: authoring.selected }, true);
 };
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
 }, {
-  recipe: () => recipe, layer: current, selected: () => selected,
+  recipe: () => authoring.recipe, layer: current, selected: () => authoring.selected,
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
@@ -527,17 +517,17 @@ function download(blob: Blob, name: string) {
 }
 $("save").onclick = () => {
   download(
-    new Blob([JSON.stringify(recipe, null, 2)], { type: "application/json" }),
+    new Blob([JSON.stringify(authoring.recipe, null, 2)], { type: "application/json" }),
     "xfs.recipe.json",
   );
   status("Recipe exported — editable shapes, colours and fields.");
 };
 $("load").onclick = () => input("file").click();
-presetLibrary = setupCollections(() => ({ recipe, active, selected, fieldSelection, history: history.snapshot() }), editor => {
-  history.restore(editor.history);
-  fieldSelection = editor.fieldSelection ?? {};
+presetLibrary = setupCollections(() => authoring.export(), editor => {
+  authoring.restoreHistory(editor.history);
+  authoring.fieldSelection = editor.fieldSelection ?? {};
   replaceRecipe(editor.recipe, editor.active);
-  selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
+  authoring.selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
 }, workspace.collections, workspace.library, persist, download);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
@@ -708,9 +698,9 @@ for (let i = 0; i <= 21; i++) {
   o.selected = i === workspace.preview.eyeShape;
   shape.append(o);
 }
-for (let i = 0; i < recipe.layers.length; i++) render(i);
+for (let i = 0; i < authoring.recipe.layers.length; i++) render(i);
 sync();
-workspaceReady = true;
+workspacePersistence.activate();
 try {
   // Discover hardware limits before attaching any full-size generated texture.
   viewer = await createScene($("viewport"), emptyPreviewCanvases());
@@ -742,7 +732,7 @@ try {
   $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
   const surface = createSurfaceEditor(viewer, {
     layer: current,
-    selected: () => selected,
+    selected: () => authoring.selected,
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
     begin: checkpoint,
@@ -754,12 +744,12 @@ try {
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
     previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
-  for (let i = 0; i < recipe.layers.length; i++) {
+  for (let i = 0; i < authoring.recipe.layers.length; i++) {
     const stored = initialOptics[i];
-    if (initialQuality.accepted && !(recipe.layers[i].finish==="glitter" &&
-      (isIrregular(recipe.layers[i].flakes) || isDirectGlint(recipe.layers[i].flakes)) && canvases[i].width<32))
-      viewer.updateLayer(i, recipe.layers[i], stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.data : undefined,
-        stored?.key === opticalKey(recipe.layers[i], canvases[i].width) ? stored.albedo : undefined,true);
+    if (initialQuality.accepted && !(authoring.recipe.layers[i].finish==="glitter" &&
+      (isIrregular(authoring.recipe.layers[i].flakes) || isDirectGlint(authoring.recipe.layers[i].flakes)) && canvases[i].width<32))
+      viewer.updateLayer(i, authoring.recipe.layers[i], stored?.key === opticalKey(authoring.recipe.layers[i], canvases[i].width) ? stored.data : undefined,
+        stored?.key === opticalKey(authoring.recipe.layers[i], canvases[i].width) ? stored.albedo : undefined,true);
     initialOptics[i] = undefined;
   }
   $("loading").hidden = true;
@@ -851,7 +841,7 @@ try {
       surface: surface.diagnostics(),
       inputCapture: viewport.capture(),
       uv: uvEditor!.diagnostics(),
-      recipe: structuredClone(recipe),
+      recipe: structuredClone(authoring.recipe),
       assets: viewer!.evidence,
       eyeAppearance: viewer!.eyeAppearance(),
       idle: { enabled: viewer!.idle?.enabled ?? false, time: viewer!.idle?.time ?? 0,

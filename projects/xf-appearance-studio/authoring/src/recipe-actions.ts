@@ -7,7 +7,6 @@ import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import type { PathCommand } from "./path-ui";
-import { RecipeHistory } from "./editor-actions";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =
@@ -162,7 +161,7 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
 export class RecipeActions {
   private listeners = new Set<(effect: RecipeActionEffect) => void>();
   constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
-    private history: RecipeHistory, private choices: GlitterChoices, private presetId: () => string,
+    private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
     private gestureChanged?: (layerIndex: number) => void) {}
   snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
   capability(action: RecipeAction) { return recipeActionCapability(this.read(), action); }
