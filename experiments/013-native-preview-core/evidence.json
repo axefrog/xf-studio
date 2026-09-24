@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-25",
+  "scope": "Private offline fixed-vanilla candidate from installed Cyberpunk 2077 2.31",
+  "providerArchive": "archive/pc/content/basegame_4_appearance.archive",
+  "providerSha256": "9c20370467e71d49ffb0a6415fe0415b2349ac22fe5afd38daf2783f54f2443b",
+  "wolvenkitCliVersion": "8.17.4",
+  "wolvenkitCliExeSha256": "fdffea5f19a13a5abf57487acf4e9cffce35e789d8f0d8ef551130021a086201",
+  "candidateSha256": {
+    "head.glb": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "eyes.glb": "0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba",
+    "head-albedo.png": "8b70a86c165fa8b117bf647dc7ba1a0c74ed27ea654bb88b07ceacd50494bf66",
+    "head-normal.png": "40bf65d0963f0b3790ccb7bc8333cd6260a76172dbb9e25607c907d6e6badf34",
+    "head-roughness.png": "77854210b19420c8c0dbae8af6ad4cd5e360adf1d2532cd840c4ea3225cecb2e",
+    "eye-albedo.png": "15e4a3ab9a50ec3f5f085e447af8eb8fadcadf9f282d6f3540ae96eac1036153",
+    "eye-normal.png": "5c9ba5409fd2f22c0112e11c05f70a2f08ac9b8f6c7738311c3f63eb9b97a6cb",
+    "eye-roughness.png": "106512c438b9fb54be6ad1bfc2052a7d6f5c757aff93c404765de7343d18db5a"
+  },
+  "head": {"vertices": 7186, "triangles": 13186, "joints": 254, "morphs": 105},
+  "eyeSurface": {"vertices": 668, "triangles": 1292, "joints": 57, "morphs": 0, "mesh": "submesh_01_LOD_1"},
+  "checks": {
+    "independentVerifier": "passed",
+    "sourceResourceHashes": "passed",
+    "materialMapAndGradientLinks": "passed",
+    "xbmGammaFlags": "passed",
+    "allConvertedPixels": "passed",
+    "repeatBuildCandidateBytes": "8 of 8 identical between two full runs",
+    "privateContactSheet": "visually inspected at normal reading size; colour layout, positive-blue normal baseline and scalar roughness structure present",
+    "gameLaunch": false,
+    "productionIntegration": false
+  }
+}
