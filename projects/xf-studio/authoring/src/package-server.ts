@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import { parseCollection } from "./preset-collection";
 import { preparePackageCollection } from "./package-filter";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
+import { verifyPackageBuildResult } from "./package-result-verifier";
 
 const app = resolve(import.meta.dir, "..");
 const hq = resolve(app, "../../..");
@@ -15,7 +16,6 @@ const dist = resolve(project, "dist");
 const script = resolve(app, "tools/build_collection_package.py");
 const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
-const within = (path: string, root: string) => path.startsWith(root + sep);
 export type PackageTools = { python: string; bun: string; plate: string; wolvenkit: string; gamepath: string };
 export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env): PackageTools {
   const configured = packageToolPaths(settings, env);
@@ -96,7 +96,6 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
     catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
     const { plan, omissions, packaged } = prepared;
     const source = JSON.stringify(collection);
-    const sourceHash = createHash("sha256").update(source).digest("hex");
     const packagedHash = createHash("sha256").update(JSON.stringify(packaged)).digest("hex");
     const work = mkdtempSync(resolve(tmpdir(), "xfs-ui-package-"));
     const file = resolve(work, "collection.json");
@@ -115,23 +114,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
         return json(checked);
       }
       const built = result as PackageBuild;
-      const final = resolve(built.package ?? ""), manifestPath = resolve(built.manifest ?? "");
-      if (!within(final, dist) || manifestPath !== resolve(final, "manifest.json") || !statSync(manifestPath).isFile())
-        throw Error("Package result is outside the local dist directory.");
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-      if (manifest.schema !== "xfs/local-package-1" || manifest.collectionId !== collection.id ||
-          manifest.collectionSha256 !== sourceHash || manifest.packagedCollectionSha256 !== packagedHash ||
-          manifest.originalPresetCount !== collection.presets.length ||
-          JSON.stringify(manifest.omissions) !== JSON.stringify(omissions) || manifest.namespace !== plan.namespace ||
-          JSON.stringify(manifest.presets) !== JSON.stringify(plan.presets.map(p =>
-            ({ id: p.id, revision: p.revision, appearance: p.appearance }))) ||
-          manifest.verifiedPresetCount !== packaged.presets.length ||
-          built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== packaged.presets.length ||
-          built.originalPresetCount !== collection.presets.length ||
-          built.packagedCollectionSha256 !== packagedHash || JSON.stringify(built.omissions) !== JSON.stringify(omissions) ||
-          built.installed !== false || built.gameRenderingVerified !== false ||
-          manifest.installed !== false || manifest.gameRenderingVerified !== false)
-        throw Error("Package manifest does not match this collection snapshot.");
+      verifyPackageBuildResult(built, collection, prepared, source, dist);
       return json(built);
     } catch (error) {
       console.error("Local package action failed:", (error as Error).message);

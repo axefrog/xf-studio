@@ -25,10 +25,14 @@ parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/ge
 parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
 parser.add_argument('--bun',type=Path,default=Path('C:/Users/Nathan/.bun/bin/bun.exe'))
 parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077'))
+parser.add_argument('--app-root',type=Path,help='Studio authoring source root')
+parser.add_argument('--work-root',type=Path,help='Working directory for child tools')
+parser.add_argument('--bake-script',type=Path,help='Shared TypeScript bake entry; defaults under app root')
 parser.add_argument('--no-latest',action='store_true',help='Do not change the experiment fixture pointer')
 args=parser.parse_args()
-HQ=HERE.parents[1]
-APP=HQ/'projects/xf-studio/authoring'
+HQ=args.work_root.resolve() if args.work_root else HERE.parents[1]
+APP=args.app_root.resolve() if args.app_root else HQ/'projects/xf-studio/authoring'
+BAKE=args.bake_script.resolve() if args.bake_script else APP/'tools/bake_collection.ts'
 WK=args.wolvenkit.resolve()
 BUN=args.bun.resolve()
 PLATE=args.plate.resolve()
@@ -36,6 +40,8 @@ GAME=args.gamepath.resolve()
 OUT=args.output.resolve() if args.output else HERE/'generated'/f'build-{time.time_ns()}'
 if OUT.exists(): parser.error(f'Output already exists: {OUT}')
 if not args.collection.is_file(): parser.error(f'Collection file is missing: {args.collection}')
+if not HQ.is_dir() or not APP.is_dir() or not BAKE.is_file():
+    parser.error('Work root, app root and bake script must exist.')
 for label,path in [('WolvenKit',WK),('Bun',BUN),('plate mesh',PLATE/'xfas_eye_plate.mesh'),('plate morph',PLATE/'xfas_eye_plate.morphtarget')]:
     if not path.is_file(): parser.error(f'{label} is missing: {path}')
 if not GAME.is_dir(): parser.error(f'Game path is missing: {GAME}')
@@ -63,7 +69,7 @@ def document(root): return {'Header':{'WolvenKitVersion':'8.17.4','WKitJsonVersi
 handles=itertools.count(10000) # Avoid the preserved mesh/morph buffer handles in the imported plate.
 def handle(data): return {'HandleId':str(next(handles)),'Data':data}
 
-run('bake',[BUN,APP/'tools/bake_collection.ts',args.collection.resolve(),OUT/'baked'])
+run('bake',[BUN,BAKE,args.collection.resolve(),OUT/'baked'])
 plan=load(OUT/'baked/plan.json');compiled=load(OUT/'baked/compiled.json')
 depot=plan['depot'];archive=OUT/'archive';modeldir=archive/Path(plan['mesh']).parent
 appdir=archive/Path(plan['app']).parent;texturedir=archive/depot/'textures'

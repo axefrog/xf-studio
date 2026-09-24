@@ -12,12 +12,10 @@ import subprocess
 import sys
 import time
 
-APP = Path(__file__).resolve().parents[1]
-HQ = APP.parents[2]
-STUDY = HQ / 'experiments/005-preset-collection'
-PROJECT = APP.parent
-DIST = PROJECT / 'dist'
-BUILD = PROJECT / 'build'
+DEFAULT_APP = Path(__file__).resolve().parents[1]
+DEFAULT_HQ = DEFAULT_APP.parents[2]
+DEFAULT_STUDY = DEFAULT_HQ / 'experiments/005-preset-collection'
+DEFAULT_PROJECT = DEFAULT_APP.parent
 
 
 def file_hash(path):
@@ -28,20 +26,20 @@ def file_hash(path):
     return digest.hexdigest()
 
 
-def run(command, log=None):
+def run(command, cwd, log=None):
     if log is None:
-        subprocess.run([str(part) for part in command], cwd=HQ, check=True, timeout=1800)
+        subprocess.run([str(part) for part in command], cwd=cwd, check=True, timeout=1800)
         return
-    result = subprocess.run([str(part) for part in command], cwd=HQ,
+    result = subprocess.run([str(part) for part in command], cwd=cwd,
         capture_output=True, text=True, timeout=600)
     log.write_text(result.stdout + '\n' + result.stderr, encoding='utf-8')
     if result.returncode:
         raise ValueError(f'Independent verifier failed ({result.returncode}): {result.stderr[-3000:]}')
 
 
-def destination(root):
+def destination(root, dist_root):
     """Only return an ignored project dist path, never a game/mod deployment path."""
-    base = DIST.resolve()
+    base = dist_root.resolve()
     chosen = root.resolve()
     if chosen != base and base not in chosen.parents:
         raise ValueError(f'Output must be inside {base}; game/MO2 deployment is a separate action.')
@@ -57,21 +55,37 @@ def main(argv=None):
     parser.add_argument('--wolvenkit', type=Path, help='WolvenKit.CLI executable')
     parser.add_argument('--gamepath', type=Path, help='Local Cyberpunk 2077 directory for texture conversion')
     parser.add_argument('--bun', type=Path, default=Path(shutil.which('bun') or ''), help='Bun executable')
-    parser.add_argument('--output-root', type=Path, default=DIST, help='Ignored destination within project dist')
+    parser.add_argument('--app-root', type=Path, default=DEFAULT_APP, help='Studio authoring source root')
+    parser.add_argument('--study-root', type=Path, default=DEFAULT_STUDY, help='Experiment 005 Python tools root')
+    parser.add_argument('--work-root', type=Path, default=DEFAULT_HQ, help='Working directory for child tools')
+    parser.add_argument('--build-root', type=Path, default=DEFAULT_PROJECT/'build', help='Private intermediate build root')
+    parser.add_argument('--dist-root', type=Path, default=DEFAULT_PROJECT/'dist', help='Host-owned private package root')
+    parser.add_argument('--preflight-script', type=Path, help='Shared TypeScript preflight entry; defaults under app root')
+    parser.add_argument('--bake-script', type=Path, help='Shared TypeScript bake entry; defaults under app root')
+    parser.add_argument('--output-root', type=Path, help='Destination within --dist-root (defaults to dist root)')
     parser.add_argument('--check', action='store_true', help='Validate the collection/finish support without building')
     parser.add_argument('--machine-result', action='store_true', help='Emit one prefixed JSON result for the local server')
     args = parser.parse_args(argv)
 
     try:
-        output_root = destination(args.output_root)
+        app = args.app_root.resolve(strict=True)
+        study = args.study_root.resolve()
+        work_root = args.work_root.resolve(strict=True)
+        build_root = args.build_root.resolve()
+        dist_root = args.dist_root.resolve()
+        preflight_script = (args.preflight_script or app/'tools/validate_collection_build.ts').resolve(strict=True)
+        bake_script = (args.bake_script or app/'tools/bake_collection.ts').resolve()
+        if not app.is_dir() or not work_root.is_dir():
+            raise ValueError('App and work roots must be directories.')
+        output_root = destination(args.output_root or dist_root, dist_root)
         collection = args.collection.resolve(strict=True)
         if not collection.is_file() or collection.stat().st_size > 16_000_000:
             raise ValueError('Collection must be a file of at most 16 MB.')
         source_hash = file_hash(collection)
         bun = args.bun.resolve(strict=True)
         if not bun.is_file(): raise ValueError(f'Bun executable is missing: {bun}')
-        preflight = subprocess.run([str(bun), str(APP/'tools/validate_collection_build.ts'), str(collection)],
-            cwd=HQ, capture_output=True, text=True, encoding='utf-8', timeout=120)
+        preflight = subprocess.run([str(bun), str(preflight_script), str(collection)],
+            cwd=work_root, capture_output=True, text=True, encoding='utf-8', timeout=120)
         if preflight.returncode:
             raise ValueError('Collection preflight rejected input: ' + preflight.stderr[-3000:])
         summary = json.loads(preflight.stdout)
@@ -84,6 +98,8 @@ def main(argv=None):
             result = {'ready': True, **summary}
             print(('XFS_PACKAGE_RESULT=' + json.dumps(result)) if args.machine_result else json.dumps(result, indent=2))
             return 0
+        if not study.is_dir() or not (study/'build.py').is_file() or not (study/'verify.py').is_file() or not bake_script.is_file():
+            raise ValueError('Build requires the Experiment 005 tools and shared bake script.')
         if not args.plate or not args.wolvenkit or not args.gamepath:
             raise ValueError('Build requires --plate, --wolvenkit and --gamepath. --check only needs --collection.')
         plate = args.plate.resolve(strict=True)
@@ -94,11 +110,11 @@ def main(argv=None):
         if not wolvenkit.is_file() or not gamepath.is_dir():
             raise ValueError('WolvenKit must be a file and gamepath must be a directory.')
         token = f"{summary['namespace']}-{time.time_ns()}"
-        intermediate = BUILD / token
+        intermediate = build_root / token
         final = output_root / token
         if intermediate.exists() or final.exists(): raise ValueError('Build destination already exists.')
-        BUILD.mkdir(parents=True, exist_ok=True)
-        snapshot = BUILD / f'source-{token}.json'
+        build_root.mkdir(parents=True, exist_ok=True)
+        snapshot = build_root / f'source-{token}.json'
         if file_hash(collection) != source_hash:
             raise ValueError('Collection changed during preflight; export a stable snapshot and retry.')
         snapshot.write_text(packaged_json, encoding='utf-8')
@@ -107,11 +123,12 @@ def main(argv=None):
             raise ValueError('Filtered collection snapshot changed while writing; retry.')
         print(f'Building {len(summary["presets"])} preset(s) in ignored local intermediates: {intermediate}', flush=True)
         try:
-            run([sys.executable, STUDY/'build.py', '--collection', snapshot, '--output', intermediate,
-                '--plate', plate, '--wolvenkit', wolvenkit, '--bun', bun, '--gamepath', gamepath, '--no-latest'])
+            run([sys.executable, study/'build.py', '--collection', snapshot, '--output', intermediate,
+                '--plate', plate, '--wolvenkit', wolvenkit, '--bun', bun, '--gamepath', gamepath,
+                '--app-root', app, '--work-root', work_root, '--bake-script', bake_script, '--no-latest'], work_root)
         finally:
             snapshot.unlink(missing_ok=True)
-        run([sys.executable, STUDY/'verify.py', '--build', intermediate, '--wolvenkit', wolvenkit],
+        run([sys.executable, study/'verify.py', '--build', intermediate, '--wolvenkit', wolvenkit], work_root,
             log=intermediate/'logs/package-verify-cli.log')
         verification = json.loads((intermediate/'verification.json').read_text(encoding='utf-8'))
         built = json.loads((intermediate/'build.json').read_text(encoding='utf-8'))
