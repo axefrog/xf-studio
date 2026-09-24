@@ -56,7 +56,8 @@ export class StudioFileOperations {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify() { for (const listener of this.listeners) listener(); }
   snapshot(): ReadonlyDeep<StudioFileState> {
-    const collection = this.collection?.view(), progress = collection?.progress;
+    // The primitive summary carries busy/progress without cloning every preset's Undo history.
+    const collection = this.collection?.summary(), progress = collection?.progress;
     const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
       { available: false, reason: "Collection is still loading." };
     return structuredClone({ busy: this.busy, collectionBusy: collection?.busy ?? false,
