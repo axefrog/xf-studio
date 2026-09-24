@@ -1,5 +1,6 @@
 import type { CollectionRequest } from "./collection-service";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
+import type { StudioFileAction } from "./studio-file-operations";
 
 export type ActionScope = StudioTarget["kind"] | "file";
 export type UndoPolicy = "none" | "recipe" | "transaction" | "recovery";
@@ -33,6 +34,7 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
   "recipe.undo": desc("workspace", "content", "none"),
+  "recipe.redo": desc("workspace", "content", "none"),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
   "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),
@@ -127,3 +129,42 @@ export const GESTURE_DESCRIPTORS = {
   "field.replace": desc("field", "content", "transaction", { fieldId: target("string"), next: input("object") }),
   "path.replacePoints": desc("layer", "content", "transaction", { points: input("object") }),
 } satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;
+
+/**
+ * File workflows (`StudioFileOperations`). Each runs asynchronously through a device
+ * port; `device` names the browser mechanism it needs, `savesFirst` marks exports that
+ * write a SQLite revision before downloading, and `recovery` marks draft switches that
+ * the collection recovery queue can undo. None records a recipe Undo entry.
+ */
+export type FileDescriptor = { scope: readonly ActionScope[];
+  effect: "import" | "download" | "package" | "recover"; device: "picker" | "download" | "none";
+  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy };
+const file = (scope: ActionScope | readonly ActionScope[], effect: FileDescriptor["effect"],
+  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy } = {}): FileDescriptor =>
+  ({ scope: typeof scope === "string" ? [scope] : scope, effect, device, async: true, cancellable: false,
+    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none" });
+export const FILE_DESCRIPTORS = {
+  "recipe.import": file(["file", "collection"], "import", "picker"),
+  "recipe.export": file(["file", "layer"], "download", "download"),
+  "mask.export": file(["file", "layer"], "download", "download"),
+  "savedV.import": file("file", "import", "picker"),
+  "savedV.export": file("file", "download", "download"),
+  "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
+  "collection.export": file("collection", "download", "download", { savesFirst: true }),
+  "collection.plan": file("collection", "download", "download", { savesFirst: true }),
+  "package.check": file("collection", "package", "none"),
+  "package.build": file("collection", "package", "none"),
+  "collection.recover": file("collection", "recover", "none", { undo: "recovery" }),
+} satisfies Record<StudioFileAction["kind"], FileDescriptor>;
+
+/** One flat index over every family, for palettes, scripts and documentation checks. */
+export type RegistryEntry = { id: string; family: "action" | "request" | "gesture" | "file";
+  scope: readonly ActionScope[]; undo: UndoPolicy; async: boolean };
+export function actionRegistry(): RegistryEntry[] {
+  return [
+    ...Object.entries(ACTION_DESCRIPTORS).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(REQUEST_DESCRIPTORS).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),
+    ...Object.entries(GESTURE_DESCRIPTORS).map(([id, d]) => ({ id, family: "gesture" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(FILE_DESCRIPTORS).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo, async: true })),
+  ].map(entry => structuredClone(entry));
+}

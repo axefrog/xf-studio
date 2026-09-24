@@ -70,7 +70,7 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
 export function openShortcuts() {
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const rows: [string, string][] = [
-    ["Ctrl+K", "Command palette — every command, with reasons when unavailable"], ["Ctrl+Z", "Undo the last recipe change (outside text fields)"],
+    ["Ctrl+K", "Command palette — every command, with reasons when unavailable"], ["Ctrl+Z", "Undo the last recipe change (outside text fields)"], ["Ctrl+Shift+Z / Ctrl+Y", "Redo the change you just undid"],
     ["Ctrl+S", "Save the collection to the local library"], ["F6 / Shift+F6", "Move focus between the header, panel groups and status bar"],
     ["← → Home End", "Switch tabs in a focused tab strip"], ["Alt+Shift+← →", "Reorder the focused tab"], ["Shift+F10", "Layout or context commands for the focused item"],
     ["Delete", "Close the focused tab · remove the focused row"], ["↑ ↓", "Move between rows in Presets and Layers"], ["Alt+↑ ↓", "Reorder the focused row"],

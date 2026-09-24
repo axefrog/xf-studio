@@ -14,12 +14,12 @@ import type { LocalSetupActions } from "./local-setup-actions";
 export type StudioPresentationPort<Slot> = {
   readonly authoring: Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
-    "gestureDescriptors" | "descriptorsFor" | "targetCapability" | "contextCapability" |
+    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
     "choicesFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "finishCatalogue" |
     "glitterModelCatalogue"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
@@ -90,6 +90,7 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
     requestDescriptors: () => a.requestDescriptors(), gestureDescriptors: () => a.gestureDescriptors(),
+    fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
     contextCapability: (target, action) => a.contextCapability(target, action),
@@ -110,7 +111,7 @@ export function createStudioPresentation<Slot>(sources: {
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), finishCatalogue: () => a.finishCatalogue(),
+    previewState: () => a.previewState(), history: () => a.history(), finishCatalogue: () => a.finishCatalogue(),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
   };
   const fallback = () => a.snapshot().document;

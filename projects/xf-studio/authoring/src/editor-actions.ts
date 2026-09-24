@@ -1,6 +1,7 @@
 import { editLayers, type LayerCommand } from "./layer-stack";
 import { MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 import type { ActionCapability } from "./collection-actions";
+import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 
 export type LayerAction =
   | { kind: "layer.edit"; command: LayerCommand }
@@ -29,21 +30,34 @@ export function applyLayerAction(recipe: Recipe, activeId: string | undefined, a
     changed: next.layers.findIndex(layer => layer.id === action.id) };
 }
 
-/** Recipe history has no DOM or storage dependency and never returns a mutable stored entry. */
+/**
+ * Recipe history has no DOM or storage dependency and never returns a mutable stored entry.
+ * Each entry may carry a session-only label; persisted/restored entries have none.
+ */
 export class RecipeHistory {
-  private entries: string[];
-  constructor(initial: Recipe[] = []) { this.entries = initial.map(recipe => JSON.stringify(parseRecipe(recipe))).slice(-80); }
+  private entries: { encoded: string; label?: HistoryLabel }[];
+  constructor(initial: Recipe[] = []) { this.entries = encode(initial); }
   get canUndo() { return this.entries.length > 0; }
   get depth() { return this.entries.length; }
-  checkpoint(recipe: Recipe) {
+  /** Returns true when a new entry was added (an identical top entry is not duplicated). */
+  checkpoint(recipe: Recipe, label?: HistoryLabel) {
     const encoded = JSON.stringify(recipe);
-    if (this.entries.at(-1) !== encoded) this.entries.push(encoded);
+    const added = this.entries.at(-1)?.encoded !== encoded;
+    if (added) this.entries.push({ encoded, label: label && { ...label } });
     if (this.entries.length > 80) this.entries.shift();
+    return added;
   }
   undo(): Recipe | undefined {
-    const encoded = this.entries.pop();
-    return encoded ? parseRecipe(JSON.parse(encoded)) : undefined;
+    const entry = this.entries.pop();
+    return entry ? parseRecipe(JSON.parse(entry.encoded)) : undefined;
   }
-  snapshot(): Recipe[] { return this.entries.map(encoded => parseRecipe(JSON.parse(encoded))); }
-  restore(entries: Recipe[]) { this.entries = entries.map(recipe => JSON.stringify(parseRecipe(recipe))).slice(-80); }
+  /** Label of the entry the next Undo would restore. */
+  topLabel(): HistoryLabel | undefined {
+    const entry = this.entries.at(-1);
+    return entry && (entry.label ? { ...entry.label } : { ...UNKNOWN_HISTORY_LABEL });
+  }
+  relabelTop(label: HistoryLabel) { const entry = this.entries.at(-1); if (entry) entry.label = { ...label }; }
+  snapshot(): Recipe[] { return this.entries.map(entry => parseRecipe(JSON.parse(entry.encoded))); }
+  restore(entries: Recipe[]) { this.entries = encode(entries); }
 }
+const encode = (entries: Recipe[]) => entries.map(recipe => ({ encoded: JSON.stringify(parseRecipe(recipe)) })).slice(-80);
