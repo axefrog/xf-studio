@@ -124,6 +124,7 @@ export function createRasterClient(makeWorker: () => RasterPort,
     },
     reset() { queue.clear(); versions.clear(); cancelRunning(); },
     diagnostics: () => ({ running: running ? { i: running.i, version: running.version } : null,
-      queued: queue.size, cancelling: cancelSent, cancellations, completed, discarded, failures }),
+      queued: queue.size, queuedIndices: [...queue.keys()], cancelling: cancelSent,
+      cancellations, completed, discarded, failures }),
   };
 }

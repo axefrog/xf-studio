@@ -22,6 +22,7 @@ function harness() {
       calls.push("reconcile");
       const old = new Map(previous.map((layer, i) => [layer.id, sizes[i]]));
       sizes = current.map(layer => old.get(layer.id) ?? 1);
+      return new Set<string>();
     },
     releaseDisabled: i => { calls.push(`release:${i}`); sizes[i] = 1; },
     request: (i, _layer, priority, size, optics) => calls.push(`request:${i}:${priority}:${size}:${optics}`),

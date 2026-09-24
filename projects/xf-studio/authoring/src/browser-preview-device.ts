@@ -72,6 +72,9 @@ export function createBrowserPreviewDevice(options: {
     },
     reconcileResources: (previous, current) => {
       // Worker slots are indices; old completions must not paint a moved identity.
+      const pending = client.diagnostics();
+      const interrupted = new Set([...(pending.running ? [pending.running.i] : []), ...pending.queuedIndices]
+        .map(index => previous[index]?.id).filter((id): id is string => !!id));
       client.reset();
       const oldSlots = new Map(previous.map((layer, i) => [layer.id, i]));
       const priorCanvases = [...canvases], priorOptics = [...initialOptics];
@@ -84,6 +87,7 @@ export function createBrowserPreviewDevice(options: {
         return old === undefined ? undefined : priorOptics[old];
       });
       viewer?.reconcileLayerCanvases(current.map(layer => layer.id), canvases);
+      return interrupted;
     },
     releaseDisabled: (i, layer) => {
       if (canvases[i].width !== 1) {

@@ -20,7 +20,7 @@ export type PreviewRenderPort = {
   queue(): { queued: number; running: unknown };
   reset(): void;
   replaceResources(): void;
-  reconcileResources(previous: Layer[], current: Layer[]): void;
+  reconcileResources(previous: Layer[], current: Layer[]): ReadonlySet<string>;
   releaseDisabled(index: number, layer: Layer): void;
   request(index: number, layer: Layer, priority: boolean, size: number, needsOptics: boolean): void;
   updateLayer(index: number, layer: Layer): void;
@@ -120,12 +120,10 @@ export class AuthoringPreviewCoordinator {
     const current = this.document.recipe.layers, old = previous.layers;
     const oldById = new Map(old.map(layer => [layer.id, layer]));
     const orderChanged = old.length !== current.length || old.some((layer, i) => layer.id !== current[i]?.id);
-    if (orderChanged) {
-      this.port.reconcileResources(old, current);
-    }
+    const interrupted = orderChanged ? this.port.reconcileResources(old, current) : new Set<string>();
     for (let i = 0; i < current.length; i++) {
       const prior = oldById.get(current[i].id);
-      if (!prior || !samePreviewInputs(prior, current[i]) ||
+      if (!prior || !samePreviewInputs(prior, current[i]) || interrupted.has(current[i].id) ||
           orderChanged && current[i].enabled &&
             (this.port.resourceSize(i) !== this.size || this.port.needsPresentationMaps(i, current[i], this.size)))
         this.render(i);

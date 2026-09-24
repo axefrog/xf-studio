@@ -73,15 +73,26 @@ test("a moved layer keeps its completed canvas and rejects a worker result for i
   device.coordinator.syncStack(prior);
   expect(device.canvases[2]).toBe(canvas);
   expect(sent).toHaveLength(0);
-  device.coordinator.render(2);
+  const recolored = structuredClone(moved);
+  recolored.layers[2].color = "#123456";
+  authoring.publishLayer(recolored, 2);
   expect(sent).toHaveLength(1);
   const pending = sent[0];
-  const back = editLayers(moved, id, { kind: "move", id, to: 0 }).recipe;
+  const back = editLayers(recolored, id, { kind: "move", id, to: 0 }).recipe;
   authoring.replaceRecipe(back, 0);
-  device.coordinator.syncStack(moved);
+  device.coordinator.syncStack(recolored);
   expect(cancelled).toEqual([pending.version]);
+  expect(device.coordinator.readiness().phase).toBe("updating");
   worker.onmessage!({ data: { i: 2, version: pending.version, size: 512, ms: 1,
     data: completed } } as MessageEvent);
   expect(device.canvases[0]).toBe(canvas);
   expect(device.queueDiagnostics().discarded).toBe(1);
+  expect(sent).toHaveLength(2);
+  expect(sent[1].i).toBe(0);
+  expect(sent[1].version).toBeGreaterThan(pending.version);
+  expect(device.coordinator.readiness().phase).toBe("updating");
+  worker.onmessage!({ data: { i: 0, version: sent[1].version, size: 512, ms: 1,
+    data: completed } } as MessageEvent);
+  expect(device.queueDiagnostics().completed).toBe(1);
+  expect(device.coordinator.readiness().phase).toBe("ready");
 });
