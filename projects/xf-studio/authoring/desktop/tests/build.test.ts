@@ -8,7 +8,7 @@ import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { parseCollection } from "../../src/preset-collection";
 import { preparePackageCollection } from "../../src/package-filter";
-import { desktopBuildIssue, runDesktopBuild } from "../build";
+import { desktopBuildIssue, probeBun, runDesktopBuild } from "../build";
 import { createDesktopServer } from "../server";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"));
@@ -48,7 +48,10 @@ function host(wrapper = "import time; time.sleep(30)\n") {
 
 test("Build readiness requires intact packaged tools, configured inputs and disjoint private roots", () => {
   const h = host();
+  expect(probeBun(process.execPath)).toBeNull();
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toBeNull();
+  expect(desktopBuildIssue({ ...h.settings, bunExecutable: h.settings.wolvenKitCli }, h.data, h.tools,
+    fixtureWolvenKit)).toContain("cannot run");
   expect(desktopBuildIssue(h.settings, h.data, h.tools, () => "Unsupported CLI version.")).toBe("Unsupported CLI version.");
   expect(desktopBuildIssue({ ...h.settings, mo2Root: h.data }, h.data, h.tools, fixtureWolvenKit)).toContain("overlaps");
   expect(desktopBuildIssue({ ...h.settings, plateInput: null }, h.data, h.tools, fixtureWolvenKit)).toContain("plate");

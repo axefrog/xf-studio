@@ -25,6 +25,22 @@ const signature = (path: string, expected: string) => {
 const inside = (path: string, root: string) => path === root || path.startsWith(root + sep);
 export type WolvenKitProbe = (path: string) => string | null;
 const wolvenKitCache = new Map<string, { issue: string | null; until: number }>();
+const bunCache = new Map<string, { issue: string | null; until: number }>();
+/** Execute code, rather than trusting a filename or the Electrobun main path. */
+export function probeBun(path: string): string | null {
+  try {
+    const stamp = statSync(path);
+    const key = `${path}|${stamp.size}|${stamp.mtimeMs}`;
+    const cached = bunCache.get(key);
+    if (cached && Date.now() < cached.until) return cached.issue;
+    const run = spawnSync(path, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"],
+      { encoding: "utf8", timeout: 5000, windowsHide: true, maxBuffer: 4096 });
+    const issue = run.error || run.status !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(run.stdout || "")
+      ? "The selected Bun executable cannot run the packaged compiler scripts." : null;
+    bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
+    return issue;
+  } catch { return "The selected Bun executable could not be checked."; }
+}
 export const probeWolvenKit: WolvenKitProbe = path => {
   const stamp = statSync(path);
   const key = `${path}|${stamp.size}|${stamp.mtimeMs}`;
@@ -90,6 +106,8 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     return "The selected game executable is not a Windows executable.";
   const bun = settings.bunExecutable || process.execPath;
   if (!file(bun)) return "The Bun executable is unavailable.";
+  const bunIssue = probeBun(bun);
+  if (bunIssue) return bunIssue;
   try {
     for (const name of ["package-snapshots", "package-work", "package-staging", "package-candidates"])
       privatePath(dataRoot, resolve(dataRoot, name));
