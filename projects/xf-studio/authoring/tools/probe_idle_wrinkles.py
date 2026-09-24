@@ -103,7 +103,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     result = probe(args.intake, args.addon)
-    args.output.write_text(json.dumps(result, indent=2) + '\n')
+    args.output.write_bytes((json.dumps(result, indent=2) + '\n').encode('utf-8'))
     print(f"{result['frames']} frames, {len(result['channels'])} processed wrinkle tracks")
     for channel in result['channels']:
         if 'brow' in channel['name'].lower():
