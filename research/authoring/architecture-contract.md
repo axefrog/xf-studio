@@ -12,6 +12,8 @@
 
 Dependencies point inward: presentation calls typed application actions and reads detached snapshots/capabilities; application services use typed ports for device work; adapters implement those ports. Keep pure evaluators, recipe parsing, compiler and serialization reusable without a browser. `main.ts` is currently a transitional composition root, not a place to put new behavior simply because the feature has a button.
 
+The [import-boundary test](../../projects/xf-appearance-studio/authoring/tests/architecture-import-boundary.test.ts) guards direct dependencies from trusted services into browser/renderer modules and from the independent UI entry into legacy control modules. It is a regression tripwire, not a substitute for reviewing data flow or transitive dependencies when adding a new service.
+
 The trusted authoring core and Studio bootstrap are independent of today's controls. A new presentation entry must construct device adapters, use `createTrustedAuthoringCore` and `createTrustedStudioBootstrap`, and receive only the `StudioPresentationPort` through the mount callback. Do not import `main.ts` or require its legacy element IDs to make a new shell start. Keep trusted service handles in the composition root. A view must never receive the bootstrap object, `AuthoringDocument`, raw collection service, renderer object or writable recipe. Browser viewport, file, workspace and preview-resource adapters now accept injected hosts and elements; service construction and an alternate browser entry remain tracked in the [gap assessment](ui-architecture-boundary.md).
 
 ## Rules for each feature change
