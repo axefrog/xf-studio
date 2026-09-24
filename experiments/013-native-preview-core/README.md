@@ -1,5 +1,7 @@
 # Native female head, eyes and fixed vanilla maps — offline candidate
 
+**Status:** paused pending in-game evidence — the installed 2.31 head, eye mesh and fixed vanilla maps extract and verify reproducibly offline. The candidate still lacks an accepted eye plate and assembled eye shading, so Studio does not use it. It waits on the plate decision ([Experiment 012](../012-native-plate-bootstrap/README.md)) that follows the first in-game smoke test.
+
 25 September 2026. This experiment extends the [native head bootstrap](../012-native-plate-bootstrap/README.md) toward a clean user's local preview. It takes **installed Cyberpunk 2077 2.31 files**, not Nathan's private `.blend` or old atlas. All extracted resources, GLBs, PNGs and manifests are written beneath ignored `generated/`; only the project-authored builder, verifier and evidence are tracked. It does not install anything or alter Studio.
 
 ## Reproduce

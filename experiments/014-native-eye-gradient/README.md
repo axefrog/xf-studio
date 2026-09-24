@@ -1,5 +1,7 @@
 # Native brown-eye gradient — source-input probe
 
+**Status:** paused pending in-game evidence — the vanilla brown-eye gradient's three source stops and optical inputs extract reproducibly, and the compiled shader's iris-mask lookup is traced. Stop interpolation and the rendered eye appearance remain unobserved. Native-eye work is paused with Experiments 013 and 015.
+
 25 September 2026. This experiment extends [native preview core](../013-native-preview-core/README.md) without changing Studio. It traces the **fixed installed Cyberpunk 2077 2.31 vanilla** `gradient_brown` eye material and normalizes the brown gradient's source stops plus its declared optical inputs. It does not produce a coloured iris texture or claim game rendering.
 
 A [second compiled-shader and gaze-source checkpoint](compiled-shader-and-gaze.md) establishes the iris-mask R lookup and alpha blend, roughness R channel and compatible eye-joint names. It still cannot establish the generated gradient texture's stop interpolation or validate native gaze assembly.

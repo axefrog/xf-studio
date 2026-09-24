@@ -1,5 +1,7 @@
 # Native eye skin and default idle — offline assembly gate
 
+**Status:** paused pending in-game evidence — the native eye skins consistently to the pinned idle, with pupil-weighted vertices up to 0.345 mm from the rigid preview eye. Offline assemblies still show exposed eye/head contacts at the saved blink, and their game visibility is unknown. Nothing was promoted to the Studio renderer.
+
 25 September 2026. This study binds the installed vanilla female eye GLB to the already pinned, solved `ui_closeup_shot` body/face idle and compares it with Studio's historical rigid eye attachment. It uses Three.js's actual `SkinnedMesh.getVertexPosition` path and Studio's existing `IdleAnimation` composer. The numerical result is [evidence.json](evidence.json); its SHA-256 is `96507abbcb0622ee65189a9372f03dc9f78d7f3f23015c311b47a1d23c0a1b35`. The study changes no production renderer, game, MO2 state or user draft. It creates no brown iris texture.
 
 ## Inputs and reproduction

@@ -1,5 +1,9 @@
 # Irregular planar glitter study
 
+**Status:** concluded — the study produced the opt-in recipe-7 (`irregular-planar-1`) raster and recipe-8 (`uv-cell-direct-1`) direct-light browser Glitter models now in the editor; neither has a proven REDengine mapping or photographic match, and game Glitter export stays guarded ([Experiment 009](../009-glitter-game-fixture/README.md)).
+
+**Where conclusions live:** this experiment's [findings](findings.md) and [visibility audit](visibility-audit.md), then the later browser checkpoints in [direct-glint browser checkpoint](../../research/materials/direct-glint-browser-checkpoint.md), [clustered direct-glint study](../../research/materials/clustered-direct-glint-study.md) (recipe-9) and [fine-speckle browser study](../../research/materials/fine-speckle-browser-study.md) (recipe-10).
+
 First results: [measured findings](findings.md) and [versioned evidence](evidence.json). The [lit-head follow-up](lit-head-findings.md) compares fine fields, normal filtering and separate pigment/flake reflections. The [CPU glint reference](glint-oracle-findings.md) measures facet-response integration against averaged maps at 1K/2K. A separate [UV-cell browser pilot](uv-cell-glint-findings.md) tests fixed procedural facets under direct light. No production material was switched.
 
 Owned procedural texture research for the user-supplied glitter references. The main editor carries an opt-in `irregular-planar-1` recipe-7 raster candidate and a separate `uv-cell-direct-1` recipe-8 browser model informed by the polygon shader pilot. Historical glitter recipes remain unchanged. [Visibility audit](visibility-audit.md) records why raster candidate IDs vastly exceed visible glints; the [direct-light checkpoint](../../research/materials/direct-glint-browser-checkpoint.md) compares the new model at 1K and 2K.

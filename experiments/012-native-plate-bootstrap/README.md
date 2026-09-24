@@ -1,5 +1,21 @@
 # Native head eye-plate bootstrap — 25 September 2026
 
+**Status:** paused pending in-game evidence — the exact native-head cut is reproducible with native skin bytes retained, but every lifted clearance candidate has been rejected (most recently the packed candidate, on subframe idle contacts). Further fitting waits for the first in-game smoke test to show whether residual eyelid contacts are actually visible.
+
+## Current state
+
+- **Neutral cut: reproducible, no clearance.** The 3,010-triangle / 1,620-vertex cut is rebuilt from the installed 2.31 head. Native skin bytes are restored in both the mesh and morph buffers. Its surface coincides with the head, so it has no designed outward clearance.
+- **Every correction so far is rejected.** Candidates were checked in this order (details in the dated sections below):
+  - The [direct transfer](#native-topology-correction-transfer-diagnostic--25-september) of Experiment 006's candidate failed.
+  - A [constrained repair](#constrained-native-repair-numeric-pass-packed-failure--25-september) passed numerically but failed after WolvenKit readback.
+  - All [three readback-compensation trials](#measured-resource-readback-compensation-three-rejected-trials--25-september) failed.
+  - A [localized packed candidate](#local-packed-resource-candidate-sampled-gate-passes--25-september) passed the 107 static / 73 pose / 664 frame sampled gates, with only +0.539 µm minimum slack. [120/240 Hz subframe sampling](#subframe-acceptance-rejects-the-packed-candidate--25-september) then found new finite contacts (15 across the full loop, two in the focused window), so it was rejected.
+  - Four [bounded subframe fits](#bounded-subframe-correction-attempt--25-september) failed numerical screening, so no new resource round trip was made.
+- **Nothing was promoted.** No plate reached the preview, packaging, the owned master, the game or MO2.
+- **Why the work is paused.** Private Blender renders showed the subframe contact faces as mostly obscured or a thin edge. Those renders omit the eye, cards and game materials, so they cannot establish visibility. The first in-game smoke test uses the neutral [Experiment 004](../004-plate-import/README.md) plate ([runtime preflight card](../../research/authoring/first-makeup-runtime-preflight-2026-09-25.md)) and should show whether eyelid contacts are visible in practice. Any resumed attempt must meet the requirements in the final section.
+
+## Original checkpoint
+
 **Offline candidate, not an accepted preview plate.** This experiment reconstructs
 the historical expanded eye cut from the installed Cyberpunk 2077 2.31 female
 head. Running it needs no `.blend`, old Eye Artistry generator or Nathan-specific

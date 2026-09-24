@@ -9,7 +9,7 @@ This is the internal map behind the [XF Studio landing page](../README.md). Read
 | [XF Studio](../projects/xf-studio/README.md) | Active standalone product and project-specific source, intake, build and verification |
 | [Photo Mode Tools](../projects/xf-photo-mode-tools/README.md) | Second independent project; research before a clean implementation |
 | [Current state](status.md) | Established results, limitations and next work |
-| [Inventory](../inventory/README.md) | Local source/mod landscape and explicit survey exclusions |
+| [Inventory](../inventory/README.md) | Local source/mod landscape and explicit survey exclusions (outputs are ignored, local-only files) |
 | [Experiments](../experiments/) | Numbered investigations, evidence and conclusions |
 | [Research](../research/) | Source-supported findings, design contracts and backlog |
 | [Tools](../tools/README.md) | Small shared inspection and verification utilities |
@@ -35,4 +35,10 @@ The public repository is [axefrog/xf-studio](https://github.com/axefrog/xf-studi
 
 Newly generated archive appearances use lowercase `xfs_`. The project-directory migration updates executable paths and current documentation links while retaining historical input and output identities. The local checkout name remains a separate, deferred migration.
 
-The old directory spelling remains only in captured, immutable output evidence and the internal package/health identifiers. The local ignored head, plate, hair and SQLite assets require a physical move in the primary checkout before its preview and package-build checks can run at the new path; they are not part of this Git change.
+The old directory spelling remains only in captured, immutable output evidence and the internal package/health identifiers. The local ignored head, plate, hair and SQLite assets have since been moved to the new path in the primary checkout (for example `projects/xf-studio/authoring/public/assets/` and `projects/xf-studio/assets/authored/xfas_eye_plate.blend`); an empty, file-free `projects/xf-appearance-studio/` directory skeleton may still exist locally and can be ignored.
+
+## Parallel work, worktrees and the local archive
+
+Code-changing parallel work uses a separate Git worktree at `D:/Dev/worktrees/<slug>` on a `claude/<slug>` branch; the agent edits, tests and commits only there, and the result is reviewed and merged or cherry-picked into `main` in the primary checkout. Remove the worktree and branch only after integration and a check for uncommitted work. Read-only research may use the primary checkout.
+
+On 25 September 2026 all earlier `D:/Dev/worktrees/*` checkouts and `codex/*` branches were removed after integration. Private, ignored experiment outputs that had existed only in those worktrees were moved to their canonical ignored locations in the primary checkout (for example `experiments/*/generated/`). Copies that conflicted with existing files were kept under the ignored `local/worktree-archive/<old-worktree>/` folder, alongside `consolidation-manifest.json` (every move and its destination), `branch-tips.txt` and a `codex-branches.bundle`. Check that manifest before assuming a historical private output is lost.

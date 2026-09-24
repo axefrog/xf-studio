@@ -1,6 +1,10 @@
 # Decal material import fixture
 
-Status: **ten texture resources and ten material instances imported and checked offline**. No mesh, morph, app, CCXL registration, packaged install or runtime proof yet. Outputs are isolated under ignored `generated/archive/axefrog/appearance_studio/studies/`.
+**Status:** concluded — ten decal textures and ten material instances imported offline against the authoritative `mesh_decal.mt` with measured compression error, without runtime proof; its open normal-mode/green-sign question moved to the uninstalled on-plate comparison in [Experiment 011](../011-shimmer-plate-comparison/README.md), which awaits a runtime session.
+
+Checkpoint status (23 September): **ten texture resources and ten material instances imported and checked offline**. No mesh, morph, app, CCXL registration, packaged install or runtime proof yet. Outputs are isolated under ignored `generated/archive/axefrog/appearance_studio/studies/`.
+
+**Naming note:** the `xfas_` resource prefix and `appearance_studio` output path in this experiment are historical (XF Appearance Studio). Current generated appearance and resource names use the lowercase `xfs_` prefix ([naming contract](../../projects/xf-studio/data/naming.md)). Existing historical identifiers here are intentionally not renamed.
 
 This bridges [the browser flake candidate](../002-flake-material/README.md) to the [inspected game decal shader](../../research/materials/mesh-decal-shader-contract.md), using the authoritative `base\materials\mesh_decal.mt` rather than the old priority-modified copy.
 

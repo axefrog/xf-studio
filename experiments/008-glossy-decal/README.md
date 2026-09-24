@@ -1,5 +1,7 @@
 # Recipe-driven Glossy decal: offline boundary
 
+**Status:** concluded — a real Studio Glossy layer transfers to a stock `mesh_decal_blendable.mt` instance only as a pigmented single-lobe approximation, because the template cannot encode the browser's independent clearcoat; production Glossy export therefore stays guarded. This was offline serialization and mip measurement only, with no on-plate package or in-game test.
+
 24 September 2026. This opt-in study feeds a **real Studio Glossy layer** into a stock `mesh_decal_blendable.mt` material instance. It reads a portable recipe with `parseRecipe`, selects one enabled Glossy layer by ID, and bakes its exact coverage with the production `raster` function. The checked-in sample is `initialRecipe()` with its first layer explicitly set to Glossy; `--recipe` and `--layer` accept another authored recipe. The historical canned-mask fixture result is preserved in [result.json](result.json). This study does not enable production Glossy export.
 
 ## Mapping and its limit
