@@ -126,7 +126,6 @@ const descriptors = [
   ["manualModRoot", "Optional direct mod folder"],
   ["mo2Root", "Mod Organizer 2 instance folder"],
   ["mo2ProfileId", "Mod Organizer 2 profile"],
-  ["plateInput", "Private plate input folder"],
   ["wolvenKitCli", "WolvenKit CLI executable"],
   ["pythonExecutable", "Optional Python executable"],
   ["bunExecutable", "Optional Bun executable"],

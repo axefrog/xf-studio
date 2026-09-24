@@ -7,6 +7,8 @@ import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
+import { EyePlateError, ensureEyePlate, type EyePlateResult } from "../src/eye-plate-service";
+import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 
 export const buildDeadlineMs = 40 * 60_000;
 const toolNames = ["build_collection_package.py", "study/build.py", "study/verify.py",
@@ -77,7 +79,12 @@ function privatePath(root: string, target: string): void {
   }
 }
 
-/** A packaged code bundle, external executables, private plate and game are all required. */
+/** Writable host-owned roots below the desktop user-data directory. */
+const privateRoots = ["package-snapshots", "package-work", "package-staging", "package-candidates", "plate-cache"];
+/** The built-in eye plate is derived from the installed game and cached here. */
+export const desktopPlateCache = (dataRoot: string) => resolve(dataRoot, "plate-cache");
+
+/** A packaged code bundle, external executables and the game are required; the eye plate is built in. */
 export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, toolsRoot: string,
   wolvenKitProbe: WolvenKitProbe = probeWolvenKit): string | null {
   try {
@@ -98,12 +105,6 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   if (!signature(settings.wolvenKitCli, "MZ")) return "The selected WolvenKit CLI is not a Windows executable.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
   catch { return "WolvenKit CLI could not complete its version and command checks."; }
-  if (!settings.plateInput || !directory(settings.plateInput) ||
-      !["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"].every(name => file(resolve(settings.plateInput!, name))))
-    return "Select a private plate directory with both mesh and morph resources.";
-  if (!["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"].every(name =>
-      signature(resolve(settings.plateInput!, name), "CR2W")))
-    return "The selected plate resources do not have the expected game resource format.";
   if (!settings.gameRoot || !file(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe")) ||
       !directory(resolve(settings.gameRoot, "archive/pc"))) return "Select a complete Cyberpunk 2077 game directory.";
   if (!signature(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe"), "MZ"))
@@ -113,17 +114,15 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   const bunIssue = probeBun(bun);
   if (bunIssue) return bunIssue;
   try {
-    for (const name of ["package-snapshots", "package-work", "package-staging", "package-candidates"])
-      privatePath(dataRoot, resolve(dataRoot, name));
+    for (const name of privateRoots) privatePath(dataRoot, resolve(dataRoot, name));
   } catch { return "Private build storage uses a linked path."; }
   // Electrobun installs app resources below userData. Its read-only tool bundle
   // may share that parent, but none of the writable package roots may overlap
   // an input (including an MO2 root unknown to the Python wrapper).
   try {
     const output = realpathSync(dataRoot);
-    const writable = ["package-snapshots", "package-work", "package-staging", "package-candidates"]
-      .map(name => resolve(output, name));
-    for (const input of [toolsRoot, settings.gameRoot, settings.plateInput,
+    const writable = privateRoots.map(name => resolve(output, name));
+    for (const input of [toolsRoot, settings.gameRoot,
       settings.wolvenKitCli, settings.pythonExecutable, bun, settings.mo2Root].filter((v): v is string => !!v)) {
       const source = realpathSync(input);
       if (writable.some(path => inside(path, source) || inside(source, path)))
@@ -139,11 +138,18 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
 type BuildOutcome = { kind: "success"; result: PackageBuild } |
   { kind: "failure"; code: string; message: string };
 
-/** Run the wrapper as one bounded process tree; publish only the shared verified result. */
+/** Prepares the verified built-in eye plate for one Build; injectable for host tests. */
+export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, signal: AbortSignal) => Promise<EyePlateResult>;
+export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
+  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal });
+
+/** Prepare the built-in eye plate, then run the wrapper as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
-  timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit): Promise<BuildOutcome> {
+  timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit,
+  preparePlate: DesktopPlatePreparer = prepareDesktopPlate): Promise<BuildOutcome> {
   const issue = desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe);
   if (issue) return { kind: "failure", code: "package_build_unavailable", message: issue };
+  const started = Date.now();
   let collection: ReturnType<typeof parseCollection>;
   let prepared: ReturnType<typeof preparePackageCollection>;
   try { collection = parseCollection(value); prepared = preparePackageCollection(collection); }
@@ -155,12 +161,31 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   const candidateRoot = resolve(dataRoot, "package-candidates");
   try { for (const path of [work, buildRoot, stageRoot, candidateRoot]) privatePath(dataRoot, path); }
   catch { return { kind: "failure", code: "package_build_unavailable", message: "Private package storage is unsafe." }; }
+  let plate: EyePlateResult;
+  const plateDeadline = new AbortController();
+  const plateTimer = setTimeout(() => plateDeadline.abort(), timeoutMs);
+  const plateAbort = () => plateDeadline.abort();
+  signal?.addEventListener("abort", plateAbort, { once: true });
+  try {
+    privatePath(dataRoot, desktopPlateCache(dataRoot));
+    plate = await preparePlate(settings, desktopPlateCache(dataRoot), plateDeadline.signal);
+  } catch (error) {
+    if (error instanceof EyePlateError) {
+      if (error.detail) console.error("Desktop eye plate preparation failed:", error.detail.slice(-3000));
+      if (error.code === "plate_cancelled") return signal?.aborted
+        ? { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." }
+        : { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
+      return { kind: "failure", code: error.code, message: error.message };
+    }
+    return { kind: "failure", code: "package_build_failed", message: "The built-in eye plate could not be prepared. No candidate was published." };
+  } finally { clearTimeout(plateTimer); signal?.removeEventListener("abort", plateAbort); }
+  const remainingMs = Math.max(1, timeoutMs - (Date.now() - started));
   mkdirSync(work, { recursive: true, mode: 0o700 });
   const snapshot = resolve(work, "collection.json");
   writeFileSync(snapshot, source, { mode: 0o600, flag: "wx" });
   const python = settings.pythonExecutable!;
   const args = [resolve(toolsRoot, "build_collection_package.py"), "--collection", snapshot,
-    "--bun", settings.bunExecutable || process.execPath, "--plate", settings.plateInput!,
+    "--bun", settings.bunExecutable || process.execPath, "--plate", plate.directory, "--plate-manifest", plate.manifestFile,
     "--wolvenkit", settings.wolvenKitCli!, "--gamepath", settings.gameRoot!,
     "--app-root", resolve(toolsRoot, "app"), "--study-root", resolve(toolsRoot, "study"),
     "--work-root", work, "--build-root", buildRoot, "--dist-root", stageRoot,
@@ -186,7 +211,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
         } else child.kill();
       };
       const abort = () => stopTree("package_build_cancelled");
-      const timer = setTimeout(() => stopTree("package_build_timeout"), timeoutMs);
+      const timer = setTimeout(() => stopTree("package_build_timeout"), remainingMs);
       if (signal?.aborted) abort();
       else signal?.addEventListener("abort", abort, { once: true });
       const finish = (code: number | null) => {
@@ -207,14 +232,14 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     const line = processResult.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
     if (!line) throw Error("Package tool completed without a result.");
     const built = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageBuild;
-    verifyPackageBuildResult(built, collection, prepared, source, stageRoot);
+    verifyPackageBuildResult(built, collection, prepared, source, stageRoot, plate.manifest);
     privatePath(dataRoot, candidateRoot);
     mkdirSync(candidateRoot, { recursive: true, mode: 0o700 });
     privatePath(dataRoot, candidateRoot);
     const promoted = resolve(candidateRoot, basename(built.package));
     renameSync(built.package, promoted);
     const result = { ...built, package: promoted, manifest: resolve(promoted, "manifest.json") };
-    verifyPackageBuildResult(result, collection, prepared, source, candidateRoot);
+    verifyPackageBuildResult(result, collection, prepared, source, candidateRoot, plate.manifest);
     return { kind: "success", result };
   } catch (error) {
     console.error("Desktop package result failed:", (error as Error).message);

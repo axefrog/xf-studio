@@ -61,7 +61,8 @@ test("Build refuses a game destination before writing and accepts separate priva
     const work = join(root, "work"), game = join(root, "game"), plate = join(root, "plate");
     const tools = join(root, "tools"), scripts = join(root, "scripts");
     for (const path of [work, game, plate, tools, scripts]) mkdirSync(path);
-    for (const name of ["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"]) writeFileSync(join(plate, name), "fixture");
+    // The host-derived built-in plate uses the xfs_ stem; the other test covers the legacy override name.
+    for (const name of ["xfs_eye_plate.mesh", "xfs_eye_plate.morphtarget"]) writeFileSync(join(plate, name), "fixture");
     const fakeWolvenkit = join(tools, "WolvenKit.CLI.exe");
     writeFileSync(fakeWolvenkit, "fixture");
     const bake = join(scripts, "bake.ts");
@@ -82,6 +83,18 @@ test("Build refuses a game destination before writing and accepts separate priva
     expect(refusedIntermediate.exitCode).not.toBe(0);
     expect(new TextDecoder().decode(refusedIntermediate.stderr)).toContain("Build root overlaps configured game root");
     expect(existsSync(join(game, "generated"))).toBe(false);
+    writeFileSync(join(plate, "xfas_eye_plate.mesh"), "fixture");
+    writeFileSync(join(plate, "xfas_eye_plate.morphtarget"), "fixture");
+    const ambiguous = Bun.spawnSync([...base, "--dist-root", dist], { cwd: work, stdout: "pipe", stderr: "pipe" });
+    expect(ambiguous.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(ambiguous.stderr)).toContain("exactly one mesh/morphtarget pair");
+    for (const name of ["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"]) rmSync(join(plate, name));
+    const mismatched = join(root, "plate-manifest.json");
+    writeFileSync(mismatched, JSON.stringify({ schema: "xfs/eye-plate-cache-1", files: { mesh: { sha256: "0".repeat(64) }, morph: { sha256: "0".repeat(64) } } }));
+    const wrongManifest = Bun.spawnSync([...base, "--dist-root", dist, "--plate-manifest", mismatched], { cwd: work, stdout: "pipe", stderr: "pipe" });
+    expect(wrongManifest.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(wrongManifest.stderr)).toContain("does not match the plate resources");
+    expect(existsSync(build)).toBe(false);
     const privateAttempt = Bun.spawnSync([...base, "--dist-root", dist],
       { cwd: work, stdout: "pipe", stderr: "pipe" });
     // The fake bake has no compiled plan; reaching it proves the root gate accepted private paths.

@@ -6,7 +6,10 @@ export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCa
 export type ReadinessIssue = { code: string; reason: string };
 export type CapabilityReadiness = { ready: boolean; issues: ReadinessIssue[]; limits: string[] };
 export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
-export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean };
+/** Last recorded built-in eye plate outcome for this game folder (see `eyePlateReadiness`). */
+export type EyePlateHostReadiness = { issue: ReadinessIssue | null; limit: string };
+export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean;
+  eyePlate?: EyePlateHostReadiness };
 const available = (path: string | null, kind: "file" | "directory") => {
   if (!path) return false;
   try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); }
@@ -56,8 +59,6 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   const buildIssues: ReadinessIssue[] = [];
   if (host.packageBuild === false)
     buildIssues.push(issue("package_host_unavailable", "This host does not provide mod package builds."));
-  if (!settings.plateInput) buildIssues.push(issue("plate_unset", "Select the private plate input directory."));
-  else if (!available(settings.plateInput, "directory")) buildIssues.push(issue("plate_missing", "The selected plate input directory is unavailable."));
   if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", "Select the WolvenKit CLI executable."));
   else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
   if (settings.pythonExecutable && !available(settings.pythonExecutable, "file"))
@@ -65,6 +66,8 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   if (settings.bunExecutable && !available(settings.bunExecutable, "file"))
     buildIssues.push(issue("bun_missing", "The selected Bun executable is unavailable."));
   buildIssues.push(...gameIssues);
+  // The expanded eye plate is built in: Build derives it from the installed game, so it needs no path.
+  if (host.eyePlate?.issue && gameIssues.length === 0) buildIssues.push(host.eyePlate.issue);
 
   const cacheIssues: ReadinessIssue[] = [];
   if (settings.sourceCache.directory && !writableDirectory(settings.sourceCache.directory))
@@ -86,22 +89,26 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
     author: item(),
     check: item(host.packageCheck === false
       ? [issue("package_check_host_unavailable", "This host does not provide mod export checks.")] : [],
-      ["Collection eligibility checks require no game, plate or build tool path when the host provides them."]),
+      ["Collection eligibility checks require no game or build tool path when the host provides them."]),
     sourceDiscovery: item(sourceIssues, [settings.launchRoute === "mo2"
       ? "MO2 modlist '+' is activation evidence only; physical candidates do not prove a runtime winner."
       : "Direct archive/pc candidates do not prove a runtime winner."]),
     sourceCache: item(cacheIssues, ["An unset location uses the host's private default once a cache adapter is connected."]),
     previewStorage: item(previewIssues, ["An unset location uses the host's private default once preview storage is connected."]),
-    build: item(buildIssues, ["Path presence does not prove tool-version compatibility or game rendering."]),
+    build: item(buildIssues, ["Path presence does not prove tool-version compatibility or game rendering.",
+      ...(host.eyePlate ? [host.eyePlate.limit] : [])]),
     install: item(installIssues, ["A verified package and conflict/receipt validation are still required."]),
     updates: item(host.updater ? [] : [issue("updater_unavailable", "This host does not provide desktop updates.")]),
   };
 }
 
-/** Environment overrides remain highest priority for localhost until package-server is migrated. */
+/**
+ * Environment overrides remain highest priority for localhost until package-server is migrated.
+ * `XFS_PACKAGE_PLATE` is a hidden developer override for the built-in eye plate; it has no setting.
+ */
 export function packageToolPaths(settings: LocalSettings, env: Record<string, string | undefined> = process.env) {
   return {
-    plate: env.XFS_PACKAGE_PLATE || settings.plateInput,
+    plate: env.XFS_PACKAGE_PLATE || null,
     wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli,
     gamepath: env.XFS_PACKAGE_GAMEPATH || settings.gameRoot,
     python: env.XFS_PACKAGE_PYTHON || settings.pythonExecutable,

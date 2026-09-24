@@ -1,7 +1,8 @@
 """Compile a local authored collection into an isolated CCXL archive fixture. Never installs.
 
-Uses the owned imported plate from experiment 004, fresh resource definitions, and the
-pure studio material compiler. Old Eye Artistry code/resources are not build inputs.
+Uses the built-in expanded eye plate that the Studio host derives from the installed game
+(or a developer override directory), fresh resource definitions, and the pure studio
+material compiler. Old Eye Artistry code/resources are not build inputs.
 """
 import shutil
 import hashlib
@@ -22,7 +23,8 @@ HERE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser()
 parser.add_argument('--collection',type=Path,default=HERE/'collection.json')
 parser.add_argument('--output',type=Path,help='Fresh isolated intermediate build directory')
-parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies')
+parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies',
+    help='Directory holding one plate pair: derived xfs_eye_plate.* or a legacy xfas_eye_plate.* override')
 parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
 parser.add_argument('--bun',type=Path,default=Path(shutil.which('bun') or 'bun'))
 parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077'))
@@ -43,7 +45,11 @@ if OUT.exists(): parser.error(f'Output already exists: {OUT}')
 if not args.collection.is_file(): parser.error(f'Collection file is missing: {args.collection}')
 if not HQ.is_dir() or not APP.is_dir() or not BAKE.is_file():
     parser.error('Work root, app root and bake script must exist.')
-for label,path in [('WolvenKit',WK),('Bun',BUN),('plate mesh',PLATE/'xfas_eye_plate.mesh'),('plate morph',PLATE/'xfas_eye_plate.morphtarget')]:
+# The host-derived plate uses the xfs_ stem; earlier private inputs keep their historical name.
+stems=[stem for stem in ('xfs_eye_plate','xfas_eye_plate') if (PLATE/(stem+'.mesh')).is_file() and (PLATE/(stem+'.morphtarget')).is_file()]
+if len(stems)!=1: parser.error(f'Plate directory must contain exactly one mesh/morphtarget pair: {PLATE}')
+PLATE_STEM=stems[0]
+for label,path in [('WolvenKit',WK),('Bun',BUN)]:
     if not path.is_file(): parser.error(f'{label} is missing: {path}')
 if not GAME.is_dir(): parser.error(f'Game path is missing: {GAME}')
 for folder in ['logs','baked','source-json','models-json','app-json','cc-json','roundtrip','export','export-dds','input/colour','input/scalar','input/dds-colour','input/dds-scalar','archive','package/archive/pc/mod']:
@@ -99,7 +105,7 @@ for group,gamma,texture_group,raw_format,compression in [
 plate=PLATE
 run('serialize-owned-models',[WK,'convert','serialize',plate,'-o',OUT/'source-json'])
 seed=plan['presets'][0]['appearance']
-mesh=load(OUT/'source-json/xfas_eye_plate.mesh.json');root=mesh['Data']['RootChunk']
+mesh=load(OUT/'source-json'/(PLATE_STEM+'.mesh.json'));root=mesh['Data']['RootChunk']
 root['appearances']=[handle({'$type':'meshMeshAppearance','name':cname(p['appearance']),
     'chunkMaterials':[cname(seed+'@preset')] if i==0 else [],'tags':[]}) for i,p in enumerate(plan['presets'])]
 root['materialEntries']=[{'$type':'CMeshMaterialEntry','index':0,'isLocalInstance':1,'name':cname('@preset')}]
@@ -109,7 +115,7 @@ values.append({'$type':'Color','DiffuseColor':{'$type':'Color','Red':255,'Green'
 root['localMaterialBuffer']['materials']=[{'$type':'CMaterialInstance','audioTag':cname('None'),'baseMaterial':ref('base/materials/mesh_decal.mt'),'cookingPlatform':'PLATFORM_PC','enableMask':0,'resourceVersion':4,'values':values}]
 root['localMaterialBuffer']['rawData']=None;root['localMaterialBuffer']['rawDataHeaders']=[]
 write(OUT/'models-json'/(Path(plan['mesh']).name+'.json'),mesh)
-morph=load(OUT/'source-json/xfas_eye_plate.morphtarget.json');mr=morph['Data']['RootChunk']
+morph=load(OUT/'source-json'/(PLATE_STEM+'.morphtarget.json'));mr=morph['Data']['RootChunk']
 mr['baseMesh']=ref(plan['mesh']);mr['baseMeshAppearance']=cname(seed)
 write(OUT/'models-json'/(Path(plan['morph']).name+'.json'),morph)
 run('deserialize-models',[WK,'convert','deserialize',OUT/'models-json','-o',modeldir])
@@ -151,7 +157,7 @@ run('pack',[WK,'pack',archive,'-o',package])
 xl='customizations:\n  female: '+plan['customization'].replace('/','\\')+'\nresource:\n  scope:\n    player_customization.app:\n      - '+plan['app'].replace('/','\\')+'\n'
 (package/(filename+'.archive.xl')).write_text(xl,encoding='utf-8')
 write(OUT/'build.json',{'plan':plan,'compiled':compiled,'steps':steps,
-    'plateInputs':[{'path':str(p),'sha256':sha(p)} for p in plate.glob('xfas_eye_plate.*')],
+    'plateStem':PLATE_STEM,'plateInputs':[{'path':str(p),'sha256':sha(p)} for p in sorted(plate.glob(PLATE_STEM+'.*'))],
     'artifacts':artifacts,
     'archiveSha256':sha(package/(filename+'.archive')),'installed':False,'gameRenderingVerified':False})
 print('BUILD',OUT,flush=True)

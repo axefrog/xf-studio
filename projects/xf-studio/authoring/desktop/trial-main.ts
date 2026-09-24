@@ -19,7 +19,6 @@ try {
   if (version.metadataStatus !== "ready") throw Error("Packaged canary metadata is unavailable.");
   const inputs = {
     gameRoot: process.env.XFS_BUILD_TRIAL_GAME_ROOT,
-    plateInput: process.env.XFS_BUILD_TRIAL_PLATE,
     wolvenKitCli: process.env.XFS_BUILD_TRIAL_WOLVENKIT,
     pythonExecutable: process.env.XFS_BUILD_TRIAL_PYTHON,
     bunExecutable: process.env.XFS_BUILD_TRIAL_BUN,
@@ -29,7 +28,7 @@ try {
   const store = new LocalSettingsStore(dataRoot);
   if (store.load().source !== "new" || existsSync(resolve(dataRoot, "library.sqlite")))
     throw Error("Build trial user data is not fresh; refusing to overwrite it.");
-  store.save({ ...defaultLocalSettings(), gameRoot: inputs.gameRoot!, plateInput: inputs.plateInput!,
+  store.save({ ...defaultLocalSettings(), gameRoot: inputs.gameRoot!,
     wolvenKitCli: inputs.wolvenKitCli!, pythonExecutable: inputs.pythonExecutable!,
     bunExecutable: inputs.bunExecutable! }, 0);
   const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");

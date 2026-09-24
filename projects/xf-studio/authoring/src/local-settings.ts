@@ -14,7 +14,6 @@ export interface LocalSettings {
   mo2Root: string | null;
   mo2ProfileId: string | null;
   manualModRoot: string | null;
-  plateInput: string | null;
   wolvenKitCli: string | null;
   pythonExecutable: string | null;
   bunExecutable: string | null;
@@ -33,7 +32,6 @@ export const defaultLocalSettings = (): LocalSettings => ({
   mo2Root: null,
   mo2ProfileId: null,
   manualModRoot: null,
-  plateInput: null,
   wolvenKitCli: null,
   pythonExecutable: null,
   bunExecutable: null,
@@ -69,11 +67,17 @@ const profile = (value: unknown): string | null => {
   return value;
 };
 
+/**
+ * Fields that earlier Studio versions saved and that are now intentionally ignored.
+ * `plateInput` pointed at a private plate folder; the expanded eye plate is now built in.
+ */
+const RETIRED_FIELDS = ["plateInput"] as const;
+
 /** Strict parsing is intentional: unknown fields could accidentally persist secrets. */
 export function parseLocalSettings(value: unknown): LocalSettings {
   const root = object(value, "Settings");
   keys(root, ["schema", "revision", "gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-    "plateInput", "wolvenKitCli", "pythonExecutable", "bunExecutable", "sourceCache", "preview", "installMode", "updates"], "Settings");
+    "wolvenKitCli", "pythonExecutable", "bunExecutable", "sourceCache", "preview", "installMode", "updates"], "Settings");
   if (root.schema !== LOCAL_SETTINGS_SCHEMA) throw Error("Unsupported local settings version.");
   if (!Number.isSafeInteger(root.revision) || (root.revision as number) < 0) throw Error("Settings revision is invalid.");
   const cache = object(root.sourceCache, "Source cache");
@@ -93,7 +97,6 @@ export function parseLocalSettings(value: unknown): LocalSettings {
     mo2Root: path(root.mo2Root, "MO2 root"),
     mo2ProfileId: profile(root.mo2ProfileId),
     manualModRoot: path(root.manualModRoot, "Manual mod root"),
-    plateInput: path(root.plateInput, "Plate input"),
     wolvenKitCli: path(root.wolvenKitCli, "WolvenKit CLI"),
     pythonExecutable: path(root.pythonExecutable, "Python executable"),
     bunExecutable: path(root.bunExecutable, "Bun executable"),
@@ -106,16 +109,23 @@ export function parseLocalSettings(value: unknown): LocalSettings {
   };
 }
 
-/** The sole known migration is an early flat local draft; there is no legacy settings file in shipped Studio. */
+/**
+ * Migrations: an early flat local draft, and retired fields in the current schema, which are
+ * dropped without error (the next save no longer writes them).
+ */
 export function migrateLocalSettings(value: unknown): { settings: LocalSettings; migrated: boolean } {
   const input = object(value, "Settings");
-  if (input.schema === LOCAL_SETTINGS_SCHEMA) return { settings: parseLocalSettings(input), migrated: false };
+  if (input.schema === LOCAL_SETTINGS_SCHEMA) {
+    const retired = RETIRED_FIELDS.filter(key => key in input);
+    const current = Object.fromEntries(Object.entries(input).filter(([key]) => !(RETIRED_FIELDS as readonly string[]).includes(key)));
+    return { settings: parseLocalSettings(current), migrated: retired.length > 0 };
+  }
   if (input.schema !== "xfs/local-settings-0") throw Error("Unsupported local settings version.");
   keys(input, ["schema", "gamePath", "mo2Path", "mo2Profile", "platePath", "wolvenKitPath"], "Legacy settings");
   const base = defaultLocalSettings();
   return { migrated: true, settings: parseLocalSettings({ ...base,
     gameRoot: input.gamePath ?? null, mo2Root: input.mo2Path ?? null,
-    mo2ProfileId: input.mo2Profile ?? null, plateInput: input.platePath ?? null,
+    mo2ProfileId: input.mo2Profile ?? null,
     wolvenKitCli: input.wolvenKitPath ?? null,
     launchRoute: input.mo2Path ? "mo2" : "direct",
   }) };

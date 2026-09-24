@@ -1,18 +1,45 @@
 # Native head eye-plate bootstrap — 25 September 2026
 
-**Status:** paused pending in-game evidence — the exact native-head cut is reproducible with native skin bytes retained, but every lifted clearance candidate has been rejected (most recently the packed candidate, on subframe idle contacts). Further fitting waits for the first in-game smoke test to show whether residual eyelid contacts are actually visible.
+**Status:** the neutral cut is now **production**. XF Studio's Build derives it from the user's installed game as the [built-in eye plate](#built-in-production-plate), byte for byte and without this experiment's GLB/.NET round trip. Clearance correction is paused pending in-game evidence: every lifted candidate has been rejected (most recently the packed candidate, on subframe idle contacts). Further fitting waits for the first in-game smoke test to show whether residual eyelid contacts are actually visible.
 
 ## Current state
 
-- **Neutral cut: reproducible, no clearance.** The 3,010-triangle / 1,620-vertex cut is rebuilt from the installed 2.31 head. Native skin bytes are restored in both the mesh and morph buffers. Its surface coincides with the head, so it has no designed outward clearance.
+- **Neutral cut: production, no clearance.** The 3,010-triangle / 1,620-vertex selection is the product's asset-free plate recipe. Build cuts it from the installed 2.31 head with every retained vertex, index and morph-diff byte equal to the head, in both the mesh and the morph base buffer. Its surface coincides with the head, so it has no designed outward clearance. The scripts below remain the research reproduction.
 - **Every correction so far is rejected.** Candidates were checked in this order (details in the dated sections below):
   - The [direct transfer](#native-topology-correction-transfer-diagnostic--25-september) of Experiment 006's candidate failed.
   - A [constrained repair](#constrained-native-repair-numeric-pass-packed-failure--25-september) passed numerically but failed after WolvenKit readback.
   - All [three readback-compensation trials](#measured-resource-readback-compensation-three-rejected-trials--25-september) failed.
   - A [localized packed candidate](#local-packed-resource-candidate-sampled-gate-passes--25-september) passed the 107 static / 73 pose / 664 frame sampled gates, with only +0.539 µm minimum slack. [120/240 Hz subframe sampling](#subframe-acceptance-rejects-the-packed-candidate--25-september) then found new finite contacts (15 across the full loop, two in the focused window), so it was rejected.
   - Four [bounded subframe fits](#bounded-subframe-correction-attempt--25-september) failed numerical screening, so no new resource round trip was made.
-- **Nothing was promoted.** No plate reached the preview, packaging, the owned master, the game or MO2.
-- **Why the work is paused.** Private Blender renders showed the subframe contact faces as mostly obscured or a thin edge. Those renders omit the eye, cards and game materials, so they cannot establish visibility. The first in-game smoke test uses the neutral [Experiment 004](../004-plate-import/README.md) plate ([runtime preflight card](../../research/authoring/first-makeup-runtime-preflight-2026-09-25.md)) and should show whether eyelid contacts are visible in practice. Any resumed attempt must meet the requirements in the final section.
+- **No correction was promoted.** No lifted candidate reached the preview, packaging, the owned master, the game or MO2.
+- **Why the work is paused.** Private Blender renders showed the subframe contact faces as mostly obscured or a thin edge. Those renders omit the eye, cards and game materials, so they cannot establish visibility. The first in-game smoke test ([runtime preflight card](../../research/authoring/first-makeup-runtime-preflight-2026-09-25.md)) should show whether eyelid contacts are visible in practice. The diagnostic candidate already staged in MO2 was built with the older [Experiment 004](../004-plate-import/README.md) plate; rebuild it with the built-in plate before that session so the test covers the production plate. Any resumed attempt must meet the requirements in the final section.
+
+## Built-in production plate
+
+XF Studio now ships this experiment's triangle selection as an asset-free recipe, [`eye-plate-recipe.json`](../../projects/xf-studio/authoring/src/eye-plate-recipe.json). It holds the 105 face ranges, the face/vertex ID hashes (`555c2f7e…` / `5c37e347…`), the expected topology and the SHA-256 of the audited 2.31 head mesh and morph resources (`e877b91a…` / `3e10c3f7…`, as extracted above). Build extracts those two resources from the user's `archive/pc/content` with WolvenKit, cuts them in TypeScript directly over WolvenKit's JSON form, converts the result back and independently re-verifies it. The derivation, cache and readiness are described in the [pipeline guide](../../research/authoring/studio-to-mod-pipeline.md#where-the-eye-plate-comes-from).
+
+The byte-level cut replaces this experiment's GLB export, mesh import, morph import and skin-byte restoration. The selection itself did not change: every triangle of the exported bound-head GLB uses the same three vertices as the native index buffer (only the corner order is rotated), so the recorded face IDs are native triangle IDs. The head mesh render buffer and the morph's base buffer are byte-identical in 2.31.
+
+[Asset-free comparison](production-plate-comparison.json) against the native head, by an independent private decoder over WolvenKit JSON:
+
+| Property | Experiment 004 (previous production input) | Experiment 012 neutral round trip | Built-in plate |
+|---|---|---|---|
+| Vertices / triangles | 1,635 (15 split duplicates of 13 head vertices) / 3,010 | 1,620 / 3,010 | 1,620 / 3,010 |
+| Triangle order and winding | native | native, index buffer equals the compact native cut | native, exact |
+| Skin index/weight bytes, mesh and morph base | not native (weights re-normalized; 14–391 of 1,635 rows match per element) | exact | exact |
+| UV0 / UV1 | exact | exact | exact |
+| Vertex colour | all white (head has 21 distinct values) | exact | exact |
+| Positions | re-quantized to plate bounds (≤ 0.99 µm mesh, ≤ 2.61 µm morph base) | re-quantized (same bounds) | head quantization, exact bytes |
+| Normals / tangents | ≤ 1 LSB (W bits differ) | ≤ 1 LSB (W bits differ) | exact |
+| Morph diffs (73,164 rows, same set in all three) | re-quantized per target (≤ 9.43 µm) | re-quantized per target (≤ 9.43 µm) | head rows and quantization, exact |
+| Offsets or edits | none | none | none |
+| Material/appearance setup | one `mesh_decal.mt` instance, `xfas_plate_reference` | same, `xfs_bootstrap_reference` | same, `xfs_eye_plate` |
+
+The cut relies on this resource layout. It was read in WolvenKit's `MorphTargetTools.cs` and `MorphTargetImportTools.cs` (official source at `11720772`) [source] and observed in the 2.31 head [resource]. The head mesh has one LOD-0 render chunk with 16-bit indices and vertex factory 30. Its per-vertex streams are each 16-byte aligned, followed by the index buffer: stream 0 (Short4N position, two UByte4 skin-index and two UByte4N skin-weight quads, Float16_4 extra data; 32 bytes), 1 (UV0), 2 (Dec4 normal and tangent), 3 (colour and UV1) and 4 (light-blocker float). A `.morphtarget` blob embeds a complete render-mesh `baseBlob`. For each target and chunk it stores a run of 12-byte diffs: a 10-bit unsigned position delta dequantized by that target's offset and scale, then 10-bit shifted normal and tangent deltas. A u16 vertex-index mapping follows, padded to an even count; its stored count is half that, rounded up. Position decoding uses the blob header's quantization, so keeping the head's quantization keeps the plate's decoded positions bit-identical to the head's.
+
+All three drop the head's `PS_ExtraData` and light-blocker streams and its garment-support parameter (vertex factory 4). The package builder replaces the appearance and material for each collection anyway. The `mesh_decal` skinned pixel program reads only position and texture-coordinate interpolants ([shader contract](../../research/materials/mesh-decal-shader-contract.md)), so the white vertex colour probably had no visible effect [hypothesis].
+
+The derived mesh and morph (`58081caf…` / `b8b7c055…`) are byte-identical across runs and between WolvenKit CLI 8.17.4 and 9.0.1. A real localhost Build of the public four-preset fixture was run with each plate. Both passed the independent verifier with 16 unpacked resources. Fourteen members, including all twelve textures, the `.app`, the customization resource and the `.archive.xl`, are byte-identical; only the two plate resources differ. After the builder's material rewrite, the packaged plate still passes the plate verifier. No game was launched and nothing was installed.
 
 ## Original checkpoint
 
@@ -86,18 +113,21 @@ validation used WolvenKit CLI 8.17.4, the project morph importer and the
 previously extracted installed 2.31 head. It reproduced the same bound-head
 SHA-256 as Experiment 006 and a deterministic selected GLB hash on repeat.
 
-## Gate before preview use
+## Clearance limits
 
 This is an **exact neutral cut**: its surface coincides with the head and has
-no designed outward clearance. Experiment 004 measured negative signed plane
-distance after resource packing; [Experiment 006](../006-plate-clearance/README.md)
-found residual and sometimes newly exposed eyelid contacts in offset variants.
-The later quantization-aware candidate also failed a denser 664-frame idle
+no designed outward clearance. Packaging already used a neutral plate
+(Experiment 004), and the built-in plate replaces it with the same cut at exact
+head bytes. That removes the small negative signed plane distances Experiment 004
+measured after re-quantization, but it relies on the decal material's
+depth handling for a coincident surface. [Experiment 006](../006-plate-clearance/README.md)
+found residual and sometimes newly exposed eyelid contacts in offset variants,
+and the later quantization-aware candidate failed a denser 664-frame idle
 contact check. This experiment proves reproducible source geometry and native
 skin retention; it does **not** prove a safe lifted surface, continuous posed
-clearance, game shading or runtime rendering. Keep it out of production preview
-and packaging until a clearance candidate passes the existing static, morph,
-packed-resource and dense posed-contact gates. No game launch occurred.
+clearance, game shading or runtime rendering. A lifted plate must still pass the
+static, morph, packed-resource and dense posed-contact gates before it replaces
+the neutral cut. No game launch occurred.
 
 WolvenKit and the existing project adapter are credited in
 [`docs/community-credits.md`](../../docs/community-credits.md). The selected

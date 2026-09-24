@@ -39,8 +39,9 @@ def pixels(p): return np.asarray(Image.open(p).convert('RGBA'),dtype=np.float64)
 def linear(x): return np.where(x<=.04045,x/12.92,((x+.055)/1.055)**2.4)
 
 mesh,morph,app,cc=[root(Path(plan[key]).name+'.json') for key in ['mesh','morph','app','customization']]
-source_mesh=load(out/'source-json/xfas_eye_plate.mesh.json')['Data']['RootChunk']
-source_morph=load(out/'source-json/xfas_eye_plate.morphtarget.json')['Data']['RootChunk']
+plate_stem=build.get('plateStem','xfas_eye_plate')
+source_mesh=load(out/'source-json'/(plate_stem+'.mesh.json'))['Data']['RootChunk']
+source_morph=load(out/'source-json'/(plate_stem+'.morphtarget.json'))['Data']['RootChunk']
 for field in ['renderResourceBlob','boneNames','boneRigMatrices','boundingBox']:
     assert field in mesh and normalized(mesh[field])==normalized(source_mesh[field]),field
 for field in ['blob','targets']:

@@ -2,7 +2,9 @@ import { resolve, sep } from "node:path";
 import { mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
-import { createPackageHandler, localPackageTools } from "./src/package-server";
+import { createPackageHandler, localPackageTools, localPlateCache } from "./src/package-server";
+import { eyePlateReadiness } from "./src/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler } from "./src/install-detection-server";
 import { LocalSettingsStore } from "./src/local-settings-store";
@@ -14,7 +16,8 @@ const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqli
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
 const localSettings = new LocalSettingsStore();
-const settingsRequest = createLocalSettingsHandler(localSettings);
+const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: false,
+  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE) }));
 const detectionRequest = createInstallDetectionHandler();
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));

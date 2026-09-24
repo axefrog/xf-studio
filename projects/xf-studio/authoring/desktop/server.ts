@@ -8,7 +8,9 @@ import { createInstallDetectionHandler } from "../src/install-detection-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
-import { desktopBuildIssue, type WolvenKitProbe } from "./build";
+import { desktopBuildIssue, desktopPlateCache, type WolvenKitProbe } from "./build";
+import { eyePlateReadiness } from "../src/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest } from "./workspace-store";
@@ -44,7 +46,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   };
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => ({ updater: false, installer: false, packageCheck: true,
-      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null }));
+      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null,
+      eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE) }));
   const installDetection = createInstallDetectionHandler();
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
