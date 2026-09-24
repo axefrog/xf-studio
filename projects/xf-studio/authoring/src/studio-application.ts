@@ -63,6 +63,7 @@ export class StudioApplication {
   private listeners = new Set<() => void>();
   private unsubs: (() => void)[] = [];
   private collectionRevision = 0;
+  private seenContent?: number;
   private previewUnavailable?: string;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   constructor(services: Services) { this.services = services; this.subscribeSources(); }
@@ -77,8 +78,12 @@ export class StudioApplication {
     for (const unsub of this.unsubs) unsub();
     const s = this.services;
     this.unsubs = [s.document.subscribe(() => this.notify())];
+    this.seenContent = s.collection?.contentVersion();
+    // Save progress, busy flags and list refreshes must not invalidate an open menu (audit A-14).
     if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
-      this.collectionRevision++; this.notify();
+      const content = s.collection!.contentVersion();
+      if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
+      this.notify();
     }));
     for (const source of [s.preview, s.motion, s.quality, s.savedV])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));

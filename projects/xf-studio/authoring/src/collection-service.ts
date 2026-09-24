@@ -48,6 +48,8 @@ export class CollectionService {
   private packageSource?: string;
   private summaries: CollectionSummary[] = [];
   private listeners = new Set<() => void>();
+  /** Advances only when draft content or identity changes; progress, busy, list and disclosure do not count. */
+  private content = 0;
   constructor(restored: CollectionWorkspace | undefined, private legacy: LibraryState,
     private read: () => EditorSnapshot, private show: (editor: EditorSnapshot) => void,
     private transport: CollectionTransport) {
@@ -64,6 +66,8 @@ export class CollectionService {
       summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary() };
   }
   snapshot() { return this.actions?.snapshot(); }
+  /** Version of the draft's collection/preset content, for binding menus to what they were opened on. */
+  contentVersion() { return this.content; }
   /** Cheap ownership read: `loaded` is false until a draft exists; `id` is the preset the editor belongs to. */
   selectedPreset(): { loaded: boolean; id?: string } {
     return this.actions ? { loaded: true, id: this.actions.selected() } : { loaded: false };
@@ -95,7 +99,9 @@ export class CollectionService {
   dispatch(action: CollectionAction) {
     const allowed = this.actionCapability(action);
     if (!allowed.available) throw new CollectionServiceError("unavailable", allowed.reason!);
-    this.actions!.dispatch(action); this.notify();
+    this.actions!.dispatch(action);
+    if (action.kind !== "preset.expand" && action.kind !== "collection.filesOpen") this.content++;
+    this.notify();
   }
   private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
   private async list() { this.summaries = await this.transport.list(); this.notify(); return this.summaries; }
@@ -139,7 +145,7 @@ export class CollectionService {
             }
             draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected,
               fieldSelection: current.fieldSelection, history: current.history };
-            this.actions = new CollectionActions(draft, this.read, this.show);
+            this.actions = new CollectionActions(draft, this.read, this.show); this.content++;
             message = summaries.length
               ? "Existing looks and your current draft are retained. Save collection to store this arrangement."
               : "Your starter collection is ready. Save it to the local library when you want to keep a revision.";
@@ -152,6 +158,7 @@ export class CollectionService {
           const stored = await this.transport.get(request.id);
           // Opening is the only draft switch in this async operation. Existing changes are stashed first.
           this.actions!.dispatch({ kind: "collection.open", collection: stored.collection, revision: stored.revision });
+          this.content++;
           result = { kind: "opened", collection: stored };
           message = `Opened “${stored.collection.name}”. Undo collection open restores the previous draft.`; break;
         }
@@ -190,6 +197,7 @@ export class CollectionService {
           catch (error) { throw new CollectionServiceError(error instanceof SyntaxError ? "invalid_json" : "invalid_collection",
             (error as Error).message); }
           this.actions!.dispatch({ kind: "collection.open", collection });
+          this.content++;
           result = { kind: "imported" };
           message = "Imported collection draft. Existing IDs are preserved; Save a copy creates a separate collection. Undo collection open recovers the previous draft."; break;
         }

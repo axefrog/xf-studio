@@ -161,3 +161,23 @@ test("refusals carry structured validation issues instead of text to parse", () 
   expect(app.contextCapability({ kind: "layer", id: back }, { kind: "layer.setOpacity", layerId: back } as never))
     .toMatchObject({ code: "needs_input", issue: { code: "required", field: "opacity" } });
 });
+
+test("save progress and list refreshes keep an open collection menu bound; content edits invalidate it", async () => {
+  const saved: { collection: unknown; revision: number }[] = [];
+  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
+    save: async (collection, revision) => { const stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 };
+      saved.push(stored); return stored as never; },
+    package: async () => { throw Error("not used"); } };
+  const { app, presetId, service } = withCollection(transport);
+  const query = app.contextQuery({ kind: "preset", id: presetId });
+  const copy = { kind: "preset.edit", command: { kind: "copy", id: presetId } } as const;
+  expect(app.boundActionCapability(query.context, copy).available).toBe(true);
+  const before = service.contentVersion();
+  expect(await app.execute({ kind: "save" })).toMatchObject({ ok: true });
+  expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true });
+  expect(saved).toHaveLength(1);
+  expect(service.contentVersion()).toBe(before);
+  expect(app.boundActionCapability(query.context, copy).available).toBe(true);
+  expect(app.dispatch({ kind: "preset.edit", command: { kind: "rename", id: presetId, name: "Renamed" } }).ok).toBe(true);
+  expect(app.boundActionCapability(query.context, copy)).toMatchObject({ available: false, code: "missing_target" });
+});
