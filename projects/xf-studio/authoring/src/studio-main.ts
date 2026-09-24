@@ -4,6 +4,7 @@
  * `StudioPresentationPort`. Nothing in `studio-ui/` imports this module.
  */
 import { createBrowserFileDevice } from "./browser-file-device";
+import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -39,6 +40,7 @@ void start().catch(error => {
 async function start() {
   const restored = loadBrowserWorkspace(localStorage, verification), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
+  const localSetup = createBrowserLocalSetup();
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
   let savedAppearance: SavedAppearanceActions | undefined;
   let previewActions: ReturnType<ReturnType<typeof createTrustedPreviewServices>["finish"]>["preview"] | undefined;
@@ -127,7 +129,7 @@ async function start() {
     persist, message: text => adapterMessage("uv", text),
   }, workspace.uvView);
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, viewport: viewportDevice.attachment,
+    workspace, core, preferences, localSetup, viewport: viewportDevice.attachment,
     previewReadiness: previewDevice.coordinator, status: statusSource,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
@@ -148,6 +150,7 @@ async function start() {
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
   if (verification) Object.assign(window, { xfStudioPresentation: port });
   port!.subscribe(persist);
+  void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });

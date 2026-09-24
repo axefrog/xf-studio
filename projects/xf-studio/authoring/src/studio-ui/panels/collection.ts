@@ -1,4 +1,5 @@
 import type { PackageBuild, PackageCheck } from "../../package-action";
+import type { LocalSetupFields } from "../../local-settings-server";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
@@ -221,6 +222,50 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
+  const setupFields = [
+    ["gameRoot", "Cyberpunk 2077 folder"], ["plateInput", "Private plate input folder"],
+    ["wolvenKitCli", "WolvenKit CLI executable"], ["pythonExecutable", "Python executable (optional)"],
+    ["bunExecutable", "Bun executable (optional)"], ["mo2Root", "MO2 instance folder"],
+    ["mo2ProfileId", "MO2 profile name"], ["manualModRoot", "Additional direct mod folder (optional)"],
+  ] as const;
+  const inputs = Object.fromEntries(setupFields.map(([key, label]) => [key,
+    h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<typeof setupFields[number][0], HTMLInputElement>;
+  const route = h("select", { class: "field", "aria-label": "Mod source route", onchange: () => { dirty = true; showRoute(); } },
+    h("option", { value: "direct", text: "Game folder directly" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
+  let dirty = false, loadedRevision = -1;
+  const mo2Fields = h("div", {}, ...setupFields.filter(([key]) => key === "mo2Root" || key === "mo2ProfileId")
+    .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
+  const directFields = h("div", {}, ...setupFields.filter(([key]) => key === "manualModRoot")
+    .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
+  const showRoute = () => { mo2Fields.hidden = route.value !== "mo2"; directFields.hidden = route.value !== "direct"; };
+  const setupState = note("Loading local setup…");
+  const setupReadiness = note("");
+  const saveSetup = button({ label: "Save local setup", icon: "check", onClick: () => void (async () => {
+    const current = port.localSetup.snapshot().view;
+    if (!current) return;
+    const fields: LocalSetupFields = { ...current.fields, launchRoute: route.value as LocalSetupFields["launchRoute"] };
+    for (const [key] of setupFields) (fields as unknown as Record<string, string | null>)[key] = inputs[key].value.trim() || null;
+    const result = await port.localSetup.dispatch({ kind: "setup.save", fields });
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Local setup", "Configuration saved on this computer."); }
+    else rt.feedback.toast("error", "Local setup", result.message);
+  })() });
+  const restoreSetup = button({ label: "Restore previous settings", onClick: () => void (async () => {
+    const result = await port.localSetup.dispatch({ kind: "setup.restorePrevious" });
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Local setup", "Previous configuration restored."); }
+    else rt.feedback.toast("error", "Local setup", result.message);
+  })() });
+  const refreshSetup = button({ label: "Reload setup", onClick: event => {
+    const reload = () => void (async () => {
+      const result = await port.localSetup.dispatch({ kind: "setup.refresh" });
+      if (result.ok) { dirty = false; loadedRevision = -1; }
+      else rt.feedback.toast("error", "Local setup", result.message);
+    })();
+    if (!dirty) { reload(); return; }
+    const anchor = event.currentTarget as Element;
+    openMenu([{ kind: "heading", label: "Discard unsaved setup edits?" },
+      { kind: "action", label: "Reload saved setup", run: reload }], anchor,
+    { label: "Reload local setup", invoker: anchor });
+  } });
   const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   const progress = h("div", { class: "package-progress", hidden: true },
@@ -233,14 +278,29 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   }
   function confirmBuild(anchor: Element) {
     openMenu([{ kind: "heading", label: "Build local mod files?", detail: "Uses the current draft, including unsaved edits. Several minutes; cannot be cancelled once started. Nothing is installed." },
-      { kind: "action", label: "Build now", icon: "package", capability: port.files.capability({ kind: "package.build" }), run: () => void runPackage("build") },
+      { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
+  }
+  function buildCapability() {
+    const file = port.files.capability({ kind: "package.build" });
+    if (!file.available) return file;
+    const setup = port.localSetup.snapshot();
+    if (!setup.view) return { available: false, reason: setup.error ?? "Load local setup to configure build inputs." };
+    const build = setup.view.readiness.build;
+    return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
   }
   const element = h("div", { class: "panel-content" },
     section("Mod package", note("Creates private Cyberpunk mod files for ONE in-game eye-makeup selector (plus Off) from the current draft, including unsaved edits. Your collection and library revisions are never changed."),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
+    h("details", { class: "section" }, h("summary", { text: "Local setup" }),
+      note("These paths stay on this computer. Choose the game folder and build inputs; select MO2 or direct sources for later mod discovery."),
+      h("label", { class: "control" }, h("span", { class: "control-label", text: "Mod source route" }), route),
+      ...setupFields.filter(([key]) => !["mo2Root", "mo2ProfileId", "manualModRoot"].includes(key))
+        .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])),
+      mo2Fields, directFields, setupState, setupReadiness,
+      h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
       h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Flat adapter", finish.exportAdapter === "none" ? "warning" : "success")))),
     note("Active layers with preview-study finishes are omitted and named in the result; a preset left with nothing exportable is omitted whole. Check decides — this list is informational.")));
@@ -249,7 +309,22 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
-      applyCapability(build, port.files.capability({ kind: "package.build" }));
+      applyCapability(build, buildCapability());
+      const setup = frame.localSetup;
+      if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
+        loadedRevision = setup.view.revision;
+        route.value = setup.view.fields.launchRoute;
+        for (const [key] of setupFields) setValue(inputs[key], setup.view.fields[key] ?? "");
+        showRoute();
+      }
+      setText(setupState, setup.error ?? (setup.view?.source === "backup" ?
+        "The current settings file is damaged. Restore its previous copy before editing." :
+        setup.view ? `Saved locally · revision ${setup.view.revision}${setup.view.overridden.length ? ` · server overrides: ${setup.view.overridden.join(", ")}` : ""}` : "Loading local setup…"));
+      setText(setupReadiness, setup.view?.readiness.build.ready ? "Build inputs are available. Tool version and game rendering are checked separately." :
+        setup.view?.readiness.build.issues.map(issue => issue.reason).join(" ") ?? "");
+      applyCapability(saveSetup, port.localSetup.capability({ kind: "setup.save", fields: setup.view?.fields ?? {} as LocalSetupFields }));
+      applyCapability(refreshSetup, port.localSetup.capability({ kind: "setup.refresh" }));
+      applyCapability(restoreSetup, port.localSetup.capability({ kind: "setup.restorePrevious" }));
       const working = library.busy && library.progress?.code === "package";
       progress.hidden = !working;
       if (working) setText(progress.querySelector(".progress-text")!, library.progress!.message);

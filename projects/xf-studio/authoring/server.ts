@@ -2,14 +2,19 @@ import { resolve, sep } from "node:path";
 import { mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
-import { createPackageHandler } from "./src/package-server";
+import { createPackageHandler, localPackageTools } from "./src/package-server";
+import { createLocalSettingsHandler } from "./src/local-settings-server";
+import { LocalSettingsStore } from "./src/local-settings-store";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
-const packageRequest = createPackageHandler();
+const localSettings = new LocalSettingsStore();
+const settingsRequest = createLocalSettingsHandler(localSettings);
+const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
+  localPackageTools(localSettings.load().settings));
 const root = resolve(import.meta.dir, "public");
 const build = await Bun.build({
   entrypoints: ["studio-main.ts", "main.ts", "port-smoke.ts", "raster-worker.ts", "render-fidelity-study.ts"].map((n) =>
@@ -30,6 +35,7 @@ const server = Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/api/package") return packageRequest(request);
+    if (url.pathname === "/api/local-settings") return settingsRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

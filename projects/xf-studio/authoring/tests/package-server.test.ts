@@ -5,6 +5,11 @@ import { createPackageHandler, localPackageTools } from "../src/package-server";
 import { preparePackageCollection } from "../src/package-filter";
 import { createHash } from "node:crypto";
 import type { PackageAction, PackageCheck } from "../src/package-action";
+import { LocalSettingsStore } from "../src/local-settings-store";
+import { defaultLocalSettings } from "../src/local-settings";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const url = "http://127.0.0.1:4317/api/package";
@@ -111,4 +116,25 @@ test("check and build both refuse a wholly unsupported collection before invokin
     expect((await response.json()).code).toBe("no_exportable_content");
   }
   expect(calls).toBe(0);
+});
+
+test("the package server resolves local settings for each build and leaves Check independent", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-settings-"));
+  try {
+    const store = new LocalSettingsStore(directory);
+    let selected = "";
+    const handler = createPackageHandler(action => action === "check" ? localPackageTools() :
+      localPackageTools(store.load().settings, {}), async (action, file, tools) => {
+      if (action === "check") return summary(JSON.parse(readFileSync(file, "utf8")));
+      selected = tools.gamepath;
+      throw Error("Captured configured build input");
+    });
+    expect((await handler(request({ action: "check", collection: fixture }))).status).toBe(200);
+    const first = store.save({ ...defaultLocalSettings(), gameRoot: join(directory, "game-a") }, 0);
+    expect((await handler(request({ action: "build", collection: fixture }))).status).toBe(422);
+    expect(selected).toBe(first.gameRoot!);
+    const second = store.save({ ...first, gameRoot: join(directory, "game-b") }, 1);
+    expect((await handler(request({ action: "build", collection: fixture }))).status).toBe(422);
+    expect(selected).toBe(second.gameRoot!);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

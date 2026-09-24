@@ -8,6 +8,7 @@ import type { StudioApplication } from "./studio-application";
 import type { StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
+import type { LocalSetupActions } from "./local-setup-actions";
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
@@ -50,6 +51,9 @@ export type StudioPresentationPort<Slot> = {
   };
   /** Browser draft autosave and optional preview-asset diagnostics from trusted adapters. */
   readonly status: { snapshot(): ReadonlyDeep<PresentationStatus> };
+  readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
+    snapshot(): ReadonlyDeep<ReturnType<LocalSetupActions["snapshot"]>>;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -58,6 +62,7 @@ export type StudioPresentationPort<Slot> = {
     preferences: ReturnType<UIPreferenceActions["snapshot"]>;
     previewReadiness: PreviewReadiness;
     status: PresentationStatus;
+    localSetup: ReturnType<LocalSetupActions["snapshot"]>;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -74,6 +79,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** Optional for fixtures; without it the editor view falls back to detached snapshots. */
   editor?: AuthoringPresentation;
   status?: StatusSource;
+  localSetup?: LocalSetupActions;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -141,16 +147,24 @@ export function createStudioPresentation<Slot>(sources: {
     dispatch: action => p.dispatch(action),
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
+  const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {
+    snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),
+    dispatch: action => sources.localSetup!.dispatch(action),
+  } : {
+    snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Local setup is unavailable on this host." }),
+    dispatch: async () => ({ ok: false, code: "unavailable", message: "Local setup is unavailable on this host." }),
+  };
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, editor: Object.freeze(editor),
+    previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
     status: Object.freeze({ snapshot: () => s.snapshot() }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
-      status: s.snapshot() }),
+      status: s.snapshot(), localSetup: localSetup.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
-        v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener)];
+        v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
+        ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

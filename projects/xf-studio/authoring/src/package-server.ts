@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { parseCollection } from "./preset-collection";
 import { preparePackageCollection } from "./package-filter";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
+import { defaultLocalSettings, type LocalSettings } from "./local-settings";
+import { packageToolPaths } from "./local-settings-readiness";
 
 const app = resolve(import.meta.dir, "..");
 const hq = resolve(app, "../../..");
@@ -15,13 +17,14 @@ const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const within = (path: string, root: string) => path.startsWith(root + sep);
 export type PackageTools = { python: string; bun: string; plate: string; wolvenkit: string; gamepath: string };
-export function localPackageTools(): PackageTools {
+export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env): PackageTools {
+  const configured = packageToolPaths(settings, env);
   return {
-    python: process.env.XFS_PACKAGE_PYTHON || (process.platform === "win32" ? "python" : "python3"),
-    bun: process.execPath,
-    plate: process.env.XFS_PACKAGE_PLATE || resolve(hq, "experiments/004-plate-import/generated/archive/axefrog/appearance_studio/studies"),
-    wolvenkit: process.env.XFS_PACKAGE_WOLVENKIT || "F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe",
-    gamepath: process.env.XFS_PACKAGE_GAMEPATH || "F:/Games/Cyberpunk 2077",
+    python: configured.python || (process.platform === "win32" ? "python" : "python3"),
+    bun: configured.bun || process.execPath,
+    plate: configured.plate || "",
+    wolvenkit: configured.wolvenkit || "",
+    gamepath: configured.gamepath || "",
   };
 }
 
@@ -38,7 +41,18 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
       ["Game", tools.gamepath, "directory"]] as const) {
       let valid = false;
       try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
-      if (!valid) throw Error(`${name} input is unavailable at ${path}. Configure the local studio server's XFS_PACKAGE_${name === "Plate" ? "PLATE" : name === "Game" ? "GAMEPATH" : "WOLVENKIT"} setting.`);
+      if (!valid) throw Error(`${name} input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_${name === "Plate" ? "PLATE" : name === "Game" ? "GAMEPATH" : "WOLVENKIT"} server override.`);
+    }
+    for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
+      ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {
+      try { if (name.endsWith("directory") ? statSync(path).isDirectory() : statSync(path).isFile()) continue; }
+      catch { /* Missing game input. */ }
+      throw Error(`The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Local setup.`);
+    }
+    for (const [name, path] of [["Python", tools.python], ["Bun", tools.bun]] as const) {
+      if (!path.includes("/") && !path.includes("\\")) continue; // Host PATH command, checked by spawn.
+      try { if (statSync(path).isFile()) continue; } catch { /* Missing executable. */ }
+      throw Error(`The configured ${name} executable is unavailable. Check Local setup.`);
     }
   }
   const args = [tools.python, script, "--collection", file, "--bun", tools.bun, "--machine-result",
@@ -56,7 +70,7 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
 
 type Runner = (action: PackageAction, file: string, tools: PackageTools) => Promise<PackageCheck | PackageBuild>;
 /** One active build per server; requests carry only a validated collection snapshot. */
-export function createPackageHandler(tools = localPackageTools(), runner: Runner = runLocalPackage) {
+export function createPackageHandler(tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = runLocalPackage) {
   let building = false;
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -89,7 +103,7 @@ export function createPackageHandler(tools = localPackageTools(), runner: Runner
     writeFileSync(file, source);
     if (action === "build") building = true;
     try {
-      const result = await runner(action, file, tools);
+      const result = await runner(action, file, typeof tools === "function" ? tools(action) : tools);
       if (action === "check") {
         const checked = result as PackageCheck;
         if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||

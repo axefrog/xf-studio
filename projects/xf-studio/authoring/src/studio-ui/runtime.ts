@@ -30,6 +30,7 @@ export class Frame {
   get readiness() { return this.once("readiness", () => this.port.previewReadiness.snapshot()); }
   get viewport() { return this.once("viewport", () => this.port.viewport.snapshot()); }
   get status() { return this.once("status", () => this.port.status.snapshot()); }
+  get localSetup() { return this.once("localSetup", () => this.port.localSetup.snapshot()); }
 }
 export type FrameState = Frame;
 

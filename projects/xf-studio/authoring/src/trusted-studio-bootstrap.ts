@@ -10,6 +10,7 @@ import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { WorkspaceState } from "./workspace-state";
+import type { LocalSetupActions } from "./local-setup-actions";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -25,6 +26,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   onEditorRestored(): void;
   /** Optional device status (autosave, asset diagnostics) exposed read-only to the view. */
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
+  localSetup?: LocalSetupActions;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -55,7 +57,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     core.document, options.onEditorRestored, options.transport, core.app, files);
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
-    previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status });
+    previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
+    localSetup: options.localSetup });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,
