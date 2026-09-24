@@ -12,7 +12,7 @@ const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verific
 const packageRequest = createPackageHandler();
 const root = resolve(import.meta.dir, "public");
 const build = await Bun.build({
-  entrypoints: ["main.ts", "raster-worker.ts"].map((n) =>
+  entrypoints: ["main.ts", "raster-worker.ts", "render-fidelity-study.ts"].map((n) =>
     resolve(import.meta.dir, "src", n),
   ),
   outdir: resolve(root, "build"),

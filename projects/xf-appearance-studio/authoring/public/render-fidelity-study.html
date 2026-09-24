@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>XF Studio — render fidelity study</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#12191e;color:#e9edef;font:14px system-ui,sans-serif}
+    main{min-height:100vh;display:grid;grid-template-columns:300px minmax(0,1fr)}aside{padding:18px;overflow:auto;border-right:1px solid #45535b}
+    h1{font-size:21px;margin:0 0 12px}h2{font-size:15px}p,small{line-height:1.45;color:#bac8cf}
+    label{display:block;margin:15px 0}select,input[type=range]{width:100%;margin-top:6px}select,button{background:#27353d;color:inherit;border:1px solid #5b6d77;border-radius:5px;padding:8px}
+    button{cursor:pointer}.views{display:flex;gap:6px}.views button{flex:1}.views button[aria-pressed=true]{border-color:#e2ab62;color:#ffd396}output{float:right;font-variant-numeric:tabular-nums}
+    #status{overflow-wrap:anywhere}#compare{display:grid;grid-template-columns:1fr 1fr;min-width:0;height:100vh}
+    figure{position:relative;margin:0;min-width:0;min-height:0;background:#1b252b}figure+figure{border-left:2px solid #e2ab62}
+    figcaption{position:absolute;top:12px;left:12px;z-index:1;padding:7px 9px;background:#10171cd9;border:1px solid #596972;border-radius:4px}
+    canvas{width:100%;height:100%;display:block}#normal-note{font-size:12px}
+    @media(max-width:850px){main{display:block}#compare{height:65vh}aside{border-right:0;border-bottom:1px solid #45535b}}
+  </style>
+</head>
+<body><main><aside>
+  <h1>Render fidelity study</h1>
+  <p>Locked A/B view of the current preview head. The left side is the current browser material; the right changes one material term. This page does not read or save your studio draft.</p>
+  <fieldset id="controls" disabled>
+    <div class="views"><button type="button" data-view="lip">Lip seam</button><button type="button" data-view="eye">Saved eye</button></div>
+    <label>Right-hand test<select id="variant"></select></label>
+    <label>Key light direction <output id="light-value">−31°</output><input id="light" type="range" min="-90" max="90" value="-31"></label>
+    <label>Exposure <output id="exposure-value">1.2</output><input id="exposure" type="range" min="0.5" max="2" step="0.05" value="1.2"></label>
+    <label>Framing height <output id="height-value">0</output><input id="height" type="range" min="-0.15" max="0.15" step="0.005" value="0"></label>
+    <label>Framing distance <output id="distance-value">0</output><input id="distance" type="range" min="-0.12" max="0.35" step="0.005" value="0"></label>
+    <button type="button" id="capture">Save paired PNG</button>
+  </fieldset>
+  <p id="status" role="status">Loading local preview resources…</p>
+  <small id="normal-note">Neutral static pose. Both panes share camera, light, exposure and assets. Eye shader, refraction, bubble normal and saved skin material remain unmodelled. No game rendering claim.</small>
+</aside><section id="compare" aria-label="Locked material comparison">
+  <figure id="left"><figcaption>Current browser baseline</figcaption></figure>
+  <figure id="right"><figcaption id="right-label">Test</figcaption></figure>
+</section></main><script type="module" src="/build/render-fidelity-study.js"></script></body>
+</html>
