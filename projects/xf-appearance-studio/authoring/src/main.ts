@@ -26,14 +26,16 @@ import { setupPathControls, type PathCommand } from "./path-ui";
 import type { createUVEditor } from "./uv-editor";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
+import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
+import { createTrustedPreviewServices } from "./trusted-preview-services";
 import { ViewportAttachment } from "./viewport-attachment";
-import { PreviewActions } from "./preview-actions";
+import type { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
 import { CollectionApplication } from "./collection-application";
 import { collectionTransport } from "./collection-transport";
 import { setupMotionControls } from "./motion-ui";
-import { MotionActions } from "./motion-actions";
-import { SavedAppearanceActions, type SavedAppearanceState } from "./saved-appearance-actions";
+import type { MotionActions } from "./motion-actions";
+import type { SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import {
   canonicalFinish,
   defaultFlakes,
@@ -493,12 +495,12 @@ function setupPiercingControls() {
     const option = document.createElement("option");
     option.value = entry.id; option.textContent = entry.label; style.append(option);
   }
-  function fillColours(preferred = "") {
+  function fillColours(preferred = "", apply = true) {
     colour.replaceChildren();
     const entry = styles.find(s => s.id === style.value);
     colour.disabled = !entry;
     if (!entry) {
-      previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: "", definition: "" });
+      if (apply) previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: "", definition: "" });
       updatePiercingNote(); return;
     }
     for (const choice of entry.choices) {
@@ -506,14 +508,14 @@ function setupPiercingControls() {
       option.value = choice.definition; option.textContent = `${choice.index}. ${choice.label}`; colour.append(option);
     }
     colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
-    previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: entry.id, definition: colour.value });
+    if (apply) previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: entry.id, definition: colour.value });
     updatePiercingNote();
   }
-  style.value = styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
-  fillColours(workspace.preview.piercingDefinition);
+  const state = previewActions!.snapshot();
+  style.value = state.piercingStyle;
+  fillColours(state.piercingDefinition, false);
   style.onchange = () => fillColours();
   colour.onchange = () => previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: style.value, definition: colour.value });
-  previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
   input("piercings").onchange = () => previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
 }
 $("v-export").onclick = () => void runFile({ kind: "savedV.export" });
@@ -531,29 +533,20 @@ workspaceSession.activate();
 try {
   // Discover hardware limits before attaching any full-size generated texture.
   viewer = await viewportDevice.loadHead(previewDevice.emptyCanvases());
-  savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
+  let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
+  const previewServices = createTrustedPreviewServices(workspace,
+    createBrowserScenePreviewPorts(viewer, {
+      setSurfaceControls: enabled => surface?.setEnabled(enabled),
+      hasSavedAppearance: () => !!workspace.savedV || !!savedAppearance?.hasSavedV(),
+    }));
+  savedAppearance = previewServices.savedAppearance;
   app.attach({ savedV: savedAppearance });
   savedAppearance.subscribe(persist);
   previewDevice.connectScene(viewer);
-  if (workspace.savedV) showSavedV(savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }));
-  const preview = workspace.preview;
-  for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
-    brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
-    normals: preview.normals, "eye-optics": preview.eyeOptics })) input(id).checked = checked;
-  viewer.setEyeOptics(preview.eyeOptics);
+  if (previewServices.restoredSavedAppearance) showSavedV(previewServices.restoredSavedAppearance);
   refreshEyeOpticsNote();
-  input("blink").value = String(preview.blink);
-  input("exposure").value = String(preview.exposure);
-  input("light-angle").value = String(preview.lightAngle);
-  input("fov").value = String(preview.camera?.fov ?? 30);
-  $("fov-value").textContent = `${input("fov").value}°`;
-  viewer.eyeShape(+shape.value);
-  viewer.setWire(preview.wire);
-  viewer.setNormals(preview.normals);
-  viewer.setExposure(preview.exposure);
-  viewer.setLightAngle(preview.lightAngle);
   $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
-  const surface = viewportDevice.mountSurface({
+  surface = viewportDevice.mountSurface({
     layer: () => geometry.layer(),
     selected: () => presentation.selected,
     selectedField: () => currentField()?.id, selectField,
@@ -564,7 +557,24 @@ try {
     finish: () => app.endGesture("surface"),
     message: status,
   });
-  surface.setEnabled(input("surface-controls").checked);
+  const services = previewServices.finish();
+  motionActions = services.motion;
+  previewActions = services.preview;
+  app.attach({ motion: motionActions, preview: previewActions });
+  motionActions.subscribe(persist);
+  previewActions.subscribe(persist);
+  const initialPreview = previewActions.snapshot();
+  for (const [id, checked] of Object.entries({ "surface-controls": initialPreview.surface, wire: initialPreview.wire,
+    brows: initialPreview.brows, lashes: initialPreview.lashes, hair: initialPreview.hair,
+    piercings: initialPreview.piercings, normals: initialPreview.normals,
+    "eye-optics": initialPreview.eyeOptics })) input(id).checked = checked;
+  input("blink").value = String(motionActions.snapshot().blink);
+  input("exposure").value = String(initialPreview.exposure);
+  input("light-angle").value = String(initialPreview.lightAngle);
+  input("fov").value = String(initialPreview.camera.fov);
+  $("fov-value").textContent = `${input("fov").value}°`;
+  shape.value = String(initialPreview.eyeShape);
+  setupMotionControls(motionActions);
   input("surface-controls").onchange = () =>
     previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
   previewDevice.presentInitialLayers();
@@ -579,12 +589,9 @@ try {
   input("wire").onchange = () => previewActions!.dispatch({ kind: "preview.setWire", enabled: input("wire").checked });
   for (const name of ["brows", "lashes"] as const) {
     input(name).disabled = !viewer.details[name];
-    input(name).checked &&= !!viewer.details[name];
-    viewer.setDetail(name, input(name).checked);
     input(name).onchange = () => previewActions!.dispatch({ kind: "preview.setDetail", detail: name, enabled: input(name).checked });
   }
   if (!savedAppearance.hasSavedV()) input("hair").disabled = true;
-  viewer.setHair(input("hair").checked);
   input("hair").onchange = () => previewActions!.dispatch({ kind: "preview.setHair", enabled: input("hair").checked });
   if (viewer.evidence.hairError) $("hair-note").textContent =
     `${viewer.hair.length ? "Some local hair styles unavailable" : "Hair preview unavailable"}: ${viewer.evidence.hairError}`;
@@ -595,36 +602,7 @@ try {
     $("detail-note").textContent = viewer.evidence.lashColor === "saved-profile-swatch-approximation"
       ? "Saved Arkhe brow maps · brown liquorice lash profile, colour preview approximate"
       : "Saved Arkhe brow maps + installed brown ombre gradient · lash shading approximate";
-  motionActions = new MotionActions(preview, { get idle() { return viewer!.idle; },
-    available: viewer.evidence.idle.available, error: viewer.evidence.idle.error,
-    setIdle: viewer.setIdle, setIdlePaused: viewer.setIdlePaused,
-    setIdleContributions: viewer.setIdleContributions, setBlink: viewer.setBlink,
-    animateBlink: viewer.animateBlink });
-  app.attach({ motion: motionActions });
-  motionActions.restore();
-  setupMotionControls(motionActions);
-  motionActions.subscribe(persist);
-  previewActions = new PreviewActions({ ...preview, surface: input("surface-controls").checked,
-    brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked,
-    eyeShape: +shape.value, piercings: input("piercings").checked,
-    piercingStyle: $<HTMLSelectElement>("piercing-style").value,
-    piercingDefinition: $<HTMLSelectElement>("piercing-colour").value }, {
-    cameraState: viewer.cameraState, front: viewer.front, setFov: viewer.setFov,
-    endFovGesture: viewer.endFovGesture, restoreCamera: viewer.restoreCamera,
-    setExposure: viewer.setExposure, setLightAngle: viewer.setLightAngle,
-    setSurfaceControls: enabled => surface.setEnabled(enabled), setWire: viewer.setWire,
-    setNormals: viewer.setNormals, setEyeOptics: viewer.setEyeOptics,
-    setHair: viewer.setHair, setDetail: viewer.setDetail, setEyeShape: viewer.eyeShape,
-    setPiercings: viewer.setPiercings, setPiercingPreview: viewer.setPiercingPreview,
-    piercingOptions: () => viewer!.piercingStyles.map(style => ({ id: style.id, label: style.label,
-      choices: style.choices.map(choice => ({ index: choice.index,
-        definition: choice.definition, label: choice.label })) })),
-    availability: target => target === "hair" ? !savedAppearance!.hasSavedV() || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
-      : !viewer!.details[target] ? `${target} preview assets are unavailable.` : undefined,
-  });
-  app.attach({ preview: previewActions });
   setupPiercingControls();
-  previewActions.subscribe(persist);
   shape.onchange = () => previewActions!.dispatch({ kind: "preview.setEyeShape", index: +shape.value });
   input("exposure").oninput = () =>
     dispatchStudio({ kind: "preview.setExposure", value: +input("exposure").value });
@@ -644,8 +622,7 @@ try {
       : "Camera distance follows the viewed face area as lens angle changes. Game FOV numbers may use a different convention.";
   };
   input("fov").onchange = () => previewActions!.dispatch({ kind: "camera.endFovGesture" });
-  // Motion is restored before the neutral-space camera, applying its offset once.
-  if (preview.camera) previewActions.dispatch({ kind: "camera.restore", camera: preview.camera });
+  // Motion and neutral-space camera were restored in the trusted preview bootstrap.
   viewer.controls.addEventListener("change", persist);
   layersPanel.scrollTop = workspace.panels.layersScroll;
   panel.scrollTop = workspace.panels.propertiesScroll;
