@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import config from "../electrobun.config";
 import desktopPackage from "../package.json";
+import { noticeIssues, requireLicence } from "../notices";
 import { appVersion, changelogPath, changelogSection, checkTag, isPrerelease, parseChecksums, parseReleaseVersion,
-  releaseNotes, releaseTag, releaseTitle, setupAssetName, stageRelease, verifyStaged } from "../release";
+  noticesAssetName, releaseNotes, releaseTag, releaseTitle, setupAssetName, stageRelease, verifyStaged } from "../release";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-release-test-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -85,7 +86,7 @@ describe("release staging and notes", () => {
   test("stages the named setup ZIP, build information and sha256sum-format checksums", () => {
     writeFileSync(updateJson, JSON.stringify({ identifier: "dev.axefrog.xf-studio", version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
     const assets = stageRelease({ setupZip, updateJson, outDir: out, commit, version, dependencyLock: lock });
-    expect(assets.map(asset => asset.name)).toEqual(["XFStudio-0.1.0-alpha.1-win-x64-setup.zip", "build-info.json"]);
+    expect(assets.map(asset => asset.name)).toEqual(["XFStudio-0.1.0-alpha.1-win-x64-setup.zip", "build-info.json", noticesAssetName]);
     expect(assets[0].sha256).toBe(createHash("sha256").update("PK fake setup").digest("hex"));
     const info = JSON.parse(readFileSync(resolve(out, "build-info.json"), "utf8"));
     expect(info).toMatchObject({ version: "0.1.0-alpha.1", tag: "v0.1.0-alpha.1", commit, signed: false, updater: "disabled",
@@ -94,6 +95,18 @@ describe("release staging and notes", () => {
     const sums = parseChecksums(readFileSync(resolve(out, "SHA256SUMS.txt"), "utf8"));
     expect(sums.map(entry => entry.name)).toEqual(assets.map(asset => asset.name));
     expect(verifyStaged(out).map(asset => asset.sha256)).toEqual(assets.map(asset => asset.sha256));
+  });
+
+  test("refuses to stage or release without a project licence", () => {
+    writeFileSync(updateJson, JSON.stringify({ version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
+    const missing = resolve(root, "no-such-LICENSE");
+    expect(() => requireLicence(missing)).toThrow("No LICENSE file at the repository root");
+    expect(() => stageRelease({ setupZip, updateJson, outDir: resolve(root, "unlicensed"), commit, version,
+      dependencyLock: lock, licence: missing })).toThrow("No LICENSE file");
+    const empty = resolve(root, "EMPTY-LICENSE");
+    writeFileSync(empty, "  \n");
+    expect(() => requireLicence(empty)).toThrow("No LICENSE file");
+    expect(() => requireLicence()).not.toThrow();
   });
 
   test("refuses mismatched metadata, missing commits and altered files", () => {
@@ -119,7 +132,31 @@ describe("release staging and notes", () => {
     expect(notes).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.zip --repo axefrog/xf-studio");
     expect(notes).toContain("https://github.com/axefrog/xf-studio/commits/v0.1.0-alpha.1");
     expect(notes).toContain("have not been tested in the game");
+    expect(notes).toContain("MIT-licensed");
+    expect(notes).toContain(noticesAssetName);
+    expect(notes).toContain("3D head preview isn't available");
     expect(() => releaseNotes({ version: "0.1.0-alpha.1", newAndImproved: "a", fixes: "b" }, version, []))
       .toThrow("do not include");
+  });
+});
+
+describe("third-party notices", () => {
+  const notices = readFileSync(resolve(import.meta.dir, "../../../THIRD_PARTY_NOTICES.md"), "utf8");
+  const facts = { binaries: ["bun.exe", "launcher.exe", "ElectrobunCore.dll", "libNativeWrapper.dll", "libasar.dll",
+    "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.1", threeVersion: "0.186.0" };
+
+  test("the checked-in notices cover the known shipped programs and versions", () => {
+    expect(noticeIssues(notices, facts)).toEqual([]);
+    const authoring = JSON.parse(readFileSync(resolve(import.meta.dir, "../../package.json"), "utf8"));
+    expect(authoring.dependencies).toEqual({ three: facts.threeVersion });
+  });
+
+  test("a new program, a version bump or a dropped licence text is reported", () => {
+    expect(noticeIssues(notices, { ...facts, binaries: [...facts.binaries, "WebView2Loader.dll"] }))
+      .toEqual(["Shipped program bin/WebView2Loader.dll is not named."]);
+    expect(noticeIssues(notices, { ...facts, bunVersion: "1.4.2" })).toEqual([
+      "Bun 1.4.2 is not the version listed.", "Bun's licence link does not point at bun-v1.4.2."]);
+    expect(noticeIssues(notices, { ...facts, threeVersion: "0.187.0" })).toEqual(["three.js 0.187.0 is not the version listed."]);
+    expect(noticeIssues(notices.replace("### Electrobun (MIT)", ""), facts)).toEqual(["Missing licence text: Electrobun (MIT)."]);
   });
 });

@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { licencePath, noticesPath, packagedLicence, packagedNotices, requireLicence } from "./notices";
 
 // Deliberately enumerate distributable files. public/assets contains extracted
 // game/mod resources and must never be copied into a shell bundle.
@@ -9,6 +10,10 @@ rmSync(output, { recursive: true, force: true });
 mkdirSync(resolve(output, "build"), { recursive: true });
 cpSync(resolve(authoring, "public", "studio.css"), resolve(output, "studio.css"));
 cpSync(resolve(import.meta.dir, "about.css"), resolve(output, "about.css"));
+// The installed app carries its licence and third-party notices; About shows both.
+requireLicence();
+cpSync(noticesPath, resolve(output, packagedNotices));
+cpSync(licencePath, resolve(output, packagedLicence));
 const html = readFileSync(resolve(authoring, "public", "index.html"), "utf8");
 const script = '<script type="module" src="/build/studio-main.js"></script>';
 if (!html.includes(script)) throw Error("Studio entry changed; review desktop bootstrap before packaging.");
@@ -29,4 +34,4 @@ const check = await Bun.build({
 });
 if (!check.success || check.outputs.length !== 1)
   throw Error(check.logs.map(String).join("\n") || "Desktop Check worker did not bundle.");
-console.log(`Prepared ${result.outputs.length} browser bundles, one Bun Check worker and four allowlisted static files.`);
+console.log(`Prepared ${result.outputs.length} browser bundles, one Bun Check worker and six allowlisted static files (including the licence and notices).`);

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import desktopPackage from "./package.json";
+import { noticesPath, requireLicence } from "./notices";
 
 // Release metadata for the desktop app. `package.json` `version` is the single
 // source of truth: the Electrobun config, packaged version.json/About, the
@@ -15,6 +16,8 @@ export const changelogPath = resolve(desktopRoot, "../../CHANGELOG.md");
 export const electrobunChannel = "canary";
 export const canarySetupZip = resolve(desktopRoot, "artifacts", "canary-win-x64-XFStudio-Setup-canary.zip");
 export const canaryUpdateJson = resolve(desktopRoot, "artifacts", "canary-win-x64-update.json");
+/** Attached to every release beside the setup ZIP; the same file is installed with the app. */
+export const noticesAssetName = "THIRD_PARTY_NOTICES.md";
 
 export type ReleaseStage = "alpha" | "beta" | "rc" | "stable";
 export type ReleaseVersion = Readonly<{
@@ -115,8 +118,11 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
     "2. Extract the whole ZIP (the setup program needs its hidden `.installer` folder) and run `XF Studio-Setup-canary.exe`.",
     "3. The installer is not code-signed yet, so Windows SmartScreen may show **Windows protected your PC**. " +
       "Only if the checksum matched, choose **More info → Run anyway**. If Smart App Control is on, Windows blocks unsigned apps and offers no per-app override.",
-    "4. It installs for your Windows user only. No game or mod files are included: the UV editor, library and Check work without them, " +
-      "and the 3D preview and Build need resources prepared from your own copy of the game.", "",
+    "4. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
+      "The 3D head preview isn't available in this alpha, and building the mod files still needs a developer setup.", "",
+    "## Licence", "",
+    `XF Studio is MIT-licensed ([LICENSE](https://github.com/${repository}/blob/${tag}/LICENSE)). ` +
+      `The app includes third-party software; its notices are attached as \`${noticesAssetName}\` and shown under **About → Licences**.`, "",
     "## Verify your download", "",
     "| File | SHA-256 |", "|---|---|", rows, "",
     "In PowerShell: `(Get-FileHash .\\" + setup + " -Algorithm SHA256).Hash.ToLower()` must equal the value above " +
@@ -128,7 +134,7 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
 }
 
 type StageInput = { setupZip?: string; updateJson?: string; outDir: string; commit: string; version?: ReleaseVersion;
-  dependencyLock?: string };
+  dependencyLock?: string; notices?: string; licence?: string };
 /** Copy the verified setup ZIP under its release name and write checksums plus asset-free build information. */
 export function stageRelease(input: StageInput): ReleaseAsset[] {
   const version = input.version ?? appVersion();
@@ -137,10 +143,12 @@ export function stageRelease(input: StageInput): ReleaseAsset[] {
   if (update.version !== version.version || update.channel !== electrobunChannel)
     throw Error("The built update metadata does not match the app version and canary channel.");
   if (!/^[0-9a-f]{40}$/.test(input.commit)) throw Error("A full commit SHA is required for build information.");
+  requireLicence(input.licence);
   rmSync(input.outDir, { recursive: true, force: true });
   mkdirSync(input.outDir, { recursive: true });
   const setupName = setupAssetName(version);
   copyFileSync(setupZip, resolve(input.outDir, setupName));
+  copyFileSync(input.notices ?? noticesPath, resolve(input.outDir, noticesAssetName));
   const lockPath = input.dependencyLock ?? resolve(desktopRoot, ".hutch", "dependencies.lock");
   const toolchain = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, "utf8")).objects : null;
   const info = {
@@ -150,7 +158,7 @@ export function stageRelease(input: StageInput): ReleaseAsset[] {
     signed: false, updater: "disabled", includesGameAssets: false, toolchain,
   };
   writeFileSync(resolve(input.outDir, "build-info.json"), JSON.stringify(info, null, 2) + "\n");
-  const assets = [setupName, "build-info.json"].map(name => {
+  const assets = [setupName, "build-info.json", noticesAssetName].map(name => {
     const path = resolve(input.outDir, name);
     return { name, sha256: sha256(path), bytes: statSync(path).size };
   });
@@ -180,6 +188,7 @@ if (import.meta.main) {
     const ref = option(args, "--ref") ?? "";
     const tag = ref.startsWith("refs/tags/") ? ref.slice("refs/tags/".length) : null;
     if (tag) {
+      requireLicence();
       checkTag(tag, version);
       changelogSection(readFileSync(changelogPath, "utf8"), version.version);
     }
@@ -193,6 +202,7 @@ if (import.meta.main) {
   } else if (command === "notes") {
     const dir = resolve(option(args, "--assets") ?? resolve(desktopRoot, "artifacts", "release"));
     const out = option(args, "--out");
+    requireLicence();
     const section = changelogSection(readFileSync(changelogPath, "utf8"), version.version);
     const notes = releaseNotes(section, version, verifyStaged(dir));
     if (out) writeFileSync(out, notes); else console.log(notes);

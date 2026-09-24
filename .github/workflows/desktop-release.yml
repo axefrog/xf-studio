@@ -6,8 +6,9 @@
 #   14-day workflow artifact. No tag, release or Pages change.
 # - Pushed tag v<version>: the tag must equal projects/xf-studio/authoring/desktop/package.json
 #   "version", the tagged commit must be on main, and projects/xf-studio/CHANGELOG.md must have a
-#   complete section for that version. Creates a DRAFT GitHub release (pre-release for -alpha/-beta/-rc)
-#   with the setup ZIP, build-info.json, SHA256SUMS.txt and build-provenance attestations.
+#   complete section for that version, and the repository must have a top-level LICENSE. Creates a DRAFT
+#   GitHub release (pre-release for -alpha/-beta/-rc) with the setup ZIP, build-info.json,
+#   THIRD_PARTY_NOTICES.md, SHA256SUMS.txt and build-provenance attestations.
 #   A maintainer reviews and publishes the draft by hand; nothing here publishes it.
 #
 # Decisions, verification and maintenance: research/authoring/desktop-release-decisions.md
@@ -20,6 +21,8 @@ on:
     paths:
       - "projects/xf-studio/authoring/desktop/**"
       - "projects/xf-studio/CHANGELOG.md"
+      - "projects/xf-studio/THIRD_PARTY_NOTICES.md"
+      - "LICENSE"
       - ".github/workflows/desktop-release.yml"
   workflow_dispatch:
 
@@ -60,8 +63,9 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      # On a tag push this fails unless the tag equals v<package.json version> and the
-      # changelog section for that version is complete.
+      # On a tag push this fails unless the repository has a top-level LICENSE, the tag equals
+      # v<package.json version> and the changelog section for that version is complete.
+      # Every build also refuses without LICENSE (prepare-static packages it with the notices).
       - name: Release metadata
         id: meta
         run: |
@@ -181,7 +185,7 @@ jobs:
           name: ${{ needs.build.outputs.artifact }}
           path: ${{ env.ASSETS }}
 
-      # Re-verifies SHA256SUMS.txt against the transferred files and fails on a missing or empty changelog section.
+      # Re-verifies SHA256SUMS.txt against the transferred files and fails on a missing LICENSE or a missing or empty changelog section.
       - name: Compose release notes
         working-directory: projects/xf-studio/authoring/desktop
         run: bun release.ts notes --assets artifacts/release --out "$RUNNER_TEMP/notes.md"
@@ -197,5 +201,5 @@ jobs:
         run: |
           flags=(--draft --verify-tag --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md")
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" "${flags[@]}" "$ASSETS"/*.zip "$ASSETS/build-info.json" "$ASSETS/SHA256SUMS.txt"
+          gh release create "$TAG" "${flags[@]}" "$ASSETS"/*.zip "$ASSETS/build-info.json" "$ASSETS/THIRD_PARTY_NOTICES.md" "$ASSETS/SHA256SUMS.txt"
           echo "Draft release for $TAG created. Review it on GitHub and publish it by hand." >> "$GITHUB_STEP_SUMMARY"
