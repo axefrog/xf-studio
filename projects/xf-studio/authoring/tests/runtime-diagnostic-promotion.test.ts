@@ -99,6 +99,32 @@ test("source/stage drift, collisions, and existing destination refuse before wri
   } finally { f.cleanup(); }
 });
 
+test("stage and every source root must be disjoint, including equality", () => {
+  const f = fixture();
+  try {
+    const stage = f.options.stagingRoot;
+    const cases = [
+      { stagingRoot: f.options.mo2Root },
+      { stagingRoot: join(f.options.mo2Root, "scratch") },
+      { mo2Root: join(stage, "mo2") },
+      { stagingRoot: f.options.candidateStore },
+      { stagingRoot: join(f.options.candidateStore, "scratch") },
+      { candidateStore: stage },
+      { stagingRoot: f.options.gameRoot },
+      { stagingRoot: join(f.options.gameRoot, "scratch") },
+      { gameRoot: join(stage, "mo2") },
+    ];
+    for (const change of cases) {
+      const options = { ...f.options, ...change };
+      expect(() => planRuntimePromotion(options)).toThrow("outside every source root");
+      expect(() => promoteRuntimeDiagnostic(options)).toThrow("outside every source root");
+    }
+    expect(existsSync(join(f.options.mo2Root, "profiles", f.options.newProfileId))).toBe(false);
+    expect(existsSync(join(f.options.mo2Root, "mods", "XF Studio"))).toBe(false);
+    expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
+  } finally { f.cleanup(); }
+});
+
 test("missing trusted stage receipt and changed source candidate block promotion", () => {
   const f = fixture();
   try {

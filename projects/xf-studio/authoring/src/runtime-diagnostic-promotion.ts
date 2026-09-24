@@ -21,7 +21,7 @@ function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const within = (child: string, root: string) => {
   const rel = relative(root, child);
-  return !!rel && rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
+  return !rel || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
 };
 function noLinks(path: string) {
   let at = resolve(path);
@@ -82,7 +82,9 @@ function validate(options: PromotionOptions) {
   requireValue(options.profileId.toLowerCase() !== options.newProfileId.toLowerCase(),
     "Promotion requires a different, new profile name.");
   const stage = resolve(options.stagingRoot), mo2 = resolve(options.mo2Root);
-  requireValue(!within(stage, mo2) && !within(mo2, stage), "Stage and real MO2 must be separate.");
+  for (const source of [mo2, resolve(options.candidateStore), resolve(options.gameRoot)])
+    requireValue(!within(stage, source) && !within(source, stage),
+      "Diagnostic stage must be outside every source root.");
   directory(stage); directory(mo2);
   const { journal, receipt } = recordPaths(stage);
   noLinks(journal); noLinks(receipt);
