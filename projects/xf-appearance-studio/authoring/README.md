@@ -6,7 +6,7 @@ For the complete path from a draft or exported collection through layer merging,
 
 A working local authoring experiment, built with Bun 1.4.2, TypeScript 7.0.2 and Three.js 0.186.0. Open [XF Studio](http://127.0.0.1:4317/) while the local server is running.
 
-**Separate rendering comparison:** open `/render-fidelity-study.html` on the same local server to compare the current browser skin/eye materials against isolated lighting, roughness and normal changes under one fixed view. It does not touch the editor draft. The page requires ignored local head and exact saved-eye assets; unavailable assets are reported rather than substituted. [Observed results and limits](evidence/render-fidelity-study-2026-09-24.md).
+**Separate rendering comparison:** open `/render-fidelity-study.html` on the same local server to compare the current browser skin/eye materials against isolated lighting, roughness and normal changes under one fixed view. It does not touch the editor draft. The page requires ignored local head and exact saved-eye assets; unavailable assets are reported rather than substituted. [Observed results and limits](evidence/render-fidelity-study-2026-09-24.md). The [saved-skin source trace](../../../research/eye-artistry/saved-skin-resource-chain.md) now identifies the head/teeth inputs and installed alternatives; runtime winners and skin-map channel/UV behavior still need validation before a source-map preview can be trusted.
 
 **Optional vanilla piercing context:** Face details can display a female vanilla piercing style and colour in the viewport, or follow an exact saved choice if one is present. The preview selector does not edit the imported V. It requires locally extracted, hash-checked game geometry and a manifest made by `bun tools/intake_piercings.ts`; without them the control explains why it is unavailable. Shape/chunk selection follows current serialized game resources, while the browser material is approximate. [Resource chain, intake and fidelity limits](../../../research/jewellery/vanilla-piercing-preview.md).
 
@@ -79,7 +79,7 @@ Hair intake uses [its own manifest](evidence/hair-intake-manifest.json), exact s
 
 The same source geometry/texture data is useful, but a REDengine `.mt` is not a WebGL shader. This first adapter uses MeshStandardMaterial for the head/details and MeshPhysicalMaterial for makeup, sRGB colour textures, linear roughness/normal textures, a provisional DirectX normal-Y sign, studio lighting and ACES tone mapping. Skin layering, wrinkles, subsurface scattering, eye refraction, game lighting and exact decal blending remain unresolved. Existing preview normals are attenuated to 0.35. Finishes are studies.
 
-Next: trace skin/eye/mesh-decal parameters and channel packing from extracted authoritative resources; resolve the saved appearance hashes against the installed resource winners; add the missing eye overlay and attached parts; extract/calibrate true blink transforms. Compare a small material/pose matrix during one future game session. Do not ask Nathan to launch the game for each browser iteration.
+Next: establish effective installed winners and the skin shader's channel/UV interpretation for the [traced saved head and teeth](../../../research/eye-artistry/saved-skin-resource-chain.md); add the missing eye overlay and attached parts; extract/calibrate true blink transforms. Compare a small material/pose matrix during one future game session. Do not ask Nathan to launch the game for each browser iteration.
 
 ## Implementation boundaries
 
