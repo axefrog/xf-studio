@@ -34,3 +34,4 @@ writeFileSync(join(out, "source.json"), JSON.stringify({ schema: recipe.schema, 
   coveredTexels,
   note: "Exact Studio recipe raster and legacy Shimmer optical bake; material translation remains experimental."
 }, null, 2) + "\n");
+writeFileSync(join(out, "selected-recipe.json"), JSON.stringify(recipe, null, 2) + "\n");
