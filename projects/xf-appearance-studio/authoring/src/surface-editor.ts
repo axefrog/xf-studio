@@ -12,6 +12,7 @@ import type { createScene } from "./scene";
 import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
 import { createSurfaceOcclusion } from "./surface-occlusion";
 import type { StudioGestureProposal } from "./studio-application";
+import type { ViewportHit } from "./viewport-attachment";
 
 type Handle = {
   kind: "point" | "tangent" | "origin" | "field";
@@ -427,6 +428,26 @@ export function createSurfaceEditor(
     if (!uv || Math.hypot(uv.u - best.uv.u, uv.v - best.uv.v) > 0.012) return;
     return best;
   }
+  function hitAt(clientX: number, clientY: number): ViewportHit | undefined {
+    if (drag || shapeDrag || wheel) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientY < rect.top ||
+      clientX >= rect.left + rect.width || clientY >= rect.top + rect.height) return;
+    const layer = hooks.layer();
+    if (!enabled || !layer?.enabled) return;
+    update();
+    const handle = handleAt(clientX, clientY);
+    if (handle) {
+      const hit = handle.kind === "point" ? { kind: "point" as const, layerId: layer.id, index: handle.index }
+        : handle.kind === "tangent" ? { kind: "tangent" as const, layerId: layer.id,
+          index: handle.index, side: handle.side === "in" ? "incoming" as const : "outgoing" as const }
+        : { kind: "field" as const, layerId: layer.id, id: handle.fieldId! };
+      return { hit, mirror: handle.mirror,
+        affordance: handle.kind === "origin" ? "warp-origin" : handle.kind === "field" ? "warp-vector" : handle.kind };
+    }
+    const uv = hit(clientX, clientY), shape = uv && shapeHit(layer, uv);
+    return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" } : undefined;
+  }
   function validDrag() {
     if (!drag || !enabled || hooks.layer() !== drag.layer || !drag.layer.enabled)
       return false;
@@ -650,7 +671,7 @@ export function createSurfaceEditor(
     (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
   }
   return {
-    resize: update, cancelInput, dispose,
+    resize: update, cancelInput, dispose, hitAt,
     inputCapture: () => !!drag || !!shapeDrag || !!wheel,
     setEnabled: (value: boolean) => {
       stop();

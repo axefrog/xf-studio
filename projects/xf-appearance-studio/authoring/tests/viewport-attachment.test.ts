@@ -12,6 +12,7 @@ test("rehosting keeps the same hosts, cancels the target gesture and resizes onl
     cancelInput: kind => events.push(`${kind}:cancel`), inputCapture: kind => kind === "uv",
     headView: () => ({ position: [0, 1, 2], target: [0, 1, 0], fov: 30 }),
     uvView: () => ({ mode: "both", side: "low", u: 0, v: 0, span: 1 }),
+    hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
   };
   const attachment = new ViewportAttachment(port);
   let changes = 0; attachment.subscribe(() => changes++);
@@ -34,6 +35,7 @@ test("hidden hosts skip device resizes and retain a finite camera aspect until v
   const attachment = new ViewportAttachment<string>({
     moveHost: () => {}, measure: kind => sizes[kind], resize: kind => events.push(kind),
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
+    hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
   });
   attachment.resize();
   expect(events).toEqual([]);

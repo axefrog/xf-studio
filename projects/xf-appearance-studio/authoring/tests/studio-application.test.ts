@@ -8,6 +8,7 @@ import { applyLayerAction } from "../src/editor-actions";
 import { RecipeActions } from "../src/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
 import { freshWorkspace } from "../src/workspace-state";
+import { ViewportAttachment } from "../src/viewport-attachment";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
@@ -164,6 +165,27 @@ test("hit-context query binds point, tangent and shape commands to live geometry
   expect(tangent.options.find(item => item.id === "point.select")?.capability.available).toBe(true);
   expect(app.boundActionCapability(tangent.context, { kind: "point.select", layerId, index: 2 }))
     .toMatchObject({ available: false, code: "missing_target" });
+});
+
+test("viewport hit query binds the current geometry revision without selection or Undo", () => {
+  const { app, document } = fixture(), layerId = document.recipe.layers[0].id;
+  const port = new ViewportAttachment<string>({
+    moveHost: () => {}, measure: () => ({ width: 400, height: 200 }), resize: () => {},
+    cancelInput: () => {}, inputCapture: () => false,
+    headView: () => undefined, uvView: () => undefined,
+    hitAt: () => ({ hit: { kind: "point", layerId, index: 0 }, mirror: true, affordance: "point" }),
+    queryContext: hit => app.contextQuery(hit),
+  });
+  expect(port.contextAt("uv", 10, 10)).toBeUndefined();
+  port.setReady("uv");
+  const before = document.snapshot(), hit = port.contextAt("uv", 10, 10)!;
+  expect(hit).toMatchObject({ source: "uv", mirror: true, affordance: "point",
+    context: { hit: { kind: "point", layerId, index: 0 },
+      geometryRevision: document.geometryVersion.revision } });
+  expect(hit.options.find(option => option.id === "point.select")?.capability.available).toBe(true);
+  expect(document.snapshot()).toEqual(before);
+  document.recipe = structuredClone(document.recipe);
+  expect(app.contextOptionsFor(hit.context).every(option => option.capability.code === "missing_target")).toBe(true);
 });
 
 test("hit-context commands recheck field, layer and collection identity at invocation", () => {

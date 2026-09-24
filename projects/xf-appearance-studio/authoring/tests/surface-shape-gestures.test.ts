@@ -48,6 +48,12 @@ test("surface shape gestures share one transaction, preserve mirror/pivot and re
     };
     const escape=()=>{const e=new Event("keydown",{cancelable:true});Object.assign(e,{key:"Escape"});fakeWindow.dispatchEvent(e);};
     frame();
+    const mirroredPoint = editor.diagnostics().handles.find(h => h.kind === "point" && h.index === 0 && h.mirror)!;
+    expect(editor.hitAt(mirroredPoint.screen.x, mirroredPoint.screen.y)).toMatchObject({
+      hit: { kind: "point", layerId: layer.id, index: 0 }, mirror: true, affordance: "point" });
+    const interior = new THREE.Vector3(.2, -.1, 0).project(camera);
+    expect(editor.hitAt((interior.x + 1) * 500, (1 - interior.y) * 500)).toMatchObject({
+      hit: { kind: "shape", layerId: layer.id }, mirror: true, affordance: "shape" });
     // Mirrored drag moves the canonical shape left as the visible shape moves right.
     emit("pointerdown",.7,.4);
     expect(editor.diagnostics().gesture).toBe("translate");

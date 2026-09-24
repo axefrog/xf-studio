@@ -151,6 +151,7 @@ $<HTMLDetailsElement>("quality-panel").open = workspace.panels.previewQuality;
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
+let surfaceEditor: ReturnType<typeof createSurfaceEditor> | undefined;
 const headHost = $("viewport"), uvHost = $("uv");
 viewportAttachment = new ViewportAttachment<HTMLElement>({
   moveHost: (kind, slot) => {
@@ -170,6 +171,8 @@ viewportAttachment = new ViewportAttachment<HTMLElement>({
   inputCapture: kind => viewport.capture()[kind === "head" ? "surface" : "uv"],
   headView: () => viewer?.cameraState(),
   uvView: () => uvEditor?.snapshot(),
+  hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
+  queryContext: hit => app.contextQuery(hit),
 });
 if (verification) Object.assign(window, { eyeArtistryViewportAttachment: viewportAttachment });
 let refreshFields: (() => void) | undefined;
@@ -712,6 +715,7 @@ try {
     finish: () => app.endGesture("surface"),
     message: status,
   });
+  surfaceEditor = surface;
   viewport.attach("surface", surface);
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>

@@ -1,5 +1,7 @@
 import type { CameraState } from "./workspace-state";
 import type { UVView } from "./uv-view";
+import type { StudioApplication } from "./studio-application";
+import type { StudioContextHit } from "./studio-context-targets";
 
 export type ViewportHostKind = "head" | "uv";
 export type ViewportSize = { width: number; height: number };
@@ -9,6 +11,10 @@ export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState };
   uv: ViewportHostState & { view?: UVView };
 };
+export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
+  affordance: "point" | "tangent" | "warp-origin" | "warp-vector" | "shape" | "empty" };
+export type ViewportContextQuery = ReturnType<StudioApplication["contextQuery"]> &
+  Pick<ViewportHit, "mirror" | "affordance"> & { source: ViewportHostKind };
 
 /** Layout/device hooks. A move must reparent the same host, never recreate its editor. */
 export type ViewportAttachmentPort<Slot> = {
@@ -19,6 +25,8 @@ export type ViewportAttachmentPort<Slot> = {
   inputCapture(kind: ViewportHostKind): boolean;
   headView(): CameraState | undefined;
   uvView(): UVView | undefined;
+  hitAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportHit | undefined;
+  queryContext(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
 };
 
 /** A layout-facing attachment boundary with no scene, worker or editor imports. */
@@ -51,6 +59,14 @@ export class ViewportAttachment<Slot> {
   cancelInput(kind?: ViewportHostKind) {
     for (const key of kind ? [kind] : ["head", "uv"] as const) this.port.cancelInput(key);
     this.publish();
+  }
+  /** Picking is read-only; the application binds identity and geometry revision. */
+  contextAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportContextQuery | undefined {
+    if (this.phases[kind].phase !== "ready") return;
+    const hit = this.port.hitAt(kind, clientX, clientY);
+    if (!hit) return;
+    return { ...this.port.queryContext(hit.hit), source: kind,
+      affordance: hit.affordance, mirror: hit.mirror };
   }
   snapshot(): ViewportAttachmentState {
     const state = (kind: ViewportHostKind): ViewportHostState => ({

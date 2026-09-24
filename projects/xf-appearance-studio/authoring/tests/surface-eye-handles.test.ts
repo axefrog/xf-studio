@@ -79,6 +79,7 @@ test("projected tangents cross eye holes while actual surface controls keep head
     // click must still pass through to the camera rather than select makeup.
     const shapeClick = atUV("pointerdown",.3,.4);
     expect(shapeClick.defaultPrevented).toBe(false);
+    expect(editor.hitAt((shapeClick as any).clientX, (shapeClick as any).clientY)).toBeUndefined();
     expect(editor.diagnostics().dragging).toBe(false);
     expect(controls.enabled).toBe(true);
     expect(editor.diagnostics().handles.find(h=>h.kind==="point"&&h.index===0&&!h.mirror)!.selectable).toBe(true);
@@ -87,6 +88,7 @@ test("projected tangents cross eye holes while actual surface controls keep head
     eyes.position.x=-.06;eyes.updateMatrixWorld();frame();
     let obscured=tangent();
     expect(obscured.parentVisible).toBe(false);expect(obscured.selectable).toBe(false);
+    expect(editor.hitAt(obscured.screen.x,obscured.screen.y)?.hit.kind).not.toBe("tangent");
     emit("pointerdown",obscured.screen.x,obscured.screen.y);
     expect(editor.diagnostics().dragging).toBe(false);
     expect(editor.diagnostics().handles.find(h=>h.kind==="point"&&h.index===0&&!h.mirror)!.selectable).toBe(false);
@@ -94,6 +96,9 @@ test("projected tangents cross eye holes while actual surface controls keep head
     // The existing tangent itself has a legitimate plate anchor and is usable.
     let handle = tangent();
     expect(handle.selectable).toBe(true);
+    expect(editor.hitAt(handle.screen.x,handle.screen.y)).toMatchObject({
+      hit: { kind: "tangent", layerId: layer.id, index: 0, side: "outgoing" },
+      mirror: false, affordance: "tangent" });
     expect(emit("pointerdown",handle.screen.x,handle.screen.y).defaultPrevented).toBe(true);
     expect(controls.enabled).toBe(false);
     expect(editor.diagnostics().gesture).toBe("handle");
@@ -109,6 +114,7 @@ test("projected tangents cross eye holes while actual surface controls keep head
     const edited = structuredClone(layer);
     // Nor may an active handle continue through an opaque head occluder.
     head.position.z=.04;head.updateMatrixWorld();
+    expect(editor.hitAt(handle.screen.x,handle.screen.y)?.hit.kind).not.toBe("tangent");
     emit("pointermove",handle.screen.x+8,handle.screen.y+4);
     expect(layer).toEqual(edited);
     escape();
@@ -121,6 +127,8 @@ test("projected tangents cross eye holes while actual surface controls keep head
     // Eye-overlapping mirrored handles retain canonical direction and one Undo.
     head.position.z=-.02;head.updateMatrixWorld();frame();handle=tangent(true);
     expect(handle.selectable).toBe(true);
+    expect(editor.hitAt(handle.screen.x,handle.screen.y)).toMatchObject({ mirror: true,
+      hit: { kind: "tangent", layerId: layer.id, index: 0, side: "outgoing" } });
     emit("pointerdown",handle.screen.x,handle.screen.y);
     emit("pointermove",handle.screen.x+5,handle.screen.y);
     expect(layer.points[0].handles!.out.u).toBeLessThan(.04);

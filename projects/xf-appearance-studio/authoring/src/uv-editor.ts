@@ -5,6 +5,7 @@ import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } fro
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
+import type { ViewportHit } from "./viewport-attachment";
 
 type Hooks = {
   recipe(): Recipe; layer(): Layer | undefined; selected(): number;
@@ -199,6 +200,26 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     }
     return closest;
   }
+  function hitAt(clientX: number, clientY: number): ViewportHit | undefined {
+    if (drag || wheel) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientY < rect.top ||
+      clientX >= rect.left + rect.width || clientY >= rect.top + rect.height) return;
+    const layer = hooks.layer();
+    if (!layer) return { hit: { kind: "uv-empty" }, affordance: "empty" };
+    const p = coordinate({ clientX, clientY } as MouseEvent), handle = pickHandle(p);
+    if (handle) {
+      const hit = handle.kind === "point" ? { kind: "point" as const, layerId: layer.id, index: handle.index }
+        : handle.kind === "tangent" ? { kind: "tangent" as const, layerId: layer.id,
+          index: handle.index, side: handle.side === "in" ? "incoming" as const : "outgoing" as const }
+        : { kind: "field" as const, layerId: layer.id, id: handle.fieldId! };
+      return { hit, mirror: handle.mirror,
+        affordance: handle.kind === "origin" ? "warp-origin" : handle.kind === "field" ? "warp-vector" : handle.kind };
+    }
+    const shape = shapeHit(layer, p);
+    return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" }
+      : { hit: { kind: "uv-empty" }, affordance: "empty" };
+  }
   canvas.onpointerdown = e => {
     if ((e.button !== 0 && e.button !== 2) || drag) return;
     finishWheel();
@@ -354,7 +375,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
     elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
-  return { draw, resize: draw, cancelInput, dispose,
+  return { draw, resize: draw, cancelInput, dispose, hitAt,
     inputCapture: () => !!drag || !!wheel,
     snapshot: () => ({ ...view }), diagnostics: () => {
     const b = bounds();
