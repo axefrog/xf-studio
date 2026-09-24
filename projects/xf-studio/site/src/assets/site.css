@@ -263,6 +263,9 @@ time { white-space: nowrap; }
 }
 .fx-shift { background: radial-gradient(80% 70% at 30% 25%, oklch(1 0 0 / .18), transparent 70%), linear-gradient(118deg, oklch(.5 .09 195) 0%, oklch(.46 .12 285) 42%, oklch(.52 .14 330) 64%, oklch(.66 .1 75) 100%); }
 
+/* Download */
+.download-actions { margin: 0 0 1.5rem; }
+
 /* Status */
 .status-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
 .status-col { padding: 1.5rem 1.375rem; background: var(--bg-panel); border: 1px solid var(--line); }

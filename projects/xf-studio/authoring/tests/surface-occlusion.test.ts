@@ -3,6 +3,7 @@ import * as THREE from "three";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
 import {createSurfaceOcclusion} from "../src/surface-occlusion";
 import {extendSkin,restoreFirstWeights} from "../src/skin";
+import {privateAssetTest} from "./private-assets";
 
 function reference(mesh:THREE.Mesh,ray:THREE.Ray,limit:number){
   const caster=new THREE.Raycaster();caster.ray.copy(ray);
@@ -47,7 +48,7 @@ test("unchanged poses reuse samples; morph, bone, bind, geometry and world chang
     query();expect(helper.diagnostics().refits).toBe(before.refits+1);}
 });
 
-test("local real head BVH matches eight-influence ray picking through rest, morph and skin poses",async()=>{
+privateAssetTest("local real head BVH matches eight-influence ray picking through rest, morph and skin poses",async()=>{
   const bytes=await Bun.file(new URL("../public/assets/head.glb",import.meta.url)).arrayBuffer(),
     gltf=await new GLTFLoader().parseAsync(bytes,""),weights=restoreFirstWeights(bytes);
   const head=gltf.scene.getObjectByName("head") as THREE.SkinnedMesh;

@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildSite, fill, parsePage } from "../tools/build";
 import { checkSite, trackedRepoFiles } from "../tools/check";
-import { loadConfig, normalizeBaseUrl } from "../tools/config";
+import { loadConfig, normalizeBaseUrl, validateRelease, type SiteConfig } from "../tools/config";
 
 const temp: string[] = [];
-const fresh = (baseUrl?: string) => {
+const fresh = (baseUrl?: string, release: Partial<Pick<SiteConfig, "releaseStatus" | "release">> = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-site-test-"));
   temp.push(dir);
-  return buildSite({ outDir: dir, baseUrl });
+  return buildSite({ outDir: dir, baseUrl, ...release });
 };
 afterAll(() => { for (const dir of temp) rmSync(dir, { recursive: true, force: true }); });
 const messages = async (dir: string, repoFiles: Set<string> | null = null) =>
@@ -119,6 +119,49 @@ describe("checks", () => {
     const found = await messages(outDir);
     expect(found.some(m => m.includes("[data-release-status]"))).toBe(true);
     expect(found.some(m => m.includes("“download now”"))).toBe(true);
+  });
+
+  test("the default unreleased download section explains releases without linking one", async () => {
+    const { outDir } = fresh();
+    const html = readFileSync(join(outDir, "index.html"), "utf8");
+    expect(html).toContain('data-download="unreleased"');
+    expect(html).toContain("There is nothing to download yet.");
+    expect(html).not.toMatch(/\/releases/);
+    expect(html).toMatch(/<meta name="description" content="[^"]*No public release yet\."/);
+  });
+
+  test("a configured pre-release renders the tag link, checksums, attestation and SmartScreen steps", async () => {
+    const release = { tag: "v0.1.0-alpha.1", title: "XF Studio 0.1.0 alpha 1" };
+    const result = fresh(undefined, { releaseStatus: "prerelease", release });
+    const html = readFileSync(join(result.outDir, "index.html"), "utf8");
+    expect(html).toContain('data-download="prerelease"');
+    expect(html).toContain('href="https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.1"');
+    expect(html).toContain("XFStudio-0.1.0-alpha.1-win-x64-setup.zip");
+    expect(html).toContain("Get-FileHash");
+    expect(html).toContain("gh attestation verify XFStudio-0.1.0-alpha.1-win-x64-setup.zip --repo axefrog/xf-studio");
+    expect(html).toContain("<strong>Run anyway</strong>");
+    expect(html).toContain("Alpha pre-release");
+    expect(html).toMatch(/<meta name="description" content="[^"]*unsigned Windows alpha/);
+    expect((await checkSite(result.outDir, { config: result.config, repoFiles: null })).issues).toEqual([]);
+
+    // Pre-releases are invisible to /releases/latest, and direct asset links bypass the release page.
+    const file = join(result.outDir, "index.html");
+    writeFileSync(file, html.replace("</main>", '<a href="https://github.com/axefrog/xf-studio/releases/latest">x</a>' +
+      '<a href="https://github.com/axefrog/xf-studio/releases/tag/v0.0.9-alpha.1">y</a><p>Now tested in game.</p></main>'));
+    const found = (await checkSite(result.outDir, { config: result.config, repoFiles: null })).issues.map(issue => issue.message);
+    expect(found.filter(m => m.includes("release link must be"))).toHaveLength(2);
+    expect(found.some(m => m.includes("“tested in game”"))).toBe(true);
+    // The rendered section must match the configured state.
+    expect((await checkSite(result.outDir, { repoFiles: null })).issues.some(issue => issue.message.includes('rendered for releaseStatus "unreleased"'))).toBe(true);
+  });
+
+  test("release configuration is validated", () => {
+    expect(() => validateRelease({ releaseStatus: "unreleased", release: { tag: "v0.1.0-alpha.1", title: "x" } })).toThrow("must be null");
+    expect(() => validateRelease({ releaseStatus: "prerelease", release: null })).toThrow("needs release.tag");
+    expect(() => validateRelease({ releaseStatus: "prerelease", release: { tag: "v0.1.0", title: "x" } })).toThrow("use releaseStatus released");
+    expect(() => validateRelease({ releaseStatus: "released", release: { tag: "v1.0.0-rc.1", title: "x" } })).toThrow("use releaseStatus prerelease");
+    expect(() => validateRelease({ releaseStatus: "prerelease", release: { tag: "0.1.0-alpha.1", title: "x" } })).toThrow("needs release.tag");
+    expect(() => validateRelease({ releaseStatus: "released", release: { tag: "v1.0.0", title: "XF Studio 1.0.0" } })).not.toThrow();
   });
 
   test("future directions carry no dates or schedule promises, and the home page keeps them marked", async () => {

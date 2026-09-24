@@ -21,23 +21,25 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 
 | Path | Purpose |
 |---|---|
-| `site.config.json` | Site name, base URL, repository URL/branch, author, `statusReviewed` date, `releaseStatus`, navigation and size budgets. |
+| `site.config.json` | Site name, base URL, repository URL/branch, author, `statusReviewed` date, `releaseStatus` and `release`, navigation and size budgets. |
 | `src/layout.html` | Shared head, header, theme switch and footer. |
 | `src/pages/*.html` | One file per page, starting with a `<!--page {json} -->` header. |
 | `src/assets/` | `site.css`, `theme.js` and `favicon.svg`. All original; no fonts or raster images. |
 | `../authoring/public/style-guide.html` | Generated Studio reference copied byte-for-byte to `dist/style-guide.html`; design source changes require regeneration. |
 | `tools/build.ts`, `check.ts`, `serve.ts`, `qa.ts`, `cdp.ts`, `config.ts` | Build, checks, local server and browser QA. |
+| `tools/release.ts` | Renders the hero release statement, the home page `#download` section and the description's release summary from the config. |
 | `tests/site.test.ts` | Unit tests. |
 | `evidence/` | Concise, committed QA records. Screenshots stay in ignored `.evidence/`. |
 
 ## Updating content
 
-**Pages.** Edit `src/pages/<name>.html`. The header needs `title` and `description`; optional `nav` (the nav item id marked current), `noindex` and `absoluteLinks` (only for `404.html`, which Pages serves at any depth). Available placeholders: `{{root}}` (asset/page prefix), `{{home}}` (overview link), `{{repo}}`, `{{blob}}` and `{{tree}}` (repository URLs on the configured branch), `{{statusReviewed}}`, `{{statusReviewedIso}}`, `{{authorName}}`, `{{authorUrl}}` and `{{siteName}}`. An unknown placeholder fails the build. A new page needs no registration; add a `nav` entry in `site.config.json` if it belongs in the header.
+**Pages.** Edit `src/pages/<name>.html`. The header needs `title` and `description`; optional `nav` (the nav item id marked current), `noindex` and `absoluteLinks` (only for `404.html`, which Pages serves at any depth). Available placeholders: `{{root}}` (asset/page prefix), `{{home}}` (overview link), `{{repo}}`, `{{blob}}` and `{{tree}}` (repository URLs on the configured branch), `{{statusReviewed}}`, `{{statusReviewedIso}}`, `{{authorName}}`, `{{authorUrl}}`, `{{siteName}}`, and the release-driven `{{releaseStatement}}`, `{{downloadSection}}` and `{{releaseSummary}}` (the last is also allowed in the page description). An unknown placeholder fails the build. A new page needs no registration; add a `nav` entry in `site.config.json` if it belongs in the header.
 
 **Status and capabilities.** Before changing product wording, check it against [docs/status.md](../../../docs/status.md), the [project README](../README.md) and the [authoring guide](../authoring/README.md). Then set `statusReviewed` in `site.config.json` to the review date; the page shows it. Rules:
 
 - Describe only capabilities that are implemented and verified. Say *works locally*, *verified offline* or *preview study*, and keep previewed, packaged, verified and game-tested as separate claims.
-- Label research and in-development work, and never state or imply a release, download or in-game test that has not happened. While `releaseStatus` is `unreleased`, the home page must keep its visible `data-release-status` statement, and the check rejects links to releases or packages and phrases such as “download now” or “tested in game” (`UNRELEASED_CLAIMS` in `tools/check.ts`). When a real release exists, change `releaseStatus` together with the wording.
+- Label research and in-development work, and never state or imply a release, download or in-game test that has not happened. The home page always keeps its visible `data-release-status` statement and exactly one `#download` section rendered for the configured state. Phrases such as “tested in game” are rejected in every state (`GAME_CLAIMS`); while `releaseStatus` is `unreleased`, links to releases and phrases such as “download now” are also rejected (`UNRELEASED_CLAIMS`). Direct links to downloadable files are always rejected.
+- **Release state.** `releaseStatus` is `unreleased` (default, `release: null`), `prerelease` or `released`. The other two need `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }`. A tag with an `-alpha`, `-beta` or `-rc` suffix must use `prerelease`. `tools/release.ts` then renders the alpha warning, a link to that tag's GitHub release page, checksum and attestation checks, and SmartScreen guidance. Release links may point only at `/releases` or the configured tag page; `/releases/latest` is refused because GitHub excludes pre-releases from it. Switch the config **only after** the maintainer has published the draft release. The tag, title and asset name come from the desktop release workflow ([decisions](../../../research/authoring/desktop-release-decisions.md)).
 - **Positioning.** XF Studio is a studio for customising many parts of Cyberpunk 2077, starting with the user's own V and potentially expanding into other areas of the game. Eye makeup is its first working feature and today's focus, not the product's definition or limit, so keep feature-specific wording out of the page title and hero heading. Present every other area as a direction under discussion, never as a feature, and label eye-makeup-specific sections, numbers and illustrations as such. A unit test pins the title, hero heading and description to this positioning; change it only with a deliberate positioning decision.
 - Future directions carry no dates or schedule promises, and each later area requires discussion before it is built. Mark vision and direction sections with `data-future`. The check rejects years, months, quarters and schedule words such as “soon”, “upcoming” or “will ship” inside them (`FUTURE_SCHEDULE`), “coming soon” anywhere while unreleased, and a home page with no `data-future` section.
 - Repository links use `{{blob}}/<path>`. The check verifies that every such target is a **tracked** file, so ignored local files cannot slip in as links.
@@ -73,7 +75,7 @@ Run `bun run qa` after any visual or content change. It serves `dist/` under the
 - the no-JavaScript fallback;
 - skip-link focus.
 
-It also captures a forced-colours view. Screenshots and `summary.json` go to `.evidence/qa-<date>/` (ignored). The numbers catch regressions; they are not a substitute for looking at the screenshots at normal and enlarged size. Record a short dated summary in `evidence/`.
+It also captures a forced-colours view. To review the pre-release state before switching the config, build it into `dist/` with `bun -e 'import {buildSite} from "./tools/build"; buildSite({releaseStatus: "prerelease", release: {tag: "v0.1.0-alpha.1", title: "XF Studio 0.1.0 alpha 1"}})'`, then run `bun tools/qa.ts`. Screenshots and `summary.json` go to `.evidence/qa-<date>/` (ignored). The numbers catch regressions; they are not a substitute for looking at the screenshots at normal and enlarged size. Record a short dated summary in `evidence/`.
 
 ## Deployment
 
@@ -110,7 +112,7 @@ These are manual owner decisions, not performed by any script here:
 - deployments time out after 10 minutes;
 - soft limits of 100 GB bandwidth per month and 10 builds per hour.
 
-Pages must not be used for commercial transactions, SaaS or sensitive data. The site uses about 86 KiB.
+Pages must not be used for commercial transactions, SaaS or sensitive data. The site pages and assets use under 100 KiB; the published style guide adds most of the remaining 423 KiB. Release downloads are hosted by GitHub Releases, never by Pages.
 
 **Troubleshooting.**
 
