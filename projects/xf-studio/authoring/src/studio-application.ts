@@ -251,6 +251,10 @@ export class StudioApplication {
   }
   capability(action: StudioAction): StudioCapability {
     const s = this.services;
+    // With a loaded collection but no selected preset the editor shows an empty recipe no
+    // preset owns; content written there would be discarded at the next preset switch.
+    if (ACTION_DESCRIPTORS[action.kind].effect === "content" && this.unowned())
+      return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
       action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
@@ -316,10 +320,15 @@ export class StudioApplication {
       return { ok: true, result };
     } catch (error) { return { ok: false, code: "invalid_value", message: (error as Error).message }; }
   }
+  /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
+    if (this.gesture || this.unowned()) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
-  controlEdit(id: string, action: RecipeAction) { this.services.controls.edit(id, action.layerId, action); }
+  controlEdit(id: string, action: RecipeAction) {
+    if (this.gesture || this.unowned()) return;
+    this.services.controls.edit(id, action.layerId, action);
+  }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
   requestCapability(request: CollectionRequest): StudioCapability {
@@ -330,7 +339,13 @@ export class StudioApplication {
   }
   async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
     ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
+  /** True when a collection is loaded and no preset owns the editor recipe. */
+  private unowned() {
+    const owner = this.services.collection?.selectedPreset();
+    return !!owner?.loaded && !owner.id;
+  }
   canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (source === "surface" && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
@@ -354,7 +369,11 @@ export class StudioApplication {
   beginGesture(source: GestureSource, layerId: string) {
     if (!this.canBeginGesture(source, layerId).available) return false;
     const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
-    if (!layer || !this.services.gestures.begin(source, layer)) return false;
+    if (!layer) return false;
+    // Finish an open form transaction first, so its later Escape cannot revert this gesture.
+    const control = this.services.controls.snapshot();
+    if (control) this.services.controls.commit(control.id);
+    if (!this.services.gestures.begin(source, layer)) return false;
     this.gesture = { source, layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
   }
@@ -400,6 +419,7 @@ function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | und
     schema.maxLength !== undefined && value.length > schema.maxLength))
     return { available: false, code: "limit", reason: "The text length is outside the supported range." };
 }
+const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function reasonCode(action: StudioAction, reason: string): StudioReasonCode {

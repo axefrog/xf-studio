@@ -1,4 +1,5 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
+import { cancelsGesture } from "./gesture-cancel";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
@@ -342,7 +343,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     { capture: true, signal: listeners.signal });
   window.addEventListener("blur", () => { stop(true); finishWheel(true); }, { signal: listeners.signal });
   window.addEventListener("keydown", e => {
-    if ((drag || wheel) && (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "z"))) {
+    if ((drag || wheel) && cancelsGesture(e)) {
       // If another context replaced this one, leave its keyboard action alone.
       const valid = drag ? validDrag() : validWheel();
       if (valid) { e.preventDefault(); e.stopImmediatePropagation(); }

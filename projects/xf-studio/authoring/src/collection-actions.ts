@@ -56,6 +56,8 @@ export class CollectionActions {
         revision: oldest.revision } : undefined };
   }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
+  /** Selected preset ID without cloning; undefined when the collection has no selected preset. */
+  selected(): string | undefined { return this.session.state.selected; }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

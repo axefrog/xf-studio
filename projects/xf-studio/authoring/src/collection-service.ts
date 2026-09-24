@@ -64,6 +64,10 @@ export class CollectionService {
       summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary() };
   }
   snapshot() { return this.actions?.snapshot(); }
+  /** Cheap ownership read: `loaded` is false until a draft exists; `id` is the preset the editor belongs to. */
+  selectedPreset(): { loaded: boolean; id?: string } {
+    return this.actions ? { loaded: true, id: this.actions.selected() } : { loaded: false };
+  }
   /** A package response describes its request snapshot, not necessarily the live draft. */
   lastPackageIsCurrent(): boolean {
     if (!this.packageSource || !this.actions) return false;

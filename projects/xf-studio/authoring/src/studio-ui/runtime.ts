@@ -95,18 +95,9 @@ export class StudioRuntime {
     this.changed();
     return outcome;
   }
-  /**
-   * With a loaded collection but no selected preset, the editor shows an empty recipe that
-   * no preset owns; edits there would be discarded (review finding). Gate authoring on it.
-   */
-  presetGate(): { available: boolean; reason?: string } {
-    const draft = this.port.library.summary().draft;
-    return draft && !draft.selected ? { available: false, reason: "Add or select a preset first; layers belong to a preset." } : { available: true };
-  }
-  /** Layer-creation capability combined with the preset gate. */
+  /** Layer creation; the application refuses it (with a reason) while no preset owns the editor. */
   addLayerCapability() {
-    const gate = this.presetGate();
-    return gate.available ? this.port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }) : gate;
+    return this.port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } });
   }
   /** A toast "Undo" that only undoes the change it announced, never a later unrelated edit. */
   undoAction(): FeedbackAction {

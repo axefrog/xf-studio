@@ -292,7 +292,7 @@ function bindEdit(id: string, control: HTMLInputElement) {
 }
 $("undo").onclick = () => { dispatchStudio({ kind: "recipe.undo" }); };
 window.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
     e.preventDefault();
     dispatchStudio({ kind: "recipe.undo" });
   }
