@@ -355,7 +355,9 @@ export async function createScene(
             if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
             o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
             o.frustumCulled = false;
-            const mat = new THREE.MeshStandardMaterial({
+            // Strands: fibre lighting replaces the card's dielectric specular (see hair-shading.ts).
+            const mat = new (index && strand ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
+              ...(index && strand ? { specularIntensity: 0 } : {}),
               color: strand ? 0xffffff : 0x342c29,
               roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
               // Strands: no alpha test, so MSAA alpha-to-coverage keeps coverage proportional to the

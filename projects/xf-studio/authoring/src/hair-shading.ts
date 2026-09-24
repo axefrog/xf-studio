@@ -59,6 +59,16 @@ const STRAND_COVERAGE_GLSL = `
         diffuseColor.a *= xfsAlphaCutoff >= 1.0 ? 0.0 :
           clamp(max(strandAlpha - xfsAlphaCutoff, 0.0) / (1.0 - xfsAlphaCutoff), 0.0, 1.0);`;
 
+/**
+ * The game lights hair as fibres from a G-buffer strand tangent frame and
+ * ID-scaled roughness (deferred R/TT/TRT model, compiled outside the material
+ * cache). A flat card's own dielectric specular, with its grazing-angle
+ * Fresnel, has no counterpart there, so strand materials disable it
+ * (specularIntensity 0). No substitute highlight lobe is drawn: a trial
+ * Kajiya-Kay lobe needed invented widths/normalisation and produced bright
+ * bands, so fibre highlights are an explicit omission until the game's hair
+ * lighting defaults are captured.
+ */
 type StrandSource = {
   kind: "strand"; id: THREE.Texture; gradient: THREE.Texture; profile: THREE.Texture;
   sampleCount: number; material: HairMaterialParameters;
@@ -123,5 +133,5 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
     }
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-2`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-3`;
 }
