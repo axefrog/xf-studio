@@ -86,8 +86,8 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["authoring", "files", "library", "preferences",
-    "previewReadiness", "snapshot", "subscribe", "viewport"]);
+  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "library", "preferences",
+    "previewReadiness", "snapshot", "status", "subscribe", "viewport"]);
   expect("document" in shell.authoring).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);
   const initial = shell.snapshot(), firstLayer = initial.authoring.document.recipe.layers[0];

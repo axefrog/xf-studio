@@ -1,4 +1,7 @@
+import type { AuthoringPresentation } from "./authoring-presentation";
 import type { CollectionViewPort } from "./collection-application";
+import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
+import type { Layer, Recipe, WarpField } from "./recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication } from "./studio-application";
@@ -15,7 +18,8 @@ export type StudioPresentationPort<Slot> = {
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture"> & {
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" |
+    "glitterModelCatalogue"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
@@ -30,6 +34,22 @@ export type StudioPresentationPort<Slot> = {
     snapshot(): ReadonlyDeep<ReturnType<UIPreferenceActions["snapshot"]>>;
   };
   readonly previewReadiness: { snapshot(): Readonly<PreviewReadiness> };
+  /**
+   * Cheap, cached read-only editor view for repainting controls on every change.
+   * Returned objects are detached from the authored document; `revision` changes
+   * whenever geometry is published, including in-place gesture updates.
+   */
+  readonly editor: {
+    recipe(): ReadonlyDeep<Recipe>;
+    layer(): ReadonlyDeep<Layer> | undefined;
+    active(): number;
+    selected(): number;
+    selectedField(): ReadonlyDeep<WarpField> | undefined;
+    revision(): number;
+    canUndo(): boolean;
+  };
+  /** Browser draft autosave and optional preview-asset diagnostics from trusted adapters. */
+  readonly status: { snapshot(): ReadonlyDeep<PresentationStatus> };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -37,9 +57,11 @@ export type StudioPresentationPort<Slot> = {
     viewport: ReturnType<ViewportAttachment<Slot>["snapshot"]>;
     preferences: ReturnType<UIPreferenceActions["snapshot"]>;
     previewReadiness: PreviewReadiness;
+    status: PresentationStatus;
   }>;
   subscribe(listener: () => void): () => void;
 };
+type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
 export function createStudioPresentation<Slot>(sources: {
@@ -49,9 +71,15 @@ export function createStudioPresentation<Slot>(sources: {
   viewport: ViewportAttachment<Slot>;
   preferences: UIPreferenceActions;
   previewReadiness: { readiness(): PreviewReadiness; subscribe(listener: () => void): () => void };
+  /** Optional for fixtures; without it the editor view falls back to detached snapshots. */
+  editor?: AuthoringPresentation;
+  status?: StatusSource;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
-    v = sources.viewport, p = sources.preferences, r = sources.previewReadiness;
+    v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
+    e = sources.editor;
+  const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
+    subscribe: () => () => {} };
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -76,9 +104,22 @@ export function createStudioPresentation<Slot>(sources: {
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
+    previewState: () => a.previewState(), finishCatalogue: () => a.finishCatalogue(),
+    glitterModelCatalogue: () => a.glitterModelCatalogue(),
+  };
+  const fallback = () => a.snapshot().document;
+  const editor: StudioPresentationPort<Slot>["editor"] = e ? {
+    recipe: () => e.recipe(), layer: () => e.layer(), active: () => e.active, selected: () => e.selected,
+    selectedField: () => e.selectedField(), revision: () => e.revision, canUndo: () => e.canUndo,
+  } : {
+    recipe: () => fallback().recipe, layer: () => { const d = fallback(); return d.recipe.layers[d.active]; },
+    active: () => fallback().active, selected: () => fallback().selected,
+    selectedField: () => { const d = fallback(), layer = d.recipe.layers[d.active];
+      return layer?.fields.find(field => field.id === d.fieldSelection[layer.id]) ?? layer?.fields[0]; },
+    revision: () => -1, canUndo: () => a.capability({ kind: "recipe.undo" }).available,
   };
   const library: CollectionViewPort = {
-    view: () => l.view(), subscribe: listener => l.subscribe(listener),
+    view: () => l.view(), summary: () => l.summary(), subscribe: listener => l.subscribe(listener),
     capability: action => l.capability(action), dispatch: action => l.dispatch(action),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
@@ -102,12 +143,14 @@ export function createStudioPresentation<Slot>(sources: {
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness,
+    previewReadiness, editor: Object.freeze(editor),
+    status: Object.freeze({ snapshot: () => s.snapshot() }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
-      viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness() }),
+      viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
+      status: s.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
-        v.subscribe(listener), p.subscribe(listener), r.subscribe(listener)];
+        v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener)];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

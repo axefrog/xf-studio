@@ -1,4 +1,4 @@
-import { CollectionActions, type CollectionAction, type ReadonlyDeep } from "./collection-actions";
+import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
 import { collectionDraft, type CollectionWorkspace } from "./collection-workspace";
 import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
@@ -23,6 +23,9 @@ export type CollectionResult =
 export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string };
 export type CollectionServiceState = { busy: boolean; progress?: CollectionProgress;
   summaries: CollectionSummary[]; draft?: ReadonlyDeep<CollectionWorkspace> };
+/** Cheap detached projection for frequently repainted views; see `view()` for the full draft. */
+export type CollectionServiceSummary = { busy: boolean; progress?: CollectionProgress;
+  summaries: CollectionSummary[]; draft?: CollectionDraftSummary };
 export type CollectionOutcome = { ok: true; result: CollectionResult } |
   { ok: false; code: string; message: string };
 export type CollectionTransport = {
@@ -55,6 +58,10 @@ export class CollectionService {
   view(): ReadonlyDeep<CollectionServiceState> {
     return structuredClone({ busy: this.busy, progress: this.progress, summaries: this.summaries,
       draft: this.actions?.view() });
+  }
+  summary(): CollectionServiceSummary {
+    return { busy: this.busy, progress: this.progress && { ...this.progress },
+      summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary() };
   }
   snapshot() { return this.actions?.snapshot(); }
   /** A package response describes its request snapshot, not necessarily the live draft. */

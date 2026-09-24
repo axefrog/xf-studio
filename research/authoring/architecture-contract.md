@@ -25,6 +25,8 @@ The trusted authoring core and Studio bootstrap are independent of today's contr
 5. Add an action/capability entry to [the catalogue](ui-action-catalogue.md), update [the capability inventory](ui-capability-inventory.md) when user-visible scope changes, and update the relevant architecture or feature contract. Update the [mod pipeline guide](studio-to-mod-pipeline.md) and visually recheck its diagrams for any pipeline change. Credit community learning in [the provenance record](../../docs/community-credits.md).
 6. Verify the behavior at its boundary: focused pure tests for validation/state/Undo; adapter tests for worker, geometry or transport behavior; and a `?verify=1` task flow when interaction or persistence changes. Keep authored draft data and private assets out of fixtures and Git. Run the authoring suite, type check and build for a coherent integration checkpoint.
 
+The authoritative [interface style guide](../../projects/xf-appearance-studio/authoring/public/style-guide.html) shows how presentation work composes from the same actions, capabilities, detached reads and device ports; regenerate it with `bun tools/build-style-guide.ts` whenever `studio.css` or a pattern changes (`tests/style-guide.test.ts` enforces this). `tests/studio-ui-boundary.test.ts` enforces the presentation's import boundary.
+
 ## Change review questions
 
 - Can another UI invoke this capability without clicking today's DOM control or importing `main.ts`?

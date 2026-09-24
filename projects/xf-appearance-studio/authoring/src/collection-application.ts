@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { CollectionAction } from "./collection-actions";
 import { CollectionService, type CollectionOutcome, type CollectionRequest,
-  type CollectionServiceState, type CollectionTransport } from "./collection-service";
+  type CollectionServiceState, type CollectionServiceSummary, type CollectionTransport } from "./collection-service";
 import type { CollectionWorkspace } from "./collection-workspace";
 import type { ReadonlyDeep } from "./read-only";
 import type { Recipe } from "./recipe";
@@ -12,6 +12,8 @@ import type { LibraryState } from "./workspace-state";
 type ViewAction = Exclude<CollectionAction, { kind: "collection.saved" }>;
 export type CollectionViewPort = {
   view(): ReadonlyDeep<CollectionServiceState>;
+  /** Primitive-only projection for repainting lists; the selected preset uses its live layer count. */
+  summary(): ReadonlyDeep<CollectionServiceSummary>;
   subscribe(listener: () => void): () => void;
   capability(action: ViewAction): ReturnType<StudioApplication["capability"]>;
   dispatch(action: ViewAction): ReturnType<StudioApplication["dispatch"]>;
@@ -37,6 +39,12 @@ export class CollectionApplication implements CollectionViewPort {
     files.attachCollection(this.service);
   }
   view() { return this.service.view(); }
+  summary() {
+    const summary = this.service.summary(), selected = summary.draft?.selected;
+    for (const preset of summary.draft?.presets ?? [])
+      if (preset.id === selected) preset.layers = this.document.recipe.layers.length;
+    return summary;
+  }
   subscribe(listener: () => void) { return this.files.subscribe(listener); }
   workspaceSnapshot() { return this.service.snapshot(); }
   currentLayerCount() { return this.document.recipe.layers.length; }

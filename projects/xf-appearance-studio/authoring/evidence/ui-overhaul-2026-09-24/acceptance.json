@@ -1,0 +1,462 @@
+{
+  "date": "2026-09-24",
+  "url": "http://127.0.0.1:4401/?verify=1",
+  "isolated": {
+    "verification": true,
+    "dataDir": "disposable temp",
+    "chromeProfile": "disposable temp"
+  },
+  "build": false,
+  "results": [
+    {
+      "step": "boot: head, UV and preview reach Ready in the isolated verification workspace",
+      "pass": true,
+      "detail": {
+        "verification": true,
+        "head": "ready",
+        "layers": 4,
+        "errors": 0
+      }
+    },
+    {
+      "step": "presets: add, inline rename (F2), reorder (Alt+↑), duplicate, remove and restore",
+      "pass": true,
+      "detail": {
+        "before": 1,
+        "afterAdd": 2,
+        "renamed": "Chrome dusk",
+        "position": 0,
+        "afterCopy": 3,
+        "afterRemove": 2,
+        "afterRestore": 3
+      }
+    },
+    {
+      "step": "layers: add, rename, reorder, hide, duplicate, remove and guarded Undo",
+      "pass": true,
+      "detail": {
+        "count": 2,
+        "index": 0,
+        "hidden": true,
+        "afterRemove": 1,
+        "restored": true
+      }
+    },
+    {
+      "step": "inspector: a keyboard burst on a slider is one Undo step; Escape restores the burst's start",
+      "pass": true,
+      "detail": {
+        "start": 0.85,
+        "changed": 0.8,
+        "escaped": 0.8,
+        "d0": 6,
+        "d1": 7,
+        "d2": 7
+      }
+    },
+    {
+      "step": "UV: point drag is one Undo; a live Escape mid-drag cancels without an entry",
+      "pass": true,
+      "detail": {
+        "before": {
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333
+            },
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333
+            },
+            "mode": "symmetric"
+          }
+        },
+        "moved": {
+          "u": 0.3242717607345315,
+          "v": 0.2398632155007463,
+          "weight": 1,
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333
+            },
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333
+            },
+            "mode": "symmetric"
+          }
+        },
+        "after": {
+          "u": 0.3242717607345315,
+          "v": 0.2398632155007463,
+          "weight": 1,
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333
+            },
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333
+            },
+            "mode": "symmetric"
+          }
+        },
+        "undone": {
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333
+            },
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333
+            },
+            "mode": "symmetric"
+          }
+        },
+        "d0": 7,
+        "d1": 8,
+        "d2": 8,
+        "midGesture": true
+      }
+    },
+    {
+      "step": "context menu: stationary right-click on a UV point opens target commands; right-drag pans without a menu",
+      "pass": true,
+      "detail": {
+        "heading": "Contour pointMirrored copy · edits the authored side",
+        "items": [
+          {
+            "label": "Select point",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Remove point",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Smooth handles",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Symmetric handles",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Corner handles",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Set point pigment…",
+            "disabled": false,
+            "reason": ""
+          },
+          {
+            "label": "Set point edge softness…",
+            "disabled": true,
+            "reason": "Enable point edge softness before editing an individual edge."
+          },
+          {
+            "label": "Both eyes",
+            "disabled": false,
+            "reason": ""
+          }
+        ],
+        "menuAfterPan": false,
+        "panned": true
+      }
+    },
+    {
+      "step": "context menu: disabled commands show the application's reason (keyboard Shift+F10)",
+      "pass": true,
+      "detail": {
+        "disabled": true,
+        "reason": "Invalid layer position."
+      }
+    },
+    {
+      "step": "head: right-click on a surface point opens point commands; background shows view commands; right-drag pans",
+      "pass": true,
+      "detail": {
+        "pointMenu": "Contour point | Select point, Remove point, Smooth handles",
+        "bgMenu": "BackgroundNo editable control under the cursor | Front view, Surface controls, Plate wireframe",
+        "panned": true,
+        "menuAfter": false
+      }
+    },
+    {
+      "step": "performance: UV drag with the Library panel visible keeps frame pacing (p95 ≤ 34 ms)",
+      "pass": true,
+      "detail": {
+        "n": 93,
+        "p50": 16.700000000000728,
+        "p95": 16.80000000000291,
+        "max": 17
+      }
+    },
+    {
+      "step": "native text menus stay available in text fields; suppressed on other surfaces",
+      "pass": true,
+      "detail": [
+        {
+          "target": "INPUT.field title-field",
+          "prevented": false
+        },
+        {
+          "target": "DIV.dock-tabbar-fill",
+          "prevented": true
+        }
+      ]
+    },
+    {
+      "step": "quality: 2K shows Updating then Ready with no stale claim",
+      "pass": true,
+      "detail": [
+        "updating:2048",
+        "ready:2048"
+      ]
+    },
+    {
+      "step": "files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import",
+      "pass": true,
+      "detail": {
+        "recipeSchema": "xfs/recipe-7",
+        "collectionPresets": 3,
+        "mask": {
+          "w": 2048,
+          "h": 2048
+        },
+        "presetsAfter": [
+          "Chrome dusk",
+          "Chrome dusk (copy)",
+          "Untitled look",
+          "xfs.recipe"
+        ],
+        "confirm": null,
+        "draftBefore": "Makeup collection",
+        "imported": {
+          "name": "Makeup collection",
+          "presets": 3
+        },
+        "restored": "Renamed before import"
+      }
+    },
+    {
+      "step": "library: Ctrl+S saves a revision; an external newer revision produces a conflict with recovery actions",
+      "pass": true,
+      "detail": {
+        "revision": 3,
+        "external": {
+          "ok": true,
+          "status": 200
+        },
+        "chip": "Newer r4 saved",
+        "toast": {
+          "text": "LibraryThis collection changed in another window. Open the saved version or save a separate copy.Refresh librarySave as copy",
+          "actions": [
+            "Refresh library",
+            "Save as copy"
+          ]
+        },
+        "kept": 0.61
+      }
+    },
+    {
+      "step": "library: open a saved revision, then recover the previous draft",
+      "pass": true,
+      "detail": {
+        "draftName": "Makeup collection",
+        "opened": "Saved elsewhere",
+        "recovered": {
+          "name": "Makeup collection",
+          "opacity": 0.61
+        }
+      }
+    },
+    {
+      "step": "package: Check omits the preview-study layer, shows Current, turns Stale after an edit",
+      "pass": true,
+      "detail": {
+        "fresh": "current",
+        "stale": "stale",
+        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p411b432292424d87850196594efcd1b4Untitled lookxfs_p2dd6b1998e8c4d1f82c0c9c8fa3ed9d3xfs.recipexfs_p4d26f10d010941f096181a6fc541d282Omit"
+      }
+    },
+    {
+      "step": "review fixes: Mod package repaints beside a visible Library; a bare slider click opens no transaction",
+      "pass": true,
+      "detail": {
+        "bothVisible": true,
+        "stale": "stale",
+        "fresh": "current",
+        "control": null,
+        "depth0": 4,
+        "depth1": 4
+      }
+    },
+    {
+      "step": "dock: a large panel overlapping another group floats until the CURSOR reaches a guide",
+      "pass": true,
+      "detail": {
+        "during": {
+          "label": "",
+          "overlap": true
+        },
+        "floating": true,
+        "label": "Add as tab",
+        "merged": [
+          "finish",
+          "character"
+        ],
+        "window": {
+          "x": 384,
+          "y": 168,
+          "w": 760,
+          "h": 520,
+          "cx": 764,
+          "cy": 428
+        }
+      }
+    },
+    {
+      "step": "dock: floating panels magnetize by cursor band into a composite; keyboard menu docks it back",
+      "pass": true,
+      "detail": {
+        "composite": {
+          "kind": "split",
+          "w": 760
+        },
+        "docked": true,
+        "menu": [
+          "Float panel",
+          "Move or resize window…",
+          "Add as tab to",
+          "Place beside",
+          "Dock to workspace edge",
+          "Maximize group",
+          "Close Motion",
+          "Reset layout"
+        ]
+      }
+    },
+    {
+      "step": "F6 cycles focus through header, groups and status bar",
+      "pass": true,
+      "detail": [
+        "Presets, Library, Mod package, Motion group",
+        "Layers group",
+        "Head group",
+        "UV map group",
+        "Colour & finish, Character group"
+      ]
+    },
+    {
+      "step": "theme: explicit Light overrides a dark OS preference",
+      "pass": true,
+      "detail": {
+        "light": "light"
+      }
+    },
+    {
+      "step": "reload restores layout, theme, selection, preset names, UV view and FOV",
+      "pass": true,
+      "detail": {
+        "diff": [
+          "fov"
+        ],
+        "floating": 1,
+        "before": {
+          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
+          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
+          "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
+          "fov": 30,
+          "theme": "light",
+          "names": [
+            "Chrome dusk",
+            "Chrome dusk (copy)",
+            "Untitled look",
+            "xfs.recipe"
+          ]
+        },
+        "after": {
+          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
+          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
+          "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
+          "fov": 42,
+          "theme": "light",
+          "names": [
+            "Chrome dusk",
+            "Chrome dusk (copy)",
+            "Untitled look",
+            "xfs.recipe"
+          ]
+        }
+      }
+    },
+    {
+      "step": "recovery: an off-screen saved window is pulled back on reload",
+      "pass": true,
+      "detail": {
+        "window": {
+          "x": 1504,
+          "y": 872
+        },
+        "visible": {
+          "x": 1509,
+          "y": 921,
+          "w": 398,
+          "h": 32,
+          "cx": 1708,
+          "cy": 937
+        }
+      }
+    },
+    {
+      "step": "compact layout at 900 px uses its own arrangement",
+      "pass": true,
+      "detail": [
+        "Head, UV map group",
+        "Layers, Presets, Library, Mod package group",
+        "Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality group"
+      ]
+    },
+    {
+      "step": "no application exceptions or unexpected console errors during the pass (one intentional 409 conflict excluded)",
+      "pass": true,
+      "detail": {
+        "unexpected": [],
+        "expectedConflicts": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "wide-dark-default.png",
+    "context-menu-uv-point.png",
+    "context-menu-layer-disabled-reason.png",
+    "context-menu-head-point.png",
+    "library-conflict.png",
+    "package-check-current.png",
+    "package-check-stale.png",
+    "dock-large-overlap-no-snap.png",
+    "dock-cursor-on-centre-guide.png",
+    "dock-magnetic-composite.png",
+    "wide-light-after-edits.png",
+    "wide-light-reloaded.png",
+    "compact-dark.png",
+    "compact-light.png",
+    "wide-dark-system.png"
+  ]
+}
