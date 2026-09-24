@@ -9,17 +9,17 @@ import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { QualityAction, PreviewQualityActions } from "./preview-quality-actions";
 import type { Layer, Point, WarpField } from "./recipe";
 import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
-import type { SavedAppearanceAction, SavedAppearanceActions } from "./saved-appearance-actions";
+import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ValueSchema } from "./studio-action-descriptors";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 
-export type StudioAction = RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
+export type StudioAction = { kind: "recipe.undo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
-  { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" };
+  { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
 export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
   "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
 export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode };
@@ -32,7 +32,8 @@ export type StudioGestureProposal =
   | { kind: "path.replacePoints"; points: Point[] };
 
 type Services = { document: AuthoringDocument; recipe: RecipeActions;
-  layer: (action: LayerAction) => void; gestures: AuthoringGestures; controls: AuthoringControlEdits;
+  layer: (action: LayerAction) => void; undo: () => boolean;
+  gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
 const selection = new Set<StudioAction["kind"]>(["layer.select", "point.select", "field.select"]);
@@ -221,14 +222,20 @@ export class StudioApplication {
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
-      preview: s.preview?.snapshot(), motion: s.motion?.snapshot(),
+      preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(), motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /** A saved-V adapter has already applied the morph; synchronize only the selector. */
+  recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
+    if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
   }
   capability(action: StudioAction): StudioCapability {
     const s = this.services;
     let raw: { available: boolean; reason?: string };
-    if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
+    if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
+      { available: false, reason: "There is no recipe change to undo." };
+    else if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
     else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
       raw = layerCapability(s.document.recipe, action);
     else if (collectionKinds.has(action.kind)) raw = s.collection?.actionCapability(action as CollectionAction)
@@ -246,6 +253,7 @@ export class StudioApplication {
   actionsFor(target: StudioTarget): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
     let actions: StudioAction[] = [];
+    if (target.kind === "workspace") actions = [{ kind: "recipe.undo" }];
     if (target.kind === "collection") actions = [
       { kind: "preset.edit", command: { kind: "add" } }, { kind: "preset.edit", command: { kind: "restore" } },
       { kind: "collection.undoOpen" }];
@@ -275,7 +283,8 @@ export class StudioApplication {
     try {
       const s = this.services;
       let result: unknown;
-      if (recipeKinds.has(action.kind)) s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind));
+      if (action.kind === "recipe.undo") result = s.undo();
+      else if (recipeKinds.has(action.kind)) s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind));
       else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled") s.layer(action);
       else if (collectionKinds.has(action.kind)) s.collection!.dispatch(action as CollectionAction);
       else if (action.kind.startsWith("preview.") || action.kind.startsWith("camera.")) result = s.preview!.dispatch(action as PreviewAction);
@@ -383,7 +392,7 @@ function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
   return "invalid_value";
 }
 function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
-  if (selection.has(action.kind) || action.kind.startsWith("preview.") ||
+  if (action.kind === "recipe.undo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
     action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
     action.kind.startsWith("quality.") || action.kind.startsWith("savedV.")) return "none";
   if (action.kind === "preset.edit" && action.command.kind === "remove" ||

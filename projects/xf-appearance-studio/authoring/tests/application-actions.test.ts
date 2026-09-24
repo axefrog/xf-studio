@@ -167,7 +167,8 @@ test("preview commands keep camera and lighting state readable without DOM and e
     setHair: () => {}, setDetail: () => {}, setEyeShape: index => calls.push(`eye:${index}`),
     setPiercings: enabled => calls.push(`piercings:${enabled}`),
     setPiercingPreview: (style, definition) => calls.push(`piercing:${style}:${definition}`),
-    piercingOptions: () => [{ id: "stud", definitions: ["silver"] }],
+    piercingOptions: () => [{ id: "stud", label: "Stud", choices: [
+      { index: 1, definition: "silver", label: "Silver" }] }],
     availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
   };
   const actions = new PreviewActions(freshWorkspace().preview, port);
@@ -180,6 +181,9 @@ test("preview commands keep camera and lighting state readable without DOM and e
   const detached = actions.snapshot();
   expect(detached.camera.fov).toBe(10);
   expect(detached.exposure).toBe(1.5);
+  const choices = actions.piercingOptions();
+  choices[0].choices[0].label = "Forged";
+  expect(actions.piercingOptions()[0].choices[0].label).toBe("Silver");
   expect(notifications).toBe(3);
   expect(calls).toEqual(["exposure:1.5", "angle:120"]);
   expect(actions.capability({ kind: "preview.setPiercingPreview", style: "stud", definition: "gold" }).available).toBe(false);

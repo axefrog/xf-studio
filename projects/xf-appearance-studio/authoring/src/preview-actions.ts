@@ -17,6 +17,8 @@ export type PreviewAction =
   | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean };
 export type PreviewActionResult = { limited?: boolean };
 export type PreviewCapability = { available: boolean; reason?: string };
+export type PiercingPreviewOption = { id: string; label: string;
+  choices: { index: number; definition: string; label: string }[] };
 export type PreviewPort = {
   cameraState(): CameraState; front(): boolean; setFov(degrees: number): boolean | undefined; endFovGesture(): void;
   restoreCamera(camera: CameraState): void;
@@ -25,7 +27,7 @@ export type PreviewPort = {
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
   setPiercingPreview(style: string, definition: string): void;
-  piercingOptions?(): { id: string; definitions: string[] }[];
+  piercingOptions?(): PiercingPreviewOption[];
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
 };
@@ -40,6 +42,9 @@ export class PreviewActions {
       eyeShape: initial.eyeShape, piercings: initial.piercings, piercingStyle: initial.piercingStyle,
       piercingDefinition: initial.piercingDefinition,
       exposure: initial.exposure, lightAngle: initial.lightAngle };
+  }
+  piercingOptions(): Readonly<PiercingPreviewOption[]> {
+    return structuredClone(this.port.piercingOptions?.() ?? []);
   }
   snapshot(): Readonly<PreviewConfig & { camera: CameraState }> {
     return structuredClone({ ...this.state, camera: this.port.cameraState() });
@@ -56,7 +61,7 @@ export class PreviewActions {
       return { available: false, reason: "Eye shape must be between 0 and 21." };
     if (action.kind === "preview.setPiercingPreview" && action.style) {
       const option = this.port.piercingOptions?.().find(item => item.id === action.style);
-      if (!option || !option.definitions.includes(action.definition))
+      if (!option || !option.choices.some(choice => choice.definition === action.definition))
         return { available: false, reason: "That piercing style or colour is unavailable." };
     }
     if (action.kind === "preview.setPiercings" && action.enabled && !this.port.piercingOptions?.().length)

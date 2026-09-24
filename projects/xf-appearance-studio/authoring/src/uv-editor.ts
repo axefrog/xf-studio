@@ -6,6 +6,7 @@ import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
 import type { ViewportHit } from "./viewport-attachment";
+import type { UVViewCommand } from "./viewport-attachment";
 
 type Hooks = {
   recipe(): Recipe; layer(): Layer | undefined; selected(): number;
@@ -186,10 +187,18 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   function updateView(next: UVView) {
     stop(); finishWheel(); view = next; draw(); hooks.persist();
   }
-  elements.both.onclick = () => updateView(fitUVView({ ...view, mode: "both" }, hooks.layer()));
-  elements.single.onclick = () => updateView(fitUVView({ ...view, mode: "single" }, hooks.layer()));
-  elements.other.onclick = () => updateView({ ...view, side: view.side === "low" ? "high" : "low", u: 1 - view.u });
-  elements.fit.onclick = () => updateView(fitUVView(view, hooks.layer()));
+  function viewCommand(command: UVViewCommand): boolean {
+    if (command === "other" && view.mode !== "single") return false;
+    const next = command === "both" ? fitUVView({ ...view, mode: "both" }, hooks.layer()) :
+      command === "single" ? fitUVView({ ...view, mode: "single" }, hooks.layer()) :
+      command === "other" ? { ...view, side: view.side === "low" ? "high" as const : "low" as const, u: 1 - view.u } :
+      fitUVView(view, hooks.layer());
+    updateView(next); return true;
+  }
+  elements.both.onclick = () => { viewCommand("both"); };
+  elements.single.onclick = () => { viewCommand("single"); };
+  elements.other.onclick = () => { viewCommand("other"); };
+  elements.fit.onclick = () => { viewCommand("fit"); };
   function pickHandle(p: UV): Handle | undefined {
     const b = bounds(), r = region();
     let closest: Handle | undefined, best = 11;
@@ -375,7 +384,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
     elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
-  return { draw, resize: draw, cancelInput, dispose, hitAt,
+  return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand,
     inputCapture: () => !!drag || !!wheel,
     snapshot: () => ({ ...view }), diagnostics: () => {
     const b = bounds();

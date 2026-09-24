@@ -171,6 +171,7 @@ viewportAttachment = new ViewportAttachment<HTMLElement>({
   inputCapture: kind => viewport.capture()[kind === "head" ? "surface" : "uv"],
   headView: () => viewer?.cameraState(),
   uvView: () => uvEditor?.snapshot(),
+  uvCommand: command => uvEditor?.viewCommand(command) ?? false,
   hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
   queryContext: hit => app.contextQuery(hit),
 });
@@ -236,7 +237,7 @@ function sync() {
   $<HTMLButtonElement>("layer-add").disabled = !app.capability({ kind: "layer.edit", command: { kind: "add" } }).available;
   $<HTMLButtonElement>("layer-copy").disabled = !l || !app.contextCapability({ kind: "layer", id: l.id },
     { kind: "layer.edit", command: { kind: "duplicate", id: l.id } }).available;
-  $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
+  $<HTMLButtonElement>("undo").disabled = !app.capability({ kind: "recipe.undo" }).available;
   if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
   input("layer-name").value = l.name;
   $("active-name").textContent = l.name;
@@ -299,7 +300,7 @@ function sync() {
   }
   $<HTMLButtonElement>("remove").disabled = !app.contextCapability({ kind: "point", layerId: l.id, index: presentation.selected },
     { kind: "point.remove", layerId: l.id, index: presentation.selected }).available;
-  $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
+  $<HTMLButtonElement>("undo").disabled = !app.capability({ kind: "recipe.undo" }).available;
   layerCards();
 }
 let previewCoordinator: AuthoringPreviewCoordinator;
@@ -383,13 +384,14 @@ function dispatchRecipeAction(action: RecipeAction, record = false) {
 
 function undo() {
   const next = authoring.undoRecipe();
-  if (!next) return;
+  if (!next) return false;
   replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
+  return true;
 }
 const gestures = new AuthoringGestures(authoring, recipeActions, undo);
 const controlEdits = new AuthoringControlEdits(authoring, action => dispatchRecipeAction(action), undo);
 const app = new StudioApplication({ document: authoring, recipe: recipeActions,
-  layer: applyLayerCommand, gestures, controls: controlEdits, quality: qualityActions });
+  layer: applyLayerCommand, undo, gestures, controls: controlEdits, quality: qualityActions });
 const beginControl = (id: string) => { const layer = current(); if (layer) app.controlBegin(id, layer.id); };
 const controlAction = (id: string, action: RecipeAction) => app.controlEdit(id, action);
 function dispatchStudio(action: StudioAction) {
@@ -401,11 +403,11 @@ function bindEdit(id: string, control: HTMLInputElement) {
   bindControlEdit(control, { begin: () => beginControl(id),
     commit: () => app.controlCommit(id), cancel: () => app.controlCancel(id) });
 }
-$("undo").onclick = undo;
+$("undo").onclick = () => { dispatchStudio({ kind: "recipe.undo" }); };
 window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
     e.preventDefault();
-    undo();
+    dispatchStudio({ kind: "recipe.undo" });
   }
 });
 for (const id of ["weight", "opacity", "color"]) {
@@ -549,7 +551,11 @@ const fileOperations = new StudioFileOperations({
   },
   hasSavedV: () => savedAppearance?.hasSavedV() ?? false,
   savedV: () => savedAppearance?.snapshot().savedV,
-  loadSavedV: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
+  loadSavedV: bytes => {
+    const applied = savedAppearance!.dispatch({ kind: "savedV.load", bytes });
+    app.recordAppliedSavedAppearance(applied);
+    return applied;
+  },
   savedVReady: () => !!viewer,
   executeCollection: request => app.execute(request),
   recoverCollection: () => collectionApp!.recover(),
@@ -568,7 +574,6 @@ async function runFile(action: StudioFileAction) {
     showSavedV(outcome.savedAppearance);
     if (outcome.savedAppearance.suggestedEyeShape !== undefined) {
       shape.value = String(outcome.savedAppearance.suggestedEyeShape);
-      previewActions?.rememberEyeShape(outcome.savedAppearance.suggestedEyeShape);
     }
     persist();
   }
@@ -617,7 +622,7 @@ function refreshEyeOpticsNote() {
 }
 function setupPiercingControls() {
   const style = $<HTMLSelectElement>("piercing-style"), colour = $<HTMLSelectElement>("piercing-colour"),
-    styles = viewer!.piercingStyles;
+    styles = previewActions!.piercingOptions();
   if (!styles.length) {
     $("piercing-note").textContent = `Piercing preview unavailable: ${viewer!.evidence.piercingError}; ${viewer!.evidence.prcError}.`;
     return;
@@ -642,8 +647,7 @@ function setupPiercingControls() {
     const entry = styles.find(s => s.id === style.value);
     colour.disabled = !entry;
     if (!entry) {
-      if (previewActions) previewActions.dispatch({ kind: "preview.setPiercingPreview", style: "", definition: "" });
-      else viewer!.setPiercingPreview("", "");
+      previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: "", definition: "" });
       updatePiercingNote(); return;
     }
     for (const choice of entry.choices) {
@@ -651,15 +655,14 @@ function setupPiercingControls() {
       option.value = choice.definition; option.textContent = `${choice.index}. ${choice.label}`; colour.append(option);
     }
     colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
-    if (previewActions) previewActions.dispatch({ kind: "preview.setPiercingPreview", style: entry.id, definition: colour.value });
-    else viewer!.setPiercingPreview(entry.id, colour.value);
+    previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: entry.id, definition: colour.value });
     updatePiercingNote();
   }
   style.value = styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
   fillColours(workspace.preview.piercingDefinition);
   style.onchange = () => fillColours();
   colour.onchange = () => previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: style.value, definition: colour.value });
-  viewer!.setPiercings(input("piercings").checked);
+  previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
   input("piercings").onchange = () => previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
 }
 $("v-export").onclick = () => void runFile({ kind: "savedV.export" });
@@ -692,7 +695,6 @@ try {
     normals: preview.normals, "eye-optics": preview.eyeOptics })) input(id).checked = checked;
   viewer.setEyeOptics(preview.eyeOptics);
   refreshEyeOpticsNote();
-  setupPiercingControls();
   input("blink").value = String(preview.blink);
   input("exposure").value = String(preview.exposure);
   input("light-angle").value = String(preview.lightAngle);
@@ -776,12 +778,14 @@ try {
     setNormals: viewer.setNormals, setEyeOptics: viewer.setEyeOptics,
     setHair: viewer.setHair, setDetail: viewer.setDetail, setEyeShape: viewer.eyeShape,
     setPiercings: viewer.setPiercings, setPiercingPreview: viewer.setPiercingPreview,
-    piercingOptions: () => viewer!.piercingStyles.map(style => ({ id: style.id,
-      definitions: style.choices.map(choice => choice.definition) })),
+    piercingOptions: () => viewer!.piercingStyles.map(style => ({ id: style.id, label: style.label,
+      choices: style.choices.map(choice => ({ index: choice.index,
+        definition: choice.definition, label: choice.label })) })),
     availability: target => target === "hair" ? !savedAppearance!.hasSavedV() || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
       : !viewer!.details[target] ? `${target} preview assets are unavailable.` : undefined,
   });
   app.attach({ preview: previewActions });
+  setupPiercingControls();
   previewActions.subscribe(persist);
   shape.onchange = () => previewActions!.dispatch({ kind: "preview.setEyeShape", index: +shape.value });
   input("exposure").oninput = () =>

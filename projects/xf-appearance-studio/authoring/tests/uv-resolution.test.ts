@@ -36,11 +36,11 @@ test("UV resize sharpens backing buffer without resetting view or changing CSS-s
   try {
     const recipe=initialRecipe(),layer=recipe.layers[0];layer.pathMode="catmull-rom";layer.fields=[];
     layer.points.forEach(p=>delete p.handles);
-    let selected=0,begins=0;
+    let selected=0,begins=0,persists=0;
     const element=()=>({setAttribute(){},disabled:false,textContent:""}) as any;
     const editor=createUVEditor(canvas,{both:element(),single:element(),other:element(),fit:element(),note:element()},
       {recipe:()=>recipe,layer:()=>layer,selected:()=>selected,select:i=>{selected=i;},selectedField:()=>undefined,selectField(){},
-        canvases:()=>[],albedo:()=>undefined,begin:()=>begins++,apply:action=>applyAdapterProposal(layer,action),cancel(){},persist(){},message(){}},defaultUVView());
+        canvases:()=>[],albedo:()=>undefined,begin:()=>begins++,apply:action=>applyAdapterProposal(layer,action),cancel(){},persist(){persists++;},message(){}},defaultUVView());
     editor.draw();
     expect(bufferWidth).toBe(1440);
     const saved=editor.snapshot(), firstWrites=writes;
@@ -72,5 +72,16 @@ test("UV resize sharpens backing buffer without resetting view or changing CSS-s
     const uv={u:.36,v:.24}, px=uvToPixel(uv,afterDPR.region,r.cssWidth,r.cssHeight);
     const back=pixelToUV(px,afterDPR.region,r.cssWidth,r.cssHeight);
     expect(back.u).toBeCloseTo(uv.u,12);expect(back.v).toBeCloseTo(uv.v,12);
+    const beforeCommand = persists;
+    expect(editor.viewCommand("other")).toBe(false);
+    expect(editor.viewCommand("single")).toBe(true);
+    expect(editor.snapshot().mode).toBe("single");
+    const firstSide = editor.snapshot().side;
+    expect(editor.viewCommand("other")).toBe(true);
+    expect(editor.snapshot().side).not.toBe(firstSide);
+    expect(editor.viewCommand("fit")).toBe(true);
+    expect(editor.viewCommand("both")).toBe(true);
+    expect(editor.snapshot().mode).toBe("both");
+    expect(persists).toBe(beforeCommand + 4);
   } finally {Object.assign(globalThis,old);}
 });

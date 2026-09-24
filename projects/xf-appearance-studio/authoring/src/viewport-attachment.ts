@@ -4,6 +4,7 @@ import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
 
 export type ViewportHostKind = "head" | "uv";
+export type UVViewCommand = "both" | "single" | "other" | "fit";
 export type ViewportSize = { width: number; height: number };
 export type ViewportPhase = "loading" | "ready" | "error";
 export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; captured: boolean };
@@ -25,6 +26,7 @@ export type ViewportAttachmentPort<Slot> = {
   inputCapture(kind: ViewportHostKind): boolean;
   headView(): CameraState | undefined;
   uvView(): UVView | undefined;
+  uvCommand(command: UVViewCommand): boolean;
   hitAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportHit | undefined;
   queryContext(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
 };
@@ -59,6 +61,21 @@ export class ViewportAttachment<Slot> {
   cancelInput(kind?: ViewportHostKind) {
     for (const key of kind ? [kind] : ["head", "uv"] as const) this.port.cancelInput(key);
     this.publish();
+  }
+  uvCommandCapability(command: UVViewCommand) {
+    if (this.phases.uv.phase !== "ready") return { available: false as const, reason: "UV editor is not ready." };
+    const view = this.port.uvView();
+    if (!view) return { available: false as const, reason: "UV view is unavailable." };
+    if (command === "other" && view.mode !== "single")
+      return { available: false as const, reason: "Switch to single-eye view first." };
+    return { available: true as const };
+  }
+  uvCommand(command: UVViewCommand) {
+    const capability = this.uvCommandCapability(command);
+    if (!capability.available) return false;
+    const changed = this.port.uvCommand(command);
+    if (changed) this.publish();
+    return changed;
   }
   /** Picking is read-only; the application binds identity and geometry revision. */
   contextAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportContextQuery | undefined {

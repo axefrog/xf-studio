@@ -32,6 +32,7 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
+  "recipe.undo": desc("workspace", "content", "none"),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
   "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),

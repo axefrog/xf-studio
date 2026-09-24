@@ -6,20 +6,22 @@ import { CollectionService } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { applyLayerAction } from "../src/editor-actions";
 import { RecipeActions } from "../src/recipe-actions";
+import { PreviewActions } from "../src/preview-actions";
 import { StudioApplication } from "../src/studio-application";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  const undo = () => { const prior = document.undoRecipe(); if (prior) document.recipe = prior; };
+  const undo = () => { const prior = document.undoRecipe(); if (!prior) return false;
+    document.recipe = prior; return true; };
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft",
   index => document.gestureChanged(index));
   const gestures = new AuthoringGestures(document, recipe, undo);
   const controls = new AuthoringControlEdits(document, action => { recipe.dispatch(action); }, undo);
-  const app = new StudioApplication({ document, recipe, gestures, controls,
+  const app = new StudioApplication({ document, recipe, gestures, controls, undo,
     layer: action => {
       const next = applyLayerAction(document.recipe, document.recipe.layers[document.active]?.id, action);
       document.checkpoint(); document.recipe = next.recipe;
@@ -46,6 +48,44 @@ test("facade discovers target-specific commands, validates at invocation and det
   expect(app.dispatch({ kind: "layer.edit", command: { kind: "remove", id: "stale" } })).toMatchObject({ ok: false });
   expect(notifications).toBeGreaterThan(0);
   unsubscribe();
+});
+
+test("recipe Undo is a current workspace action with live capability and one atomic restore", () => {
+  const { app, document } = fixture();
+  expect(app.capability({ kind: "recipe.undo" })).toMatchObject({ available: false });
+  const firstId = document.recipe.layers[0].id;
+  expect(app.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: firstId } }).ok).toBe(true);
+  expect(document.recipe.layers).toHaveLength(5);
+  expect(app.actionsFor({ kind: "workspace" })).toMatchObject([{
+    action: { kind: "recipe.undo" }, capability: { available: true }, undo: "none" }]);
+  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: true, result: true });
+  expect(document.recipe.layers).toHaveLength(4);
+  expect(document.active).toBeLessThan(document.recipe.layers.length);
+  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: false });
+});
+
+test("saved-V eye suggestion updates application state without applying the morph a second time", () => {
+  const { app } = fixture(), calls: number[] = [];
+  const preview = new PreviewActions(freshWorkspace().preview, {
+    cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }),
+    front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
+    setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {},
+    setEyeShape: index => calls.push(index), setPiercings: () => {}, setPiercingPreview: () => {},
+    setDetail: () => {}, piercingOptions: () => [{ id: "ring", label: "Nose ring",
+      choices: [{ index: 1, definition: "gold", label: "Gold" }] }],
+  });
+  app.attach({ preview });
+  app.recordAppliedSavedAppearance({ suggestedEyeShape: 9 });
+  const snapshot = app.snapshot();
+  expect(snapshot.preview?.eyeShape).toBe(9);
+  expect(calls).toEqual([]);
+  expect(snapshot.previewOptions).toEqual([{ id: "ring", label: "Nose ring",
+    choices: [{ index: 1, definition: "gold", label: "Gold" }] }]);
+  snapshot.previewOptions![0].choices[0].label = "Forged";
+  expect(app.snapshot().previewOptions?.[0].choices[0].label).toBe("Gold");
+  expect(app.capability({ kind: "preview.setPiercingPreview", style: "ring", definition: "silver" }).available).toBe(false);
+  expect(app.capability({ kind: "preview.setPiercingPreview", style: "ring", definition: "gold" }).available).toBe(true);
 });
 
 test("facade groups form changes and hides live gesture targets", () => {
@@ -173,6 +213,7 @@ test("viewport hit query binds the current geometry revision without selection o
     moveHost: () => {}, measure: () => ({ width: 400, height: 200 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false,
     headView: () => undefined, uvView: () => undefined,
+    uvCommand: () => false,
     hitAt: () => ({ hit: { kind: "point", layerId, index: 0 }, mirror: true, affordance: "point" }),
     queryContext: hit => app.contextQuery(hit),
   });

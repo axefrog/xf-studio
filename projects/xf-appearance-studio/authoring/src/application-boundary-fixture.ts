@@ -12,8 +12,10 @@ import { freshWorkspace } from "./workspace-state";
 /** Small replaceable-presentation fixture: no current sidebar, scene, worker or storage. */
 const initial = freshWorkspace(), documentState = new AuthoringDocument(initial);
 const undo = () => { const recipe = documentState.undoRecipe();
-  if (recipe) documentState.replaceRecipe(recipe,
-    recipe.layers.findIndex(layer => layer.id === documentState.recipe.layers[documentState.active]?.id)); };
+  if (!recipe) return false;
+  documentState.replaceRecipe(recipe,
+    recipe.layers.findIndex(layer => layer.id === documentState.recipe.layers[documentState.active]?.id));
+  return true; };
 let collection: CollectionService;
 const recipe = new RecipeActions(() => ({ recipe: documentState.recipe, active: documentState.active,
   selected: documentState.selected, fieldSelection: documentState.fieldSelection }),
@@ -24,7 +26,7 @@ const controls = new AuthoringControlEdits(documentState, action => { recipe.dis
 const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
 const layerActions = new AuthoringLayerActions(documentState, () => {});
 const app = new StudioApplication({ document: documentState, recipe, gestures, controls, quality,
-  layer: action => layerActions.dispatch(action) });
+  layer: action => layerActions.dispatch(action), undo });
 const presetId = crypto.randomUUID(), collectionId = crypto.randomUUID();
 collection = new CollectionService(collectionDraft({ schema: "xfas/collection-1", id: collectionId,
   name: "Fixture collection", presets: [{ id: presetId, name: "Fixture preset", revision: 1,
@@ -57,7 +59,7 @@ function paint() {
     actionCount: app.actionKinds().length,
     descriptorCount: Object.keys(app.actionDescriptors()).length }, null, 2);
   $<HTMLInputElement>("opacity").value = String(layer?.opacity ?? 0);
-  $<HTMLButtonElement>("undo").disabled = !documentState.canUndo;
+  $<HTMLButtonElement>("undo").disabled = !app.capability({ kind: "recipe.undo" }).available;
 }
 app.subscribe(paint);
 $("duplicate-preset").onclick = () => {
@@ -70,7 +72,7 @@ $("remove-point").onclick = () => {
   if (layer) run({ kind: "point.remove", layerId: layer.id, index: 0 });
 };
 $("quality").onclick = () => run({ kind: "quality.set", size: 1024 });
-$("undo").onclick = undo;
+$("undo").onclick = () => run({ kind: "recipe.undo" });
 $("refresh").onclick = () => void app.execute({ kind: "refresh" }).then(outcome =>
   show(outcome.ok ? "Refreshed the fixture library" : `${outcome.code}: ${outcome.message}`));
 const opacity = $<HTMLInputElement>("opacity");
