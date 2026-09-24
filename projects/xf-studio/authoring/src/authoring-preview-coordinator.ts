@@ -7,9 +7,16 @@ import type { Layer, Recipe } from "./recipe";
 import type { RasterResponse } from "./raster-processor";
 
 export type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
+/**
+ * Per-layer preview state (audit A-12), from the same sources as the aggregate phase.
+ * `updating` includes queued or running work for that slot and a published texture that is
+ * not the current tier or lacks its maps; when the queue cannot say which slot is pending,
+ * every enabled layer is reported as updating rather than guessed ready.
+ */
+export type LayerReadiness = { layerId: string; state: "ready" | "updating" | "blocked" | "disabled"; size: number };
 export type PreviewReadiness = { phase: "ready" | "updating" | "blocked";
   size: PreviewTextureSize; pending: number; waiting: boolean;
-  estimatedBytes: number; error?: string };
+  estimatedBytes: number; error?: string; layers: LayerReadiness[] };
 
 /** Device resources stay behind this port; it has no DOM, Three or worker types. */
 export type PreviewRenderPort = {
@@ -17,7 +24,8 @@ export type PreviewRenderPort = {
   resourceSize(index: number): number;
   needsOptics(index: number, layer: Layer, size: PreviewTextureSize): boolean;
   needsPresentationMaps(index: number, layer: Layer, size: PreviewTextureSize): boolean;
-  queue(): { queued: number; running: unknown };
+  /** `queuedIndices` and `running.i` identify pending slots when the adapter knows them. */
+  queue(): { queued: number; running: unknown; queuedIndices?: readonly number[] };
   reset(): void;
   replaceResources(): void;
   reconcileResources(previous: Layer[], current: Layer[]): ReadonlySet<string>;
@@ -65,9 +73,17 @@ export class AuthoringPreviewCoordinator {
       (this.port.resourceSize(index) !== this.size ||
         this.port.needsPresentationMaps(index, layer, this.size)));
     const error = quality.error || (!assessment.accepted ? assessment.error : undefined);
+    const runningIndex = (queue.running as { i?: unknown } | null | undefined)?.i;
+    const known = Array.isArray(queue.queuedIndices) && (!queue.running || typeof runningIndex === "number");
+    const busy = new Set<number>(known ? [...queue.queuedIndices!, ...(typeof runningIndex === "number" ? [runningIndex] : [])] : []);
+    const layers = this.document.recipe.layers.map((layer, index): LayerReadiness => ({ layerId: layer.id,
+      size: this.port.resourceSize(index),
+      state: !layer.enabled ? "disabled" : error ? "blocked" :
+        (known ? busy.has(index) : pending > 0) || this.port.resourceSize(index) !== this.size ||
+          this.port.needsPresentationMaps(index, layer, this.size) ? "updating" : "ready" }));
     return { phase: error ? "blocked" : pending || waiting ? "updating" : "ready",
       size: this.size, pending, waiting, estimatedBytes: assessment.estimatedBytes,
-      ...(error ? { error } : {}) };
+      ...(error ? { error } : {}), layers };
   }
   describeQuality() {
     const state = this.readiness();

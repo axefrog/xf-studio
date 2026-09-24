@@ -33,7 +33,7 @@ function mountFixture() {
   const statusSource = new PresentationStatusSource(() => status);
   const bootstrap = createTrustedStudioBootstrap({ workspace, core, viewport, transport,
     preferences: new UIPreferenceActions(workspace.uiPreferences), status: statusSource,
-    previewReadiness: { readiness: () => ({ phase: "ready", size: 1024, pending: 0, waiting: false, estimatedBytes: 1 }),
+    previewReadiness: { readiness: () => ({ phase: "ready", size: 1024, pending: 0, waiting: false, estimatedBytes: 1, layers: [] }),
       subscribe: () => () => {} },
     onEditorRestored: () => {}, onRecipeImported: () => {},
     savedAppearance: { has: () => false, read: () => undefined, load: () => { throw Error("none"); }, ready: () => false },
