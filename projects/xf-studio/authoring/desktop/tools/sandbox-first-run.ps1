@@ -32,10 +32,30 @@ Expand-Archive $zip.FullName $setupDir -Force
 $setup = Get-ChildItem $setupDir -Filter "*Setup*.exe" | Select-Object -First 1
 Save
 
-# The installer may show its own window; complete it by hand if it asks.
+# Unattended: Electrobun 2.0.1's setup accepts --quiet. If it still shows its final
+# "Installation complete" window, dismiss it once the installed launcher exists, so the
+# trial never waits for a person. The report records which path happened.
 $t = Get-Date
-$proc = Start-Process $setup.FullName -PassThru
-if (-not $proc.WaitForExit(600000)) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
+$proc = Start-Process $setup.FullName -ArgumentList "--quiet" -PassThru
+$shell = New-Object -ComObject WScript.Shell
+$report.installerDismissed = $false
+while (-not $proc.HasExited -and ((Get-Date) - $t).TotalSeconds -lt 600) {
+  Start-Sleep -Seconds 5
+  $installed = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue } | Select-Object -First 1
+  $proc.Refresh()
+  if ($installed -and $proc.MainWindowHandle -ne 0) {
+    Start-Sleep -Seconds 5
+    if ($proc.HasExited) { break }
+    Shot "installer-final"
+    [void]$shell.AppActivate($proc.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
+    Start-Sleep -Seconds 3
+    if (-not $proc.HasExited) { [void]$proc.CloseMainWindow() }
+    $report.installerDismissed = $true
+    [void]$proc.WaitForExit(30000)
+  }
+}
+if (-not $proc.HasExited) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
 $report.installSeconds = [int]((Get-Date) - $t).TotalSeconds
 $roots = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue
 $report.installRoots = @($roots | ForEach-Object { $_.Name })
@@ -50,7 +70,22 @@ if ($launcher) {
   Start-Sleep -Seconds 25
   $report.windows = @(Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): $($_.MainWindowTitle)" })
   Shot "first-run"
+  # Best effort: the welcome's first button (Start designing) has focus, so Enter dismisses it.
+  $app = Get-Process | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
+  if ($app) {
+    $shell = New-Object -ComObject WScript.Shell
+    [void]$shell.AppActivate($app.Id); Start-Sleep -Seconds 1; $shell.SendKeys("{ENTER}"); Start-Sleep -Seconds 4
+    Shot "after-welcome"
+    # Close and reopen: the welcome must not return, and the draft must come back.
+    [void]$app.CloseMainWindow(); Start-Sleep -Seconds 8
+    $report.closedCleanly = -not (Get-Process -Id $app.Id -ErrorAction SilentlyContinue)
+    Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
+    Start-Sleep -Seconds 20
+    Shot "relaunch"
+  }
+  $report.dataRootFiles = @($roots | ForEach-Object { Get-ChildItem $_.FullName -Recurse -File -Include *.json, *.sqlite -ErrorAction SilentlyContinue } |
+    Where-Object { $_.FullName -notmatch "\Resources\\" } | ForEach-Object { $_.Name })
 }
 $report.finished = (Get-Date).ToString("o")
 Save
-Write-Host "Automatic part finished. Continue the manual checklist in the desktop README, then close the sandbox."
+Write-Host "Automatic part finished. Screenshots and report.json are in the results folder; close the sandbox when done."

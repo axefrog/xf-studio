@@ -196,6 +196,7 @@ jobs:
           subject-path: |
             ${{ env.ASSETS }}/*.zip
             ${{ env.ASSETS }}/build-info.json
+            ${{ env.ASSETS }}/THIRD_PARTY_NOTICES.md
 
       - name: Create draft release
         run: |

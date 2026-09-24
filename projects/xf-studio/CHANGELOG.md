@@ -17,21 +17,18 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
-- **First desktop preview for Windows.** XF Studio now installs as an ordinary app for your Windows user, with its own window, icon and About page showing the exact version and build.
-- **Design eye makeup in layers.** Build complete looks from any number of layers (up to 32 in the preview), each with its own colour, strength and finish. Presets can be added, copied, renamed, reordered and removed.
-- **Precise shape editing.** Draw each layer as a smooth or cornered curve, adjust the softness of its edge (including differently at different points), bend it with warp fields, and move, rotate or scale the whole shape. Zoom and pan the flat UV view. Every gesture can be undone.
-- **Works without any game files.** On first launch you can skip setup and go straight to the flat UV editor, your library and the export check. Add prepared preview resources from your own copy of the game later to switch on the 3D head.
-- **A 3D preview head.** Point the app at five preview files prepared from your own copy of the game to see your makeup on the head, alongside the flat UV view.
-- **Your work is kept.** Presets are saved in a local library with version history, the current draft is restored after you close and reopen the app, and looks can be exported and imported as portable files.
-- **Your eye-makeup mod now has its own name: XF Eye Artistry.** It appears under that name in the character creator's selector and in Check and Build results, and the mod files you install carry that name. XF Studio remains the name of the app.
-- **Check before you build.** Check tells you which layers can be turned into mod files and which will be left out, and why. With your own game, WolvenKit and Python set up, Build turns your looks into your own copy of **XF Eye Artistry**, the eye-makeup mod, with Matte, Satin and Metallic layers independently verified before the files are kept.
+- **The first test version of XF Studio for Windows.** XF Studio is a desktop app for designing your own eye makeup for V. It installs for your Windows user, with its own window, icon and About page.
+- **Design eye makeup in layers on the flat UV map.** Build complete looks from stacked layers (up to 32), each with its own colour, opacity, strength and finish. Draw each layer as a smooth or cornered curve, soften its edge (differently at different points if you like), bend it with warp controls, and move, rotate or scale the whole shape. Zoom and pan the map. Every change can be undone.
+- **Keep your looks in a library.** Presets can be added, copied, renamed, reordered and removed. Your collection is saved in a local library with version history, your current draft comes back when you reopen the app, and looks can be exported and imported as files to back up or share.
+- **Check which looks can become mod files.** Check lists every preset and layer that can be built into **XF Eye Artistry**, the eye-makeup mod the Studio makes for you, and names anything that would be left out, and why. It needs no game files.
+- **What isn't in this alpha yet.** The **3D head preview** isn't available: a preview built from your own game files is planned. **Building the mod files** still needs a developer setup (the game, WolvenKit and build tools), so most people can design and Check but not Build yet. Anything that isn't ready says so where you would use it.
+- **Licences in About.** About → Licences shows XF Studio's MIT licence and the notices for the software it includes.
 
 ### Fixes and under the hood
 
-- Nothing from the game or other mods is included in the download. The build is checked automatically so that only the app's own files can be packaged.
-- The XF Eye Artistry mod files the Studio builds are verified offline only. They have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
-- Shimmer, Glitter, Glossy and Colour-shifting finishes are preview experiments. Build leaves them out and says so.
+- Nothing from the game or other mods is included in the download. Every build is checked automatically so that only the app's own files, its licence and the third-party notices are packaged.
+- Mod files the Studio builds are checked automatically but have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
+- Matte, Satin and Metallic can be built. Shimmer, Glitter, Glossy and Colour-shifting are preview only: Check and Build leave those layers out and tell you which.
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
-- The desktop preview accepts only the core head files so far. The idle animation, saved-V import, hair, brows, lashes and piercings still need the development version run from source.
-- Automatic updates are switched off. Installing one version over another has not been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
+- Automatic updates are off. Download new versions from the releases page. Installing one version over another hasn't been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
 - Closing the window waits for your latest draft to be saved, and shows a message instead of closing if saving fails.
