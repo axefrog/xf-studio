@@ -44,7 +44,7 @@ By jac3km4 and contributors. [GitHub](https://github.com/jac3km4/redscript). Its
 
 ### Cyberpunk Blender Add-on (IO Suite)
 
-By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
+By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato, showed how community tools read each shader template's parameters and texture channels. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
 
 ### Mod Organizer 2
 
@@ -52,7 +52,7 @@ By the ModOrganizer2 contributors; the Cyberpunk game plugin credits 6788 and Za
 
 ### WolvenKit
 
-By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/WolvenKit). WolvenKit is the backbone of our export pipeline: we use its CLI to convert, serialize and pack resources, and its source taught us the game's save, archive, mesh, morph target, animation and compiled appearance formats. Its archive and package writers also informed XF Studio's pre-pack path checks. Used as an external tool (GPL-3.0); no WolvenKit code is included in XF Studio.
+By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/WolvenKit). WolvenKit is the backbone of our export pipeline: we use its CLI to convert, serialize and pack resources, and its source taught us the game's save, archive, mesh, morph target, animation and compiled appearance formats, plus the material type definitions and shader-cache layout. Its archive and package writers also informed XF Studio's pre-pack path checks. Used as an external tool (GPL-3.0); no WolvenKit code is included in XF Studio.
 
 ## Libraries, runtimes and general tools
 
@@ -104,7 +104,7 @@ By the gfx-rs/wgpu contributors. [GitHub](https://github.com/gfx-rs/wgpu). Its d
 
 ### Cyberpunk 2077 Modding Wiki
 
-By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), and to the CyberCAT documentation for pointing us to external preset files.
+By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), and to the CyberCAT documentation for pointing us to external preset files.
 
 ## Mods and creators whose work we studied
 
@@ -164,7 +164,11 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ## Research papers
 
-These papers informed our thinking about filtering tiny glitter highlights; no algorithm from them was implemented.
+These papers informed our research. No algorithm from them was implemented.
+
+### Lagarde and de Rousiers (2014)
+
+Sébastien Lagarde and Charles de Rousiers, "Moving Frostbite to PBR" (EA DICE, SIGGRAPH 2014 course notes). The reference that let us recognise the game's diffuse and specular lighting formulas when reading its compiled shaders.
 
 ### Deliot and Belcour (2023)
 
