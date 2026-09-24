@@ -8,6 +8,7 @@ import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, m
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { LocalSettings } from "./local-settings";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
+import { readConfiguredMo2Instance } from "./install-detection-host";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
@@ -131,14 +132,17 @@ function targetFor(settings: LocalSettings): Target {
   assert(settings.mo2Root && isAbsolute(settings.mo2Root) && settings.mo2ProfileId && profileSegment(settings.mo2ProfileId),
     "Configured MO2 instance and profile are missing.");
   noLinks(settings.mo2Root);
-  directory(join(settings.mo2Root, "mods"));
-  noLinks(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"));
-  regular(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"));
+  // Use the instance's configured directories (ModOrganizer.ini [Settings]), not assumed defaults.
+  const { paths } = readConfiguredMo2Instance(settings.mo2Root);
+  noLinks(paths.mods);
+  directory(paths.mods);
+  noLinks(join(paths.profiles, settings.mo2ProfileId, "modlist.txt"));
+  regular(join(paths.profiles, settings.mo2ProfileId, "modlist.txt"));
   // An earlier diagnostic install of this same mod may sit under a legacy folder name.
   // Install refuses rather than silently creating a second copy beside it (see preflight).
-  const legacyInstall = readdirSync(join(settings.mo2Root, "mods")).find(entry =>
+  const legacyInstall = readdirSync(paths.mods).find(entry =>
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
-  const target = join(settings.mo2Root, "mods", EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
+  const target = join(paths.mods, EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
   noLinks(target);
   return { route, target, legacyInstall,
     activation: `Enable the dedicated ${EYE_MAKEUP_MOD.modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };

@@ -178,6 +178,11 @@ export function uvPanel(rt: StudioRuntime): PanelController {
       modes.update(view?.mode, value => port.viewport.uvCommandCapability(value));
       applyCapability(other, port.viewport.uvCommandCapability("other"));
       applyCapability(fit, port.viewport.uvCommandCapability("fit"));
+      const selection = frame.viewport.uv.selection;
+      const outside = selection?.point && !selection.point.visible;
+      setText(hint, outside ? "Selected point is outside this view · F: fit shape · O: other eye"
+        : "Wheel: zoom · Right-drag: pan · Double-click outline: add point · Shift-drag: rotate · Shift-wheel: scale");
+      hint.dataset.tone = outside ? "warning" : "";
     },
   };
 }

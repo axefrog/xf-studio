@@ -60,3 +60,19 @@ export function fitUVView(view: UVView, layer?: Layer): UVView {
   return { ...view, u: clamp((minU + maxU) / 2, -1, 2), v: clamp((minV + maxV) / 2, -1, 2),
     span: clamp(Math.max(maxU - minU, (maxV - minV) * uvAspect(view.mode)) * 1.25, .04, MAX_UV_VIEW_SPAN) };
 }
+
+/** Whether the selected point and warp origin are inside the visible UV region (audit A-13). */
+export type UVSelectionVisibility = { point?: { index: number; visible: boolean }; field?: { id: string; visible: boolean } };
+export function selectionVisibility(view: UVView, aspect: number, layer: {
+  symmetry: boolean; points: readonly UV[]; fields: readonly (UV & { id: string })[] },
+  selected: number, fieldId?: string): UVSelectionVisibility {
+  const r = uvRegion(view, Number.isFinite(aspect) && aspect > 0 ? aspect : uvAspect(view.mode));
+  // A mirrored layer is visible when either drawn instance is inside the view.
+  const visible = (p: UV) => (layer.symmetry ? [false, true] : [false]).some(mirror => {
+    const q = reflectUV(p, mirror);
+    return q.u >= r.u && q.u <= r.u + r.w && q.v >= r.v && q.v <= r.v + r.h;
+  });
+  const point = layer.points[selected], field = layer.fields.find(item => item.id === fieldId);
+  return { ...(point ? { point: { index: selected, visible: visible(point) } } : {}),
+    ...(field ? { field: { id: field.id, visible: visible(field) } } : {}) };
+}

@@ -4,6 +4,7 @@ import type { CollectionWorkspace, PresetCommand } from "./collection-workspace"
 import type { PresetCollection } from "./preset-collection";
 import type { StoredCollection } from "./collection-store";
 import type { Recipe } from "./recipe";
+import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
 
 export type CollectionAction =
   | { kind: "preset.edit"; command: PresetCommand }
@@ -16,7 +17,7 @@ export type CollectionAction =
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string };
 
-export type ActionCapability = { available: boolean; reason?: string };
+export type ActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
 /** Primitive-only draft projection; building it never clones recipes or Undo histories. */
 export type CollectionDraftSummary = {
   id: string; name: string; revision?: number; selected?: string;
@@ -56,6 +57,12 @@ export class CollectionActions {
         revision: oldest.revision } : undefined };
   }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
+  /** Trusted, uncloned preset list for the service's own comparisons. Never hand it to a view. */
+  presetsForComparison(): readonly { readonly id: string; readonly name: string; readonly recipe: Recipe }[] {
+    return this.session.state.collection.presets;
+  }
+  /** Selected preset ID without cloning; undefined when the collection has no selected preset. */
+  selected(): string | undefined { return this.session.state.selected; }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -71,8 +78,14 @@ export class CollectionActions {
         return { available: false, reason: "No removed preset to restore." };
       if ("id" in command && !state.collection.presets.some(p => p.id === command.id))
         return { available: false, reason: "That preset no longer exists." };
-      if (command.kind === "move" && (command.to < 0 || command.to >= state.collection.presets.length || !Number.isInteger(command.to)))
-        return { available: false, reason: "Invalid preset position." };
+      const issue = command.kind === "move" ? positionIssue(command.to, state.collection.presets.length,
+        { below: "This preset is already first.", above: "This preset is already last." }) :
+        command.kind === "rename" ? nameIssue(command.name, 120) : undefined;
+      if (issue) return refuse(issue);
+    }
+    if (action.kind === "collection.rename") {
+      const issue = nameIssue(action.name, 120);
+      if (issue) return refuse(issue);
     }
     if (action.kind === "preset.select" && !state.collection.presets.some(p => p.id === action.id))
       return { available: false, reason: "Preset not found." };

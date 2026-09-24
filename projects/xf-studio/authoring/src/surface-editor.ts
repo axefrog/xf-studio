@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { cancelsGesture } from "./gesture-cancel";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, transformLayer } from "./shape-transform";
@@ -649,8 +650,7 @@ export function createSurfaceEditor(
     "keydown",
     (e) => {
       if (
-        (drag || shapeDrag || wheel) &&
-        (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "z"))
+        (drag || shapeDrag || wheel) && cancelsGesture(e)
       ) {
         e.preventDefault();
         e.stopImmediatePropagation();

@@ -19,7 +19,6 @@ const valueAllowlist = new Map<string, string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["uv-view", ["uvAspect"]],
-  ["flake-field", ["FLAKE_LIMITS", "REGION_FLAKE_STUDY_LIMITS"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
 ]);
 

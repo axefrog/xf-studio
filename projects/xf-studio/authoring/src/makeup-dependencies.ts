@@ -1,4 +1,4 @@
-import { defaultFlakes, type LegacyFlakes } from "./finish";
+import { canonicalFinish, defaultFlakes, isIrregular, type LegacyFlakes } from "./finish";
 import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
   STUDIO_FINE_REGIONS, validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
@@ -109,4 +109,11 @@ export function legacyOpticalKey(size: number, finish: "shimmer" | "glitter", se
 export function irregularAlbedoKey(optics: OpticalKey, alpha: AlphaKey, baseColour: string, flakeColour: string,
   compositionVersion = ALBEDO_COMPOSITION_VERSION): AlbedoKey {
   return key("albedo", [version(compositionVersion), optics, alpha, colour(baseColour), colour(flakeColour)]);
+}
+
+/** Browser preview optical-map identity for one layer at one preview tier (pure; shared by device and measurement services). */
+export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number) {
+  return isIrregular(layer.flakes) && layer.finish === "glitter"
+    ? studioIrregularOpticalKey(layer.flakes, size)
+    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 }

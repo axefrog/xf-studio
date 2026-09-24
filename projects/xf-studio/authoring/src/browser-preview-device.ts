@@ -1,9 +1,9 @@
 import type { AuthoringDocument } from "./authoring-document";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
-import { canonicalFinish, defaultFlakes, isIrregular } from "./finish";
+import { canonicalFinish, isIrregular } from "./finish";
 import { isDirectGlint } from "./direct-glint-settings";
-import { maskAlphaKey, studioIrregularOpticalKey } from "./makeup-dependencies";
+import { maskAlphaKey, previewOpticalKey } from "./makeup-dependencies";
 import { createRasterClient, type RasterPort } from "./raster-client";
 import type { RasterResponse, GlitterStats } from "./raster-processor";
 import type { Layer } from "./recipe";
@@ -17,11 +17,7 @@ type PreviewOptics = NonNullable<CompleteRaster["optics"]>;
 type PreviewAlbedo = NonNullable<CompleteRaster["albedo"]>;
 type PendingOptics = { key: string; data?: PreviewOptics; albedo?: PreviewAlbedo };
 
-export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number) {
-  return isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? studioIrregularOpticalKey(layer.flakes, size)
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
-}
+export { previewOpticalKey };
 
 /** Trusted browser resource owner. A replacement presentation receives quality actions, never these canvases or worker. */
 export function createBrowserPreviewDevice(options: {

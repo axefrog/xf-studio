@@ -1,6 +1,6 @@
 # Site QA: studio positioning revision, 24 September 2026
 
-Nathan clarified the product vision after the first site build. XF Studio is meant to let people customise many parts of Cyberpunk 2077, starting with their own V and expanding into other areas of the game. Eye makeup is its first working authoring feature, not the product's definition or limit. The revision changes positioning and structure only. It adds no release, download, game-test or dated feature claim. The technical project directory is unchanged; its planned move to `projects/xf-studio` is coordinated separately.
+The product vision was clarified after the first site build. XF Studio is meant to let people customise many parts of Cyberpunk 2077, starting with their own V and expanding into other areas of the game. Eye makeup is its first working authoring feature, not the product's definition or limit. The revision changes positioning and structure only. It adds no release, download, game-test or dated feature claim. The technical project directory is unchanged; its planned move to `projects/xf-studio` is coordinated separately.
 
 ## Changes reviewed
 

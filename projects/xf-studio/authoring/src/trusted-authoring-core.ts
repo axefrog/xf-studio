@@ -2,6 +2,7 @@ import { AuthoringControlEdits } from "./authoring-control-edits";
 import { AuthoringDocument } from "./authoring-document";
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
+import { AuthoringHistory } from "./authoring-history";
 import { AuthoringLayerActions } from "./authoring-layer-actions";
 import { AuthoringPresentation } from "./authoring-presentation";
 import { RecipeActions, type RecipeAction } from "./recipe-actions";
@@ -26,18 +27,13 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     (next, effect) => document.applyActionState(next, effect),
     document, workspace.glitterChoices, ports.selectedCollection,
     (index, kind) => document.gestureChanged(index, kind));
-  const undo = () => {
-    const next = document.undoRecipe();
-    if (!next) return false;
-    const previous = document.recipe;
-    const activeId = document.recipe.layers[document.active]?.id;
-    document.replaceRecipe(next, next.layers.findIndex(layer => layer.id === activeId));
-    ports.resetStack(previous);
-    return true;
-  };
-  const gestures = new AuthoringGestures(document, recipe, undo);
-  const controls = new AuthoringControlEdits(document, ports.controlAction, undo);
+  const history = new AuthoringHistory(document, previous => ports.resetStack(previous));
+  const undo = () => history.undo();
+  // Cancelling a gesture or form transaction restores its checkpoint without creating Redo.
+  const revert = () => history.revert();
+  const gestures = new AuthoringGestures(document, recipe, revert);
+  const controls = new AuthoringControlEdits(document, ports.controlAction, revert);
   const app = new StudioApplication({ document, recipe, layer: action => layers.dispatch(action),
-    undo, gestures, controls });
-  return { document, geometry, presentation, layers, recipe, gestures, controls, app, undo };
+    undo, history, gestures, controls });
+  return { document, geometry, presentation, layers, recipe, gestures, controls, app, undo, history };
 }

@@ -39,7 +39,7 @@ No DXIL-to-HLSL/GLSL decompiler is installed on the workstation. The search cove
 | **Engine registers** | Only the few whose use is decoded. Most stay `Struct[reg].c`. | mixed; each label states its basis |
 | **Group-shared memory** | Demangled global names, e.g. `ldsMaterialMask` in `m_classifyMaterials`. | [source] |
 | **Interpolators** | For each pixel input component, the vertex-stream inputs it depends on, from dxc's ViewId dependency table in the paired vertex program. The vertex program is also lifted. | [source] |
-| **Render targets** | Each target's template pass blend/write mask. G-buffer roles are added for `gbuffer_regular`, `gbuffer_velbuff_regular` and `post_gbuffer`, from [knowledge §2.2](../../../knowledge/materials-and-shaders.md#22-the-gbuffer). | [resource] + consolidated reading |
+| **Render targets** | Each target's template pass blend/write mask. G-buffer roles are added for `gbuffer_regular`, `gbuffer_velbuff_regular` and `post_gbuffer`, from [knowledge §2.2](../../../knowledge/materials-and-shaders.md#22-the-g-buffer). | [resource] + consolidated reading |
 
 **Engine constant-buffer names** in 2,119 extracted programs (vertex, pixel and compute):
 

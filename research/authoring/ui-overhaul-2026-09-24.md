@@ -1,6 +1,6 @@
 # XF Studio UI/UX overhaul — delivery record, 24 September 2026
 
-**Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until the new interface is accepted after in-depth review (so far reviewed only cursorily). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
+**Status (25 September 2026): merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). Core defects B-1..B-3 were fixed on 25 September (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`). The new UI is the production entry; `legacy.html` remains until the new interface is accepted after in-depth review (so far reviewed only cursorily). The audit's API gaps and adapter notes were largely closed on 25 September; see the [boundary assessment](ui-architecture-boundary.md#application-api-additions-25-september). Open follow-ups are tracked in [the backlog](../backlog/claude-ui-overhaul.md#open) and [Remaining work](#remaining-work) below; the current boundary state is in [the boundary assessment](ui-architecture-boundary.md).
 
 Built on branch `codex/opus-ui-overhaul` in `D:/Dev/worktrees/opus-ui-overhaul` (both removed on 25 September after integration was verified). This record was written for the primary agent's review against the [handoff brief](../backlog/claude-ui-overhaul.md) and the [architecture contract](architecture-contract.md).
 
@@ -51,7 +51,7 @@ The audit covered `legacy.html`, `style.css`, `main.ts`, the legacy view modules
 | B-4 | Footer status overwritten by raster timing messages; gesture warnings linger | `authoring-preview-coordinator.ts:104`, `main.ts:54-56` | source | **Fixed**: results go to toasts + Activity; routine timings are not activity; adapter limit messages toast once. |
 | B-5 | Collection message repeats stale results; package freshness unused | `collection-ui.ts:112-125` | source | **Fixed**: result card shows Current/Stale from `package.freshness`; recovery results toast. |
 | B-6 | Motion card overlaps the viewport hint and wireframe toggle | `style.css:302-333` | **Reproduced** visually (`legacy-before.png`: the toggle shows through behind the card) | **Legacy only**. |
-| B-7 | Ctrl+Z ignored when a checkbox/colour input has focus; case-sensitive `z` | `main.ts:298`, `uv-editor.ts:345`, `surface-editor.ts:653` | source | **Fixed** in shell (text-input-only exclusion, case-insensitive, and no Undo while a gesture/control transaction is active). Editor adapters' own case-sensitive cancel remains **Core/adapter**. |
+| B-7 | Ctrl+Z ignored when a checkbox/colour input has focus; case-sensitive `z` | `main.ts:298`, `uv-editor.ts:345`, `surface-editor.ts:653` | source | **Fixed** in shell (text-input-only exclusion, case-insensitive, and no Undo while a gesture/control transaction is active). Editor adapters' cancel is case-insensitive since 25 September (`gesture-cancel.ts`). |
 | B-8 | Lists rebuilt from scratch, losing focus and closing menus | `layer-ui.ts:11`, `collection-ui.ts:39-45` | source | **Fixed**: keyed in-place row updates; focus restored. |
 | B-9 | Preview controls live before handlers exist; changes during load reverted; dead after load failure | `main.ts:536-625, 700-706` | source | **Fixed**: preview controls disabled until preview state exists; head errors replace the stage while other panels keep working. |
 | B-10 | Header file buttons ignore availability/busy | `main.ts:438-441` | source | **Fixed**: capability-driven everywhere. |
@@ -61,7 +61,7 @@ The audit covered `legacy.html`, `style.css`, `main.ts`, the legacy view modules
 | B-14 | Escape mid-slider then continuing the drag adds one Undo per movement | `control-edit-ui.ts:10`, `authoring-control-edits.ts:25-38` | source | **Fixed**: after Escape the slider ignores input until release/blur. Keyboard bursts are also one Undo step (found by this acceptance: browsers fire `change` per arrow key). |
 | B-15 | Irregular Glitter limits hidden; error advice wrong direction | `main.ts:221-228, 277-279` | source | **Fixed** message (direction-neutral, explains the 32,768 threshold). Bounds still need A-7. |
 | B-16 | Resizing one sidebar saves the other's squeezed width | `sidebar-ui.ts:41-42` | source | **Legacy only** (no sidebars). |
-| B-17 | Shift overloaded on the head (Shift-drag off makeup pans; Shift-wheel swallowed) | `surface-editor.ts:482-487, 622-629` | source | **Core/adapter** (device-owned gesture policy). |
+| B-17 | Shift overloaded on the head (Shift-drag off makeup pans; Shift-wheel swallowed) | `surface-editor.ts:482-487, 622-629` | source | **Open, awaiting a gesture-policy decision**; options in the [boundary assessment](ui-architecture-boundary.md#open-work). |
 | B-18 | Library load failure hides the editor with no retry | `collection-ui.ts:40-42` | source | **Fixed**: *Library unavailable* with Retry; layers stay editable. |
 | B-19 | Keyboard-opened colour picker adds one Undo per colour | `control-edit-ui.ts:1-9` | source | **Fixed**: transaction begins on Enter/Space. |
 | B-20 | Scroll/disclosure restored only after the head loads | `main.ts:549, 628-630` | source | **Legacy only** (layout restores before any async work). |
@@ -76,20 +76,20 @@ The audit covered `legacy.html`, `style.css`, `main.ts`, the legacy view modules
 
 | ID | Gap | Proposal (summary) | State after this work |
 |---|---|---|---|
-| A-1 | No draft-vs-revision dirty state | `persistence(): { savedRevision, dirty, dirtyPresets, structureDirty }` — the service already compares snapshots for package freshness | Open. The UI states only what is known (*Not in library*, *Based on rN*, *Newer rN saved*). |
-| A-2 | No consequence metadata; one previous-draft slot | `consequences(action)` + bounded previous-draft stack | Recovery stack completed 25 September (B-1); generic consequence metadata remains open. |
-| A-3 | File and collection busy states separate/contradictory | one activity model; refusals never mutate busy | Refusal mutation fixed (B-3); unified activity model remains open. |
+| A-1 | No draft-vs-revision dirty state | `persistence(): { savedRevision, dirty, dirtyPresets, structureDirty }` — the service already compares snapshots for package freshness | **Implemented** 25 September: `library.persistence()`; the chip reads Saved rN / Unsaved. |
+| A-2 | No consequence metadata; one previous-draft slot | `consequences(action)` + bounded previous-draft stack | **Implemented** 25 September: recovery stack (B-1) and `authoring.consequences()`. |
+| A-3 | File and collection busy states separate/contradictory | one activity model; refusals never mutate busy | **Implemented** 25 September: refusals never mutate busy (B-3); `files.activity()` is one list linked by request ID. |
 | A-4 | Adapter messages untyped | `{ code, severity, clears }` | **Partly**: `port.status.message` now carries source + id; severity/code still open. |
-| A-5 | No high-level geometry/navigation commands (insert, move, tangent, transform, warp origin/vector, UV pan/zoom, orbit/dolly) | typed `GeometryAction`s and view commands | Open; blocks full keyboard editing and scripted menus for coordinates. |
+| A-5 | No high-level geometry/navigation commands (insert, move, tangent, transform, warp origin/vector, UV pan/zoom, orbit/dolly) | typed `GeometryAction`s and view commands | **Implemented** 25 September: coordinate recipe actions, `camera.navigate`, `viewport.uvNavigate`. Arrow-key nudging UI still to build. |
 | A-6 | No labels/descriptions for actions and choices; `satin` alias offered | presentation metadata on descriptors | **Partly**: `finishCatalogue()` and `glitterModelCatalogue()` added; the UI hides the alias. |
-| A-7 | State-dependent limits missing from descriptors | `limitsFor(target, kind, variant)` | Open; `FLAKE_LIMITS` allowlisted as a recorded exception. |
-| A-8 | Free-text validation failures; codes guessed from text | structured `ValidationIssue`s | Open (e.g. Bring forward on the front layer reports "Invalid layer position."). |
-| A-9 | Requests lack IDs, progress linkage and cancellation | request handles + honest `cancel` | Open; UI says builds cannot be cancelled. |
-| A-10 | Undo exposes only a flag; no label/Redo | `history()` + `recipe.redo` | Open. |
+| A-7 | State-dependent limits missing from descriptors | `limitsFor(target, kind, variant)` | **Implemented** 25 September: `authoring.limitsFor()`; the `flake-field` allowlist exception is removed. |
+| A-8 | Free-text validation failures; codes guessed from text | structured `ValidationIssue`s | **Implemented** 25 September: `issue: {code, field, message}` on refusals (e.g. "This layer is already at the front."). |
+| A-9 | Requests lack IDs, progress linkage and cancellation | request handles + honest `cancel` | **Implemented** 25 September: request IDs; `cancel` refuses honestly (the server cannot abort). |
+| A-10 | Undo exposes only a flag; no label/Redo | `history()` + `recipe.redo` | **Implemented** 25 September: `recipe.redo`, `authoring.history()` labels; header Redo. |
 | A-11 | No quick per-layer "will this export?" | advisory `packagePreflight()` | **Partly**: finish catalogue mirrors the compiler gate; Check stays authoritative. |
-| A-12 | Readiness only aggregate | per-layer readiness | Open. |
-| A-13 | UV "selected point outside view" only in DOM | selection visibility in viewport snapshot | Open (hint lost in the new root). |
-| A-14 | Panel disclosure in collection domain; save progress bumps `collectionRevision`, invalidating open menus | move disclosure to UI prefs; bump revision on content only | Open. |
+| A-12 | Readiness only aggregate | per-layer readiness | **Implemented** 25 September: `previewReadiness.layers`. |
+| A-13 | UV "selected point outside view" only in DOM | selection visibility in viewport snapshot | **Implemented** 25 September: `viewport.snapshot().uv.selection`; UV hint restored. |
+| A-14 | Panel disclosure in collection domain; save progress bumps `collectionRevision`, invalidating open menus | move disclosure to UI prefs; bump revision on content only | **Partly**: revision now bumps on content only (`contentVersion()`); disclosure move deferred while only the legacy shell uses it. |
 | A-15 | Asset availability loosely typed | typed per-asset records | **Partly**: `port.status.assets` (errors, provenance, eye optics). |
 | A-16 | Full snapshots clone every Undo history (measured ~56 ms / ~30 ms per call) | cheap detached reads | **Implemented** (E1–E3). |
 
@@ -237,13 +237,12 @@ Original delivery: **353 tests pass** (330 before this work plus 23 new: dock mo
 
 Updated 25 September 2026.
 
-1. ~~Core fix for B-3~~ — **done** (`6c0e46f`), with B-1 (`f552ff6`) and B-2 (`da76361`, `c6b2866`). Still open: adapter items B-7 (case-sensitive Ctrl+Z gesture cancel) and B-17 (Shift overload on the head), and the two core notes from the code review (control transaction vs gesture; layer add without a selected preset).
-2. API proposals A-1, A-5, A-7, A-8, A-9, A-10, A-12, A-13, A-14 (appendix signatures); remaining parts of A-2 (consequence metadata) and A-3 (unified activity model).
-3. Core performance: `CollectionService.capability()` for export/package and `lastPackageIsCurrent()` re-parse the whole workspace including every Undo history (~27 ms); validate the collection without editor histories or cache by draft version.
-4. Presentation follow-ups: arrow-key nudging once A-5 exists; relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification; a shorter stage hint for narrow head cells.
-5. Primary-agent review of the API commit (`ebe6a1f`; the one-line file-snapshot change) versus presentation commits. The merge itself is done; this review is still owed.
-6. Move `StudioFileOperations` IDs into the `StudioApplication` descriptor registry, and verify the context-menu/command-registry claims end to end.
-7. Retire `legacy.html` once the new interface is accepted after in-depth review.
+1. B-1, B-2, B-3 (`f552ff6`, `da76361` + `c6b2866`, `6c0e46f`), B-7, both code-review core notes and API items A-1, A-2, A-3, A-5, A-7..A-10, A-12, A-13 and the A-14 revision part are **done** (25 September; see the [boundary assessment](ui-architecture-boundary.md#application-api-additions-25-september)). Still open: B-17 (gesture-policy decision), A-4, A-6, A-11, A-15 and the A-14 disclosure move.
+2. Core performance: `CollectionService.capability()` for export/package and `lastPackageIsCurrent()` re-parse the whole workspace including every Undo history (~27 ms); validate the collection without editor histories or cache by draft version.
+3. Presentation follow-ups: arrow-key nudging (the commands now exist); relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification; a shorter stage hint for narrow head cells.
+4. Primary-agent review of the API commit (`ebe6a1f`; the one-line file-snapshot change) versus presentation commits. The merge itself is done; this review is still owed.
+5. Verify the context-menu/command-registry claims end to end (file-workflow IDs are now in the registry).
+6. Retire `legacy.html` once the new interface is accepted after in-depth review.
 
 ## Appendix — proposed signatures (from the audit, unchanged)
 

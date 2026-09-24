@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="XF Studio">
+  <!-- 16/24 px variant: same mark, heavier strokes so the letters survive downsampling. -->
+  <path d="M0 0h25l7 7v25H7l-7-7z" fill="#f4dc4b"/>
+  <path d="M5.5 9.5l8 13M13.5 9.5l-8 13M19.5 22.5v-13h7M19.5 16h5.5" fill="none" stroke="#18160c" stroke-width="3.1" stroke-linecap="square"/>
+</svg>

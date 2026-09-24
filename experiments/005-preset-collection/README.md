@@ -32,6 +32,8 @@ python experiments/005-preset-collection/build.py --collection experiments/005-p
 python experiments/005-preset-collection/verify.py
 ```
 
+The Studio app has TypeScript ports of `mip_maps.py`, `archive_inventory.py` and an independent port of `verify.py`, which reproduce these programs' output (see [Build pipeline port](../../research/authoring/studio-to-mod-pipeline.md#build-pipeline-port)). The product Build still runs the Python programs until the orchestration is ported. These Python programs remain the research oracle.
+
 `build.py --collection <collection.json>` accepts another validated `xfas/collection-1` collection. Each build gets a new output directory, preserving prior outputs. The independent verifier follows the latest successfully completed build. No runtime install action is part of either command.
 
 `create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-studio/authoring/tools/bake_collection.ts) writes the material inputs. The accordion editor and SQLite collection store now feed this same contract; its source export remains separate from installable packaging.

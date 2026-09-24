@@ -1,6 +1,6 @@
 # Character customization file chain and image guide
 
-Research snapshot: [`Cyberpunk-Modding-Docs` commit `be2f44eed8419342ec13f72ed9cab008e9f7b289`](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/tree/be2f44eed8419342ec13f72ed9cab008e9f7b289), inspected locally at `D:/Dev/Cyberpunk-Modding-Docs`. This maps *documented resource relationships*, not the winning resources in Nathan's game. The wiki's diagrams and WolvenKit screenshots were inspected as evidence alongside the prose. Paths below are relative to that clone; prepend `D:/Dev/Cyberpunk-Modding-Docs/` for an exact local path. Public links pin the same commit.
+Research snapshot: [`Cyberpunk-Modding-Docs` commit `be2f44eed8419342ec13f72ed9cab008e9f7b289`](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/tree/be2f44eed8419342ec13f72ed9cab008e9f7b289), inspected locally at `D:/Dev/Cyberpunk-Modding-Docs`. This maps *documented resource relationships*, not the winning resources in any particular installation. The wiki's diagrams and WolvenKit screenshots were inspected as evidence alongside the prose. Paths below are relative to that clone; prepend `D:/Dev/Cyberpunk-Modding-Docs/` for an exact local path. Public links pin the same commit.
 
 ## The chain to resolve
 

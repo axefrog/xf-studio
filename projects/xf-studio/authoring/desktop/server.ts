@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
+import { createInstallDetectionHandler } from "../src/install-detection-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
@@ -44,6 +45,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => ({ updater: false, installer: false, packageCheck: true,
       packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null }));
+  const installDetection = createInstallDetectionHandler();
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
@@ -121,6 +123,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
+      if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

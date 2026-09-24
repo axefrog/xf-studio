@@ -25,6 +25,7 @@ export class Frame {
   get revision() { return this.once("revision", () => this.port.editor.revision()); }
   get canUndo() { return this.once("canUndo", () => this.port.editor.canUndo()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
+  get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
   get preview() { return this.once("preview", () => this.port.authoring.previewState()); }
   get readiness() { return this.once("readiness", () => this.port.previewReadiness.snapshot()); }
@@ -35,8 +36,8 @@ export class Frame {
 export type FrameState = Frame;
 
 const sources: [RegExp, string][] = [
-  [/^recipe\.undo$/, "Undo"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
-  [/^(point|path|field|pigment|softness)\./, "Shape"], [/^(layer\.set|glitter\.)/, "Colour & finish"],
+  [/^recipe\.(undo|redo)$/, "Undo"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
+  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
   [/^collection\./, "Library"], [/^savedV\./, "Saved V"],
 ];
@@ -96,18 +97,9 @@ export class StudioRuntime {
     this.changed();
     return outcome;
   }
-  /**
-   * With a loaded collection but no selected preset, the editor shows an empty recipe that
-   * no preset owns; edits there would be discarded (review finding). Gate authoring on it.
-   */
-  presetGate(): { available: boolean; reason?: string } {
-    const draft = this.port.library.summary().draft;
-    return draft && !draft.selected ? { available: false, reason: "Add or select a preset first; layers belong to a preset." } : { available: true };
-  }
-  /** Layer-creation capability combined with the preset gate. */
+  /** Layer creation; the application refuses it (with a reason) while no preset owns the editor. */
   addLayerCapability() {
-    const gate = this.presetGate();
-    return gate.available ? this.port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }) : gate;
+    return this.port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } });
   }
   /** A toast "Undo" that only undoes the change it announced, never a later unrelated edit. */
   undoAction(): FeedbackAction {

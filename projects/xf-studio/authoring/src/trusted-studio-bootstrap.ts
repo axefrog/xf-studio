@@ -11,6 +11,7 @@ import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { WorkspaceState } from "./workspace-state";
 import type { LocalSetupActions } from "./local-setup-actions";
+import type { InstallDetectionActions } from "./install-detection-actions";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -27,6 +28,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   /** Optional device status (autosave, asset diagnostics) exposed read-only to the view. */
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
+  installDetection?: InstallDetectionActions;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -66,7 +68,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup });
+    localSetup: options.localSetup, installDetection: options.installDetection });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,
