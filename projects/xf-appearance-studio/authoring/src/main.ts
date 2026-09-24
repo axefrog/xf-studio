@@ -35,6 +35,8 @@ import { createUVEditor } from "./uv-editor";
 import { ViewportAdapter } from "./viewport-adapter";
 import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
+import { CollectionApplication } from "./collection-application";
+import { collectionTransport } from "./collection-transport";
 import { setupMotionControls } from "./motion-ui";
 import { MotionActions } from "./motion-actions";
 import { SavedAppearanceActions, type SavedAppearanceState } from "./saved-appearance-actions";
@@ -75,6 +77,7 @@ const presentation = new AuthoringPresentation(authoring, geometry);
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
+let collectionApp: CollectionApplication | undefined;
 function checkpoint() {
   authoring.checkpoint();
 }
@@ -120,7 +123,7 @@ const layout = (): WorkspaceState["panels"] => ({ ...sidebars.snapshot(),
 const workspaceComposer = new WorkspaceComposer(workspace, {
   editor: () => authoring.export(), uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
   savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
-  collections: () => presetLibrary?.snapshot() ?? workspace.collections,
+  collections: () => collectionApp?.workspaceSnapshot() ?? workspace.collections,
   quality: () => qualityActions?.snapshot().size ?? initialTextureSize,
   preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
   sidebar: () => sidebars.snapshot(), layout,
@@ -340,7 +343,7 @@ const recipeActions = new RecipeActions(
   () => ({ recipe: authoring.recipe, active: authoring.active,
     selected: authoring.selected, fieldSelection: authoring.fieldSelection }),
   (next, effect) => authoring.applyActionState(next, effect),
-  authoring, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
+  authoring, glitterChoices, () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
   (i, kind) => authoring.gestureChanged(i, kind));
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
@@ -513,13 +516,16 @@ const fileOperations = new StudioFileOperations({
   }),
 }, {
   recipe: () => presentation.recipe(), selectedLayer: current,
-  importRecipe: (recipe, name) => presetLibrary!.importRecipe(recipe, name),
+  importRecipe: (recipe, name) => {
+    collectionApp!.importRecipe(recipe, name);
+    presetLibrary!.refresh(); persist();
+  },
   hasSavedV: () => savedAppearance?.hasSavedV() ?? false,
   savedV: () => savedAppearance?.snapshot().savedV,
   loadSavedV: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
   savedVReady: () => !!viewer,
   executeCollection: request => app.execute(request),
-  recoverCollection: () => presetLibrary!.service.dispatch({ kind: "collection.undoOpen" }),
+  recoverCollection: () => collectionApp!.recover(),
 });
 async function runFile(action: StudioFileAction) {
   const previousStatus = $("status").textContent ?? "";
@@ -548,10 +554,11 @@ $("save").onclick = () => void runFile({ kind: "recipe.export" });
 $("load").onclick = () => void runFile({ kind: "recipe.import" });
 $("export").onclick = () => void runFile({ kind: "mask.export" });
 $("open-v").onclick = () => void runFile({ kind: "savedV.import" });
-presetLibrary = setupCollections(() => authoring.export(), editor => {
-  authoring.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
-  resetStackResources();
-}, workspace.collections, workspace.library, persist, fileOperations, app);
+collectionApp = new CollectionApplication(workspace.collections, workspace.library, authoring,
+  resetStackResources, collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
+  app, fileOperations);
+presetLibrary = setupCollections(collectionApp, persist, workspace.collections?.filesOpen);
+void collectionApp.initialize().then(() => presetLibrary?.refresh());
 function showSavedV(state: Readonly<SavedAppearanceState>) {
   const { result, savedV } = state;
   if (!result || !savedV) return;

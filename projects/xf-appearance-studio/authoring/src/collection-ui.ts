@@ -1,43 +1,34 @@
-import type { EditorSnapshot } from "./collection-session";
-import type { CollectionWorkspace, PresetCommand } from "./collection-workspace";
-import { CollectionService, type CollectionRequest } from "./collection-service";
-import { collectionTransport } from "./collection-transport";
-import type { LibraryState } from "./workspace-state";
+import type { PresetCommand } from "./collection-workspace";
+import type { CollectionRequest } from "./collection-service";
+import type { CollectionViewPort } from "./collection-application";
 import { reorderHandle } from "./reorder-ui";
-import type { Recipe } from "./recipe";
-import type { StudioApplication } from "./studio-application";
-import type { StudioFileOperations } from "./studio-file-operations";
 
-export function setupCollections(read: () => EditorSnapshot, show: (editor: EditorSnapshot) => void,
-  restored: CollectionWorkspace | undefined, legacy: LibraryState, changed: () => void,
-  filesIO: StudioFileOperations, app: StudioApplication) {
+export function setupCollections(collection: CollectionViewPort, changed: () => void, filesOpen = false) {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const host = $("presets"), layerEditor = $("makeup-editor"), parked = $("parked-layers"), note = $("collection-state");
   const title = $<HTMLInputElement>("collection-name"), savedList = $("saved-collections");
   const files = savedList.closest<HTMLDetailsElement>("details")!;
-  const endpoint = new URLSearchParams(location.search).has("verify") ? "/api/verification/collections" : "/api/collections";
-  const service = new CollectionService(restored, legacy, read, show, collectionTransport(endpoint));
-  app.attach({ collection: service });
-  filesIO.attachCollection(service);
-  const draft = () => service.view().draft;
-  files.open = restored?.filesOpen ?? false;
-  files.ontoggle = () => { if (draft() && !service.view().busy) {
-    service.dispatch({ kind: "collection.filesOpen", open: files.open }); changed(); } };
+  const draft = () => collection.view().draft;
+  files.open = filesOpen;
+  files.ontoggle = () => { if (draft() && !collection.view().busy) {
+    const outcome = collection.dispatch({ kind: "collection.filesOpen", open: files.open });
+    if (outcome.ok) changed(); else message(outcome.message);
+  } };
   const layerCount = (count: number) => `${count} ${count === 1 ? "layer" : "layers"}`;
   const controls = ["preset-add", "preset-restore", "collection-save", "collection-copy", "collection-export", "collection-plan",
     "collection-package-check", "collection-package-build",
     "collection-import", "collection-refresh", "collection-undo-open"];
   const message = (text: string) => { note.textContent = text; };
   function buttons() {
-    const state = service.view();
+    const state = collection.view();
     for (const id of controls) $<HTMLButtonElement>(id).disabled = state.busy || !state.draft;
     title.disabled = state.busy || !state.draft;
     if (state.draft && !state.busy) {
-      $<HTMLButtonElement>("preset-restore").disabled = !service.actionCapability({ kind: "preset.edit", command: { kind: "restore" } }).available;
-      $<HTMLButtonElement>("collection-undo-open").disabled = !filesIO.capability({ kind: "collection.recover" }).available;
+      $<HTMLButtonElement>("preset-restore").disabled = !collection.capability({ kind: "preset.edit", command: { kind: "restore" } }).available;
+      $<HTMLButtonElement>("collection-undo-open").disabled = !collection.fileCapability({ kind: "collection.recover" }).available;
       for (const [id, action] of [["collection-export", "collection.export"], ["collection-plan", "collection.plan"],
         ["collection-package-check", "package.check"], ["collection-package-build", "package.build"]] as const)
-        $<HTMLButtonElement>(id).disabled = !filesIO.capability({ kind: action }).available;
+        $<HTMLButtonElement>(id).disabled = !collection.fileCapability({ kind: action }).available;
     }
     for (const actions of host.querySelectorAll<HTMLElement>(".preset-actions")) actions.inert = state.busy;
     for (const field of host.querySelectorAll<HTMLInputElement>(".preset-name-label input")) field.disabled = state.busy;
@@ -60,9 +51,11 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       summary.append(heading, info); details.append(summary);
       summary.onclick = e => {
         e.preventDefault();
-        if (service.view().busy) return;
-        if (draft()!.selected === preset.id) service.dispatch({ kind: "preset.expand", expanded: !draft()!.expanded });
-        else service.dispatch({ kind: "preset.select", id: preset.id });
+        if (collection.view().busy) return;
+        const outcome = draft()!.selected === preset.id
+          ? collection.dispatch({ kind: "preset.expand", expanded: !draft()!.expanded })
+          : collection.dispatch({ kind: "preset.select", id: preset.id });
+        if (!outcome.ok) { message(outcome.message); return; }
         paint(); changed();
       };
       const actions = document.createElement("div"); actions.className = "preset-actions";
@@ -84,10 +77,11 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
       const commit = () => {
         if (name.value === draft()!.collection.presets.find(p => p.id === preset.id)?.name) return;
         const oldName = draft()!.collection.presets.find(p => p.id === preset.id)!.name;
-        try { service.dispatch({ kind: "preset.edit", command: { kind: "rename", id: preset.id, name: name.value } }); const newName = draft()!.collection.presets.find(p => p.id === preset.id)!.name;
+        const outcome = collection.dispatch({ kind: "preset.edit", command: { kind: "rename", id: preset.id, name: name.value } });
+        if (outcome.ok) { const newName = draft()!.collection.presets.find(p => p.id === preset.id)!.name;
           heading.textContent = newName;
           for (const button of actions.querySelectorAll("button")) { button.title = button.title.replace(oldName, newName); button.setAttribute("aria-label", button.title); }
-          changed(); } catch (e) { message((e as Error).message); name.value = oldName; }
+          changed(); } else { message(outcome.message); name.value = oldName; }
       };
       name.onchange = name.onblur = commit; name.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commit(); } };
       details.append(label, actions);
@@ -97,27 +91,27 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     buttons();
   }
   function edit(command: PresetCommand) {
-    if (!draft() || service.view().busy) return;
-    const outcome = app.dispatch({ kind: "preset.edit", command });
+    if (!draft() || collection.view().busy) return;
+    const outcome = collection.dispatch({ kind: "preset.edit", command });
     if (!outcome.ok) { message(outcome.message); return; }
     paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision.");
   }
   function paintSavedList() {
     savedList.replaceChildren();
-    for (const item of service.view().summaries) {
+    for (const item of collection.view().summaries) {
       const button = document.createElement("button"); button.textContent = `${item.name} · ${item.count} presets · v${item.revision}`;
       button.onclick = () => void run({ kind: "open", id: item.id }); savedList.append(button);
     }
   }
   async function run(request: CollectionRequest) {
-    const outcome = await filesIO.executeCollection(request);
+    const outcome = await collection.execute(request);
     if (!outcome.ok) message(outcome.message);
     paint();
     if (outcome.ok && request.kind !== "package" && request.kind !== "refresh") changed();
   }
-  filesIO.subscribe(() => {
+  collection.subscribe(() => {
     buttons(); paintSavedList();
-    const progress = service.view().progress;
+    const progress = collection.view().progress;
     if (progress) message(progress.message);
   });
   $("preset-add").onclick = () => edit({ kind: "add" }); $("preset-restore").onclick = () => edit({ kind: "restore" });
@@ -125,15 +119,15 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   $("collection-copy").onclick = () => void run({ kind: "saveCopy" });
   $("collection-refresh").onclick = () => void run({ kind: "refresh" });
   $("collection-undo-open").onclick = () => void (async () => {
-    const outcome = await filesIO.execute({ kind: "collection.recover" });
+    const outcome = await collection.fileExecute({ kind: "collection.recover" });
     if (!outcome.ok) message(outcome.message);
     else { paint(); changed(); }
   })();
   const commitTitle = () => {
     if (!draft()) return;
     if (title.value === draft()!.collection.name) return;
-    try { service.dispatch({ kind: "collection.rename", name: title.value }); changed(); }
-    catch (e) { message((e as Error).message); title.value = draft()!.collection.name; }
+    const outcome = collection.dispatch({ kind: "collection.rename", name: title.value });
+    if (outcome.ok) changed(); else { message(outcome.message); title.value = draft()!.collection.name; }
   };
   title.onchange = title.onblur = commitTitle;
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitTitle(); } };
@@ -142,25 +136,17 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   for (const [id, kind] of [["collection-package-check", "check"], ["collection-package-build", "build"]] as const)
     $(id).onclick = () => void run({ kind: "package", action: kind });
   $("collection-import").onclick = () => void (async () => {
-    const outcome = await filesIO.execute({ kind: "collection.import" });
+    const outcome = await collection.fileExecute({ kind: "collection.import" });
     if (!outcome.ok) { if (outcome.code !== "cancelled") message(outcome.message); return; }
     paint(); changed();
   })();
   paint();
-  void run({ kind: "initialize" });
   return {
-    service,
-    snapshot: () => service.snapshot(),
-    importRecipe(recipe: Recipe, name: string) {
-      if (!draft() || service.view().busy) throw Error("Wait for the collection to finish loading or saving.");
-      const outcome = app.dispatch({ kind: "collection.importRecipe", recipe, name });
-      if (!outcome.ok) throw Error(outcome.message);
-      paint(); changed();
-    },
+    refresh: paint,
     refreshSummary() {
       if (!draft()) return;
-      const current = read(), row = host.querySelector<HTMLElement>(`[data-preset-id="${draft()!.selected}"] small`);
-      if (row) row.textContent = layerCount(current.recipe.layers.length);
+      const row = host.querySelector<HTMLElement>(`[data-preset-id="${draft()!.selected}"] small`);
+      if (row) row.textContent = layerCount(collection.currentLayerCount());
     },
   };
 }
