@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -52,5 +52,60 @@ test("Experiment 005 invokes a supplied bake entry from a supplied work root", (
     // The small test bake deliberately writes no compiled plan; only path dispatch is in scope.
     expect(result.exitCode).not.toBe(0);
     expect(readFileSync(join(output, "logs", "bake.log"), "utf8")).toContain(`portable bake entry reached from ${workRoot}`);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Build refuses a game destination before writing and accepts separate private roots", () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-private-roots-"));
+  try {
+    const work = join(root, "work"), game = join(root, "game"), plate = join(root, "plate");
+    const tools = join(root, "tools"), scripts = join(root, "scripts");
+    for (const path of [work, game, plate, tools, scripts]) mkdirSync(path);
+    for (const name of ["xfas_eye_plate.mesh", "xfas_eye_plate.morphtarget"]) writeFileSync(join(plate, name), "fixture");
+    const fakeWolvenkit = join(tools, "WolvenKit.CLI.exe");
+    writeFileSync(fakeWolvenkit, "fixture");
+    const bake = join(scripts, "bake.ts");
+    writeFileSync(bake, "console.log('private bake reached')");
+    const build = join(root, "private", "build"), dist = join(root, "private", "dist");
+    const base = ["python", script, "--collection", fixture, "--bun", process.execPath,
+      "--app-root", app, "--study-root", study, "--work-root", work,
+      "--build-root", build, "--plate", plate, "--wolvenkit", fakeWolvenkit,
+      "--gamepath", game, "--bake-script", bake, "--machine-result"];
+    const refused = Bun.spawnSync([...base, "--dist-root", join(game, "archive", "pc", "mod")],
+      { cwd: work, stdout: "pipe", stderr: "pipe" });
+    expect(refused.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(refused.stderr)).toContain("overlaps configured game root");
+    expect(existsSync(build)).toBe(false);
+    expect(existsSync(join(game, "archive"))).toBe(false);
+    const refusedIntermediate = Bun.spawnSync([...base, "--build-root", join(game, "generated"), "--dist-root", dist],
+      { cwd: work, stdout: "pipe", stderr: "pipe" });
+    expect(refusedIntermediate.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(refusedIntermediate.stderr)).toContain("Build root overlaps configured game root");
+    expect(existsSync(join(game, "generated"))).toBe(false);
+    const privateAttempt = Bun.spawnSync([...base, "--dist-root", dist],
+      { cwd: work, stdout: "pipe", stderr: "pipe" });
+    // The fake bake has no compiled plan; reaching it proves the root gate accepted private paths.
+    expect(privateAttempt.exitCode).not.toBe(0);
+    const intermediate = readdirSync(build).find(name => !name.startsWith("source-"));
+    expect(intermediate).toBeDefined();
+    expect(readFileSync(join(build, intermediate!, "logs", "bake.log"), "utf8")).toContain("private bake reached");
+    expect(existsSync(dist)).toBe(false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a linked output directory cannot escape the dist root", () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-linked-output-"));
+  try {
+    const dist = join(root, "dist"), outside = join(root, "outside"), work = join(root, "work");
+    for (const path of [dist, outside, work]) mkdirSync(path);
+    const link = join(dist, "linked");
+    symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
+    const check = Bun.spawnSync(["python", script, "--collection", fixture, "--bun", process.execPath,
+      "--app-root", app, "--study-root", study, "--work-root", work,
+      "--dist-root", dist, "--output-root", link, "--check"],
+      { cwd: work, stdout: "pipe", stderr: "pipe" });
+    expect(check.exitCode).not.toBe(0);
+    expect(new TextDecoder().decode(check.stderr)).toContain("linked directory");
+    expect(existsSync(join(outside, "manifest.json"))).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

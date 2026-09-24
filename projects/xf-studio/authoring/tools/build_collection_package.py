@@ -38,7 +38,8 @@ def run(command, cwd, log=None):
 
 
 def destination(root, dist_root):
-    """Only return an ignored project dist path, never a game/mod deployment path."""
+    """Return a canonical destination beneath the host's private dist root."""
+    reject_linked_path(root, 'Output root')
     base = dist_root.resolve()
     chosen = root.resolve()
     if chosen != base and base not in chosen.parents:
@@ -46,6 +47,36 @@ def destination(root, dist_root):
     if chosen.exists() and not chosen.is_dir():
         raise ValueError(f'Output root is not a directory: {chosen}')
     return chosen
+
+
+def reject_linked_path(path, label):
+    """Reject symlinks and Windows junctions in writable paths before resolving them."""
+    absolute = path.absolute()
+    for component in (absolute, *absolute.parents):
+        if component.is_symlink() or (hasattr(component, 'is_junction') and component.is_junction()):
+            raise ValueError(f'{label} uses a linked directory: {component}')
+
+
+def overlaps(left, right):
+    return left == right or left in right.parents or right in left.parents
+
+
+def guard_private_roots(build_arg, dist_arg, output_arg, protected, collection):
+    """Keep all wrapper writes apart from declared source, game and tool inputs."""
+    for label, path in [('Build root', build_arg), ('Dist root', dist_arg), ('Output root', output_arg)]:
+        reject_linked_path(path, label)
+    build_root, dist_root = build_arg.resolve(), dist_arg.resolve()
+    output_root = destination(output_arg, dist_root)
+    if overlaps(build_root, dist_root):
+        raise ValueError('Build and dist roots must be separate private directories.')
+    for label, path in protected:
+        source = path.resolve()
+        for root_label, root in [('Build root', build_root), ('Dist root', dist_root)]:
+            if overlaps(root, source):
+                raise ValueError(f'{root_label} overlaps configured {label}: {source}')
+    if build_root == collection or build_root in collection.parents or dist_root == collection or dist_root in collection.parents:
+        raise ValueError('Collection input cannot be inside a writable build or dist root.')
+    return build_root, dist_root, output_root
 
 
 def main(argv=None):
@@ -109,6 +140,12 @@ def main(argv=None):
             if not (plate/name).is_file(): raise ValueError(f'Missing source plate resource: {plate/name}')
         if not wolvenkit.is_file() or not gamepath.is_dir():
             raise ValueError('WolvenKit must be a file and gamepath must be a directory.')
+        protected = [('game root', gamepath), ('plate source', plate), ('app source', app),
+                     ('study source', study), ('preflight tool', preflight_script.parent),
+                     ('bake tool', bake_script.parent), ('WolvenKit tools', wolvenkit.parent),
+                     ('Bun tools', bun.parent)]
+        build_root, dist_root, output_root = guard_private_roots(
+            args.build_root, args.dist_root, args.output_root or args.dist_root, protected, collection)
         token = f"{summary['namespace']}-{time.time_ns()}"
         intermediate = build_root / token
         final = output_root / token
@@ -141,6 +178,10 @@ def main(argv=None):
             raise ValueError('Compiled collection identities differ from preflight.')
         source_package = intermediate/'package/archive/pc/mod'
         names = [summary['namespace'] + suffix for suffix in ('.archive', '.archive.xl')]
+        checked_roots = guard_private_roots(
+            args.build_root, args.dist_root, args.output_root or args.dist_root, protected, collection)
+        if checked_roots != (build_root, dist_root, output_root):
+            raise ValueError('Private output roots changed during the build.')
         output_root.mkdir(parents=True, exist_ok=True)
         staging = output_root / ('.staging-' + token)
         staging.mkdir(exist_ok=False)
