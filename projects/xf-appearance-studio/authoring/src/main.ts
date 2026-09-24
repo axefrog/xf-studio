@@ -17,6 +17,8 @@ import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { StudioApplication, type StudioAction } from "./studio-application";
+import { createStudioPresentation } from "./studio-presentation";
+import { UIPreferenceActions } from "./ui-preferences";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import { StudioFileOperations, type StudioFileAction, type StudioFileKind } from "./studio-file-operations";
 import { bindControlEdit } from "./control-edit-ui";
@@ -63,6 +65,7 @@ const status = (text: string) => {
 const verification = new URLSearchParams(location.search).has("verify");
 const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
 const workspace = restored.state;
+const uiPreferences = new UIPreferenceActions(workspace.uiPreferences);
 const initialTextureSize = workspace.preview.textureSize;
 let qualityActions: PreviewQualityActions;
 type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
@@ -128,6 +131,7 @@ const workspaceComposer = new WorkspaceComposer(workspace, {
   collections: () => collectionApp?.workspaceSnapshot() ?? workspace.collections,
   quality: () => qualityActions?.snapshot().size ?? initialTextureSize,
   preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+  uiPreferences: () => uiPreferences.snapshot(),
   sidebar: () => sidebars.snapshot(), layout,
 });
 function snapshot(): WorkspaceState { return workspaceComposer.capture(); }
@@ -136,6 +140,7 @@ const workspacePersistence = new WorkspacePersistence({ storage: localStorage,
   restoreError: restored.error, capture: snapshot });
 workspacePersistence.subscribe(state => { $("save-state").textContent = state.message; });
 authoring.subscribe(() => workspacePersistence.request());
+uiPreferences.subscribe(() => workspacePersistence.request());
 function flushWorkspace() { workspacePersistence.flush(); }
 function persist() { workspacePersistence.request(); }
 window.addEventListener("pagehide", flushWorkspace);
@@ -589,6 +594,9 @@ $("open-v").onclick = () => void runFile({ kind: "savedV.import" });
 collectionApp = new CollectionApplication(workspace.collections, workspace.library, authoring,
   resetStackResources, collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
   app, fileOperations);
+const studioPresentation = createStudioPresentation({ authoring: app, library: collectionApp,
+  files: fileOperations, viewport: viewportAttachment, preferences: uiPreferences });
+if (verification) Object.assign(window, { eyeArtistryStudioPresentation: studioPresentation });
 presetLibrary = setupCollections(collectionApp, persist, workspace.collections?.filesOpen);
 void collectionApp.initialize().then(() => presetLibrary?.refresh());
 function showSavedV(state: Readonly<SavedAppearanceState>) {
