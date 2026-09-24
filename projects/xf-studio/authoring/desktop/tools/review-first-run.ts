@@ -17,6 +17,13 @@ let browser: Awaited<ReturnType<typeof launch>> | undefined;
 try {
   browser = await launch(server.url, { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-setup-open-inline')");
+  await browser.evaluate(`document.querySelector('#desktop-intake-folder').value = ${JSON.stringify(resolve(directory, "absent"))};
+    document.querySelector('#desktop-intake-inspect').click()`);
+  await browser.waitFor("document.querySelector('#desktop-intake-status').textContent.includes('head.glb (missing)')");
+  const intake = await browser.evaluate(`({ message: document.querySelector('#desktop-intake-status').textContent,
+    importDisabled: document.querySelector('#desktop-intake-import').disabled })`);
+  if (!intake.importDisabled || !intake.message.includes("head.glb (missing)"))
+    throw Error("First-run asset diagnostics or import guard failed.");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
   await browser.evaluate("document.querySelector('#desktop-setup-open-inline').click()");
   await browser.waitFor("document.querySelector('#desktop-setup').open && document.querySelector('#desktop-setup-status').textContent.includes('Cyberpunk')");
@@ -30,7 +37,7 @@ try {
     game: document.querySelector('input[name="gameRoot"]')?.value,
     errors: document.querySelectorAll('.boot-error').length
   })`);
-  if (state.game !== game || state.errors || !state.setup.includes("Mod export checks and builds are unavailable"))
+  if (state.game !== game || state.errors || !state.setup.includes("Mod builds are unavailable"))
     throw Error("Desktop first-run setup did not render and persist accurately.");
   await browser.screenshot(resolve(screenshots, "desktop-local-setup-saved.png"));
   await browser.viewport(390, 700);

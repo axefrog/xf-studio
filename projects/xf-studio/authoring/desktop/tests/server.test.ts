@@ -38,7 +38,7 @@ test("session gates static files and narrowly typed host facts", async () => {
   const assetRoot = resolve(root, "data", "preview-assets");
   mkdirSync(assetRoot, { recursive: true });
   writeFileSync(resolve(assetRoot, "head.glb"), "local-only fixture");
-  expect((await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).previewAssets).toBe("user-provided");
+  expect((await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).previewAssets).toBe("incomplete");
   expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(200);
 });
 
@@ -47,6 +47,26 @@ test("About version never falls back to source metadata when packaged metadata i
     .toEqual({ version: "0.1.0", channel: "canary", buildHash: "abc12345", metadataStatus: "ready" });
   expect(desktopVersionFromMetadata({ version: "0.1.0", channel: "canary" }))
     .toMatchObject({ version: "unavailable", channel: "unavailable", metadataStatus: "unavailable" });
+});
+
+test("asset intake requires the desktop session and accepts only a folder inspection command", async () => {
+  const base = `http://127.0.0.1:${app.port}`;
+  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
+  const body = JSON.stringify({ action: "inspect", folder: resolve(root, "absent") });
+  const endpoint = base + "/api/desktop/assets/intake";
+  expect((await fetch(endpoint, { method: "POST", headers: { Origin: base,
+    "Content-Type": "application/json" }, body })).status).toBe(403);
+  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie,
+    Origin: "https://attacker.example", "Content-Type": "application/json" }, body })).status).toBe(403);
+  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
+    "Content-Type": "application/json" }, body: JSON.stringify({ action: "read", folder: dataRoot }) })).status).toBe(400);
+  const report = await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
+    "Content-Type": "application/json" }, body });
+  expect(report.status).toBe(422);
+  const diagnostic = await report.json();
+  expect(diagnostic).toMatchObject({ ready: false, provenance: "unverified" });
+  expect(diagnostic.files).toHaveLength(5);
+  expect(diagnostic.files[0]).toEqual({ name: "head.glb", status: "missing" });
 });
 
 test("SQLite library initializes in the supplied user-data root", async () => {

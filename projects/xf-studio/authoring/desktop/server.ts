@@ -7,6 +7,7 @@ import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
+import { coreAssetsReady, desktopAssetIntakeRequest } from "./asset-intake";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts")) {
@@ -45,8 +46,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         headers: new Headers([...request.headers, ["Origin", origin]]),
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
-        return Response.json(desktopCapabilities(existsSync(resolve(assetRoot, "head.glb")) ? "user-provided" : "missing", version, dataRoot),
+        return Response.json(desktopCapabilities(await coreAssetsReady(dataRoot) ? "matched-prepared" :
+          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot),
           { headers: { "Cache-Control": "no-store" } });
+      if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }

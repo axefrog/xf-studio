@@ -32,6 +32,14 @@
 #desktop-setup-fields label[hidden] { display: none; }
 #desktop-setup-fields input, #desktop-setup-fields select { box-sizing: border-box; width: 100%; min-width: 0;
   padding: 6px 8px; color: inherit; background: var(--bg-sunken, #111820); border: 1px solid var(--line-strong, #59616b); }
+.desktop-intake-label { display: grid; gap: 5px; width: 100%; }
+.desktop-intake-label input { box-sizing: border-box; width: 100%; padding: 8px; color: var(--text, #f0f2f2);
+  background: var(--bg-sunken, #111820); border: 1px solid var(--line-strong, #59616b); }
+.desktop-intake-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.desktop-intake-actions button { padding: 7px 10px; color: var(--text, #f0f2f2);
+  background: var(--bg-raised, #111820); border: 1px solid var(--line-strong, #59616b); }
+.desktop-intake-actions button:disabled { opacity: .55; }
+#desktop-intake-status { min-height: 2.5em; }
 #desktop-setup-status { min-height: 2.5em; }
 .desktop-setup-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .desktop-setup-actions button, #desktop-setup-open, #desktop-setup-open-inline { padding: 6px 10px;
