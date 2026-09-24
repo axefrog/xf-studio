@@ -1,0 +1,13 @@
+{
+  "extends": "./.hutch/devkit/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["main.ts", "server.ts", "host.ts", "electrobun.config.ts", "prepare-static.ts", "tests/*.ts"]
+}

@@ -21,6 +21,11 @@ projects/*/authoring/public/build/
 projects/*/authoring/evidence/screenshots/
 projects/*/authoring/.server-*.log
 projects/*/authoring/data/
+projects/*/authoring/desktop/static/
+projects/*/authoring/desktop/build/
+projects/*/authoring/desktop/.hutch/
+projects/*/authoring/desktop/.cottontail-tmp/
+projects/*/authoring/desktop/artifacts/
 projects/*/tools/*/bin/
 projects/*/tools/*/obj/
 

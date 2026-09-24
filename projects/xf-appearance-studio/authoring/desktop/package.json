@@ -1,0 +1,17 @@
+{
+  "name": "xf-studio-electrobun-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:static": "bun prepare-static.ts",
+    "build:dev": "bun run prepare:static && bunx electrobun@2.0.1 build --env=dev",
+    "run:dev": "bunx electrobun@2.0.1 run --env=dev",
+    "check": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "electrobun": "2.0.1",
+    "typescript": "5.9.3"
+  }
+}
