@@ -38,7 +38,10 @@ void start().catch(error => {
 });
 
 async function start() {
-  const restored = loadBrowserWorkspace(localStorage, verification), workspace = restored.state;
+  const storage = (window as typeof window & {
+    xfDesktopWorkspaceStorage?: Pick<Storage, "getItem" | "setItem">;
+  }).xfDesktopWorkspaceStorage ?? localStorage;
+  const restored = loadBrowserWorkspace(storage, verification), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const localSetup = createBrowserLocalSetup();
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
@@ -81,7 +84,7 @@ async function start() {
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
   const session = createBrowserWorkspaceSession({
-    workspace, restored, verification, storage: localStorage,
+    workspace, restored, verification, storage,
     capture: {
       editor: () => core.document.export(),
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,

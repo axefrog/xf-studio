@@ -4,6 +4,51 @@
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
+// The loopback port changes on each launch, so WebView localStorage alone does
+// not survive a full desktop restart. Load the host-owned draft before Studio
+// constructs its services; keep the browser copy for same-process reloads.
+const verification = new URLSearchParams(location.search).has("verify");
+const workspaceKey = verification ? "xfas.workspace.verification.v1" : "xfas.workspace.v1";
+const workspaceEndpoint = `/api/desktop/workspace${verification ? "?verify=1" : ""}`;
+const failWorkspaceBoot = message => {
+  const root = document.getElementById("studio");
+  root?.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error", textContent: message }));
+  throw Error(message);
+};
+const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
+if (!workspaceResponse.ok) failWorkspaceBoot("Private desktop workspace could not be restored; its file was preserved.");
+const workspaceDocument = await workspaceResponse.json();
+if (workspaceDocument.schema !== "xfs/desktop-workspace-1" ||
+    (workspaceDocument.workspace !== null && typeof workspaceDocument.workspace !== "string"))
+  failWorkspaceBoot("Desktop workspace response is invalid.");
+let workspaceText = workspaceDocument.workspace ?? localStorage.getItem(workspaceKey);
+let saveQueue = Promise.resolve();
+const workspaceAlert = message => {
+  let alert = document.getElementById("desktop-workspace-error");
+  if (!alert) {
+    alert = document.createElement("p");
+    alert.id = "desktop-workspace-error";
+    alert.setAttribute("role", "alert");
+    document.body.append(alert);
+  }
+  alert.textContent = message;
+};
+function saveWorkspace(text) {
+  saveQueue = saveQueue.catch(() => {}).then(async () => {
+    const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: text }),
+      keepalive: new TextEncoder().encode(text).length < 60_000 });
+    if (!response.ok) throw Error("Private desktop workspace could not be saved. Keep this window open and export your collection.");
+  }).catch(error => { workspaceAlert(error.message); });
+}
+window.xfDesktopWorkspaceStorage = {
+  getItem(key) { return key === workspaceKey ? workspaceText : localStorage.getItem(key); },
+  setItem(key, value) {
+    localStorage.setItem(key, value);
+    if (key === workspaceKey) { workspaceText = value; saveWorkspace(value); }
+  },
+};
+if (workspaceDocument.workspace === null && workspaceText !== null) saveWorkspace(workspaceText);
 const stylesheet = document.createElement("link");
 stylesheet.rel = "stylesheet";
 stylesheet.href = "/about.css";

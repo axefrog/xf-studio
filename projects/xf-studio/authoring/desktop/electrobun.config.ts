@@ -5,11 +5,16 @@ import type { ElectrobunConfig } from "electrobun";
 const trialSuffix = process.env.XFS_DESKTOP_BUILD_TRIAL_SUFFIX;
 if (trialSuffix && !/^[a-z0-9]{8,24}$/.test(trialSuffix))
   throw Error("Desktop build trial suffix must be 8–24 lowercase letters or digits.");
+const uiTrialSuffix = process.env.XFS_DESKTOP_UI_TRIAL_SUFFIX;
+if (uiTrialSuffix && !/^[a-z0-9]{8,24}$/.test(uiTrialSuffix))
+  throw Error("Desktop UI trial suffix must be 8–24 lowercase letters or digits.");
+if (trialSuffix && uiTrialSuffix) throw Error("Select only one disposable desktop trial identity.");
 
 export default {
   app: {
-    name: trialSuffix ? "XF Studio Build Trial" : "XF Studio",
-    identifier: trialSuffix ? `dev.axefrog.xf-studio-build-trial-${trialSuffix}` : "dev.axefrog.xf-studio",
+    name: trialSuffix ? "XF Studio Build Trial" : uiTrialSuffix ? "XF Studio UI Trial" : "XF Studio",
+    identifier: trialSuffix ? `dev.axefrog.xf-studio-build-trial-${trialSuffix}` :
+      uiTrialSuffix ? `dev.axefrog.xf-studio-ui-trial-${uiTrialSuffix}` : "dev.axefrog.xf-studio",
     version: "0.1.0",
   },
   build: {

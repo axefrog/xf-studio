@@ -7,6 +7,8 @@ import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { createPackageHandler } from "../../src/package-server";
+import { collectionDraft } from "../../src/collection-workspace";
+import { freshWorkspace, loadWorkspace } from "../../src/workspace-state";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -115,6 +117,65 @@ test("SQLite library initializes in the supplied user-data root", async () => {
   expect((await saved.json()).revision).toBe(2);
   expect((await (await fetch(base + `/api/collections/${summary.id}`, { headers: { Cookie: cookie } })).json()).collection.name)
     .toBe("Desktop trial");
+});
+
+test("desktop workspace survives a changed loopback port without mixing verification and normal drafts", async () => {
+  const shared = resolve(root, "workspace-across-ports");
+  const first = createDesktopServer(staticRoot, shared,
+    { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
+  const firstOrigin = `http://127.0.0.1:${first.port}`;
+  const firstCookie = (await fetch(first.url)).headers.get("set-cookie")!.split(";")[0];
+  const workspace = freshWorkspace();
+  workspace.collections = collectionDraft(collectionFixture, 3);
+  workspace.collections.selected = collectionFixture.presets[1].id;
+  workspace.recipe = structuredClone(collectionFixture.presets[1].recipe);
+  workspace.preview.eyeShape = 12;
+  const endpoint = firstOrigin + "/api/desktop/workspace?verify=1";
+  const headers = { Cookie: firstCookie, Origin: firstOrigin, "Content-Type": "application/json" };
+  try {
+    expect((await fetch(endpoint, { method: "POST", headers: { Origin: firstOrigin, "Content-Type": "application/json" },
+      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(403);
+    expect((await fetch(endpoint, { method: "POST", headers: { ...headers, Origin: "https://attacker.example" },
+      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(403);
+    expect((await fetch(endpoint, { method: "POST", headers,
+      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(204);
+    expect(await (await fetch(firstOrigin + "/api/desktop/workspace", { headers: { Cookie: firstCookie } })).json())
+      .toMatchObject({ workspace: null });
+    expect((await fetch(endpoint, { method: "POST", headers,
+      body: JSON.stringify({ workspace: "invalid" }) })).status).toBe(422);
+  } finally { first.stop(); }
+  const second = createDesktopServer(staticRoot, shared,
+    { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
+  try {
+    const secondOrigin = `http://127.0.0.1:${second.port}`;
+    const cookie = (await fetch(second.url)).headers.get("set-cookie")!.split(";")[0];
+    const response = await fetch(secondOrigin + "/api/desktop/workspace?verify=1", { headers: { Cookie: cookie } });
+    expect(response.status).toBe(200);
+    const value = await response.json();
+    const restored = loadWorkspace({ getItem: key => key === "xfas.workspace.verification.v1" ? value.workspace : null }, true).state;
+    expect(restored.collections?.collection.presets).toHaveLength(collectionFixture.presets.length);
+    expect(restored.collections?.selected).toBe(collectionFixture.presets[1].id);
+    expect(restored.preview.eyeShape).toBe(12);
+  } finally { second.stop(); }
+});
+
+test("an unreadable desktop workspace is preserved and cannot be silently replaced", async () => {
+  const data = resolve(root, "damaged-workspace");
+  mkdirSync(data, { recursive: true });
+  const file = resolve(data, "verification-workspace.json");
+  writeFileSync(file, "damaged draft");
+  const desktop = createDesktopServer(staticRoot, data,
+    { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
+  try {
+    const origin = `http://127.0.0.1:${desktop.port}`;
+    const cookie = (await fetch(desktop.url)).headers.get("set-cookie")!.split(";")[0];
+    const endpoint = origin + "/api/desktop/workspace?verify=1";
+    expect((await fetch(endpoint, { headers: { Cookie: cookie } })).status).toBe(409);
+    expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: origin,
+      "Content-Type": "application/json" }, body: JSON.stringify({ workspace: JSON.stringify(freshWorkspace()) }) })).status)
+      .toBe(422);
+    expect(readFileSync(file, "utf8")).toBe("damaged draft");
+  } finally { desktop.stop(); }
 });
 
 test("desktop first run saves local setup only in its own user data and reports Check ready", async () => {

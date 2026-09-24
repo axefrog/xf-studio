@@ -10,6 +10,7 @@ import { desktopPackageRequest } from "./package";
 import { desktopBuildIssue, type WolvenKitProbe } from "./build";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
+import { DesktopWorkspaceStore, desktopWorkspaceRequest } from "./workspace-store";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
@@ -23,6 +24,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
+  const workspaceStore = new DesktopWorkspaceStore(dataRoot);
   const shutdown = new AbortController();
   const updates = new DesktopUpdateService({ version: version.version, channel: version.channel,
     buildHash: version.buildHash }, updateTrial?.native ?? null,
@@ -80,6 +82,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
+      if (url.pathname === "/api/desktop/workspace")
+        return desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
