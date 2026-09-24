@@ -50,3 +50,6 @@ sav.dat
 *.sqlite*
 *.dpapi
 temp.txt
+
+# Local-only archives (worktree consolidation, branch bundles). Never commit.
+local/
