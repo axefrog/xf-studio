@@ -4,6 +4,10 @@ export type UV = { u: number; v: number };
 export type TangentSide = "in" | "out";
 export type TangentMode = "aligned" | "symmetric" | "corner";
 export type Handles = { in: UV; out: UV; mode: TangentMode };
+/** Explicit path-structure edit: Catmull–Rom → Bézier conversion or one knot's tangent mode. */
+export type PathCommand =
+  | { kind: "enable-bezier" }
+  | { kind: "point-mode"; index: number; mode: TangentMode };
 export type BezierSample = Point & { segment: number; t: number };
 
 export const BEZIER_TOLERANCE = 0.000025;

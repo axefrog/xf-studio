@@ -1,4 +1,4 @@
-import { convertToBezier, setPointMode } from "./bezier-path";
+import { convertToBezier, setPointMode, type PathCommand } from "./bezier-path";
 import { isDirectGlint } from "./direct-glint-settings";
 import type { FieldSelection } from "./field-selection";
 import { defaultFlakes, isIrregular, type Flakes } from "./finish";
@@ -6,7 +6,6 @@ import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, t
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
-import type { PathCommand } from "./path-ui";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =

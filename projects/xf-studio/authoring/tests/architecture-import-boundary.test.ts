@@ -23,3 +23,23 @@ test("the independent browser entry does not depend on legacy main or control mo
   expect(dependencies).not.toContain("./main");
   expect(dependencies.some(path => /\.\/(?:collection-ui|path-ui|control-edit-ui|motion-ui)$/.test(path))).toBe(false);
 });
+
+// Dependencies point inward. Presentation modules (legacy `*-ui` controls, the
+// `studio-ui/` tree) and browser entry points may import the core, never the
+// reverse. `context-menu` is presentation policy shared by both shells.
+const presentation = (path: string) => /^\.\/(?:[\w-]+-ui|studio-ui\/.*|context-menu)$/.test(path);
+const entries = new Set(["main", "studio-main", "port-smoke", "application-boundary-fixture"]);
+
+test("core modules never import presentation modules or browser entry points", () => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  const modules = readdirSync(new URL("../src/", import.meta.url))
+    .filter(file => file.endsWith(".ts") && !file.endsWith(".d.ts"))
+    .map(file => file.slice(0, -3));
+  const core = modules.filter(name => !presentation(`./${name}`) && !entries.has(name));
+  expect(core).toContain("recipe-actions");
+  expect(core).toContain("studio-application");
+  const violations = core.flatMap(name => imports(source(name))
+    .filter(path => presentation(path) || entries.has(path.replace(/^\.\//, "")))
+    .map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
+});
