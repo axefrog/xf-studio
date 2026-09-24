@@ -315,3 +315,66 @@ narrow. The 107 static cases and 664 sampled frames cannot prove continuous
 motion clearance, combined-scene appearance, or runtime rendering. No plate
 was promoted to production preview, packaging, the owned master, the game,
 or MO2. Those later gates need separate evidence before adoption.
+
+## Subframe acceptance rejects the packed candidate — 25 September
+
+The exact packed GLB above **fails** a finer idle check. The new
+[`sample_plate_subframes.ts`](../../projects/xf-studio/authoring/tools/sample_plate_subframes.ts)
+evaluates the same decoded body and facial clips through the existing
+`IdleAnimation` and native-weight skin adapter at requested clip times. It
+reconstructs the 1,620 native-cut affine skin matrices and all 7,186 head
+vertices at each time. It does **not** linearly interpolate the 30 Hz baked
+positions. The independent [subframe verifier](verify_idle_subframes.py) uses
+the unchanged finite, nonadjacent `new_pairs` checker and a separate
+finite-triangle separating-axis calculation. Every included original 30 Hz
+head and affine sample agrees exactly with the prior bake (maximum component
+error zero).
+
+| Sweep | Samples | Original 30 Hz overlap | New contact occurrences |
+|---|---:|---:|---:|
+| Local frames 295–303, 240 Hz | 65 | 9/9 exact | **2** at 9.941667 s |
+| Whole loop 0–22.1 s, 120 Hz | 2,653 | 664/664 exact | **15** across four times |
+
+The full-loop contacts occur at 3.991667 s (seven pairs), 9.941667 s (two),
+16.341667 s (three), and 16.350000 s (three). The 9.941667 s plate-face-795
+pair penetrates by a measured separating-axis interval of 0.068 µm while its
+native head source pair remains separated by 1.376 µm. The largest measured
+candidate overlap in the sweep is 2.978 µm at 3.991667 s. These are newly
+introduced nonadjacent **finite triangle** pairs under the same classification
+as the earlier gates; they are not inferred from vertex proximity. The
+previous 30 Hz static edge slack remains +0.539 µm, and the originally fitted
+frame-298/299 witness pairs retain 3.574–4.686 µm of positive SAT separation
+at their 30 Hz samples. Those positive margins did not protect neighboring
+triangles between frames. [Asset-free evidence](subframe-contact-evidence.json)
+records every contact time, face pair, native comparison, hashes and limits;
+full private reports and samples remain ignored.
+
+Three private Blender 5.0 Workbench renders show the head and false-colour
+plate eye region at the three distinct contact intervals. At normal 1200×800
+view the shell has no obvious large tear. The marked face is mostly obscured
+at 3.991667 and 9.941667 s, and appears as a thin red edge at 16.341667 s.
+The render omits eye globe, cards, textures and game materials, so it cannot
+confirm visibility or appearance. Its PNGs are ignored; the evidence records
+their hashes and the render script remains reproducible. No game or MO2 file
+was changed.
+
+To reproduce privately, use the exact hashed head, native map, clips and
+passing packed candidate above. From `projects/xf-studio/authoring`, install
+the pinned dependencies and run `sample_plate_subframes.ts` with arguments
+`SOURCE_BUILD NATIVE_MAP ASSET_ROOT OUTPUT RATE_HZ FIRST_30HZ_FRAME
+LAST_30HZ_FRAME`: first `240 295 303`, then `120 0 663`, writing to separate
+ignored output directories. From the repository root, run
+`verify_idle_subframes.py --head --native --native-map --prior-map --packed
+--roundtrip-report --packed-verification --dense --subframes --output` on each
+sample directory. It asserts the exact packed GLB/resource proof and 30 Hz
+overlap before checking all subframes. The ignored diagnostic PNGs can be
+recreated with `render_subframe_contacts.py` in Blender 5.0 using an absolute
+ignored `--output` path.
+
+**The candidate is rejected for acceptance and remains research-only.** The
+120/240 Hz samples establish failure, not a complete continuous-time contact
+inventory. The live REDengine graph, full visual context and game rendering
+remain untested; no production plate was promoted. A next correction must
+include between-frame finite-contact constraints for all three discovered
+intervals and then rerun packed-resource, static, selected-pose, 30 Hz, and
+subframe gates without relaxing the displacement or neighbor limits.

@@ -1,0 +1,116 @@
+{
+  "schema": "xfs/native-plate-subframe-contact-evidence-1",
+  "date": "2026-09-25",
+  "status": "REJECTED_AFTER_FINER_IDLE_SAMPLING",
+  "candidate": {
+    "packedGlbSha256": "8e9c76b445ec746904bd8d24bfdf93f78f09d7627ffc8b3d4b337d8b524c6499",
+    "meshSha256": "ad744238134f3d72721047829efd823ace6cc7bce43b214506a15e4bc2e873ee",
+    "morphSha256": "d462fb41f5fdcb741158ff64de1cbcce061b2f313d932f1bb7aaa41c63f2651a",
+    "priorPackedVerificationSha256": "381fe07b13e080861796450bfcacf37187f46f2bddec17ba25397f6d2e10434e",
+    "prior30HzStaticCases": 107,
+    "prior30HzStaticNeighborViolations": 0,
+    "prior30HzMinimumStaticNeighborSlackUm": 0.5394572913235647,
+    "prior30HzSelectedPoses": 73,
+    "prior30HzDenseFrames": 664,
+    "prior30HzNewContacts": 0,
+    "nativeSkinBytesExactInMeshAndMorphBase": true,
+    "topologyUvAnd105MorphIdentitiesVerified": true
+  },
+  "animationInputs": {
+    "headSha256": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "bodyClipSha256": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
+    "facialClipSha256": "5a52d9b9e59acc2630336c3a280e179e57ad4ca5815f97d5397cf15748f2b3e7",
+    "bindingSha256": "72712873bcd65190207c9b83ff44a4a8dd2dd0190b20cea21beb1571deabe568",
+    "idleAdapterSha256": "5aed334947decd0d6c69824fc33d14bb409a84876c73dceee6b0cdcc0c7f38d5",
+    "skinAdapterSha256": "ac0c420a6a4766acb6452374b81422c5734e03306649eaf7bc50b0da31495978",
+    "threeVersion": "0.186.0",
+    "dense30HzManifestSha256": "d7987db6dbfb8de5f8f30643ffdd9085c36159029aaca37328af29b6e8c02969",
+    "dense30HzHeadSha256": "2525a6ff36953b5149778a864853ebd5dad6cf4e9c71eac692f6af23319f8628",
+    "dense30HzLinearSha256": "a0f951850b0f8229794f5ad1c19e6115c31aac541c9abacdee4c08d7b3c59e7c"
+  },
+  "local240Hz": {
+    "range30HzFramesInclusive": [295, 303],
+    "sampleCount": 65,
+    "stepSeconds": 0.004166666666666667,
+    "original30HzOverlap": 9,
+    "maximumHeadAndAffineComponentOverlapError": 0,
+    "subframeManifestSha256": "6bb10d94c032c7b0478f66005d969f5649344d9cfe594db58fcc1a5fb0b339c5",
+    "subframeHeadSha256": "ddf37b5edae47c5239f9941e53eb2a6e1c4670b2b569d3bf73a5ffe5c3c01941",
+    "subframeLinearSha256": "099a27694e0c08f9af9f2d8cc24f9003d037db95df91bf67300a92c37eb66a42",
+    "privateVerificationSha256": "9cf43f7b149347c8a0bcce12957109a24af650f4c87b4ae3adc75e116c61b788",
+    "newContactingTicks": [2386],
+    "newContactOccurrences": 2,
+    "contactPairs": [[795, 2421], [795, 1997]],
+    "candidateMaximumSeparatingAxisGapUm": -0.06843554190005818,
+    "nativeMaximumSeparatingAxisGapUm": 1.376210384762544,
+    "gate": "FAIL"
+  },
+  "full120Hz": {
+    "range30HzFramesInclusive": [0, 663],
+    "sampleCount": 2653,
+    "stepSeconds": 0.008333333333333333,
+    "original30HzOverlap": 664,
+    "maximumHeadAndAffineComponentOverlapError": 0,
+    "subframeManifestSha256": "e9a3b38e81d04bdfd4b9691311c1d6a48087bf476318b4c8cff5baacbb3a3098",
+    "subframeHeadSha256": "c2435cb56e29bae39ae6be89a934248bbc7b624c2c137e9f3dfef512daa72d3e",
+    "subframeLinearSha256": "183cb2158d011637f038e3aad990e2a3cdf5a484dd5eb6eabf9a2b134d77b525",
+    "privateVerificationSha256": "08ca32e556576270516a2aa81ed9f5412d89f39ab772d90378c354735f54f4af",
+    "newContactingTimeCount": 4,
+    "newContactOccurrences": 15,
+    "contactTimes": [
+      {
+        "tick": 479,
+        "seconds": 3.9916666666666667,
+        "pairCount": 7,
+        "plateHeadFaces": [[794, 1993], [794, 1994], [795, 2421], [795, 1993], [795, 1994], [795, 1995], [795, 1997]],
+        "minimumCandidateSeparatingAxisGapUm": -2.977550308536081,
+        "minimumNativeSeparatingAxisGapUm": 0.2180138152230171
+      },
+      {
+        "tick": 1193,
+        "seconds": 9.941666666666666,
+        "pairCount": 2,
+        "plateHeadFaces": [[795, 2421], [795, 1997]],
+        "minimumCandidateSeparatingAxisGapUm": -0.06843554190005818,
+        "minimumNativeSeparatingAxisGapUm": 1.376210384762544
+      },
+      {
+        "tick": 1961,
+        "seconds": 16.341666666666665,
+        "pairCount": 3,
+        "plateHeadFaces": [[2017, 3668], [2017, 3670], [2017, 3672]],
+        "minimumCandidateSeparatingAxisGapUm": -0.334156794790097,
+        "minimumNativeSeparatingAxisGapUm": 33.80013794263004
+      },
+      {
+        "tick": 1962,
+        "seconds": 16.35,
+        "pairCount": 3,
+        "plateHeadFaces": [[2017, 3668], [2017, 3670], [2017, 3672]],
+        "minimumCandidateSeparatingAxisGapUm": -0.0926443464166482,
+        "minimumNativeSeparatingAxisGapUm": 38.10867151576858
+      }
+    ],
+    "gate": "FAIL"
+  },
+  "positiveMarginsAtPrevious30HzWitnessesUm": {
+    "frame298Plate792Head2421": 4.439542738543523,
+    "frame298Plate800Head1987": 3.573895499320301,
+    "frame299Plate799Head1989": 4.0981790065952595,
+    "frame299Plate793Head2421": 4.68591765034887
+  },
+  "privateVisualReview": {
+    "date": "2026-09-25",
+    "tool": "Blender 5.0 Workbench, 1200x800, false-colour head and packed plate",
+    "sampleTicks": [479, 1193, 1961],
+    "renderSha256": {
+      "479": "fc4f9627b0ef2a5e22534c9e8a2da7734910ea9835bf2418de57dc3033b15f7c",
+      "1193": "3c712003b0969802bc60e471e30d3a1aede359eb17bcd43e10fd3b8d90ff8063",
+      "1961": "5c2dced52e484913925023750278ef2f8a4cc6d43bd76129acf1c0842251cdad"
+    },
+    "observations": "At normal image size the plate wraps the eye region without an obvious macroscopic tear. The marked contact triangle is mostly hidden by adjacent surfaces at ticks 479 and 1193; a thin red edge is visible at tick 1961. This workbench view cannot establish micrometre clearance or game appearance. Eye globe, cards, textures and full material context were not rendered.",
+    "imagesTracked": false
+  },
+  "method": "Three.js IdleAnimation samples the original decoded clips at each requested time and reconstructs all head vertices plus the native-cut affine skin field. Original 30 Hz samples match exactly. The independent existing finite nonadjacent new_pairs checker and separate triangle separating-axis calculation assess the exact packed GLB. No linear interpolation of baked head positions or skin matrices was used.",
+  "limit": "Finite 240/120 Hz decoded-adapter samples reveal failure. Timing and counts do not prove all continuous-time contacts or live REDengine behaviour. No preview, package, owned-master, game or MO2 asset was promoted."
+}
