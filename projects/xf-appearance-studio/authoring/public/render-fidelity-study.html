@@ -18,7 +18,7 @@
 </head>
 <body><main><aside>
   <h1>Render fidelity study</h1>
-  <p>Locked A/B view of the current preview head. The left side is the current browser material; the right changes one material term. This page does not read or save your studio draft.</p>
+  <p>Locked A/B view of the current preview head. The left side keeps the current browser material; the right tests a labelled material change or private source-map set. This page does not read or save your studio draft.</p>
   <fieldset id="controls" disabled>
     <div class="views"><button type="button" data-view="lip">Lip seam</button><button type="button" data-view="eye">Saved eye</button></div>
     <label>Right-hand test<select id="variant"></select></label>
@@ -29,7 +29,8 @@
     <button type="button" id="capture">Save paired PNG</button>
   </fieldset>
   <p id="status" role="status">Loading local preview resources…</p>
-  <small id="normal-note">Neutral static pose. Both panes share camera, light, exposure and assets. Eye shader, refraction, bubble normal and saved skin material remain unmodelled. No game rendering claim.</small>
+  <p id="metrics" aria-live="polite"></p>
+  <small id="normal-note">Neutral static pose. Both panes share camera, light and exposure. Eye shader, refraction, bubble normal and game skin transport remain unmodelled. No game rendering claim.</small>
 </aside><section id="compare" aria-label="Locked material comparison">
   <figure id="left"><figcaption>Current browser baseline</figcaption></figure>
   <figure id="right"><figcaption id="right-label">Test</figcaption></figure>

@@ -4,6 +4,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { parseEyeManifest, verifyEyeBytes } from "./eye-appearance";
 import { roughnessRedToGreen } from "./eye-optics";
 import { extendSkin, restoreFirstWeights } from "./skin";
+import { skinPackedRgToRgb, skinRoughnessToGreen } from "./skin-study-maps";
 
 type View = "lip" | "eye";
 type Variant = { value: string; label: string };
@@ -14,6 +15,14 @@ const lipVariants: Variant[] = [
   { value: "uniform-roughness", label: "Uniform skin roughness 0.85" },
   { value: "high-roughness", label: "Uniform skin roughness 1.0" },
   { value: "wireframe", label: "Lip/head triangle wireframe" },
+];
+const sourceVariants: Variant[] = [
+  { value: "base-r-packed", label: "Base D05: roughness R, packed RG normal" },
+  { value: "base-rb-packed", label: "Base D05: R+B 0.93 bias bracket, packed normal" },
+  { value: "base-r-flat", label: "Base D05: roughness R, flat normal" },
+  { value: "arkhe-r-packed", label: "Arkhe candidate: roughness R, packed RG normal" },
+  { value: "arkhe-rb-packed", label: "Arkhe candidate: R+B 0.93 bias bracket, packed normal" },
+  { value: "arkhe-r-flat", label: "Arkhe candidate: roughness R, flat normal" },
 ];
 const eyeVariants: Variant[] = [
   { value: "baseline", label: "Unchanged baseline: roughness 0.18" },
@@ -26,6 +35,45 @@ const controls = $<HTMLFieldSetElement>("controls"), status = $<HTMLParagraphEle
 const variant = $<HTMLSelectElement>("variant"), light = $<HTMLInputElement>("light");
 const exposure = $<HTMLInputElement>("exposure"), height = $<HTMLInputElement>("height");
 const distance = $<HTMLInputElement>("distance"), rightLabel = $<HTMLElement>("right-label");
+const metrics = $<HTMLParagraphElement>("metrics");
+
+type PrivateMap = { url: string; sha256: string };
+type PrivateSkinManifest = {
+  schema: "xfs/private-skin-study-1"; headGlbSha256: string;
+  roughness: PrivateMap;
+  base: { albedo: PrivateMap; normal: PrivateMap };
+  arkheCandidate: { albedo: PrivateMap; normal: PrivateMap };
+};
+type SourceSet = { color: THREE.Texture; normal: THREE.Texture; roughnessR: THREE.Texture; roughnessRB: THREE.Texture };
+type SourceMaps = { base: SourceSet; arkhe: SourceSet; headHash: string };
+const EXPECTED_SKIN_HASHES = {
+  head: "72b46566276bf87786d2b8025800278b41833194b45359792d380009bc3f82e8",
+  roughness: "5a258560cb9b7056159d28d0f17dd9f90aad5caf833760c3562779a57dd102d4",
+  baseColor: "2e066e187efcde185c254ec722308e84e360cd7f30625319167af755e785af4b",
+  baseNormal: "015f9b8f730cb01ffc6f1bef543e83ce48b2c999850a485394dce586bbfc648e",
+  arkheColor: "a89753c3e5b4126fd12d6caed1c75c48f160726040907640f41a4a66e634522c",
+  arkheNormal: "0b1b0d68691abba974dbc3b1ff3c9b67f6193582445eeed227aab057025b59e5",
+} as const;
+
+function checkedMap(value: PrivateMap, name: string, hash: string) {
+  if (value?.url !== `/assets/skin-study/${name}.png` || value.sha256 !== hash)
+    throw Error(`Private skin manifest changed: ${name}`);
+}
+
+async function privateSkinManifest(): Promise<PrivateSkinManifest | null> {
+  const response = await fetch("/assets/skin-study/manifest.json", { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw Error(`Private skin manifest failed (${response.status})`);
+  const result = await response.json() as PrivateSkinManifest;
+  if (result.schema !== "xfs/private-skin-study-1" || result.headGlbSha256 !== EXPECTED_SKIN_HASHES.head)
+    throw Error("Private skin manifest or head version changed");
+  checkedMap(result.roughness, "base-roughness", EXPECTED_SKIN_HASHES.roughness);
+  checkedMap(result.base.albedo, "base-albedo", EXPECTED_SKIN_HASHES.baseColor);
+  checkedMap(result.base.normal, "base-normal", EXPECTED_SKIN_HASHES.baseNormal);
+  checkedMap(result.arkheCandidate.albedo, "arkhe-albedo", EXPECTED_SKIN_HASHES.arkheColor);
+  checkedMap(result.arkheCandidate.normal, "arkhe-normal", EXPECTED_SKIN_HASHES.arkheNormal);
+  return result;
+}
 
 async function loadBytes(url: string, expected?: string) {
   const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -63,6 +111,49 @@ function eyeRoughness(texture: THREE.Texture, channel: "red" | "green") {
   return map;
 }
 
+function sourcePixels(texture: THREE.Texture): { data: Uint8ClampedArray; width: number; height: number } {
+  const image = texture.image as HTMLImageElement;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw Error("Cannot decode private skin map");
+  context.drawImage(image, 0, 0);
+  return { data: context.getImageData(0, 0, canvas.width, canvas.height).data,
+    width: canvas.width, height: canvas.height };
+}
+
+function dataMap(bytes: Uint8Array, width: number, height: number) {
+  const map = new THREE.DataTexture(bytes, width, height, THREE.RGBAFormat);
+  map.flipY = false; map.colorSpace = THREE.NoColorSpace;
+  map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter;
+  map.magFilter = THREE.LinearFilter; map.anisotropy = 8; map.needsUpdate = true;
+  return map;
+}
+
+async function loadSourceMaps(manifest: PrivateSkinManifest): Promise<SourceMaps> {
+  const [roughness, baseColor, basePacked, arkheColor, arkhePacked] = await Promise.all([
+    imageTexture(manifest.roughness.url, false, manifest.roughness.sha256),
+    imageTexture(manifest.base.albedo.url, true, manifest.base.albedo.sha256),
+    imageTexture(manifest.base.normal.url, false, manifest.base.normal.sha256),
+    imageTexture(manifest.arkheCandidate.albedo.url, true, manifest.arkheCandidate.albedo.sha256),
+    imageTexture(manifest.arkheCandidate.normal.url, false, manifest.arkheCandidate.normal.sha256),
+  ]);
+  const rough = sourcePixels(roughness);
+  const roughnessR = dataMap(skinRoughnessToGreen(rough.data, "base-r"), rough.width, rough.height);
+  const roughnessRB = dataMap(skinRoughnessToGreen(rough.data, "r-b-lower-bound"), rough.width, rough.height);
+  const unpack = (source: THREE.Texture) => {
+    const pixels = sourcePixels(source);
+    return dataMap(skinPackedRgToRgb(pixels.data), pixels.width, pixels.height);
+  };
+  const baseNormal = unpack(basePacked), arkheNormal = unpack(arkhePacked);
+  roughness.dispose(); basePacked.dispose(); arkhePacked.dispose();
+  return {
+    base: { color: baseColor, normal: baseNormal, roughnessR, roughnessRB },
+    arkhe: { color: arkheColor, normal: arkheNormal, roughnessR, roughnessRB },
+    headHash: manifest.headGlbSha256,
+  };
+}
+
 type Pane = {
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera;
   key: THREE.DirectionalLight; head: THREE.MeshStandardMaterial; eye: THREE.MeshStandardMaterial;
@@ -71,7 +162,7 @@ type Pane = {
 async function createPane(host: HTMLElement, maps: {
   skinColor: THREE.Texture; skinNormal: THREE.Texture; skinRoughness: THREE.Texture;
   eyeColor: THREE.Texture;
-}) {
+}, headHash?: string) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setClearColor(0x20282d);
@@ -91,7 +182,7 @@ async function createPane(host: HTMLElement, maps: {
   fill.position.set(0.4, 1.65, -0.2);
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
-  const bytes = await loadBytes("/assets/head.glb");
+  const bytes = await loadBytes("/assets/head.glb", headHash);
   const weightSets = restoreFirstWeights(bytes.buffer as ArrayBuffer);
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer as ArrayBuffer, "/assets/");
   scene.add(gltf.scene);
@@ -124,8 +215,9 @@ async function createPane(host: HTMLElement, maps: {
   return { renderer, scene, camera, key, head, eye } satisfies Pane;
 }
 
-function setOptions(view: View) {
-  variant.replaceChildren(...(view === "lip" ? lipVariants : eyeVariants).map(option => {
+function setOptions(view: View, sourceReady: boolean) {
+  const choices = view === "lip" ? [...lipVariants, ...(sourceReady ? sourceVariants : [])] : eyeVariants;
+  variant.replaceChildren(...choices.map(option => {
     const node = document.createElement("option");
     node.value = option.value; node.textContent = option.label;
     return node;
@@ -133,7 +225,27 @@ function setOptions(view: View) {
   variant.value = view === "lip" ? "uniform-roughness" : "roughness-red";
 }
 
+function lipMetric(canvas: HTMLCanvasElement) {
+  const image = document.createElement("canvas");
+  image.width = canvas.width; image.height = canvas.height;
+  const context = image.getContext("2d", { willReadFrequently: true });
+  if (!context) throw Error("Cannot measure lip crop");
+  context.drawImage(canvas, 0, 0);
+  const left = Math.round(canvas.width * 260 / 782), top = Math.round(canvas.height * 145 / 1230);
+  const right = Math.round(canvas.width * 525 / 782), bottom = Math.round(canvas.height * 212 / 1230);
+  const pixels = context.getImageData(left, top, right - left, bottom - top).data;
+  let bright = 0, linearSum = 0;
+  const linear = (v: number) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i] > 220 && pixels[i + 1] > 220 && pixels[i + 2] > 220) bright++;
+    linearSum += 0.2126 * linear(pixels[i]) + 0.7152 * linear(pixels[i + 1]) + 0.0722 * linear(pixels[i + 2]);
+  }
+  return { bright, pixels: pixels.length / 4, meanLinear: linearSum / (pixels.length / 4) };
+}
+
 async function main() {
+  const skinManifest = await privateSkinManifest();
+  const sourceMaps = skinManifest ? await loadSourceMaps(skinManifest) : null;
   const manifestResponse = await fetch("/assets/eyes/manifest.json");
   if (!manifestResponse.ok) throw Error("Local saved-eye manifest is unavailable. Stage private eye assets for this study.");
   const savedEye = parseEyeManifest(await manifestResponse.json()).find(entry =>
@@ -147,12 +259,13 @@ async function main() {
   ]);
   const maps = { skinColor, skinNormal, skinRoughness, eyeColor };
   const panes = await Promise.all([
-    createPane($<HTMLElement>("left"), maps), createPane($<HTMLElement>("right"), maps),
+    createPane($<HTMLElement>("left"), maps, sourceMaps?.headHash),
+    createPane($<HTMLElement>("right"), maps, sourceMaps?.headHash),
   ]);
   const roughnessRed = eyeRoughness(roughness, "red");
   const roughnessGreen = eyeRoughness(roughness, "green");
   let view: View = "lip";
-  setOptions(view);
+  setOptions(view, !!sourceMaps);
   function markView() {
     document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(button =>
       button.setAttribute("aria-pressed", String(button.dataset.view === view)));
@@ -162,7 +275,7 @@ async function main() {
     button.addEventListener("click", () => {
       view = button.dataset.view as View;
       distance.value = "0"; height.value = "0";
-      setOptions(view); markView(); render();
+      setOptions(view, !!sourceMaps); markView(); render();
     }));
   for (const input of [variant, light, exposure, height, distance]) input.addEventListener("input", render);
   window.addEventListener("resize", render);
@@ -192,9 +305,16 @@ async function main() {
     rightLabel.textContent = variant.selectedOptions[0]?.textContent ?? "Test";
     for (const [index, pane] of panes.entries()) {
       const active = index === 1 ? selected : "baseline";
-      pane.head.normalMap = active === "flat-normal" ? null : skinNormal;
-      pane.head.roughnessMap = active === "uniform-roughness" || active === "high-roughness" ? null : skinRoughness;
-      pane.head.roughness = active === "high-roughness" ? 1 : 0.85;
+      const match = /^(base|arkhe)-(r|rb)-(packed|flat)$/.exec(active);
+      const source = match && sourceMaps ? sourceMaps[match[1] as "base" | "arkhe"] : null;
+      pane.head.map = source?.color ?? skinColor;
+      pane.head.normalMap = source
+        ? match![3] === "flat" ? null : source.normal
+        : active === "flat-normal" ? null : skinNormal;
+      pane.head.roughnessMap = source
+        ? match![2] === "rb" ? source.roughnessRB : source.roughnessR
+        : active === "uniform-roughness" || active === "high-roughness" ? null : skinRoughness;
+      pane.head.roughness = source ? 1 : active === "high-roughness" ? 1 : 0.85;
       pane.head.wireframe = active === "wireframe";
       pane.head.needsUpdate = true;
       pane.eye.roughnessMap = active === "roughness-red" ? roughnessRed :
@@ -213,8 +333,14 @@ async function main() {
       pane.camera.updateProjectionMatrix();
       pane.renderer.render(pane.scene, pane.camera);
     }
+    if (view === "lip" && height.value === "0" && distance.value === "0") {
+      const [left, right] = panes.map(pane => lipMetric(pane.renderer.domElement));
+      metrics.textContent = `Default-frame broad lip crop (${left.pixels} pixels): near-white RGB>220 ${left.bright} → ${right.bright}; mean linear luminance ${left.meanLinear.toFixed(4)} → ${right.meanLinear.toFixed(4)}.`;
+    } else metrics.textContent = view === "lip" ? "Reset framing height and distance to 0 for comparable fixed-crop metrics." : "";
     status.textContent = view === "lip"
-      ? "Lip: current cropped Blender-master skin tile. The no-environment test removes all image-based lighting, including diffuse light. Compare mapped roughness and normals separately; wireframe can expose geometry. Saved skin/mouth assembly is unresolved."
+      ? sourceMaps
+        ? "Source-map inputs are private and SHA-256 checked. Left: old Blender maps. Right: selected installed base or current-MO2 Arkhe candidate. Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved."
+        : "Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B."
       : `Eye: exact local Kala eye-16 diffuse and roughness hashes verified. Source R/G tests use the same 0.493 scale; the game shader reads R, but its normal, UV transform and refraction are absent here.`;
   }
   render();
