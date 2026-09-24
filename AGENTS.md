@@ -55,6 +55,7 @@ The Studio architecture is a maintained contract, not a one-time cleanup. Follow
   - Refuse promotion if nothing usable remains or any structural, compiler or independent-verifier gate fails.
   - Never present an omitted detail as packaged, or a verified archive as game-tested. See the [partial export checkpoint](research/authoring/partial-mod-export-checkpoint.md).
 - **One selector.** Users author complete presets in the Studio, save them in a local SQLite library and export a collection for **one** eye-makeup selector. Compile only authored combinations. Prefer merged material output where faithful; do not assume REDengine multilayered shading supports mixed finishes or transparency. See the [product direction](projects/xf-studio/data/product-direction.md).
+- **Don't touch users' core mod setups.** Never install, replace, disable or duplicate a user's frameworks (ArchiveXL, TweakXL, Codeware, RED4ext, redscript, CET and the like), and never reshape their mod list. Detect installed versions and, if something needs updating, tell the user plainly which framework, which version and where to get it. When placing our own mod into a mod manager, add only that mod and respect the user's organisation (e.g. MO2 separator sections; the MO2 window order is the reverse of `modlist.txt`).
 - **Never auto-deploy.** Never deploy old generator output automatically; the old generator installs even when build-only behaviour is expected.
 
 ## Product decisions
