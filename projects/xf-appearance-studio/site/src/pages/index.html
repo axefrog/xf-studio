@@ -1,0 +1,291 @@
+<!--page {
+  "title": "XF Studio — eye-makeup authoring for Cyberpunk 2077",
+  "description": "XF Studio is an in-development local tool for designing layered eye-makeup presets on V's head and compiling a collection into mod files for one in-game selector. No public release yet.",
+  "nav": "overview"
+} -->
+<section class="hero" aria-labelledby="hero-title" id="overview">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Eye-makeup authoring for Cyberpunk 2077</p>
+      <h1 id="hero-title">Design eye makeup for V, layer by layer.</h1>
+      <p class="lede">XF Studio is a local authoring tool for building complete eye-makeup presets on V’s deforming head, keeping them in a private library, and compiling a chosen collection into mod files for a single in-game selector.</p>
+      <div class="release-status" data-release-status>
+        <span class="tag dev">In development</span>
+        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source, and the mod files it builds have not yet been tested in the game.</p>
+      </div>
+      <div class="hero-actions">
+        <a class="btn primary" href="#capabilities">See what works today</a>
+        <a class="btn" href="{{repo}}"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/></svg>View the source</a>
+      </div>
+      <dl class="spec-strip" aria-label="At a glance">
+        <div><dt>7</dt><dd>finish families in the preview</dd></div>
+        <div><dt>32</dt><dd>layers per preset, current preview budget</dd></div>
+        <div><dt>105</dt><dd>facial morphs deforming the preview head</dd></div>
+        <div><dt>1</dt><dd>selector per built collection, plus Off</dd></div>
+      </dl>
+    </div>
+    <figure class="hero-figure">
+      <div class="stage">
+        <svg viewBox="0 0 640 440" role="img" aria-labelledby="hero-art-title hero-art-desc">
+          <title id="hero-art-title">Illustration of a layered eye-makeup preset</title>
+          <desc id="hero-art-desc">An abstract eye with three makeup layers: a soft satin lid wash, a matte crease shade and a sharp metallic wing liner. The liner is selected, showing Bézier anchor points and tangent handles. A warp field control sits above the crease.</desc>
+          <defs>
+            <radialGradient id="hero-wash" cx="45%" cy="70%" r="70%">
+              <stop offset="0" stop-color="oklch(.8 .07 50)"/>
+              <stop offset=".6" stop-color="oklch(.7 .08 40)"/>
+              <stop offset="1" stop-color="oklch(.62 .08 35)" stop-opacity=".2"/>
+            </radialGradient>
+            <linearGradient id="hero-crease" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="oklch(.48 .1 335)" stop-opacity=".15"/>
+              <stop offset=".45" stop-color="oklch(.48 .1 335)" stop-opacity=".85"/>
+              <stop offset="1" stop-color="oklch(.42 .1 335)" stop-opacity="1"/>
+            </linearGradient>
+            <linearGradient id="hero-liner" x1="0" y1="0" x2="1" y2=".35">
+              <stop offset="0" stop-color="oklch(.36 .03 250)"/>
+              <stop offset=".35" stop-color="oklch(.8 .03 250)"/>
+              <stop offset=".55" stop-color="oklch(.3 .03 250)"/>
+              <stop offset=".8" stop-color="oklch(.72 .03 250)"/>
+              <stop offset="1" stop-color="oklch(.34 .03 250)"/>
+            </linearGradient>
+            <radialGradient id="hero-iris" cx="50%" cy="45%" r="55%">
+              <stop offset="0" stop-color="oklch(.5 .04 220)"/>
+              <stop offset=".75" stop-color="oklch(.34 .03 230)"/>
+              <stop offset="1" stop-color="oklch(.22 .02 240)"/>
+            </radialGradient>
+            <filter id="hero-soft" x="-25%" y="-50%" width="150%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+            <filter id="hero-softer" x="-25%" y="-50%" width="150%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+            <clipPath id="hero-eye-clip"><path d="M150 262C205 198 350 178 455 238C375 292 230 300 150 262Z"/></clipPath>
+          </defs>
+          <path d="M126 140C208 98 346 92 482 134" fill="none" stroke="oklch(.93 .005 255)" stroke-opacity=".13" stroke-width="13" stroke-linecap="round"/>
+          <path d="M150 262C205 198 350 178 455 238L490 214C372 128 186 158 142 250Z" fill="url(#hero-wash)" opacity=".92" filter="url(#hero-soft)"/>
+          <path d="M150 238C190 150 372 118 496 210C442 180 364 160 300 162C232 166 186 196 150 238Z" fill="url(#hero-crease)" filter="url(#hero-softer)"/>
+          <path d="M150 262C205 198 350 178 455 238C375 292 230 300 150 262Z" fill="oklch(.9 .01 80)" fill-opacity=".86"/>
+          <g clip-path="url(#hero-eye-clip)">
+            <circle cx="300" cy="242" r="47" fill="url(#hero-iris)"/>
+            <circle cx="300" cy="242" r="16" fill="oklch(.14 .01 250)"/>
+            <circle cx="316" cy="226" r="5" fill="oklch(1 0 0)" fill-opacity=".7"/>
+            <path d="M140 225C220 206 360 196 470 228" fill="none" stroke="oklch(.2 .01 250)" stroke-opacity=".35" stroke-width="16"/>
+          </g>
+          <path d="M150 262C230 300 375 292 455 238" fill="none" stroke="oklch(.93 .005 255)" stroke-opacity=".38" stroke-width="1.5"/>
+          <path d="M158 256C210 190 352 168 452 226L542 172L462 240C352 184 208 202 158 258Z" fill="url(#hero-liner)"/>
+          <g fill="none" stroke="oklch(.8 .006 255)" stroke-opacity=".75" stroke-width="1.25">
+            <circle cx="404" cy="150" r="44" stroke-dasharray="3 5"/>
+            <circle cx="404" cy="150" r="5"/>
+            <path d="M404 150L436 128"/>
+            <path d="M432 124h8v8h-8z"/>
+          </g>
+          <g stroke="oklch(.82 .12 205)" stroke-width="1.4" fill="none">
+            <path d="M217 203L357 186"/>
+            <circle cx="217" cy="203" r="4.5" fill="oklch(.2 .006 255)"/>
+            <circle cx="357" cy="186" r="4.5" fill="oklch(.2 .006 255)"/>
+            <path d="M153.5 251.5h9v9h-9zM447.5 221.5h9v9h-9zM537.5 167.5h9v9h-9zM457.5 235.5h9v9h-9z" fill="oklch(.2 .006 255)"/>
+            <path d="M281.5 188.5h11v11h-11z" fill="oklch(.82 .12 205)"/>
+          </g>
+        </svg>
+        <span class="stage-chip">Illustration · not a render</span>
+        <ol class="layer-legend" aria-label="Layers, top first" reversed>
+          <li class="selected"><span class="swatch liner" aria-hidden="true"></span><span>Wing liner <span class="sr-only">(selected)</span></span><span class="finish">Metallic</span></li>
+          <li><span class="swatch crease" aria-hidden="true"></span><span>Crease shade</span><span class="finish">Matte</span></li>
+          <li><span class="swatch wash" aria-hidden="true"></span><span>Lid wash</span><span class="finish">Satin</span></li>
+        </ol>
+      </div>
+      <figcaption class="stage-caption">Layers render bottom to top and are listed top first, as in the Studio. The selected layer shows its Bézier anchors and tangent handles.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section alt" id="how-it-works" aria-labelledby="how-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">01</span>How it works</p>
+      <h2 id="how-title">From a blank layer to one in-game choice</h2>
+      <p class="lede">You design complete looks in the Studio. The game only needs to offer one selector that switches between them, instead of separate menus for every colour, design and finish.</p>
+    </header>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-num">01 · Author</span>
+        <h3>Compose a preset</h3>
+        <p>Stack ordered layers. Draw each with Bézier curves, then set colour, finish, pigment strength and edge softness, working on the 3D head or the flat UV map.</p>
+        <span class="tag ok">Works locally</span>
+      </li>
+      <li class="step">
+        <span class="step-num">02 · Keep</span>
+        <h3>Save to your library</h3>
+        <p>Collections live in a local SQLite library with immutable revisions, conflict protection and recovery. Portable recipe and collection files cover sharing and backup.</p>
+        <span class="tag ok">Works locally</span>
+      </li>
+      <li class="step">
+        <span class="step-num">03 · Check and build</span>
+        <h3>Make private mod files</h3>
+        <p>Check lists exactly which layers or presets a package would omit. Build compiles a package-only copy, runs an independent verifier and leaves your collection untouched.</p>
+        <span class="tag ok">Verified offline</span>
+      </li>
+      <li class="step target">
+        <span class="step-num">04 · Choose</span>
+        <h3>Pick a look in the game</h3>
+        <p>The goal: one character-creator selector switching between your complete presets, plus Off. Registration, switching and saved selections still need an in-game test.</p>
+        <span class="tag open">Not yet game-tested</span>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="capabilities" aria-labelledby="capabilities-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">02</span>Capabilities</p>
+      <h2 id="capabilities-title">What works today</h2>
+      <p class="lede">Everything here is implemented and exercised in the local prototype. It is not a released product, and the browser preview approximates the game’s renderer rather than reproducing it.</p>
+    </header>
+    <ul class="cards">
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.5-8.5 4.5L3.5 8z"/><path d="M3.5 12.2l8.5 4.5 8.5-4.5M3.5 16.2l8.5 4.5 8.5-4.5"/></svg></span>
+        <h3>Presets and layers</h3>
+        <p>Named presets with ordered layer stacks, up to 32 layers each. Add, copy, rename, reorder and remove both, with per-preset Undo and recoverable removal. Identities survive renames and reordering.</p>
+      </li>
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18C7 8.5 17 8.5 20 18"/><path d="M4 18L8.5 6.5M20 18l-4.5-11.5"/><path d="M2.5 16.5h3v3h-3zM18.5 16.5h3v3h-3zM7.5 5.5h2v2h-2zM14.5 5.5h2v2h-2z"/></svg></span>
+        <h3>Precise shapes</h3>
+        <p>Bézier paths with smooth, symmetric and corner points, and mirror symmetry. Move, rotate and scale whole shapes, and bend them with up to eight smoothly blended warp fields per layer.</p>
+      </li>
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="2 2.4"/><circle cx="12" cy="12" r="4.5"/></svg></span>
+        <h3>Pigment and edges</h3>
+        <p>Pigment strength can vary from point to point with smooth gradients. Edge softness is set for the whole outline or per point, and stays separate from pigment.</p>
+      </li>
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3c-4.2 0-6.8 3-6.8 7.1 0 2.8 1.3 4.7 2.5 5.9V21h8.6v-5c1.2-1.2 2.5-3.1 2.5-5.9C18.8 6 16.2 3 12 3z"/><path d="M9 9.5h2.5V12H9z"/></svg></span>
+        <h3>Edit on the face or the map</h3>
+        <p>Drag points, handles, warp fields and whole shapes directly on the moving 3D head, or in a zoomable, pannable UV map. Each gesture is one Undo step, and Escape cancels it.</p>
+      </li>
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.8"/></svg></span>
+        <h3>Preview on your V</h3>
+        <p>V’s head and an expanded eye plate cut from it, skinned and deformed by all 105 facial morphs. Read facial shape choices from your own save, play the character-creator idle, adjust field of view and choose 512 to 4K preview textures. Optional brows, lashes, hair and piercings add context.</p>
+        <p class="limit"><strong>Your files, not ours:</strong> the preview reads resources from your own game and mod installation. None are distributed, and materials are browser approximations.</p>
+      </li>
+      <li class="card">
+        <span class="card-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></svg></span>
+        <h3>Honest mod export</h3>
+        <p>Check and Build share one filtered snapshot. Layers whose finish has no export adapter, and presets left empty, are named rather than silently packaged. Files are promoted only after an independent verifier passes.</p>
+        <p class="limit"><strong>Every manifest says so:</strong> built packages are recorded as not installed and not game-tested.</p>
+      </li>
+    </ul>
+
+    <div class="subhead" id="finishes">
+      <h3>Seven finish families</h3>
+      <p>Each layer has one finish. All seven preview in the browser. Only three can become mod files so far, through a provisional adapter whose in-game look is still unverified.</p>
+    </div>
+    <ul class="finishes">
+      <li class="finish"><span class="finish-swatch fx-matte" aria-hidden="true"></span><h4>Matte</h4><p>Soft colour with little shine.</p><span class="tag ok">Preview + export</span></li>
+      <li class="finish"><span class="finish-swatch fx-satin" aria-hidden="true"></span><h4>Satin</h4><p>A smooth, gentle sheen without individual sparkles.</p><span class="tag ok">Preview + export</span></li>
+      <li class="finish"><span class="finish-swatch fx-metallic" aria-hidden="true"></span><h4>Metallic / foil</h4><p>A continuous metallic sheen without separate flakes.</p><span class="tag ok">Preview + export</span></li>
+      <li class="finish"><span class="finish-swatch fx-shimmer" aria-hidden="true"></span><h4>Shimmer / pearl</h4><p>Fine reflective texture over colour.</p><span class="tag study">Preview study</span></li>
+      <li class="finish"><span class="finish-swatch fx-glitter" aria-hidden="true"></span><h4>Glitter</h4><p>Distinct reflective flakes, with five preview models under study.</p><span class="tag study">Preview study</span></li>
+      <li class="finish"><span class="finish-swatch fx-glossy" aria-hidden="true"></span><h4>Glossy / wet look</h4><p>A smooth, wet-looking shine over colour.</p><span class="tag study">Preview study</span></li>
+      <li class="finish"><span class="finish-swatch fx-shift" aria-hidden="true"></span><h4>Colour-shifting</h4><p>Duochrome and multichrome colour that changes with viewing angle.</p><span class="tag study">Preview study</span></li>
+    </ul>
+    <p class="swatch-note">Swatches are CSS illustrations of each intended look, not Studio renders or game captures. “Preview + export” means Check and Build can package the layer; “Preview study” layers are omitted from packages, and Check says so.</p>
+  </div>
+</section>
+
+<section class="section alt" id="status" aria-labelledby="status-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">03</span>Status</p>
+      <h2 id="status-title">Where the project stands</h2>
+      <p class="lede">Reviewed <time datetime="{{statusReviewedIso}}">{{statusReviewed}}</time>. The detailed, evidence-linked record is in the <a href="{{blob}}/docs/status.md">repository’s status document</a>.</p>
+    </header>
+    <div class="status-grid">
+      <div class="status-col">
+        <h3><span class="tag ok">Established</span></h3>
+        <ul class="checklist done">
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A working local prototype</strong> for editable layered presets, the local library and portable files.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>An offline package pipeline</strong> that filters, compiles and independently verifies private mod candidates.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A preview head and eye plate matched to the game’s geometry,</strong> keeping native skin weights and every facial morph.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Matte, Satin and Metallic layers</strong> can be packaged through a provisional material adapter.</span></li>
+        </ul>
+      </div>
+      <div class="status-col">
+        <h3><span class="tag open">Still to prove</span></h3>
+        <ul class="checklist open">
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>In-game behaviour:</strong> selector registration, switching A → B → Off, and saved selections. No package has been installed or tested in the game.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>Eye-plate clearance under facial animation:</strong> the latest candidate corrections failed dense animation checks, so the plate is unchanged.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>Game materials for Shimmer, Glitter, Glossy and Colour-shifting:</strong> studies exist, but none yet represents the look faithfully.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>Preview fidelity:</strong> skin, eye and hair shading in the browser remain approximations of the game renderer.</span></li>
+        </ul>
+      </div>
+    </div>
+    <dl class="readouts">
+      <div><dt>Game target</dt><dd>Cyberpunk 2077 2.31</dd></div>
+      <div><dt>Framework target</dt><dd>ArchiveXL 1.27.3</dd></div>
+    </dl>
+    <div class="callout">
+      <h3>Can I try it?</h3>
+      <p>Not as a finished product: there is nothing to download or install. Developers can run the prototype from the repository with Bun, but it needs resources extracted from their own copy of the game, because none are included. The <a href="{{blob}}/projects/xf-appearance-studio/authoring/README.md">authoring guide</a> describes the setup and its limits.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="directions" aria-labelledby="directions-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">04</span>Directions</p>
+      <h2 id="directions-title">Where it could go</h2>
+      <p class="lede">Eye makeup comes first. Everything beyond it is a direction rather than a commitment: each area is discussed before any building starts, and none has a date.</p>
+    </header>
+    <div class="subhead"><h3>Next for eye makeup</h3><p>Active work, in no guaranteed order.</p></div>
+    <ol class="next-list">
+      <li><strong>Prove the package in the game</strong><p>Selector registration, switching between presets and Off, and saved selections surviving a reload, batched into one prepared test session.</p></li>
+      <li><strong>Eye-plate clearance</strong><p>A correction that stays clear of the skin through the full facial animation, not just sampled poses.</p></li>
+      <li><strong>More exportable finishes</strong><p>Game material adapters for the preview-only finishes, but only where the game can represent them faithfully.</p></li>
+      <li><strong>A redesigned workspace</strong><p>Dockable, floating and tabbed panels, with light and dark themes that follow the system by default.</p></li>
+      <li><strong>Library tools</strong><p>Visible revision history and restore, backups, thumbnails and search.</p></li>
+    </ol>
+    <div class="subhead"><h3>Later areas under consideration</h3><p>Roughly the order in which they may be explored. Existing brows, lashes, hair and piercings in the preview are context only, not editors.</p></div>
+    <ul class="futures">
+      <li class="future"><h4>Piercings and earrings</h4><p>Jewellery that follows facial deformation.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Eyebrows</h4><p>Brow shape and colour authoring.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Cheek makeup</h4><p>Extending layered makeup beyond the eyes.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Hair</h4><p>Beyond today’s optional preview context.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Expressions and idles</h4><p>Static and animated facial expressions, and varied idle animations.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Tattoos</h4><p>Full-body designs at that stage.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Broader appearance</h4><p>Appearance authoring beyond individual features.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Quest design</h4><p>A longer-term possibility behind the broader XF Studio name.</p><span class="tag later">Discussion first</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section alt" id="principles" aria-labelledby="principles-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">05</span>Principles</p>
+      <h2 id="principles-title">How the project works</h2>
+    </header>
+    <ul class="principles">
+      <li><h3>Honest status</h3><p>Previewed, packaged, verified and game-tested are different claims. The Studio, its package manifests and this site keep them apart.</p></li>
+      <li><h3>Your work stays local</h3><p>Drafts, the library and imported saves stay on your machine. There is no account or cloud service; saves are read, never modified.</p></li>
+      <li><h3>No game assets shared</h3><p>This site hosts no game files, and the repository keeps extracted game and mod assets, saves and personal libraries out of version control. The preview uses resources from your own installation.</p></li>
+      <li><h3>Credit where it is due</h3><p>Techniques learned from other modders and tools are recorded as they inform the work, with the distinction between learning and reuse kept explicit.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="docs" aria-labelledby="docs-title">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="eyebrow"><span class="num">06</span>Community and documentation</p>
+      <h2 id="docs-title">Built on what the community has learned</h2>
+      <p>XF Studio stands on ArchiveXL, WolvenKit, the Cyberpunk 2077 Modding Wiki and the resource work of many mod authors. The credits page summarises who taught us what; the repository keeps the full learning record.</p>
+      <a class="btn" href="{{root}}credits.html">Read the credits</a>
+    </div>
+    <ul class="doc-links" aria-label="Documentation in the source repository">
+      <li><a class="doc-link" href="{{blob}}/projects/xf-appearance-studio/README.md"><strong>Project overview</strong><span>Scope, product direction and current delivery state.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/docs/status.md"><strong>Current state</strong><span>Dated, evidence-linked progress and open questions.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/research/authoring/studio-to-mod-pipeline.md"><strong>From collection to mod files</strong><span>Illustrated guide to filtering, compiling and verification.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/research/materials/makeup-finish-taxonomy.md"><strong>Finish taxonomy</strong><span>What each finish family is meant to look like.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/research/authoring/architecture-contract.md"><strong>Architecture contract</strong><span>How the Studio separates behaviour from presentation.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/docs/validation.md"><strong>Validation workflow</strong><span>Offline checks first, then batched in-game evidence.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+    </ul>
+  </div>
+</section>

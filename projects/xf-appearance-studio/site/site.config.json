@@ -1,0 +1,17 @@
+{
+  "siteName": "XF Studio",
+  "baseUrl": "https://axefrog.github.io/xf-studio/",
+  "repoUrl": "https://github.com/axefrog/xf-studio",
+  "repoBranch": "main",
+  "author": { "name": "axefrog", "url": "https://github.com/axefrog" },
+  "statusReviewed": "2026-09-24",
+  "releaseStatus": "unreleased",
+  "nav": [
+    { "id": "overview", "label": "Overview", "href": "./" },
+    { "id": "capabilities", "label": "Capabilities", "href": "./#capabilities" },
+    { "id": "status", "label": "Status", "href": "./#status" },
+    { "id": "roadmap", "label": "Directions", "href": "./#directions" },
+    { "id": "credits", "label": "Credits", "href": "credits.html" }
+  ],
+  "budgets": { "totalBytes": 262144, "fileBytes": 98304 }
+}

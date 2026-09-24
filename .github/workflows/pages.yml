@@ -1,0 +1,86 @@
+# Public XF Studio site: test, build, check and deploy projects/xf-appearance-studio/site to GitHub Pages.
+# Only site changes (or a manual run) trigger it; the Studio app and its local Bun builds are not involved.
+# Required repository settings and maintenance: projects/xf-appearance-studio/site/README.md
+name: Pages site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/xf-appearance-studio/site/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "projects/xf-appearance-studio/site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages-build-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      # Pull requests and manual runs on other branches build and check only.
+      DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    defaults:
+      run:
+        working-directory: projects/xf-appearance-studio/site
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      # Reads the published URL. Fails if Pages is not enabled with "GitHub Actions" as the source;
+      # this workflow deliberately never enables Pages itself.
+      - name: Configure Pages
+        id: pages
+        if: env.DEPLOY == 'true'
+        uses: actions/configure-pages@v6
+
+      - name: Test
+        run: bun test
+
+      - name: Build
+        run: bun tools/build.ts
+        env:
+          SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
+
+      - name: Check
+        run: bun tools/check.ts
+
+      - name: Upload Pages artifact
+        if: env.DEPLOY == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: projects/xf-appearance-studio/site/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

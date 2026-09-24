@@ -1,0 +1,3 @@
+# Generated site output and local QA screenshots. Never commit either.
+dist/
+.evidence/

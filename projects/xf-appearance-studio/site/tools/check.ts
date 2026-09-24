@@ -1,0 +1,222 @@
+/**
+ * Static checks over a built site: bun tools/check.ts [distDir]
+ * Structure and accessibility basics, link integrity (including repository links against tracked files),
+ * the content/asset policy and the release-claim guard. Exits non-zero on any issue.
+ */
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { extname, join, relative, resolve } from "node:path";
+import { basePath, loadConfig, repoRoot, siteRoot, type SiteConfig } from "./config";
+
+export type Issue = { file: string; message: string };
+export type CheckOptions = {
+  config?: SiteConfig;
+  /** Tracked repository paths for validating {{blob}}/{{tree}} links; null skips that validation. */
+  repoFiles?: Set<string> | null;
+};
+export type CheckReport = { issues: Issue[]; pages: number; files: number; bytes: number; internalLinks: number; repoLinks: number; externalLinks: string[]; repoLinksChecked: boolean };
+
+/** Everything the site may publish. Raster images, fonts, archives and game formats need a reviewed policy change first. */
+export const ALLOWED_EXTENSIONS = new Set([".html", ".css", ".js", ".svg", ".xml", ".txt"]);
+const PRIVATE_PATH = /\b[A-Za-z]:[\\/](?:Dev|Games|Users|Program Files|RedModding|MO2)\b/i;
+const DOWNLOADABLE = /\.(?:zip|7z|rar|archive|xl|exe|msi|dmg|glb|gltf|blend|xbm|mesh|sav)$/i;
+/** Phrases that would imply a release, download or in-game verification that does not exist yet. */
+export const UNRELEASED_CLAIMS = ["download now", "now available", "available now", "install now", "get it now", "latest release",
+  "release notes", "tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
+
+export function trackedRepoFiles(): Set<string> | null {
+  const result = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) return null;
+  return new Set(result.stdout.toString().split("\0").filter(Boolean));
+}
+
+function walk(dir: string, root = dir): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name);
+    return entry.isDirectory() ? walk(full, root) : [relative(root, full).replaceAll("\\", "/")];
+  });
+}
+
+type PageScan = {
+  lang: string | null; title: string; description: string | null; canonical: string | null; robots: string | null;
+  csp: boolean; charset: boolean; viewport: boolean; headings: number[]; ids: string[];
+  links: { attr: string; value: string; tag: string }[]; text: string; releaseStatus: boolean; main: boolean;
+  problems: string[]; labelledBy: string[];
+};
+
+async function scanPage(html: string): Promise<PageScan> {
+  const scan: PageScan = { lang: null, title: "", description: null, canonical: null, robots: null, csp: false, charset: false, viewport: false,
+    headings: [], ids: [], links: [], text: "", releaseStatus: false, main: false, problems: [], labelledBy: [] };
+  const named: { what: string; label: string | null; text: string }[] = [];
+  const nameHandler = (what: string) => ({
+    element(el: HTMLRewriterTypes.Element) {
+      const entry = { what: `${what}${el.getAttribute("href") ? ` → ${el.getAttribute("href")}` : ""}`, label: el.getAttribute("aria-label"), text: "" };
+      named.push(entry);
+      if (what === "button" && !el.getAttribute("type")) scan.problems.push(`<button> without type: ${entry.what}`);
+      if (what === "a") {
+        if (!el.getAttribute("href")) scan.problems.push("<a> without href");
+        if (el.getAttribute("target") === "_blank" && !/\bnoopener\b/.test(el.getAttribute("rel") ?? "")) scan.problems.push(`target=_blank without rel=noopener: ${entry.what}`);
+      }
+    },
+    text(chunk: HTMLRewriterTypes.Text) { named[named.length - 1].text += chunk.text; },
+  });
+  await new HTMLRewriter()
+    .on("html", { element(el) { scan.lang = el.getAttribute("lang"); } })
+    .on("meta", { element(el) {
+      if (el.getAttribute("charset")) scan.charset = true;
+      const name = el.getAttribute("name"); const equiv = el.getAttribute("http-equiv");
+      if (name === "viewport") scan.viewport = true;
+      if (name === "description") scan.description = el.getAttribute("content");
+      if (name === "robots") scan.robots = el.getAttribute("content");
+      if (equiv?.toLowerCase() === "content-security-policy") scan.csp = true;
+    } })
+    .on("title", { text(chunk) { scan.title += chunk.text; } })
+    .on("link[rel=canonical]", { element(el) { scan.canonical = el.getAttribute("href"); } })
+    .on("h1, h2, h3, h4, h5, h6", { element(el) { scan.headings.push(Number(el.tagName.slice(1))); } })
+    .on("[id]", { element(el) { scan.ids.push(el.getAttribute("id")!); if (el.getAttribute("id") === "main" && el.tagName === "main") scan.main = true; } })
+    .on("[href]", { element(el) { scan.links.push({ attr: "href", value: el.getAttribute("href")!, tag: el.tagName }); } })
+    .on("[src]", { element(el) { scan.links.push({ attr: "src", value: el.getAttribute("src")!, tag: el.tagName }); } })
+    .on("[data-release-status]", { element() { scan.releaseStatus = true; } })
+    .on("[aria-labelledby]", { element(el) { scan.labelledBy.push(...el.getAttribute("aria-labelledby")!.split(/\s+/)); } })
+    .on("*", { element(el) {
+      for (const [name] of el.attributes) {
+        if (/^on/i.test(name)) scan.problems.push(`inline event handler ${name} on <${el.tagName}>`);
+        if (name === "style") scan.problems.push(`inline style attribute on <${el.tagName}> (blocked by the CSP)`);
+      }
+    } })
+    .on("script", { element(el) { if (!el.getAttribute("src")) scan.problems.push("inline <script> (blocked by the CSP)"); } })
+    .on("style", { element() { scan.problems.push("<style> element (blocked by the CSP); use assets/site.css"); } })
+    .on("img", { element(el) { if (el.getAttribute("alt") === null) scan.problems.push(`<img> without alt: ${el.getAttribute("src")}`); } })
+    .on("svg[role=img]", { element(el) { if (!el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby")) scan.problems.push("svg[role=img] without an accessible name"); } })
+    .on("a", nameHandler("a"))
+    .on("button", nameHandler("button"))
+    .on("body", { text(chunk) { scan.text += chunk.text; } })
+    .transform(new Response(html)).text();
+  for (const entry of named)
+    if (!entry.label?.trim() && !entry.text.replace(/\s+/g, "")) scan.problems.push(`${entry.what} has no accessible name`);
+  return scan;
+}
+
+export async function checkSite(dir: string, options: CheckOptions = {}): Promise<CheckReport> {
+  const config = options.config ?? loadConfig();
+  const repoFiles = options.repoFiles === undefined ? trackedRepoFiles() : options.repoFiles;
+  const base = new URL(config.baseUrl);
+  const baseDir = basePath(config);
+  const issues: Issue[] = [];
+  const add = (file: string, message: string) => issues.push({ file, message });
+  const files = walk(dir).sort();
+  let bytes = 0;
+  for (const file of files) {
+    const size = statSync(join(dir, file)).size;
+    bytes += size;
+    if (!ALLOWED_EXTENSIONS.has(extname(file).toLowerCase())) add(file, `file type ${extname(file) || "(none)"} is not allowed on the public site; see README “Content policy”`);
+    if (size > config.budgets.fileBytes) add(file, `${size} bytes exceeds the per-file budget of ${config.budgets.fileBytes}`);
+    if ([".html", ".css", ".js", ".svg", ".xml", ".txt"].includes(extname(file))) {
+      const text = readFileSync(join(dir, file), "utf8");
+      if (PRIVATE_PATH.test(text)) add(file, `contains a local machine path: ${PRIVATE_PATH.exec(text)![0]}`);
+      if (/file:\/\//i.test(text)) add(file, "contains a file:// URL");
+      if (/\{\{\w+\}\}/.test(text)) add(file, "contains an unrendered {{placeholder}}");
+      if (file.endsWith(".css") || file.endsWith(".js")) {
+        if (/\b(?:127\.0\.0\.1|localhost)\b/.test(text)) add(file, "references localhost");
+        if (/@import|url\(\s*["']?https?:/i.test(text)) add(file, "loads a remote resource (the site must be self-contained)");
+      }
+    }
+  }
+  if (bytes > config.budgets.totalBytes) add(".", `site is ${bytes} bytes, over the ${config.budgets.totalBytes}-byte budget`);
+
+  const pages = files.filter(file => file.endsWith(".html"));
+  const scans = new Map<string, PageScan>();
+  for (const page of pages) {
+    const html = readFileSync(join(dir, page), "utf8");
+    if (!/^<!doctype html>/i.test(html)) add(page, "missing <!doctype html>");
+    scans.set(page, await scanPage(html));
+  }
+
+  let internalLinks = 0, repoLinks = 0;
+  const externalLinks = new Set<string>();
+  for (const [page, scan] of scans) {
+    for (const problem of scan.problems) add(page, problem);
+    if (scan.lang !== "en") add(page, "<html> needs lang=\"en\"");
+    if (!scan.charset) add(page, "missing <meta charset>");
+    if (!scan.viewport) add(page, "missing viewport meta");
+    if (!scan.csp) add(page, "missing Content-Security-Policy meta");
+    if (!scan.title.trim()) add(page, "empty <title>");
+    if (!scan.description?.trim()) add(page, "missing meta description");
+    const noindex = /noindex/.test(scan.robots ?? "");
+    if (!noindex && !scan.canonical) add(page, "missing canonical link");
+    if (scan.canonical && !scan.canonical.startsWith(config.baseUrl)) add(page, `canonical ${scan.canonical} is outside ${config.baseUrl}`);
+    if (scan.headings.filter(level => level === 1).length !== 1) add(page, `expected exactly one <h1>, found ${scan.headings.filter(level => level === 1).length}`);
+    scan.headings.forEach((level, i) => { if (i > 0 && level > scan.headings[i - 1] + 1) add(page, `heading level jumps from h${scan.headings[i - 1]} to h${level}`); });
+    const seen = new Set<string>();
+    for (const id of scan.ids) { if (seen.has(id)) add(page, `duplicate id "${id}"`); seen.add(id); }
+    for (const id of scan.labelledBy) if (!seen.has(id)) add(page, `aria-labelledby references missing id "${id}"`);
+    if (!scan.main) add(page, "missing <main id=\"main\">");
+    if (!scan.links.some(link => link.value === "#main")) add(page, "missing skip link to #main");
+    if (config.releaseStatus === "unreleased") {
+      const text = scan.text.toLowerCase().replace(/\s+/g, " ");
+      for (const phrase of UNRELEASED_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}” while releaseStatus is unreleased`);
+      if (page === "index.html" && !scan.releaseStatus) add(page, "home page must keep a visible [data-release-status] statement while unreleased");
+    }
+
+    const pageUrl = new URL(page === "index.html" ? "" : page, base);
+    for (const link of scan.links) {
+      const value = link.value.trim();
+      if (!value) { add(page, `empty ${link.attr} on <${link.tag}>`); continue; }
+      if (/^(?:mailto|tel):/i.test(value)) continue;
+      if (/^(?:javascript|data):/i.test(value)) { add(page, `${link.attr}="${value.slice(0, 40)}" is not allowed`); continue; }
+      if (/^http:/i.test(value)) { add(page, `insecure link ${value}`); continue; }
+      if (/^\/\//.test(value)) { add(page, `protocol-relative link ${value}`); continue; }
+      if (/\b(?:127\.0\.0\.1|localhost)\b/.test(value)) { add(page, `link to localhost: ${value}`); continue; }
+      const url = new URL(value, pageUrl);
+      if (DOWNLOADABLE.test(url.pathname)) add(page, `link to a downloadable package/asset: ${value}`);
+      if (config.releaseStatus === "unreleased" && /\/releases(?:\/|$)/.test(url.pathname)) add(page, `link to releases while unreleased: ${value}`);
+      if (url.origin !== base.origin || !url.pathname.startsWith(baseDir)) {
+        const repoPrefix = new URL(config.repoUrl + "/").pathname;
+        if (url.origin === "https://github.com" && url.pathname.startsWith(repoPrefix)) {
+          const rest = url.pathname.slice(repoPrefix.length);
+          const match = /^(blob|tree)\/([^/]+)\/(.+)$/.exec(rest);
+          if (match) {
+            repoLinks++;
+            if (match[2] !== config.repoBranch) add(page, `repository link uses branch ${match[2]}, expected ${config.repoBranch}: ${value}`);
+            if (repoFiles) {
+              const path = decodeURIComponent(match[3]).replace(/\/$/, "");
+              const ok = match[1] === "blob" ? repoFiles.has(path) : [...repoFiles].some(file => file.startsWith(path + "/"));
+              if (!ok) add(page, `repository link target is not a tracked file: ${path}`);
+            }
+            continue;
+          }
+        }
+        if (url.protocol === "https:") externalLinks.add(url.origin + url.pathname);
+        continue;
+      }
+      internalLinks++;
+      let target = decodeURIComponent(url.pathname.slice(baseDir.length));
+      if (target === "" || target.endsWith("/")) target += "index.html";
+      if (!files.includes(target) && files.includes(`${target}.html`)) target += ".html";
+      if (!files.includes(target)) { add(page, `broken internal ${link.attr}: ${value} (→ ${target})`); continue; }
+      if (url.hash && target.endsWith(".html")) {
+        const id = decodeURIComponent(url.hash.slice(1));
+        if (!scans.get(target)?.ids.includes(id)) add(page, `broken anchor ${value} (no id "${id}" in ${target})`);
+      }
+    }
+  }
+
+  if (!files.includes("index.html")) add(".", "missing index.html");
+  if (!files.includes("404.html")) add(".", "missing 404.html");
+  if (files.includes("sitemap.xml")) {
+    for (const [, loc] of readFileSync(join(dir, "sitemap.xml"), "utf8").matchAll(/<loc>([^<]+)<\/loc>/g))
+      if (!loc.startsWith(config.baseUrl)) add("sitemap.xml", `URL outside the base URL: ${loc}`);
+  } else add(".", "missing sitemap.xml");
+
+  return { issues, pages: pages.length, files: files.length, bytes, internalLinks, repoLinks, externalLinks: [...externalLinks].sort(), repoLinksChecked: !!repoFiles };
+}
+
+if (import.meta.main) {
+  const dir = resolve(process.argv[2] ?? join(siteRoot, "dist"));
+  const report = await checkSite(dir);
+  for (const issue of report.issues) console.error(`✗ ${issue.file}: ${issue.message}`);
+  console.log(`${report.pages} pages, ${report.files} files, ${(report.bytes / 1024).toFixed(1)} KiB; ${report.internalLinks} internal links, ` +
+    `${report.repoLinks} repository links${report.repoLinksChecked ? " checked against tracked files" : " (not checked: git unavailable)"}, ` +
+    `${report.externalLinks.length} other external URLs.`);
+  if (report.issues.length) { console.error(`${report.issues.length} issue(s).`); process.exit(1); }
+  console.log("Site checks passed.");
+}

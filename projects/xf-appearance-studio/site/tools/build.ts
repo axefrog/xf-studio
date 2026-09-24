@@ -1,0 +1,111 @@
+/**
+ * Static site build: bun tools/build.ts [outDir]
+ * Pages in src/pages/*.html start with a <!--page {json}--> header and are wrapped in src/layout.html.
+ * Placeholders are {{name}}; an unknown placeholder fails the build. No dependencies, no network.
+ */
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join, relative, resolve } from "node:path";
+import { basePath, formatDate, loadConfig, siteRoot, type SiteConfig } from "./config";
+
+export type PageMeta = {
+  title: string;
+  description: string;
+  /** Nav item id marked aria-current="page". */
+  nav?: string;
+  /** Use base-path absolute links (needed by 404.html, which Pages serves at any depth). */
+  absoluteLinks?: boolean;
+  noindex?: boolean;
+  bodyClass?: string;
+};
+export type BuildResult = { outDir: string; pages: string[]; files: string[]; config: SiteConfig };
+
+const PAGE_HEADER = /^<!--page\s+(\{[\s\S]*?\})\s*-->[ \t]*\r?\n?/;
+
+export const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+export function fill(template: string, vars: Record<string, string>, source: string) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) => {
+    if (!(name in vars)) throw Error(`${source}: unknown placeholder {{${name}}}`);
+    return vars[name];
+  });
+}
+
+export function parsePage(text: string, source: string): { meta: PageMeta; body: string } {
+  const match = PAGE_HEADER.exec(text);
+  if (!match) throw Error(`${source}: missing <!--page {...}--> header`);
+  const meta = JSON.parse(match[1]) as PageMeta;
+  if (!meta.title?.trim() || !meta.description?.trim()) throw Error(`${source}: page header needs title and description`);
+  return { meta, body: text.slice(match[0].length) };
+}
+
+const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+export function buildSite(options: { outDir?: string; baseUrl?: string } = {}): BuildResult {
+  const config = loadConfig({ baseUrl: options.baseUrl });
+  const outDir = resolve(options.outDir ?? join(siteRoot, "dist"));
+  const base = basePath(config);
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(join(outDir, "assets"), { recursive: true });
+
+  const files: string[] = [];
+  const versions: Record<string, string> = {};
+  const assetDir = join(siteRoot, "src", "assets");
+  for (const name of readdirSync(assetDir).sort()) {
+    const bytes = readFileSync(join(assetDir, name));
+    writeFileSync(join(outDir, "assets", name), bytes);
+    versions[name] = sha(bytes).slice(0, 10);
+    files.push(`assets/${name}`);
+  }
+
+  const layout = readFileSync(join(siteRoot, "src", "layout.html"), "utf8");
+  const pageDir = join(siteRoot, "src", "pages");
+  const pages: string[] = [];
+  const sitemap: string[] = [];
+  for (const file of readdirSync(pageDir).filter(name => name.endsWith(".html")).sort()) {
+    const source = relative(siteRoot, join(pageDir, file)).replaceAll("\\", "/");
+    const { meta, body } = parsePage(readFileSync(join(pageDir, file), "utf8"), source);
+    const slug = basename(file, ".html");
+    const root = meta.absoluteLinks ? base : "";
+    const home = meta.absoluteLinks ? base : "./";
+    const link = (href: string) => !meta.absoluteLinks || /^[a-z]+:/i.test(href) ? href
+      : href.startsWith("./") ? base + href.slice(2) : base + href;
+    const blob = `${config.repoUrl}/blob/${config.repoBranch}`;
+    const shared: Record<string, string> = {
+      root, home, siteName: escapeHtml(config.siteName),
+      repo: config.repoUrl, blob, tree: `${config.repoUrl}/tree/${config.repoBranch}`,
+      authorName: escapeHtml(config.author.name), authorUrl: config.author.url,
+      statusReviewed: formatDate(config.statusReviewed), statusReviewedIso: config.statusReviewed,
+    };
+    const content = fill(body, shared, source).trim();
+    const pageUrl = slug === "index" ? config.baseUrl : `${config.baseUrl}${slug}.html`;
+    const nav = config.nav.map(item =>
+      `<li><a href="${link(item.href)}"${item.id === meta.nav ? ' aria-current="page"' : ""}>${escapeHtml(item.label)}</a></li>`).join("");
+    const html = fill(layout, {
+      ...shared,
+      title: escapeHtml(meta.title),
+      description: escapeHtml(meta.description),
+      robots: meta.noindex ? '<meta name="robots" content="noindex">\n' : "",
+      canonical: meta.noindex ? "" : `<link rel="canonical" href="${pageUrl}">\n`,
+      ogUrl: meta.noindex ? "" : `<meta property="og:url" content="${pageUrl}">\n`,
+      bodyClass: escapeHtml(meta.bodyClass ?? `page-${slug}`),
+      css: `${root}assets/site.css?v=${versions["site.css"]}`,
+      js: `${root}assets/theme.js?v=${versions["theme.js"]}`,
+      nav, content,
+    }, "src/layout.html");
+    writeFileSync(join(outDir, `${slug}.html`), html);
+    pages.push(`${slug}.html`); files.push(`${slug}.html`);
+    if (!meta.noindex) sitemap.push(`  <url><loc>${pageUrl}</loc></url>`);
+  }
+
+  writeFileSync(join(outDir, "sitemap.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.join("\n")}\n</urlset>\n`);
+  files.push("sitemap.xml");
+  return { outDir, pages, files: files.sort(), config };
+}
+
+if (import.meta.main) {
+  const result = buildSite({ outDir: process.argv[2] });
+  console.log(`Built ${result.pages.length} pages, ${result.files.length} files for ${result.config.baseUrl} → ${relative(process.cwd(), result.outDir) || "."}`);
+}

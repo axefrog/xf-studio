@@ -1,0 +1,15 @@
+{
+  "name": "xf-studio-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Public GitHub Pages site for XF Studio. Independent of the Studio app; no dependencies.",
+  "scripts": {
+    "build": "bun tools/build.ts",
+    "check": "bun tools/check.ts",
+    "test": "bun test",
+    "verify": "bun tools/build.ts && bun tools/check.ts && bun test",
+    "preview": "bun tools/build.ts && bun tools/serve.ts",
+    "qa": "bun tools/build.ts && bun tools/qa.ts"
+  }
+}
