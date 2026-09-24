@@ -1,9 +1,10 @@
 /** Private-input browser regression: pass a prepared folder; no asset bytes enter this repository. */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { launch } from "../../tools/cdp";
 import { createDesktopServer } from "../server";
+import { PREVIEW_INTAKE_MARKER } from "../host";
 
 const prepared = process.argv[2];
 if (!prepared) throw Error("Pass an absolute path to five privately prepared core preview files.");
@@ -12,6 +13,8 @@ let browser: Awaited<ReturnType<typeof launch>> | undefined;
 let server: ReturnType<typeof createDesktopServer> | undefined;
 try {
   const data = resolve(directory, "user-data");
+  mkdirSync(data, { recursive: true });
+  writeFileSync(resolve(data, PREVIEW_INTAKE_MARKER), ""); // The intake is developer-only.
   server = createDesktopServer(resolve(import.meta.dir, "../static"), data,
     { version: "0.1.0", channel: "dev", buildHash: "fixture", metadataStatus: "ready" });
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9439, scheme: "dark" });

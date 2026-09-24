@@ -293,7 +293,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
   }
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note(`Builds your own ${EYE_MAKEUP_MOD.modName} mod: private Cyberpunk mod files for ONE in-game eye-makeup selector, labelled “${EYE_MAKEUP_MOD.selectorLabel}” (plus Off), from the current draft, including unsaved edits. Your collection and library revisions are never changed.`),
+    section("Mod package", note(`Builds your own copy of ${EYE_MAKEUP_MOD.modName}, the eye-makeup mod, from the current draft (including unsaved edits). Each preset becomes one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     h("details", { class: "section" }, h("summary", { text: "Local setup" }),
@@ -304,7 +304,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       mo2Fields, directFields, setupState, setupReadiness,
       h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Flat adapter", finish.exportAdapter === "none" ? "warning" : "success")))),
+      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Can be built", finish.exportAdapter === "none" ? "warning" : "success")))),
     note("Active layers with preview-study finishes are omitted and named in the result; a preset left with nothing exportable is omitted whole. Check decides — this list is informational.")));
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
@@ -370,9 +370,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
       h("dt", { text: "Package" }), h("dd", {}, h("code", { text: b.package })),
       h("dt", { text: "Manifest" }), h("dd", {}, h("code", { text: b.manifest })),
       h("dt", { text: "Archive SHA-256" }), h("dd", {}, h("code", { class: "hash", text: b.archiveSha256 }))),
-    h("div", { class: "row wrap gap-s" }, badge("Not installed", "neutral"), badge("Not game-tested", "warning"), badge("Offline verified", "success")));
+    note("Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed.", "info"));
   }
-  card.append(h("p", { class: "muted small" }, "Packaged collection SHA-256 ", h("code", { class: "hash", text: r.packagedCollectionSha256 })));
+  card.append(h("p", { class: "muted small" }, "Collection fingerprint (SHA-256) ", h("code", { class: "hash", text: r.packagedCollectionSha256 })));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;

@@ -76,7 +76,7 @@ function readinessBadge() {
       ? `Updating ${headAvailable ? "preview" : "UV masks"} ${label}${r.pending ? ` · ${r.pending} queued` : ""}` : `${headAvailable ? "Preview" : "UV masks"} blocked`);
     element.title = r.error ?? (r.phase === "ready" ? headAvailable
       ? "Every enabled layer shows its latest complete texture in the 3D preview."
-      : "UV masks are ready. 3D preview assets are unavailable."
+      : "UV masks are ready. The 3D head preview isn't available."
       : "Showing the last complete textures while new ones compute.");
   } };
 }

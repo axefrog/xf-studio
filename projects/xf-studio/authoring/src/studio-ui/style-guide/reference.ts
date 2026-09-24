@@ -34,7 +34,7 @@ export function reference(panels: PanelInfo[]) {
     ["Draft", "The working collection autosaved in this browser."],
     ["Library · revision", "Explicit, immutable SQLite saves (r1, r2…). “Save to library”, never just “Save file”."],
     ["Collection file · recipe file · build plan", "Portable editable data; a build plan is compiler input — none is a mod."],
-    ["Mod package · Check · Build", "Check lists what can be packaged (no files). Build creates private local files that are offline verified, not installed, not game-tested."],
+    ["Mod package · Check · Build", "Check lists what can be packaged (no files). Build creates your own mod files and checks them; the result says plainly that they are not tested in game and not installed."],
     ["Preview study", "A browser look with no game-export adapter."],
     ["Preview context", "Brows, lashes, hair, piercings, V's face: view-only, not authoring."],
   ];

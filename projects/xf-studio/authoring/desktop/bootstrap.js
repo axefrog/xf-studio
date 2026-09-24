@@ -1,7 +1,9 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
-// This desktop-only bootstrap offers a bounded intake for prepared core
-// preview outputs. Optional known-hash matches do not establish ownership.
+// It adds the desktop first-run welcome, About (version, licences, build setup)
+// and, for maintainers only, a bounded intake for prepared core preview files.
+// Community installs never see the intake: the host reports previewIntake=false.
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
+import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -16,7 +18,7 @@ const failWorkspaceBoot = message => {
   throw Error(message);
 };
 const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
-if (!workspaceResponse.ok) failWorkspaceBoot("Private desktop workspace could not be restored; its file was preserved.");
+if (!workspaceResponse.ok) failWorkspaceBoot("Your saved workspace could not be restored. Its file was kept unchanged; restart XF Studio to try again.");
 const workspaceDocument = await workspaceResponse.json();
 if (workspaceDocument.schema !== "xfs/desktop-workspace-1" ||
     (workspaceDocument.workspace !== null && typeof workspaceDocument.workspace !== "string"))
@@ -38,7 +40,7 @@ function saveWorkspace(text) {
     const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: text }),
       keepalive: new TextEncoder().encode(text).length < 60_000 });
-    if (!response.ok) throw Error("Private desktop workspace could not be saved. Keep this window open and export your collection.");
+    if (!response.ok) throw Error("Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.");
   });
   void saveQueue.catch(error => { workspaceAlert(error.message); });
 }
@@ -74,11 +76,13 @@ aboutButton.textContent = "About";
 aboutButton.setAttribute("aria-label", "About XF Studio");
 const about = document.createElement("dialog");
 about.id = "desktop-about";
-about.innerHTML = '<h2>About XF Studio</h2><p id="desktop-version"></p><p id="desktop-build"></p><p>Private data folder</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><button id="desktop-setup-open" type="button">Local setup</button><form method="dialog"><button type="submit">Close</button></form>';
+about.innerHTML = '<h2>About XF Studio</h2><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button></div><form method="dialog"><button type="submit">Close</button></form>';
 about.querySelector("#desktop-version").textContent = capabilities.metadataStatus === "ready" ?
-  `Version ${capabilities.version} · ${capabilities.channel}` : "Installed version unavailable";
+  `Version ${capabilities.version}` : "Installed version unavailable";
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
-  `Build ${capabilities.buildHash}` : "This installation needs repair before its version can be trusted.";
+  `Build ${capabilities.buildHash}` : "This installation looks damaged. Reinstall XF Studio to repair it.";
+about.querySelector("#desktop-preview-note").textContent = capabilities.previewAssets === "ready" ? "" :
+  "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully.";
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
 const updateStatus = about.querySelector("#desktop-update");
 const updateActions = about.querySelector("#desktop-update-actions");
@@ -114,12 +118,34 @@ for (const button of updateActions.querySelectorAll("button")) button.addEventLi
     showUpdate(await response.json());
   } catch { await refreshUpdate(); }
 });
-document.body.append(aboutButton, about);
+const licences = document.createElement("dialog");
+licences.id = "desktop-licences";
+licences.innerHTML = '<h2>Licences</h2><p>XF Studio is free software under the MIT licence. It includes third-party software, whose notices and licences are listed here.</p><div class="desktop-about-actions" role="group" aria-label="Licence document"><button type="button" data-licence-doc="LICENSE.txt" aria-pressed="true">XF Studio licence</button><button type="button" data-licence-doc="THIRD_PARTY_NOTICES.md" aria-pressed="false">Third-party notices</button></div><pre id="desktop-licence-text" tabindex="0"></pre><form method="dialog"><button type="submit">Close</button></form>';
+const licenceText = licences.querySelector("#desktop-licence-text");
+async function showLicence(name) {
+  for (const item of licences.querySelectorAll("[data-licence-doc]"))
+    item.setAttribute("aria-pressed", String(item.dataset.licenceDoc === name));
+  licenceText.textContent = "Loading…";
+  try {
+    const response = await fetch(`/${name}`, { cache: "no-store" });
+    if (!response.ok) throw Error();
+    licenceText.textContent = await response.text();
+  } catch { licenceText.textContent = "This document is missing from the installation. Reinstall XF Studio, or read it on the project's GitHub page."; }
+}
+for (const item of licences.querySelectorAll("[data-licence-doc]"))
+  item.addEventListener("click", () => void showLicence(item.dataset.licenceDoc));
+about.querySelector("#desktop-licences-open").addEventListener("click", () => {
+  about.close(); licences.showModal(); void showLicence("LICENSE.txt");
+});
+document.body.append(aboutButton, about, licences);
 aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Local setup</h2><p>These paths stay in this Windows account. You can set them now and change them later. Prepared preview files are optional; use Enable 3D preview when you have them.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Continue without paths</button><button type="submit" id="desktop-setup-save">Save setup</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
-document.body.append(setup);
+setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup in this alpha. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+const welcome = document.createElement("dialog");
+welcome.id = "desktop-welcome";
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Design eye makeup on the flat UV map, keep your looks in your library, and run Check to see which looks can become mod files.</p><p><strong>The 3D head preview isn&#39;t available in this alpha.</strong> The UV editor, library and Check work fully. A 3D preview built from your own game files is planned.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup. You can find it later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
+document.body.append(setup, welcome);
 const descriptors = [
   ["gameRoot", "Cyberpunk 2077 game folder"],
   ["launchRoute", "Mod source route"],
@@ -177,11 +203,12 @@ function showSetup(view) {
   deferSetup.hidden = view.source !== "new";
   saveSetup.disabled = recovery;
   const pathIssues = view.readiness.sourceDiscovery.issues.map(issue => issue.reason);
-  const pathStatus = pathIssues.length ? pathIssues.join(" ") : "Game and mod source paths pass the current presence checks.";
-  setupStatus.textContent = recovery ? "The current settings file is damaged. Restore the previous copy before editing." :
-    `${pathStatus} Mod export Check uses the collection alone. Build ${view.readiness.build.ready ? "is ready" : "needs its configured tools and inputs"}.`;
-  aboutReadiness.textContent = recovery ? "Local setup needs recovery." :
-    `Local setup: ${view.source === "new" ? "not saved" : pathIssues.length ? "paths need attention" : "paths saved"}. Mod export Check is available; Build ${view.readiness.build.ready ? "is ready" : "needs its configured tools and inputs"}.`;
+  const buildReady = view.readiness.build.ready;
+  const pathStatus = pathIssues.length ? pathIssues.join(" ") : "The game folder was found.";
+  setupStatus.textContent = recovery ? "Your settings file is damaged. Restore the previous copy before editing." :
+    `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." : "isn't set up yet."}`;
+  aboutReadiness.textContent = recovery ? "Build settings need repair: open Build setup." :
+    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet; it needs a developer setup in this alpha."}`;
 }
 async function setupAction(action) {
   const result = await setupActions.dispatch(action);
@@ -189,22 +216,35 @@ async function setupAction(action) {
   showSetup(setupActions.snapshot().view);
 }
 async function openSetup() {
-  setupStatus.textContent = "Loading local setup…";
+  setupStatus.textContent = "Loading build setup…";
   saveSetup.disabled = true;
   setup.showModal();
   await initialSetup.catch(() => {});
   try { await setupAction({ kind: "setup.refresh" }); }
-  catch { setupStatus.textContent = "Local setup is unavailable. Restart XF Studio and retry."; }
+  catch { setupStatus.textContent = "Build setup couldn't be loaded. Restart XF Studio and try again."; }
 }
 about.querySelector("#desktop-setup-open").addEventListener("click", () => { about.close(); void openSetup(); });
 setup.querySelector("#desktop-setup-close").addEventListener("click", () => setup.close());
-deferSetup.addEventListener("click", async () => {
+// Skipping stores the untouched defaults through the same validated action, so
+// the welcome does not return on every launch; Check never needs these paths.
+async function deferBuildSetup() {
   if (setupView?.source !== "new") return;
+  await setupAction({ kind: "setup.save", fields: setupView.fields });
+}
+deferSetup.addEventListener("click", async () => {
   deferSetup.disabled = true;
-  try { await setupAction({ kind: "setup.save", fields: setupView.fields }); setup.close(); }
+  try { await deferBuildSetup(); setup.close(); }
   catch (error) { setupStatus.textContent = error.message; }
   finally { deferSetup.disabled = false; }
 });
+const welcomeStart = welcome.querySelector("#desktop-welcome-start");
+welcomeStart.addEventListener("click", async () => {
+  welcomeStart.disabled = true;
+  try { await initialSetup.catch(() => {}); await deferBuildSetup(); welcome.close(); }
+  catch (error) { welcome.querySelector("#desktop-welcome-status").textContent = error.message; }
+  finally { welcomeStart.disabled = false; }
+});
+welcome.querySelector("#desktop-welcome-setup").addEventListener("click", () => { welcome.close(); void openSetup(); });
 setup.querySelector("#desktop-setup-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (!setupView || setupView.source === "backup") return;
@@ -223,19 +263,21 @@ restoreSetup.addEventListener("click", async () => {
 });
 const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.then(() => {
-  // Fresh or damaged local settings deserve the first-run prompt. Existing
-  // users can still open setup from About, and missing assets have their own
-  // optional intake button rather than reopening a modal on every launch.
-  if (setupView?.source === "new" || setupView?.source === "backup") setup.showModal();
-}).catch(() => { aboutReadiness.textContent = "Local setup is unavailable."; });
-if (capabilities.previewAssets !== "ready") {
+  // A fresh install gets the plain-language welcome; damaged settings open
+  // Build setup for recovery. Existing users reach Build setup from About.
+  if (setupView?.source === "new") welcome.showModal();
+  else if (setupView?.source === "backup") setup.showModal();
+}).catch(() => { aboutReadiness.textContent = "Build setup couldn't be loaded. Check still works."; });
+// Developer-only: the five prepared preview files come from a maintainer
+// pipeline that community users cannot run, so the host hides this intake.
+if (capabilities.previewIntake && capabilities.previewAssets !== "ready") {
   const intakeButton = document.createElement("button");
   intakeButton.id = "desktop-intake-open";
   intakeButton.type = "button";
   intakeButton.textContent = "Enable 3D preview";
   const root = document.createElement("dialog");
   root.id = "desktop-intake";
-  root.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>UV editor is ready</h1><p>You can edit makeup shapes, use Undo, save collections, export masks and run Check without 3D preview files. Head and saved-V controls will become available after you import your own prepared assets.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is optional and does not verify ownership, source provenance or game fidelity. This installer includes no game or mod files. Build needs separately configured host tools and plate inputs.</p><div class="desktop-intake-actions"><button type="button" id="desktop-setup-open-inline">Configure local setup</button><button type="button" id="desktop-intake-close">Continue in UV editor</button></div></div>';
+  root.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Developer preview files</h1><p>Import the five prepared core preview files to switch on the 3D head. The UV editor, library and Check work without them.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is only a diagnostic. This installer includes no game or mod files.</p><div class="desktop-intake-actions"><button type="button" id="desktop-setup-open-inline">Build setup</button><button type="button" id="desktop-intake-close">Continue in UV editor</button></div></div>';
   document.body.append(intakeButton, root);
   intakeButton.addEventListener("click", () => root.showModal());
   root.querySelector("#desktop-intake-close").addEventListener("click", () => root.close());
@@ -278,6 +320,7 @@ if (capabilities.previewAssets !== "ready") {
   importButton.addEventListener("click", () => { if (inspected === folder.value.trim()) void intake("import"); });
 }
 document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
+document.documentElement.dataset.desktopPreviewIntake = capabilities.previewIntake ? "enabled" : "disabled";
 void import("/build/studio-main.js").catch(error => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");

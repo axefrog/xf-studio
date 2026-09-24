@@ -162,9 +162,13 @@ async function start() {
   await port!.library.execute({ kind: "initialize" });
   const desktopAssets = document.documentElement.dataset.desktopPreviewAssets;
   if (desktopAssets === "missing" || desktopAssets === "incomplete") {
-    const reason = desktopAssets === "missing"
-      ? "3D preview assets are missing. Import the five prepared files to enable the head view."
-      : "3D preview assets are incomplete. Inspect the private preview folder and import a valid prepared set.";
+    // Community installs have no preview intake, so they get the plain alpha
+    // status; only a maintainer-enabled intake mentions the prepared files.
+    const reason = document.documentElement.dataset.desktopPreviewIntake !== "enabled"
+      ? "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully."
+      : desktopAssets === "missing"
+        ? "3D preview files are missing. Use Enable 3D preview to import the five prepared files."
+        : "3D preview files are incomplete. Check the preview-assets folder and import a valid prepared set.";
     core.app.setPreviewUnavailable(reason);
     viewportDevice.failHead(reason);
     statusSource.changed();

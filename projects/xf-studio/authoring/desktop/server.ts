@@ -5,7 +5,7 @@ import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
-import { desktopCapabilities, type DesktopVersion } from "./host";
+import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
 import { desktopBuildIssue, type WolvenKitProbe } from "./build";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
@@ -47,6 +47,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
+  // Maintainer-only: the five prepared preview files come from a private
+  // pipeline, so the intake stays hidden and refused unless explicitly enabled.
+  const previewIntake = () => existsSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER));
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
@@ -72,7 +75,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
         return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
-          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady()),
+          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady(), previewIntake()),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
@@ -89,7 +92,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
-      if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
+      if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
+        desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
       if (url.pathname === "/api/desktop/workspace") {
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
         if (request.method === "POST" && response.status === 204)
