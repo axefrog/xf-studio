@@ -37,6 +37,7 @@ export function createBrowserViewportDevice(options: {
     inputCapture: kind => editors.capture()[kind === "head" ? "surface" : "uv"],
     headView: () => viewer?.cameraState(),
     uvView: () => uvEditor?.snapshot(),
+    uvSelection: () => uvEditor?.selection?.(),
     uvCommand: command => uvEditor?.viewCommand(command) ?? false,
     hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
     queryContext: options.queryContext,

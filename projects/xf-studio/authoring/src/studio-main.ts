@@ -119,7 +119,8 @@ async function start() {
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
-    persist, message: text => adapterMessage("uv", text),
+    persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
+    message: text => adapterMessage("uv", text),
   }, workspace.uvView);
   bootstrap = createTrustedStudioBootstrap({
     workspace, core, preferences, localSetup, viewport: viewportDevice.attachment,

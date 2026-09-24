@@ -287,3 +287,18 @@ test("consequences say what an action replaces, writes or discards and how to re
   expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen",
     discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name }], confirm: true });
 });
+
+test("the viewport snapshot carries UV selection visibility and view-change notifications", async () => {
+  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  let selection: { point?: { index: number; visible: boolean } } | undefined = { point: { index: 2, visible: false } };
+  const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
+    cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
+    uvSelection: () => selection, uvCommand: () => true, hitAt: () => undefined,
+    queryContext: () => { throw Error("not used"); } });
+  let notified = 0; attachment.subscribe(() => notified++);
+  expect(attachment.snapshot().uv.selection).toEqual({ point: { index: 2, visible: false } });
+  attachment.viewChanged();
+  expect(notified).toBe(1);
+  selection = undefined;
+  expect("selection" in attachment.snapshot().uv).toBe(false);
+});

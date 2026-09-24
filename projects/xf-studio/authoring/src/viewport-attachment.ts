@@ -1,5 +1,5 @@
 import type { CameraState } from "./workspace-state";
-import type { UVView } from "./uv-view";
+import type { UVSelectionVisibility, UVView } from "./uv-view";
 import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
 
@@ -10,7 +10,7 @@ export type ViewportPhase = "loading" | "ready" | "error";
 export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; captured: boolean };
 export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState };
-  uv: ViewportHostState & { view?: UVView };
+  uv: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
 };
 export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
   affordance: "point" | "tangent" | "warp-origin" | "warp-vector" | "shape" | "empty" };
@@ -26,6 +26,8 @@ export type ViewportAttachmentPort<Slot> = {
   inputCapture(kind: ViewportHostKind): boolean;
   headView(): CameraState | undefined;
   uvView(): UVView | undefined;
+  /** Optional: whether the selected point/warp is inside the current UV view. */
+  uvSelection?(): UVSelectionVisibility | undefined;
   uvCommand(command: UVViewCommand): boolean;
   hitAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportHit | undefined;
   queryContext(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
@@ -40,6 +42,8 @@ export class ViewportAttachment<Slot> {
   constructor(private port: ViewportAttachmentPort<Slot>) {}
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private publish() { for (const listener of this.listeners) listener(); }
+  /** The device reports a view change (UV pan/zoom/mode) so readers of `snapshot()` can repaint. */
+  viewChanged() { this.publish(); }
   setReady(kind: ViewportHostKind) { this.phases[kind] = { phase: "ready" }; this.publish(); }
   setError(kind: ViewportHostKind, error: string) {
     this.phases[kind] = { phase: "error", error }; this.publish();
@@ -91,7 +95,8 @@ export class ViewportAttachment<Slot> {
     });
     return {
       head: { ...state("head"), view: structuredClone(this.port.headView()) },
-      uv: { ...state("uv"), view: structuredClone(this.port.uvView()) },
+      uv: { ...state("uv"), view: structuredClone(this.port.uvView()),
+        ...(this.port.uvSelection?.() ? { selection: structuredClone(this.port.uvSelection()) } : {}) },
     };
   }
 }

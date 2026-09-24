@@ -4,7 +4,7 @@ import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
-import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
+import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
 import type { ViewportHit } from "./viewport-attachment";
 import type { UVViewCommand } from "./viewport-attachment";
@@ -389,7 +389,12 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   }
   return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand,
     inputCapture: () => !!drag || !!wheel,
-    snapshot: () => ({ ...view }), diagnostics: () => {
+    snapshot: () => ({ ...view }),
+    selection: () => {
+      const l = hooks.layer(), b = bounds();
+      return l ? selectionVisibility(view, b.width / b.height, l, hooks.selected(), hooks.selectedField()) : undefined;
+    },
+    diagnostics: () => {
     const b = bounds();
     return { view: { ...view }, region: region(), aspect: b.width / b.height,
       resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),
