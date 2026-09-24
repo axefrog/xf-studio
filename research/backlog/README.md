@@ -18,6 +18,13 @@
 
 Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
+## Queued R&D and background work
+
+- **Runtime access baseline** (early mod R&D, start when a research slot frees, ideally after the first in-game test): minimal, heavily logged base mods per type (RED4ext C++, redscript, CET Lua, ArchiveXL/TweakXL) plus a loopback bridge so agents can read and change live game state while the maintainer plays. See [runtime access baseline](runtime-access-baseline.md).
+- **Shader decompile annotator** (R&D tooling, in progress): rename decompiled material constants and bindless textures from template register maps. See [shader-system tooling](../materials/shader-system/README.md).
+- **Generic game-file resolver** (architecture, feeds tracks 2–3): support for installed mods and frameworks such as PRC and CCXL packs must come from interpreting files as the game does, not per-mod adapters. The existing PRC-specific preview code is migration debt. Specified by the [CC file chain](cc-file-chain.md) research.
+- **Public knowledge pages** (low priority, background): periodically publish mature, attributed and caveated knowledge on the Pages site. See [public knowledge pages](public-knowledge-site.md).
+
 ## Paused pending in-game evidence
 
 - **Expanded-plate clearance** ([Experiment 006](../../experiments/006-plate-clearance/README.md), [012](../../experiments/012-native-plate-bootstrap/README.md)). Many offline candidates were rejected; no correction is accepted. Pause until the smoke test shows whether residual eyelid contacts are visible in game. Any resumed candidate must be morph-aware and finite-contact-aware and preserve exact native skin bytes in mesh and morph base buffers.
