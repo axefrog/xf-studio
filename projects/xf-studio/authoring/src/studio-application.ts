@@ -123,15 +123,22 @@ export class StudioApplication {
       typeof flattened.fieldId === "string" && target.kind === "field" && flattened.fieldId !== target.id ||
       typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
       return { available: false, code: "missing_target", reason: "The command targets a different item." };
+    // A range limit is generic; when the domain can say why in the user's terms
+    // (for example "already at the front"), show that instead.
+    const explain = (issue: StudioCapability) => {
+      if (issue.code !== "limit") return issue;
+      const domain = this.capability(action);
+      return !domain.available && domain.reason ? domain : issue;
+    };
     for (const [name, schema] of Object.entries(descriptor.payload)) {
       const issue = fieldIssue(flattened[name], schema);
-      if (issue) return issue;
+      if (issue) return explain(issue);
     }
     const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
     const variantFields = variant && descriptor.variants?.[String(variant)]?.payload;
     if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
       const issue = fieldIssue(flattened[name], schema);
-      if (issue) return issue;
+      if (issue) return explain(issue);
     }
     return this.capability(action);
   }

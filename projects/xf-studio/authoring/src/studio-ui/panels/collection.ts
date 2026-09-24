@@ -284,14 +284,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
   }
-  function buildCapability() {
-    const file = port.files.capability({ kind: "package.build" });
-    if (!file.available) return file;
-    const setup = port.localSetup.snapshot();
-    if (!setup.view) return { available: false, reason: setup.error ?? "Load local setup to configure build inputs." };
-    const build = setup.view.readiness.build;
-    return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
-  }
+  // Build readiness (including the host's Build setup) is part of the file capability.
+  const buildCapability = () => port.files.capability({ kind: "package.build" });
   const element = h("div", { class: "panel-content" },
     section("Mod package", note(`Builds your own copy of ${EYE_MAKEUP_MOD.modName}, the eye-makeup mod, from the current draft (including unsaved edits). Each preset becomes one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
@@ -304,8 +298,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       mo2Fields, directFields, setupState, setupReadiness,
       h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Can be built", finish.exportAdapter === "none" ? "warning" : "success")))),
-    note("Active layers with preview-study finishes are omitted and named in the result; a preset left with nothing exportable is omitted whole. Check decides — this list is informational.")));
+      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : "Can be built", finish.exportAdapter === "none" ? "warning" : "success")))),
+    note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Check decides — this list is a guide.")));
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {

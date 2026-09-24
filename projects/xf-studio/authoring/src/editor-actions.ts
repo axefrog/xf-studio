@@ -13,8 +13,12 @@ export function layerCapability(recipe: Recipe, action: LayerAction): ActionCapa
   if (action.kind === "layer.edit") {
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
       return { available: false, reason: `This preview currently supports up to ${MAX_LAYERS} layers.` };
-    if (command.kind === "move" && (!Number.isInteger(command.to) || command.to < 0 || command.to >= recipe.layers.length))
-      return { available: false, reason: "Invalid layer position." };
+    if (command.kind === "move") {
+      // Layers render bottom-to-top, so a higher index is further forward.
+      if (!Number.isInteger(command.to)) return { available: false, reason: "Choose a position in the layer stack." };
+      if (command.to >= recipe.layers.length) return { available: false, reason: "This layer is already at the front." };
+      if (command.to < 0) return { available: false, reason: "This layer is already at the back." };
+    }
   }
   return { available: true };
 }

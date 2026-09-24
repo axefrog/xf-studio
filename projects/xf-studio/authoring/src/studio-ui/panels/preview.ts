@@ -74,7 +74,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       piercings.update(!!preview?.piercings, { disabled: !preview || !options.length || (!preview.piercings && !piercingAllowed.available),
         reason: piercingAllowed.reason ?? "Preview is still loading." });
       style.update([{ value: "", label: "Saved V / off" }, ...options.map(option => ({ value: option.id, label: option.label }))], preview?.piercingStyle ?? "", !options.length,
-        options.length ? undefined : `Piercing preview unavailable${assets.piercingError ? `: ${assets.piercingError}` : ""}.`);
+        options.length ? undefined : !preview ? (frame.viewport.head.error ?? "Preview is still loading.") :
+          `Piercing preview unavailable${assets.piercingError ? `: ${assets.piercingError}` : ""}.`);
       const chosen = options.find(option => option.id === preview?.piercingStyle);
       colour.update((chosen?.choices ?? []).map(choice => ({ value: choice.definition, label: `${choice.index}. ${choice.label}` })), preview?.piercingDefinition, !chosen,
         "Choose a preview style first.");
@@ -132,7 +133,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       const loading = { disabled: !ready, reason: frame.viewport.head.error ?? "Preview is still loading." };
       fov.update(preview?.camera.fov, loading); exposure.update(preview?.exposure, loading); angle.update(preview?.lightAngle, loading);
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
-      front.disabled = !ready;
+      applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
       optics.update(!!preview?.eyeOptics, loading);
       const eye = assets.eyeOptics;

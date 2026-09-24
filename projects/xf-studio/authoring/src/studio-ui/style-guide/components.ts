@@ -16,8 +16,8 @@ export function components() {
       a11y: "Disabled buttons cannot take focus, so every disabled command also appears with its reason in the command palette and context menus." }),
     pattern({ id: "c-chips", title: "Chips, badges and status vocabulary", status: "implemented",
       specimen: `<div class="stack-s"><div class="row wrap gap-s">${chip("Based on r3")}${chip("Not in library", "warning")}${chip("Newer r5 saved", "warning")}${chip("Working…", "info")}</div>
-        <div class="row wrap gap-s">${badge("Flat adapter · provisional", "success")}${badge("Preview study", "warning")}${badge("Current", "success")}${badge("Stale — draft changed since", "warning")}${badge("Blocked", "error")}</div></div>`,
-      what: "Chips describe document/library state; badges qualify a result or capability. The words are fixed vocabulary: Working, Preview study, Current, Stale, Blocked. A finished Build states its limits in one plain sentence (built and checked, not tested in game, nothing installed) rather than in badges.",
+        <div class="row wrap gap-s">${badge("Can be built", "success")}${badge("Preview only", "warning")}${badge("Current", "success")}${badge("Stale — draft changed since", "warning")}${badge("Blocked", "error")}</div></div>`,
+      what: "Chips describe document/library state; badges qualify a result or capability. The words are fixed vocabulary: Working, Preview only, Can be built, Current, Stale, Blocked. A finished Build states its limits in one plain sentence (built and checked, not tested in game, nothing installed) rather than in badges.",
       when: "Whenever a result could be mistaken for more than it is. A green badge never implies game rendering.",
       avoid: "Colour-only status dots without words; vague labels like “OK” or “Done”." }),
     pattern({ id: "c-fields", title: "Text, title and select fields", status: "implemented",
@@ -49,7 +49,7 @@ export function components() {
       when: "Layer pigment and finish-specific facet colours. A future palette library should feed the same field (see future directions)." }),
     pattern({ id: "c-finish", title: "Finish chooser", status: "implemented", wide: true,
       specimen: `<div class="finish-grid" style="max-width:560px">${finishes.map(([id, label, exports], index) => `<button type="button" class="finish-option" data-finish="${id}" aria-pressed="${index === 2}"><span class="finish-chip"></span><span class="finish-name">${label}</span><span class="finish-tag ${exports ? "ok" : "warn"}">${exports ? "Exports" : "Preview"}</span></button>`).join("")}</div>
-        <div class="export-line" style="max-width:560px">${badge("Flat adapter · provisional", "success")}<span class="small">Can become local mod files through the provisional flat adapter. Game appearance is unverified.</span></div>`,
+        <div class="export-line" style="max-width:560px">${badge("Can be built", "success")}<span class="small">Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet.</span></div>`,
       what: "The seven finish families as comparable tiles, each with its export status from the application's finish catalogue. The selected tile's description and export note sit underneath; Glitter reveals its model suite and Shimmer/Glitter reveal flake studies.",
       when: "Colour & finish panel, the layer context menu's Finish submenu and the command palette — all from the same catalogue.",
       combine: "Metallic is its own family; never alias it to Shimmer. Satin is the user-facing name of the internal regular finish.",

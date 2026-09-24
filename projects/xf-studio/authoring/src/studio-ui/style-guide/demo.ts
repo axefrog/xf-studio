@@ -150,7 +150,7 @@ attach("c-context", "Open live menu", button => openMenu([
   { kind: "action", label: "Remove layer", icon: "trash", danger: true, hint: "Undo with Ctrl+Z", run: () => feedback.toast("info", "Layers", "Removed “Petal wash” (demo).", [{ label: "Undo", run: () => {} }]) },
   { kind: "action", label: "Bring forward", icon: "arrowUp", capability: { available: false, reason: "This layer is already in front." }, run: () => {} },
   { kind: "submenu", label: "Finish", icon: "finish", items: () => [
-    { kind: "action", label: "Matte", checked: true, run: () => {} }, { kind: "action", label: "Glitter", hint: "Preview study · not exported", run: () => {} }] },
+    { kind: "action", label: "Matte", checked: true, run: () => {} }, { kind: "action", label: "Glitter", hint: "Preview only · not built into your mod", run: () => {} }] },
   { kind: "action", label: "Set point pigment…", icon: "edge", run: () => openValuePopover({ kind: "range", label: "Pigment strength", value: .72, min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)}%` },
     button, { title: "Point 3 pigment", apply: "Apply", validate: v => Number(v) >= .1 ? { available: true } : { available: false, reason: "Demo: values below 10% are refused." }, commit: () => feedback.toast("success", "Shape", "Applied (demo).") }) },
 ], button, { label: "Demo menu", invoker: button }));

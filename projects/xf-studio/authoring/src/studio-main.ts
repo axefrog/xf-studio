@@ -4,6 +4,7 @@
  * `StudioPresentationPort`. Nothing in `studio-ui/` imports this module.
  */
 import { createBrowserFileDevice } from "./browser-file-device";
+import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
@@ -165,7 +166,7 @@ async function start() {
     // Community installs have no preview intake, so they get the plain alpha
     // status; only a maintainer-enabled intake mentions the prepared files.
     const reason = document.documentElement.dataset.desktopPreviewIntake !== "enabled"
-      ? "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully."
+      ? NO_3D_PREVIEW_IN_ALPHA
       : desktopAssets === "missing"
         ? "3D preview files are missing. Use Enable 3D preview to import the five prepared files."
         : "3D preview files are incomplete. Check the preview-assets folder and import a valid prepared set.";

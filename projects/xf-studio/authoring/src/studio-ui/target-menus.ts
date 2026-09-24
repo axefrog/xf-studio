@@ -130,7 +130,7 @@ export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor
         const descriptor = rt.finishes.find(item => item.id === choice.value);
         return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
           checked: layer.finish === choice.value || (layer.finish === "satin" && choice.value === "regular"),
-          hint: descriptor?.exportAdapter === "none" ? "Preview study · not exported" : undefined,
+          hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod" : undefined,
           run: () => { rt.dispatch(choice.action); } };
       }) },
     targetAction(rt, target, { kind: "layer.edit", command: { kind: "reset", id: layerId } }, "Reset shape and settings", "reset",

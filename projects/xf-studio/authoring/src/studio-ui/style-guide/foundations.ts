@@ -10,7 +10,7 @@ const tokens: [string, string, string][] = [
   ["--text", "Primary text (≥15:1)", "text"], ["--text-muted", "Secondary text (≥6:1)", "text"], ["--text-faint", "Tertiary text (≥4.5:1 on panels)", "text"],
   ["--accent", "Signal yellow: commitment (primary action), focus, active tab notch", "accent"], ["--accent-text", "Accent used as text", "text"],
   ["--signal", "Cyan/teal: live selection, data, drop targets", "accent"], ["--success", "Verified, exportable, ready", "state"],
-  ["--warning", "Preview study, stale, needs attention", "state"], ["--danger", "Errors, destructive commands", "state"], ["--focus", "Focus ring", "accent"],
+  ["--warning", "Preview only, stale, needs attention", "state"], ["--danger", "Errors, destructive commands", "state"], ["--focus", "Focus ring", "accent"],
 ];
 
 export function foundations(css: string) {
@@ -36,7 +36,7 @@ export function foundations(css: string) {
       specimen: `<div class="token-grid">${tokens.map(([name, use, kind]) => `<div class="token" data-kind="${kind}"><span class="token-swatch" style="--sample:var(${name})"></span><code>${name}</code><small>${use}</small></div>`).join("")}</div>`,
       what: "Semantic surfaces, lines, text and state colours. Contrast was computed for both themes: all text tokens ≥4.5:1 on panels, control boundaries (--line-strong) ≥3:1, focus ≥11:1.",
       when: "Always reference a token, never a literal colour. User-authored makeup colours are content and are shown unmodified inside swatches.",
-      combine: "State colours always travel with a word or icon (e.g. a warning badge says “Preview study”), never colour alone.",
+      combine: "State colours always travel with a word or icon (e.g. a warning badge says “Preview only”), never colour alone.",
       adapt: "Themes switch by color-scheme; forced-colors mode falls back to system colours for selection and borders.",
       drives: `${code("--accent")} is identical in both themes; light theme swaps accent-as-line to ink via ${code("--indicator")} and ${code("--accent-edge")}.` }),
     pattern({ id: "f-contrast", title: "Contrast", status: "implemented", wide: true, specimen: contrast.html,

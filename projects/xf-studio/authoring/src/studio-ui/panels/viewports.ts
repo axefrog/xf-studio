@@ -88,11 +88,11 @@ export function headPanel(rt: StudioRuntime): PanelController {
   const badge = readinessBadge();
   const context = h("span", { class: "viewport-context" });
   const front = button({ label: "Front view", icon: "front", iconOnly: true, small: true, variant: "ghost", onClick: () => rt.dispatch({ kind: "camera.front" }) });
-  const surface = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Surface controls", "aria-pressed": "false", title: "Show editable controls on the head" }, icon("handles"));
+  const surface = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Surface controls", "aria-pressed": "false", title: "Show editable controls on the head", "data-title": "Show editable controls on the head" }, icon("handles"));
   surface.addEventListener("click", () => { const p = port.authoring.previewState().preview; rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !p?.surface }); });
-  const wire = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Plate wireframe", "aria-pressed": "false", title: "Plate wireframe" }, icon("wire"));
+  const wire = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Plate wireframe", "aria-pressed": "false", title: "Plate wireframe", "data-title": "Plate wireframe" }, icon("wire"));
   wire.addEventListener("click", () => { const p = port.authoring.previewState().preview; rt.dispatch({ kind: "preview.setWire", enabled: !p?.wire }); });
-  const idle = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Play idle", title: "Character-creator idle" }, icon("play"));
+  const idle = h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": "Play idle", title: "Character-creator idle", "data-title": "Character-creator idle" }, icon("play"));
   idle.addEventListener("click", () => {
     const motion = port.authoring.previewState().motion;
     if (!motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
@@ -116,8 +116,8 @@ export function headPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const state = frame.viewport.head;
       loading.hidden = state.phase === "ready";
-      if (state.phase === "error") { loading.replaceChildren(icon("error"), h("p", { text: `Preview unavailable: ${state.error}` }),
-        h("p", { class: "muted small", text: "Editing in the UV map, the library and packaging still work." })); loading.dataset.tone = "error"; }
+      if (state.phase === "error") { loading.replaceChildren(icon("error"), h("p", { text: state.error ?? "The 3D preview could not load." }),
+        h("p", { class: "muted small", text: "You can keep working in the UV map." })); loading.dataset.tone = "error"; }
       badge.update(frame);
       const preview = frame.preview.preview, motion = frame.preview.motion;
       setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
@@ -125,7 +125,12 @@ export function headPanel(rt: StudioRuntime): PanelController {
       if (idle.dataset.playing !== String(playing)) { idle.dataset.playing = String(playing); idle.replaceChildren(icon(playing ? "pause" : "play")); }
       setAttr(idle, "aria-label", !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle");
       idle.hidden = !motion?.available;
-      for (const control of [front, surface, wire, idle]) control.disabled = state.phase !== "ready";
+      // Each control shows its own application reason (for example, no 3D preview in this alpha).
+      applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
+      applyCapability(surface, port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }));
+      applyCapability(wire, port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }));
+      applyCapability(idle, port.authoring.capability(!motion?.idle ? { kind: "motion.setIdle", enabled: true } :
+        { kind: "motion.setPaused", paused: !motion.idlePaused }));
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
       setText(context, [presetName, frame.layer?.name].filter(Boolean).join(" › ") || "No layer selected");
     },
