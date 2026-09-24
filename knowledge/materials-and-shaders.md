@@ -162,7 +162,7 @@ The layout below is decoded from the tiled deferred light (`m_shaderLightsComput
 |---|---|---|
 | **GBuffer0** | `sqrt(linear base colour)`. The light squares it. | Class-specific payload (bits of the eye's second vector). Skin writes 1. |
 | **GBuffer1** | World normal `n / max(|n|) × 0.5 + 0.5`. The light uses `normalize(rgb − 0.5)`. | Class-specific: skin-profile slot high bits (skin); tangent-axis selector (hair); octahedral bits (eye). 0 for metal_base. |
-| **GBuffer2** | **x = metalness, y = roughness** (the light clamps it to [0.04, 1]), **z = "translucency" term**: neutral 1/3 for Standard materials, `0.4 + 0.6·vertexInput` for skin. | Class-specific: skin-profile low bit, an emissive flag and 6 bits (skin); the eye's second vector (eye). |
+| **GBuffer2** | **x = metalness, y = roughness** (the light clamps it to [0.04, 1]), **z = "translucency" term**: neutral 1/3 for Standard materials, `0.4 + 0.6·(vertex colour G)` for skin. | Class-specific: skin-profile low bit, an emissive flag and 6 bits (skin); the eye's second vector (eye). Standard emissive writers (metal_base family, `mesh_decal_emissive`) store bit 7 = emissive flag and 7 bits = `sqrt(EV/10)`. |
 | **Stencil** (bits 5+) | Lighting class = `ERenderMaterialType`: Standard 0, Subsurface 1, Cloth 2, Eye 3, Hair 4, Foliage 5. The value is set per material template (`materialType`). | — |
 
 **Grades for the less certain rows:**
@@ -224,18 +224,44 @@ All [source]/[resource] ([mesh-decal contract](../research/materials/mesh-decal-
 
 **Constant registers.**
 
-- Material constants are `cb4`, one register per `usedParameters[2]` register.
-- Textures are bindless: the program loads an index from that `cb4` register and indexes `t0, space1`.
-- Engine buffers `cb0`, `cb6`, `cb12` and `cb13` are anonymous.
+- **Material constants are `cb4`**, one register per `usedParameters[2]` register ([1] for vertex programs).
+  - Each program keeps a `%ShaderSpecificConstants` type with **one field per register**: `i32` for Texture/TextureArray/Cube, `float` for Scalar, `<4 x float>` for Vector/Color.
+  - Across one representative program per template, 314 of 314 checked templates agree, and no program reads a `cb4` register that the template does not own [source].
+- **Textures are bindless.** The program loads an index from that `cb4` register and indexes `t0, space1`. Multilayer layer textures are the exception: their index comes from a structured-buffer load.
+- **Engine buffers keep their struct names** in the DXIL resource metadata; their member names do not survive, so individual registers are identified by use [source]:
+
+  | Register | Struct |
+  |---|---|
+  | `cb0` | `GlobalShaderConsts` |
+  | `cb1` | `CameraShaderConsts` |
+  | `cb2` | `ENV_PROBES` |
+  | `cb3` | `CustomPixelConsts` / `CustomVertexConsts` |
+  | `cb5` | `FrequentVertexConsts` |
+  | `cb6` | `COM` / `VER` (static compute programs) |
+  | `cb7` | `MaterialModifiersConsts` |
+  | `cb12` | `SharedPixelConsts` |
+  | `cb13` | `CSConstants` |
 
 ### 3.2 Repeatable method
 
-[`research/materials/shader-system/`](../research/materials/shader-system/README.md) contains `shader_cache.py` (index / find / static / extract / summary) and `template_summary.py` (parameters, registers, passes and blend states for all 373 templates). Recipe:
+[`research/materials/shader-system/`](../research/materials/shader-system/README.md) contains:
+
+- `shader_cache.py` (index / find / static / extract / summary);
+- `template_summary.py` (parameters, registers, passes and blend states for all 373 templates);
+- `shader_annotate.py` (annotate / search).
+
+Recipe:
 
 1. **Serialize the templates** with WolvenKit CLI 8.17.4: `unbundle memoryresident_1_general.archive -r "\.(mt|remt)$"`, then `convert serialize`.
 2. **Find the compilation** with `shader_cache.py find <template> --info "<stage>'.*VF: MeshSkinned\]"`. The eye plate, head and eyes are `MeshSkinned`.
-3. **Extract and summarize** with `extract <pixelGUID>` then `summary <pixelGUID>`. Disassembly uses Windows SDK `dxc -dumpbin`.
-4. **Map registers.** Match `cb4` register numbers to template parameters, then follow each `storeOutput` back to its samples.
+3. **Annotate** with `shader_annotate.py annotate <template> --guid <pixelGUID>`. This extracts and disassembles with Windows SDK `dxc -dumpbin`, then writes readable pseudo-HLSL with names for:
+   - template parameters and textures;
+   - engine struct names;
+   - the vertex inputs behind each interpolator;
+   - G-buffer and blend roles for each target.
+
+   `shader_annotate.py search` finds the programs that contain a code pattern. `extract` and `summary` remain for raw work.
+4. **Check the listing against the disassembly** (`<GUID>.annotated.ll`) before relying on it. The lifter folds expressions and keeps loops as `goto`, and it is a reading aid, not compilable source. No DXIL decompiler is installed; dxil-spirv + SPIRV-Cross would be the upgrade path ([annotation results](../research/materials/shader-system/annotation-results.md#decompiler-availability)).
 5. **Write it down.** Record the program GUID, the SHA-256 and SSA ranges. SSA numbers are only valid within that one program.
 
 Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cache.ts`, `extract-brow-shader.ts`, `inspect-eye-skin-cache.ts`, `experiments/014-native-eye-gradient/inspect-cache.ts`) cover the same v10 format for single studies.
@@ -252,6 +278,7 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `mesh_decal_wet_character` `post_gbuffer` | `17388524518779931857` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_gradientmap_recolor_blendable` `post_gbuffer` | `3456408455936683438` | [colour-shift feasibility](../research/materials/colour-shift-game-feasibility.md) |
 | `mesh_decal_particles` `post_gbuffer` / `highlights` | `1688064767334184205` / `10861674281505605668` | [particle-decal audit](../experiments/009-glitter-game-fixture/particle-decal-audit.md) |
+| `mesh_decal_emissive` `post_gbuffer` (target 2 is additive on B/A, so over skin it would add into GBuffer2.z/.w [hypothesis for the visible effect]) | `9453098283293843067` | [annotation results](../research/materials/shader-system/annotation-results.md#basematerialsmesh_decal_emissivemt) |
 | `mesh_decal_emissive_subsurface` `subsurface_emissive` / `highlights` | `8986576764202126900` / `7960168020925993542` | [glint feasibility](../research/materials/redengine-glint-feasibility.md) |
 | `metal_base_glitter` `gbuffer_regular` | `15760075574186250120` | [glitter investigation](../research/materials/glitter-shader-investigation.md) |
 | `metal_base` `gbuffer_regular` | `1846801220589112223` | [evidence note](../research/materials/shader-system/README.md) |
@@ -287,7 +314,7 @@ Parameters and registers below are from the serialized 2.31 templates [resource]
 | `EmissiveMask` (18), `EmissiveEV` (19) | Mask **R** × EV. If this exceeds 0.001, GBuffer2.w gets an emissive flag plus 6-bit intensity. | [source] |
 | `CavityIntensity` (7), `Detailmap_Stretch/Squash` (20/21), `Bloodflow` (22), `BloodColor` (23) | Wrinkle maps (RG normals); the other roles are unmapped | [source] (wrinkle RG) / [hypothesis] |
 
-**Vertex colour.** The wiki reads vertex colour as R = AO, G = SSS mask and B = "improved facial lighting" [wiki] (`shader-docs.md` L47-51). The skin writer takes GBuffer2.z from an interpolated vertex input [source], which is consistent with G being the SSS mask [hypothesis].
+**Vertex colour.** The wiki reads vertex colour as R = AO, G = SSS mask and B = "improved facial lighting" [wiki] (`shader-docs.md` L47-51). The skin writer stores GBuffer2.z = `0.4 + 0.6·G`: its vertex program passes `COLOR.y` straight through to the interpolator the pixel program reads [source] ([annotation results](../research/materials/shader-system/annotation-results.md#basematerialsskinmt)). That fits G being the SSS mask. What GBuffer2.z means to the lighting is still [hypothesis] (§2.2).
 
 **Gotcha.** The Blender add-on maps Roughness G to Metallic and marks its microdetail masking as uncertain (`material_types/skin.py:341,626`). It uses Principled random-walk SSS, which is an approximation, not the engine path.
 

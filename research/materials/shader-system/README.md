@@ -35,9 +35,9 @@ python research/materials/shader-system/template_summary.py "base/materials/skin
 
 Reading a disassembly:
 
-1. **Material constants are `cb4`**, one 16-byte register per template parameter; the register number is the template's `usedParameters[2]` register (`template_summary.py` prints it). Textures are bindless: the shader loads an integer index from the same `cb4` register and calls `createHandle` on a large `t0, space1` range. So a texture parameter's register also leads to its sample.
+1. **Material constants are `cb4`**, one 16-byte register per template parameter; the register number is the template's `usedParameters[2]` register (`template_summary.py` prints it). The program's own `%ShaderSpecificConstants` type lists one field per register (`i32` texture index, `float` scalar, `<4 x float>` vector/colour), which confirms the mapping. Textures are bindless: the shader loads an integer index from the same `cb4` register and calls `createHandle` on a large `t0, space1` range. So a texture parameter's register also leads to its sample.
 2. **Render targets** are `storeOutput(sigId=target, …, component)`. `summary` lists them.
-3. Engine-global buffers (`cb0`, `cb12`, `cb13`) are anonymous. Identify them by use, for example camera position (subtracted from world position) or a light direction.
+3. Engine buffers keep their **struct type names** in the DXIL resource metadata: `cb0` `GlobalShaderConsts`, `cb1` `CameraShaderConsts`, `cb12` `SharedPixelConsts`, `cb13` `CSConstants`, and so on (full table in [annotation results](annotation-results.md#what-is-recovered-and-what-stays-anonymous)). Their member names are gone, so identify individual registers by use, for example camera position (subtracted from world position) or a light direction.
 4. Record SSA numbers only together with the program GUID and SHA-256, because numbering is per program.
 
 Format notes:
@@ -46,6 +46,33 @@ Format notes:
 - The static v8 cache has a 16-byte tail: `RDHS`, version 8, then 8 unknown bytes. After a descriptor region, it stores contiguous `[u64 guid][u32 size][DXBC]` records. Each descriptor stores its program GUID(s) about 111 bytes **before** its length-prefixed technique name. `shader_cache.py` attributes each GUID to the following name.
 - That name association is a heuristic. The lighting programs below were confirmed by their content: the class switch, the G-buffer decode and the material-mask test.
 - Ray-tracing libraries (`rgs_reference_main` etc.) sit in the same file in another container form. Their metadata keeps names such as `GBuffer0..2` and `ShadeSurfaceWithLightSampleFullLighting`. They are not parsed yet.
+
+## Annotating programs with template names
+
+`shader_annotate.py` does steps 3–4 and the register mapping automatically. It lifts the `dxc -dumpbin` DXIL into readable pseudo-HLSL and names:
+
+- every material constant and bindless texture after the template parameter, with its class and default;
+- engine buffers by their DXIL struct name;
+- each pixel input by the vertex inputs it depends on;
+- each render target by its template blend state, plus its G-buffer role in G-buffer passes.
+
+No DXIL decompiler is installed, so the tool does its own lifting in pure Python, using only the Windows SDK `dxc` that step 3 already needs. Output is written to the ignored `research/consumers/shader-system/raw/annotated/` as `<GUID>.hlsl` plus `<GUID>.annotated.ll`, the original disassembly with name comments.
+
+```powershell
+# Prerequisites: shader_cache.py index, and template_summary.py (writes json/template-summary.json)
+# Annotate every matching compilation of a template (pixel + vertex programs)
+python research/materials/shader-system/shader_annotate.py annotate "base/materials/mesh_decal.mt" --info "post_gbuffer'.*VF: MeshSkinned\]"
+# Annotate one known pixel program of a template
+python research/materials/shader-system/shader_annotate.py annotate "base/materials/skin.mt" --guid 12806642364631437234
+# Find which programs contain a code pattern (all regexes must match the pseudo-HLSL)
+python research/materials/shader-system/shader_annotate.py search "metal_base.*|cable" "if \(EmissiveEV > 0\.0\)" "\+ EmissiveEV, 0\.0\)"
+```
+
+It uses the same `CP2077_GAME_DIR` and `DXC_EXE` overrides as `shader_cache.py`.
+
+Read `_N` as SSA `%N` of that program's `.ll`. Loops stay as labelled `goto`, and the listing is a reading aid, not compilable source.
+
+Recovered names, what stays anonymous, a coverage run over all templates and three validation programs are in [annotation results](annotation-results.md).
 
 ## Programs examined in this pass
 
@@ -102,7 +129,7 @@ These values match the templates' `materialType` enum (`ERenderMaterialType`: St
 For every class except Eye, `saturate((GBuffer2.z − 1/3) × 1.5)` (`%85`–`%87`) scales an extra lighting term (`%1201`). What GBuffer2.z means is still a hypothesis:
 
 - Standard writers store exactly 1/3 (metal_base target 2 `.z`, decal target 2 `.z`), so the term is zero.
-- Skin stores `0.4 + 0.6 × TEXCOORD3.w` (`%1142`/`%1143`).
+- Skin stores `0.4 + 0.6 × TEXCOORD3.w` (`%1142`/`%1143`). Its vertex program `7494393843130164436` writes `TEXCOORD3.w = COLOR.y`, so the input is the **vertex colour's green channel** ([annotation results](annotation-results.md#basematerialsskinmt)).
 - The engine's debug view list includes "Translucency", which fits this term.
 
 ### What writers put in the `.w` channels
