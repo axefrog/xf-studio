@@ -9,7 +9,7 @@ export default {
   build: {
     mainProcess: "bun",
     bun: { entrypoint: "main.ts" },
-    copy: { "static": "views/studio" },
+    copy: { "static": "views/studio", "build-tools": "build-tools" },
     win: { defaultRenderer: "native", autoGrantPermissions: [], icon: "icon/icon.ico" },
   },
 } satisfies ElectrobunConfig;

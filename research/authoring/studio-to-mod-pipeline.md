@@ -18,10 +18,12 @@ flowchart TB
   end
 
   ui --> server["Localhost server<br/>validate original draft and snapshot"]
-  ui --> desktop["Desktop host<br/>authenticated Check only<br/>Build unavailable"]
+  ui --> desktop["Desktop host<br/>authenticated Check and gated Build"]
   server --> filter["Shared export filter<br/>package-only copy"]
   desktop --> worker["Isolated Bun Check worker<br/>15-second deadline"]
+  desktop --> buildWrapper["Desktop Build wrapper<br/>bounded process tree"]
   worker --> filter
+  buildWrapper --> filter
   worker -. "timeout, cancellation or failure" .-> noresult["No Check result published<br/>worker stopped"]
   export --> filter
   filter --> decision{"Any exportable<br/>preset remains?"}
@@ -31,7 +33,7 @@ flowchart TB
   omitted -- No --> preflight["Shared TypeScript<br/>32-pixel compiler preflight"]
   warn --> preflight
   preflight -- Check --> ready["Eligibility and omissions<br/>no package created"]
-  preflight -- "Localhost Build" --> setup["Host local setup and server overrides<br/>plate, game and build tools"]
+  preflight -- Build --> setup["Host local setup<br/>plate, game and build tools"]
   setup --> roots{"Private build/dist roots<br/>disjoint from game and inputs?"}
   roots -- No --> unsafe["Refuse output path<br/>no build files written"]
   roots -- Yes --> snapshot["Hash original and filtered snapshots<br/>continue with filtered copy below"]
@@ -49,10 +51,11 @@ flowchart TB
   gate -- Pass --> pack["WolvenKit packs archive"]
   pack --> verifier["Independent verifier<br/>round trip, pixels, mips, archive"]
   verifier -- Fail --> stop["No dist candidate<br/>diagnostics retained locally"]
-  verifier -- Pass --> dist["Private dist candidate<br/>archive, .archive.xl, manifest with omissions"]
-  dist --> resultGate{"Host manifest identity gate<br/>source, filtered hash, omissions, presets"}
-  resultGate -- Fail --> unaccepted["No accepted package result<br/>private files stay local"]
-  resultGate -- Pass --> scratch["Ignored diagnostic scratch stage<br/>copied profile and paired files"]
+  verifier -- Pass --> dist["Private wrapper output<br/>desktop uses staging root"]
+  dist --> resultGate{"Host identity and payload gate<br/>hashes, omissions, exact files"}
+  resultGate -- Fail --> unaccepted["No accepted package result<br/>desktop staging discarded"]
+  resultGate -- Pass --> candidate["Private candidate<br/>archive, .archive.xl, manifest"]
+  candidate --> scratch["Ignored diagnostic scratch stage<br/>copied profile and paired files"]
   scratch --> preview["Read-only transfer preview<br/>paths, hashes, ownership gates"]
   preview -- "explicit promotion executed for diagnostic" --> mo2["New MO2 profile and XF Studio mod<br/>reversible private receipt"]
   mo2 -. "profile not selected<br/>game behavior untested" .-> runtime["Future game session<br/>selector, A/B/Off, rendering, save"]
@@ -63,7 +66,7 @@ flowchart TB
   class runtime pending;
 ```
 
-The diagram has entries into the same TypeScript filter from a localhost Studio request, an authenticated desktop request and an exported collection JSON file passed to the CLI. All use the same filter and 32-pixel compiler preflight. **Check mod export** stops after eligibility and needs no plate, WolvenKit or game file. The desktop host runs collection validation, filtering and compilation in a fresh bundled Bun worker, with a 15-second deadline. Timeout, cancellation or worker failure stops that worker and returns an error without a partial result; a second concurrent Check is refused. The localhost CLI still runs the shared module through Bun. **Build mod files** currently works on localhost only and takes the filtered snapshot into the resource pipeline; the desktop returns 503 because that pipeline has no portable host adapter yet. Build paths come from private local settings, with server environment overrides taking precedence on localhost. The browser's separate Local setup form can edit saved fields with revision checks. The localhost server runs one build at a time and calls a source-tree-independent result verifier against its own filter of the exact snapshot and its host-owned dist root. The Python wrapper now accepts explicit app/study/work/build/dist roots plus preflight and bake entries, retaining the current HQ defaults for localhost; these path ports do not enable desktop Build. Before writing, the wrapper rejects build/dist roots that overlap the declared game, plate, source or tool directories, and rejects linked writable path components. [Server boundary](../../projects/xf-studio/authoring/src/package-server.ts), [result identity gate](../../projects/xf-studio/authoring/src/package-result-verifier.ts), [desktop adapter](../../projects/xf-studio/authoring/desktop/package.ts), [shared preflight](../../projects/xf-studio/authoring/src/package-preflight.ts), [local setup](../../projects/xf-studio/authoring/LOCAL-SETTINGS.md), [CLI](../../projects/xf-studio/authoring/tools/build_collection_package.py).
+The diagram has entries into the same TypeScript filter from a localhost Studio request, an authenticated desktop request and an exported collection JSON file passed to the CLI. All use the same filter and 32-pixel compiler preflight. **Check mod export** stops after eligibility and needs no plate, WolvenKit or game file. The desktop host runs Check in a fresh bundled Bun worker, with a 15-second deadline; timeout or cancellation publishes no result. **Build mod files** uses the same partial-export filter and Python resource/verifier pipeline in either host. Desktop Build is available only when its asset-free packaged code bundle, configured Python with NumPy/Pillow, WolvenKit, private plate and game inputs pass host readiness checks. The browser sends only a collection snapshot. Desktop keeps its work, staging and candidate roots under Electrobun user data, disjoint from the configured game, MO2 and source/tool roots, and stops a timed-out or cancelled process tree. It verifies wrapper output against the original and filtered identities, exact archive/XL file set, lengths and SHA-256 values before moving the staged candidate into the private candidate store. Localhost retains its server overrides and project dist root. Neither host installs the resulting files or proves game rendering. [Server boundary](../../projects/xf-studio/authoring/src/package-server.ts), [result identity gate](../../projects/xf-studio/authoring/src/package-result-verifier.ts), [desktop adapter](../../projects/xf-studio/authoring/desktop/package.ts), [shared preflight](../../projects/xf-studio/authoring/src/package-preflight.ts), [local setup](../../projects/xf-studio/authoring/LOCAL-SETTINGS.md), [CLI](../../projects/xf-studio/authoring/tools/build_collection_package.py).
 
 ## What each kind of data means
 
@@ -176,5 +179,6 @@ After any change to collection/recipe schema, finish eligibility, map compilatio
 | 2026-09-25, portable result gate | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to ignored PNGs at 800px and 1600px requests and visually inspected each at normal and enlarged size. | The new host manifest gate follows the private dist candidate, with its Fail branch ending at no accepted result while the independent verifier's Fail branch still ends before dist. Labels and directions are readable. Check remains separate from localhost Build; eligible layers merge before resources, and the final game-session arrow remains dashed. Mermaid kept the merge diagram at intrinsic width. No private inputs entered the renders. |
 | 2026-09-25, isolated MO2 promotion | Mermaid CLI 11.17.0 with Chrome; rerendered all three current diagrams to ignored PNGs at 800px and 1600px requests and visually inspected them at normal and enlarged widths. | The build diagram now distinguishes the completed diagnostic promotion from the dashed, untested game session. The host result gate and its failure branch remain legible; the authoring diagram still separates Check from localhost Build and shows the path guard before snapshot writing. The layer merge remains ahead of packaging. Mermaid kept build and merge at intrinsic widths for both requests; the authoring diagram widened at 1600px. No private assets entered the renders. |
 | 2026-09-25, private-root gate | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to ignored PNGs at 800px and 1600px requests and visually inspected each at normal and enlarged size. | The new root decision sits on localhost Build after setup; its No arrow ends before the filtered snapshot and its Yes arrow continues to it. Check ends before this gate. Labels, arrow directions, omissions, independent verifier, layer merge and the dashed untested-game boundary are readable. The authoring diagram remains tall. No private inputs entered the renders. |
+| 2026-09-25, desktop Build host | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to temporary 800px and 1600px PNGs and visually inspected normal and enlarged views. | The desktop Check worker and separate bounded Build wrapper visibly converge at the shared filter. The Check/Build split, omitted-layer branch and private-root refusal remain clear. In the build diagram, the host gate follows wrapper output; desktop staging is discarded on failure and the candidate follows only a passing result. The layer merge remains before packing, and the game-session arrow remains dashed. The first diagram is tall; Mermaid kept the build and merge diagrams near intrinsic width despite the larger request. No private assets entered the renders. |
 
 Primary implementation sources: [recipe](../../projects/xf-studio/authoring/src/recipe.ts), [collection plan](../../projects/xf-studio/authoring/src/preset-collection.ts), [flat compiler](../../projects/xf-studio/authoring/src/preset-compiler.ts), [package server](../../projects/xf-studio/authoring/src/package-server.ts), [CLI wrapper](../../projects/xf-studio/authoring/tools/build_collection_package.py), [Experiment 005 builder](../../experiments/005-preset-collection/build.py) and [independent verifier](../../experiments/005-preset-collection/verify.py). The guide explains the code as checked on this date; it is not a runtime observation.

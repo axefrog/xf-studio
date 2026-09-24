@@ -1,13 +1,18 @@
 import { resolve } from "node:path";
 import { runDesktopCheck } from "./check-runner";
+import { runDesktopBuild, type WolvenKitProbe } from "./build";
+import { LocalSettingsStore } from "../src/local-settings-store";
 
 const maxBytes = 16_000_000;
 let checking = false;
+let building = false;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
-/** Desktop package port. Build has no portable resource/verifier adapter yet. */
+export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: LocalSettingsStore;
+  deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe };
+/** Browser requests contain only action and collection; all build paths are host owned. */
 export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
-  timeoutMs?: number): Promise<Response> {
+  timeoutMs?: number, buildHost?: DesktopBuildHost): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
     return json({ error: "Expected a JSON package request." }, 403);
@@ -24,8 +29,22 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
       (input.action !== "check" && input.action !== "build") ||
       Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
     return json({ error: "Expected a package action and collection only." }, 400);
-  if (input.action === "build") return json({ code: "package_build_host_unavailable",
-    error: "Desktop mod builds are unavailable until the external plate, WolvenKit and independent verifier pipeline has a portable adapter." }, 503);
+  if (input.action === "build") {
+    if (!buildHost) return json({ code: "package_build_host_unavailable",
+      error: "Desktop package tools are unavailable." }, 503);
+    if (building) return json({ code: "package_build_busy", error: "A package Build is already running." }, 409);
+    building = true;
+    try {
+      const signal = buildHost.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
+      const result = await runDesktopBuild(input.collection, buildHost.settings.load().settings,
+        buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe);
+      if (result.kind === "success") return json(result.result);
+      return json({ code: result.code, error: result.message }, result.code === "package_build_unavailable" ? 503 :
+        result.code === "invalid_collection" ? 422 : result.code === "package_build_timeout" ? 504 :
+        result.code === "package_build_cancelled" ? 499 : 422);
+    } catch { return json({ code: "package_build_failed", error: "Package Build could not start." }, 422); }
+    finally { building = false; }
+  }
   if (checking) return json({ code: "package_check_busy", error: "A package Check is already running. Wait for its result before starting another." }, 409);
   checking = true;
   let result;

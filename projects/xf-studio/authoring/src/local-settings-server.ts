@@ -18,7 +18,7 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
 
 /** Host-owned configuration endpoint. The browser can edit known fields, never select a settings file. */
 export function createLocalSettingsHandler(store = new LocalSettingsStore(), env = process.env,
-  host: HostFeatures = { updater: false, installer: false }) {
+  host: HostFeatures | ((settings: LocalSettings) => HostFeatures) = { updater: false, installer: false }) {
   const view = (): LocalSetupView => {
     const loaded = store.load();
     const paths = packageToolPaths(loaded.settings, env);
@@ -26,7 +26,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
       wolvenKitCli: paths.wolvenkit, pythonExecutable: paths.python, bunExecutable: paths.bun };
     return { revision: loaded.settings.revision, source: loaded.source,
       fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,
-      readiness: evaluateLocalReadiness(effective, host),
+      readiness: evaluateLocalReadiness(effective, typeof host === "function" ? host(effective) : host),
       overridden: overrideNames.filter(name => !!env[name]),
     };
   };

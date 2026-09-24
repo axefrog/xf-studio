@@ -7,10 +7,12 @@ import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
+import { desktopBuildIssue, type WolvenKitProbe } from "./build";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
-  checkWorkerPath = resolve(import.meta.dir, "check-worker.ts")) {
+  checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
+  toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -18,8 +20,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
-  const localSettings = createLocalSettingsHandler(new LocalSettingsStore(dataRoot), {},
-    { updater: false, installer: false, packageCheck: true, packageBuild: false });
+  const settingsStore = new LocalSettingsStore(dataRoot);
+  const shutdown = new AbortController();
+  const buildReady = () => {
+    try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, wolvenKitProbe) === null; }
+    catch { return false; }
+  };
+  const localSettings = createLocalSettingsHandler(settingsStore, {},
+    settings => ({ updater: false, installer: false, packageCheck: true,
+      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null }));
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
@@ -48,7 +57,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
         return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
-          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot),
+          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady()),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
@@ -59,7 +68,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         console.log(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
         return new Response(null, { status: 204 });
       }
-      if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath);
+      if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe });
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
@@ -89,6 +99,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   return {
     url: `${server.url}?session=${token}`,
     port: server.port,
-    stop() { server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

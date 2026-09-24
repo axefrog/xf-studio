@@ -9,7 +9,7 @@ export type DesktopCapabilities = Readonly<{
   userDataPath: string;
   library: true;
   packageCheck: true;
-  packageBuild: false;
+  packageBuild: boolean;
   installation: false;
   updater: false;
   previewAssets: "missing" | "incomplete" | "ready";
@@ -31,7 +31,7 @@ export function desktopVersionFromMetadata(value: unknown): DesktopVersion {
 }
 
 export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewAssets"],
-  version: DesktopVersion, userDataPath: string): DesktopCapabilities => ({
+  version: DesktopVersion, userDataPath: string, packageBuild = false): DesktopCapabilities => ({
   schema: "xfs/desktop-capabilities-1",
   host: "electrobun-spike",
   renderer: "webview2",
@@ -39,7 +39,7 @@ export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewA
   userDataPath,
   library: true,
   packageCheck: true,
-  packageBuild: false,
+  packageBuild,
   installation: false,
   updater: false,
   previewAssets,

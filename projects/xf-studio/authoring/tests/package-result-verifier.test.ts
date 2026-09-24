@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { preparePackageCollection } from "../src/package-filter";
@@ -21,13 +21,21 @@ test("final package identity verification works under a relocated host-owned dis
     const source = JSON.stringify(collection);
     const packagedHash = sha(JSON.stringify(prepared.packaged));
     const omissions = prepared.omissions;
-    const archiveHash = "a".repeat(64);
+    const payloadRoot = join(final, "archive", "pc", "mod");
+    mkdirSync(payloadRoot, { recursive: true });
+    const archiveName = prepared.plan.namespace + ".archive";
+    const xlName = prepared.plan.namespace + ".archive.xl";
+    writeFileSync(join(payloadRoot, archiveName), "archive fixture");
+    writeFileSync(join(payloadRoot, xlName), "xl fixture");
+    const archiveHash = sha("archive fixture");
     const manifestPath = join(final, "manifest.json");
     const manifest = { schema: "xfs/local-package-1", collectionId: collection.id,
       collectionSha256: sha(source), packagedCollectionSha256: packagedHash,
       originalPresetCount: collection.presets.length, omissions, namespace: prepared.plan.namespace,
       presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
-      verifiedPresetCount: prepared.packaged.presets.length, files: [{ sha256: archiveHash }],
+      verifiedPresetCount: prepared.packaged.presets.length, files: [
+        { path: `archive/pc/mod/${archiveName}`, bytes: 15, sha256: archiveHash },
+        { path: `archive/pc/mod/${xlName}`, bytes: 10, sha256: sha("xl fixture") }],
       installed: false, gameRenderingVerified: false };
     const built = { package: final, manifest: manifestPath, archiveSha256: archiveHash,
       presetCount: prepared.packaged.presets.length, originalPresetCount: collection.presets.length,
@@ -37,6 +45,18 @@ test("final package identity verification works under a relocated host-owned dis
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, join(root, "other"))).toThrow("outside the local dist");
     expect(() => verifyPackageBuildResult({ ...built, archiveSha256: "b".repeat(64) }, collection, prepared, source, dist)).toThrow("does not match");
     expect(() => verifyPackageBuildResult(built, collection, prepared, source + " ", dist)).toThrow("does not match");
+    writeFileSync(join(payloadRoot, xlName), "changed XL");
+    expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).toThrow("payload");
+    writeFileSync(join(payloadRoot, xlName), "xl fixture");
+    const linked = join(dist, "linked");
+    try {
+      symlinkSync(final, linked, process.platform === "win32" ? "junction" : "dir");
+      expect(() => verifyPackageBuildResult({ ...built, package: linked, manifest: join(linked, "manifest.json") },
+        collection, prepared, source, dist)).toThrow("linked path");
+    } catch (error) {
+      // Windows accounts without symlink rights cannot create this fixture.
+      if (!String(error).includes("EPERM")) throw error;
+    }
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, installed: true }));
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).toThrow("does not match");
   } finally { rmSync(root, { recursive: true, force: true }); }

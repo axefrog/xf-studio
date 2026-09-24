@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync, readdirSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { PackageBuild } from "./package-action";
 import type { PresetCollection } from "./preset-collection";
 import type { preparePackageCollection } from "./package-filter";
+
+function fileSha256(path: string): string {
+  const digest = createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), handle = openSync(path, "r");
+  try { let count: number; while ((count = readSync(handle, buffer, 0, buffer.length, null)) > 0)
+    digest.update(buffer.subarray(0, count)); }
+  finally { closeSync(handle); }
+  return digest.digest("hex");
+}
 
 /** Verify the tool's final identity against the host-owned snapshot and output root. */
 export function verifyPackageBuildResult(
@@ -18,10 +26,38 @@ export function verifyPackageBuildResult(
   const root = resolve(distRoot);
   if (!final.startsWith(root + sep) || manifestPath !== resolve(final, "manifest.json") || !statSync(manifestPath).isFile())
     throw Error("Package result is outside the local dist directory.");
+  const canonicalRoot = realpathSync(root);
+  const canonicalFinal = realpathSync(final);
+  if (!canonicalFinal.startsWith(canonicalRoot + sep) || lstatSync(final).isSymbolicLink() ||
+      realpathSync(manifestPath) !== resolve(canonicalFinal, "manifest.json") || lstatSync(manifestPath).isSymbolicLink())
+    throw Error("Package result is outside the local dist directory or uses a linked path.");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const sourceHash = createHash("sha256").update(sourceJson).digest("hex");
   const packagedHash = createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex");
   const identities = prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance }));
+  const names = [prepared.plan.namespace + ".archive", prepared.plan.namespace + ".archive.xl"];
+  const expectedFiles = names.map(name => `archive/pc/mod/${name}`);
+  if (!Array.isArray(manifest.files) || manifest.files.length !== 2 ||
+      manifest.files.some((entry: any, index: number) => entry?.path !== expectedFiles[index] ||
+        !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 ||
+        typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)))
+    throw Error("Package manifest does not match this collection snapshot.");
+  const inventory = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const path = resolve(dir, entry.name);
+    if (entry.isSymbolicLink()) throw Error("Package contains a linked path.");
+    if (entry.isDirectory()) return inventory(path);
+    if (!entry.isFile()) throw Error("Package contains an unexpected file type.");
+    return [path.slice(final.length + 1).replaceAll("\\", "/")];
+  });
+  if (JSON.stringify(inventory(final).sort()) !== JSON.stringify(["manifest.json", ...expectedFiles].sort()))
+    throw Error("Package contains unexpected files.");
+  for (const entry of manifest.files) {
+    const payload = resolve(final, entry.path);
+    if (!realpathSync(payload).startsWith(canonicalFinal + sep) ||
+        statSync(payload).size !== entry.bytes ||
+        fileSha256(payload) !== entry.sha256)
+      throw Error("Package payload does not match its manifest.");
+  }
   if (manifest.schema !== "xfs/local-package-1" || manifest.collectionId !== collection.id ||
       manifest.collectionSha256 !== sourceHash || manifest.packagedCollectionSha256 !== packagedHash ||
       manifest.originalPresetCount !== collection.presets.length ||

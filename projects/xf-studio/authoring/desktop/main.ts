@@ -10,7 +10,8 @@ catch { console.error("Packaged XF Studio version metadata could not be read.");
 const version = desktopVersionFromMetadata(metadata);
 if (version.metadataStatus === "unavailable") console.error("Packaged XF Studio version metadata is unavailable or invalid.");
 const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");
-const app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"));
+const app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
+  resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"));
 console.log(`XF desktop loopback ready on 127.0.0.1:${app.port}`);
 const window = new BrowserWindow({
   title: "XF Studio",

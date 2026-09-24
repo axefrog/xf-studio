@@ -150,11 +150,13 @@ test("desktop Check matches localhost preflight for a partial export and rejects
     "Content-Type": "application/json" }, body })).status).toBe(403);
   expect((await fetch(base + "/api/package", { method: "POST", headers,
     body: JSON.stringify({ action: "check", collection, outputRoot: "F:/Games/Cyberpunk 2077" }) })).status).toBe(400);
+  expect((await fetch(base + "/api/package", { method: "POST", headers,
+    body: JSON.stringify({ action: "build", collection, outputRoot: "F:/Games/Cyberpunk 2077" }) })).status).toBe(400);
   expect((await desktopPackageRequest(new Request(base + "/api/package", { method: "POST",
     headers: { "Content-Type": "application/json", "Content-Length": "16000001" }, body }))).status).toBe(413);
 });
 
-test("desktop Check refuses an empty filtered package; Build remains unavailable", async () => {
+test("desktop Check refuses an empty filtered package; Build needs configured inputs", async () => {
   const base = `http://127.0.0.1:${app.port}`;
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
   const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
@@ -168,7 +170,7 @@ test("desktop Check refuses an empty filtered package; Build remains unavailable
   const build = await fetch(base + "/api/package", { method: "POST", headers,
     body: JSON.stringify({ action: "build", collection: collectionFixture }) });
   expect(build.status).toBe(503);
-  expect((await build.json()).code).toBe("package_build_host_unavailable");
+  expect((await build.json()).code).toBe("package_build_unavailable");
 });
 
 test("desktop settings recovery uses previous copy and blocks editing damaged primary", async () => {

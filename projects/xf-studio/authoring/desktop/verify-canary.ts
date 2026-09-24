@@ -26,6 +26,11 @@ function tar(args: string[]): string {
   if (result.error || result.status !== 0) throw Error(`Cannot inspect archive: ${result.error?.message ?? result.stderr}`);
   return result.stdout;
 }
+function tarBytes(args: string[]): Buffer {
+  const result = spawnSync("tar", args, { maxBuffer: 32 * 1024 * 1024 });
+  if (result.error || result.status !== 0) throw Error(`Cannot inspect archive: ${result.error?.message ?? result.stderr}`);
+  return result.stdout;
+}
 
 function sameMembers(actual: string[], expected: string[], label: string) {
   if (JSON.stringify(actual.sort()) !== JSON.stringify(expected.sort()))
@@ -47,6 +52,20 @@ const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWit
   .map(name => name.slice(views.length));
 sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
   "build/studio-main.js", "build/raster-worker.js"], "Packaged Studio view");
+const toolPrefix = `${bundle}/Resources/app/build-tools/`;
+const toolFiles = members.filter(name => name.startsWith(toolPrefix) && !name.endsWith("/"))
+  .map(name => name.slice(toolPrefix.length));
+sameMembers(toolFiles, ["manifest.json", "build_collection_package.py", "study/build.py", "study/verify.py",
+  "study/mip_maps.py", "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"],
+"Packaged build tools");
+const toolManifest = JSON.parse(tar(["-xOf", archive, toolPrefix + "manifest.json"]));
+if (toolManifest.schema !== "xfs/desktop-build-tools-1" ||
+    JSON.stringify(Object.keys(toolManifest.files).sort()) !== JSON.stringify(toolFiles.filter(name => name !== "manifest.json").sort()))
+  throw Error("Packaged build tool manifest is incomplete.");
+for (const name of toolFiles.filter(name => name !== "manifest.json")) {
+  if (createHash("sha256").update(tarBytes(["-xOf", archive, toolPrefix + name])).digest("hex") !== toolManifest.files[name])
+    throw Error(`Packaged build tool changed: ${name}`);
+}
 if (members.some(name => /(?:^|\/)(?:assets|preview-assets|data)(?:\/|$)|\.sqlite(?:-wal|-shm)?$|\.(?:glb|blend|sav)$/i.test(name)))
   throw Error("Canary bundle contains a private asset or data path.");
 
@@ -65,4 +84,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified private Windows setup: ${installer}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Seven allowlisted Studio view files; no bundled private preview assets or update feed.");
+console.log("Seven allowlisted Studio view files and seven hashed asset-free build tools; no private preview assets or update feed.");
