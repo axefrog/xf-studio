@@ -1,0 +1,85 @@
+import { expect, test } from "bun:test";
+import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import { collectionDraft, emptyMemory } from "../src/collection-workspace";
+import { initialRecipe } from "../src/recipe";
+import type { EditorSnapshot } from "../src/collection-session";
+import type { PresetCollection } from "../src/preset-collection";
+
+function fixture() {
+  const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
+    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
+  let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
+  const saved = { collection: structuredClone(collection), revision: 1, updatedAt: "now" };
+  let saves = 0, packageInput: PresetCollection | undefined;
+  const transport: CollectionTransport = {
+    list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
+    get: async () => saved,
+    save: async (value, revision) => { saves++; return { collection: structuredClone(value), revision: (revision ?? 0) + 1, updatedAt: "now" }; },
+    package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
+      namespace: "xfs_test", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+  };
+  const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
+    () => editor, value => editor = value, transport);
+  return { service, collection, saved, transport, editor: () => editor, saves: () => saves,
+    packageInput: () => packageInput };
+}
+
+test("async collection service preserves an unsaved draft in package snapshots without a SQLite save", async () => {
+  const f = fixture();
+  await f.service.execute({ kind: "initialize" });
+  f.editor().recipe.layers[0].color = "#123456";
+  const before = f.service.snapshot()!;
+  const outcome = await f.service.execute({ kind: "package", action: "check" });
+  expect(outcome.ok && outcome.result.kind).toBe("packageCheck");
+  expect(f.packageInput()!.presets[0].recipe.layers[0].color).toBe("#123456");
+  expect(f.saves()).toBe(0);
+  expect(f.service.snapshot()!.revision).toBe(before.revision);
+  const detached = f.service.view() as any;
+  detached.draft.collection.presets[0].name = "Outside";
+  expect(f.service.view().draft!.collection.presets[0].name).toBe("Eye");
+});
+
+test("save reconciliation retains edits made while the immutable request is in flight", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  let release!: (value: any) => void;
+  f.transport.save = (collection) => new Promise(resolve => { release = resolve; });
+  const pending = f.service.execute({ kind: "save" });
+  expect(f.service.view().busy).toBe(true);
+  expect(f.service.capability({ kind: "package", action: "check" }).available).toBe(false);
+  f.editor().recipe.layers[0].color = "#abcdef";
+  release({ collection: structuredClone(f.collection), revision: 2, updatedAt: "now" });
+  expect((await pending).ok).toBe(true);
+  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#abcdef");
+  expect(f.service.snapshot()!.revision).toBe(2);
+});
+
+test("unsupported finish errors retain a stable code and an actionable message", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  f.editor().recipe.layers[0].finish = "glitter";
+  f.transport.package = async () => { throw new CollectionServiceError("unsupported_finish",
+    "Glitter in preset “Eye”, layer “Petal wash” cannot become mod files yet. Change that finish or remove the layer, then check again."); };
+  const outcome = await f.service.execute({ kind: "package", action: "check" });
+  expect(outcome).toMatchObject({ ok: false, code: "unsupported_finish" });
+  expect(f.service.view().progress?.message).toContain("Change that finish");
+  expect(f.service.view().busy).toBe(false);
+  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].finish).toBe("glitter");
+});
+
+test("loading a saved list does not replace a restored local draft", async () => {
+  const f = fixture(); f.editor().recipe.layers[0].color = "#fedcba";
+  const result = await f.service.execute({ kind: "initialize" });
+  expect(result.ok).toBe(true);
+  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#fedcba");
+  expect(f.service.view().progress?.message).toContain("without replacing unsaved edits");
+});
+
+test("a revision conflict reports its code without replacing the local draft", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  f.editor().recipe.layers[0].color = "#13579b";
+  f.transport.save = async () => { throw new CollectionServiceError("conflict",
+    "This collection changed in another window. Your draft is safe; save a copy or reopen the latest revision."); };
+  const outcome = await f.service.execute({ kind: "save" });
+  expect(outcome).toMatchObject({ ok: false, code: "conflict" });
+  expect(f.service.snapshot()!.revision).toBe(1);
+  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#13579b");
+});
