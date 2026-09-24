@@ -8,16 +8,16 @@ The latest inspected RED4ext session is September 16 2026, 11:14-11:25 Brisbane 
 
 **25 September diagnostic recheck:** the selected MO2 profile still enables ArchiveXL, TweakXL, Codeware and redscript. MO2 metadata and the locally inspected DLL versions agree at ArchiveXL 1.26.3, TweakXL 1.11.3 and Codeware 1.20.3; redscript metadata is 0.5.31 and the game-root RED4ext DLL is 1.30.0. These are installed-file observations, not evidence of a new game launch. The stable release targets below were rechecked against their official release pages. ArchiveXL 1.27.3 and Codeware 1.20.5 explicitly list game 2.31 in their tagged READMEs; TweakXL 1.11.4's tagged README still names game 2.3, so its next-run 2.31 compatibility needs fresh runtime confirmation. Preserve the existing entries and profile while preparing newer stable framework entries in a separate diagnostic profile. The 1.28.0 ArchiveXL beta, 1.11.5 TweakXL release candidate and redscript 1.0 development line are not the stable test targets.
 
-| Framework | Observed installed/runtime version | Current stable release | Action before new runtime tests |
+| Framework | Last observed runtime/base-profile version | Current stable release | Diagnostic status before runtime test |
 |---|---|---|---|
-| ArchiveXL | 1.26.3 (runtime and MO2 metadata) | [1.27.3](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3) | Update; required by proposed composite-material design |
-| TweakXL | 1.11.3 (runtime) | [1.11.4](https://github.com/psiberx/cp2077-tweak-xl/releases/tag/v1.11.4) | Update with the prepared framework maintenance step |
-| Codeware | 1.20.3 (runtime) | [1.20.5](https://github.com/psiberx/cp2077-codeware/releases/tag/v1.20.5) | Update with the prepared framework maintenance step |
+| ArchiveXL | 1.26.3 (runtime and original MO2 entry) | [1.27.3](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3) | Versioned 1.27.3 mod enabled only in new diagnostic profile; verify actual load |
+| TweakXL | 1.11.3 (runtime and original MO2 entry) | [1.11.4](https://github.com/psiberx/cp2077-tweak-xl/releases/tag/v1.11.4) | Versioned 1.11.4 mod enabled only in new diagnostic profile; tagged README still names game 2.3 |
+| Codeware | 1.20.3 (runtime and original MO2 entry) | [1.20.5](https://github.com/psiberx/cp2077-codeware/releases/tag/v1.20.5) | Versioned 1.20.5 mod enabled only in new diagnostic profile; verify actual load |
 | RED4ext | 1.30.0 (runtime) | [1.30.0](https://github.com/wopss/RED4ext/releases/tag/v1.30.0) | Current at check time |
 | redscript | 0.5.31 (MO2 metadata; compilation success in latest runtime log) | [0.5.31](https://github.com/jac3km4/redscript/releases/tag/v0.5.31) | Current stable; do not deploy the 1.0.x development source branch |
 | CET | 1.37.1 (latest session header in appended log) | [1.37.1](https://github.com/maximegmd/CyberEngineTweaks/releases/tag/v1.37.1) | Current at check time |
 
-Official GitHub API responses were reduced to release metadata in [framework release record](../inventory/framework-releases-2026-09-23.json). No installed framework binaries were changed during the foundation survey. Nathan authorizes designing for newer releases rather than allowing installed versions to limit the work.
+Official GitHub API responses were reduced to release metadata in [framework release record](../inventory/framework-releases-2026-09-23.json). The foundation survey changed no installed binaries. On 25 September, complete stable packages were installed **side by side** into new MO2 mod folders and enabled only in the new diagnostic profile; the old folders and physical RED4ext loader were not replaced. [ZIP hashes, profile scope and runtime limits](../research/authoring/framework-diagnostic-profile-2026-09-25.md).
 
 The selected MO2 profile is `2025 (again)` (920 enabled actual mods). Game-root logs confirm a loaded framework stack; MO2 `overwrite` contains current ArchiveXL/redscript output, while `_overwrite_` is older. ArchiveXL's latest inspected log loads `xf-eye-artistry-ccxl.xl`; that proves loader activity, not that every appearance rendered correctly.
 
