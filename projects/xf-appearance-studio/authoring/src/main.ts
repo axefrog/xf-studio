@@ -17,6 +17,7 @@ import { createSurfaceEditor } from "./surface-editor";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringControlEdits } from "./authoring-control-edits";
+import { StudioApplication, type StudioAction } from "./studio-application";
 import { planLayerPreview } from "./authoring-preview-policy";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
@@ -174,13 +175,16 @@ function changeLayers(command: LayerCommand) {
 }
 function dispatchLayer(action: LayerAction) {
   try {
-    const capability = layerCapability(authoring.recipe, action);
-    if (!capability.available) throw Error(capability.reason);
-    const next = applyLayerAction(authoring.recipe, current()?.id, action);
-    checkpoint();
-    if (next.structure) replaceRecipe(next.recipe, next.active);
-    else authoring.publishLayer(next.recipe, next.changed);
+    applyLayerCommand(action);
   } catch (error) { status((error as Error).message); sync(); }
+}
+function applyLayerCommand(action: LayerAction) {
+  const capability = layerCapability(authoring.recipe, action);
+  if (!capability.available) throw Error(capability.reason);
+  const next = applyLayerAction(authoring.recipe, current()?.id, action);
+  checkpoint();
+  if (next.structure) replaceRecipe(next.recipe, next.active);
+  else authoring.publishLayer(next.recipe, next.changed);
 }
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
 $("layer-copy").onclick = () => { if (current()) changeLayers({ kind: "duplicate", id: current().id }); };
@@ -323,8 +327,8 @@ qualityActions = new PreviewQualityActions(textureSize, { assess: size => qualit
 qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
   { current: () => qualityActions.snapshot().size, describe: describeQuality,
-    set: size => { qualityActions.dispatch({ kind: "quality.set", size }); },
-    rebuild: () => { qualityActions.dispatch({ kind: "quality.rebuild" }); } });
+    set: size => { dispatchStudio({ kind: "quality.set", size }); },
+    rebuild: () => { dispatchStudio({ kind: "quality.rebuild" }); } });
 function render(i = authoring.active) {
   const plan = planLayerPreview({ recipe: authoring.recipe, index: i, active: authoring.active,
     size: textureSize, assessment: qualityAssessment(), blocked: qualityActions.snapshot().blocked,
@@ -384,11 +388,18 @@ function undo() {
 }
 const gestures = new AuthoringGestures(authoring, recipeActions, undo);
 const controlEdits = new AuthoringControlEdits(authoring, action => dispatchRecipeAction(action), undo);
-const beginControl = (id: string) => { controlEdits.begin(id, current()?.id); };
-const controlAction = (id: string, action: RecipeAction) => controlEdits.edit(id, current()?.id, action);
+const app = new StudioApplication({ document: authoring, recipe: recipeActions,
+  layer: applyLayerCommand, gestures, controls: controlEdits, quality: qualityActions });
+const beginControl = (id: string) => { const layer = current(); if (layer) app.controlBegin(id, layer.id); };
+const controlAction = (id: string, action: RecipeAction) => app.controlEdit(id, action);
+function dispatchStudio(action: StudioAction) {
+  const outcome = app.dispatch(action);
+  if (!outcome.ok) { status(outcome.message); sync(); }
+  return outcome;
+}
 function bindEdit(id: string, control: HTMLInputElement) {
   bindControlEdit(control, { begin: () => beginControl(id),
-    commit: () => controlEdits.commit(id), cancel: () => controlEdits.cancel(id) });
+    commit: () => app.controlCommit(id), cancel: () => app.controlCancel(id) });
 }
 $("undo").onclick = undo;
 window.addEventListener("keydown", (e) => {
@@ -410,12 +421,12 @@ for (const id of ["weight", "opacity", "color"]) {
   };
 }
 input("symmetry").onchange = () => {
-  const l = current(); if (l) dispatchRecipeAction({ kind: "layer.setSymmetry", layerId: l.id,
-    symmetry: input("symmetry").checked }, true);
+  const l = current(); if (l) dispatchStudio({ kind: "layer.setSymmetry", layerId: l.id,
+    symmetry: input("symmetry").checked });
 };
 $<HTMLSelectElement>("finish").onchange = () => {
-  const l=current(); if (l) dispatchRecipeAction({ kind: "layer.setFinish", layerId: l.id,
-    finish: $<HTMLSelectElement>("finish").value as Layer["finish"] }, true);
+  const l=current(); if (l) dispatchStudio({ kind: "layer.setFinish", layerId: l.id,
+    finish: $<HTMLSelectElement>("finish").value as Layer["finish"] });
 };
 for (const id of ["cells", "density", "tilt"] as const) {
   const control = input("flake-" + id);
@@ -427,7 +438,7 @@ for (const id of ["cells", "density", "tilt"] as const) {
 }
 $<HTMLSelectElement>("glitter-model").onchange = () => {
   const layer = current(), model = $<HTMLSelectElement>("glitter-model").value as GlitterModel;
-  if (layer) dispatchRecipeAction({ kind: "glitter.selectModel", layerId: layer.id, model }, true);
+  if (layer) dispatchStudio({ kind: "glitter.selectModel", layerId: layer.id, model });
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
@@ -461,8 +472,8 @@ function changePigment(command: PigmentCommand) {
 refreshPigment = setupPigment({
   smooth: input("smooth-strength"), blend: input("strength-blend"),
   value: $("strength-blend-value"), note: $("strength-note"),
-}, { layer: current, begin: beginControl, commit: id => controlEdits.commit(id),
-  cancel: id => controlEdits.cancel(id), edit: changePigment });
+}, { layer: current, begin: beginControl, commit: id => app.controlCommit(id),
+  cancel: id => app.controlCancel(id), edit: changePigment });
 function changeSoftness(command: SoftnessCommand) {
   const layer = current(); if (layer) controlAction(command.kind === "variable-softness" ? "variable-softness" : "feather",
     { kind: "softness.edit", layerId: layer.id, command });
@@ -471,16 +482,16 @@ refreshSoftness = setupSoftness({
   variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
   value: $("feather-value"), note: $("softness-note"),
 }, { layer: current, selected: () => authoring.selected, begin: beginControl,
-  commit: id => controlEdits.commit(id), cancel: id => controlEdits.cancel(id), edit: changeSoftness });
+  commit: id => app.controlCommit(id), cancel: id => app.controlCancel(id), edit: changeSoftness });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),
 }, { layer: current, selected: currentField, select: selectField, begin: beginControl,
-  commit: id => controlEdits.commit(id), cancel: id => controlEdits.cancel(id),
+  commit: id => app.controlCommit(id), cancel: id => app.controlCancel(id),
   edit: (action, record) => action.kind === "field.setReach" ? controlAction("radius", action) : dispatchRecipeAction(action, record) });
 $("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
-  const l = current(); if (l) dispatchRecipeAction({ kind: "point.remove", layerId: l.id, index: authoring.selected }, true);
+  const l = current(); if (l) dispatchStudio({ kind: "point.remove", layerId: l.id, index: authoring.selected });
 };
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
@@ -514,7 +525,7 @@ presetLibrary = setupCollections(() => authoring.export(), editor => {
   authoring.fieldSelection = editor.fieldSelection ?? {};
   replaceRecipe(editor.recipe, editor.active);
   authoring.selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
-}, workspace.collections, workspace.library, persist, download);
+}, workspace.collections, workspace.library, persist, download, app);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
   if (!file) return;
@@ -691,6 +702,7 @@ try {
   // Discover hardware limits before attaching any full-size generated texture.
   viewer = await createScene($("viewport"), emptyPreviewCanvases());
   savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
+  app.attach({ savedV: savedAppearance });
   savedAppearance.subscribe(persist);
   const initialQuality = qualityAssessment();
   viewer.setLayerCanvases(initialQuality.accepted ? canvases : emptyPreviewCanvases());
@@ -771,6 +783,7 @@ try {
     setIdle: viewer.setIdle, setIdlePaused: viewer.setIdlePaused,
     setIdleContributions: viewer.setIdleContributions, setBlink: viewer.setBlink,
     animateBlink: viewer.animateBlink });
+  app.attach({ motion: motionActions });
   motionActions.restore();
   setupMotionControls(motionActions);
   motionActions.subscribe(persist);
@@ -791,12 +804,13 @@ try {
     availability: target => target === "hair" ? !savedAppearance!.hasSavedV() || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
       : !viewer!.details[target] ? `${target} preview assets are unavailable.` : undefined,
   });
+  app.attach({ preview: previewActions });
   previewActions.subscribe(persist);
   shape.onchange = () => previewActions!.dispatch({ kind: "preview.setEyeShape", index: +shape.value });
   input("exposure").oninput = () =>
-    previewActions!.dispatch({ kind: "preview.setExposure", value: +input("exposure").value });
+    dispatchStudio({ kind: "preview.setExposure", value: +input("exposure").value });
   input("light-angle").oninput = () =>
-    previewActions!.dispatch({ kind: "preview.setKeyAngle", degrees: +input("light-angle").value });
+    dispatchStudio({ kind: "preview.setKeyAngle", degrees: +input("light-angle").value });
   input("normals").onchange = () =>
     previewActions!.dispatch({ kind: "preview.setNormals", enabled: input("normals").checked });
   input("eye-optics").onchange = () => {

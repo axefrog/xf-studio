@@ -5,15 +5,18 @@ import { collectionTransport } from "./collection-transport";
 import type { LibraryState } from "./workspace-state";
 import { reorderHandle } from "./reorder-ui";
 import type { Recipe } from "./recipe";
+import type { StudioApplication } from "./studio-application";
 
 export function setupCollections(read: () => EditorSnapshot, show: (editor: EditorSnapshot) => void,
-  restored: CollectionWorkspace | undefined, legacy: LibraryState, changed: () => void, download: (blob: Blob, name: string) => void) {
+  restored: CollectionWorkspace | undefined, legacy: LibraryState, changed: () => void,
+  download: (blob: Blob, name: string) => void, app: StudioApplication) {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const host = $("presets"), layerEditor = $("makeup-editor"), parked = $("parked-layers"), note = $("collection-state");
   const title = $<HTMLInputElement>("collection-name"), savedList = $("saved-collections");
   const files = savedList.closest<HTMLDetailsElement>("details")!;
   const endpoint = new URLSearchParams(location.search).has("verify") ? "/api/verification/collections" : "/api/collections";
   const service = new CollectionService(restored, legacy, read, show, collectionTransport(endpoint));
+  app.attach({ collection: service });
   const draft = () => service.view().draft;
   files.open = restored?.filesOpen ?? false;
   files.ontoggle = () => { if (draft() && !service.view().busy) {
@@ -94,8 +97,9 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   }
   function edit(command: PresetCommand) {
     if (!draft() || service.view().busy) return;
-    try { service.dispatch({ kind: "preset.edit", command }); paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision."); }
-    catch (e) { message((e as Error).message); }
+    const outcome = app.dispatch({ kind: "preset.edit", command });
+    if (!outcome.ok) { message(outcome.message); return; }
+    paint(); changed(); message("Collection draft updated. Save collection to retain a SQLite revision.");
   }
   function paintSavedList() {
     savedList.replaceChildren();
@@ -105,7 +109,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     }
   }
   async function run(request: CollectionRequest) {
-    const outcome = await service.execute(request);
+    const outcome = await app.execute(request);
     if (!outcome.ok) message(outcome.message);
     if (outcome.ok && outcome.result.kind === "export")
       download(new Blob([outcome.result.json], { type: "application/json" }), outcome.result.name);
@@ -147,10 +151,13 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   paint();
   void run({ kind: "initialize" });
   return {
+    service,
     snapshot: () => service.snapshot(),
     importRecipe(recipe: Recipe, name: string) {
       if (!draft() || service.view().busy) throw Error("Wait for the collection to finish loading or saving.");
-      service.dispatch({ kind: "collection.importRecipe", recipe, name }); paint(); changed();
+      const outcome = app.dispatch({ kind: "collection.importRecipe", recipe, name });
+      if (!outcome.ok) throw Error(outcome.message);
+      paint(); changed();
     },
     refreshSummary() {
       if (!draft()) return;
