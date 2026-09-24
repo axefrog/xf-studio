@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
 import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { privateAssetTest } from "./private-assets";
 test("CPU surface picking retains contributions beyond the first four", () => {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute([1, 2, 3], 3));
@@ -39,7 +40,7 @@ for (const [asset, morphCount, skinCount] of [
   ["brows", 105, 1],
   ["lashes", 21, 1],
 ] as const)
-  test(`${asset} GLB retains customization morphs, all skin sets and normalized totals`, async () => {
+  privateAssetTest(`${asset} GLB retains customization morphs, all skin sets and normalized totals`, async () => {
     const file = Bun.file(
       new URL(`../public/assets/${asset}.glb`, import.meta.url),
     );

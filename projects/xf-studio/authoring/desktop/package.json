@@ -4,6 +4,7 @@
   "version": "0.1.0-alpha.1",
   "type": "module",
   "scripts": {
+    "prepare:devkit": "bunx electrobun@2.0.1 prepare",
     "prepare:static": "bun prepare-static.ts && bun prepare-build-tools.ts",
     "build:dev": "bun run prepare:static && bunx electrobun@2.0.1 build --env=dev",
     "build:canary": "bun run prepare:static && bunx electrobun@2.0.1 build --env=canary && bun verify-canary.ts",
