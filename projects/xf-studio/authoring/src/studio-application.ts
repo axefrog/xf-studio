@@ -54,7 +54,8 @@ const recipeKinds = new Set<StudioAction["kind"]>([
   "layer.select", "point.select", "point.remove", "path.edit", "field.select", "field.add",
   "field.remove", "field.clear", "field.setReach", "pigment.edit", "softness.edit",
   "layer.setColor", "layer.setOpacity", "layer.setSymmetry", "layer.setFinish",
-  "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect"]);
+  "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect",
+  "point.move", "point.insert", "point.setTangent", "shape.transform", "field.setOrigin", "field.setVector"]);
 const collectionKinds = new Set<StudioAction["kind"]>([
   "preset.edit", "preset.select", "preset.expand", "collection.rename", "collection.filesOpen",
   "collection.open", "collection.undoOpen", "collection.importRecipe"]);

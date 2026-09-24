@@ -68,6 +68,16 @@ export const ACTION_DESCRIPTORS = {
   "glitter.setDirect": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["density", "fineShare", "strength", "color"]), value: input("number|string") }, {
     density: { value: input("number", 0, 1) }, fineShare: { value: input("number", 0, 1) },
     strength: { value: input("number", 0, 32) }, color: { value: inputText(7, 7) } }),
+  "point.move": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.insert": desc("layer", "content", "recipe", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.setTangent": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"),
+    side: enumerated(["in", "out"]), du: input("number", -1, 1), dv: input("number", -1, 1) }),
+  "shape.transform": desc("layer", "content", "recipe", { layerId: target("string"), command: input("object"),
+    pivotIndex: { type: "integer", required: false, from: "state", min: 0 } }, {
+    translate: { du: input("number", -1, 1), dv: input("number", -1, 1) }, rotate: { radians: input("number") },
+    scale: { factor: input("number", .01, 100) } }),
+  "field.setOrigin": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "field.setVector": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
   "layer.edit": desc(["layer", "collection"], "content", "recipe", { command: input("object") }, {
     add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
     reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
@@ -88,6 +98,9 @@ export const ACTION_DESCRIPTORS = {
   "camera.setFov": desc("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
   "camera.endFovGesture": desc("viewport", "workspace", "none"),
   "camera.restore": desc("viewport", "workspace", "none", { camera: input("object") }),
+  "camera.navigate": desc("viewport", "workspace", "none", { command: input("object") }, {
+    orbit: { yaw: input("number"), pitch: input("number") }, dolly: { factor: input("number", .01, 100) },
+    pan: { dx: input("number", -10, 10), dy: input("number", -10, 10) } }),
   "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
   "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),

@@ -13,11 +13,14 @@ const simple: Record<string, string> = {
   "field.setReach": "Warp reach", "layer.setColor": "Colour", "layer.setOpacity": "Opacity", "layer.setSymmetry": "Mirroring",
   "layer.setFinish": "Finish", "glitter.selectModel": "Glitter model", "glitter.setClassic": "Flake setting",
   "glitter.setIrregular": "Flake setting", "glitter.setDirect": "Glint setting",
+  "point.move": "Move point", "point.insert": "Add point", "point.setTangent": "Tangent",
+  "field.setOrigin": "Move warp", "field.setVector": "Warp pull",
 };
 const nested: Record<string, string> = {
   "enable-bezier": "Enable Bézier handles", "point-mode": "Handle type",
   "point-strength": "Point pigment", "smooth-strength": "Smooth point gradients", "strength-blend": "Pigment blend",
   "variable-softness": "Point edge softness", "point-softness": "Point edge softness", "uniform-softness": "Edge softness",
+  translate: "Move shape", rotate: "Rotate shape", scale: "Scale shape",
 };
 
 /** Label for a discrete or form-control recipe edit. */

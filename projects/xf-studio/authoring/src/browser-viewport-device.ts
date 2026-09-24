@@ -39,6 +39,7 @@ export function createBrowserViewportDevice(options: {
     uvView: () => uvEditor?.snapshot(),
     uvSelection: () => uvEditor?.selection?.(),
     uvCommand: command => uvEditor?.viewCommand(command) ?? false,
+    uvNavigate: command => uvEditor?.navigate?.(command) ?? false,
     hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
     queryContext: options.queryContext,
   });

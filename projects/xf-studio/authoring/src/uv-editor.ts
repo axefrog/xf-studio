@@ -196,6 +196,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       fitUVView(view, hooks.layer());
     updateView(next); return true;
   }
+  function navigate(command: { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: UV }): boolean {
+    stop(); finishWheel();
+    const next = command.kind === "pan" ? panUVView(view, command.du, command.dv)
+      : zoomUVView(view, command.at ?? { u: view.u, v: view.v }, command.factor);
+    if (JSON.stringify(next) === JSON.stringify(view)) return false;
+    updateView(next); return true;
+  }
   if (elements) {
     elements.both.onclick = () => { viewCommand("both"); };
     elements.single.onclick = () => { viewCommand("single"); };
@@ -387,7 +394,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
     if (elements) elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
-  return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand,
+  return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand, navigate,
     inputCapture: () => !!drag || !!wheel,
     snapshot: () => ({ ...view }),
     selection: () => {

@@ -5,6 +5,8 @@ import type { StudioContextHit } from "./studio-context-targets";
 
 export type ViewportHostKind = "head" | "uv";
 export type UVViewCommand = "both" | "single" | "other" | "fit";
+/** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
+export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 export type ViewportSize = { width: number; height: number };
 export type ViewportPhase = "loading" | "ready" | "error";
 export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; captured: boolean };
@@ -29,6 +31,8 @@ export type ViewportAttachmentPort<Slot> = {
   /** Optional: whether the selected point/warp is inside the current UV view. */
   uvSelection?(): UVSelectionVisibility | undefined;
   uvCommand(command: UVViewCommand): boolean;
+  /** Optional: apply a UV pan/zoom and persist the view. */
+  uvNavigate?(command: UVNavigation): boolean;
   hitAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportHit | undefined;
   queryContext(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
 };
@@ -78,6 +82,20 @@ export class ViewportAttachment<Slot> {
     const capability = this.uvCommandCapability(command);
     if (!capability.available) return false;
     const changed = this.port.uvCommand(command);
+    if (changed) this.publish();
+    return changed;
+  }
+  uvNavigateCapability(command: UVNavigation) {
+    if (this.phases.uv.phase !== "ready" || !this.port.uvNavigate) return { available: false as const, reason: "UV editor is not ready." };
+    const values = command.kind === "pan" ? [command.du, command.dv] : [command.factor, command.at?.u ?? 0, command.at?.v ?? 0];
+    if (!values.every(Number.isFinite) || command.kind === "zoom" && command.factor <= 0)
+      return { available: false as const, reason: "UV navigation needs finite values and a positive zoom factor." };
+    return { available: true as const };
+  }
+  /** View state only: no recipe, Undo or selection change. */
+  uvNavigate(command: UVNavigation) {
+    if (!this.uvNavigateCapability(command).available) return false;
+    const changed = this.port.uvNavigate!(command);
     if (changed) this.publish();
     return changed;
   }

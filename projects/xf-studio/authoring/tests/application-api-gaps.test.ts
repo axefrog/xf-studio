@@ -302,3 +302,88 @@ test("the viewport snapshot carries UV selection visibility and view-change noti
   selection = undefined;
   expect("selection" in attachment.snapshot().uv).toBe(false);
 });
+
+test("coordinate commands edit geometry with one Undo each and refuse invalid targets", () => {
+  const { app, document } = coreFixture(), layer = document.recipe.layers[0], id = layer.id;
+  const count = layer.points.length, fieldId = layer.fields[0]?.id;
+  expect(app.dispatch({ kind: "point.move", layerId: id, index: 1, u: .41, v: .26 }).ok).toBe(true);
+  expect(document.recipe.layers[0].points[1]).toMatchObject({ u: .41, v: .26 });
+  expect(app.history().undo).toMatchObject({ label: "Move point" });
+  expect(app.capability({ kind: "point.move", layerId: id, index: 99, u: .4, v: .2 })).toMatchObject({ available: false, code: "missing_target" });
+  expect(app.contextCapability({ kind: "point", layerId: id, index: 1 }, { kind: "point.move", layerId: id, index: 1, u: 1.5, v: .2 }))
+    .toMatchObject({ code: "limit", issue: { field: "u" } });
+  const p0 = document.recipe.layers[0].points[0], p1 = document.recipe.layers[0].points[1];
+  expect(app.dispatch({ kind: "point.insert", layerId: id, u: (p0.u + p1.u) / 2, v: (p0.v + p1.v) / 2 }).ok).toBe(true);
+  expect(document.recipe.layers[0].points).toHaveLength(count + 1);
+  expect(document.selected).toBe(1);
+  const before = JSON.stringify(document.recipe.layers[0].points.map(p => [p.u, p.v]));
+  expect(app.dispatch({ kind: "shape.transform", layerId: id, command: { kind: "translate", du: .01, dv: 0 } }).ok).toBe(true);
+  expect(document.recipe.layers[0].points[0].u).toBeCloseTo(p0.u + .01, 9);
+  expect(app.history().undo?.label).toBe("Move shape");
+  const pivot = document.recipe.layers[0].points[1];
+  expect(app.dispatch({ kind: "shape.transform", layerId: id, command: { kind: "scale", factor: 1.1 } }).ok).toBe(true);
+  expect(document.recipe.layers[0].points[1]).toMatchObject({ u: pivot.u, v: pivot.v });
+  expect(app.capability({ kind: "shape.transform", layerId: id, command: { kind: "rotate", radians: .1 }, pivotIndex: 99 }))
+    .toMatchObject({ available: false, issue: { field: "pivotIndex" } });
+  expect(app.dispatch({ kind: "shape.transform", layerId: id, command: { kind: "translate", du: 5, dv: 0 } }).ok).toBe(false);
+  app.dispatch({ kind: "recipe.undo" }); app.dispatch({ kind: "recipe.undo" });
+  expect(JSON.stringify(document.recipe.layers[0].points.map(p => [p.u, p.v]))).toBe(before);
+  if (fieldId) {
+    expect(app.dispatch({ kind: "field.setOrigin", layerId: id, fieldId, u: .35, v: .22 }).ok).toBe(true);
+    expect(app.dispatch({ kind: "field.setVector", layerId: id, fieldId, du: .01, dv: -.005 }).ok).toBe(true);
+    expect(document.recipe.layers[0].fields[0]).toMatchObject({ u: .35, v: .22, du: .01, dv: -.005 });
+    expect(app.contextCapability({ kind: "field", layerId: id, id: fieldId }, { kind: "field.setVector", layerId: id, fieldId, du: .5, dv: 0 }).code).toBe("limit");
+  }
+});
+
+test("tangent commands need Bézier handles and respect the tangent mode", () => {
+  const { app, document } = coreFixture(), id = document.recipe.layers[0].id;
+  if (document.recipe.layers[0].pathMode !== "bezier") {
+    expect(app.capability({ kind: "point.setTangent", layerId: id, index: 0, side: "out", du: .01, dv: 0 }))
+      .toMatchObject({ available: false, code: "incompatible_mode" });
+    expect(app.dispatch({ kind: "path.edit", layerId: id, command: { kind: "enable-bezier" } }).ok).toBe(true);
+  }
+  expect(app.dispatch({ kind: "path.edit", layerId: id, command: { kind: "point-mode", index: 0, mode: "symmetric" } }).ok).toBe(true);
+  expect(app.dispatch({ kind: "point.setTangent", layerId: id, index: 0, side: "out", du: .02, dv: .01 }).ok).toBe(true);
+  const handles = document.recipe.layers[0].points[0].handles!;
+  expect(handles.mode).toBe("symmetric");
+  expect([handles.out.u, handles.out.v, handles.in.u, handles.in.v].map(x => +x.toFixed(9))).toEqual([.02, .01, -.02, -.01]);
+  expect(app.history().undo?.label).toBe("Tangent");
+});
+
+test("the contour point limit refuses insertion with a structured issue", () => {
+  const { app, document } = coreFixture(), id = document.recipe.layers[0].id;
+  for (let guard = 0; guard < 40 && document.recipe.layers[0].points.length < 24; guard++) {
+    const pts = document.recipe.layers[0].points, a = pts[0], b = pts[1];
+    app.dispatch({ kind: "point.insert", layerId: id, u: (a.u + b.u) / 2, v: (a.v + b.v) / 2 });
+  }
+  expect(document.recipe.layers[0].points).toHaveLength(24);
+  expect(app.capability({ kind: "point.insert", layerId: id, u: .3, v: .3 })).toMatchObject({ available: false, code: "limit", issue: { field: "points" } });
+});
+
+test("camera and UV navigation commands are view-only and bounded", async () => {
+  const { navigateCamera } = await import("../src/camera-navigation");
+  const state = { position: [0, 0, 1], target: [0, 0, 0], fov: 30 };
+  const orbited = navigateCamera(state, { kind: "orbit", yaw: Math.PI / 2, pitch: 0 });
+  expect(orbited.position[0]).toBeCloseTo(1, 9); expect(Math.hypot(...orbited.position)).toBeCloseTo(1, 9);
+  const flipped = navigateCamera(state, { kind: "orbit", yaw: 0, pitch: 10 });
+  expect(flipped.position[1]).toBeLessThan(1); expect(flipped.position[1]).toBeGreaterThan(.99);
+  expect(Math.hypot(...navigateCamera(state, { kind: "dolly", factor: .001 }).position)).toBeCloseTo(.1, 9);
+  expect(Math.hypot(...navigateCamera(state, { kind: "dolly", factor: 100 }).position)).toBeCloseTo(3.5, 9);
+  const panned = navigateCamera(state, { kind: "pan", dx: .5, dy: 0 });
+  expect(panned.target[0]).toBeCloseTo(panned.position[0], 9); expect(panned.target[0]).not.toBe(0);
+  expect(navigateCamera(state, { kind: "dolly", factor: -1 })).toEqual(state);
+  const { app } = coreFixture();
+  expect(app.actionKinds()).toContain("camera.navigate");
+  expect(app.capability({ kind: "camera.navigate", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
+  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  const moves: unknown[] = [];
+  const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
+    cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => true,
+    uvNavigate: command => { moves.push(command); return true; }, hitAt: () => undefined, queryContext: () => { throw Error("not used"); } });
+  expect(attachment.uvNavigateCapability({ kind: "pan", du: .1, dv: 0 }).available).toBe(false);
+  attachment.setReady("uv");
+  expect(attachment.uvNavigateCapability({ kind: "zoom", factor: 0 }).available).toBe(false);
+  expect(attachment.uvNavigate({ kind: "zoom", factor: 2, at: { u: .3, v: .3 } })).toBe(true);
+  expect(moves).toEqual([{ kind: "zoom", factor: 2, at: { u: .3, v: .3 } }]);
+});
