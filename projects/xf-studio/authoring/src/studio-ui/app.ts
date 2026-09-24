@@ -3,6 +3,7 @@ import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { openPalette, openShortcuts, type Command } from "./commands";
+import { studioShortcut } from "./shortcuts";
 import { button } from "./controls";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
@@ -114,20 +115,19 @@ export function mountStudio(port: Port, root: HTMLElement) {
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
     if (event.defaultPrevented) return;
-    const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
     const modalOpen = !!document.querySelector("dialog[open]");
-    if (mod && (key === "k" || (event.shiftKey && key === "p"))) { event.preventDefault(); if (!modalOpen) { closeMenus(false); openPalette(commands); } return; }
-    if (mod && key === "s") { event.preventDefault(); void rt.request({ kind: "save" }); return; }
-    const redo = mod && !isTextInput(event.target) && (key === "y" && !event.shiftKey || key === "z" && event.shiftKey);
-    if (redo || mod && key === "z" && !event.shiftKey && !isTextInput(event.target)) {
-      event.preventDefault();
+    const shortcut = studioShortcut(event, { textInput: isTextInput(event.target), modalOpen });
+    if (!shortcut) return;
+    event.preventDefault();
+    if (shortcut === "palette") { if (!modalOpen) { closeMenus(false); openPalette(commands); } }
+    else if (shortcut === "save") void rt.request({ kind: "save" });
+    else if (shortcut === "undo" || shortcut === "redo") {
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
       const state = port.authoring.previewState();
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
-      rt.dispatch({ kind: redo ? "recipe.redo" : "recipe.undo" }); return;
-    }
-    if (event.key === "F6") { event.preventDefault(); cycleRegions(root, event.shiftKey); return; }
-    if (event.key === "?" && !isTextInput(event.target) && !mod && !modalOpen) { event.preventDefault(); openShortcuts(); }
+      rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
+    } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
+    else openShortcuts();
   });
   header.bindPalette(() => openPalette(commands));
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands } });

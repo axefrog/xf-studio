@@ -6,6 +6,12 @@ import type { Capability } from "./menu";
 export type Command = { id: string; title: string; group: string; icon?: IconName; shortcut?: string; keywords?: string;
   capability(): Capability; run(): void };
 
+/** Palette search: every whitespace-separated term must occur in the title, group or keywords. */
+export function matchCommands<T extends Pick<Command, "title" | "group" | "keywords">>(commands: readonly T[], query: string): T[] {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return commands.filter(command => terms.every(term => `${command.title} ${command.group} ${command.keywords ?? ""}`.toLowerCase().includes(term)));
+}
+
 /** Keyboard-first command palette. Disabled commands stay listed with their reason. */
 export function openPalette(commands: () => Command[], options: { onClose?(): void } = {}) {
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -19,8 +25,7 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
   let items: Command[] = [], active = 0;
   const all = commands();
   const render = () => {
-    const terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
-    items = all.filter(command => terms.every(term => `${command.title} ${command.group} ${command.keywords ?? ""}`.toLowerCase().includes(term)));
+    items = matchCommands(all, input.value);
     active = Math.min(active, Math.max(0, items.length - 1));
     let group = "";
     list.replaceChildren(...items.flatMap((command, index) => {
