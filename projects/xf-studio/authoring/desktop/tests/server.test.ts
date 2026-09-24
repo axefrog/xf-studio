@@ -52,6 +52,25 @@ test("About version never falls back to source metadata when packaged metadata i
     .toMatchObject({ version: "unavailable", channel: "unavailable", metadataStatus: "unavailable" });
 });
 
+test("update snapshot is read-only and disabled operations cannot reach a feed", async () => {
+  const base = `http://127.0.0.1:${app.port}`;
+  const endpoint = base + "/api/desktop/update";
+  expect((await fetch(endpoint)).status).toBe(403);
+  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
+  const headers = { Cookie: cookie };
+  expect(await (await fetch(endpoint, { headers })).json()).toMatchObject({
+    schema: "xfs/desktop-update-1", installed: { version: "0.0.1", channel: "dev", buildHash: "dev" },
+    available: null, phase: "unavailable", canCheck: false, canDownload: false, canApplyAndRestart: false,
+  });
+  const post = (body: unknown, extra: Record<string, string> = {}) => fetch(endpoint, { method: "POST",
+    headers: { ...headers, Origin: base, "Content-Type": "application/json", ...extra }, body: JSON.stringify(body) });
+  expect((await post({ schema: "xfs/desktop-update-action-1", action: "check", url: "https://attacker.example" })).status).toBe(400);
+  expect((await post({ schema: "xfs/desktop-update-action-1", action: "check" },
+    { Origin: "https://attacker.example" })).status).toBe(403);
+  expect(await (await post({ schema: "xfs/desktop-update-action-1", action: "check" })).json())
+    .toMatchObject({ phase: "unavailable", available: null });
+});
+
 test("asset intake requires the desktop session and accepts only a folder inspection command", async () => {
   const base = `http://127.0.0.1:${app.port}`;
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];

@@ -9,10 +9,12 @@ import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
 import { desktopBuildIssue, type WolvenKitProbe } from "./build";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
+import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
-  toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe) {
+  toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
+  updateTrial?: { native: NativeUpdater; trust: UpdateTrust }) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -22,6 +24,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
   const shutdown = new AbortController();
+  const updates = new DesktopUpdateService({ version: version.version, channel: version.channel,
+    buildHash: version.buildHash }, updateTrial?.native ?? null,
+    updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false });
   const buildReady = () => {
     try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, wolvenKitProbe) === null; }
     catch { return false; }
@@ -59,6 +64,21 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
           existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady()),
           { headers: { "Cache-Control": "no-store" } });
+      if (url.pathname === "/api/desktop/update") {
+        if (request.method === "GET") return Response.json(updates.snapshot(),
+          { headers: { "Cache-Control": "no-store" } });
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        let body: unknown;
+        try { body = await routedRequest.json(); } catch { return new Response("Bad update action", { status: 400 }); }
+        if (!body || typeof body !== "object" || Array.isArray(body) ||
+          Object.keys(body).sort().join(",") !== "action,schema" ||
+          (body as any).schema !== "xfs/desktop-update-action-1" ||
+          !["check", "download", "applyAndRestart"].includes((body as any).action))
+          return new Response("Bad update action", { status: 400 });
+        try { return Response.json(await updates.dispatch((body as any).action),
+          { headers: { "Cache-Control": "no-store" } }); }
+        catch { return new Response("Update operation is unavailable", { status: 409 }); }
+      }
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;

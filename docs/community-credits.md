@@ -81,6 +81,8 @@ The [focused archive-hash probe](../research/character-customization/catalog-pro
 
 The official [uninstall](https://framework.blackboard.sh/electrobun/guides/uninstalling/) and [Paths](https://framework.blackboard.sh/electrobun/apis/paths/) documentation further informed the AppData/user-data and app-only versus app-plus-data removal design. They document per-user managed roots and a data-preserving default, but do not by themselves verify the application binary's location or standard-user update behavior in a v2.0.1 build. **Use: documentation learning only**; confirm with a packaged trial before implementation claims.
 
+The 25 September [Updater API](https://framework.blackboard.sh/electrobun/apis/updater/) and [release hosting guide](https://framework.blackboard.sh/electrobun/guides/updates/) informed the [typed desktop update gate](../research/authoring/desktop-packaging.md): separate check/download/apply calls, `before-quit` and native relaunch, and the explicit warning that bundle hashes do not authenticate code. **Use: documentation learning and framework API integration only.** The tracked native adapter calls the Electrobun 2.0.1 API, but the unsigned/no-feed production canary never instantiates it; tests use a project-authored fake port. No upstream source or assets were adapted. The existing MIT and redistribution-notice record above still applies.
+
 ### WolvenKit — the WolvenKit team and contributors
 
 [Repository](https://github.com/WolvenKit/WolvenKit). Save-format research used commit `11720772f1e20581301b3dec88a59f7b5ee05675`; conversion experiments use installed CLI 8.17.4. Do not conflate these revisions.

@@ -15,16 +15,48 @@ aboutButton.textContent = "About";
 aboutButton.setAttribute("aria-label", "About XF Studio");
 const about = document.createElement("dialog");
 about.id = "desktop-about";
-about.innerHTML = '<h2>About XF Studio</h2><p id="desktop-version"></p><p id="desktop-build"></p><p>Private data folder</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update"></p><button id="desktop-setup-open" type="button">Local setup</button><form method="dialog"><button type="submit">Close</button></form>';
+about.innerHTML = '<h2>About XF Studio</h2><p id="desktop-version"></p><p id="desktop-build"></p><p>Private data folder</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><button id="desktop-setup-open" type="button">Local setup</button><form method="dialog"><button type="submit">Close</button></form>';
 about.querySelector("#desktop-version").textContent = capabilities.metadataStatus === "ready" ?
   `Version ${capabilities.version} · ${capabilities.channel}` : "Installed version unavailable";
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
   `Build ${capabilities.buildHash}` : "This installation needs repair before its version can be trusted.";
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
-about.querySelector("#desktop-update").textContent = capabilities.updater ? "Updates available through this desktop host." :
-  "Updates are unavailable in this desktop trial.";
+const updateStatus = about.querySelector("#desktop-update");
+const updateActions = about.querySelector("#desktop-update-actions");
+async function refreshUpdate() {
+  try {
+    const response = await fetch("/api/desktop/update");
+    if (!response.ok) throw Error("Update state unavailable.");
+    showUpdate(await response.json());
+  } catch { updateStatus.textContent = "Update state unavailable. Restart XF Studio and retry."; }
+}
+function showUpdate(state) {
+  updateStatus.textContent = state.phase === "unavailable" ? state.reason :
+    state.available ? `${state.phase}: ${state.available.version} (${state.available.buildHash})` :
+    state.phase === "idle" ? "No update is currently selected. Check only when you choose to." :
+    state.reason || `Update ${state.phase}.`;
+  updateActions.hidden = state.phase === "unavailable";
+  for (const button of updateActions.querySelectorAll("button")) {
+    button.disabled = button.dataset.updateAction === "check" ? !state.canCheck :
+      button.dataset.updateAction === "download" ? !state.canDownload : !state.canApplyAndRestart;
+  }
+}
+for (const button of updateActions.querySelectorAll("button")) button.addEventListener("click", async () => {
+  const action = button.dataset.updateAction;
+  if (action === "applyAndRestart" && !confirm("Apply the downloaded XF Studio update and restart now?")) return;
+  updateStatus.textContent = action === "check" ? "Checking for an update…" :
+    action === "download" ? "Downloading update…" : "Applying update and restarting…";
+  for (const item of updateActions.querySelectorAll("button")) item.disabled = true;
+  try {
+    const response = await fetch("/api/desktop/update", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schema: "xfs/desktop-update-action-1", action }) });
+    if (!response.ok) throw Error("Update action was refused.");
+    showUpdate(await response.json());
+  } catch { await refreshUpdate(); }
+});
 document.body.append(aboutButton, about);
-aboutButton.addEventListener("click", () => about.showModal());
+aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
 setup.innerHTML = '<h2>Local setup</h2><p>These paths stay in this Windows account. You can set them now and change them later.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="submit" id="desktop-setup-save">Save setup</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
