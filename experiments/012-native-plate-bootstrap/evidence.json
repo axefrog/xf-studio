@@ -1,0 +1,43 @@
+{
+  "date": "2026-09-25",
+  "gameVersion": "Cyberpunk 2077 2.31",
+  "tool": "WolvenKit CLI 8.17.4 and project-local MorphImport",
+  "sourceSha256": {
+    "nativeMeshJson": "6e302b14b1aa208a344a9699c108c99e391aa49a99e97c8dadc442734c0cb14f",
+    "nativeMorphJson": "e72683ef93e9acfcad628fff8aa4b873fd09a27034c9d54c2ee0b0b43fedc18c",
+    "boundHeadGlb": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "selection": "b504a2b7e9f2ee6ecf3c6d1e60858665a033cd9c700de6efc9f4701fd12e5376"
+  },
+  "privateOutputSha256": {
+    "derivedPlateGlb": "0571c4da09595009dbc7e4e305518e95f18a58ba4c59bf51e97e7d56d0f060ea",
+    "mesh": "3f7fc7c9d25b2a44c51bcd383db8b939c544332552cee98040151cd38054e0c1",
+    "morph": "fba40259949c924dcf716e7cbc4f2680984f0355a407915ceb7c1423c1946934",
+    "roundtripGlb": "f1ceeb58dcbee9dbad51291f32ec14bf89d6072b0501b96c8627a255e121f823"
+  },
+  "selection": {
+    "vertices": 1620,
+    "triangles": 3010,
+    "morphs": 105,
+    "componentVertices": [20, 20, 790, 790],
+    "boundaryEdges": 226,
+    "boundaryLoops": 6,
+    "minimumBaseTriangleArea": 1.8677276810455286e-08,
+    "minimumIndividualMorphTriangleArea": 2.0871593809125235e-09
+  },
+  "roundtrip": {
+    "exactUv0AndUv1": true,
+    "exactFaceIndices": true,
+    "exactNativeSkinBytesMesh": true,
+    "exactNativeSkinBytesMorphBase": true,
+    "boundGlbNativeIndexOrderExact": true,
+    "boundGlbNormalizedWeightMaximumError": 9.54624190807607e-08,
+    "verticesNeedingWeightRestoration": 1595,
+    "maximumBasePositionAbsoluteError": 2.6132911443710327e-06,
+    "maximumMorphPositionAbsoluteError": 9.425217285752296e-06
+  },
+  "limits": [
+    "Neutral head cut has no designed clearance and is not accepted for preview or packaging.",
+    "No continuous posed-clearance, game shader or runtime rendering proof.",
+    "Source and output game assets remain ignored and private."
+  ]
+}
