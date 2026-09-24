@@ -164,7 +164,11 @@ test("preview commands keep camera and lighting state readable without DOM and e
     endFovGesture: () => calls.push("end"), restoreCamera: value => { camera.fov = value.fov; },
     setExposure: value => calls.push(`exposure:${value}`), setLightAngle: value => calls.push(`angle:${value}`),
     setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {},
-    setHair: () => {}, setDetail: () => {}, availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
+    setHair: () => {}, setDetail: () => {}, setEyeShape: index => calls.push(`eye:${index}`),
+    setPiercings: enabled => calls.push(`piercings:${enabled}`),
+    setPiercingPreview: (style, definition) => calls.push(`piercing:${style}:${definition}`),
+    piercingOptions: () => [{ id: "stud", definitions: ["silver"] }],
+    availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
   };
   const actions = new PreviewActions(freshWorkspace().preview, port);
   expect(actions.capability({ kind: "preview.setHair", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
@@ -178,4 +182,11 @@ test("preview commands keep camera and lighting state readable without DOM and e
   expect(detached.exposure).toBe(1.5);
   expect(notifications).toBe(3);
   expect(calls).toEqual(["exposure:1.5", "angle:120"]);
+  expect(actions.capability({ kind: "preview.setPiercingPreview", style: "stud", definition: "gold" }).available).toBe(false);
+  actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
+  actions.dispatch({ kind: "preview.setPiercingPreview", style: "stud", definition: "silver" });
+  expect(actions.snapshot()).toMatchObject({ eyeShape: 12, piercingStyle: "stud", piercingDefinition: "silver" });
+  actions.rememberEyeShape(9); // A saved morph was already applied by the renderer.
+  expect(actions.snapshot().eyeShape).toBe(9);
+  expect(calls.filter(call => call.startsWith("eye:"))).toEqual(["eye:12"]);
 });

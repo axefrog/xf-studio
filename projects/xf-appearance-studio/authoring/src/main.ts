@@ -21,6 +21,7 @@ import { RecipeActions, type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { setupPreviewQuality } from "./preview-quality-ui";
+import { PreviewQualityActions } from "./preview-quality-actions";
 import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
@@ -29,7 +30,8 @@ import { ViewportAdapter } from "./viewport-adapter";
 import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
-import { readSavedV, type SavedV } from "./save-reader";
+import { MotionActions } from "./motion-actions";
+import { SavedAppearanceActions, type SavedAppearanceState } from "./saved-appearance-actions";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 import {
   canonicalFinish,
@@ -53,8 +55,7 @@ const verification = new URLSearchParams(location.search).has("verify");
 const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
 const workspace = restored.state;
 let textureSize = workspace.preview.textureSize;
-let qualityError = "";
-let qualityBlocked = false;
+let qualityActions: PreviewQualityActions;
 type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
 type PreviewAlbedo = NonNullable<Extract<RasterResponse, {data: unknown}>["albedo"]>;
 let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo } | undefined)[] = [];
@@ -81,7 +82,8 @@ function emptyPreviewCanvases() {
 }
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let previewActions: PreviewActions | undefined;
-let savedV: SavedV | undefined = workspace.savedV;
+let motionActions: MotionActions | undefined;
+let savedAppearance: SavedAppearanceActions | undefined;
 const current = () => recipe.layers[active];
 function showGlitterMeasurement(){
   const layer=current();
@@ -105,33 +107,37 @@ const viewport = new ViewportAdapter();
 const sidebars = setupSidebars(workspace.panels, () => { persist(); viewport.resize(); });
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.snapshot(), savedV,
+  const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.snapshot(),
+    savedV: savedAppearance?.snapshot().savedV ?? workspace.savedV,
     glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
     panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
   const previewConfig = previewActions?.snapshot();
+  const motion = motionActions?.snapshot();
   return {
     schema: "xfas/workspace-1", ...editing,
     preview: {
-      textureSize,
-      camera: previewConfig?.camera ?? viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
+      textureSize: qualityActions?.snapshot().size ?? textureSize,
+      camera: previewConfig?.camera ?? viewer?.cameraState() ?? workspace.preview.camera,
+      eyeShape: previewConfig?.eyeShape ?? +$<HTMLSelectElement>("eye-shape").value,
       surface: previewConfig?.surface ?? input("surface-controls").checked,
       wire: previewConfig?.wire ?? input("wire").checked,
       brows: previewConfig?.brows ?? input("brows").checked,
       lashes: previewConfig?.lashes ?? input("lashes").checked,
       hair: previewConfig?.hair ?? input("hair").checked,
-      piercings: input("piercings").checked, piercingStyle: $<HTMLSelectElement>("piercing-style").value,
-      piercingDefinition: $<HTMLSelectElement>("piercing-colour").value,
+      piercings: previewConfig?.piercings ?? input("piercings").checked,
+      piercingStyle: previewConfig?.piercingStyle ?? $<HTMLSelectElement>("piercing-style").value,
+      piercingDefinition: previewConfig?.piercingDefinition ?? $<HTMLSelectElement>("piercing-colour").value,
       normals: previewConfig?.normals ?? input("normals").checked,
       eyeOptics: previewConfig?.eyeOptics ?? input("eye-optics").checked,
       exposure: previewConfig?.exposure ?? +input("exposure").value,
       lightAngle: previewConfig?.lightAngle ?? +input("light-angle").value,
-      blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
-      idle: viewer?.idle?.enabled ?? workspace.preview.idle,
-      idleTime: viewer?.idle?.time ?? workspace.preview.idleTime,
-      idlePaused: viewer?.idle?.paused ?? workspace.preview.idlePaused,
-      idleBody: viewer?.idle?.bodyEnabled ?? workspace.preview.idleBody,
-      idleFace: viewer?.idle?.faceEnabled ?? workspace.preview.idleFace,
+      blink: motion?.blink ?? +input("blink").value, blinkPlaying: motion?.blinkPlaying ?? $("play").getAttribute("aria-pressed") === "true",
+      idle: motion?.idle ?? viewer?.idle?.enabled ?? workspace.preview.idle,
+      idleTime: motion?.idleTime ?? viewer?.idle?.time ?? workspace.preview.idleTime,
+      idlePaused: motion?.idlePaused ?? viewer?.idle?.paused ?? workspace.preview.idlePaused,
+      idleBody: motion?.idleBody ?? viewer?.idle?.bodyEnabled ?? workspace.preview.idleBody,
+      idleFace: motion?.idleFace ?? viewer?.idle?.faceEnabled ?? workspace.preview.idleFace,
     },
     panels: { ...sidebars.snapshot(), lighting: $<HTMLDetailsElement>("lighting-panel").open,
       previewQuality: $<HTMLDetailsElement>("quality-panel").open,
@@ -325,12 +331,12 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
     drawUV();
     refreshQuality?.();
     status(`Live makeup · ${size}² · ${Math.round(ms)} ms · layer ${i + 1}`);
-  }, reason => { qualityBlocked = true; qualityError = reason ?? "Texture calculation failed. Rebuild the preview or edit again to retry."; status(qualityError); refreshQuality?.(); });
+  }, reason => { qualityActions.fail(reason); status(qualityActions.snapshot().error); refreshQuality?.(); });
 function qualityAssessment(size = textureSize) {
   return assessPreviewQuality(recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
 }
 function describeQuality() {
-  if (qualityError) return qualityError;
+  if (qualityActions.snapshot().error) return qualityActions.snapshot().error;
   const assessment = qualityAssessment(), queue = maskClient.diagnostics();
   if (!assessment.accepted) return assessment.error!;
   const pending = queue.queued + (queue.running ? 1 : 0);
@@ -338,20 +344,20 @@ function describeQuality() {
     (viewer && (viewer.needsOptics(i,l,textureSize) || viewer.needsAlbedo(i,l,textureSize)))));
   return `${pending || waiting ? "Updating" : "Ready"} · ${textureSize} × ${textureSize} · estimated generated-texture peak ${Math.ceil(assessment.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
 }
-function setPreviewTextureSize(size: PreviewTextureSize) {
-  const assessment = qualityAssessment(size);
-  if (!assessment.accepted) { qualityError = assessment.error!; refreshQuality?.(); return; }
-  textureSize = size; qualityError = ""; qualityBlocked = false; maskClient.reset();
+qualityActions = new PreviewQualityActions(textureSize, { assess: size => qualityAssessment(size), replace: size => {
+  textureSize = size; maskClient.reset();
   // Release the old quality's textures and CPU canvases before allocating the
   // next tier. A 4K-to-512 transition must not retain the old 4K bundle while
   // the target-only budget assesses the smaller replacement.
   canvases.splice(0,canvases.length,...emptyPreviewCanvases());
   initialOptics=[]; viewer?.setLayerCanvases(canvases);
   for (const i of [active, ...recipe.layers.map((_,i) => i).filter(i => i !== active)]) render(i);
-  refreshQuality?.(); persist();
-}
+} });
+qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
-  { current: () => textureSize, describe: describeQuality, set: setPreviewTextureSize, rebuild: () => setPreviewTextureSize(textureSize) });
+  { current: () => qualityActions.snapshot().size, describe: describeQuality,
+    set: size => { qualityActions.dispatch({ kind: "quality.set", size }); },
+    rebuild: () => { qualityActions.dispatch({ kind: "quality.rebuild" }); } });
 function render(i = active) {
   if (!recipe.layers[i]) return;
   const layer = recipe.layers[i], assessment = qualityAssessment();
@@ -364,16 +370,16 @@ function render(i = active) {
     initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
   }
   if (!assessment.accepted) {
-    maskClient.reset(); qualityBlocked = true; qualityError = assessment.error!;
-    status(qualityError); refreshQuality?.(); sync(); persist(); return;
+    maskClient.reset(); qualityActions.fail(assessment.error);
+    status(qualityActions.snapshot().error); refreshQuality?.(); sync(); persist(); return;
   }
-  if (qualityBlocked) {
+  if (qualityActions.snapshot().blocked) {
     // Capacity/failure recovery rebuilds every potentially stale slot.
-    qualityBlocked = false; qualityError = ""; maskClient.reset();
+    qualityActions.recover(); maskClient.reset();
     for (const slot of [active, ...recipe.layers.map((_,slot) => slot).filter(slot => slot !== active)]) render(slot);
     return;
   }
-  qualityError = "";
+  qualityActions.recover();
   const size = layer.enabled ? textureSize : 1;
   const needsOptics = layer.enabled && !isDirectGlint(layer.flakes) && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     (viewer ? viewer.needsOptics(i, layer, size) : initialOptics[i]?.key !== opticalKey(layer, size));
@@ -595,11 +601,12 @@ input("v-file").onchange = async () => {
     if (file.size > 128 * 1024 * 1024)
       throw Error("Save is larger than the supported limit.");
     status("Reading saved appearance locally…");
-    const v = readSavedV(new Uint8Array(await file.arrayBuffer()));
-    showSavedV(v);
-    const group = v.groups.head.find(g => g.name === "character_customization") ?? v.groups.head.find(g => g.name === "TPP");
-    const eye = group?.morphs.find(m => m.region === "eyes");
-    if (eye) shape.value = String(Math.floor(Number(eye.target.slice(1)) / 10));
+    const state = savedAppearance!.dispatch({ kind: "savedV.load", bytes: new Uint8Array(await file.arrayBuffer()) });
+    showSavedV(state);
+    if (state.suggestedEyeShape !== undefined) {
+      shape.value = String(state.suggestedEyeShape);
+      previewActions?.rememberEyeShape(state.suggestedEyeShape);
+    }
     persist();
     status(
       "Saved facial shape applied. Remaining appearance assets still need resolving.",
@@ -609,9 +616,9 @@ input("v-file").onchange = async () => {
   }
   input("v-file").value = "";
 };
-function showSavedV(v: SavedV) {
-  const result = viewer!.applySavedV(v);
-  savedV = v;
+function showSavedV(state: Readonly<SavedAppearanceState>) {
+  const { result, savedV } = state;
+  if (!result || !savedV) return;
   $("v-details").textContent =
     result.matchedDetails.length === 2
       ? "Brows and lashes match the saved resource references; colours are approximate."
@@ -627,7 +634,7 @@ function showSavedV(v: SavedV) {
   refreshEyeOpticsNote();
   $("v-card").hidden = false;
   $("v-summary").textContent =
-    `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(v.gameVersion / 1000).toFixed(2)}.`;
+    `${result.applied.length} facial regions applied. ${result.appearanceReferences} appearance references read. Game ${(savedV.gameVersion / 1000).toFixed(2)}.`;
 }
 function refreshEyeOpticsNote() {
   if (!viewer) return;
@@ -664,23 +671,29 @@ function setupPiercingControls() {
     colour.replaceChildren();
     const entry = styles.find(s => s.id === style.value);
     colour.disabled = !entry;
-    if (!entry) { viewer!.setPiercingPreview("", ""); updatePiercingNote(); return; }
+    if (!entry) {
+      if (previewActions) previewActions.dispatch({ kind: "preview.setPiercingPreview", style: "", definition: "" });
+      else viewer!.setPiercingPreview("", "");
+      updatePiercingNote(); return;
+    }
     for (const choice of entry.choices) {
       const option = document.createElement("option");
       option.value = choice.definition; option.textContent = `${choice.index}. ${choice.label}`; colour.append(option);
     }
     colour.value = entry.choices.some(c => c.definition === preferred) ? preferred : entry.choices[0]!.definition;
-    viewer!.setPiercingPreview(entry.id, colour.value);
+    if (previewActions) previewActions.dispatch({ kind: "preview.setPiercingPreview", style: entry.id, definition: colour.value });
+    else viewer!.setPiercingPreview(entry.id, colour.value);
     updatePiercingNote();
   }
   style.value = styles.some(s => s.id === workspace.preview.piercingStyle) ? workspace.preview.piercingStyle : "";
   fillColours(workspace.preview.piercingDefinition);
   style.onchange = () => fillColours();
-  colour.onchange = () => viewer!.setPiercingPreview(style.value, colour.value);
+  colour.onchange = () => previewActions!.dispatch({ kind: "preview.setPiercingPreview", style: style.value, definition: colour.value });
   viewer!.setPiercings(input("piercings").checked);
-  input("piercings").onchange = () => viewer!.setPiercings(input("piercings").checked);
+  input("piercings").onchange = () => previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
 }
 $("v-export").onclick = () => {
+  const savedV = savedAppearance?.snapshot().savedV;
   if (savedV)
     download(
       new Blob([JSON.stringify(savedV, null, 2)], { type: "application/json" }),
@@ -701,12 +714,14 @@ workspaceReady = true;
 try {
   // Discover hardware limits before attaching any full-size generated texture.
   viewer = await createScene($("viewport"), emptyPreviewCanvases());
+  savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
+  savedAppearance.subscribe(persist);
   const initialQuality = qualityAssessment();
   viewer.setLayerCanvases(initialQuality.accepted ? canvases : emptyPreviewCanvases());
   if (!initialQuality.accepted) {
-    maskClient.reset(); qualityBlocked = true; qualityError = initialQuality.error!; refreshQuality?.();
+    maskClient.reset(); qualityActions.fail(initialQuality.error); refreshQuality?.();
   }
-  if (savedV) showSavedV(savedV);
+  if (workspace.savedV) showSavedV(savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }));
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
     brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
@@ -762,7 +777,7 @@ try {
     viewer.setDetail(name, input(name).checked);
     input(name).onchange = () => previewActions!.dispatch({ kind: "preview.setDetail", detail: name, enabled: input(name).checked });
   }
-  if (!savedV) input("hair").disabled = true;
+  if (!savedAppearance.hasSavedV()) input("hair").disabled = true;
   viewer.setHair(input("hair").checked);
   input("hair").onchange = () => previewActions!.dispatch({ kind: "preview.setHair", enabled: input("hair").checked });
   if (viewer.evidence.hairError) $("hair-note").textContent =
@@ -774,20 +789,33 @@ try {
     $("detail-note").textContent = viewer.evidence.lashColor === "saved-profile-swatch-approximation"
       ? "Saved Arkhe brow maps · brown liquorice lash profile, colour preview approximate"
       : "Saved Arkhe brow maps + installed brown ombre gradient · lash shading approximate";
-  setupMotionControls(viewer, preview);
+  motionActions = new MotionActions(preview, { get idle() { return viewer!.idle; },
+    available: viewer.evidence.idle.available, error: viewer.evidence.idle.error,
+    setIdle: viewer.setIdle, setIdlePaused: viewer.setIdlePaused,
+    setIdleContributions: viewer.setIdleContributions, setBlink: viewer.setBlink,
+    animateBlink: viewer.animateBlink });
+  motionActions.restore();
+  setupMotionControls(motionActions);
+  motionActions.subscribe(persist);
   previewActions = new PreviewActions({ ...preview, surface: input("surface-controls").checked,
-    brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked }, {
+    brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked,
+    eyeShape: +shape.value, piercings: input("piercings").checked,
+    piercingStyle: $<HTMLSelectElement>("piercing-style").value,
+    piercingDefinition: $<HTMLSelectElement>("piercing-colour").value }, {
     cameraState: viewer.cameraState, front: viewer.front, setFov: viewer.setFov,
     endFovGesture: viewer.endFovGesture, restoreCamera: viewer.restoreCamera,
     setExposure: viewer.setExposure, setLightAngle: viewer.setLightAngle,
     setSurfaceControls: enabled => surface.setEnabled(enabled), setWire: viewer.setWire,
     setNormals: viewer.setNormals, setEyeOptics: viewer.setEyeOptics,
-    setHair: viewer.setHair, setDetail: viewer.setDetail,
-    availability: target => target === "hair" ? !savedV || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
+    setHair: viewer.setHair, setDetail: viewer.setDetail, setEyeShape: viewer.eyeShape,
+    setPiercings: viewer.setPiercings, setPiercingPreview: viewer.setPiercingPreview,
+    piercingOptions: () => viewer!.piercingStyles.map(style => ({ id: style.id,
+      definitions: style.choices.map(choice => choice.definition) })),
+    availability: target => target === "hair" ? !savedAppearance!.hasSavedV() || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
       : !viewer!.details[target] ? `${target} preview assets are unavailable.` : undefined,
   });
   previewActions.subscribe(persist);
-  shape.onchange = () => viewer!.eyeShape(+shape.value);
+  shape.onchange = () => previewActions!.dispatch({ kind: "preview.setEyeShape", index: +shape.value });
   input("exposure").oninput = () =>
     previewActions!.dispatch({ kind: "preview.setExposure", value: +input("exposure").value });
   input("light-angle").oninput = () =>
@@ -853,9 +881,9 @@ try {
       frameTiming:viewer!.frameTiming(),
       rasterQueue: maskClient.diagnostics(),
       previewQuality: { requestedSize: textureSize, canvases: canvases.map(c => c.width),
-        materials: viewer!.makeupDiagnostics(), assessment: qualityAssessment(), error: qualityError },
-      savedV: savedV
-        ? { gameVersion: savedV.gameVersion, evidence: savedV.evidence }
+        materials: viewer!.makeupDiagnostics(), assessment: qualityAssessment(), error: qualityActions.snapshot().error },
+      savedV: savedAppearance!.snapshot().savedV
+        ? { gameVersion: savedAppearance!.snapshot().savedV!.gameVersion, evidence: savedAppearance!.snapshot().savedV!.evidence }
         : null,
       activeMorphs: Object.entries(viewer!.head.morphTargetDictionary!)
         .filter(([n, i]) => viewer!.head.morphTargetInfluences![i] > 0)
