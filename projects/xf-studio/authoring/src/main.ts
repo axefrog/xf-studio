@@ -20,13 +20,13 @@ import { type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
 import { setupPreviewQuality } from "./preview-quality-ui";
 import type { PreviewQualityActions } from "./preview-quality-actions";
-import type { GlitterStats } from "./raster-processor";
+import { GlitterMeasurements } from "./glitter-measurements";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls } from "./path-ui";
 import type { PathCommand } from "./bezier-path";
 import type { createUVEditor } from "./uv-editor";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
-import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
+import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { createTrustedPreviewServices } from "./trusted-preview-services";
 import { ViewportAttachment } from "./viewport-attachment";
@@ -47,7 +47,6 @@ import {
 import {FLAKE_LIMITS} from "./flake-field";
 import {isDirectGlint} from "./direct-glint-settings";
 import {glitterModel, type GlitterModel} from "./glitter-model";
-import {maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const input = (id: string) => $<HTMLInputElement>(id);
@@ -68,7 +67,7 @@ const core = createTrustedAuthoringCore(workspace, {
 });
 const { document: authoring, geometry, presentation, layers: layerActions,
   recipe: recipeActions, app } = core;
-const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
+const glitterMeasurements=new GlitterMeasurements({ layers: () => authoring.recipe.layers, size: () => previewCoordinator.size });
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 let collectionApp: CollectionApplication | undefined;
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
@@ -81,13 +80,11 @@ const current = () => presentation.layer();
 function showGlitterMeasurement(){
   const layer=current();
   if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
-  const prior=glitterMeasurements.get(layer.id);
-  const valid=prior?.opticalKey===previewOpticalKey(layer,previewCoordinator.size) &&
-    prior.maskKey===maskAlphaKey(layer,previewCoordinator.size);
+  const measured=glitterMeasurements.forLayer(layer);
   const note=$("irregular-visible-note");
-  const scope=layer.flakes.count>FLAKE_LIMITS.count?"retained in the eye UV regions":"generated across the UV atlas";
-  note.textContent=valid
-    ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${previewCoordinator.size}²; these are not visible screen glints.`
+  const scope=measured?.dense?"retained in the eye UV regions":"generated across the UV atlas";
+  note.textContent=measured?.current
+    ? `${measured.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${measured.regionRetained.toLocaleString()} ${scope}. ${measured.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${previewCoordinator.size}²; these are not visible screen glints.`
     : "Calculating flakes in this painted shape. Field density is not a visible flake count.";
 }
 const currentField = () => presentation.selectedField();
@@ -259,8 +256,7 @@ const previewDevice = createBrowserPreviewDevice({
   refreshQuality: () => { refreshQuality?.(); },
   drawUV, report: status,
   measurement: (layer, size, stats) => {
-    glitterMeasurements.set(layer.id, { opticalKey: previewOpticalKey(layer, size),
-      maskKey: maskAlphaKey(layer, size), stats });
+    glitterMeasurements.record(layer, size, stats);
     if (authoring.recipe.layers[authoring.active]?.id === layer.id) showGlitterMeasurement();
   },
 });

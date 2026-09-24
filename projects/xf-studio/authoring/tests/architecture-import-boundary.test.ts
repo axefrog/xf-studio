@@ -7,7 +7,7 @@ const imports = (text: string) => [...text.matchAll(/\bfrom\s+["']([^"']+)["']/g
 test("trusted application and presentation services keep browser devices outside their import boundary", () => {
   const trusted = ["studio-application", "studio-presentation", "trusted-authoring-core",
     "trusted-studio-bootstrap", "trusted-preview-services", "collection-application",
-    "studio-file-operations", "authoring-preview-coordinator"];
+    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "makeup-dependencies"];
   for (const name of trusted) {
     const code = source(name);
     for (const dependency of imports(code))
