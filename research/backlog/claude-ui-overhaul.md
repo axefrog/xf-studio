@@ -44,6 +44,8 @@ For every pattern, give **concrete what/when composition guidance**: what inform
 
 Protect core logic through the decoupled API, a bounded presentation change set and reviewed diffs. If a new interaction genuinely needs an API extension, Claude should propose the contract change for the primary agent to implement/review; do not quietly modify persistence, material calculations or compiler behavior. A separate branch/worktree may help contain the change once the baseline is committed; do not infer that a worktree alone provides architectural separation.
 
+The [XF Studio architecture contract](../authoring/architecture-contract.md) is binding during and after this redesign. Use the trusted bootstrap and `StudioPresentationPort`; keep validation, Undo, persistence and export decisions in their owned services, and record any necessary exception with an owner and removal criterion. The style guide should teach subsequent UI work to use the same action, capability, detached-state and device-port patterns rather than introducing control-specific business logic.
+
 Completion: UI and user workflows verified in an isolated `?verify=1` draft/library, core checks still passing, dock/float/magnetic-composite/tab grouping and cursor-based snapping demonstrated, and primary-agent review confirms no unintended logic/data changes. Record the actual harness/model/reasoning setting, the triaged issue/API/category audit, light and dark screenshots, and acceptance evidence. The authoritative HTML style guide above is a required deliverable, not optional supporting art.
 
 ## Programmable actions and context menus — requested 23 September
