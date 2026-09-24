@@ -16,6 +16,9 @@ export class AuthoringDocument {
   private history: RecipeHistory;
   private listeners = new Set<(change: DocumentChange) => void>();
   private effectListeners = new Set<(effect: DocumentEffect) => void>();
+  private geometryRevision = 0;
+  private changedLayerIndex: number | undefined;
+  private changedGestureKind: string | undefined;
   constructor(initial: DocumentState) {
     const recipe = parseRecipe(initial.recipe);
     this.state = { recipe, active: clamp(initial.active, recipe.layers.length),
@@ -32,7 +35,19 @@ export class AuthoringDocument {
   private notify(change: DocumentChange) { for (const listener of this.listeners) listener(change); }
   private effect(value: DocumentEffect) { for (const listener of this.effectListeners) listener(value); }
   get recipe() { return this.state.recipe; }
-  set recipe(value: Recipe) { this.state.recipe = value; this.notify("recipe"); }
+  /** Lets detached geometry readers refresh on edits without cloning on render frames. */
+  get geometryVersion() { return { revision: this.geometryRevision, layerIndex: this.changedLayerIndex,
+    gestureKind: this.changedGestureKind }; }
+  set recipe(value: Recipe) { this.state.recipe = value; this.geometryRevision++; this.changedLayerIndex = undefined;
+    this.changedGestureKind = undefined; this.notify("recipe"); }
+  /** Atomically replace a stack or Undo result, keeping selection within the new recipe. */
+  replaceRecipe(value: Recipe, nextActive = 0) {
+    const recipe = parseRecipe(value), active = clamp(nextActive, recipe.layers.length);
+    this.state = { ...this.state, recipe, active, selected: 0,
+      fieldSelection: parseFieldSelection(this.state.fieldSelection, recipe) };
+    this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
+    this.notify("recipe");
+  }
   get active() { return this.state.active; }
   set active(value: number) { this.state.active = value; this.notify("selection"); }
   get selected() { return this.state.selected; }
@@ -40,15 +55,22 @@ export class AuthoringDocument {
   get fieldSelection() { return this.state.fieldSelection; }
   set fieldSelection(value: FieldSelection) { this.state.fieldSelection = value; this.notify("selection"); }
   /** Gesture proposals preserve the live layer identity; publish after their validated in-place write. */
-  gestureChanged(layerIndex?: number) { this.notify("recipe"); if (layerIndex !== undefined) this.effect({ kind: "gesture", layerIndex }); }
+  gestureChanged(layerIndex?: number, kind?: string) {
+    this.geometryRevision++; this.changedLayerIndex = layerIndex;
+    this.changedGestureKind = kind;
+    this.notify("recipe"); if (layerIndex !== undefined) this.effect({ kind: "gesture", layerIndex });
+  }
   /** Publish one validated action result and its rendering intent together. */
   applyActionState(next: RecipeActionState, effect: RecipeActionEffect) {
     this.state = next;
+    if (effect.kind !== "selection") { this.geometryRevision++; this.changedLayerIndex = undefined;
+      this.changedGestureKind = undefined; }
     this.notify(effect.kind === "selection" ? "selection" : "recipe");
     this.effect(effect);
   }
   publishLayer(recipe: Recipe, layerIndex: number) {
     this.state.recipe = recipe;
+    this.geometryRevision++; this.changedLayerIndex = layerIndex; this.changedGestureKind = undefined;
     this.notify("recipe");
     this.effect({ kind: "immediate", layerIndex });
   }
@@ -70,6 +92,7 @@ export class AuthoringDocument {
     this.state = { recipe, active, selected: clamp(value.selected, recipe.layers[active]?.points.length ?? 0),
       fieldSelection };
     this.history = history;
+    this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
     this.notify("restore");
   }
 }

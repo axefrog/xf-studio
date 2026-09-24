@@ -1,12 +1,13 @@
 import {
-  MAX_LAYERS,
   parseRecipe,
   type Recipe,
   type Layer,
 } from "./recipe";
 import { type LayerCommand } from "./layer-stack";
-import { applyLayerAction, layerCapability, type LayerAction } from "./editor-actions";
+import { type LayerAction } from "./editor-actions";
+import { AuthoringLayerActions } from "./authoring-layer-actions";
 import { AuthoringDocument } from "./authoring-document";
+import { AuthoringGeometry } from "./authoring-geometry";
 import { WorkspacePersistence } from "./workspace-persistence";
 import { WorkspaceComposer } from "./workspace-composer";
 import { layerList } from "./layer-ui";
@@ -72,6 +73,7 @@ const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && 
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 const authoring = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
   selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
+const geometry = new AuthoringGeometry(authoring);
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
@@ -159,7 +161,10 @@ const paintLayerList = layerList($("layers"), {
 });
 function layerCards() { paintLayerList(authoring.recipe, authoring.active); }
 function replaceRecipe(next: Recipe, nextActive = 0) {
-  authoring.recipe = next; authoring.active = Math.max(0, Math.min(nextActive, authoring.recipe.layers.length - 1)); authoring.selected = 0;
+  authoring.replaceRecipe(next, nextActive);
+  resetStackResources();
+}
+function resetStackResources() {
   maskClient.reset();
   initialOptics = [];
   // A structure change cannot reuse an in-flight mask or an old slot's pixels.
@@ -179,13 +184,9 @@ function dispatchLayer(action: LayerAction) {
   } catch (error) { status((error as Error).message); sync(); }
 }
 function applyLayerCommand(action: LayerAction) {
-  const capability = layerCapability(authoring.recipe, action);
-  if (!capability.available) throw Error(capability.reason);
-  const next = applyLayerAction(authoring.recipe, current()?.id, action);
-  checkpoint();
-  if (next.structure) replaceRecipe(next.recipe, next.active);
-  else authoring.publishLayer(next.recipe, next.changed);
+  layerActions.dispatch(action);
 }
+const layerActions = new AuthoringLayerActions(authoring, resetStackResources);
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
 $("layer-copy").onclick = () => { if (current()) changeLayers({ kind: "duplicate", id: current().id }); };
 const layerName = input("layer-name");
@@ -207,8 +208,9 @@ function sync() {
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
   $("layer-properties").inert = !l;
   $<HTMLButtonElement>("export").disabled = !l;
-  $<HTMLButtonElement>("layer-add").disabled = authoring.recipe.layers.length >= MAX_LAYERS;
-  $<HTMLButtonElement>("layer-copy").disabled = !l || authoring.recipe.layers.length >= MAX_LAYERS;
+  $<HTMLButtonElement>("layer-add").disabled = !app.capability({ kind: "layer.edit", command: { kind: "add" } }).available;
+  $<HTMLButtonElement>("layer-copy").disabled = !l || !app.contextCapability({ kind: "layer", id: l.id },
+    { kind: "layer.edit", command: { kind: "duplicate", id: l.id } }).available;
   $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
   input("layer-name").value = l.name;
@@ -270,7 +272,8 @@ function sync() {
         ? `${(value * 100).toFixed(2)}% UV`
         : `${Math.round(value * 100)}%`;
   }
-  $<HTMLButtonElement>("remove").disabled = l.points.length <= 3;
+  $<HTMLButtonElement>("remove").disabled = !app.contextCapability({ kind: "point", layerId: l.id, index: authoring.selected },
+    { kind: "point.remove", layerId: l.id, index: authoring.selected }).available;
   $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   layerCards();
 }
@@ -370,7 +373,7 @@ const recipeActions = new RecipeActions(
     selected: authoring.selected, fieldSelection: authoring.fieldSelection }),
   (next, effect) => authoring.applyActionState(next, effect),
   authoring, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
-  i => authoring.gestureChanged(i));
+  (i, kind) => authoring.gestureChanged(i, kind));
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -496,12 +499,12 @@ $("remove").onclick = () => {
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
 }, {
-  recipe: () => authoring.recipe, layer: current, selected: () => authoring.selected,
+  recipe: () => geometry.recipe(), layer: () => geometry.layer(), selected: () => authoring.selected,
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
   begin: () => { const layer = current(); if (layer) app.beginGesture("uv", layer.id); },
-  apply: action => app.applyGesture("uv", action),
+  apply: action => { const accepted = app.applyGesture("uv", action); if (accepted) geometry.recipe(); return accepted; },
   cancel: () => app.endGesture("uv", true), finish: () => app.endGesture("uv"), persist, message: status,
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
@@ -730,12 +733,12 @@ try {
   viewer.setLightAngle(preview.lightAngle);
   $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
   const surface = createSurfaceEditor(viewer, {
-    layer: current,
+    layer: () => geometry.layer(),
     selected: () => authoring.selected,
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
     begin: () => { const layer = current(); if (layer) app.beginGesture("surface", layer.id); },
-    apply: action => app.applyGesture("surface", action),
+    apply: action => { const accepted = app.applyGesture("surface", action); if (accepted) geometry.recipe(); return accepted; },
     cancel: () => app.endGesture("surface", true),
     finish: () => app.endGesture("surface"),
     message: status,

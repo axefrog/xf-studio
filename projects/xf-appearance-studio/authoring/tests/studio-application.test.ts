@@ -114,3 +114,21 @@ test("descriptors cover every public command, including nested variants and stru
   expect(app.requestCapability({ kind: "save" }))
     .toMatchObject({ available: false, code: "not_ready" });
 });
+
+test("context queries validate target, payload and live enum choices for menus and shortcuts", () => {
+  const { app, document } = fixture(), id = document.recipe.layers[0].id;
+  const target = { kind: "layer" as const, id };
+  expect(app.contextCapability(target, { kind: "layer.setOpacity", layerId: id, opacity: 1.1 }))
+    .toMatchObject({ available: false, code: "limit" });
+  expect(app.contextCapability(target, { kind: "layer.setOpacity", layerId: "wrong", opacity: .5 }))
+    .toMatchObject({ available: false, code: "missing_target" });
+  expect(app.contextCapability(target, { kind: "point.remove", layerId: id, index: 0 }))
+    .toMatchObject({ available: false, code: "invalid_value" });
+  const finishes = app.choicesFor(target, "layer.setFinish", "finish");
+  expect(finishes.find(choice => choice.value === "glitter")?.capability.available).toBe(true);
+  const models = app.choicesFor(target, "glitter.selectModel", "model");
+  expect(models.find(choice => choice.value === "fine")?.capability)
+    .toMatchObject({ available: false, code: "incompatible_mode" });
+  expect(app.choicesFor({ kind: "viewport" }, "quality.set", "size").map(choice => choice.value))
+    .toEqual([512, 1024, 2048, 4096]);
+});

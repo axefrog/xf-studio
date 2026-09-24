@@ -162,7 +162,7 @@ export class RecipeActions {
   private listeners = new Set<(effect: RecipeActionEffect) => void>();
   constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
     private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
-    private gestureChanged?: (layerIndex: number) => void) {}
+    private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"]) => void) {}
   snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
   capability(action: RecipeAction) { return recipeActionCapability(this.read(), action); }
   subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -183,7 +183,7 @@ export class RecipeActions {
     const layer = state.recipe.layers[index];
     if (!layer || layer !== action.expectedLayer) return false;
     if (!applyGestureEdit(action, state.recipe.schema)) return false;
-    this.gestureChanged?.(index);
+    this.gestureChanged?.(index, action.kind);
     const effect: RecipeActionEffect = { kind: "scheduled", layerIndex: index };
     for (const listener of this.listeners) listener(effect);
     return true;

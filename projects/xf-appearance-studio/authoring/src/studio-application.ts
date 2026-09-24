@@ -10,7 +10,8 @@ import type { QualityAction, PreviewQualityActions } from "./preview-quality-act
 import type { Layer, Point, WarpField } from "./recipe";
 import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
 import type { SavedAppearanceAction, SavedAppearanceActions } from "./saved-appearance-actions";
-import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS } from "./studio-action-descriptors";
+import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
+  type ValueSchema } from "./studio-action-descriptors";
 
 export type StudioAction = RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
@@ -18,7 +19,7 @@ export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
   { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" };
 export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
-  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable";
+  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
 export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
   undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
@@ -78,12 +79,12 @@ export class StudioApplication {
     }));
   }
   targetCapability(target: StudioTarget): StudioCapability {
-    const s = this.services, doc = s.document.snapshot();
-    if (target.kind === "layer" && !doc.recipe.layers.some(layer => layer.id === target.id))
+    const s = this.services, recipe = s.document.recipe;
+    if (target.kind === "layer" && !recipe.layers.some(layer => layer.id === target.id))
       return missingTarget("That layer no longer exists.");
-    if (target.kind === "point" && !doc.recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
+    if (target.kind === "point" && !recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
       return missingTarget("That control point no longer exists.");
-    if (target.kind === "field" && !doc.recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
+    if (target.kind === "field" && !recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
       return missingTarget("That warp control no longer exists.");
     if (target.kind === "preset" && !s.collection?.view().draft?.collection.presets.some(preset => preset.id === target.id))
       return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");
@@ -91,6 +92,50 @@ export class StudioApplication {
     if ((target.kind === "collection" || target.kind === "preset") && s.collection?.view().busy)
       return { available: false, code: "busy", reason: "A collection request is in progress." };
     return { available: true };
+  }
+  /** Validate a concrete target/payload pair before a menu, shortcut or form dispatches it. */
+  contextCapability(target: StudioTarget, action: StudioAction): StudioCapability {
+    const descriptor = ACTION_DESCRIPTORS[action.kind];
+    if (!(descriptor.scope as readonly string[]).includes(target.kind))
+      return { available: false, code: "invalid_value", reason: "This command does not apply to that target." };
+    const exists = this.targetCapability(target);
+    if (!exists.available) return exists;
+    const payload = action as unknown as Record<string, unknown>;
+    const command = payload.command && typeof payload.command === "object"
+      ? payload.command as Record<string, unknown> : undefined;
+    const flattened = { ...payload, ...command };
+    const targetId = target.kind === "layer" ? target.id : target.kind === "point" || target.kind === "field"
+      ? target.layerId : target.kind === "preset" ? target.id : undefined;
+    if (targetId && (typeof flattened.layerId === "string" && flattened.layerId !== targetId ||
+      typeof flattened.id === "string" && flattened.id !== (target.kind === "field" ? target.id : targetId) ||
+      typeof flattened.fieldId === "string" && target.kind === "field" && flattened.fieldId !== target.id ||
+      typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
+      return { available: false, code: "missing_target", reason: "The command targets a different item." };
+    for (const [name, schema] of Object.entries(descriptor.payload)) {
+      const issue = fieldIssue(flattened[name], schema);
+      if (issue) return issue;
+    }
+    const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
+    const variantFields = variant && descriptor.variants?.[String(variant)]?.payload;
+    if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
+      const issue = fieldIssue(flattened[name], schema);
+      if (issue) return issue;
+    }
+    return this.capability(action);
+  }
+  /** Enumerated values and their live capability for a concrete target. */
+  choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
+    base: Record<string, unknown> = {}) {
+    const schema = ACTION_DESCRIPTORS[kind].payload[field];
+    if (!schema?.values) return [];
+    const targetPayload = target.kind === "layer" ? { layerId: target.id, id: target.id } :
+      target.kind === "point" ? { layerId: target.layerId, index: target.index } :
+      target.kind === "field" ? { layerId: target.layerId, fieldId: target.id } :
+      target.kind === "preset" ? { id: target.id } : {};
+    return schema.values.map(value => {
+      const action = { kind, ...targetPayload, ...base, [field]: value } as StudioAction;
+      return { value, action, capability: this.contextCapability(target, action) };
+    });
   }
   snapshot() {
     const s = this.services;
@@ -221,6 +266,25 @@ export class StudioApplication {
     if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
     this.gesture = undefined; this.notify();
   }
+}
+function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | undefined {
+  if (value === undefined || value === null) return schema.required
+    ? { available: false, code: "needs_input", reason: "This command needs a value." } : undefined;
+  const good = schema.type === "enum" ? schema.values?.includes(value as string | number) :
+    schema.type === "integer" ? Number.isInteger(value) :
+    schema.type === "number" ? typeof value === "number" && Number.isFinite(value) :
+    schema.type === "number|string" ? typeof value === "string" || typeof value === "number" && Number.isFinite(value) :
+    schema.type === "string" ? typeof value === "string" :
+    schema.type === "boolean" ? typeof value === "boolean" :
+    schema.type === "bytes" ? value instanceof Uint8Array || value instanceof ArrayBuffer :
+    typeof value === "object";
+  if (!good) return { available: false, code: "invalid_value", reason: "The value has the wrong type or choice." };
+  if (typeof value === "number" && (schema.min !== undefined && value < schema.min ||
+    schema.max !== undefined && value > schema.max))
+    return { available: false, code: "limit", reason: "The value is outside the supported range." };
+  if (typeof value === "string" && (schema.minLength !== undefined && value.length < schema.minLength ||
+    schema.maxLength !== undefined && value.length > schema.maxLength))
+    return { available: false, code: "limit", reason: "The text length is outside the supported range." };
 }
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
