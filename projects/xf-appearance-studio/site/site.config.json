@@ -8,7 +8,7 @@
   "releaseStatus": "unreleased",
   "nav": [
     { "id": "overview", "label": "Overview", "href": "./" },
-    { "id": "capabilities", "label": "Capabilities", "href": "./#capabilities" },
+    { "id": "eye-makeup", "label": "Eye makeup", "href": "./#eye-makeup" },
     { "id": "status", "label": "Status", "href": "./#status" },
     { "id": "roadmap", "label": "Directions", "href": "./#directions" },
     { "id": "credits", "label": "Credits", "href": "credits.html" }

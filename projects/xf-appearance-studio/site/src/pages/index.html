@@ -1,23 +1,24 @@
 <!--page {
-  "title": "XF Studio — eye-makeup authoring for Cyberpunk 2077",
-  "description": "XF Studio is an in-development local tool for designing layered eye-makeup presets on V's head and compiling a collection into mod files for one in-game selector. No public release yet.",
+  "title": "XF Studio — a customisation studio for Cyberpunk 2077",
+  "description": "XF Studio is an in-development local studio for customising Cyberpunk 2077, starting with your own V. Eye makeup is its first working feature. No public release yet.",
   "nav": "overview"
 } -->
 <section class="hero" aria-labelledby="hero-title" id="overview">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">Eye-makeup authoring for Cyberpunk 2077</p>
-      <h1 id="hero-title">Design eye makeup for V, layer by layer.</h1>
-      <p class="lede">XF Studio is a local authoring tool for building complete eye-makeup presets on V’s deforming head, keeping them in a private library, and compiling a chosen collection into mod files for a single in-game selector.</p>
+      <p class="eyebrow">Customisation studio for Cyberpunk 2077</p>
+      <h1 id="hero-title">Customise your game, starting with your own V.</h1>
+      <p class="lede">XF Studio is a local studio for customising Cyberpunk 2077. It begins with your own V and is intended to grow into other areas of the game. Its first working feature is eye makeup: complete layered looks designed on V’s deforming head and compiled into mod files for one in-game selector.</p>
       <div class="release-status" data-release-status>
         <span class="tag dev">In development</span>
-        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source, and the mod files it builds have not yet been tested in the game.</p>
+        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source, and the eye-makeup mod files it builds have not yet been tested in the game.</p>
       </div>
       <div class="hero-actions">
         <a class="btn primary" href="#capabilities">See what works today</a>
         <a class="btn" href="{{repo}}"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/></svg>View the source</a>
       </div>
-      <dl class="spec-strip" aria-label="At a glance">
+      <p class="spec-title" id="spec-title">Eye makeup at a glance</p>
+      <dl class="spec-strip" aria-labelledby="spec-title">
         <div><dt>7</dt><dd>finish families in the preview</dd></div>
         <div><dt>32</dt><dd>layers per preset, current preview budget</dd></div>
         <div><dt>105</dt><dd>facial morphs deforming the preview head</dd></div>
@@ -89,17 +90,48 @@
           <li><span class="swatch wash" aria-hidden="true"></span><span>Lid wash</span><span class="finish">Satin</span></li>
         </ol>
       </div>
-      <figcaption class="stage-caption">Layers render bottom to top and are listed top first, as in the Studio. The selected layer shows its Bézier anchors and tangent handles.</figcaption>
+      <figcaption class="stage-caption">Eye makeup, the first feature. Layers render bottom to top and are listed top first, as in the Studio; the selected layer shows its Bézier anchors and tangent handles.</figcaption>
     </figure>
   </div>
 </section>
 
-<section class="section alt" id="how-it-works" aria-labelledby="how-title">
+<section class="section alt" id="studio" aria-labelledby="studio-title" data-future>
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">01</span>How it works</p>
+      <p class="eyebrow"><span class="num">01</span>The studio</p>
+      <h2 id="studio-title">Built to grow, one area at a time</h2>
+      <p class="lede">XF Studio is meant to become one place for customising many parts of Cyberpunk 2077. It starts with the character you already play: the preview reads your V’s facial shape from your own save. Eye makeup is the first area that works. Each further area is discussed before any building starts, and none has a date.</p>
+    </header>
+    <ol class="steps" aria-label="Scope, from today outward">
+      <li class="step current">
+        <span class="step-num">Now</span>
+        <h3>Eye makeup</h3>
+        <p>Complete layered looks designed on your V’s head, kept in a local library and compiled into mod files for one in-game selector.</p>
+        <span class="tag ok">Works locally</span>
+      </li>
+      <li class="step target">
+        <span class="step-num">Later</span>
+        <h3>More of your V</h3>
+        <p>Piercings, eyebrows, cheek makeup, hair, expressions, tattoos and other character-creator choices are under consideration.</p>
+        <span class="tag later">Discussion first</span>
+      </li>
+      <li class="step target">
+        <span class="step-num">Longer term</span>
+        <h3>Beyond V</h3>
+        <p>Other areas of the game. Quest design is one possibility the broader XF Studio name leaves room for.</p>
+        <span class="tag later">Discussion first</span>
+      </li>
+    </ol>
+    <p class="section-note">Brows, lashes, hair and piercings already appear in the preview, but only as context for eye makeup, not as editors. <a href="#directions">Directions</a> has the detail.</p>
+  </div>
+</section>
+
+<section class="section" id="eye-makeup" aria-labelledby="how-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">02</span>Eye makeup: how it works</p>
       <h2 id="how-title">From a blank layer to one in-game choice</h2>
-      <p class="lede">You design complete looks in the Studio. The game only needs to offer one selector that switches between them, instead of separate menus for every colour, design and finish.</p>
+      <p class="lede">You design complete eye-makeup looks in the Studio. The game only needs to offer one selector that switches between them, instead of separate menus for every colour, design and finish.</p>
     </header>
     <ol class="steps">
       <li class="step">
@@ -130,12 +162,12 @@
   </div>
 </section>
 
-<section class="section" id="capabilities" aria-labelledby="capabilities-title">
+<section class="section alt" id="capabilities" aria-labelledby="capabilities-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">02</span>Capabilities</p>
+      <p class="eyebrow"><span class="num">03</span>Eye makeup today</p>
       <h2 id="capabilities-title">What works today</h2>
-      <p class="lede">Everything here is implemented and exercised in the local prototype. It is not a released product, and the browser preview approximates the game’s renderer rather than reproducing it.</p>
+      <p class="lede">Every eye-makeup capability here is implemented and exercised in the local prototype. It is not a released product, and the browser preview approximates the game’s renderer rather than reproducing it.</p>
     </header>
     <ul class="cards">
       <li class="card">
@@ -185,14 +217,14 @@
       <li class="finish"><span class="finish-swatch fx-glossy" aria-hidden="true"></span><h4>Glossy / wet look</h4><p>A smooth, wet-looking shine over colour.</p><span class="tag study">Preview study</span></li>
       <li class="finish"><span class="finish-swatch fx-shift" aria-hidden="true"></span><h4>Colour-shifting</h4><p>Duochrome and multichrome colour that changes with viewing angle.</p><span class="tag study">Preview study</span></li>
     </ul>
-    <p class="swatch-note">Swatches are CSS illustrations of each intended look, not Studio renders or game captures. “Preview + export” means Check and Build can package the layer; “Preview study” layers are omitted from packages, and Check says so.</p>
+    <p class="section-note">Swatches are CSS illustrations of each intended look, not Studio renders or game captures. “Preview + export” means Check and Build can package the layer; “Preview study” layers are omitted from packages, and Check says so.</p>
   </div>
 </section>
 
-<section class="section alt" id="status" aria-labelledby="status-title">
+<section class="section" id="status" aria-labelledby="status-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">03</span>Status</p>
+      <p class="eyebrow"><span class="num">04</span>Status</p>
       <h2 id="status-title">Where the project stands</h2>
       <p class="lede">Reviewed <time datetime="{{statusReviewedIso}}">{{statusReviewed}}</time>. The detailed, evidence-linked record is in the <a href="{{blob}}/docs/status.md">repository’s status document</a>.</p>
     </header>
@@ -200,7 +232,7 @@
       <div class="status-col">
         <h3><span class="tag ok">Established</span></h3>
         <ul class="checklist done">
-          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A working local prototype</strong> for editable layered presets, the local library and portable files.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A working local prototype</strong> for editable layered eye-makeup presets, the local library and portable files.</span></li>
           <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>An offline package pipeline</strong> that filters, compiles and independently verifies private mod candidates.</span></li>
           <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A preview head and eye plate matched to the game’s geometry,</strong> keeping native skin weights and every facial morph.</span></li>
           <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Matte, Satin and Metallic layers</strong> can be packaged through a provisional material adapter.</span></li>
@@ -227,11 +259,11 @@
   </div>
 </section>
 
-<section class="section" id="directions" aria-labelledby="directions-title">
+<section class="section alt" id="directions" aria-labelledby="directions-title" data-future>
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">04</span>Directions</p>
-      <h2 id="directions-title">Where it could go</h2>
+      <p class="eyebrow"><span class="num">05</span>Directions</p>
+      <h2 id="directions-title">Where the studio could go</h2>
       <p class="lede">Eye makeup comes first. Everything beyond it is a direction rather than a commitment: each area is discussed before any building starts, and none has a date.</p>
     </header>
     <div class="subhead"><h3>Next for eye makeup</h3><p>Active work, in no guaranteed order.</p></div>
@@ -242,24 +274,27 @@
       <li><strong>A redesigned workspace</strong><p>Dockable, floating and tabbed panels, with light and dark themes that follow the system by default.</p></li>
       <li><strong>Library tools</strong><p>Visible revision history and restore, backups, thumbnails and search.</p></li>
     </ol>
-    <div class="subhead"><h3>Later areas under consideration</h3><p>Roughly the order in which they may be explored. Existing brows, lashes, hair and piercings in the preview are context only, not editors.</p></div>
+    <div class="subhead"><h3>More of your V</h3><p>Later areas under consideration, roughly in the order they may be explored. Existing brows, lashes, hair and piercings in the preview are context only, not editors.</p></div>
     <ul class="futures">
-      <li class="future"><h4>Piercings and earrings</h4><p>Jewellery that follows facial deformation.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Piercings and earrings</h4><p>Jewellery that follows facial deformation. Early design research exists; there is no editor.</p><span class="tag later">Discussion first</span></li>
       <li class="future"><h4>Eyebrows</h4><p>Brow shape and colour authoring.</p><span class="tag later">Discussion first</span></li>
       <li class="future"><h4>Cheek makeup</h4><p>Extending layered makeup beyond the eyes.</p><span class="tag later">Discussion first</span></li>
       <li class="future"><h4>Hair</h4><p>Beyond today’s optional preview context.</p><span class="tag later">Discussion first</span></li>
       <li class="future"><h4>Expressions and idles</h4><p>Static and animated facial expressions, and varied idle animations.</p><span class="tag later">Discussion first</span></li>
-      <li class="future"><h4>Tattoos</h4><p>Full-body designs at that stage.</p><span class="tag later">Discussion first</span></li>
-      <li class="future"><h4>Broader appearance</h4><p>Appearance authoring beyond individual features.</p><span class="tag later">Discussion first</span></li>
-      <li class="future"><h4>Quest design</h4><p>A longer-term possibility behind the broader XF Studio name.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Tattoos</h4><p>Full-body designs, with a full-body preview at that stage.</p><span class="tag later">Discussion first</span></li>
+    </ul>
+    <div class="subhead"><h3>Wider customisation</h3><p>Longer-term directions behind the broader XF Studio name.</p></div>
+    <ul class="futures">
+      <li class="future"><h4>Character-creator choices</h4><p>Editing the options your installed game and mods add to the character creator. Read-only research is under way.</p><span class="tag later">Discussion first</span></li>
+      <li class="future"><h4>Other areas of the game</h4><p>Customisation beyond your character. Quest design is one possibility.</p><span class="tag later">Discussion first</span></li>
     </ul>
   </div>
 </section>
 
-<section class="section alt" id="principles" aria-labelledby="principles-title">
+<section class="section" id="principles" aria-labelledby="principles-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">05</span>Principles</p>
+      <p class="eyebrow"><span class="num">06</span>Principles</p>
       <h2 id="principles-title">How the project works</h2>
     </header>
     <ul class="principles">
@@ -271,10 +306,10 @@
   </div>
 </section>
 
-<section class="section" id="docs" aria-labelledby="docs-title">
+<section class="section alt" id="docs" aria-labelledby="docs-title">
   <div class="wrap split">
     <div class="prose">
-      <p class="eyebrow"><span class="num">06</span>Community and documentation</p>
+      <p class="eyebrow"><span class="num">07</span>Community and documentation</p>
       <h2 id="docs-title">Built on what the community has learned</h2>
       <p>XF Studio stands on ArchiveXL, WolvenKit, the Cyberpunk 2077 Modding Wiki and the resource work of many mod authors. The credits page summarises who taught us what; the repository keeps the full learning record.</p>
       <a class="btn" href="{{root}}credits.html">Read the credits</a>
@@ -285,7 +320,7 @@
       <li><a class="doc-link" href="{{blob}}/research/authoring/studio-to-mod-pipeline.md"><strong>From collection to mod files</strong><span>Illustrated guide to filtering, compiling and verification.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
       <li><a class="doc-link" href="{{blob}}/research/materials/makeup-finish-taxonomy.md"><strong>Finish taxonomy</strong><span>What each finish family is meant to look like.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
       <li><a class="doc-link" href="{{blob}}/research/authoring/architecture-contract.md"><strong>Architecture contract</strong><span>How the Studio separates behaviour from presentation.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
-      <li><a class="doc-link" href="{{blob}}/docs/validation.md"><strong>Validation workflow</strong><span>Offline checks first, then batched in-game evidence.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/projects/xf-appearance-studio/data/product-direction.md"><strong>Product direction</strong><span>The preset-and-selector model, and the order of later areas.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
     </ul>
   </div>
 </section>

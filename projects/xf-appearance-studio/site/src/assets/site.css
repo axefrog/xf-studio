@@ -161,7 +161,8 @@ time { white-space: nowrap; }
 .release-status p { color: var(--text-muted); font-size: .9375rem; }
 .release-status strong { color: var(--text); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.75rem; }
-.spec-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 2.25rem; border: 1px solid var(--line); background: var(--line); max-width: 38rem; }
+.spec-title { margin-top: 2.25rem; font: 600 .75rem/1.2 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted); }
+.spec-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: .625rem; border: 1px solid var(--line); background: var(--line); max-width: 38rem; }
 .spec-strip div { background: var(--bg-app); padding: .75rem .875rem; }
 @media (min-width: 40rem) and (max-width: 59.99rem) { .spec-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .spec-strip dt { font: 600 1.5rem/1.1 var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
@@ -205,7 +206,9 @@ time { white-space: nowrap; }
 .step h3 { font-size: 1.25rem; font-weight: 620; }
 .step p { color: var(--text-muted); font-size: .9375rem; }
 .step .tag { align-self: flex-start; margin-top: auto; }
-.step.target { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+.step.target, .section.alt .step.target { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+/* Scope: the area available today carries the live-state cyan edge; later areas stay dashed. */
+.step.current { box-shadow: inset 0 2px 0 var(--signal); }
 
 /* Capability cards */
 .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); list-style: none; }
@@ -227,7 +230,7 @@ time { white-space: nowrap; }
 .finish h4 { font-size: 1rem; font-weight: 620; margin-top: .25rem; }
 .finish p { font-size: .875rem; color: var(--text-muted); line-height: 1.45; }
 .finish .tag { align-self: flex-start; margin-top: auto; }
-.swatch-note { margin-top: 1.25rem; font-size: .8438rem; color: var(--text-muted); max-width: 60rem; }
+.section-note { margin-top: 1.25rem; font-size: .8438rem; color: var(--text-muted); max-width: 60rem; }
 /* Illustrative CSS swatches: content colours, identical in both themes. */
 .fx-matte { background: linear-gradient(180deg, oklch(.5 .09 345), oklch(.45 .085 345)); }
 .fx-satin { background: radial-gradient(130% 110% at 28% 18%, oklch(.72 .07 30) 0%, oklch(.58 .08 25) 38%, oklch(.43 .07 22) 100%); }
@@ -284,7 +287,7 @@ time { white-space: nowrap; }
 .next-list strong { font-weight: 620; }
 .next-list p { grid-column: 2; color: var(--text-muted); font-size: .9375rem; }
 .section.alt .next-list li { background: var(--bg-app); }
-.futures { list-style: none; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr)); }
+.futures { list-style: none; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); }
 .future { display: flex; flex-direction: column; gap: .5rem; padding: 1.125rem 1.125rem 1rem; border: 1px dashed var(--line-strong); }
 .future h4 { font-size: 1.0625rem; font-weight: 620; }
 .future p { color: var(--text-muted); font-size: .875rem; }

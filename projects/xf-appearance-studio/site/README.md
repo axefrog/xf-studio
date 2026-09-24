@@ -1,6 +1,6 @@
 # XF Studio public site
 
-The public face of XF Studio: a small static site describing the product, its verified current capabilities, honest status, future directions, documentation and community credits. It deploys to GitHub Pages at **https://axefrog.github.io/xf-studio/** once Pages is enabled (see [Repository settings](#repository-settings-one-time)).
+The public face of XF Studio: a small static site describing the product, its verified current capabilities, honest status, future directions, documentation and community credits. It presents XF Studio as a customisation studio for Cyberpunk 2077 that starts with the user's own V and may grow into other areas of the game, with eye makeup as its first working feature. It deploys to GitHub Pages at **https://axefrog.github.io/xf-studio/** once Pages is enabled (see [Repository settings](#repository-settings-one-time)).
 
 The site is independent of the Studio app. It has no dependencies, imports nothing from `../authoring`, and has its own `package.json`, tests and ignore rules. The deploy workflow runs only when files here (or the workflow itself) change, so local Studio builds and tests are unaffected. It uses the Studio's visual language, copied rather than imported from the [interface style guide](../authoring/public/style-guide.html), so either can change without breaking the other.
 
@@ -11,7 +11,7 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 | Command | What it does |
 |---|---|
 | `bun run build` | Renders `src/` to `dist/` (ignored). `SITE_BASE_URL` overrides the base URL; CI sets it from `actions/configure-pages`. |
-| `bun run check` | Static checks over `dist/` (structure, accessibility basics, links, content policy, release-claim guard). |
+| `bun run check` | Static checks over `dist/` (structure, accessibility basics, links, content policy, release-claim and no-dates guards). |
 | `bun test` | Build/check unit tests, including negative tests proving each guard fires. |
 | `bun run verify` | Build, check and test: the same gates CI runs. |
 | `bun run preview` | Build, then serve at `http://127.0.0.1:4400/xf-studio/` with the Pages base path and 404 behaviour. |
@@ -37,7 +37,8 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 
 - Describe only capabilities that are implemented and verified. Say *works locally*, *verified offline* or *preview study*, and keep previewed, packaged, verified and game-tested as separate claims.
 - Label research and in-development work, and never state or imply a release, download or in-game test that has not happened. While `releaseStatus` is `unreleased`, the home page must keep its visible `data-release-status` statement, and the check rejects links to releases or packages and phrases such as “download now” or “tested in game” (`UNRELEASED_CLAIMS` in `tools/check.ts`). When a real release exists, change `releaseStatus` together with the wording.
-- Future directions carry no dates, and each later authoring area requires discussion before it is built.
+- **Positioning.** XF Studio is a studio for customising many parts of Cyberpunk 2077, starting with the user's own V and potentially expanding into other areas of the game. Eye makeup is its first working feature and today's focus, not the product's definition or limit, so keep feature-specific wording out of the page title and hero heading. Present every other area as a direction under discussion, never as a feature, and label eye-makeup-specific sections, numbers and illustrations as such. A unit test pins the title, hero heading and description to this positioning; change it only with a deliberate positioning decision.
+- Future directions carry no dates or schedule promises, and each later area requires discussion before it is built. Mark vision and direction sections with `data-future`. The check rejects years, months, quarters and schedule words such as “soon”, “upcoming” or “will ship” inside them (`FUTURE_SCHEDULE`), “coming soon” anywhere while unreleased, and a home page with no `data-future` section.
 - Repository links use `{{blob}}/<path>`. The check verifies that every such target is a **tracked** file, so ignored local files cannot slip in as links.
 
 **Credits.** `credits.html` summarises [docs/community-credits.md](../../../docs/community-credits.md), which remains authoritative. When that record gains or corrects an entry, update the public summary in the same checkpoint: copy names exactly as evidenced, never guess authorship, keep the kind of use explicit (learning, dependency, private local preview) and keep unresolved attributions visible. The site's own design and code came from the Studio style guide and official GitHub documentation, not from community sources.
@@ -108,7 +109,7 @@ These are manual owner decisions, not performed by any script here:
 - deployments time out after 10 minutes;
 - soft limits of 100 GB bandwidth per month and 10 builds per hour.
 
-Pages must not be used for commercial transactions, SaaS or sensitive data. The site uses about 83 KiB.
+Pages must not be used for commercial transactions, SaaS or sensitive data. The site uses about 86 KiB.
 
 **Troubleshooting.**
 

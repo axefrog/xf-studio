@@ -40,6 +40,21 @@ describe("build", () => {
     expect(readFileSync(join(result.outDir, "sitemap.xml"), "utf8")).not.toContain("404");
   });
 
+  test("positions XF Studio as a broader customisation studio, with eye makeup as its first feature", () => {
+    const { outDir } = fresh();
+    const html = readFileSync(join(outDir, "index.html"), "utf8");
+    const meta = (pattern: RegExp) => pattern.exec(html)?.[1] ?? "";
+    const title = meta(/<title>([^<]*)<\/title>/);
+    const description = meta(/<meta name="description" content="([^"]*)"/);
+    const h1 = meta(/<h1 id="hero-title">([^<]*)<\/h1>/);
+    // The product is not defined by its first feature; eye makeup is presented as today's focus.
+    for (const text of [title, h1]) expect(text).not.toMatch(/eye.?makeup/i);
+    expect(title).toContain("Cyberpunk 2077");
+    expect(description).toMatch(/starting with your own V/);
+    expect(description).toMatch(/eye makeup is its first working feature/i);
+    expect(html).toContain('href="./#eye-makeup"');
+  });
+
   test("placeholders and page headers fail loudly", () => {
     expect(() => fill("{{nope}}", {}, "x.html")).toThrow("unknown placeholder {{nope}}");
     expect(() => parsePage("<p>no header</p>", "x.html")).toThrow("missing <!--page");
@@ -94,6 +109,17 @@ describe("checks", () => {
     const found = await messages(outDir);
     expect(found.some(m => m.includes("[data-release-status]"))).toBe(true);
     expect(found.some(m => m.includes("“download now”"))).toBe(true);
+  });
+
+  test("future directions carry no dates or schedule promises, and the home page keeps them marked", async () => {
+    const { outDir } = fresh();
+    const file = join(outDir, "index.html");
+    const html = readFileSync(file, "utf8");
+    writeFileSync(file, html.replace("Quest design is one possibility.", "Quest design is coming in 2027."));
+    const dated = await messages(outDir);
+    expect(dated.some(m => m.includes("contains a date or schedule: “coming”"))).toBe(true);
+    writeFileSync(file, html.replaceAll(" data-future", ""));
+    expect((await messages(outDir)).some(m => m.includes("[data-future]"))).toBe(true);
   });
 
   test("flags accessibility and CSP regressions", async () => {

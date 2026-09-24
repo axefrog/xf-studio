@@ -1,7 +1,7 @@
 /**
  * Static checks over a built site: bun tools/check.ts [distDir]
  * Structure and accessibility basics, link integrity (including repository links against tracked files),
- * the content/asset policy and the release-claim guard. Exits non-zero on any issue.
+ * the content/asset policy, the release-claim guard and the no-dates guard for future directions. Exits non-zero on any issue.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
@@ -21,7 +21,10 @@ const PRIVATE_PATH = /\b[A-Za-z]:[\\/](?:Dev|Games|Users|Program Files|RedModdin
 const DOWNLOADABLE = /\.(?:zip|7z|rar|archive|xl|exe|msi|dmg|glb|gltf|blend|xbm|mesh|sav)$/i;
 /** Phrases that would imply a release, download or in-game verification that does not exist yet. */
 export const UNRELEASED_CLAIMS = ["download now", "now available", "available now", "install now", "get it now", "latest release",
-  "release notes", "tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
+  "release notes", "coming soon", "tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
+/** Dates and schedule language that future-direction copy ([data-future]) must not use: directions are discussed, not scheduled.
+ *  “May” is omitted because it is also the modal verb, and the game's title is not a year. */
+export const FUTURE_SCHEDULE = /\b(?:(?<!Cyberpunk )(?:19|20)\d{2}|Q[1-4]|H[12]|January|February|March|April|June|July|August|September|October|November|December|soon|upcoming|coming|imminent|this (?:week|month|year|quarter)|next (?:week|month|year|quarter|release|update|version)|by the end of|scheduled|due (?:in|by|for)|(?:is|are) planned for|will (?:ship|launch|arrive|land|release|be (?:released|available|ready|added)))\b/i;
 
 export function trackedRepoFiles(): Set<string> | null {
   const result = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
@@ -40,12 +43,12 @@ type PageScan = {
   lang: string | null; title: string; description: string | null; canonical: string | null; robots: string | null;
   csp: boolean; charset: boolean; viewport: boolean; headings: number[]; ids: string[];
   links: { attr: string; value: string; tag: string }[]; text: string; releaseStatus: boolean; main: boolean;
-  problems: string[]; labelledBy: string[];
+  problems: string[]; labelledBy: string[]; futureSections: number; futureText: string;
 };
 
 async function scanPage(html: string): Promise<PageScan> {
   const scan: PageScan = { lang: null, title: "", description: null, canonical: null, robots: null, csp: false, charset: false, viewport: false,
-    headings: [], ids: [], links: [], text: "", releaseStatus: false, main: false, problems: [], labelledBy: [] };
+    headings: [], ids: [], links: [], text: "", releaseStatus: false, main: false, problems: [], labelledBy: [], futureSections: 0, futureText: "" };
   const named: { what: string; label: string | null; text: string }[] = [];
   const nameHandler = (what: string) => ({
     element(el: HTMLRewriterTypes.Element) {
@@ -76,6 +79,7 @@ async function scanPage(html: string): Promise<PageScan> {
     .on("[href]", { element(el) { scan.links.push({ attr: "href", value: el.getAttribute("href")!, tag: el.tagName }); } })
     .on("[src]", { element(el) { scan.links.push({ attr: "src", value: el.getAttribute("src")!, tag: el.tagName }); } })
     .on("[data-release-status]", { element() { scan.releaseStatus = true; } })
+    .on("[data-future]", { element() { scan.futureSections++; scan.futureText += " "; }, text(chunk) { scan.futureText += chunk.text; } })
     .on("[aria-labelledby]", { element(el) { scan.labelledBy.push(...el.getAttribute("aria-labelledby")!.split(/\s+/)); } })
     .on("*", { element(el) {
       for (const [name] of el.attributes) {
@@ -156,6 +160,9 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
       for (const phrase of UNRELEASED_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}” while releaseStatus is unreleased`);
       if (page === "index.html" && !scan.releaseStatus) add(page, "home page must keep a visible [data-release-status] statement while unreleased");
     }
+    const schedule = FUTURE_SCHEDULE.exec(scan.futureText.replace(/\s+/g, " "));
+    if (schedule) add(page, `future-direction text ([data-future]) contains a date or schedule: “${schedule[0]}”`);
+    if (page === "index.html" && !scan.futureSections) add(page, "home page must mark its vision and directions sections with [data-future] so the no-dates guard applies");
 
     const pageUrl = new URL(page === "index.html" ? "" : page, base);
     for (const link of scan.links) {
