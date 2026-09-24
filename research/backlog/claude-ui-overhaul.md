@@ -10,7 +10,7 @@ Delegate this work through the **`claude` CLI with the exact Opus 5.5 model and 
 
 ## Required prerequisite: presentation/functionality decoupling
 
-Nathan explicitly requires the architecture to be fully decoupled before delegation, so Claude can reimagine UI strategy without changing the functional logic. This prerequisite is **not yet met**: `authoring/src/main.ts` mixes DOM handling, state transitions, undo, persistence and rendering coordination; `library-ui.ts` also binds transport and view state directly. Recipe evaluation, SQLite storage and save parsing are already separate modules, but that alone is insufficient.
+Nathan explicitly requires the architecture to be fully decoupled before delegation, so Claude can reimagine UI strategy without changing the functional logic. This prerequisite is **not yet met**: typed collection, recipe, gesture, preview, motion, quality and saved-V services now exist, but `authoring/src/main.ts` still coordinates DOM/file adapters, renderer jobs and some view/persistence state. [The source-audited action catalogue](../authoring/ui-action-catalogue.md) identifies exact implemented IDs and remaining command/capability gaps; documenting them alone does not pass the handoff gate.
 
 1. Extract UI-independent application state, commands, undo/history, document/library identity and asynchronous operation coordination. Expose typed commands and observable read-only state, not direct mutable access to recipes or database internals.
 2. Keep recipe schemas, shape/raster evaluator, save reader, SQLite/revision rules, asset resolver, material behavior and compiler/export contracts in owned core/adapters with contract checks. Desktop/browser transports must not determine domain behavior.
@@ -54,7 +54,7 @@ Build this incrementally alongside functionality. Before handoff, audit the enti
 
 Support gesture/batch transactions with one-step Undo and cancellation, async progress/results and stale-target checks. Do not expose raw mutable recipes, direct database writes or DOM-only click wrappers as the public contract. Keep rendering/picking and file/network adapters separate. Provide implementation examples and a completeness checklist to Opus; the new presentation can combine actions creatively while preserving tested behavior. This is part of the decoupling gate, not a reason to keep the now-prioritized UI work indefinitely queued.
 
-Interim native-menu policy implemented in `authoring/src/context-menu.ts` and wired once at application startup. Isolated browser checks retain text-field/editable-content menus, suppress non-text menus, and retain viewport right-drag pan; typecheck/build pass. [Evidence](../../projects/xf-appearance-studio/authoring/evidence/context-menu-2026-09-23.json). The custom menu system and broad action catalogue remain pending.
+Interim native-menu policy implemented in `authoring/src/context-menu.ts` and wired once at application startup. Isolated browser checks retain text-field/editable-content menus, suppress non-text menus, and retain viewport right-drag pan; typecheck/build pass. [Evidence](../../projects/xf-appearance-studio/authoring/evidence/context-menu-2026-09-23.json). The [action catalogue](../authoring/ui-action-catalogue.md) documents current typed commands and missing coverage. A custom menu system and unified, target-aware command/capability registry remain pending.
 
 ## Verification scenarios for the handoff
 
