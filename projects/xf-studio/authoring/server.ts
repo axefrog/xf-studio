@@ -38,7 +38,7 @@ const server = Bun.serve({
     if (request.method !== "GET" && request.method !== "HEAD")
       return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/health")
-      return Response.json({ app: "xf-appearance-studio", version: "0.1.0" });
+      return Response.json({ app: "xf-studio", version: "0.1.0" });
     let path: string;
     try {
       path = resolve(
