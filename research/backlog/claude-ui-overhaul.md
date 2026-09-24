@@ -4,7 +4,7 @@ Explicit user request, updated 24 September 2026. **UI quality is now a priority
 
 Earlier functionality-first scheduling described the previous priority. Continue useful makeup work while establishing the boundary, but treat the UI handoff as the next priority once the gate passes. Decoupling is not a reason to block unrelated functional fixes now.
 
-Local harness discovery: `claude.exe` resolves to `C:/Users/Nathan/.local/bin/claude.exe`. Exact Opus 5.5 availability has not been checked; resolving the executable is not model validation or task dispatch.
+Local harness discovery: `claude.exe` resolves to `C:/Users/Nathan/.local/bin/claude.exe`. On 24 September, `claude auth status` reported `loggedIn: false`; a read-only `claude -p --model claude-opus-5-5 --effort xhigh` probe returned `unrecognized_model` and an expired OAuth session without using any model tokens. That does **not** establish whether Opus 5.5 is available after authentication, nor whether this is its accepted model ID. Sign-in and exact-model validation remain necessary before dispatch; do not substitute another model silently.
 
 Delegate this work through the **`claude` CLI with the exact Opus 5.5 model and its extra-high / xhigh reasoning setting**. Before dispatch, verify that both the model and reasoning level are available and record the command, harness version and effective settings. If unavailable, retain the request and report the limitation; never silently substitute a model, harness or reasoning level. This document is the acceptance specification for that handoff, not an instruction to invoke the harness now. No new user-visible Codex task or automation is needed.
 
