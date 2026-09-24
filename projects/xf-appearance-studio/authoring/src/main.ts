@@ -500,8 +500,9 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
-  begin: () => { gestures.begin("uv", current()); }, apply: action => gestures.apply("uv", action),
-  cancel: () => gestures.cancel("uv"), finish: () => gestures.commit("uv"), persist, message: status,
+  begin: () => { const layer = current(); if (layer) app.beginGesture("uv", layer.id); },
+  apply: action => app.applyGesture("uv", action),
+  cancel: () => app.endGesture("uv", true), finish: () => app.endGesture("uv"), persist, message: status,
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
 function download(blob: Blob, name: string) {
@@ -733,10 +734,10 @@ try {
     selected: () => authoring.selected,
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
-    begin: () => { gestures.begin("surface", current()); },
-    apply: action => gestures.apply("surface", action),
-    cancel: () => gestures.cancel("surface"),
-    finish: () => gestures.commit("surface"),
+    begin: () => { const layer = current(); if (layer) app.beginGesture("surface", layer.id); },
+    apply: action => app.applyGesture("surface", action),
+    cancel: () => app.endGesture("surface", true),
+    finish: () => app.endGesture("surface"),
     message: status,
   });
   viewport.attach("surface", surface);

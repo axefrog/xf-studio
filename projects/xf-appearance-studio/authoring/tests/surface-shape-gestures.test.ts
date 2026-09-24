@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { initialRecipe, type Layer } from "../src/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
-import { applyGestureEdit } from "../src/recipe-actions";
+import { applyAdapterProposal } from "./gesture-test-adapter";
 
 test("surface shape gestures share one transaction, preserve mirror/pivot and reject stale or invalid edits", async () => {
   class Canvas extends EventTarget {
@@ -36,7 +36,7 @@ test("surface shape gestures share one transaction, preserve mirror/pivot and re
       onFrame:(fn:()=>void)=>{frame=fn;} };
     const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
       layer:()=>layer, selected:()=>selected, select:i=>{selected=i;}, selectedField:()=>undefined,selectField:()=>{},
-      begin:()=>{checkpoints++;undo=structuredClone(layer);},apply:action=>applyGestureEdit(action),
+      begin:()=>{checkpoints++;undo=structuredClone(layer);},apply:action=>applyAdapterProposal(layer,action),
       cancel:()=>{cancellations++;if(undo)Object.assign(layer,structuredClone(undo));},message:text=>messages.push(text),
     });
     canvas.addEventListener("pointerdown",()=>cameraEvents++);

@@ -56,7 +56,12 @@ test("facade groups form changes and hides live gesture targets", () => {
   app.controlCommit("opacity");
   expect(document.undoDepth).toBe(1);
   expect(document.undoRecipe()?.layers[0].opacity).toBe(before);
+  expect(app.canBeginGesture("uv", "stale")).toMatchObject({ available: false, code: "missing_target" });
   expect(app.beginGesture("uv", id)).toBe(true);
+  expect(app.canBeginGesture("surface", id)).toMatchObject({ available: false, code: "busy" });
+  expect(app.gestureCapability("uv", { kind: "point", index: 0 })).toEqual({ available: true });
+  expect(app.gestureCapability("uv", { kind: "point", index: 999 }))
+    .toMatchObject({ available: false, code: "missing_target" });
   const point = document.recipe.layers[0].points[0], originalU = point.u;
   expect(app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: originalU + .002 } })).toBe(true);
   app.endGesture("uv", true);
@@ -87,4 +92,25 @@ test("facade exposes collection target capabilities and typed async outcomes", a
   expect(app.requestCapability({ kind: "package", action: "check" }).available).toBe(true);
   expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true, result: { kind: "list" } });
   expect(app.dispatch({ kind: "preset.select", id: "stale" })).toMatchObject({ ok: false });
+});
+
+test("descriptors cover every public command, including nested variants and structured reasons", () => {
+  const { app, document } = fixture(), layerId = document.recipe.layers[0].id;
+  expect(app.actionKinds().length).toBe(Object.keys(app.actionDescriptors()).length);
+  expect(app.requestKinds().length).toBe(Object.keys(app.requestDescriptors()).length);
+  expect(Object.keys(app.gestureDescriptors())).toEqual([
+    "shape.replace", "point.replace", "field.replace", "path.replacePoints"]);
+  const layer = app.descriptorsFor({ kind: "layer", id: layerId });
+  expect(layer.find(entry => entry.id === "layer.edit")?.variants?.rename.payload.name.maxLength).toBe(80);
+  expect(layer.find(entry => entry.id === "glitter.setDirect")?.variants?.strength.payload.value.max).toBe(32);
+  expect(layer.find(entry => entry.id === "layer.setOpacity")?.requiresInput).toBe(true);
+  expect(app.descriptorsFor({ kind: "point", layerId, index: 999 })[0].targetCapability)
+    .toMatchObject({ available: false, code: "missing_target" });
+  expect(app.capability({ kind: "point.remove", layerId, index: 999 }))
+    .toMatchObject({ available: false, code: "missing_target" });
+  document.recipe.layers[0].points.splice(3);
+  expect(app.capability({ kind: "point.remove", layerId, index: 0 }))
+    .toMatchObject({ available: false, code: "limit" });
+  expect(app.requestCapability({ kind: "save" }))
+    .toMatchObject({ available: false, code: "not_ready" });
 });

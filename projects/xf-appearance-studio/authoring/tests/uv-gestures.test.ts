@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { initialRecipe, type Recipe } from "../src/recipe";
 import { createUVEditor } from "../src/uv-editor";
-import { applyGestureEdit } from "../src/recipe-actions";
+import { applyAdapterProposal } from "./gesture-test-adapter";
 import { defaultUVView, panUVView, parseUVView, pixelToUV, uvAspect, uvRegion, uvToPixel, zoomUVView } from "../src/uv-view";
 
 test("UV navigation preserves anchor/aspect, round trips and stays inside persisted view bounds", () => {
@@ -48,7 +48,7 @@ function setup() {
     recipe:()=>recipe,layer:()=>recipe.layers[0],selected:()=>selected,canvases:()=>[],albedo:()=>undefined,
     select:index=>{selected=index;},selectedField:()=>undefined,selectField() {},
     begin:()=>{checkpoint=structuredClone(recipe);begins++;},
-    apply:action=>{const changed=applyGestureEdit(action);if(changed)changes++;return changed;},
+    apply:action=>{const changed=applyAdapterProposal(recipe.layers[0],action);if(changed)changes++;return changed;},
     cancel:()=>{recipe=structuredClone(checkpoint);cancels++;},
     persist:()=>{persists++;},message:text=>messages.push(text),
   },defaultUVView());

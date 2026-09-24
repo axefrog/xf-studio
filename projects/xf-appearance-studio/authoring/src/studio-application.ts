@@ -10,13 +10,16 @@ import type { QualityAction, PreviewQualityActions } from "./preview-quality-act
 import type { Layer, Point, WarpField } from "./recipe";
 import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
 import type { SavedAppearanceAction, SavedAppearanceActions } from "./saved-appearance-actions";
+import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS } from "./studio-action-descriptors";
 
 export type StudioAction = RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
-  { kind: "field"; layerId: string; id: string } | { kind: "viewport" };
-export type StudioCapability = { available: boolean; reason?: string; code?: string };
+  { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" };
+export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
+  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable";
+export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
   undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
 export type StudioGestureProposal =
@@ -60,15 +63,35 @@ export class StudioApplication {
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
-  actionKinds() { return [...recipeKinds, "layer.edit", "layer.setEnabled", ...collectionKinds,
-    "camera.front", "camera.setFov", "camera.endFovGesture", "camera.restore",
-    "preview.setExposure", "preview.setKeyAngle", "preview.setEyeShape", "preview.setPiercingPreview",
-    "preview.setPiercings", "preview.setSurfaceControls", "preview.setWire", "preview.setNormals",
-    "preview.setEyeOptics", "preview.setHair", "preview.setDetail",
-    "motion.setIdle", "motion.setPaused", "motion.setContributions", "motion.setBlink", "motion.playBlink",
-    "quality.set", "quality.rebuild", "savedV.load", "savedV.restore"] as const; }
-  requestKinds() { return ["initialize", "refresh", "open", "save", "saveCopy", "exportCollection",
-    "exportPlan", "import", "package"] as const; }
+  actionKinds() { return Object.keys(ACTION_DESCRIPTORS) as StudioAction["kind"][]; }
+  requestKinds() { return Object.keys(REQUEST_DESCRIPTORS) as CollectionRequest["kind"][]; }
+  actionDescriptors() { return structuredClone(ACTION_DESCRIPTORS); }
+  requestDescriptors() { return structuredClone(REQUEST_DESCRIPTORS); }
+  gestureDescriptors() { return structuredClone(GESTURE_DESCRIPTORS); }
+  /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
+  descriptorsFor(target: StudioTarget) {
+    const targetCapability = this.targetCapability(target);
+    return Object.entries(ACTION_DESCRIPTORS).filter(([, descriptor]) =>
+      (descriptor.scope as readonly string[]).includes(target.kind)).map(([id, descriptor]) => ({
+      id: id as StudioAction["kind"], ...structuredClone(descriptor),
+      targetCapability, requiresInput: Object.values(descriptor.payload).some(field => field.from === "input"),
+    }));
+  }
+  targetCapability(target: StudioTarget): StudioCapability {
+    const s = this.services, doc = s.document.snapshot();
+    if (target.kind === "layer" && !doc.recipe.layers.some(layer => layer.id === target.id))
+      return missingTarget("That layer no longer exists.");
+    if (target.kind === "point" && !doc.recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
+      return missingTarget("That control point no longer exists.");
+    if (target.kind === "field" && !doc.recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
+      return missingTarget("That warp control no longer exists.");
+    if (target.kind === "preset" && !s.collection?.view().draft?.collection.presets.some(preset => preset.id === target.id))
+      return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");
+    if (target.kind === "collection" && !s.collection?.view().draft) return missing("Collection is still loading.");
+    if ((target.kind === "collection" || target.kind === "preset") && s.collection?.view().busy)
+      return { available: false, code: "busy", reason: "A collection request is in progress." };
+    return { available: true };
+  }
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
@@ -78,18 +101,20 @@ export class StudioApplication {
   }
   capability(action: StudioAction): StudioCapability {
     const s = this.services;
-    if (recipeKinds.has(action.kind)) return s.recipe.capability(action as RecipeAction);
-    if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
-      return layerCapability(s.document.recipe, action);
-    if (collectionKinds.has(action.kind)) return s.collection?.actionCapability(action as CollectionAction)
-      ?? { available: false, code: "unavailable", reason: "Collection is still loading." };
-    if (action.kind.startsWith("preview.") || action.kind.startsWith("camera."))
-      return s.preview?.capability(action as PreviewAction) ?? missing("Preview is still loading.");
-    if (action.kind.startsWith("motion."))
-      return s.motion?.capability(action as MotionAction) ?? missing("Motion preview is still loading.");
-    if (action.kind.startsWith("quality."))
-      return s.quality?.capability(action as QualityAction) ?? missing("Preview quality is still loading.");
-    return s.savedV?.capability(action as SavedAppearanceAction) ?? missing("Saved appearance preview is still loading.");
+    let raw: { available: boolean; reason?: string };
+    if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
+    else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
+      raw = layerCapability(s.document.recipe, action);
+    else if (collectionKinds.has(action.kind)) raw = s.collection?.actionCapability(action as CollectionAction)
+      ?? missing("Collection is still loading.");
+    else if (action.kind.startsWith("preview.") || action.kind.startsWith("camera."))
+      raw = s.preview?.capability(action as PreviewAction) ?? missing("Preview is still loading.");
+    else if (action.kind.startsWith("motion."))
+      raw = s.motion?.capability(action as MotionAction) ?? missing("Motion preview is still loading.");
+    else if (action.kind.startsWith("quality."))
+      raw = s.quality?.capability(action as QualityAction) ?? missing("Preview quality is still loading.");
+    else raw = s.savedV?.capability(action as SavedAppearanceAction) ?? missing("Saved appearance preview is still loading.");
+    return raw.available ? { available: true } : { ...raw, code: reasonCode(action, raw.reason ?? "") };
   }
   /** Candidate actions use the hit target, never the currently selected row. */
   actionsFor(target: StudioTarget): StudioActionInfo[] {
@@ -132,7 +157,7 @@ export class StudioApplication {
       else if (action.kind.startsWith("quality.")) result = s.quality!.dispatch(action as QualityAction);
       else result = s.savedV!.dispatch(action as SavedAppearanceAction);
       return { ok: true, result };
-    } catch (error) { return { ok: false, code: "invalid", message: (error as Error).message }; }
+    } catch (error) { return { ok: false, code: "invalid_value", message: (error as Error).message }; }
   }
   controlBegin(id: string, layerId: string) {
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
@@ -140,11 +165,35 @@ export class StudioApplication {
   controlEdit(id: string, action: RecipeAction) { this.services.controls.edit(id, action.layerId, action); }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
-  requestCapability(request: CollectionRequest) { return this.services.collection?.capability(request)
-    ?? missing("Collection is still loading."); }
+  requestCapability(request: CollectionRequest): StudioCapability {
+    const raw = this.services.collection?.capability(request) ?? missing("Collection is still loading.");
+    return raw.available ? { available: true } : { ...raw,
+      code: raw.reason?.includes("in progress") ? "busy" : raw.reason?.includes("loading") ? "not_ready" :
+        raw.reason?.includes("budget") ? "limit" : "invalid_value" };
+  }
   async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
     ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
+  canBeginGesture(_source: GestureSource, layerId: string): StudioCapability {
+    if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
+    return this.targetCapability({ kind: "layer", id: layerId });
+  }
+  gestureCapability(source: GestureSource, target: { kind: "shape" | "path" } |
+    { kind: "point"; index: number } | { kind: "field"; fieldId: string }): StudioCapability {
+    const session = this.gesture;
+    if (!session || session.source !== source) return { available: false, code: "not_ready",
+      reason: "Begin a gesture on the target layer first." };
+    if (!this.services.document.recipe.layers.includes(session.layer))
+      return missingTarget("That gesture layer was replaced.");
+    if (target.kind === "point" && (!session.points[target.index] ||
+      session.layer.points[target.index] !== session.points[target.index]))
+      return missingTarget("That control point was replaced.");
+    if (target.kind === "field" && (!session.fields.has(target.fieldId) ||
+      session.layer.fields.find(field => field.id === target.fieldId) !==
+      session.fields.get(target.fieldId))) return missingTarget("That warp control was replaced.");
+    return { available: true };
+  }
   beginGesture(source: GestureSource, layerId: string) {
+    if (!this.canBeginGesture(source, layerId).available) return false;
     const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
     if (!layer || !this.services.gestures.begin(source, layer)) return false;
     this.gesture = { source, layer, points: [...layer.points],
@@ -153,6 +202,10 @@ export class StudioApplication {
   applyGesture(source: GestureSource, proposal: StudioGestureProposal) {
     const session = this.gesture;
     if (!session || session.source !== source) return false;
+    const target = proposal.kind === "point.replace" ? { kind: "point" as const, index: proposal.index } :
+      proposal.kind === "field.replace" ? { kind: "field" as const, fieldId: proposal.fieldId } :
+      proposal.kind === "path.replacePoints" ? { kind: "path" as const } : { kind: "shape" as const };
+    if (!this.gestureCapability(source, target).available) return false;
     const base = { layerId: session.layer.id, expectedLayer: session.layer };
     const action: GestureEdit = proposal.kind === "shape.replace" ? { ...base, ...proposal } :
       proposal.kind === "point.replace" ? { ...base, ...proposal,
@@ -169,7 +222,21 @@ export class StudioApplication {
     this.gesture = undefined; this.notify();
   }
 }
-function missing(reason: string): StudioCapability { return { available: false, code: "unavailable", reason }; }
+function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
+function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
+function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
+  if (reason.includes("loading")) return "not_ready";
+  if (reason.includes("in progress")) return "busy";
+  if (reason.includes("no longer exists") || reason.includes("not found")) return "missing_target";
+  if (reason.includes("supports up to") || reason.includes("at least") || reason.includes("larger than") ||
+    reason.includes("budget")) return "limit";
+  if (action.kind.startsWith("glitter.") && reason.includes("Select")) return "incompatible_mode";
+  if ((action.kind === "preview.setHair" || action.kind === "preview.setDetail" ||
+    action.kind === "preview.setPiercings" || action.kind.startsWith("motion.")) &&
+    reason.includes("unavailable")) return "asset_unavailable";
+  if (reason.includes("unavailable")) return "unavailable";
+  return "invalid_value";
+}
 function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
   if (selection.has(action.kind) || action.kind.startsWith("preview.") ||
     action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||

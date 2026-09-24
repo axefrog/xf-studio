@@ -11,7 +11,7 @@ import {
 import type { createScene } from "./scene";
 import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
 import { createSurfaceOcclusion } from "./surface-occlusion";
-import type { GestureEdit } from "./recipe-actions";
+import type { StudioGestureProposal } from "./studio-application";
 
 type Handle = {
   kind: "point" | "tangent" | "origin" | "field";
@@ -31,7 +31,7 @@ type Hooks = {
   selectedField: () => string | undefined;
   selectField: (id: string) => void;
   begin: () => void;
-  apply: (action: GestureEdit) => boolean;
+  apply: (action: StudioGestureProposal) => boolean;
   cancel: () => void;
   finish?: () => void;
   message: (text: string) => void;
@@ -164,7 +164,7 @@ export function createSurfaceEditor(
     }
     if (JSON.stringify(next) === state.expected) return true;
     if (!state.changed) { hooks.begin(); state.changed = true; }
-    if (!hooks.apply({ kind: "shape.replace", layerId: state.layer.id, expectedLayer: state.layer, next })) return false;
+    if (!hooks.apply({ kind: "shape.replace", next })) return false;
     state.expected = JSON.stringify(state.layer);
     return true;
   }
@@ -559,20 +559,17 @@ export function createSurfaceEditor(
         v = uv.v;
       let accepted = false;
       if (h.kind === "point") {
-        accepted = hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
-          index: h.index, expectedPoint: l.points[h.index], next: { u: clamp(u), v: clamp(v) } });
+        accepted = hooks.apply({ kind: "point.replace", index: h.index, next: { u: clamp(u), v: clamp(v) } });
       } else if (h.kind === "tangent") {
         // Keep knot identity stable so an in-progress gesture remains valid.
-        accepted = hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
-          index: h.index, expectedPoint: l.points[h.index], next: moveTangent(l.points[h.index], h.side!, { u, v }) });
+        accepted = hooks.apply({ kind: "point.replace", index: h.index,
+          next: moveTangent(l.points[h.index], h.side!, { u, v }) });
       } else {
         const field = l.fields.find((f) => f.id === h.fieldId)!;
         if (h.kind === "origin") {
-          accepted = hooks.apply({ kind: "field.replace", layerId: l.id, expectedLayer: l,
-            fieldId: field.id, expectedField: field, next: { u: clamp(u), v: clamp(v) } });
+          accepted = hooks.apply({ kind: "field.replace", fieldId: field.id, next: { u: clamp(u), v: clamp(v) } });
         } else {
-          accepted = hooks.apply({ kind: "field.replace", layerId: l.id, expectedLayer: l,
-            fieldId: field.id, expectedField: field,
+          accepted = hooks.apply({ kind: "field.replace", fieldId: field.id,
             next: { du: clamp(u - field.u, -0.1, 0.1), dv: clamp(v - field.v, -0.1, 0.1) } });
         }
       }

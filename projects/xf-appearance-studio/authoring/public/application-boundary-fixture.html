@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>XF Studio application boundary fixture</title>
+<main>
+  <h1>Application boundary fixture</h1>
+  <p>This minimal presentation uses the Studio application facade without the authoring sidebar or renderer.</p>
+  <button id="duplicate-preset">Duplicate preset</button>
+  <button id="add-layer">Add layer</button>
+  <button id="remove-point">Remove point</button>
+  <label>Opacity <input id="opacity" type="range" min="0" max="1" step="0.01"></label>
+  <button id="quality">Preview quality 1K</button>
+  <button id="refresh">Refresh fixture library</button>
+  <button id="undo">Undo recipe edit</button>
+  <p id="message" role="status"></p>
+  <pre id="state" aria-label="Application state"></pre>
+</main>
+<script type="module" src="/build/application-boundary-fixture.js"></script>
+</html>

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createUVEditor } from "../src/uv-editor";
-import { applyGestureEdit } from "../src/recipe-actions";
+import { applyAdapterProposal } from "./gesture-test-adapter";
 import { initialRecipe } from "../src/recipe";
 import { defaultUVView } from "../src/uv-view";
 
@@ -18,7 +18,7 @@ test("UV tint samples actual mask dimensions into display-sized scratch without 
     const element=()=>({setAttribute(){},disabled:false,textContent:""}) as any;
     const editor=createUVEditor(canvas,{both:element(),single:element(),other:element(),fit:element(),note:element()},
       {recipe:()=>recipe,layer:()=>recipe.layers[0],selected:()=>0,canvases:()=>[mask],albedo:()=>albedo,
-        select(){},selectedField:()=>undefined,selectField(){},begin(){},apply:action=>applyGestureEdit(action),cancel(){},persist(){},message(){}},defaultUVView());
+        select(){},selectedField:()=>undefined,selectField(){},begin(){},apply:action=>applyAdapterProposal(recipe.layers[0],action),cancel(){},persist(){},message(){}},defaultUVView());
     editor.draw();
     const state=editor.diagnostics(), r=state.region;
     expect(tinted.width).toBe(canvas.width);expect(tinted.height).toBe(canvas.height);expect(tinted.width).toBe(2000);
