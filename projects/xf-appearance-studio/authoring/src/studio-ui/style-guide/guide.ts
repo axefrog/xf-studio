@@ -123,6 +123,8 @@ body.guide { overflow: auto; height: auto; }
 .compare-demo .viewport-panel { height: 110px; min-height: 0; padding: var(--sp-3); }
 .ref-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .ref-table th, .ref-table td { text-align: left; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.contrast-table td.ok { color: var(--success); font-family: var(--font-mono); }
+.contrast-table td.fail { color: var(--danger); font-family: var(--font-mono); font-weight: 700; }
 .ref-table th { font: 600 var(--fs-2xs)/1.4 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
 .snap-sandbox, .live-dock { position: relative; height: 360px; background: var(--bg-app); border: 1px solid var(--line); overflow: hidden; touch-action: none; }
 .live-dock .dock { position: absolute; inset: 4px; width: auto; height: auto; }
@@ -138,7 +140,7 @@ export type GuideInput = { css: string; script: string; generated: string };
 
 export function guideDocument(input: GuideInput) {
   const panels = PANEL_IDS.map(id => ({ id, ...PANEL_META[id] }));
-  const sections = [foundations(), shell(), panelSystem(), components(), states(), compositions(), futures(), reference(panels)];
+  const sections = [foundations(input.css), shell(), panelSystem(), components(), states(), compositions(), futures(), reference(panels)];
   const toc = sections.map(html => {
     const id = /<section class="guide-section" id="([^"]+)"/.exec(html)![1], title = /<h2 id="[^"]+">([^<]+)<\/h2>/.exec(html)![1];
     const items = [...html.matchAll(/<article class="pattern[^"]*" id="([^"]+)"[^>]*>\s*<header class="pattern-head"><h3>([^<]+)<\/h3>/g)];

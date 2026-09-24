@@ -5,6 +5,7 @@ import { iconNames } from "../src/studio-ui/icons";
 import { PANEL_IDS } from "../src/studio-ui/layout-defaults";
 import { PANEL_META } from "../src/studio-ui/panel-meta";
 import { finishCatalogue } from "../src/finish-catalogue";
+import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
@@ -27,10 +28,20 @@ test("the style guide covers every panel, icon and finish, and labels pattern st
     "c-progress", "c-empty", "c-result", "c-handles", "t-saved", "t-undo", "t-async", "t-errors", "k-editing", "k-library", "k-package", "k-future"])
     expect(patterns.some(match => match[1] === required)).toBe(true);
   expect(patterns.find(match => match[1] === "k-future")![2]).toBe("future");
-  // Guidance is concrete: every pattern states what and when.
-  const incomplete = guide.split('<article class="pattern').slice(1)
-    .filter(article => !article.includes("<dt>What</dt>") || !article.includes("<dt>When</dt>")).map(article => article.slice(0, 80));
+  // Guidance is concrete: every pattern states what and when; every non-rule pattern also says
+  // how it combines, how it adapts to workspace size and which action or state drives it.
+  const incomplete = guide.split('<article class="pattern').slice(1).flatMap(article => {
+    const id = /id="([^"]+)"/.exec(article)![1], rule = article.includes('data-status="rule"');
+    const fields = rule ? ["What", "When"] : ["What", "When", "Combine", "Adapt", "Driven by"];
+    const missing = fields.filter(field => !article.includes(`<dt>${field}</dt>`));
+    return missing.length ? [`${id}: ${missing.join(", ")}`] : [];
+  });
   expect(incomplete).toEqual([]);
+});
+
+test("design tokens meet their contrast minimums in both themes", () => {
+  const { failures } = contrastTable(css);
+  expect(failures.map(([fg, bg]) => `${fg} on ${bg}`)).toEqual([]);
 });
 
 test("the style guide is self-contained", () => {

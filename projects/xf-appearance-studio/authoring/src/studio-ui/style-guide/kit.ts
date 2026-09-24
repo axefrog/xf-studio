@@ -1,4 +1,5 @@
 import { iconMarkup, type IconName } from "../icons";
+import { GUIDANCE } from "./guidance";
 
 /** String builders for the self-contained style guide. Static specimens use the app's real classes. */
 export const i = (name: IconName) => iconMarkup(name);
@@ -10,7 +11,9 @@ export type Pattern = {
 };
 const statusLabel: Record<Status, string> = { implemented: "Implemented", future: "Future direction · not built", rule: "Rule" };
 
-export function pattern(p: Pattern) {
+export function pattern(input: Pattern) {
+  const extra = GUIDANCE[input.id] ?? {};
+  const p = { ...input, combine: input.combine ?? extra.combine, adapt: input.adapt ?? extra.adapt, drives: input.drives ?? extra.drives };
   const row = (label: string, value?: string) => value ? `<dt>${label}</dt><dd>${value}</dd>` : "";
   return `<article class="pattern${p.wide ? " wide" : ""}" id="${p.id}" data-status="${p.status}">
   <header class="pattern-head"><h3>${p.title}</h3><span class="status-tag ${p.status}">${statusLabel[p.status]}</span></header>

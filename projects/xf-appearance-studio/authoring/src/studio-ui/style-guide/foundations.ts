@@ -1,4 +1,5 @@
 import { iconNames } from "../icons";
+import { contrastTable } from "./contrast";
 import { badge, btn, chip, code, i, pattern, section } from "./kit";
 
 const tokens: [string, string, string][] = [
@@ -12,7 +13,8 @@ const tokens: [string, string, string][] = [
   ["--warning", "Preview study, stale, needs attention", "state"], ["--danger", "Errors, destructive commands", "state"], ["--focus", "Focus ring", "accent"],
 ];
 
-export function foundations() {
+export function foundations(css: string) {
+  const contrast = contrastTable(css);
   return section("foundations", "01", "Foundations",
     `A restrained Cyberpunk: graphite instruments under a single signal yellow, with cyan reserved for live state. The only ornament is the bevel —
      a clipped corner borrowed from industrial labelling. No neon glow, glitch, scanline or fake HUD chrome: atmosphere never costs legibility.
@@ -37,6 +39,12 @@ export function foundations() {
       combine: "State colours always travel with a word or icon (e.g. a warning badge says “Preview study”), never colour alone.",
       adapt: "Themes switch by color-scheme; forced-colors mode falls back to system colours for selection and borders.",
       drives: `${code("--accent")} is identical in both themes; light theme swaps accent-as-line to ink via ${code("--indicator")} and ${code("--accent-edge")}.` }),
+    pattern({ id: "f-contrast", title: "Contrast", status: "implemented", wide: true, specimen: contrast.html,
+      what: "WCAG contrast ratios computed from the tokens in studio.css each time this guide is generated. Text needs 4.5:1; control boundaries, selection and focus need 3:1.",
+      when: "Check this table after any token change; the guide build fails the style-guide test if a pair drops below its minimum.",
+      combine: "State colours are always paired with words or icons, so contrast is never the only carrier of meaning.",
+      adapt: "Both themes are listed; the stage keeps its own fixed palette for overlays.",
+      drives: "Parsed light-dark(oklch…) token values; the conversion is OKLCH → linear sRGB → relative luminance." }),
     pattern({ id: "f-type", title: "Typography", status: "implemented",
       specimen: `<div class="type-specimen">
         <p class="t-display">XF STUDIO · EYE MAKEUP</p>
