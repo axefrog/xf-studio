@@ -1,7 +1,6 @@
 import { type Layer } from "./recipe";
 import { type LayerCommand } from "./layer-stack";
 import { type LayerAction } from "./editor-actions";
-import type { ReadonlyDeep } from "./read-only";
 import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import { createBrowserWorkspaceSession, captureBrowserPanels, loadBrowserWorkspace } from "./browser-workspace-device";
 import { createBrowserFileDevice } from "./browser-file-device";
@@ -9,14 +8,11 @@ import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
 import type { createScene } from "./scene";
-import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { type StudioAction } from "./studio-application";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 import { UIPreferenceActions } from "./ui-preferences";
-import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import { type StudioFileAction } from "./studio-file-operations";
 import { bindControlEdit } from "./control-edit-ui";
-import { createRasterClient } from "./raster-client";
 import { setupFields } from "./field-ui";
 import type { PigmentCommand } from "./pigment-edit";
 import type { SoftnessCommand } from "./softness-edit";
@@ -24,11 +20,12 @@ import { type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
 import { setupPreviewQuality } from "./preview-quality-ui";
 import type { PreviewQualityActions } from "./preview-quality-actions";
-import type { RasterResponse,GlitterStats } from "./raster-processor";
+import type { GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
 import type { createUVEditor } from "./uv-editor";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
+import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
 import { ViewportAttachment } from "./viewport-attachment";
 import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
@@ -47,7 +44,7 @@ import {
 import {FLAKE_LIMITS} from "./flake-field";
 import {isDirectGlint} from "./direct-glint-settings";
 import {glitterModel, type GlitterModel} from "./glitter-model";
-import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
+import {maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const input = (id: string) => $<HTMLInputElement>(id);
@@ -61,12 +58,6 @@ const workspace = restored.state;
 const uiPreferences = new UIPreferenceActions(workspace.uiPreferences);
 const initialTextureSize = workspace.preview.textureSize;
 let qualityActions: PreviewQualityActions;
-type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
-type PreviewAlbedo = NonNullable<Extract<RasterResponse, {data: unknown}>["albedo"]>;
-let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo } | undefined)[] = [];
-const opticalKey = (layer: ReadonlyDeep<Layer>, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-  ? studioIrregularOpticalKey(layer.flakes,size)
-  : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 const core = createTrustedAuthoringCore(workspace, {
   resetStack: () => resetStackResources(),
   selectedCollection: () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
@@ -77,14 +68,6 @@ const { document: authoring, geometry, presentation, layers: layerActions,
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 let collectionApp: CollectionApplication | undefined;
-const canvases = Array.from({ length: authoring.recipe.layers.length }, () => {
-  const c = document.createElement("canvas");
-  c.width = c.height = 1;
-  return c;
-});
-function emptyPreviewCanvases() {
-  return authoring.recipe.layers.map(() => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas; });
-}
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let previewActions: PreviewActions | undefined;
 let motionActions: MotionActions | undefined;
@@ -96,7 +79,7 @@ function showGlitterMeasurement(){
   const layer=current();
   if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
   const prior=glitterMeasurements.get(layer.id);
-  const valid=prior?.opticalKey===opticalKey(layer,previewCoordinator.size) &&
+  const valid=prior?.opticalKey===previewOpticalKey(layer,previewCoordinator.size) &&
     prior.maskKey===maskAlphaKey(layer,previewCoordinator.size);
   const note=$("irregular-visible-note");
   const scope=layer.flakes.count>FLAKE_LIMITS.count?"retained in the eye UV regions":"generated across the UV atlas";
@@ -264,69 +247,28 @@ function sync() {
   $<HTMLButtonElement>("undo").disabled = !app.capability({ kind: "recipe.undo" }).available;
   layerCards();
 }
-let previewCoordinator: AuthoringPreviewCoordinator;
-const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
-  result => previewCoordinator.publish(result), reason => previewCoordinator.fail(reason));
-previewCoordinator = new AuthoringPreviewCoordinator(authoring, initialTextureSize, {
-  maxTextureSize: () => viewer?.renderer.capabilities.maxTextureSize ?? 4096,
-  resourceSize: i => canvases[i]?.width ?? 0,
-  needsOptics: (i, layer, size) => viewer ? viewer.needsOptics(i, layer, size)
-    : initialOptics[i]?.key !== opticalKey(layer, size),
-  needsPresentationMaps: (i, layer, size) => !!viewer &&
-    (viewer.needsOptics(i, layer, size) || viewer.needsAlbedo(i, layer, size)),
-  queue: () => maskClient.diagnostics(),
-  reset: () => maskClient.reset(),
-  replaceResources: () => {
-    // Dispose the previous tier or stack before allocating its replacement.
-    canvases.splice(0, canvases.length, ...emptyPreviewCanvases());
-    initialOptics = [];
-    viewer?.setLayerCanvases(canvases);
-  },
-  releaseDisabled: (i, layer) => {
-    if (canvases[i].width !== 1) {
-      const empty = document.createElement("canvas"); empty.width = empty.height = 1;
-      canvases[i] = empty; viewer?.setLayerCanvas(i, empty);
-    }
-    initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
-  },
-  request: (i, layer, priority, size, needsOptics) => maskClient.request(i, layer, priority, size, needsOptics),
-  updateLayer: (i, layer) => { viewer?.updateLayer(i, layer); },
-  publish: ({ i, data, size, optics, albedo, glitterStats }, layer) => {
-    if (canvases[i].width !== size) {
-      const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
-      canvases[i] = canvas;
-    }
-    canvases[i]
-      .getContext("2d")!
-      .putImageData(new ImageData(data, size, size), 0, 0);
-    viewer?.setLayerCanvas(i, canvases[i]);
-    if (viewer) { viewer.updateLayer(i, layer, optics, albedo, true); initialOptics[i] = undefined; }
-    else if (optics || albedo) {
-      const key=opticalKey(layer,size), prior=initialOptics[i];
-      initialOptics[i] = { key, data:optics ?? (prior?.key===key?prior.data:undefined), albedo };
-    }
-    else if (!layer.enabled || !["shimmer", "glitter"].includes(canonicalFinish(layer.finish))) initialOptics[i] = undefined;
-    if(glitterStats && layer.finish==="glitter" && isIrregular(layer.flakes)){
-      glitterMeasurements.set(layer.id,{opticalKey:opticalKey(layer,size),maskKey:maskAlphaKey(layer,size),stats:glitterStats});
-      if(i===authoring.active)showGlitterMeasurement();
-    }
-    drawUV();
-  },
-  renderAll: order => renderScheduler.renderAll(order),
+const previewDevice = createBrowserPreviewDevice({
+  document: authoring, initialSize: initialTextureSize,
+  makeWorker: () => new Worker("/build/raster-worker.js", { type: "module" }),
+  frame: run => requestAnimationFrame(run),
   refresh: () => { sync(); drawUV(); persist(); },
+  refreshSelection: () => { sync(); drawUV(); persist(); },
   refreshQuality: () => { refreshQuality?.(); },
-  report: status,
+  drawUV, report: status,
+  measurement: (layer, size, stats) => {
+    glitterMeasurements.set(layer.id, { opticalKey: previewOpticalKey(layer, size),
+      maskKey: maskAlphaKey(layer, size), stats });
+    if (authoring.recipe.layers[authoring.active]?.id === layer.id) showGlitterMeasurement();
+  },
 });
+const previewCoordinator = previewDevice.coordinator;
+const canvases = previewDevice.canvases;
 qualityActions = previewCoordinator.quality;
 qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
   { current: () => qualityActions.snapshot().size, describe: () => previewCoordinator.describeQuality(),
     set: size => { dispatchStudio({ kind: "quality.set", size }); },
     rebuild: () => { dispatchStudio({ kind: "quality.rebuild" }); } });
-const renderScheduler = new AuthoringRenderScheduler(authoring, {
-  frame: run => requestAnimationFrame(run), render: i => previewCoordinator.render(i),
-  refreshSelection: () => { sync(); drawUV(); persist(); },
-});
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -588,15 +530,11 @@ sync();
 workspaceSession.activate();
 try {
   // Discover hardware limits before attaching any full-size generated texture.
-  viewer = await viewportDevice.loadHead(emptyPreviewCanvases());
+  viewer = await viewportDevice.loadHead(previewDevice.emptyCanvases());
   savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
   app.attach({ savedV: savedAppearance });
   savedAppearance.subscribe(persist);
-  const initialQuality = previewCoordinator.assess();
-  viewer.setLayerCanvases(initialQuality.accepted ? canvases : emptyPreviewCanvases());
-  if (!initialQuality.accepted) {
-    previewCoordinator.rejectInitialCapacity();
-  }
+  previewDevice.connectScene(viewer);
   if (workspace.savedV) showSavedV(savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }));
   const preview = workspace.preview;
   for (const [id, checked] of Object.entries({ "surface-controls": preview.surface, wire: preview.wire,
@@ -629,14 +567,7 @@ try {
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
     previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
-  for (let i = 0; i < authoring.recipe.layers.length; i++) {
-    const stored = initialOptics[i];
-    if (initialQuality.accepted && !(authoring.recipe.layers[i].finish==="glitter" &&
-      (isIrregular(authoring.recipe.layers[i].flakes) || isDirectGlint(authoring.recipe.layers[i].flakes)) && canvases[i].width<32))
-      viewer.updateLayer(i, authoring.recipe.layers[i], stored?.key === opticalKey(authoring.recipe.layers[i], canvases[i].width) ? stored.data : undefined,
-        stored?.key === opticalKey(authoring.recipe.layers[i], canvases[i].width) ? stored.albedo : undefined,true);
-    initialOptics[i] = undefined;
-  }
+  previewDevice.presentInitialLayers();
   $("loading").hidden = true;
   drawUV();
   $("front").onclick = () => {
@@ -758,7 +689,7 @@ try {
       ),
       lastRasterMs: previewCoordinator.lastRasterMs,
       frameTiming:viewer!.frameTiming(),
-      rasterQueue: maskClient.diagnostics(),
+      rasterQueue: previewDevice.queueDiagnostics(),
       previewQuality: { requestedSize: previewCoordinator.size, canvases: canvases.map(c => c.width),
         materials: viewer!.makeupDiagnostics(), assessment: previewCoordinator.assess(), error: qualityActions.snapshot().error },
       savedV: savedAppearance!.snapshot().savedV
