@@ -5,6 +5,9 @@ import type { AuthoringHistory, HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue, type ValidationIssue } from "./validation-issues";
+import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
+import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
+import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import type { CollectionAction } from "./collection-actions";
 import type { CollectionRequest, CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
@@ -268,6 +271,11 @@ export class StudioApplication {
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
+  consequences(subject: ConsequenceSubject): Consequence {
+    return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
   history(): HistoryState {

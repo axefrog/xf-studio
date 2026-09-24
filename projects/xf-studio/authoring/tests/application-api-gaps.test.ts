@@ -261,3 +261,29 @@ test("async work is one activity list linked to request IDs, and cancellation is
   expect(files.activity()).toEqual([]);
   expect(files.snapshot().progress).toMatchObject({ phase: "success", requestId: 1 });
 });
+
+test("consequences say what an action replaces, writes or discards and how to recover", () => {
+  const { app, document, presetId, service } = withCollection();
+  const layerId = document.recipe.layers[0].id;
+  expect(app.consequences({ action: { kind: "layer.select", layerId } })).toEqual({ discards: [], recoverableBy: "none", confirm: false });
+  expect(app.consequences({ action: { kind: "layer.edit", command: { kind: "remove", id: layerId } } }))
+    .toEqual({ replaces: "layer-content", recoverableBy: "recipe.undo", discards: [], confirm: false });
+  expect(app.consequences({ action: { kind: "preset.edit", command: { kind: "remove", id: presetId } } }))
+    .toMatchObject({ replaces: "preset", recoverableBy: "preset.restore", confirm: false });
+  expect(app.consequences({ file: { kind: "collection.export" } })).toMatchObject({ writes: "library-revision", confirm: false });
+  expect(app.consequences({ request: { kind: "package", action: "build" } })).toMatchObject({ writes: "private-files" });
+  app.dispatch({ kind: "layer.setOpacity", layerId, opacity: .2 });
+  app.dispatch({ kind: "recipe.undo" });
+  expect(app.consequences({ action: { kind: "recipe.undo" } }).recoverableBy).toBe("none");
+  expect(app.consequences({ action: { kind: "layer.setColor", layerId, color: "#000000" } }).discards)
+    .toEqual([{ kind: "redo", label: "Opacity" }]);
+  // Fill the four-draft recovery queue; the next open would evict the oldest draft and needs confirmation.
+  const other = (name: string) => ({ schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name,
+    presets: [{ id: crypto.randomUUID(), name: "P", revision: 1, recipe: document.export().recipe }] });
+  expect(app.consequences({ file: { kind: "collection.import" } })).toMatchObject({ replaces: "draft", confirm: false });
+  for (const name of ["A", "B", "C", "D"]) expect(app.dispatch({ kind: "collection.open", collection: other(name) }).ok).toBe(true);
+  const summary = service.summary().draft!;
+  expect(summary.recoveryCount).toBe(summary.recoveryLimit);
+  expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen",
+    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name }], confirm: true });
+});

@@ -38,7 +38,7 @@ function parseDraft(value: unknown): CollectionDraft {
   if (input.selected && result.collection.presets.some(p => p.id === input.selected)) result.selected = input.selected;
   if (typeof input.expanded === "boolean") result.expanded = input.expanded;
   for (const preset of result.collection.presets) result.editors[preset.id] = parseEditorMemory(input.editors?.[preset.id], preset.recipe);
-  if (Array.isArray(input.removed)) for (const entry of input.removed.slice(-20)) {
+  if (Array.isArray(input.removed)) for (const entry of input.removed.slice(-REMOVED_PRESET_LIMIT)) {
     const preset = parseCollection({ ...result.collection, presets: [entry.preset] }).presets[0];
     if (!Number.isInteger(entry.index) || entry.index < 0) throw Error("Invalid removed preset position");
     result.removed.push({ preset, index: entry.index, editor: parseEditorMemory(entry.editor, preset.recipe) });
@@ -56,6 +56,8 @@ export function parseCollectionWorkspace(value: unknown): CollectionWorkspace {
   return result;
 }
 
+/** Removed presets kept for Restore; removing another beyond this drops the oldest. */
+export const REMOVED_PRESET_LIMIT = 20;
 export type PresetCommand = { kind: "add" } | { kind: "copy" | "remove"; id: string } |
   { kind: "rename"; id: string; name: string } | { kind: "move"; id: string; to: number } | { kind: "restore" };
 /** Pure collection operations: stable identities, explicit order and recoverable removal. */
@@ -72,7 +74,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand):
   } else if (command.kind === "remove") {
     const [preset] = presets.splice(index, 1);
     state.removed.push({ preset, index, editor: state.editors[preset.id] ?? emptyMemory() });
-    state.removed = state.removed.slice(-20); delete state.editors[preset.id];
+    state.removed = state.removed.slice(-REMOVED_PRESET_LIMIT); delete state.editors[preset.id];
     if (state.selected === preset.id) state.selected = presets[Math.min(index, presets.length - 1)]?.id;
   } else if (command.kind === "restore") {
     const entry = state.removed.pop();

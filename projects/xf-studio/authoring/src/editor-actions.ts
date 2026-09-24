@@ -48,7 +48,7 @@ export class RecipeHistory {
     const encoded = JSON.stringify(recipe);
     const added = this.entries.at(-1)?.encoded !== encoded;
     if (added) this.entries.push({ encoded, label: label && { ...label } });
-    if (this.entries.length > 80) this.entries.shift();
+    if (this.entries.length > RECIPE_HISTORY_LIMIT) this.entries.shift();
     return added;
   }
   undo(): Recipe | undefined {
@@ -64,4 +64,6 @@ export class RecipeHistory {
   snapshot(): Recipe[] { return this.entries.map(entry => parseRecipe(JSON.parse(entry.encoded))); }
   restore(entries: Recipe[]) { this.entries = encode(entries); }
 }
-const encode = (entries: Recipe[]) => entries.map(recipe => ({ encoded: JSON.stringify(parseRecipe(recipe)) })).slice(-80);
+/** Recipe Undo entries kept per preset (the oldest is dropped beyond this). */
+export const RECIPE_HISTORY_LIMIT = 80;
+const encode = (entries: Recipe[]) => entries.map(recipe => ({ encoded: JSON.stringify(parseRecipe(recipe)) })).slice(-RECIPE_HISTORY_LIMIT);

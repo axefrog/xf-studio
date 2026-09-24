@@ -134,10 +134,11 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
  * would evict the oldest recoverable draft.
  */
 export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: string, run: () => void) {
-  const draft = rt.port.library.summary().draft;
-  if (!draft || draft.recoveryCount < draft.recoveryLimit) { run(); return; }
-  const oldest = draft.oldestRecoverable!;
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.name}” will be discarded. To keep it, recover it and save it to the library first.` },
+  // Opening and importing share one consequence: the application says what would be lost.
+  const consequence = rt.port.authoring.consequences({ file: { kind: "collection.import" } });
+  const oldest = consequence.discards.find(item => item.kind === "recovery-draft");
+  if (!consequence.confirm || !oldest) { run(); return; }
+  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.` },
     { kind: "action", label: "Continue", icon: "import", run },
     { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
       run: () => void rt.file({ kind: "collection.recover" }) }],
