@@ -14,7 +14,7 @@ The long visible hair is another reason not to interpret the save's `Short` tag 
 
 ## Evidence
 
-Source: `C:/Users/Nathan/Saved Games/CD Projekt Red/Cyberpunk 2077/AutoSave-12/sav.dat`, last modified 13 September 2026, 19:47:06 Brisbane. Selected by `sav.dat` modification time, not just the folder name. There are 163 local save directories; this is the newest local save found, not a claim about cloud saves or unsaved game state.
+Source: `%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077/AutoSave-12/sav.dat`, last modified 13 September 2026, 19:47:06 Brisbane. Selected by `sav.dat` modification time, not just the folder name. There are 163 local save directories; this is the newest local save found, not a claim about cloud saves or unsaved game state.
 
 Copied source, metadata and decoded appearance: [capture directory](../../captures/2026-09-23-save-appearance/appearance.json). SHA-256 of original and copy: `9e10c26476cb9e6d7a72164f7a2090ee3204c3fe4f23ea85c5353686da5c0748`. Original remained unchanged.
 

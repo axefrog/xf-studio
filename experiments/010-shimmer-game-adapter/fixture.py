@@ -1,4 +1,5 @@
 """Build a recipe-driven, material-only Shimmer fixture; never install or package it."""
+import shutil
 import argparse
 import hashlib
 import json
@@ -15,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = HERE / 'generated'
 CLI = Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-BUN = Path('C:/Users/Nathan/.bun/bin/bun.exe')
+BUN = Path(shutil.which('bun') or 'bun')
 TEMPLATE_SHA = 'b1b181b70fd1b16393d626281eeff1d5fc99932f24868e55248d18a1abfbc019'
 DEPOT = 'axefrog/appearance_studio/studies/shimmer'
 NAME = 'xfs_shimmer_recipe_pbr'

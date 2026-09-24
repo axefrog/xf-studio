@@ -1,4 +1,5 @@
 """Recipe-driven Glossy material study; never package, register or install it."""
+import shutil
 import argparse
 import hashlib
 import json
@@ -15,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 HQ = HERE.parents[1]
 OUT = HERE / 'generated'
 CLI = Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-BUN = Path('C:/Users/Nathan/.bun/bin/bun.exe')
+BUN = Path(shutil.which('bun') or 'bun')
 TEMPLATE_SHA = 'ddfacaf5894b6aba9cfde35d796ccad415d5db16d6c8e4851d7f3875d8266bbe'
 TEMPLATE_DATA_SHA = '37c35987e6a6eea23ba52834b8e36b74d38436907717f9c4a77a84ae35aa4e19'
 DEPOT = 'axefrog/appearance_studio/studies/glossy'

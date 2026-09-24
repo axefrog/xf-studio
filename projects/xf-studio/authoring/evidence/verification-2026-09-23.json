@@ -31,7 +31,7 @@
     "savedMorphs": ["h012_nose", "h053_mouth", "h054_jaw", "h091_eyes", "h145_ear"]
   },
   "exportedMask": {
-    "file": "C:/Users/Nathan/Downloads/eye-artistry-layer-1-alpha.png",
+    "file": "%USERPROFILE%/Downloads/eye-artistry-layer-1-alpha.png",
     "bytes": 119636,
     "size": [2048, 2048],
     "alphaRange": [0, 0.8509804606437683],
