@@ -2,6 +2,7 @@ import type { DocumentState } from "./authoring-document";
 import type { MotionActions } from "./motion-actions";
 import type { PreviewActions } from "./preview-actions";
 import type { WorkspaceState } from "./workspace-state";
+import { parseUIPreferences } from "./ui-preferences";
 
 export type WorkspaceCapturePorts = {
   editor(): DocumentState;
@@ -13,6 +14,7 @@ export type WorkspaceCapturePorts = {
   motion(): ReturnType<MotionActions["snapshot"]> | undefined;
   sidebar(): Pick<WorkspaceState["panels"], "sidebarLeft" | "sidebarRight">;
   layout(): WorkspaceState["panels"];
+  uiPreferences?(): WorkspaceState["uiPreferences"];
 };
 
 /** Composes durable workspace state from typed ports; presentation supplies layout only. */
@@ -23,7 +25,8 @@ export class WorkspaceComposer {
   capture(): WorkspaceState {
     const editing = { ...this.ports.editor(), uvView: this.ports.uvView(),
       savedV: this.ports.savedV(), glitterChoices: this.initial.glitterChoices,
-      library: this.initial.library, collections: this.ports.collections() };
+      library: this.initial.library, collections: this.ports.collections(),
+      uiPreferences: parseUIPreferences(this.ports.uiPreferences?.() ?? this.initial.uiPreferences) };
     const quality = this.ports.quality();
     if (!this.previewReady) return structuredClone({ ...this.initial, ...editing,
       preview: { ...this.initial.preview, textureSize: quality },

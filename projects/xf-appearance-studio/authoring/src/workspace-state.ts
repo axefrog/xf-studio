@@ -6,6 +6,7 @@ import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
+import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -28,6 +29,7 @@ export type WorkspaceState = {
   preview: PreviewState;
   library: LibraryState;
   collections?: CollectionWorkspace;
+  uiPreferences: UIPreferences;
   panels: { lighting: boolean; previewQuality: boolean; layersScroll: number; propertiesScroll: number; pageX: number; pageY: number;
     sidebarLeft: number; sidebarRight: number };
 };
@@ -40,6 +42,7 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
       normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
+    uiPreferences: defaultUIPreferences(),
     panels: { lighting: false, previewQuality: false, layersScroll: 0, propertiesScroll: 0, pageX: 0, pageY: 0, sidebarLeft: 260, sidebarRight: 350 },
   };
 }
@@ -52,6 +55,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
   const v = value as WorkspaceState;
   if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
+  state.uiPreferences = parseUIPreferences(v.uiPreferences);
   state.uvView = parseUVView(v.uvView);
   state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
   state.glitterChoices = parseGlitterChoices(v.glitterChoices);
