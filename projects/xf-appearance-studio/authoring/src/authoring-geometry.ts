@@ -1,4 +1,5 @@
 import type { AuthoringDocument } from "./authoring-document";
+import type { ReadonlyDeep } from "./read-only";
 import type { Layer, Point, Recipe, WarpField } from "./recipe";
 
 /**
@@ -37,6 +38,9 @@ export class AuthoringGeometry {
 
   recipe(): Recipe { return this.refresh(); }
   layer(): Layer | undefined { return this.refresh().layers[this.document.active]; }
+  /** UI-facing aliases expose only read operations at the TypeScript boundary. */
+  readonlyRecipe(): ReadonlyDeep<Recipe> { return this.refresh(); }
+  readonlyLayer(): ReadonlyDeep<Layer> | undefined { return this.refresh().layers[this.document.active]; }
 }
 
 function syncLayer(target: Layer, source: Layer, replacePoints: boolean) {

@@ -2,11 +2,12 @@ import type { Recipe } from "./recipe";
 import type { LayerCommand } from "./layer-stack";
 import { finishLabel } from "./finish";
 import { reorderHandle } from "./reorder-ui";
+import type { ReadonlyDeep } from "./read-only";
 
 export function layerList(host: HTMLElement, hooks: {
   select(index: number): void; rename(index: number): void; toggle(index: number, enabled: boolean): void; edit(command: LayerCommand): void;
 }) {
-  return (recipe: Recipe, active: number) => {
+  return (recipe: ReadonlyDeep<Recipe>, active: number) => {
     host.replaceChildren();
     if (!recipe.layers.length) {
       const empty = document.createElement("p"); empty.className = "help";

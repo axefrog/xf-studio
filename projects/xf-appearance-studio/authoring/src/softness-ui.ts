@@ -1,12 +1,13 @@
 import type { Layer } from "./recipe";
 import type { SoftnessCommand } from "./softness-edit";
 import { bindControlEdit } from "./control-edit-ui";
+import type { ReadonlyDeep } from "./read-only";
 
 /** Presentation only; the application owns history, persistence and rendering. */
 export function setupSoftness(elements: {
   variable: HTMLInputElement; width: HTMLInputElement; label: HTMLElement;
   value: HTMLElement; note: HTMLElement;
-}, hooks: { layer(): Layer | undefined; selected(): number; begin(id: string): void;
+}, hooks: { layer(): ReadonlyDeep<Layer> | undefined; selected(): number; begin(id: string): void;
   commit(id: string): void; cancel(id: string): void; edit(command: SoftnessCommand): void }) {
   elements.width.min = ".0005"; elements.width.max = ".06"; elements.width.step = ".0005";
   elements.variable.onchange = () => {

@@ -1,4 +1,5 @@
 import type { Layer } from "./recipe";
+import type { ReadonlyDeep } from "./read-only";
 
 export type PathCommand =
   | { kind: "enable-bezier" }
@@ -8,7 +9,7 @@ export type PathCommand =
 export function setupPathControls(elements: {
   enable: HTMLButtonElement; modes: HTMLElement; note: HTMLElement;
   aligned: HTMLButtonElement; symmetric: HTMLButtonElement; corner: HTMLButtonElement;
-}, hooks: { layer(): Layer | undefined; selected(): number; edit(command: PathCommand): void }) {
+}, hooks: { layer(): ReadonlyDeep<Layer> | undefined; selected(): number; edit(command: PathCommand): void }) {
   elements.enable.onclick = () => hooks.edit({ kind: "enable-bezier" });
   for (const mode of ["aligned", "symmetric", "corner"] as const)
     elements[mode].onclick = () => hooks.edit({ kind: "point-mode", index: hooks.selected(), mode });

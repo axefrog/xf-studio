@@ -1,13 +1,14 @@
 import { MAX_FIELDS, type Layer, type WarpField } from "./recipe";
 import type { RecipeAction } from "./recipe-actions";
 import { bindControlEdit } from "./control-edit-ui";
+import type { ReadonlyDeep } from "./read-only";
 
 /** Presentation adapter: recipe edits use the application's existing transaction hooks. */
 export function setupFields(elements: {
   list: HTMLElement; add: HTMLButtonElement; remove: HTMLButtonElement; clear: HTMLButtonElement;
   reach: HTMLInputElement; value: HTMLElement; note: HTMLElement;
 }, hooks: {
-  layer(): Layer | undefined; selected(): WarpField | undefined;
+  layer(): ReadonlyDeep<Layer> | undefined; selected(): ReadonlyDeep<WarpField> | undefined;
   select(id: string): void; begin(id: string): void; commit(id: string): void; cancel(id: string): void;
   edit(action: RecipeAction, record?: boolean): void;
 }) {

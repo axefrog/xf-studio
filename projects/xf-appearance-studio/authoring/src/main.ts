@@ -7,7 +7,9 @@ import { type LayerCommand } from "./layer-stack";
 import { type LayerAction } from "./editor-actions";
 import { AuthoringLayerActions } from "./authoring-layer-actions";
 import { AuthoringDocument } from "./authoring-document";
+import type { ReadonlyDeep } from "./read-only";
 import { AuthoringGeometry } from "./authoring-geometry";
+import { AuthoringPresentation } from "./authoring-presentation";
 import { WorkspacePersistence } from "./workspace-persistence";
 import { WorkspaceComposer } from "./workspace-composer";
 import { layerList } from "./layer-ui";
@@ -22,7 +24,6 @@ import { StudioApplication, type StudioAction } from "./studio-application";
 import { planLayerPreview } from "./authoring-preview-policy";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
-import { selectedWarp } from "./field-selection";
 import { setupFields } from "./field-ui";
 import type { PigmentCommand } from "./pigment-edit";
 import type { SoftnessCommand } from "./softness-edit";
@@ -68,12 +69,13 @@ let qualityActions: PreviewQualityActions;
 type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
 type PreviewAlbedo = NonNullable<Extract<RasterResponse, {data: unknown}>["albedo"]>;
 let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo } | undefined)[] = [];
-const opticalKey = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
+const opticalKey = (layer: ReadonlyDeep<Layer>, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
   ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 const authoring = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
   selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
 const geometry = new AuthoringGeometry(authoring);
+const presentation = new AuthoringPresentation(authoring, geometry);
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
@@ -92,7 +94,9 @@ let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
 let previewActions: PreviewActions | undefined;
 let motionActions: MotionActions | undefined;
 let savedAppearance: SavedAppearanceActions | undefined;
-const current = () => authoring.recipe.layers[authoring.active];
+// Presentation reads use a versioned detached view; only application and
+// renderer services below retain trusted access to the live document recipe.
+const current = () => presentation.layer();
 function showGlitterMeasurement(){
   const layer=current();
   if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
@@ -105,7 +109,7 @@ function showGlitterMeasurement(){
     ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${textureSize}²; these are not visible screen glints.`
     : "Calculating flakes in this painted shape. Field density is not a visible flake count.";
 }
-const currentField = () => selectedWarp(current(), authoring.fieldSelection);
+const currentField = () => presentation.selectedField();
 function selectField(id: string) {
   const l = current(); if (l) dispatchRecipeAction({ kind: "field.select", layerId: l.id, fieldId: id });
 }
@@ -153,13 +157,16 @@ let refreshQuality: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
-  select(i) { dispatchRecipeAction({ kind: "layer.select", layerId: authoring.recipe.layers[i].id }); },
-  rename(i) { dispatchRecipeAction({ kind: "layer.select", layerId: authoring.recipe.layers[i].id });
+  select(i) { const layer = presentation.recipe().layers[i]; if (layer)
+    dispatchRecipeAction({ kind: "layer.select", layerId: layer.id }); },
+  rename(i) { const layer = presentation.recipe().layers[i]; if (!layer) return;
+    dispatchRecipeAction({ kind: "layer.select", layerId: layer.id });
     input("layer-name").focus(); input("layer-name").select(); },
-  toggle(i, enabled) { dispatchLayer({ kind: "layer.setEnabled", id: authoring.recipe.layers[i].id, enabled }); },
+  toggle(i, enabled) { const layer = presentation.recipe().layers[i]; if (layer)
+    dispatchLayer({ kind: "layer.setEnabled", id: layer.id, enabled }); },
   edit: changeLayers,
 });
-function layerCards() { paintLayerList(authoring.recipe, authoring.active); }
+function layerCards() { paintLayerList(presentation.recipe(), presentation.active); }
 function replaceRecipe(next: Recipe, nextActive = 0) {
   authoring.replaceRecipe(next, nextActive);
   resetStackResources();
@@ -188,11 +195,12 @@ function applyLayerCommand(action: LayerAction) {
 }
 const layerActions = new AuthoringLayerActions(authoring, resetStackResources);
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
-$("layer-copy").onclick = () => { if (current()) changeLayers({ kind: "duplicate", id: current().id }); };
+$("layer-copy").onclick = () => { const layer = current(); if (layer) changeLayers({ kind: "duplicate", id: layer.id }); };
 const layerName = input("layer-name");
 function commitLayerName() {
-  if (current() && layerName.value !== current().name)
-    changeLayers({ kind: "rename", id: current().id, name: layerName.value });
+  const layer = current();
+  if (layer && layerName.value !== layer.name)
+    changeLayers({ kind: "rename", id: layer.id, name: layerName.value });
 }
 layerName.onchange = layerName.onblur = commitLayerName;
 layerName.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commitLayerName(); } };
@@ -204,7 +212,7 @@ function sync() {
   refreshQuality?.();
   refreshPath?.();
   const l = current();
-  $("layer-count").textContent = String(authoring.recipe.layers.length).padStart(2, "0");
+  $("layer-count").textContent = String(presentation.recipe().layers.length).padStart(2, "0");
   $<HTMLFieldSetElement>("layer-properties").disabled = !l;
   $("layer-properties").inert = !l;
   $<HTMLButtonElement>("export").disabled = !l;
@@ -215,7 +223,7 @@ function sync() {
   if (!l) { $("active-name").textContent = "Add a makeup layer"; layerCards(); return; }
   input("layer-name").value = l.name;
   $("active-name").textContent = l.name;
-  $("point-label").textContent = `Point ${authoring.selected + 1} / ${l.points.length}`;
+  $("point-label").textContent = `Point ${presentation.selected + 1} / ${l.points.length}`;
   input("color").value = l.color;
   input("symmetry").checked = l.symmetry;
   $<HTMLSelectElement>("finish").value = canonicalFinish(l.finish);
@@ -239,7 +247,7 @@ function sync() {
   $("flake-legacy-title").textContent = l.finish === "glitter" ? "CLASSIC REFLECTIVE FLAKES" : "SHIMMER FLAKES";
   $("flake-irregular").hidden = !(isIrregular(l.flakes) && l.finish === "glitter");
   $("flake-direct").hidden = !(isDirectGlint(l.flakes) && l.finish === "glitter");
-  const flakes = l.flakes ?? defaultFlakes();
+  const flakes = (l.flakes ? { ...l.flakes } : defaultFlakes()) as NonNullable<Layer["flakes"]>;
   for (const id of ["cells", "density", "tilt"] as const) {
     const legacy = isIrregular(flakes) || isDirectGlint(flakes) ? defaultFlakes() : flakes;
     input("flake-" + id).value = String(legacy[id]);
@@ -263,7 +271,7 @@ function sync() {
     if(id!=="color")$("direct-"+id+"-value").textContent=id==="strength"?flakes.strength.toFixed(1):`${Math.round(flakes[id]*100)}%`;
   }
   for (const [id, value] of Object.entries({
-    weight: l.points[authoring.selected].weight,
+    weight: l.points[presentation.selected].weight,
     opacity: l.opacity,
   })) {
     input(id).value = String(value);
@@ -272,8 +280,8 @@ function sync() {
         ? `${(value * 100).toFixed(2)}% UV`
         : `${Math.round(value * 100)}%`;
   }
-  $<HTMLButtonElement>("remove").disabled = !app.contextCapability({ kind: "point", layerId: l.id, index: authoring.selected },
-    { kind: "point.remove", layerId: l.id, index: authoring.selected }).available;
+  $<HTMLButtonElement>("remove").disabled = !app.contextCapability({ kind: "point", layerId: l.id, index: presentation.selected },
+    { kind: "point.remove", layerId: l.id, index: presentation.selected }).available;
   $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   layerCards();
 }
@@ -419,7 +427,7 @@ for (const id of ["weight", "opacity", "color"]) {
     if (!l) return;
     if (id === "color") controlAction(id, { kind: "layer.setColor", layerId: l.id, color: control.value });
     else if (id === "weight") controlAction(id, { kind: "pigment.edit", layerId: l.id,
-      command: { kind: "point-strength", index: authoring.selected, value: +control.value } });
+      command: { kind: "point-strength", index: presentation.selected, value: +control.value } });
     else controlAction(id, { kind: "layer.setOpacity", layerId: l.id, opacity: +control.value });
   };
 }
@@ -467,7 +475,7 @@ function changePath(command: PathCommand) {
 refreshPath = setupPathControls({
   enable: $("path-enable"), modes: $("point-modes"), note: $("path-note"),
   aligned: $("point-aligned"), symmetric: $("point-symmetric"), corner: $("point-corner"),
-}, { layer: current, selected: () => authoring.selected, edit: changePath });
+}, { layer: current, selected: () => presentation.selected, edit: changePath });
 function changePigment(command: PigmentCommand) {
   const layer = current(); if (layer) controlAction(command.kind === "smooth-strength" ? "smooth-strength" : "strength-blend",
     { kind: "pigment.edit", layerId: layer.id, command });
@@ -484,7 +492,7 @@ function changeSoftness(command: SoftnessCommand) {
 refreshSoftness = setupSoftness({
   variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
   value: $("feather-value"), note: $("softness-note"),
-}, { layer: current, selected: () => authoring.selected, begin: beginControl,
+}, { layer: current, selected: () => presentation.selected, begin: beginControl,
   commit: id => app.controlCommit(id), cancel: id => app.controlCancel(id), edit: changeSoftness });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
@@ -492,14 +500,14 @@ refreshFields = setupFields({
 }, { layer: current, selected: currentField, select: selectField, begin: beginControl,
   commit: id => app.controlCommit(id), cancel: id => app.controlCancel(id),
   edit: (action, record) => action.kind === "field.setReach" ? controlAction("radius", action) : dispatchRecipeAction(action, record) });
-$("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
+$("reset").onclick = () => { const layer = current(); if (layer) changeLayers({ kind: "reset", id: layer.id }); };
 $("remove").onclick = () => {
-  const l = current(); if (l) dispatchStudio({ kind: "point.remove", layerId: l.id, index: authoring.selected });
+  const l = current(); if (l) dispatchStudio({ kind: "point.remove", layerId: l.id, index: presentation.selected });
 };
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
 }, {
-  recipe: () => geometry.recipe(), layer: () => geometry.layer(), selected: () => authoring.selected,
+  recipe: () => geometry.recipe(), layer: () => geometry.layer(), selected: () => presentation.selected,
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
@@ -518,17 +526,15 @@ function download(blob: Blob, name: string) {
 }
 $("save").onclick = () => {
   download(
-    new Blob([JSON.stringify(authoring.recipe, null, 2)], { type: "application/json" }),
+    new Blob([JSON.stringify(presentation.recipe(), null, 2)], { type: "application/json" }),
     "xfs.recipe.json",
   );
   status("Recipe exported — editable shapes, colours and fields.");
 };
 $("load").onclick = () => input("file").click();
 presetLibrary = setupCollections(() => authoring.export(), editor => {
-  authoring.restoreHistory(editor.history);
-  authoring.fieldSelection = editor.fieldSelection ?? {};
-  replaceRecipe(editor.recipe, editor.active);
-  authoring.selected = Math.max(0, Math.min(editor.selected, (current()?.points.length ?? 1) - 1)); sync(); drawUV();
+  authoring.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
+  resetStackResources();
 }, workspace.collections, workspace.library, persist, download, app);
 input("file").onchange = async () => {
   const file = input("file").files?.[0];
@@ -544,8 +550,8 @@ input("file").onchange = async () => {
   input("file").value = "";
 };
 $("export").onclick = () => {
-  if (!current()) return;
-  const layer = structuredClone(current()),
+  const selected = current(); if (!selected) return;
+  const layer = structuredClone(selected),
     bake = new Worker("/build/raster-worker.js", { type: "module" });
   $<HTMLButtonElement>("export").disabled = true;
   status("Baking 2048² mask…");
@@ -734,7 +740,7 @@ try {
   $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
   const surface = createSurfaceEditor(viewer, {
     layer: () => geometry.layer(),
-    selected: () => authoring.selected,
+    selected: () => presentation.selected,
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
     begin: () => { const layer = current(); if (layer) app.beginGesture("surface", layer.id); },
@@ -846,7 +852,7 @@ try {
       surface: surface.diagnostics(),
       inputCapture: viewport.capture(),
       uv: uvEditor!.diagnostics(),
-      recipe: structuredClone(authoring.recipe),
+      recipe: structuredClone(presentation.recipe()),
       assets: viewer!.evidence,
       eyeAppearance: viewer!.eyeAppearance(),
       idle: { enabled: viewer!.idle?.enabled ?? false, time: viewer!.idle?.time ?? 0,

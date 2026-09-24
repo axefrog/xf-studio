@@ -1,11 +1,12 @@
 import { DEFAULT_STRENGTH_BLEND, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND, type Layer } from "./recipe";
 import type { PigmentCommand } from "./pigment-edit";
 import { bindControlEdit } from "./control-edit-ui";
+import type { ReadonlyDeep } from "./read-only";
 
 /** Presentation only; the application owns commands, Undo, persistence and rendering. */
 export function setupPigment(elements: {
   smooth: HTMLInputElement; blend: HTMLInputElement; value: HTMLElement; note: HTMLElement;
-}, hooks: { layer(): Layer | undefined; begin(id: string): void; commit(id: string): void;
+}, hooks: { layer(): ReadonlyDeep<Layer> | undefined; begin(id: string): void; commit(id: string): void;
   cancel(id: string): void; edit(command: PigmentCommand): void }) {
   elements.blend.min = String(MIN_STRENGTH_BLEND);
   elements.blend.max = String(MAX_STRENGTH_BLEND);

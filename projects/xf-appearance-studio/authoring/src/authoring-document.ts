@@ -2,13 +2,12 @@ import { RecipeHistory } from "./editor-actions";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 import type { RecipeActionEffect, RecipeActionState } from "./recipe-actions";
+import type { ReadonlyDeep } from "./read-only";
 
 export type DocumentState = { recipe: Recipe; active: number; selected: number;
   fieldSelection: FieldSelection; history: Recipe[] };
 export type DocumentChange = "recipe" | "selection" | "history" | "restore";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
-type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
-  T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
 
 /** The live in-process authoring document; snapshots never expose its mutable recipe. */
 export class AuthoringDocument {

@@ -2,6 +2,7 @@ import { defaultFlakes, type LegacyFlakes } from "./finish";
 import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
   STUDIO_FINE_REGIONS, validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
+import type { ReadonlyDeep } from "./read-only";
 
 /** Pure preparation for future material scheduling, not yet wired into the
  * production worker. Exact strings avoid digest collisions. Names and IDs own
@@ -43,7 +44,7 @@ function colour(value: string) {
 /** Accept an already parsed layer. This is not a replacement recipe validator.
  * Retain optional widths/handle mode conservatively even when currently dormant.
  * Warp order stays significant because floating-point accumulation is ordered. */
-export function maskAlphaKey(layer: Layer, size: number, rasterVersion = MASK_RASTER_VERSION): AlphaKey {
+export function maskAlphaKey(layer: ReadonlyDeep<Layer>, size: number, rasterVersion = MASK_RASTER_VERSION): AlphaKey {
   sizeWithin(size, 1);
   const points: Value[] = layer.points.map(point => [point.u, point.v, point.weight, point.feather ?? null,
     point.handles ? [point.handles.mode, point.handles.in.u, point.handles.in.v, point.handles.out.u, point.handles.out.v] : null]);
