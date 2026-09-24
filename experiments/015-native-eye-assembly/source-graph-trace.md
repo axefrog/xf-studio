@@ -1,0 +1,32 @@
+# Vanilla head/eye morph and UI face graph trace
+
+25 September 2026. This is a focused **offline source-chain discriminator** for the saved five-morph blink gap in [the private render](visual-inspection.md). The installed Cyberpunk 2077 2.31 resources reveal an omitted eye-side morph and morph-specific joint binds. They do **not** prove that the live character creator activates a particular target, chooses a particular animation state, or closes this exact saved blink.
+
+## Source and reproducibility
+
+The raw head/eye entities and morph resources below came from `basegame_4_appearance.archive` (SHA-256 `9c20370467e71d49ffb0a6415fe0415b2349ac22fe5afd38daf2783f54f2443b`). The face animation graph came from `basegame_4_gamedata.archive` (SHA-256 `a2c6ea7b8bb0dceb671d04c702c41824c29e5e1ee518490a42850dac12524dab`). WolvenKit CLI 8.17.4 unbundled and serialized each private CR2W; the same version exported the eye morph target to GLB. [The asset-free checker](inspect-source-graph.py) verifies the six raw resource hashes, the GLB hashes and the bindings below, then regenerates [numeric evidence](source-graph-evidence.json) (SHA-256 `e5f9438a9b858d809f3f6d74ccbacb8983e9ac68bbc97534d79e1a5a1a7a4311`). All raw resources, serialized JSON and GLB output are ignored under this experiment's `generated/` directory. Nothing was changed in the game or MO2.
+
+| Installed depot path | SHA-256 | Proved source role |
+|---|---|---|
+| `base/characters/head/player_base_heads/appearances/entity/head/h0_000_pwa__basehead.ent` | `5253592dc4a551df90ca3a3d20a6354839c55fe3e3567896aa3fb76bb4f37fa9` | Head `entMorphTargetSkinnedMeshComponent` binds the head morph resource and an external `face_rig`. |
+| `base/characters/head/player_base_heads/appearances/entity/head/he_000_pwa__basehead.ent` | `72271a32f542ed8beb30119ab5f8c2633649b664bf2fcdfb383549113d2b4bac` | Eye `entMorphTargetSkinnedMeshComponent` binds its **own** morph resource and an external `face_rig`. |
+| `base/characters/head/player_base_heads/player_female_average/h0_000_pwa__morphs.morphtarget` | `3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e` | 105 head targets, including eye-region `h091`. |
+| `base/characters/head/player_base_heads/player_female_average/he_000_pwa__morphs.morphtarget` | `42a19b6a4d2f4060f6785de525d8c55f663fb2a13db804cd84e929e5110d1323` | 21 eye-region targets, including `h091`; `baseMesh` points to the exact installed `he_000_pwa_c__basehead.mesh`. |
+| `base/characters/head/player_base_heads/appearances/entity/head/h0_000_pwa__basehead_face_rig.ent` | `23ef863f0aff059d77cde3459387c3c048244f44ce885bfccb85a497efabd7be` | `face_rig` component points to the female face skeleton and graph; `ui_animations` references `ui_female_face.anims`. |
+| `base/animations/facial/_facial_graphs/player_woman_paperdoll_sermo.animgraph` | `1e631615513459bad3389fff41488a0e98f2b875b6ad5da68c6dc9760d9c02c7` | Serialized graph contains `ui_closeup_shot`, distinct `ui_closeup_shot_eyes`, and two eye-track look-at nodes. |
+
+To reproduce, extract those exact paths from the two named archives into ignored `generated/graph-trace/` with WolvenKit `unbundle -r`, serialize them with `convert serialize` into ignored `generated/graph-trace-json/`, and `uncook` `he_000_pwa__morphs.morphtarget` into ignored `generated/eye-morph-export/` using `--mesh-export-type MeshOnly`. The earlier plain eye GLB from [experiment 013](../013-native-preview-core/README.md) must remain at its pinned private path. Then run:
+
+```powershell
+python experiments/015-native-eye-assembly/inspect-source-graph.py
+```
+
+The script asserts source/resource hashes rather than accepting a similarly named `pwa` sibling. It compares all three morph GLB chunks with the earlier plain eye GLB at identical vertex indices. Their base positions match **exactly**; the new GLB adds 21 target arrays. The saved head's `h091_eyes` selection corresponds by name and region to eye target `h091` / `eyes` in the eye morph resource; this is a source-name match, not observed live activation. For target `h091`, 667 of 668 main eye vertices move (maximum 3.060 mm), all 12,393 lash vertices move (maximum 4.035 mm), and all 152 wetness vertices move (maximum 3.963 mm). The head target contains 254 morph-specific `boneRigMatrices`, the eye target 57, and **all 34 shared named matrices are exactly equal** in the serialized sources. This is stronger coordination evidence than a shape-name coincidence.
+
+The face-rig entity binds the female skeleton and `ui_female_face.anims`, and its graph contains close-up and eyes states. Its serialized `facialSetup` field, however, names a male-player setup path; the female rig-setup resource used by the existing offline solver is a separate installed file. This mixed raw reference is an unresolved override/selection question, not evidence that the live creator uses the male setup. The graph alone does not prove which state runs, how look-at weights mix, or whether the head and eye morph target/bind matrices are applied in the order assumed here. The body clip's live binding also remains outside this trace.
+
+## Consequence and next discriminator
+
+The earlier saved-pose images are a **neutral-eye-versus-morphed-head diagnostic, not game visual evidence**. Their 57-joint assembly used the native `.mesh`/MeshOnly GLB, which has zero morph targets; the saved head used `h091_eyes` among five vertex morphs, while the native eye/lash/wetness stayed at their neutral shape. Morph-specific `boneRigMatrices` were not applied to either skin. The 3–4 mm eye-side target and coordinated joint matrices are large enough to invalidate a game-parity conclusion from those images. We cannot infer that they completely repair the blink without applying them.
+
+The next bounded offline gate is to apply the exact `h091` eye target to all three native chunks and the matched morph-specific head/eye joint binds, retain the saved head's other four morphs precisely, and repeat the same frame-0/169/331/490 private contact/render comparison against the prior diagnostic. Check whether the source target changes exposed eye/head intersections and the visible blink seam. Only if a mismatch survives that source-complete comparison does a controlled live character-creator capture become the decisive runtime discriminator; compare the same head customization and an observed blink, with actual installed mod winners and graph state recorded. No Studio renderer change follows from this trace.

@@ -1,0 +1,79 @@
+{
+  "sourceSha256": {
+    "headEntity": "5253592dc4a551df90ca3a3d20a6354839c55fe3e3567896aa3fb76bb4f37fa9",
+    "eyeEntity": "72271a32f542ed8beb30119ab5f8c2633649b664bf2fcdfb383549113d2b4bac",
+    "faceRigEntity": "23ef863f0aff059d77cde3459387c3c048244f44ce885bfccb85a497efabd7be",
+    "headMorph": "3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e",
+    "eyeMorph": "42a19b6a4d2f4060f6785de525d8c55f663fb2a13db804cd84e929e5110d1323",
+    "faceGraph": "1e631615513459bad3389fff41488a0e98f2b875b6ad5da68c6dc9760d9c02c7"
+  },
+  "morphGlbSha256": "90ec2ee3396c598da5061d7d51f5945c34f7ccbff95246393e11c433e3fc3fdf",
+  "plainEyeGlbSha256": "0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba",
+  "entityBindings": {
+    "headMorph": "base/characters/head/player_base_heads/player_female_average/h0_000_pwa__morphs.morphtarget",
+    "eyeMorph": "base/characters/head/player_base_heads/player_female_average/he_000_pwa__morphs.morphtarget",
+    "sharedFaceRigBinding": "face_rig",
+    "faceGraph": "base/animations/facial/_facial_graphs/player_woman_paperdoll_sermo.animgraph",
+    "uiFaceAnimSet": [
+      "base/animations/ui/female/ui_female_face.anims"
+    ]
+  },
+  "morphTargets": {
+    "headCount": 105,
+    "eyeCount": 21,
+    "eyeNames": [
+      "h011",
+      "h021",
+      "h031",
+      "h041",
+      "h051",
+      "h061",
+      "h071",
+      "h081",
+      "h091",
+      "h101",
+      "h111",
+      "h121",
+      "h131",
+      "h141",
+      "h151",
+      "h161",
+      "h171",
+      "h181",
+      "h191",
+      "h201",
+      "h211"
+    ],
+    "matchingH091Region": "eyes",
+    "h091SharedJointMatrices": 34,
+    "h091SharedJointMatricesExact": true,
+    "h091EyeChunkDisplacement": [
+      {
+        "chunk": 0,
+        "vertices": 12393,
+        "changedVertices": 12393,
+        "maximumMm": 4.034569,
+        "meanMm": 2.649612
+      },
+      {
+        "chunk": 1,
+        "vertices": 668,
+        "changedVertices": 667,
+        "maximumMm": 3.060273,
+        "meanMm": 2.869621
+      },
+      {
+        "chunk": 2,
+        "vertices": 152,
+        "changedVertices": 152,
+        "maximumMm": 3.963191,
+        "meanMm": 2.897995
+      }
+    ]
+  },
+  "faceGraph": {
+    "uiCloseupShotNameOccurrences": 9,
+    "uiCloseupShotEyesNameOccurrences": 1,
+    "eyeTracksLookAtNodes": 2
+  }
+}
