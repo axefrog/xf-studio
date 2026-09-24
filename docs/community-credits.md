@@ -104,7 +104,7 @@ By the gfx-rs/wgpu contributors. [GitHub](https://github.com/gfx-rs/wgpu). Its d
 
 ### Cyberpunk 2077 Modding Wiki
 
-By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), and to the CyberCAT documentation for pointing us to external preset files.
+By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding), [source](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs). Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families, decals and load order. We are particularly grateful to the guide authors and editors icxrus, island_dancer, nutboy, Mx_OrcBoi (custom facial piercings with PRC) and minnierylands (load-order guide), saltypigloaf (facial-rig guide), Rebecca (whose multilayered clear-coat page demonstrated the view-angle coat tint), and to the CyberCAT documentation for pointing us to external preset files.
 
 ## Mods and creators whose work we studied
 
