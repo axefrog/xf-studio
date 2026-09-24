@@ -86,22 +86,25 @@ body.guide { overflow: auto; height: auto; }
 .layout-map { display: grid; gap: 3px; height: 200px; font-size: var(--fs-2xs); }
 .layout-map span { display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px; background: var(--bg-panel); border: 1px solid var(--line); color: var(--text-muted); font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
 .layout-map span.stage { background: var(--stage); color: var(--stage-text); border-color: transparent; }
-.layout-map.wide { grid-template-columns: 1fr 2.6fr 1.3fr; grid-template-rows: 1fr 1fr 1fr; grid-template-areas: "a c e" "b c f" "b d g"; }
-.layout-map.compact { grid-template-columns: 1fr 1.4fr; grid-template-rows: 1fr 1fr; grid-template-areas: "a a" "b c"; }
+/* Drawn at real window proportions (1600×1000 and 900×900) so the head cells read as portrait. */
+.layout-map.wide { width: min(100%, 346px); grid-template-columns: 21fr 37fr 42fr; grid-template-rows: 2fr 3fr; grid-template-areas: "a c d" "b c e"; }
+.layout-map.compact { width: min(100%, 216px); grid-template-columns: 38fr 4fr 58fr; grid-template-rows: 56fr 44fr; grid-template-areas: "a b b" "c c d"; }
 .handle-legend { width: 100%; max-width: 480px; display: block; }
 .toast-demo { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 420px; }
 .demo-viewport { height: 170px; }
 .demo-uv { height: 170px; margin-top: var(--sp-4); }
 .uv-well { flex: 1; min-height: 60px; margin: var(--sp-3); background: linear-gradient(90deg, transparent 49.8%, #c4ddca44 50%, transparent 50.2%), radial-gradient(60% 50% at 30% 45%, oklch(.5 .08 350 / .7), transparent 70%), radial-gradient(60% 50% at 70% 45%, oklch(.5 .08 350 / .7), transparent 70%), #253132; border: 1px solid var(--line-strong); }
 .mock-shell { display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr) auto; height: 420px; border: 1px solid var(--line-strong); background: var(--bg-app); overflow: hidden; }
-.mock-shell.compact-mock { max-width: 560px; }
+.mock-shell.compact-mock { max-width: 560px; height: 520px; }
 .mock-dock { display: grid; gap: 4px; padding: 4px; min-height: 0; }
 .mock-dock.wide-3 { grid-template-columns: 1.25fr 1.6fr 1.25fr; }
+.mock-dock.wide-3.portrait-stage { grid-template-columns: 21fr 37fr 42fr; }
 .mock-dock.wide-2 { grid-template-columns: 1.2fr 1fr; }
-.mock-dock.compact-2 { grid-template-rows: 1fr 1fr; }
+.mock-dock.compact-2 { grid-template-rows: 56fr 44fr; }
 .mock-col, .mock-row { display: grid; gap: 4px; min-height: 0; min-width: 0; }
 .mock-col { grid-auto-rows: minmax(0, 1fr); }
 .mock-row { grid-template-columns: 1fr 1.4fr; }
+.mock-row.stage-row { grid-template-columns: 38fr 62fr; }
 .mock-stack { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4); }
 .mock-dock .dock-group { min-height: 0; }
 .mock-dock .panel-content { padding: var(--sp-4); gap: var(--sp-4); min-height: 0; }

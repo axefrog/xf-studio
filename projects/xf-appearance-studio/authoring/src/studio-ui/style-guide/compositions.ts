@@ -48,12 +48,12 @@ const stage = (label: string) => `<div class="viewport-panel mock-stage"><div cl
 
 export function compositions() {
   const editing = `<div class="mock-shell">${mockHeader("Chrome dusk")}
-    <div class="mock-dock wide-3">
+    <div class="mock-dock wide-3 portrait-stage">
       <div class="mock-col">${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Chrome dusk", "3 layers", { preset: true, selected: true })}${row("Soft day", "1 layer", { preset: true })}</ol></div>`, { condensed: true })}
         ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true })}${row("Petal wash", "Matte · 85%", { swatch: "#b0587a", selected: true })}${row("Base", "Satin · 70%", { swatch: "#6b4450", finish: "regular" })}</ol></div>`)}</div>
-      <div class="mock-col">${group([["Head", "head"]], 0, stage("Chrome dusk › Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
-      <div class="mock-col">${group([["Colour & finish", "finish"]], 0, `<div class="panel-content"><div class="layer-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">2 of 3 from front</span></div></div>${slider("Opacity", .85, "85%")}</div>`)}
-        ${group([["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"]], 1, `<div class="panel-content">${slider("Selected point pigment", .72, "72%")}${toggle("Smooth point gradients", true)}</div>`)}</div>
+      <div class="mock-col">${group([["Head", "head"]], 0, stage("Chrome dusk › Petal wash"))}</div>
+      <div class="mock-col" style="grid-template-rows: minmax(0, 2fr) minmax(0, 3fr)">${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}
+        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"], ["Motion", "motion"], ["Preview quality", "quality"]], 0, `<div class="panel-content"><div class="layer-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">2 of 3 from front</span></div></div>${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div>
     </div><footer class="status-bar"><span class="status-item">● Draft autosaved in this browser</span><span class="grow"></span><span class="status-item ready-badge" data-phase="ready">Preview 1K · ready</span></footer></div>`;
   const library = `<div class="mock-shell">${mockHeader("Night market set", "Newer r5 saved")}<div class="mock-dock wide-2">
     ${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 1, `<div class="panel-content"><section class="section"><h3 class="section-title">Local library</h3><p class="state-line warning">Your draft is based on revision 3; the library has revision 5 from elsewhere.</p><div class="row wrap gap-s">${btn("Save to library", { icon: "save", variant: "primary" })}${btn("Save a copy", { icon: "duplicate" })}</div></section>
@@ -63,7 +63,7 @@ export function compositions() {
     ${group([["Mod package", "package"]], 0, `<div class="panel-content"><section class="section"><h3 class="section-title">Mod package</h3><p class="note">Creates private mod files for ONE in-game eye-makeup selector (plus Off) from the current draft, including unsaved edits.</p><div class="row wrap gap-s">${btn("Check mod export", { icon: "check" })}${btn("Build mod files…", { icon: "package", variant: "primary" })}</div></section>
       <div class="result-card ok"><div class="result-head"><strong>Check result</strong>${badge("Current", "success")}</div><p class="result-summary">3 of 4 presets can become mod files. This check created no files.</p><ul class="result-list"><li>${i("check")}<span>Chrome dusk</span><code class="muted">xfs_eye_…_chrome</code></li><li>${i("check")}<span>Soft day</span></li></ul><div class="omissions"><span class="eyebrow">Omitted from the package</span><ul class="result-list"><li>${i("warning")}<span>Whole preset “Glitter night” — No active exportable layers remain.</span></li></ul></div></div></div>`)}
     ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true, selected: true })}</ol><div class="export-line">${badge("Preview study", "warning")}<span class="small">Preview study only. Check and Build omit active layers with this finish.</span></div></div>`)}</div></div>`;
-  const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2">${group([["Head", "head"], ["UV map", "uv"]], 0, stage("Chrome dusk › Petal wash"))}
+  const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2"><div class="mock-row stage-row">${group([["Head", "head"]], 0, stage("Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
     <div class="mock-row">${group([["Layers", "layers"], ["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Petal wash", "Matte", { swatch: "#b0587a", selected: true })}</ol></div>`, { condensed: true })}
     ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, `<div class="panel-content">${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div></div></div>`;
   const future = `<div class="mock-shell future-mock">${mockHeader("Arched brows — draft", "Not in library", "Eyebrows (future)")}
@@ -74,10 +74,10 @@ export function compositions() {
   return section("compositions", "06", "Compositions",
     `Representative arrangements built from the patterns above. They are starting points users can rearrange, not fixed screens.`, [
     pattern({ id: "k-editing", title: "Eye-makeup editing (wide)", status: "implemented", wide: true, specimen: editing,
-      what: "Stack on the left (presets over layers), stage in the centre (head over UV map), the selected layer's inspectors on the right.",
-      when: "Default wide layout. The eye travels left → centre → right: choose, see, adjust.",
+      what: "Stack on the left (presets over layers); the head in a full-height portrait column at the centre; the UV map over the selected layer's inspectors on the right, with the preview context (Character, Camera & light, Motion, Quality) one tab along.",
+      when: "Default wide layout. The eye travels left → centre → right: choose, see, adjust. Head and UV map are always visible together, so an edit in either is judged in the other.",
       combine: "Selecting a layer updates every inspector's context strip; gestures on either viewport update the other.",
-      adapt: "Users commonly float Camera & light beside the head, or maximize the head for judgement." }),
+      adapt: "Columns scale with the window, so the head stays portrait from 1100 px upward. To keep preview context in view while adjusting a layer, float Camera & light or Character, or drag it beside the inspector; maximize the head for judgement." }),
     pattern({ id: "k-library", title: "Library management", status: "implemented", wide: true, specimen: library,
       what: "Library tab with the save state explained, saved collections (the current one marked), recovery and portable files; outcomes arrive as toasts with specific recoveries.",
       when: "Saving, opening another collection, resolving a conflict, recovering a replaced draft.",
@@ -87,7 +87,7 @@ export function compositions() {
       when: "Before building: Check, read omissions, fix or accept them, then Build (confirmed in place).",
       combine: "Result freshness turns Stale as soon as the draft changes; the finish status and the omission list use the same catalogue wording." }),
     pattern({ id: "k-compact", title: "Compact workspace", status: "implemented", wide: true, specimen: compact,
-      what: "Stage above two condensed tab groups; header actions become icons.",
+      what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons.",
       when: "Windows narrower than 1100 px, tablets, or a narrow browser beside the game." }),
     pattern({ id: "k-future", title: "A future category joining", status: "future", wide: true, specimen: future,
       what: "How a later category (eyebrows is only an example) would join: an entry in the category switcher, its own panel registry and default layouts, reuse of the shell, dock, lists, controls, library and package patterns — and its own concepts.",

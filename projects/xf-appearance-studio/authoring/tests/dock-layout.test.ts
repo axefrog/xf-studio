@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { allGroups, applyDrop, closePanel, group, locate, openPanel, panelsIn, parseTree, recoverWindows,
-  split, type DockTree } from "../src/studio-ui/dock/layout";
+  split, type DockNode, type DockTree, type Rect } from "../src/studio-ui/dock/layout";
 import { compassGuides, edgeGuides, resolveDrop, type DropGeometry } from "../src/studio-ui/dock/snap";
 import { defaultCompact, defaultWide, PANEL_IDS } from "../src/studio-ui/layout-defaults";
 import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
@@ -18,13 +18,56 @@ test("default layouts contain every panel exactly once in both size classes", ()
   everyPanelOnce(defaultCompact());
 });
 
+/** Group rectangles from split fractions alone (splitters and borders ignored). */
+function groupRects(node: DockNode, rect: Rect, out = new Map<string, Rect>()) {
+  if (node.kind === "group") return out.set(node.id, rect);
+  let offset = 0;
+  node.children.forEach((child, i) => {
+    const share = node.sizes[i];
+    groupRects(child, node.axis === "row" ? { x: rect.x + offset * rect.w, y: rect.y, w: share * rect.w, h: rect.h }
+      : { x: rect.x, y: rect.y + offset * rect.h, w: rect.w, h: share * rect.h }, out);
+    offset += share;
+  });
+  return out;
+}
+
+test("factory defaults give the portrait head a portrait viewport beside a visible UV map", () => {
+  // Dock areas measured in Chrome for 1100×800, 1366×768, 1600×1000 and 1920×1080 (wide) and
+  // 900×900 and 640×900 (compact). The tab bar is 34 px; the UV panel's toolbar, hint and
+  // padding take about 115 px of height and 20 px of width around its 720:310 both-eyes canvas.
+  const cases = [...[[1092, 722], [1358, 690], [1592, 922], [1912, 1002]].map(size => ({ tree: defaultWide(), size, wide: true })),
+    ...[[892, 822], [632, 822]].map(size => ({ tree: defaultCompact(), size, wide: false }))];
+  for (const { tree, size: [w, h], wide } of cases) {
+    const rects = groupRects(tree.root!, { x: 0, y: 0, w, h });
+    const head = locate(tree, "head")!, uv = locate(tree, "uv")!, finish = locate(tree, "finish")!;
+    // Head and UV map are each the active tab of their own docked group, so both are visible.
+    expect([head.group.active, uv.group.active, head.group.id !== uv.group.id]).toEqual(["head", "uv", true]);
+    const stage = rects.get(head.group.id)!, aspect = stage.w / (stage.h - 34);
+    expect({ size: [w, h], aspect: aspect >= .5 && aspect <= .85 }).toEqual({ size: [w, h], aspect: true });
+    const map = rects.get(uv.group.id)!, canvas = Math.min(map.w - 20, (map.h - 115) * 720 / 310);
+    expect(canvas).toBeGreaterThanOrEqual(360);
+    // The wide head column spans the full height; inspectors stay wide enough for their controls.
+    if (wide) expect(stage.h).toBe(h);
+    expect(rects.get(finish.group.id)!.w).toBeGreaterThanOrEqual(wide ? 440 : 360);
+  }
+});
+
 test("panels move between tab groups, split beside groups and dock at workspace edges", () => {
   let tree = defaultWide();
   tree = applyDrop(tree, { kind: "panel", panelId: "motion" }, { kind: "tab", groupId: "g-layers", index: 0 });
   expect(locate(tree, "motion")!.group).toMatchObject({ id: "g-layers", panels: ["motion", "layers"], active: "motion" });
-  tree = applyDrop(tree, { kind: "panel", panelId: "quality" }, { kind: "split", groupId: "g-head", side: "right" });
-  const root = tree.root!, stage = root.kind === "split" ? root.children[1] : undefined;
-  expect(stage?.kind === "split" && stage.children[0].kind === "split" && stage.children[0].axis).toBe("row");
+  // Beside a group inside a column: a nested row replaces it.
+  tree = applyDrop(tree, { kind: "panel", panelId: "quality" }, { kind: "split", groupId: "g-uv", side: "right" });
+  const root = tree.root!, right = root.kind === "split" ? root.children[2] : undefined;
+  const nested = right?.kind === "split" ? right.children[0] : undefined;
+  expect(nested?.kind === "split" && nested.axis).toBe("row");
+  expect(nested?.kind === "split" && nested.children.map(child => child.id)[0]).toBe("g-uv");
+  expect(locate(tree, "quality")!.group.panels).toEqual(["quality"]);
+  // Beside a group whose parent already splits on that axis: a sibling in the same split.
+  tree = applyDrop(tree, { kind: "panel", panelId: "character" }, { kind: "split", groupId: "g-head", side: "right" });
+  const row = tree.root!;
+  expect(row.kind === "split" && row.children.map(child => child.id).indexOf("g-head")).toBe(1);
+  expect(row.kind === "split" && row.children[2].kind === "group" && row.children[2].panels).toEqual(["character"]);
   tree = applyDrop(tree, { kind: "panel", panelId: "activity" }, { kind: "edge", side: "bottom" });
   const after = tree.root!;
   expect(after.kind === "split" && after.axis).toBe("column");
@@ -81,6 +124,24 @@ test("parser drops unknown/duplicate panels, rejects malformed trees and re-adds
     PANEL_IDS, defaultWide())).toBeUndefined();
   expect(parseTree({ root: null, floating: [{ id: "w", x: NaN, y: 0, w: 1, h: 1, node: group(["head"]) }], closed: [] },
     PANEL_IDS, defaultWide())).toBeUndefined();
+});
+
+test("a layout saved with the previous factory arrangement restores exactly, not as the new default", () => {
+  // The pre-portrait defaults (head over UV map in a landscape stage column; one compact stage group).
+  const wide: DockTree = { floating: [], root: split("row", [
+    split("column", [group(["presets", "library", "package"], "presets", "g-collection"), group(["layers"], "layers", "g-layers")], [.4, .6], "s-left"),
+    split("column", [group(["head"], "head", "g-head"), group(["uv"], "uv", "g-uv")], [.62, .38], "s-stage"),
+    split("column", [group(["finish"], "finish", "g-finish"), group(["shape", "edge", "warp"], "shape", "g-inspect"),
+      group(["character", "lighting", "motion", "quality"], "character", "g-preview")], [.37, .35, .28], "s-right"),
+  ], [.2, .54, .26], "s-root"), closed: ["activity"] };
+  const compact: DockTree = { floating: [], root: split("column", [group(["head", "uv"], "head", "g-stage"),
+    split("row", [group(["layers", "presets", "library", "package"], "layers", "g-stack"),
+      group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")], [.42, .58], "s-lower")],
+  [.5, .5], "s-root"), closed: ["activity"] };
+  const saved = JSON.parse(JSON.stringify(serializeDockState({ wide, compact })));
+  const restored = restoreDockPreference(saved, area);
+  expect(restored.recovered).toBe(true);
+  expect(restored.state).toEqual(saved.state);
 });
 
 test("persisted preferences pass the engine's recovery gate and round-trip", () => {

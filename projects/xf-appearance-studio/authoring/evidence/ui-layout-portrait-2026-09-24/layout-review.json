@@ -1,0 +1,2065 @@
+{
+  "date": "2026-09-24",
+  "url": "?verify=1 (isolated workspace, disposable data and Chrome profiles)",
+  "consoleErrors": 0,
+  "results": {
+    "load-1600x1000-dark": {
+      "window": [
+        1600,
+        1000
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 342,
+        "y": 81,
+        "w": 584,
+        "h": 888,
+        "aspect": 0.658
+      },
+      "uv": {
+        "x": 938,
+        "y": 128,
+        "w": 661,
+        "h": 284,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 333,
+          "h": 367
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 419,
+          "w": 333,
+          "h": 551
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 341,
+          "y": 48,
+          "w": 586,
+          "h": 922
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 931,
+          "y": 48,
+          "w": 665,
+          "h": 386
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 931,
+          "y": 438,
+          "w": 665,
+          "h": 532
+        }
+      ]
+    },
+    "load-1100x800-dark": {
+      "window": [
+        1100,
+        800
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 237,
+        "y": 81,
+        "w": 399,
+        "h": 688,
+        "aspect": 0.58
+      },
+      "uv": {
+        "x": 653,
+        "y": 128,
+        "w": 430,
+        "h": 185,
+        "mode": "both"
+      },
+      "cameraDistance": 0.842,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 228,
+          "h": 287
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 339,
+          "w": 228,
+          "h": 431
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 236,
+          "y": 48,
+          "w": 401,
+          "h": 722
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 641,
+          "y": 48,
+          "w": 455,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 641,
+          "y": 354,
+          "w": 455,
+          "h": 416
+        }
+      ]
+    },
+    "load-900x900-dark": {
+      "window": [
+        900,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 335,
+        "h": 424,
+        "aspect": 0.79
+      },
+      "uv": {
+        "x": 352,
+        "y": 183,
+        "w": 548,
+        "h": 236,
+        "mode": "both"
+      },
+      "cameraDistance": 0.619,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 337,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 345,
+          "y": 48,
+          "w": 551,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 373,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 381,
+          "y": 510,
+          "w": 515,
+          "h": 360
+        }
+      ]
+    },
+    "load-640x900-dark": {
+      "window": [
+        640,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 237,
+        "h": 424,
+        "aspect": 0.559
+      },
+      "uv": {
+        "x": 254,
+        "y": 210,
+        "w": 387,
+        "h": 166,
+        "mode": "both"
+      },
+      "cameraDistance": 0.873,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 239,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 247,
+          "y": 48,
+          "w": 389,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 264,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": true,
+          "x": 272,
+          "y": 510,
+          "w": 364,
+          "h": 360
+        }
+      ]
+    },
+    "load-1920x1080-dark": {
+      "window": [
+        1920,
+        1080
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 409,
+        "y": 81,
+        "w": 702,
+        "h": 968,
+        "aspect": 0.725
+      },
+      "uv": {
+        "x": 1147,
+        "y": 128,
+        "w": 739,
+        "h": 318,
+        "mode": "both"
+      },
+      "cameraDistance": 0.674,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 400,
+          "h": 399
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 451,
+          "w": 400,
+          "h": 599
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 408,
+          "y": 48,
+          "w": 704,
+          "h": 1002
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 1116,
+          "y": 48,
+          "w": 800,
+          "h": 419
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 1116,
+          "y": 471,
+          "w": 800,
+          "h": 579
+        }
+      ]
+    },
+    "load-1366x768-dark": {
+      "window": [
+        1366,
+        768
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 293,
+        "y": 81,
+        "w": 497,
+        "h": 656,
+        "aspect": 0.758
+      },
+      "uv": {
+        "x": 861,
+        "y": 128,
+        "w": 435,
+        "h": 187,
+        "mode": "both"
+      },
+      "cameraDistance": 0.645,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 284,
+          "h": 274
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 326,
+          "w": 284,
+          "h": 412
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 292,
+          "y": 48,
+          "w": 499,
+          "h": 690
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 795,
+          "y": 48,
+          "w": 567,
+          "h": 288
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 795,
+          "y": 340,
+          "w": 567,
+          "h": 398
+        }
+      ]
+    },
+    "load-1024x768-dark": {
+      "window": [
+        1024,
+        768
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 383,
+        "h": 350,
+        "aspect": 1.094
+      },
+      "uv": {
+        "x": 400,
+        "y": 129,
+        "w": 625,
+        "h": 269,
+        "mode": "both"
+      },
+      "cameraDistance": 0.555,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 385,
+          "h": 384
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 393,
+          "y": 48,
+          "w": 627,
+          "h": 384
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 436,
+          "w": 425,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 433,
+          "y": 436,
+          "w": 587,
+          "h": 302
+        }
+      ]
+    },
+    "resize-1100x800-dark": {
+      "window": [
+        1100,
+        800
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 237,
+        "y": 81,
+        "w": 399,
+        "h": 688,
+        "aspect": 0.58
+      },
+      "uv": {
+        "x": 653,
+        "y": 128,
+        "w": 430,
+        "h": 185,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 228,
+          "h": 287
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 339,
+          "w": 228,
+          "h": 431
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 236,
+          "y": 48,
+          "w": 401,
+          "h": 722
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 641,
+          "y": 48,
+          "w": 455,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 641,
+          "y": 354,
+          "w": 455,
+          "h": 416
+        }
+      ]
+    },
+    "resize-900x900-dark": {
+      "window": [
+        900,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 335,
+        "h": 424,
+        "aspect": 0.79
+      },
+      "uv": {
+        "x": 352,
+        "y": 183,
+        "w": 548,
+        "h": 236,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 337,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 345,
+          "y": 48,
+          "w": 551,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 373,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 381,
+          "y": 510,
+          "w": 515,
+          "h": 360
+        }
+      ]
+    },
+    "resize-640x900-dark": {
+      "window": [
+        640,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 237,
+        "h": 424,
+        "aspect": 0.559
+      },
+      "uv": {
+        "x": 254,
+        "y": 210,
+        "w": 387,
+        "h": 166,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 239,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 247,
+          "y": 48,
+          "w": 389,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 264,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": true,
+          "x": 272,
+          "y": 510,
+          "w": 364,
+          "h": 360
+        }
+      ]
+    },
+    "resize-1600x1000-dark": {
+      "window": [
+        1600,
+        1000
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 342,
+        "y": 81,
+        "w": 584,
+        "h": 888,
+        "aspect": 0.658
+      },
+      "uv": {
+        "x": 938,
+        "y": 128,
+        "w": 661,
+        "h": 284,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 333,
+          "h": 367
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 419,
+          "w": 333,
+          "h": 551
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 341,
+          "y": 48,
+          "w": 586,
+          "h": 922
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 931,
+          "y": 48,
+          "w": 665,
+          "h": 386
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 931,
+          "y": 438,
+          "w": 665,
+          "h": 532
+        }
+      ]
+    },
+    "load-1600x1000-light": {
+      "window": [
+        1600,
+        1000
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 342,
+        "y": 81,
+        "w": 584,
+        "h": 888,
+        "aspect": 0.658
+      },
+      "uv": {
+        "x": 938,
+        "y": 128,
+        "w": 661,
+        "h": 284,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 333,
+          "h": 367
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 419,
+          "w": 333,
+          "h": 551
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 341,
+          "y": 48,
+          "w": 586,
+          "h": 922
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 931,
+          "y": 48,
+          "w": 665,
+          "h": 386
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 931,
+          "y": 438,
+          "w": 665,
+          "h": 532
+        }
+      ]
+    },
+    "load-1100x800-light": {
+      "window": [
+        1100,
+        800
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 237,
+        "y": 81,
+        "w": 399,
+        "h": 688,
+        "aspect": 0.58
+      },
+      "uv": {
+        "x": 653,
+        "y": 128,
+        "w": 430,
+        "h": 185,
+        "mode": "both"
+      },
+      "cameraDistance": 0.842,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 228,
+          "h": 287
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 339,
+          "w": 228,
+          "h": 431
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 236,
+          "y": 48,
+          "w": 401,
+          "h": 722
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 641,
+          "y": 48,
+          "w": 455,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 641,
+          "y": 354,
+          "w": 455,
+          "h": 416
+        }
+      ]
+    },
+    "load-900x900-light": {
+      "window": [
+        900,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 335,
+        "h": 424,
+        "aspect": 0.79
+      },
+      "uv": {
+        "x": 352,
+        "y": 183,
+        "w": 548,
+        "h": 236,
+        "mode": "both"
+      },
+      "cameraDistance": 0.619,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 337,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 345,
+          "y": 48,
+          "w": 551,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 373,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 381,
+          "y": 510,
+          "w": 515,
+          "h": 360
+        }
+      ]
+    },
+    "load-640x900-light": {
+      "window": [
+        640,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 237,
+        "h": 424,
+        "aspect": 0.559
+      },
+      "uv": {
+        "x": 254,
+        "y": 210,
+        "w": 387,
+        "h": 166,
+        "mode": "both"
+      },
+      "cameraDistance": 0.873,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 239,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 247,
+          "y": 48,
+          "w": 389,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 264,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": true,
+          "x": 272,
+          "y": 510,
+          "w": 364,
+          "h": 360
+        }
+      ]
+    },
+    "load-1920x1080-light": {
+      "window": [
+        1920,
+        1080
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 409,
+        "y": 81,
+        "w": 702,
+        "h": 968,
+        "aspect": 0.725
+      },
+      "uv": {
+        "x": 1147,
+        "y": 128,
+        "w": 739,
+        "h": 318,
+        "mode": "both"
+      },
+      "cameraDistance": 0.674,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 400,
+          "h": 399
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 451,
+          "w": 400,
+          "h": 599
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 408,
+          "y": 48,
+          "w": 704,
+          "h": 1002
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 1116,
+          "y": 48,
+          "w": 800,
+          "h": 419
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 1116,
+          "y": 471,
+          "w": 800,
+          "h": 579
+        }
+      ]
+    },
+    "load-1366x768-light": {
+      "window": [
+        1366,
+        768
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 293,
+        "y": 81,
+        "w": 497,
+        "h": 656,
+        "aspect": 0.758
+      },
+      "uv": {
+        "x": 861,
+        "y": 128,
+        "w": 435,
+        "h": 187,
+        "mode": "both"
+      },
+      "cameraDistance": 0.645,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 284,
+          "h": 274
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 326,
+          "w": 284,
+          "h": 412
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 292,
+          "y": 48,
+          "w": 499,
+          "h": 690
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 795,
+          "y": 48,
+          "w": 567,
+          "h": 288
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 795,
+          "y": 340,
+          "w": 567,
+          "h": 398
+        }
+      ]
+    },
+    "load-1024x768-light": {
+      "window": [
+        1024,
+        768
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 383,
+        "h": 350,
+        "aspect": 1.094
+      },
+      "uv": {
+        "x": 400,
+        "y": 129,
+        "w": 625,
+        "h": 269,
+        "mode": "both"
+      },
+      "cameraDistance": 0.555,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 385,
+          "h": 384
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 393,
+          "y": 48,
+          "w": 627,
+          "h": 384
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 436,
+          "w": 425,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 433,
+          "y": 436,
+          "w": 587,
+          "h": 302
+        }
+      ]
+    },
+    "resize-1100x800-light": {
+      "window": [
+        1100,
+        800
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 237,
+        "y": 81,
+        "w": 399,
+        "h": 688,
+        "aspect": 0.58
+      },
+      "uv": {
+        "x": 653,
+        "y": 128,
+        "w": 430,
+        "h": 185,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 228,
+          "h": 287
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 339,
+          "w": 228,
+          "h": 431
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 236,
+          "y": 48,
+          "w": 401,
+          "h": 722
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 641,
+          "y": 48,
+          "w": 455,
+          "h": 302
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 641,
+          "y": 354,
+          "w": 455,
+          "h": 416
+        }
+      ]
+    },
+    "resize-900x900-light": {
+      "window": [
+        900,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 335,
+        "h": 424,
+        "aspect": 0.79
+      },
+      "uv": {
+        "x": 352,
+        "y": 183,
+        "w": 548,
+        "h": 236,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 337,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 345,
+          "y": 48,
+          "w": 551,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 373,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 381,
+          "y": 510,
+          "w": 515,
+          "h": 360
+        }
+      ]
+    },
+    "resize-640x900-light": {
+      "window": [
+        640,
+        900
+      ],
+      "sizeClass": "compact",
+      "overflowX": false,
+      "head": {
+        "x": 5,
+        "y": 81,
+        "w": 237,
+        "h": 424,
+        "aspect": 0.559
+      },
+      "uv": {
+        "x": 254,
+        "y": 210,
+        "w": 387,
+        "h": 166,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 239,
+          "h": 458
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 247,
+          "y": 48,
+          "w": 389,
+          "h": 458
+        },
+        {
+          "id": "g-stack",
+          "tabs": [
+            "layers",
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "layers",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 510,
+          "w": 264,
+          "h": 360
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": true,
+          "x": 272,
+          "y": 510,
+          "w": 364,
+          "h": 360
+        }
+      ]
+    },
+    "resize-1600x1000-light": {
+      "window": [
+        1600,
+        1000
+      ],
+      "sizeClass": "wide",
+      "overflowX": false,
+      "head": {
+        "x": 342,
+        "y": 81,
+        "w": 584,
+        "h": 888,
+        "aspect": 0.658
+      },
+      "uv": {
+        "x": 938,
+        "y": 128,
+        "w": 661,
+        "h": 284,
+        "mode": "both"
+      },
+      "cameraDistance": 0.743,
+      "groups": [
+        {
+          "id": "g-collection",
+          "tabs": [
+            "presets",
+            "library",
+            "package"
+          ],
+          "active": "presets",
+          "condensed": true,
+          "clipped": false,
+          "x": 4,
+          "y": 48,
+          "w": 333,
+          "h": 367
+        },
+        {
+          "id": "g-layers",
+          "tabs": [
+            "layers"
+          ],
+          "active": "layers",
+          "condensed": false,
+          "clipped": false,
+          "x": 4,
+          "y": 419,
+          "w": 333,
+          "h": 551
+        },
+        {
+          "id": "g-head",
+          "tabs": [
+            "head"
+          ],
+          "active": "head",
+          "condensed": false,
+          "clipped": false,
+          "x": 341,
+          "y": 48,
+          "w": 586,
+          "h": 922
+        },
+        {
+          "id": "g-uv",
+          "tabs": [
+            "uv"
+          ],
+          "active": "uv",
+          "condensed": false,
+          "clipped": false,
+          "x": 931,
+          "y": 48,
+          "w": 665,
+          "h": 386
+        },
+        {
+          "id": "g-inspect",
+          "tabs": [
+            "finish",
+            "shape",
+            "edge",
+            "warp",
+            "character",
+            "lighting",
+            "motion",
+            "quality"
+          ],
+          "active": "finish",
+          "condensed": true,
+          "clipped": false,
+          "x": 931,
+          "y": 438,
+          "w": 665,
+          "h": 532
+        }
+      ]
+    }
+  }
+}

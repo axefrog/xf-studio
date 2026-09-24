@@ -358,28 +358,28 @@ try {
     await page.wait(300);
     const win = await rect(".dock-window:has(#dock-tab-character)");
     const fill = await rect(".dock-window:has(#dock-tab-character) .dock-tabbar-fill");
-    const target = await rect("[data-group='g-finish']");
-    // Grab the far left of the bar and move so the big window covers g-finish while the cursor stays over the head stage (no guide there).
+    const target = await rect("[data-group='g-inspect']");
+    // Grab the far left of the bar and move so the big window covers g-inspect while the cursor stays over the head stage (no guide there).
     const start = { x: fill!.x + 12, y: fill!.cy };
     const cursor = { x: target!.x - 120, y: target!.y + 40 };
     await page.mouse("mouseMoved", start.x, start.y, { button: "none", buttons: 0 }); await page.mouse("mousePressed", start.x, start.y);
     for (let n = 1; n <= 14; n++) { await page.mouse("mouseMoved", start.x + (cursor.x - start.x) * n / 14, start.y + (cursor.y - start.y) * n / 14); await page.wait(16); }
     await page.wait(120);
-    const during = await js<{ label: string; overlap: boolean }>(`(() => { const w = document.querySelector('.dock-window:has(#dock-tab-character)').getBoundingClientRect(), g = document.querySelector("[data-group='g-finish']").getBoundingClientRect();
+    const during = await js<{ label: string; overlap: boolean }>(`(() => { const w = document.querySelector('.dock-window:has(#dock-tab-character)').getBoundingClientRect(), g = document.querySelector("[data-group='g-inspect']").getBoundingClientRect();
       return { label: document.querySelector('.dock-preview')?.dataset.label ?? '', overlap: w.right > g.left && w.left < g.right && w.bottom > g.top && w.top < g.bottom }; })()`);
     await shot("dock-large-overlap-no-snap");
     await page.mouse("mouseReleased", cursor.x, cursor.y); await page.wait(300);
     const floating = await js<boolean>(`${S}.dock.tree.floating.some(w => JSON.stringify(w.node).includes('character'))`);
-    // Now put the cursor on g-finish's compass centre: it joins as a tab.
+    // Now put the cursor on g-inspect's compass centre: it joins as a tab.
     const bar = await rect(".dock-window:has(#dock-tab-character) .dock-tabbar-fill");
-    const g = await rect("[data-group='g-finish']");
+    const g = await rect("[data-group='g-inspect']");
     await page.mouse("mouseMoved", bar!.x + 12, bar!.cy, { button: "none", buttons: 0 }); await page.mouse("mousePressed", bar!.x + 12, bar!.cy);
     for (let n = 1; n <= 14; n++) { await page.mouse("mouseMoved", bar!.x + 12 + (g!.cx - bar!.x - 12) * n / 14, bar!.cy + (g!.cy - bar!.cy) * n / 14); await page.wait(16); }
     await page.wait(120);
     const label = await js<string>(`document.querySelector('.dock-preview')?.dataset.label ?? ''`);
     await shot("dock-cursor-on-centre-guide");
     await page.mouse("mouseReleased", g!.cx, g!.cy); await page.wait(300);
-    const merged = await js<string[]>(`${S}.dock.tree.floating.length === 0 || true ? [...document.querySelectorAll("[data-group='g-finish'] .dock-tab")].map(t => t.dataset.panel) : []`);
+    const merged = await js<string[]>(`${S}.dock.tree.floating.length === 0 || true ? [...document.querySelectorAll("[data-group='g-inspect'] .dock-tab")].map(t => t.dataset.panel) : []`);
     record("dock: a large panel overlapping another group floats until the CURSOR reaches a guide",
       during.overlap && during.label === "" && floating && label === "Add as tab" && merged.includes("character"), { during, floating, label, merged, window: win });
   });
@@ -454,10 +454,13 @@ try {
     await js(`${S}.commands().find(c => c.id === 'theme.dark').run()`);
     await page.viewport(900, 900); await page.wait(900);
     const compact = await js<string[]>(`[...document.querySelectorAll('.dock-group')].map(g => g.getAttribute('aria-label'))`);
+    const head = await rect(".viewport-panel:not(.uv) .viewport-slot"), uv = await rect("#device-uv-canvas");
     await shot("compact-dark");
     await js(`${S}.commands().find(c => c.id === 'theme.light').run()`); await page.wait(200);
     await shot("compact-light");
-    record("compact layout at 900 px uses its own arrangement", compact.length >= 2 && compact.some(label => /Head/.test(label!) && /UV map/.test(label!)), compact);
+    record("compact layout at 900 px uses its own arrangement: portrait head beside a visible UV map",
+      compact.includes("Head group") && compact.includes("UV map group") && !!head && head.w < head.h && !!uv && uv.w > 0,
+      { compact, head: head && [Math.round(head.w), Math.round(head.h)], uv: uv && [Math.round(uv.w), Math.round(uv.h)] });
     await page.viewport(1600, 1000); await js(`${S}.commands().find(c => c.id === 'theme.system').run()`); await page.wait(600);
     await shot("wide-dark-system");
   });

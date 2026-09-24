@@ -26,7 +26,7 @@ The presentation receives only `StudioPresentationPort`. `tests/studio-ui-bounda
 
 ### Information architecture
 
-Fifteen panels with stable IDs (`src/studio-ui/panel-meta.ts`): Presets, Layers, Library, Mod package, Head, UV map, Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality, Activity. Wide workspaces (≥1100 px) default to *stack · stage · inspector*; compact ones to *stage above two tab groups*; each size class remembers its own arrangement. The header's category switcher is the single expansion zone for future authoring categories: today it lists Eye makeup and says, in words, that other categories are planned and discussion-gated. Preview context (V, brows, lashes, hair, piercings, eye shape, lighting, motion, quality) is now separated from makeup authoring.
+Fifteen panels with stable IDs (`src/studio-ui/panel-meta.ts`): Presets, Layers, Library, Mod package, Head, UV map, Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality, Activity. Wide workspaces (≥1100 px) default to *stack · full-height portrait head · UV map over the inspectors*; compact ones to *head beside the UV map, above two tab groups* (see [the portrait-head follow-up](#follow-up--portrait-head-in-the-factory-layouts-24-september)); each size class remembers its own arrangement. The header's category switcher is the single expansion zone for future authoring categories: today it lists Eye makeup and says, in words, that other categories are planned and discussion-gated. Preview context (V, brows, lashes, hair, piercings, eye shape, lighting, motion, quality) is now separated from makeup authoring.
 
 ### Panel system (brief requirement)
 
@@ -173,22 +173,61 @@ The port key-list test was updated for `editor` and `status`. `main.ts` and `por
 | Files | CDP file-chooser interception and download capture (no automation gap this time): *Export preset recipe* wrote `xfs.recipe.json` (`xfs/recipe-7`); *Export collection* saved first and wrote `xfs.collection.json` with every preset; *Export layer mask* wrote a 2048×2048 PNG; *Import recipe as preset…* added preset `xfs.recipe` beside the others; *Import collection…* replaced the draft with the exported collection and the toast's *Undo import* restored the renamed draft |
 | Library | Ctrl+S saved a revision; a same-origin "other window" saved r3 → chip *Newer r3 saved* → Save produced the conflict toast with *Refresh library* and *Save as copy*; the unsaved opacity (0.61) was kept; open r3 then *Recover previous draft* restored the original draft and edit |
 | Package | Check with a Glitter layer → *Current*, omissions named (layer and whole preset); an edit → *Stale* |
-| Cursor-only snapping | a 760×520 floating panel dragged so it **overlapped** Colour & finish while the cursor stayed on the Head body → no preview, dropped as floating; cursor on the Colour & finish compass centre → *Add as tab* → merged |
+| Cursor-only snapping | a 760×520 floating panel dragged so it **overlapped** the inspector group (Colour & finish) while the cursor stayed on the Head body → no preview, dropped as floating; cursor on that group's compass centre → *Add as tab* → merged |
 | Magnetic composite + keyboard | cursor in Motion window's right band → composite (split, 800 px wide); Shift+F10 › Add as tab to › first group docked it back |
 | Focus | F6 visited five distinct regions |
 | Theme | explicit Light overrode a dark OS preference; System followed the OS |
 | Reload | layout (order-insensitive), theme, preset/layer selection, preset names, UV view and 42° FOV restored |
 | Recovery | a window saved at (5000, 3000) reopened on screen |
-| Compact | 900 px used the compact arrangement (stage group + two tab groups) |
+| Compact | 900 px used the compact arrangement: separate Head and UV map groups, both visible, the head viewport portrait (checked since the portrait-head follow-up; before it, one stage group + two tab groups) |
 | Stress (separate run) | 120-character collection and preset names, an 80-character layer name and a 16-layer preset: every name ellipsizes, no element overflows horizontally, the stack scrolls (`stress-long-names-dense.png`). The same draft in the legacy interface wraps names across many lines (`legacy-before.png`). |
 
 Masked evidence (viewport canvases hidden; no game-derived pixels): `wide-dark-default`, `context-menu-uv-point`, `context-menu-head-point`, `context-menu-layer-disabled-reason`, `library-conflict`, `package-check-current`, `package-check-stale`, `dock-large-overlap-no-snap`, `dock-cursor-on-centre-guide`, `dock-magnetic-composite`, `wide-light-after-edits`, `wide-light-reloaded`, `compact-dark`, `compact-light`, `wide-dark-system`, `keyboard-focus-light`, `narrow-640-light` (no horizontal overflow at 640 px), plus `stress-long-names-dense` and the before-state `legacy-before` (`.png` in `projects/xf-appearance-studio/authoring/evidence/ui-overhaul-2026-09-24/`).
 
+The pass was re-run after the portrait-head follow-up (24/24), which regenerated these images and `acceptance.json`; `keyboard-focus-light`, `narrow-640-light` and `stress-long-names-dense` came from separate earlier runs and still show the previous default arrangement.
+
 **Limits of this pass.** Saved-V import was not exercised because no save file is available to the isolated run (the picker path itself is the same one recipe/collection import now exercise, and the saved-V service contract is unchanged and tested). *Build mod files* was not run in this pass (`--build` flag available; it is slow and depends on local tools). The on-head gesture path was covered by prior acceptance and is unchanged (the same device adapter is only rehosted). Screen-reader output was not verified with an actual screen reader. No game launch, install or rendering claim.
+
+## Follow-up — portrait head in the factory layouts (24 September)
+
+Nathan observed that the factory arrangement gave the head a landscape, letterboxed viewport although the subject is portrait. Only the factory defaults changed (`src/studio-ui/layout-defaults.ts`). The dock engine, drag/float/tab/magnetic/cursor-position behaviour, the `xfs/dock` v1 format, per-size-class persistence and recovery, application actions, recipes and packages are untouched. Every saved arrangement restores exactly as saved; a new test restores a layout saved with the previous defaults unchanged. An existing workspace keeps its layout and camera: *Panels › Reset this layout* (per size class) adopts the new default, then *Front view* (F) reframes for the new viewport.
+
+**Why these shapes.** Front framing fits 0.26 m of width (`frontCameraDistance`), so a portrait viewport shows the whole head larger instead of empty sides. The UV map's both-eyes view is 720:310, so it needs a full-width cell rather than height. Head and UV map are always visible together because an edit in either is judged in the other.
+
+| | Wide (≥ 1100 px) | Compact (< 1100 px) |
+|---|---|---|
+| Before | stack 20% · stage 54% (head 62% over UV map 38%) · Colour & finish, Shape/Edge/Warp and preview-context groups 26% | Head and UV map as tabs of one group on top (50%); stack and inspector tab groups below |
+| After | stack 21% (Presets/Library/Package 40% over Layers 60%) · head 37%, full height · 42%: UV map 42% over one inspector group (Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality) | top 56%: Head 38% beside UV map 62%; below, unchanged: stack 42% and inspector 58% tab groups |
+
+Measured in `?verify=1` with a fresh Chrome profile per size, so the first-run front framing is real (`bun tools/ui-layout-review.ts`). *Head scale* is pixels per metre at the face on first run (viewport height ÷ (2 · camera distance · tan 15°)).
+
+| Window | Head viewport, before → after | Head scale | UV both-eyes canvas | Inspector |
+|---|---|---|---|---|
+| 1600×1000 | 853×535 (1.59) → 584×888 (0.66) | 1799 → 2230 (+24%) | 576×248 → 661×284 | three groups 412 px wide → one 665 px group, finish tiles four across |
+| 1100×800 | 583×411 (1.42) → 399×688 (0.58) | 1382 → 1525 (+10%) | 400×172 → 430×185 | 282 px → 455 px; the Presets strip no longer clips (7 px before) |
+| 900×900 | 890×375 (2.37) → 335×424 (0.79) | 1261 → 1278 (+1%) | hidden behind the Head tab → 548×236 | unchanged 515 px |
+| 640×900 | 630×375 (1.68) → 237×424 (0.56) | 1261 → 906 (−28%) | hidden → 387×166 | unchanged 364 px |
+| 1920×1080 | 1026×585 (1.75) → 702×968 (0.73) | 1967 → 2680 (+36%) | 647×278 → 739×318 | 495 → 800 px |
+| 1366×768 | 727×391 (1.86) → 497×656 (0.76) | 1315 → 1898 (+44%) | 371×160 → 435×187 | 351 → 567 px |
+
+No horizontal overflow or console error at any size, in either theme, on fresh loads or on a resize pass 1600 → 1100 → 900 → 640 → 1600. Resizing scales the fractions, crossing 1100 px swaps size classes, and the camera keeps its framing.
+
+**Rejected after measurement.** Colour & finish beside Shape/Edge/Warp under the UV map was the strongest composition at 1600 px, but at 1100 px each panel was 226 px wide and labels overlapped (Opacity over the hex field; *Point 1 / 6* into *Remove point*). A separate always-visible preview-context group under Layers clipped half its tabs at 1100 px. Preview context is therefore one tab along in the inspector group, as it already was in compact. It can still be dragged or floated beside the inspector.
+
+**Limits.**
+- At 640×900 the head renders 28% smaller than in the old full-width strip; in exchange the UV map is visible beside it. Maximize (double-click the tab bar) remains the close-judgement path.
+- The compact inspector strip at 640 px still clips its last two tabs (Motion, Quality; 55 px), with the same group and width as before. They remain reachable by arrow keys (the strip scrolls), the Panels menu and the palette. Fractions cannot fix this: the two lower strips need about 720 px together.
+- In head cells narrower than about 420 px, the stage hint wraps to three or four lines over the chin and neck, never the eyes; below 720 px the existing rule hides it. A shorter hint for narrow stages needs a `studio.css` change and is outside this defaults-only change.
+- At 1024×768 (compact, landscape window) the head cell is about square (1.09), and the 0.55 m minimum front distance puts the crown near the top edge. Not letterboxed; not one of the reviewed sizes.
+- The style guide embeds `studio.css` verbatim. This branch does not change `studio.css`; if main's row-text centering fix does, regenerate the guide (`bun tools/build-style-guide.ts`) when merging, or the sync test fails.
+
+Evidence: [`evidence/ui-layout-portrait-2026-09-24/`](../../projects/xf-appearance-studio/authoring/evidence/ui-layout-portrait-2026-09-24/) holds `layout-review.json` (every size, both themes, fresh loads and the resize pass) and masked `load-{1600x1000,1100x800,900x900,640x900}-{dark,light}.png`. Unmasked renders were inspected locally in `evidence/screenshots/` (ignored). The style guide's size-class maps (now drawn at real window proportions), the wide editing and compact compositions, and their guidance were updated, regenerated and inspected in both themes.
 
 ## Verification
 
-Authoring suite: **353 tests pass** (330 before this work plus 23 new: dock model, cursor rule and composite/maximize rules, read extensions, presentation boundary, style-guide sync and token contrast), `tsc --noEmit` is clean, and `bun run build` bundles `studio-main.js`, `main.js`, `port-smoke.js`, the raster worker and the fidelity study.
+Authoring suite after the portrait-head follow-up: **355 tests pass** (two new: portrait/visible-UV/inspector-width geometry at the reviewed dock areas, and exact restoration of a layout saved with the previous defaults); `tsc --noEmit` is clean; the build succeeds; acceptance 24/24.
+
+Original delivery: **353 tests pass** (330 before this work plus 23 new: dock model, cursor rule and composite/maximize rules, read extensions, presentation boundary, style-guide sync and token contrast), `tsc --noEmit` is clean, and `bun run build` bundles `studio-main.js`, `main.js`, `port-smoke.js`, the raster worker and the fidelity study.
 
 ## Remaining work
 

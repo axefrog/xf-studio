@@ -5,25 +5,30 @@ export const PANEL_IDS = ["presets", "layers", "library", "package", "head", "uv
   "edge", "warp", "character", "lighting", "motion", "quality", "activity"] as const satisfies readonly PanelId[];
 export type StudioPanelId = typeof PANEL_IDS[number];
 
-/** Wide workspaces: stack on the left, stage in the centre, the active layer's inspector on the right. */
+/**
+ * Factory defaults only; saved arrangements restore as saved. The head is a portrait subject and
+ * front framing fits its width, so it gets a portrait cell; the UV map's both-eyes view is about
+ * 2.3:1, so it gets a full-width cell. Both stay visible together in each size class.
+ *
+ * Wide workspaces: stack on the left, the head in a full-height centre column, the UV map over the inspectors on the right.
+ */
 export function defaultWide(): DockTree {
   return { floating: [], root: split("row", [
     split("column", [group(["presets", "library", "package"], "presets", "g-collection"),
       group(["layers"], "layers", "g-layers")], [.4, .6], "s-left"),
-    split("column", [group(["head"], "head", "g-head"), group(["uv"], "uv", "g-uv")], [.62, .38], "s-stage"),
-    split("column", [group(["finish"], "finish", "g-finish"),
-      group(["shape", "edge", "warp"], "shape", "g-inspect"),
-      group(["character", "lighting", "motion", "quality"], "character", "g-preview")], [.37, .35, .28], "s-right"),
-  ], [.2, .54, .26], "s-root"), closed: ["activity"] };
+    group(["head"], "head", "g-head"),
+    split("column", [group(["uv"], "uv", "g-uv"),
+      group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")], [.42, .58], "s-right"),
+  ], [.21, .37, .42], "s-root"), closed: ["activity"] };
 }
-/** Compact workspaces: the stage on top; two tab groups share the lower half. */
+/** Compact workspaces: head and UV map side by side on top; two tab groups share the lower part. */
 export function defaultCompact(): DockTree {
   return { floating: [], root: split("column", [
-    group(["head", "uv"], "head", "g-stage"),
+    split("row", [group(["head"], "head", "g-head"), group(["uv"], "uv", "g-uv")], [.38, .62], "s-stage"),
     split("row", [group(["layers", "presets", "library", "package"], "layers", "g-stack"),
       group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")],
     [.42, .58], "s-lower"),
-  ], [.5, .5], "s-root"), closed: ["activity"] };
+  ], [.56, .44], "s-root"), closed: ["activity"] };
 }
 export function defaultDockState(): DockState { return { wide: defaultWide(), compact: defaultCompact() }; }
 export const COMPACT_BREAKPOINT = 1100;

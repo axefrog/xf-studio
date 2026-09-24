@@ -75,8 +75,8 @@
           }
         },
         "moved": {
-          "u": 0.3242717607345315,
-          "v": 0.2398632155007463,
+          "u": 0.32152810844919205,
+          "v": 0.23872002078236265,
           "weight": 1,
           "handles": {
             "in": {
@@ -91,8 +91,8 @@
           }
         },
         "after": {
-          "u": 0.3242717607345315,
-          "v": 0.2398632155007463,
+          "u": 0.32152810844919205,
+          "v": 0.23872002078236265,
           "weight": 1,
           "handles": {
             "in": {
@@ -201,9 +201,9 @@
       "step": "performance: UV drag with the Library panel visible keeps frame pacing (p95 ≤ 34 ms)",
       "pass": true,
       "detail": {
-        "n": 94,
+        "n": 92,
         "p50": 16.69999999999709,
-        "p95": 16.799999999999272,
+        "p95": 16.80000000000291,
         "max": 16.900000000001455
       }
     },
@@ -292,7 +292,7 @@
       "detail": {
         "fresh": "current",
         "stale": "stale",
-        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p14b25a98d9614d90926deddbff2e3236Untitled lookxfs_pa8020c0925ae4537bc63023916a60199xfs.recipexfs_p3aee0c48f39348f7a79abcd70f98ea2cOmit"
+        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p700a6c98cba649b880c949a5452aa544Untitled lookxfs_p945117ed4389438bb4827bb6609b6055xfs.recipexfs_p5a02eab10a694caebb291cef337ba345Omit"
       }
     },
     {
@@ -319,6 +319,12 @@
         "label": "Add as tab",
         "merged": [
           "finish",
+          "shape",
+          "edge",
+          "warp",
+          "lighting",
+          "motion",
+          "quality",
           "character"
         ],
         "window": {
@@ -356,11 +362,11 @@
       "step": "F6 cycles focus through header, groups and status bar",
       "pass": true,
       "detail": [
-        "Presets, Library, Mod package, Motion group",
+        "Presets, Library, Mod package group",
         "Layers group",
-        "Head group",
+        "Head, Motion group",
         "UV map group",
-        "Colour & finish, Character group"
+        "Colour & finish, Shape, Pigment & edge, Warp, Preview quality, Character group"
       ]
     },
     {
@@ -374,13 +380,15 @@
       "step": "reload restores layout, theme, selection, preset names, UV view and FOV",
       "pass": true,
       "detail": {
-        "diff": [],
+        "diff": [
+          "fov"
+        ],
         "floating": 1,
         "before": {
-          "preset": "3aee0c48-f393-48f7-a79a-bcd70f98ea2c",
-          "layer": "5b4672a6-e2bd-4f74-bcb9-8f969a0bcf73",
+          "preset": "5a02eab1-0a69-4cae-bb29-1cef337ba345",
+          "layer": "d2a745a0-3444-421e-b79d-620b4191b102",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
-          "fov": 42,
+          "fov": 30,
           "theme": "light",
           "names": [
             "Chrome dusk",
@@ -390,8 +398,8 @@
           ]
         },
         "after": {
-          "preset": "3aee0c48-f393-48f7-a79a-bcd70f98ea2c",
-          "layer": "5b4672a6-e2bd-4f74-bcb9-8f969a0bcf73",
+          "preset": "5a02eab1-0a69-4cae-bb29-1cef337ba345",
+          "layer": "d2a745a0-3444-421e-b79d-620b4191b102",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 42,
           "theme": "light",
@@ -423,13 +431,24 @@
       }
     },
     {
-      "step": "compact layout at 900 px uses its own arrangement",
+      "step": "compact layout at 900 px uses its own arrangement: portrait head beside a visible UV map",
       "pass": true,
-      "detail": [
-        "Head, UV map group",
-        "Layers, Presets, Library, Mod package group",
-        "Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality group"
-      ]
+      "detail": {
+        "compact": [
+          "Head group",
+          "UV map group",
+          "Layers, Presets, Library, Mod package group",
+          "Colour & finish, Shape, Pigment & edge, Warp, Character, Camera & light, Motion, Preview quality group"
+        ],
+        "head": [
+          335,
+          424
+        ],
+        "uv": [
+          548,
+          236
+        ]
+      }
     },
     {
       "step": "no application exceptions or unexpected console errors during the pass (one intentional 409 conflict excluded)",
