@@ -40,10 +40,13 @@ export class DesktopWorkspaceClose {
 }
 
 /** Passed only to the app's own WebView after native close has been cancelled. */
-export function desktopFlushScript(nonce: string): string {
+export function desktopFlushScript(nonce: string, update = false): string {
   return `(async () => {
     let status = "saved";
-    try { await window.xfDesktopWorkspaceFlush?.(); }
+    try {
+      if (typeof window.xfDesktopWorkspaceFlush !== "function") throw Error("Workspace flush is unavailable.");
+      await window.xfDesktopWorkspaceFlush(${update ? JSON.stringify(nonce) : ""});
+    }
     catch (error) {
       status = "failed";
       window.xfDesktopWorkspaceError?.("Workspace save failed. Keep this window open and export your collection if retrying fails.");
@@ -54,3 +57,6 @@ export function desktopFlushScript(nonce: string): string {
     });
   })()`;
 }
+
+/** Update apply requires a fresh host-confirmed write bound to this nonce. */
+export const desktopUpdateFlushScript = (nonce: string) => desktopFlushScript(nonce, true);

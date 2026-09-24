@@ -27,5 +27,8 @@ const close = new DesktopWorkspaceClose({
 });
 app.onWorkspaceCloseAck((nonce, status) => close.acknowledge(nonce, status));
 window.on("will-close", event => close.request(event as { response?: { allow: boolean } }));
-Electrobun.events.on("before-quit", () => app.stop());
+Electrobun.events.on("before-quit", event => {
+  app.beforeQuit(event as { response?: { allow: boolean } });
+  if (event.response?.allow !== false) app.stop();
+});
 void window;

@@ -11,11 +11,14 @@ import { desktopBuildIssue, type WolvenKitProbe } from "./build";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest } from "./workspace-store";
+import { DesktopWorkActivity } from "./work-activity";
+import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
-  updateTrial?: { native: NativeUpdater; trust: UpdateTrust }) {
+  updateTrial?: { native: NativeUpdater; trust: UpdateTrust;
+    requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number }) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -27,9 +30,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const workspaceStore = new DesktopWorkspaceStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   const shutdown = new AbortController();
+  const activity = new DesktopWorkActivity();
+  const updateGuard = updateTrial && new DesktopUpdateApplyGuard(activity,
+    updateTrial.requestWorkspaceFlush, updateTrial.flushTimeoutMs);
   const updates = new DesktopUpdateService({ version: version.version, channel: version.channel,
     buildHash: version.buildHash }, updateTrial?.native ?? null,
-    updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false });
+    updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false },
+    updateGuard || null);
   const buildReady = () => {
     try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, wolvenKitProbe) === null; }
     catch { return false; }
@@ -83,16 +90,21 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
-      if (url.pathname === "/api/desktop/workspace")
-        return desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
-      if (url.pathname === "/api/desktop/workspace/close-ack" && closeAck) {
+      if (url.pathname === "/api/desktop/workspace") {
+        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        if (request.method === "POST" && response.status === 204)
+          updateGuard?.noteWorkspaceWrite(request.headers.get("X-XFS-Update-Flush"));
+        return response;
+      }
+      if (url.pathname === "/api/desktop/workspace/close-ack" && (closeAck || updateGuard)) {
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
         let body: any;
         try { body = await routedRequest.json(); } catch { return new Response("Invalid close acknowledgement", { status: 400 }); }
         if (body?.schema !== "xfs/desktop-close-ack-1" || typeof body.nonce !== "string" ||
           !["saved", "failed"].includes(body.status) || Object.keys(body).sort().join(",") !== "nonce,schema,status")
           return new Response("Invalid close acknowledgement", { status: 400 });
-        return new Response(null, { status: closeAck(body.nonce, body.status) ? 204 : 409 });
+        return new Response(null, { status: (closeAck?.(body.nonce, body.status) ||
+          updateGuard?.acknowledge(body.nonce, body.status)) ? 204 : 409 });
       }
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
@@ -103,7 +115,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
-        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe });
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
@@ -134,6 +146,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     url: `${server.url}?session=${token}`,
     port: server.port,
     onWorkspaceCloseAck(handler: (nonce: string, status: "saved" | "failed") => boolean) { closeAck = handler; },
+    beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
+    beginInstallTransaction() { return activity.begin("install"); },
     stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

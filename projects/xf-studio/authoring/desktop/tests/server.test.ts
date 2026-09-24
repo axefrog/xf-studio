@@ -73,6 +73,82 @@ test("update snapshot is read-only and disabled operations cannot reach a feed",
     .toMatchObject({ phase: "unavailable", available: null });
 });
 
+test("injected updater cannot apply until authenticated workspace acknowledgement and idle host", async () => {
+  const trialRoot = resolve(root, "update-trial");
+  const requested: string[] = [];
+  let nativeApplies = 0, ready = false;
+  const trial = createDesktopServer(staticRoot, trialRoot,
+    { version: "0.1.0", channel: "canary", buildHash: "aaaaaaaa", metadataStatus: "ready" },
+    undefined, undefined, undefined, {
+      native: {
+        async checkForUpdate() { return { version: "0.2.0", hash: "bbbbbbbb", updateAvailable: true, updateReady: false }; },
+        async downloadUpdate() { ready = true; },
+        updateInfo() { return { version: "0.2.0", hash: "bbbbbbbb", updateAvailable: true, updateReady: ready }; },
+        async applyUpdate() { nativeApplies++; },
+      },
+      trust: { verifiedPrivateFeed: true, signedRelease: true, twoVersionTrialAccepted: true },
+      requestWorkspaceFlush(nonce) { requested.push(nonce); }, flushTimeoutMs: 1000,
+    });
+  try {
+    const base = `http://127.0.0.1:${trial.port}`;
+    const cookie = (await fetch(trial.url)).headers.get("set-cookie")!.split(";")[0];
+    const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+    const post = (path: string, body: unknown, withCookie = true) => fetch(base + path, { method: "POST",
+      headers: { ...headers, ...(withCookie ? {} : { Cookie: "" }) }, body: JSON.stringify(body) });
+    const action = async (value: string) => (await post("/api/desktop/update",
+      { schema: "xfs/desktop-update-action-1", action: value })).json();
+    await action("check"); await action("download");
+    const endInstall = trial.beginInstallTransaction()!;
+    expect((await action("applyAndRestart")).reason).toContain("Finish active package or install work");
+    expect(requested).toEqual([]);
+    expect(nativeApplies).toBe(0);
+    endInstall();
+    await action("check"); await action("download");
+    const applying = action("applyAndRestart");
+    await Bun.sleep(10);
+    expect(requested).toHaveLength(1);
+    expect(nativeApplies).toBe(0);
+    expect((await post("/api/package", { action: "check", collection: {} })).status).toBe(409);
+    expect((await post("/api/desktop/workspace/close-ack",
+      { schema: "xfs/desktop-close-ack-1", nonce: requested[0], status: "saved" }, false)).status).toBe(403);
+    expect(nativeApplies).toBe(0);
+    expect((await post("/api/desktop/workspace/close-ack",
+      { schema: "xfs/desktop-close-ack-1", nonce: "wrong", status: "saved" })).status).toBe(409);
+    expect((await post("/api/desktop/workspace/close-ack",
+      { schema: "xfs/desktop-close-ack-1", nonce: requested[0], status: "failed" })).status).toBe(204);
+    expect((await applying).phase).toBe("error");
+    expect(nativeApplies).toBe(0);
+    await action("check"); await action("download");
+    const retry = action("applyAndRestart");
+    await Bun.sleep(10);
+    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(freshWorkspace()) },
+      true)).status).toBe(204);
+    expect((await post("/api/desktop/workspace/close-ack",
+      { schema: "xfs/desktop-close-ack-1", nonce: requested[1], status: "saved" })).status).toBe(409);
+    expect((await retry).phase).toBe("error");
+    expect(nativeApplies).toBe(0);
+    await action("check"); await action("download");
+    const savedRetry = action("applyAndRestart");
+    await Bun.sleep(10);
+    const saved = await fetch(base + "/api/desktop/workspace", { method: "POST",
+      headers: { ...headers, "X-XFS-Update-Flush": requested[2] },
+      body: JSON.stringify({ workspace: JSON.stringify(freshWorkspace()) }) });
+    expect(saved.status).toBe(204);
+    expect((await post("/api/desktop/workspace/close-ack",
+      { schema: "xfs/desktop-close-ack-1", nonce: requested[2], status: "saved" })).status).toBe(204);
+    expect((await savedRetry).phase).toBe("applying");
+    expect(nativeApplies).toBe(1);
+    expect((await post("/api/package", { action: "check", collection: {} })).status).toBe(409);
+    const quitting: { response?: { allow: boolean } } = {};
+    trial.beforeQuit(quitting);
+    expect(quitting.response).toBeUndefined();
+    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(freshWorkspace()) })).status).toBe(204);
+    const stale: { response?: { allow: boolean } } = {};
+    trial.beforeQuit(stale);
+    expect(stale.response).toEqual({ allow: false });
+  } finally { trial.stop(); }
+});
+
 test("asset intake requires the desktop session and accepts only a folder inspection command", async () => {
   const base = `http://127.0.0.1:${app.port}`;
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];

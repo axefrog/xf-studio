@@ -43,9 +43,17 @@ function saveWorkspace(text) {
   void saveQueue.catch(error => { workspaceAlert(error.message); });
 }
 window.xfDesktopWorkspaceError = workspaceAlert;
-window.xfDesktopWorkspaceFlush = async () => {
+window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
   await saveQueue;
+  if (updateNonce !== undefined) {
+    if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || workspaceText === null)
+      throw Error("The update workspace snapshot is unavailable.");
+    const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-XFS-Update-Flush": updateNonce },
+      body: JSON.stringify({ workspace: workspaceText }) });
+    if (!response.ok) throw Error("The update workspace snapshot could not be saved.");
+  }
 };
 window.xfDesktopWorkspaceStorage = {
   getItem(key) { return key === workspaceKey ? workspaceText : localStorage.getItem(key); },

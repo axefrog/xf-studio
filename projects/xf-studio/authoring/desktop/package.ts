@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { runDesktopCheck } from "./check-runner";
 import { runDesktopBuild, type WolvenKitProbe } from "./build";
 import { LocalSettingsStore } from "../src/local-settings-store";
+import { DesktopWorkActivity } from "./work-activity";
 
 const maxBytes = 16_000_000;
 let checking = false;
@@ -12,7 +13,7 @@ export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: 
   deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe };
 /** Browser requests contain only action and collection; all build paths are host owned. */
 export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
-  timeoutMs?: number, buildHost?: DesktopBuildHost): Promise<Response> {
+  timeoutMs?: number, buildHost?: DesktopBuildHost, activity?: DesktopWorkActivity): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
     return json({ error: "Expected a JSON package request." }, 403);
@@ -29,6 +30,10 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
       (input.action !== "check" && input.action !== "build") ||
       Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
     return json({ error: "Expected a package action and collection only." }, 400);
+  const end = activity?.begin("package");
+  if (activity && !end) return json({ code: "package_restart_pending",
+    error: "An update restart is being prepared. Finish it before starting package work." }, 409);
+  try {
   if (input.action === "build") {
     if (!buildHost) return json({ code: "package_build_host_unavailable",
       error: "Desktop package tools are unavailable." }, 503);
@@ -55,4 +60,5 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   const status = result.code === "package_check_timeout" ? 504 : result.code === "package_check_cancelled" ? 499 :
     result.code?.startsWith("package_check_worker") ? 503 : 422;
   return json({ error: result.message, ...(result.code ? { code: result.code } : {}) }, status);
+  } finally { end?.(); }
 }

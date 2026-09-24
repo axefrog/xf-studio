@@ -1,5 +1,5 @@
 // Update policy belongs to the trusted host. The view receives detached facts and
-// can request only these four operations; it never chooses a URL or archive.
+// can request only these three operations; it never chooses a URL or archive.
 export type UpdateAction = "check" | "download" | "applyAndRestart";
 export type UpdatePhase = "unavailable" | "idle" | "checking" | "available" |
   "downloading" | "ready" | "applying" | "error";
@@ -26,6 +26,7 @@ export type NativeUpdater = {
 export type InstalledUpdateVersion = UpdateSnapshot["installed"];
 export type UpdateTrust = Readonly<{ verifiedPrivateFeed: boolean; signedRelease: boolean;
   twoVersionTrialAccepted: boolean }>;
+export type UpdateApplyGuard = { prepare(): Promise<void>; finish(): void };
 
 const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const HASH = /^[a-z0-9]{1,64}$/;
@@ -38,8 +39,9 @@ export class DesktopUpdateService {
   private readonly enabled: boolean;
 
   constructor(private readonly installed: InstalledUpdateVersion,
-    private readonly native: NativeUpdater | null, trust: UpdateTrust) {
-    this.enabled = !!native && installed.channel !== "dev" &&
+    private readonly native: NativeUpdater | null, trust: UpdateTrust,
+    private readonly applyGuard: UpdateApplyGuard | null = null) {
+    this.enabled = !!native && !!applyGuard && installed.channel !== "dev" &&
       VERSION.test(installed.version) && HASH.test(installed.buildHash) &&
       trust.verifiedPrivateFeed && trust.signedRelease && trust.twoVersionTrialAccepted;
     this.phase = this.enabled ? "idle" : "unavailable";
@@ -84,8 +86,10 @@ export class DesktopUpdateService {
           throw Error("Downloaded update did not match the checked version.");
         this.phase = "ready";
       } else {
+        await this.applyGuard!.prepare();
         this.phase = "applying";
-        await this.native.applyUpdate(); // Electrobun asks before-quit handlers, then replaces and relaunches.
+        try { await this.native.applyUpdate(); }
+        catch (error) { this.applyGuard!.finish(); throw error; }
       }
     } catch (error) {
       this.phase = "error";

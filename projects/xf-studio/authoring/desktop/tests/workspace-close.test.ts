@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DesktopWorkspaceClose, desktopFlushScript } from "../workspace-close";
+import { DesktopWorkspaceClose, desktopFlushScript, desktopUpdateFlushScript } from "../workspace-close";
 
 test("native close is cancelled until the matching renderer write acknowledgement", () => {
   const requested: string[] = [], reports: string[] = [];
@@ -20,7 +20,9 @@ test("native close is cancelled until the matching renderer write acknowledgemen
   expect(reports).toHaveLength(0);
   expect(gate.acknowledge(requested[0], "saved")).toBe(false);
   expect(desktopFlushScript(requested[0])).toContain(`nonce: "${requested[0]}"`);
-  expect(desktopFlushScript(requested[0])).toContain("await window.xfDesktopWorkspaceFlush?.()");
+  expect(desktopFlushScript(requested[0])).toContain("await window.xfDesktopWorkspaceFlush()");
+  expect(desktopFlushScript(requested[0])).toContain('typeof window.xfDesktopWorkspaceFlush !== "function"');
+  expect(desktopUpdateFlushScript(requested[0])).toContain(`xfDesktopWorkspaceFlush("${requested[0]}")`);
 });
 
 test("failed or timed-out workspace writes leave the window open and allow a retry", async () => {
