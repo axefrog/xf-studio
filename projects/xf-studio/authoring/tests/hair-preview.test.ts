@@ -102,6 +102,8 @@ test("strand and cap pigments use distinct source samplers; strands replace the 
       expect(shader.fragmentShader).toContain("texelFetch(xfsProfile");
       expect(shader.fragmentShader).toContain("vec3(0.3, 0.59, 0.11)");
       expect(shader.fragmentShader).toContain("texture2D(alphaMap, vAlphaMapUv).r");
+      // Hair-class light: the BSDF is declared; it is injected where Three's light loop ends.
+      expect(shader.fragmentShader).toContain("void xfsHairDirect(");
       expect(shader.fragmentShader).not.toContain("#include <alphamap_fragment>");
       expect(shader.vertexShader).toContain("vXfsVertexRed = xfsVertexRed");
       expect(shader.uniforms.xfsAlphaCutoff!.value).toBe(0);

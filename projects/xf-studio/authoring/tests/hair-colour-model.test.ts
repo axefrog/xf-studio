@@ -105,3 +105,20 @@ test("post-G-buffer decals blend sqrt(albedo); the linear-over equivalent reprod
   close(gbufferDecalAlbedo(brow, 1, skin), brow);
   close(gbufferDecalAlbedo(brow, 0, skin), skin);
 });
+
+test("hair direct light: white R lobe, albedo-tinted TRT, diffuse proportional to albedo", async () => {
+  const { hairDirectLight, HAIR_LIGHTING_ASSUMED } = await import("../src/hair-colour-model");
+  const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
+  const L = [0, Math.sin(0.07), Math.cos(0.07)] as Rgb;   // near the R-lobe peak for this shift
+  const grey = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2);
+  const red = hairDirectLight(L, V, T, N, [0.5, 0.05, 0.05], 0.2);
+  // Diffuse scales with albedo; the R lobe does not depend on it, TRT does.
+  expect(red.diffuse[1] / grey.diffuse[1]).toBeCloseTo(0.1, 9);
+  expect(red.specular[0]).toBeGreaterThan(red.specular[1]);
+  expect(red.specular[1]).toBeGreaterThan(0);
+  // A rougher fibre spreads (lowers) the R peak.
+  expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.6).specular[0]).toBeLessThan(grey.specular[0]);
+  // Scatter and TRT intensities are the option-driven registers ([hypothesis] defaults).
+  const noScatter = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2, { ...HAIR_LIGHTING_ASSUMED, scatter: 0 });
+  expect(noScatter.diffuse).toEqual([0, 0, 0]);
+});

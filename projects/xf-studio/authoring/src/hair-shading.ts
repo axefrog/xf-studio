@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { HairStop } from "./hair-preview";
-import { bakeHairProfile, sampleStopsEncoded, type HairMaterialParameters, type ProfileEncoding } from "./hair-colour-model";
+import { bakeHairProfile, HAIR_LIGHTING_ASSUMED, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
+  type ProfileEncoding } from "./hair-colour-model";
 
 /** Renderer adapter for the hair.mt colour model in hair-colour-model.ts.
  * Three keeps its own lighting; only base colour, coverage and roughness inputs
@@ -60,18 +61,90 @@ const STRAND_COVERAGE_GLSL = `
           clamp(max(strandAlpha - xfsAlphaCutoff, 0.0) / (1.0 - xfsAlphaCutoff), 0.0, 1.0);`;
 
 /**
- * The game lights hair as fibres from a G-buffer strand tangent frame and
- * ID-scaled roughness (deferred R/TT/TRT model, compiled outside the material
- * cache). A flat card's own dielectric specular, with its grazing-angle
- * Fresnel, has no counterpart there, so strand materials disable it
- * (specularIntensity 0). No substitute highlight lobe is drawn: a trial
- * Kajiya-Kay lobe needed invented widths/normalisation and produced bright
- * bands, so fibre highlights are an explicit omission until the game's hair
- * lighting defaults are captured.
+ * Direct light for strands, mirroring hairDirectLight (hair-colour-model.ts): the
+ * 2.31 deferred hair light is a Marschner-style model (white shifted R lobe,
+ * albedo-tinted TRT lobe, wrapped Kajiya multiple-scatter diffuse) evaluated on
+ * the strand direction. The card's own dielectric specular is disabled
+ * (specularIntensity 0) and Three's direct terms are replaced. Strand direction
+ * is the skinned bitangent, as the game's G-buffer pass uses it for these cards.
+ * Option-driven constants use HAIR_LIGHTING_ASSUMED ([hypothesis]).
  */
+const HAIR_LIGHT_GLSL = `
+        #if NUM_DIR_LIGHTS > 0 && defined( USE_TANGENT )
+        {
+          vec3 hairT = normalize(tbn[1]);
+          vec3 hairC = clamp(material.diffuseColor * xfsHairScatter.w, vec3(1e-5), vec3(1.0));
+          float hairR = clamp(xfsFibreRoughness, 0.04, 1.0);
+          reflectedLight.directDiffuse = vec3(0.0);
+          reflectedLight.directSpecular = vec3(0.0);
+          DirectionalLight hairLight;
+          #pragma unroll_loop_start
+          for (int i = 0; i < NUM_DIR_LIGHTS; i++) {{
+            hairLight = directionalLights[i];
+            vec3 specular, diffuse;
+            xfsHairDirect(hairLight.direction, geometryViewDir, hairT, normal, hairC, hairR, specular, diffuse);
+            reflectedLight.directSpecular += hairLight.color * specular;
+            reflectedLight.directDiffuse += hairLight.color * diffuse;
+          }}
+          #pragma unroll_loop_end
+        }
+        #endif`;
+
+const HAIR_BSDF_GLSL = `
+        float xfsGaussian(float b, float x) { return exp(-0.5 * x * x / (b * b)) / (2.5066283 * b); }
+        float xfsSchlick(float c) { return 0.0466 + 0.9535 * pow(1.0 - c, 5.0); }
+        void xfsHairDirect(vec3 L, vec3 V, vec3 T, vec3 N, vec3 C, float r, out vec3 specular, out vec3 diffuse) {
+          float sinL = dot(T, L), sinV = dot(T, V);
+          float cosThetaD = cos(abs(asin(clamp(sinV, -1.0, 1.0)) - asin(clamp(sinL, -1.0, 1.0))) * 0.5);
+          vec3 lp = L - sinL * T, vp = V - sinV * T;
+          float cosPhi = dot(lp, vp) * inversesqrt(dot(lp, lp) * dot(vp, vp) + 1e-4);
+          float cosHalfPhi = sqrt(clamp(0.5 + 0.5 * cosPhi, 0.0, 1.0));
+          float sR = xfsHairLobes.x;
+          float shift = 2.0 * sin(sR) * (cos(sR) * cosHalfPhi * sqrt(max(0.0, 1.0 - sinV * sinV)) + sin(sR) * sinV);
+          float specR = xfsGaussian(r * r * 1.4142136 * cosHalfPhi, sinL + sinV - shift) * 0.25 * cosHalfPhi *
+            xfsSchlick(sqrt(clamp(0.5 + 0.5 * dot(L, V), 0.0, 1.0))) * xfsHairLobes.z;
+          float f = xfsSchlick(0.5 * cosThetaD);
+          float trt = xfsGaussian(2.0 * r * r, sinL + sinV - xfsHairLobes.y) * (1.0 - f) * (1.0 - f) * f *
+            exp(xfsHairTrt.x * cosPhi - xfsHairTrt.y) * xfsHairLobes.w;
+          specular = vec3(specR) + trt * pow(C, vec3(0.8 / max(cosThetaD, 1e-3)));
+          float wrapped = clamp((dot(N, L) + xfsHairScatter.x) / ((1.0 + xfsHairScatter.x) * (1.0 + xfsHairScatter.x)), 0.0, 1.0);
+          diffuse = C * mix(wrapped, 1.0 - abs(sinL), xfsHairScatter.y) * 0.31830989 * xfsHairScatter.z;
+        }`;
+
+/**
+ * Hair-class lighting for a flat-coloured strand material (e.g. lashes, whose
+ * Strand_ID/Strand_Gradient are constant images): constant G-buffer roughness,
+ * same deferred hair light as the textured strands. Needs a MeshPhysicalMaterial
+ * with specularIntensity 0 and anisotropy > 0 (for the skinned tangent frame).
+ */
+export function attachHairLighting(material: THREE.MeshStandardMaterial, roughness: number,
+                                   lighting: HairLighting = HAIR_LIGHTING_ASSUMED) {
+  const prior = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    prior(shader, renderer);
+    Object.assign(shader.uniforms, {
+      xfsLashRoughness: { value: roughness },
+      xfsHairLobes: { value: new THREE.Vector4(lighting.shiftR, lighting.shiftTRT, lighting.intensityR, lighting.intensityTRT) },
+      xfsHairTrt: { value: new THREE.Vector2(lighting.trtNpScale, lighting.trtNpBias) },
+      xfsHairScatter: { value: new THREE.Vector4(lighting.wrap, lighting.kajiyaMix, lighting.scatter, lighting.albedoMultiplier) },
+    });
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>
+        uniform float xfsLashRoughness;
+        uniform vec4 xfsHairLobes, xfsHairScatter;
+        uniform vec2 xfsHairTrt;
+        ${HAIR_BSDF_GLSL}`)
+      .replace("#include <lights_fragment_begin>", `float xfsFibreRoughness = xfsLashRoughness;
+        #include <lights_fragment_begin>`)
+      .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+        ${HAIR_LIGHT_GLSL}`);
+  };
+  const priorKey = material.customProgramCacheKey.bind(material);
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-lighting-1`;
+}
+
 type StrandSource = {
   kind: "strand"; id: THREE.Texture; gradient: THREE.Texture; profile: THREE.Texture;
-  sampleCount: number; material: HairMaterialParameters;
+  sampleCount: number; material: HairMaterialParameters; lighting?: HairLighting;
 };
 type CapSource = { kind: "cap"; mask: THREE.Texture; gradient: THREE.Texture };
 
@@ -81,12 +154,16 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
   material.onBeforeCompile = (shader, renderer) => {
     prior(shader, renderer);
     if (source.kind === "strand") {
-      const m = source.material;
+      const m = source.material, l = source.lighting ?? HAIR_LIGHTING_ASSUMED;
       Object.assign(shader.uniforms, {
         xfsStrandId: { value: source.id }, xfsStrandGradient: { value: source.gradient },
         xfsProfile: { value: source.profile }, xfsProfileSamples: { value: source.sampleCount },
         xfsShadow: { value: new THREE.Vector3(m.shadowMin, m.shadowMax, m.shadowStrength) },
         xfsAlphaCutoff: { value: m.alphaCutoff },
+        xfsRoughness: { value: new THREE.Vector4(m.roughnessScale, m.roughnessBias, m.shadowRoughness, m.shadowStrength) },
+        xfsHairLobes: { value: new THREE.Vector4(l.shiftR, l.shiftTRT, l.intensityR, l.intensityTRT) },
+        xfsHairTrt: { value: new THREE.Vector2(l.trtNpScale, l.trtNpBias) },
+        xfsHairScatter: { value: new THREE.Vector4(l.wrap, l.kajiyaMix, l.scatter, l.albedoMultiplier) },
       });
       shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
         attribute float xfsVertexRed;
@@ -98,7 +175,10 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
         uniform int xfsProfileSamples;
         uniform vec3 xfsShadow;
         uniform float xfsAlphaCutoff;
+        uniform vec4 xfsRoughness, xfsHairLobes, xfsHairScatter;
+        uniform vec2 xfsHairTrt;
         varying float vXfsVertexRed;
+        ${HAIR_BSDF_GLSL}
         int xfsProfileIndex(float v) {
           // HLSL uint((N-1)*v): truncation into a baked row, never filtering.
           return clamp(int(float(xfsProfileSamples - 1) * max(v, 0.0)), 0, xfsProfileSamples - 1);
@@ -119,8 +199,13 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
           : clamp(shadowNumerator / shadowWidth, 0.0, 1.0);
         float shadow = shadowT * shadowT * (3.0 - 2.0 * shadowT);
         hairColor += (clamp(hairColor * shadow, 0.0, 1.0) - hairColor) * xfsShadow.z;
-        diffuseColor.rgb *= abs(hairColor);`)
-        .replace("#include <alphamap_fragment>", STRAND_COVERAGE_GLSL);
+        diffuseColor.rgb *= abs(hairColor);
+        // G-buffer roughness: saturate(RoughnessScale * ID + RoughnessBias), pulled toward ShadowRoughness.
+        float xfsFibreRoughness = clamp(xfsRoughness.x * strandId + xfsRoughness.y, 0.0, 1.0);
+        xfsFibreRoughness += (xfsRoughness.z - xfsFibreRoughness) * (1.0 - shadow) * xfsRoughness.w;`)
+        .replace("#include <alphamap_fragment>", STRAND_COVERAGE_GLSL)
+        .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+        ${HAIR_LIGHT_GLSL}`);
     } else {
       Object.assign(shader.uniforms, {
         xfsCapMask: { value: source.mask }, xfsCapGradient: { value: source.gradient },
@@ -133,5 +218,5 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
     }
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-3`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-4`;
 }

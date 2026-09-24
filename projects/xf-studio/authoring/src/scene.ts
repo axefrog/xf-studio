@@ -12,7 +12,7 @@ import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceA
 import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
-import { attachHairColor, attachHairVertexRed, attachStrandCoverage, hairProfileTexture } from "./hair-shading";
+import { attachHairColor, attachHairLighting, attachHairVertexRed, attachStrandCoverage, hairProfileTexture } from "./hair-shading";
 import { resolveHairMaterial, type ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
@@ -248,7 +248,9 @@ export async function createScene(
         // Generic identity check: the strand-profile manifest must describe this detail's saved appearance.
         const lash = name === "lashes" && savedLash?.appearanceHash === hash && savedLash.definition === definition
           ? savedLash : undefined;
-        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new THREE.MeshStandardMaterial({
+        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new (lash ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
+          // Lashes are hair.mt: lit by the hair model below, not by the card's dielectric specular.
+          ...(lash ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
           color: lash ? lash.color : color,
           alphaMap: alpha,
           transparent: true,
@@ -258,7 +260,7 @@ export async function createScene(
           roughness: lash ? lash.roughness : 0.8,
           side: THREE.DoubleSide,
         });
-        if (lash) attachStrandCoverage(mat, lash.alphaCutoff);
+        if (lash) { attachStrandCoverage(mat, lash.alphaCutoff); attachHairLighting(mat, lash.roughness); }
         // Geometry is the local game's/mod's source. Hair/decal shading is provisional.
         o.material = mat;
         // Keep context details above the entire editable makeup stack (orders 10–41).
@@ -355,9 +357,10 @@ export async function createScene(
             if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
             o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
             o.frustumCulled = false;
-            // Strands: fibre lighting replaces the card's dielectric specular (see hair-shading.ts).
+            // Strands: the hair light model replaces the card's direct lighting (see hair-shading.ts).
             const mat = new (index && strand ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
-              ...(index && strand ? { specularIntensity: 0 } : {}),
+              // anisotropy > 0 makes Three skin and interpolate the vertex tangent frame (strand = bitangent).
+              ...(index && strand ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
               color: strand ? 0xffffff : 0x342c29,
               roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
               // Strands: no alpha test, so MSAA alpha-to-coverage keeps coverage proportional to the

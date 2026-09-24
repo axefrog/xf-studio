@@ -183,3 +183,49 @@ export function linearEquivalentDecal(decal: Readonly<Rgb>, coverage: number, un
   const color = target.map((t, k) => Math.max(0, (t - (1 - alpha) * underlay[k]!) / alpha)) as Rgb;
   return { color, alpha };
 }
+
+/**
+ * Registers of the 2.31 deferred hair light (`m_shaderLightsComputeGlobal*_Clustered_*1****` compute
+ * programs) whose values come from engine options at runtime (Editor/Characters/Hair/...). They are
+ * NOT in any resource. These are the defaults of the published model the program matches
+ * (Karis, "Physically Based Hair Shading in Unreal", 2016) and remain a [hypothesis] until captured.
+ */
+export const HAIR_LIGHTING_ASSUMED = Object.freeze({
+  shiftR: -0.07, shiftTRT: 0.14, intensityR: 1, intensityTRT: 1,
+  trtNpScale: 17, trtNpBias: 16.78, wrap: 1, kajiyaMix: 0.33, scatter: 1, albedoMultiplier: 1,
+});
+export type HairLighting = typeof HAIR_LIGHTING_ASSUMED;
+
+const dot3 = (a: Readonly<Rgb>, b: Readonly<Rgb>) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unit = (a: Readonly<Rgb>): Rgb => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const gaussian = (b: number, x: number) => Math.exp(-0.5 * x * x / (b * b)) / (Math.sqrt(2 * Math.PI) * b);
+const schlick = (cos: number) => 0.0466 + 0.9535 * (1 - cos) ** 5;
+
+/**
+ * One directional light's response for a hair fibre, as the 2.31 deferred hair light computes it:
+ * white R lobe + albedo-tinted TRT lobe (no TT in this path) + wrapped Kajiya "multiple scatter"
+ * diffuse. T is the strand direction, N the stored normal, L/V unit vectors toward light/eye.
+ */
+export function hairDirectLight(L: Readonly<Rgb>, V: Readonly<Rgb>, T: Readonly<Rgb>, N: Readonly<Rgb>,
+                                albedo: Readonly<Rgb>, roughness: number,
+                                lighting: HairLighting = HAIR_LIGHTING_ASSUMED): { specular: Rgb; diffuse: Rgb } {
+  const r = Math.min(1, Math.max(0.04, roughness));
+  const C = albedo.map(c => Math.min(1, Math.max(1e-5, c * lighting.albedoMultiplier))) as Rgb;
+  const sinL = dot3(T, L), sinV = dot3(T, V);
+  const cosThetaD = Math.cos(Math.abs(Math.asin(Math.max(-1, Math.min(1, sinV))) - Math.asin(Math.max(-1, Math.min(1, sinL)))) / 2);
+  const lp = unit(L.map((l, k) => l - sinL * T[k]!) as Rgb), vp = unit(V.map((v, k) => v - sinV * T[k]!) as Rgb);
+  const cosPhi = dot3(lp, vp), cosHalfPhi = Math.sqrt(saturate(0.5 + 0.5 * cosPhi));
+  // R: shifted, width r^2 * sqrt(2) * cosHalfPhi, Np = cosHalfPhi / 4, Fresnel at sqrt(0.5 + 0.5 V.L).
+  const shift = 2 * Math.sin(lighting.shiftR) * (Math.cos(lighting.shiftR) * cosHalfPhi * Math.sqrt(Math.max(0, 1 - sinV * sinV)) + Math.sin(lighting.shiftR) * sinV);
+  const mpR = gaussian(r * r * Math.SQRT2 * cosHalfPhi, sinL + sinV - shift);
+  const specR = mpR * 0.25 * cosHalfPhi * schlick(Math.sqrt(saturate(0.5 + 0.5 * dot3(L, V)))) * lighting.intensityR;
+  // TRT: width 2r^2, Fp = (1-f)^2 f with f at cosThetaD/2, Tp = C^(0.8/cosThetaD), Np = exp(17 cosPhi - 16.78).
+  const mpTRT = gaussian(2 * r * r, sinL + sinV - lighting.shiftTRT);
+  const f = schlick(0.5 * cosThetaD), fp = (1 - f) ** 2 * f;
+  const np = Math.exp(lighting.trtNpScale * cosPhi - lighting.trtNpBias);
+  const specular = C.map(c => specR + mpTRT * fp * np * c ** (0.8 / cosThetaD) * lighting.intensityTRT) as Rgb;
+  // Multiple-scatter diffuse: (1/pi) * lerp(wrapped N.L, 1 - |sinL|, kajiyaMix) * scatter * C (fully lit tint = 1).
+  const wrapped = saturate((dot3(N, L) + lighting.wrap) / (1 + lighting.wrap) ** 2);
+  const scatter = (wrapped + ((1 - Math.abs(sinL)) - wrapped) * lighting.kajiyaMix) / Math.PI * lighting.scatter;
+  return { specular, diffuse: C.map(c => c * scatter) as Rgb };
+}
