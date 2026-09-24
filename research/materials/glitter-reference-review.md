@@ -6,7 +6,7 @@
 
 The [reference manifest](../backlog/glitter-visual-references.json) records the unchanged originals, ignored local copies, hashes and unresolved creator attribution. All five local images were opened during this review.
 
-- **Studio screenshot:** conspicuous repeated circular dark centres and bright rims form approximately regular rows over an almost uninterrupted cyan area. The circles have little apparent size variation. This reads more like a patterned coated surface than the irregular fine glitter Nathan supplied.
+- **Studio screenshot:** conspicuous repeated circular dark centres and bright rims form approximately regular rows over an almost uninterrupted cyan area. The circles have little apparent size variation. This reads more like a patterned coated surface than the supplied irregular fine glitter references.
 - **Purple/gold references 1 and 2:** many fine, irregularly spaced bright fragments, some larger visible fragments, varied brightness and local density. Purple pigment remains visible between them. Gold/pale and occasional other-coloured highlights are distinct from the purple base. The closer reference contains large soft circles toward defocused areas; those circles are not reliable measurements of flake shape or size.
 - **Copper reference 3:** a more continuous foil-like reflective band, still broken up by skin/eyelid structure. Useful for the transition toward dense metallic sheen; it should not force all glitter into one dense finish.
 - **Pink reference 4:** sparse fine gold highlights over gradients, with larger spaces between groups. It supports an independently controllable sparse overlay as well as the denser purple examples.

@@ -18,12 +18,12 @@
 
 **Offline candidate, not an accepted preview plate.** This experiment reconstructs
 the historical expanded eye cut from the installed Cyberpunk 2077 2.31 female
-head. Running it needs no `.blend`, old Eye Artistry generator or Nathan-specific
+head. Running it needs no `.blend`, old Eye Artistry generator or maintainer-specific
 authored file. The triangle selection is tracked as 105 inclusive ranges in
 [`selection.json`](selection.json), while every generated GLB, JSON resource,
 archive and binary remains under ignored `generated/`.
 
-The selection was established once by matching all 3,010 triangles of Nathan's
+The selection was established once by matching all 3,010 triangles of the
 owned `.010` cut to native head triangles using exact position plus both UV sets,
 then checking winding and all 105 position morphs. This historical derivation is
 provenance for the **selection**, not a required input to reproduce the output.

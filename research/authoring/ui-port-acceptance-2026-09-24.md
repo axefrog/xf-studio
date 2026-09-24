@@ -1,6 +1,6 @@
 # Independent presentation-port acceptance — 24 September 2026
 
-The diagnostic `/port-smoke.html?verify=1` is a second browser entry built from `createTrustedAuthoringCore`, `createTrustedStudioBootstrap` and injected browser devices. Its view receives only `StudioPresentationPort`; it does not import `main.ts` or rely on the production control IDs. Without `?verify=1`, it refuses to initialize. It is a boundary probe, not a proposed UI design. Checks used an isolated local server, verification browser storage and a disposable `XFAS_DATA_DIR`, never Nathan's active draft or library.
+The diagnostic `/port-smoke.html?verify=1` is a second browser entry built from `createTrustedAuthoringCore`, `createTrustedStudioBootstrap` and injected browser devices. Its view receives only `StudioPresentationPort`; it does not import `main.ts` or rely on the production control IDs. Without `?verify=1`, it refuses to initialize. It is a boundary probe, not a proposed UI design. Checks used an isolated local server, verification browser storage and a disposable `XFAS_DATA_DIR`, never the active working draft or library.
 
 | Workflow through the public port | Observed result |
 | --- | --- |

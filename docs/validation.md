@@ -1,6 +1,6 @@
 # Validation with minimal game sessions
 
-Principle: answer structural and deterministic questions offline, instrument the remaining uncertainties, then ask Nathan for a small, prepared set of actions. Never turn every uncertain resource property into a fresh game-launch request.
+Principle: answer structural and deterministic questions offline, instrument the remaining uncertainties, then ask the maintainer for a small, prepared set of in-game actions. Never turn every uncertain resource property into a fresh game-launch request.
 
 ## Offline work before any test session
 

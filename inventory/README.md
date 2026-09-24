@@ -1,6 +1,6 @@
 # Local landscape inventory
 
-**Local-only outputs:** everything in `inventory/` except this README is ignored by Git (`inventory/*` in `.gitignore`). The linked catalogues (`dev.md`, `redmodding.md`, `mo2.md`), `summary.json`, `mo2-mods.json`, `classifications.json`, the reference-update and framework-release records and the snapshots exist only in Nathan's workspace, so the links below resolve only there. The scripts in [tools/inventory](../tools/README.md) regenerate the generated outputs; the curated classifications and historical records cannot be recreated from a fresh clone.
+**Local-only outputs:** everything in `inventory/` except this README is ignored by Git (`inventory/*` in `.gitignore`). The linked catalogues (`dev.md`, `redmodding.md`, `mo2.md`), `summary.json`, `mo2-mods.json`, `classifications.json`, the reference-update and framework-release records and the snapshots exist only in the maintainer's local workspace, so the links below resolve only there. The scripts in [tools/inventory](../tools/README.md) regenerate the generated outputs; the curated classifications and historical records cannot be recreated from a fresh clone.
 
 The 2026-09-23 census covered all top-level folders in `D:/Dev` and `F:/Games/RedModding`, nested project/repository/container boundaries, all MO2 mod folders, profiles and both overwrite trees.
 

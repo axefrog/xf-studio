@@ -1,13 +1,13 @@
 # Browser Glitter visibility audit — 24 September 2026
 
-Nathan's 500,000 setting was a count of **global generated candidate IDs**, not a count of particles in the painted shape or of visible glints. The study scripts in this directory measure the deterministic field and a bounded contrast proxy from the two locally held user reference photos. The originals stay ignored and undistributed.
+The user-chosen 500,000 setting was a count of **global generated candidate IDs**, not a count of particles in the painted shape or of visible glints. The study scripts in this directory measure the deterministic field and a bounded contrast proxy from the two locally held user reference photos. The originals stay ignored and undistributed.
 
 The measured eye shape is the initial XF Studio `Petal wash` layer with the opt-in candidate. Its fixed shape and seed make these figures reproducible; another edited shape has different counts. `measure-studio-visibility.ts` uses the same two fixed eye UV regions and the production 16-sample covered-only bake. A centre is counted inside the shape when the procedural mask covers its UV position. The live worker's faster nearest-texel approximation reports 5,447/5,441 centres at 1K/2K for the same 500k case; the exact centre query below gives 5,549. Neither number describes screen pixels.
 
 | Setting | Generated IDs | Retained in eye regions | Centres inside shape | Atlas pixels with any resolved coverage 1K / 2K | Pixels with ≥ 50% coverage 1K / 2K | Mean coverage of painted shape |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Revised candidate default, 350k IDs, .00045 UV radius | 350,000 | 50,924 | 3,895 | 5,171 / 12,552 | 672 / 4,240 | 10.8% |
-| Nathan's 500k IDs, .00025 UV radius | 500,000 | 72,114 | 5,549 | 4,269 / 9,678 | 22 / 1,238 | 4.96% |
+| User-chosen 500k IDs, .00025 UV radius | 500,000 | 72,114 | 5,549 | 4,269 / 9,678 | 22 / 1,238 | 4.96% |
 
 Both settings paint 11,496 mask pixels at 1K or 45,954 at 2K. At 500k/.00025, the median nominal flake diameter is 0.39 atlas pixels at 1K and 0.77 at 2K; the 95th percentile is 0.81/1.61. At 350k/.00045 the respective medians are 0.70/1.40 and 95th percentiles 1.45/2.90. These ratios explain why higher global count plus smaller flakes **reduced** resolvable area and strong glints. Catalogue construction took roughly 152 ms for 350k and 194 ms for 500k in one local Bun run; this excludes tile bake and browser rendering.
 

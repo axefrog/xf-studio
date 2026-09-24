@@ -1,7 +1,7 @@
 # Saved brow brown-ombre gradient: base-game versus installed override
 
-24 September 2026. This is a read-only, private source comparison for Nathan's
-saved Arkhe Fuller style-18 `10_brown_ombre` brow. It changes no Studio material,
+24 September 2026. This is a read-only, private source comparison for the reference
+save's Arkhe Fuller style-18 `10_brown_ombre` brow. It changes no Studio material,
 saved character, mod, or game installation. It narrows the colour discrepancy;
 it does not establish a game-rendered match or a runtime archive winner.
 

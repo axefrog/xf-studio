@@ -54,4 +54,4 @@ Other open work: controlled plate clearance after packing, posed intersections, 
 
 WolvenKit's appearance preprocessor/writer establishes how fresh component definitions become a binary RedPackage; actual CLI conversion confirms the resulting package and bindings. One initial conversion failed because new appearance handles collided with preserved mesh-buffer handles; generated handles now use a distinct range. The scripts inspect conversion logs as well as exit codes.
 
-These lessons extend the [community credits](../../docs/community-credits.md). Historical Eye Artistry was a schema research reference; it is not an input to this clean build. Geometry derives from Nathan's owned plate pipeline and underlying CDPR head assets.
+These lessons extend the [community credits](../../docs/community-credits.md). Historical Eye Artistry was a schema research reference; it is not an input to this clean build. Geometry derives from the owned plate pipeline and underlying CDPR head assets.

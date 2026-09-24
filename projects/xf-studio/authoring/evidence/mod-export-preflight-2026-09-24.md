@@ -1,6 +1,6 @@
 # Mod export preflight message — 24 September 2026
 
-Nathan's Check game package attempt with Glitter showed a source stack trace. The compiler correctly rejected the finish, but Python's stderr was passed through the local server as the user-facing message. The old label and its placement inside collapsed collection/library options did not explain how finish choice affected export.
+A manual Check game package attempt with Glitter showed a source stack trace. The compiler correctly rejected the finish, but Python's stderr was passed through the local server as the user-facing message. The old label and its placement inside collapsed collection/library options did not explain how finish choice affected export.
 
 The local server now checks active, nontransparent layers with the same finish rule as the flat compiler before invoking the Python tool. Both Check mod export and Build mod files return `422` with `code: unsupported_finish`, a short message naming the finish, preset and layer, the supported Matte/Satin/Metallic finishes, and the action to change or disable the layer. The validated draft is unchanged; this path creates no work directory and never calls the package runner or promotes files. Disabled and zero-opacity experimental layers retain their existing compiler eligibility. The server logs the full preset/layer IDs, names and finish; unexpected tool stderr stays in the server log instead of appearing as a source trace in the interface. The compiler's Glitter guard remains intact.
 

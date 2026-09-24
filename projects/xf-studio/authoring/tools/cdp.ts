@@ -1,7 +1,7 @@
 /**
  * Minimal Chrome DevTools Protocol driver for isolated `?verify=1` UI checks.
  * Launches a throwaway Chrome profile and a disposable-data authoring server.
- * Never points at Nathan's active draft or library.
+ * Never points at the active working draft or library.
  */
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";

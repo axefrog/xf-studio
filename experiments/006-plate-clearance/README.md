@@ -14,7 +14,7 @@ The original cut-out is sound in the aspect examined here: **all 3,010 plate tri
 - **Shading-normal method:** offset the base along the game's lighting normal and adjust each position morph for its corresponding morphed normal.
 - **Geometry-normal method:** use angle-weighted normals calculated from the full head's triangles for each shape. Preserve the game's normal/tangent data for shading; alter only base and morph positions.
 - Actual WolvenKit mesh/morph import and GLB export, retaining all 105 shapes, UVs, 122 weighted bones and eight influences. A local resolver archive also lets the head export retain its original game weights and bind transforms; its geometry and all morph arrays are checked against the earlier unbound reference.
-- 107 static cases: Basis, all 105 individual shapes, and Nathan's five-shape combination.
+- 107 static cases: Basis, all 105 individual shapes, and the reference save's five-shape combination.
 - 73 sampled poses across 22.1 seconds of the current decoded body/facial idle adapter. Sampling includes every ten frames and upper/lower eyelid surface-joint distance extrema found at 30 Hz. All 1,016 bones across the four source rigs map. This is not execution of the REDengine animation graph.
 - Full-head triangle contact queries in those samples, including coplanar cases. Synthetic cases exercise narrow-phase behavior; a small all-pairs comparison checks that spatial pruning does not lose candidates. Degenerate triangles are separately reported.
 

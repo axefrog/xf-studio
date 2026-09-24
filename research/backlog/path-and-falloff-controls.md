@@ -2,7 +2,7 @@
 
 ## Status (25 Sep 2026)
 
-All of Nathan's 23 September path/falloff/surface requests are implemented and browser-verified offline. The default new recipe is `xfs/recipe-7` (see `projects/xf-studio/authoring/src/recipe.ts`); every earlier schema still migrates on read without changing saved looks.
+All of the 23 September path/falloff/surface requests are implemented and browser-verified offline. The default new recipe is `xfs/recipe-7` (see `projects/xf-studio/authoring/src/recipe.ts`); every earlier schema still migrates on read without changing saved looks.
 
 | Request | State | Evidence |
 |---|---|---|
@@ -20,7 +20,7 @@ All of Nathan's 23 September path/falloff/surface requests are implemented and b
 
 ### Open / known limits
 
-- **On hold (Nathan, 23 Sep): addable softness-field anchors** with optional directional gradient handles (sharp wing tip, different upper/lower softness, interpolated field). Record the concept; do not implement unless the per-point softness controls prove insufficient. Any future design must budget interactive recomputation, cancel obsolete work and share export sampling.
+- **On hold (by request, 23 Sep): addable softness-field anchors** with optional directional gradient handles (sharp wing tip, different upper/lower softness, interpolated field). Record the concept; do not implement unless the per-point softness controls prove insufficient. Any future design must budget interactive recomputation, cancel obsolete work and share export sampling.
 - Tiny collapsed Bézier arms: proxy diamonds visually approach the knot on first movement.
 - Extreme handles can still create thousands of segments; preparation and individual raster chunks are not preemptible, and main-thread surface-guide rebuilding for such recipes has not been re-measured. Do not claim every valid recipe edits interactively.
 - Catmull–Rom insertion on legacy (v1–v4) layers can change neighbouring curvature; exact shape-preserving subdivision applies only to Bézier layers.

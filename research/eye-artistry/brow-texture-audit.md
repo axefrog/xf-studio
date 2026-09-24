@@ -1,6 +1,6 @@
 # Brow texture and installed-provider audit
 
-23 September 2026. Bounded read-only follow-up to Nathan's comparison, `a local clipboard image (personal Temp path withheld)`. No renderer, assets, originals or game installation changed. The screenshot alone cannot identify a texture path or runtime winner.
+23 September 2026. Bounded read-only follow-up to the supplied comparison, `a local clipboard image (personal Temp path withheld)`. No renderer, assets, originals or game installation changed. The screenshot alone cannot identify a texture path or runtime winner.
 
 ## Result
 
@@ -59,7 +59,7 @@ The archive index reader followed the field layout in the local WolvenKit `Archi
 - Arkhe FULLER archive: `62bc69d17a7f1f0c28e8f12e219e1c717a44d2f3386c40ffdee0c222b99456c0`.
 - Alliekat gradient archive: `eb16849ae89094d94d7adf5431a6bfb1ead7f2bdf4bb90426d3249637b00c616`.
 
-These findings establish unique **installed candidates** under the enumerated roots, not the assets loaded in Nathan's photographed game session. No game launch, new extraction or current-runtime resource inspection was performed. The existing extracted JSON/PNG chain was checked, not freshly decoded from the current container. The enabled Character Rendering Editor is an additional runtime-material research lead; its saved configuration was not audited here and no effect is assumed.
+These findings establish unique **installed candidates** under the enumerated roots, not the assets loaded in the photographed reference game session. No game launch, new extraction or current-runtime resource inspection was performed. The existing extracted JSON/PNG chain was checked, not freshly decoded from the current container. The enabled Character Rendering Editor is an additional runtime-material research lead; its saved configuration was not audited here and no effect is assumed.
 
 ## Next bounded work
 

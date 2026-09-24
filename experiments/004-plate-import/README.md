@@ -1,6 +1,6 @@
 # Expanded plate import
 
-**Status:** concluded — it rebuilt Nathan's owned expanded plate as game mesh/morph resources with exact retained head shading (offline round trip only; nothing installed or tested in game), and this neutral plate is still the input to [Experiment 005](../005-preset-collection/README.md) and [Experiment 011](../011-shimmer-plate-comparison/README.md). Clearance work moved to [Experiment 006](../006-plate-clearance/README.md) and then [Experiment 012](../012-native-plate-bootstrap/README.md), which is paused pending in-game evidence.
+**Status:** concluded — it rebuilt the owned expanded plate as game mesh/morph resources with exact retained head shading (offline round trip only; nothing installed or tested in game), and this neutral plate is still the input to [Experiment 005](../005-preset-collection/README.md) and [Experiment 011](../011-shimmer-plate-comparison/README.md). Clearance work moved to [Experiment 006](../006-plate-clearance/README.md) and then [Experiment 012](../012-native-plate-bootstrap/README.md), which is paused pending in-game evidence.
 
 Rebuild the owned plate as actual game mesh and morph resources, without the legacy material matrix or any deployment. Source provenance and topology are in the [lineage record](../../research/eye-artistry/lineage.md).
 
@@ -36,4 +36,4 @@ Closed/open eyelid clearance, posed overlap/intersections, deterministic materia
 
 [Experiment 012](../012-native-plate-bootstrap/README.md) later reconstructed the same cut directly from the installed native head and continued the correction work there. Every lifted candidate so far has been rejected, and that work is paused pending in-game evidence of whether the residual contacts are visible.
 
-No topology edits have been justified yet. Nathan authorizes necessary remediation while preserving source art and design intent.
+No topology edits have been justified yet. Necessary remediation is authorized, provided it preserves source art and design intent.

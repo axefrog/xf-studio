@@ -1,12 +1,12 @@
 # Reading V from a save — 23 September 2026
 
-**Proven locally:** the new TypeScript reader decodes the entire player appearance node in Nathan's newest local save, and Shape Studio applies all five saved facial morphs to the actual head and expanded plate. A full likeness still needs resource resolution/material assembly.
+**Proven locally:** the new TypeScript reader decodes the entire player appearance node in the newest local reference save, and Shape Studio applies all five saved facial morphs to the actual head and expanded plate. A full likeness still needs resource resolution/material assembly.
 
 The saved Arkhe brow style 18 and Soft Natural lashes have now been traced into MO2 and rendered as optional reference details, preserving geometry/morphs/weights. The saved definition matches are checked in the UI; colours and material behaviour are approximate. See [head-details assembly](head-details.md).
 
 ## User-provided visual references
 
-Nathan supplied two views of her current in-game appearance: [close view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/1.jpg) and [wider view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/6.jpg). Both are 2000×1600. Original paths, hashes and file metadata are recorded in [reference manifest](visual-reference-manifest.json); originals were not altered.
+Two supplied views show the reference V's current in-game appearance: [close view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/1.jpg) and [wider view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/6.jpg). Both are 2000×1600. Original paths, hashes and file metadata are recorded in [reference manifest](visual-reference-manifest.json); originals were not altered.
 
 Visible comparison targets: long dark cool-toned hair, muted gray/green irises, relatively narrow dark brows, pronounced upper/lower lashes, dark teal/charcoal eye makeup, soft pale skin and subdued mauve lips. These are image observations under the photographed lighting, not decoded material values. The current preview has conspicuously warmer/yellower study eyes, different skin detail/specularity and no hair; it should not be presented as the finished likeness. Brow thickness/coverage also needs comparison after implementing the actual material channels, rather than editing geometry to compensate prematurely.
 
@@ -67,7 +67,7 @@ These sources establish format facts. The TypeScript reader is a narrow independ
 
 1. Build a resource resolver from save hash → `.app` → selected definition → component/mesh/morph/material dependencies. Keep full 64-bit identifiers throughout. WolvenKit CLI supports `unbundle --hash`; use it after identifying the relevant archives.
 2. Account for the MO2 profile, overwrite, ArchiveXL registrations and replacement archives. A resource referenced by a save is an identifier, not an embedded copy of the asset or proof of which mod won. CCXL examples in this save confirm that vanilla-only resolution would miss major parts of V.
-   Nathan explicitly requests configurable sources for future public users: MO2, Vortex, or manual `archive/pc/mod` management. Treat non-vanilla references as likely mod assets/overrides; search installed names and hashes before classifying a save choice as unsupported. Manager adapters must resolve effective deployed/profile winners, not assume staging and active resources are identical.
+   Configurable sources for future public users are an explicit requirement: MO2, Vortex, or manual `archive/pc/mod` management. Treat non-vanilla references as likely mod assets/overrides; search installed names and hashes before classifying a save choice as unsupported. Manager adapters must resolve effective deployed/profile winners, not assume staging and active resources are identical.
 3. Complete the selected skin, eye overlay, teeth, decals and rig, and calibrate the now locally resolved brows, lashes and hair. Handle component visibility and perspective groups deliberately. Saved clothing/equipment and script-driven appearance changes may need additional nodes or a runtime snapshot.
 4. Map game material behavior into the browser and validate with a small batched game capture. The save does not include final renderer pixels, runtime lighting or all mod-managed state.
 5. Add a resolved-character manifest with hashes, installed mod versions and explicit missing assets. For others, consume their own local game/mod data; do not bundle extracted game/third-party assets into the editor distribution.

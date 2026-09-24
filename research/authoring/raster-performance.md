@@ -1,6 +1,6 @@
 # Exact makeup raster acceleration — 23 September 2026
 
-Nathan reported 5–8 second texture updates and supplied a portable recipe. Its Backdrop has nine knots tessellated to 195 segments, mirrored coverage, a warp, nonuniform pigment, and nonuniform edge softness. The input remains local; it is not bundled as a default preset.
+Texture updates were reported to take 5–8 seconds, and a portable reference recipe was supplied. Its Backdrop has nine knots tessellated to 195 segments, mirrored coverage, a warp, nonuniform pigment, and nonuniform edge softness. The input remains local; it is not bundled as a default preset.
 
 The previous raster evaluated both mirrored contours for every pixel in their combined bounds, including the empty gap between eyes. It integrated variable softness over every contour segment even when distance already guaranteed zero or full feather coverage. This repeated expensive square roots, logarithms and angles for irrelevant samples.
 

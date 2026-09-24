@@ -2,7 +2,7 @@
 
 23 September 2026. The proposed two-tier diagnostic is complete. It does **not** produce an acceptable replacement plate: four vertices still have independently verified failure certificates at every tested positive margin, including 0.000025 with the unchanged total displacement bound of 0.00025. No geometry, master, imported resource or historical experiment output was modified.
 
-This follows [the failure classification](fixed-failure-classification.md) and retains build `generated/build-1790134714546030800`, all native skin weights, Nathan's five captured customization morphs and all 73 preserved idle poses. It changes only the diagnostic right-hand sides of the incident-plane constraints: exposed or ambiguous face/poses require the specified positive clearance; sampled-hidden face/poses require nonnegative clearance. It never deletes faces or ignores their constraints completely.
+This follows [the failure classification](fixed-failure-classification.md) and retains build `generated/build-1790134714546030800`, all native skin weights, the reference save's five captured customization morphs and all 73 preserved idle poses. It changes only the diagnostic right-hand sides of the incident-plane constraints: exposed or ambiguous face/poses require the specified positive clearance; sampled-hidden face/poses require nonnegative clearance. It never deletes faces or ignores their constraints completely.
 
 ## Denser visibility evidence
 

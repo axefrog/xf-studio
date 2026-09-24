@@ -2,7 +2,7 @@
 
 **Status (25 Sep 2026): open — requirement captured, implementation not started.** Track 3 in the [ranked queue](README.md).
 
-## Requirement (Nathan)
+## Requirement
 
 The Studio currently lets a user choose only the **eye shape** (base mesh plus 21 shapes) and **preview piercing style/colour**, plus visibility toggles for brows, lashes and saved-V hair. Everything else comes from an imported save. That means makeup can only be judged on the author's own V.
 
@@ -14,7 +14,7 @@ The Studio currently lets a user choose only the **eye shape** (base mesh plus 2
 
 | Area | State |
 |---|---|
-| Saved-V import | Read-only decode of the whole appearance node; five facial morphs applied to head and plate; eye diffuse, brows, lashes, hair and piercings resolved for Nathan's captured save with documented fidelity gaps. [Save import](../eye-artistry/save-import.md). |
+| Saved-V import | Read-only decode of the whole appearance node; five facial morphs applied to head and plate; eye diffuse, brows, lashes, hair and piercings resolved for the captured reference save with documented fidelity gaps. [Save import](../eye-artistry/save-import.md). |
 | Selectable in the Studio | Eye shape; preview piercing style and colour (vanilla female, colours 8–16 from source palette tints); brow/lash/hair/piercing visibility. |
 | Option discovery | [Read-only catalogue probe](../character-customization/catalog-prototype.md) normalises vanilla `female_cco.inkcharcustomization` plus one mod-added resource (Unique Eyes) into options/choices with provenance. No effective archive-winner claim. |
 | Source resolution | [Source discovery foundation](../authoring/source-discovery-foundation.md) inventories direct-game and MO2 candidates; [resolver contract](../character-customization/mod-source-resolution.md) proposed. Vortex, REDmod and ArchiveXL transformations open. |

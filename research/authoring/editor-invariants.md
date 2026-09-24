@@ -39,7 +39,7 @@ Rules:
 - Point pigment (strength) is distinct from edge softness. Keep a positive regularisation term for crossing paths.
 - Directional softness: keep stored per-point widths when the feature is disabled, and interpolate widths through all path operations.
 - Shape scaling scales widths, blend distances and warp radii and vectors. See the [directional softness contract](directional-softness-contract.md) and the [shape gesture contract](shape-gesture-contract.md).
-- Separate addable softness-field controls are **on hold** at Nathan's request while per-point softness is evaluated. Record the concept; do not implement it yet.
+- Separate addable softness-field controls are **on hold** by request while per-point softness is evaluated. Record the concept; do not implement it yet.
 - Pure curve actions stay separate from UV and surface adapters.
 - **Known Bézier limits.**
   - Exact continuous splitting still has small measured raster approximation differences.

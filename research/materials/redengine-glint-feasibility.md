@@ -33,7 +33,7 @@ The DXIL evidence is **compiled program inspection**, not editable HLSL source. 
 
 For an authored preset, the compiler should retain its editable pigment/flake parameters even if the first game adapter uses a lower-fidelity representation. One CCXL selector can choose an appearance with multiple components; it does not require one material pass. Multiple overlaid decals still need a deterministic order test, and blending material properties into the G-buffer is not the same as separately shading two reflection lobes.
 
-## Offline checks before asking Nathan to launch the game
+## Offline checks before asking the maintainer to launch the game
 
 - Serialize **current-game** copies of the three candidate `.mt` templates and compare pass names, depth writes, target blend factors, parameter names and hashes with the older JSON above. Validate that each selected MeshSkinned compilation is in the installed cache and that the generated `.mi`, mesh and `.app` references resolve.
 - Generate one small, high-contrast test preset: matte dark pigment, few resolved metallic facets, an optional independently switchable emissive overlay, plus Off. Keep coverage maps and channel encodings explicit. Verify bundle/resource IDs, all 105 plate morphs, exact native skin weights, naming (`xfs_`) and no missing assets through the existing offline validators.

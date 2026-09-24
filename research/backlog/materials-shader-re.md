@@ -2,7 +2,7 @@
 
 **Status (25 Sep 2026): open — never properly begun as a systematic study.** Track 4 in the [ranked queue](README.md). Existing work is finish-specific or follows one saved resource chain at a time; no shader has a complete, reusable reference.
 
-## Requirement (Nathan's long-standing directive)
+## Requirement (long-standing directive)
 
 Research the game's main shaders so we understand how materials **actually** render, rather than approximating from names and thumbnails. This grounds two things:
 
@@ -13,7 +13,7 @@ Research the game's main shaders so we understand how materials **actually** ren
 
 For each shader/template: material template (`.mt`/`.remt`) parameters and defaults, instance (`.mi`) inheritance, texture channel packing and colour space, compiled pass(es) and render stage (G-buffer vs post-G-buffer decal), blend/depth state, the pixel-program dataflow for the relevant vertex factory (skinned), and what a browser adapter can and cannot reproduce. Record game version (currently 2.31), cache/template hashes and tool versions.
 
-Priority order (adjust with Nathan):
+Priority order (adjust with the maintainer):
 
 1. **Skin** (`base\materials\skin.mt`) — SSS, detail/micro normals, roughness, tone/gradient inputs; lip seam artefact.
 2. **Hair** (`base\materials\hair.mt`, `.hp` profiles) — strand-ID/root-tip gradients, flow, cap/mask, anisotropic response. Blocks correct hair and lash colour.
@@ -42,6 +42,6 @@ Priority order (adjust with Nathan):
 
 ## Rules
 
-- Compiled-shader and template inspection is offline evidence; it does not prove what a running game rendered. Batch any runtime question into Nathan's prepared session.
+- Compiled-shader and template inspection is offline evidence; it does not prove what a running game rendered. Batch any runtime question into the maintainer's prepared session.
 - Extracted shaders, templates and textures stay local and ignored; commit only findings, hashes and project-authored tools.
 - Credit community sources (wiki pages, tools, mod authors) in [community credits](../../docs/community-credits.md) as lessons accumulate.
