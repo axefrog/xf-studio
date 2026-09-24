@@ -24,8 +24,12 @@ export class ViewportAdapter {
       port.dispose();
     }
   }
-  resize() { this.ports.uv?.resize(); this.ports.surface?.resize(); }
-  cancelInput() { this.ports.uv?.cancelInput(); this.ports.surface?.cancelInput(); }
+  resize(kind?: ViewportKind) {
+    for (const key of kind ? [kind] : ["uv", "surface"] as const) this.ports[key]?.resize();
+  }
+  cancelInput(kind?: ViewportKind) {
+    for (const key of kind ? [kind] : ["uv", "surface"] as const) this.ports[key]?.cancelInput();
+  }
   capture(): Readonly<Record<ViewportKind, boolean>> {
     return { uv: this.ports.uv?.inputCapture() ?? false, surface: this.ports.surface?.inputCapture() ?? false };
   }

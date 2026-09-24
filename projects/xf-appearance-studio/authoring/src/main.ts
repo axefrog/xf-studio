@@ -33,6 +33,7 @@ import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
 import { createUVEditor } from "./uv-editor";
 import { ViewportAdapter } from "./viewport-adapter";
+import { ViewportAttachment } from "./viewport-attachment";
 import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
 import { CollectionApplication } from "./collection-application";
@@ -115,7 +116,8 @@ function selectField(id: string) {
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 const viewport = new ViewportAdapter();
-const sidebars = setupSidebars(workspace.panels, () => { persist(); viewport.resize(); });
+let viewportAttachment: ViewportAttachment<HTMLElement> | undefined;
+const sidebars = setupSidebars(workspace.panels, () => { persist(); viewportAttachment?.resize(); });
 const layout = (): WorkspaceState["panels"] => ({ ...sidebars.snapshot(),
   lighting: $<HTMLDetailsElement>("lighting-panel").open,
   previewQuality: $<HTMLDetailsElement>("quality-panel").open,
@@ -149,6 +151,27 @@ $<HTMLDetailsElement>("quality-panel").open = workspace.panels.previewQuality;
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
+const headHost = $("viewport"), uvHost = $("uv");
+viewportAttachment = new ViewportAttachment<HTMLElement>({
+  moveHost: (kind, slot) => {
+    const host = kind === "head" ? headHost : uvHost;
+    if (slot === host || host.contains(slot)) throw Error("A viewport cannot be hosted inside itself.");
+    slot.append(host);
+  },
+  measure: kind => {
+    const host = kind === "head" ? headHost : uvHost;
+    return { width: host.clientWidth, height: host.clientHeight };
+  },
+  resize: kind => {
+    if (kind === "head") { viewer?.resize(); viewport.resize("surface"); }
+    else viewport.resize("uv");
+  },
+  cancelInput: kind => viewport.cancelInput(kind === "head" ? "surface" : "uv"),
+  inputCapture: kind => viewport.capture()[kind === "head" ? "surface" : "uv"],
+  headView: () => viewer?.cameraState(),
+  uvView: () => uvEditor?.snapshot(),
+});
+if (verification) Object.assign(window, { eyeArtistryViewportAttachment: viewportAttachment });
 let refreshFields: (() => void) | undefined;
 let refreshPigment: (() => void) | undefined;
 let refreshSoftness: (() => void) | undefined;
@@ -479,6 +502,7 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   cancel: () => app.endGesture("uv", true), finish: () => app.endGesture("uv"), persist, message: status,
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
+viewportAttachment.setReady("uv");
 const fileOperations = new StudioFileOperations({
   pick: kind => new Promise(resolve => {
     const id: Record<StudioFileKind, string> = { recipe: "file", collection: "collection-file", savedV: "v-file" };
@@ -829,7 +853,7 @@ try {
         .filter(([n, i]) => viewer!.head.morphTargetInfluences![i] > 0)
         .map(([n]) => n),
       renderer: {
-        near: viewer!.camera.near, far: viewer!.camera.far,
+        near: viewer!.camera.near, far: viewer!.camera.far, aspect: viewer!.camera.aspect,
         calls: viewer!.renderer.info.render.calls,
         triangles: viewer!.renderer.info.render.triangles,
       },
@@ -848,7 +872,9 @@ try {
     }),
   });
   status("Ready · actual head & expanded plate · all skin weights retained");
+  viewportAttachment.setReady("head");
 } catch (error) {
+  viewportAttachment.setError("head", (error as Error).message);
   $("loading").textContent = `Preview unavailable: ${(error as Error).message}`;
   status("Asset or renderer error — see the preview message.");
   console.error(error);

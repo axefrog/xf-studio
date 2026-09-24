@@ -16,6 +16,7 @@ import { attachHairColor, hairGradientTexture } from "./hair-shading";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { loadSavedBrowMaterial } from "./brow-material";
 import { loadSavedLashColor } from "./lash-profile";
+import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 
 export async function createScene(
   host: HTMLElement,
@@ -38,8 +39,11 @@ export async function createScene(
   controls.minDistance = MIN_CAMERA_DISTANCE;
   controls.maxDistance = MAX_CAMERA_DISTANCE;
   const idleFrameOffset = new THREE.Vector3();
+  let frontPending = false;
   function front() {
-    const requested = frontCameraDistance(camera.fov, host.clientWidth / host.clientHeight);
+    frontPending = !visibleViewportSize(host.clientWidth, host.clientHeight);
+    const requested = frontCameraDistance(camera.fov,
+      retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
     const distance = Math.min(MAX_CAMERA_DISTANCE - .005, requested);
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
@@ -640,14 +644,22 @@ export async function createScene(
     plate.computeBoundingSphere();
     return ray.intersectObject(plate, false)[0]?.uv;
   }
-  const observer = new ResizeObserver(() => {
-    const w = host.clientWidth,
-      h = host.clientHeight;
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-  });
+  let appliedWidth = 0, appliedHeight = 0;
+  const resize = () => {
+    const size = visibleViewportSize(host.clientWidth, host.clientHeight);
+    if (!size) return false;
+    if (size.width !== appliedWidth || size.height !== appliedHeight) {
+      renderer.setSize(size.width, size.height);
+      camera.aspect = size.width / size.height;
+      camera.updateProjectionMatrix();
+      appliedWidth = size.width; appliedHeight = size.height;
+    }
+    if (frontPending) front();
+    return true;
+  };
+  const observer = new ResizeObserver(resize);
   observer.observe(host);
+  resize();
   let animation = false,
     amount = 0;
   const start = performance.now();
@@ -720,6 +732,7 @@ export async function createScene(
     materials,
     albedo,
     evidence,
+    resize,
     front,
     pick,
     updateLayer,
@@ -754,6 +767,7 @@ export async function createScene(
     cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
       target: controls.target.clone().sub(idleFrameOffset).toArray(), fov: camera.fov }),
     restoreCamera: (state: CameraState) => {
+      frontPending = false;
       camera.fov = state.fov;
       camera.position.fromArray(state.position).add(idleFrameOffset);
       controls.target.fromArray(state.target).add(idleFrameOffset);
