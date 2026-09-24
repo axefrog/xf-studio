@@ -89,6 +89,16 @@ function parseManifest(root: string): PackageManifest {
   }
   return value;
 }
+/** Read-only payload check for a host-owned candidate. This checks the exact
+ * paired files and hashes, but does not repeat the independent archive verifier. */
+export function inspectLocalPackageCandidate(storePath: string, candidateId: string) {
+  assert(isAbsolute(storePath), "Invalid candidate store.");
+  assert(safeName(candidateId), "Invalid candidate ID.");
+  const store = resolve(storePath), root = resolve(store, candidateId);
+  assert(inside(root, store), "Candidate escapes the configured store.");
+  noLinks(store); noLinks(root); directory(store); directory(root);
+  return { root, manifest: parseManifest(root) };
+}
 function validEntries(files: FileEntry[], namespace: string): boolean {
   return Array.isArray(files) && files.length === 2 && safeName(namespace) && namespace.startsWith("xfs_") &&
     files.every((entry, index) => entry?.path === `archive/pc/mod/${namespace}.${fileNames[index]}` &&
@@ -156,11 +166,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       validReceipt(receipt.rollback.prior, false);
   };
   const candidate = (candidateId: string) => {
-    assert(safeName(candidateId), "Invalid candidate ID.");
-    const root = resolve(store, candidateId);
-    assert(inside(root, store), "Candidate escapes the configured store.");
-    noLinks(root); directory(root);
-    return { root, manifest: parseManifest(root) };
+    return inspectLocalPackageCandidate(store, candidateId);
   };
   const owned = (): InstallReceipt | null => {
     noLinks(receiptFile);
