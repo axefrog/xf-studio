@@ -3,8 +3,8 @@ import { type LayerCommand } from "./layer-stack";
 import { type LayerAction } from "./editor-actions";
 import type { ReadonlyDeep } from "./read-only";
 import { createTrustedAuthoringCore } from "./trusted-authoring-core";
-import { WorkspacePersistence } from "./workspace-persistence";
-import { WorkspaceComposer } from "./workspace-composer";
+import { createBrowserWorkspaceSession, captureBrowserPanels, loadBrowserWorkspace } from "./browser-workspace-device";
+import { createBrowserFileDevice } from "./browser-file-device";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
@@ -14,7 +14,7 @@ import { type StudioAction } from "./studio-application";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 import { UIPreferenceActions } from "./ui-preferences";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
-import { type StudioFileAction, type StudioFileKind } from "./studio-file-operations";
+import { type StudioFileAction } from "./studio-file-operations";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
 import { setupFields } from "./field-ui";
@@ -37,7 +37,6 @@ import { collectionTransport } from "./collection-transport";
 import { setupMotionControls } from "./motion-ui";
 import { MotionActions } from "./motion-actions";
 import { SavedAppearanceActions, type SavedAppearanceState } from "./saved-appearance-actions";
-import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 import {
   canonicalFinish,
   defaultFlakes,
@@ -57,7 +56,7 @@ const status = (text: string) => {
   $("status").textContent = text;
 };
 const verification = new URLSearchParams(location.search).has("verify");
-const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
+const restored = loadBrowserWorkspace(localStorage, verification);
 const workspace = restored.state;
 const uiPreferences = new UIPreferenceActions(workspace.uiPreferences);
 const initialTextureSize = workspace.preview.textureSize;
@@ -113,40 +112,29 @@ const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 let viewportAttachment: ViewportAttachment<HTMLElement> | undefined;
 const sidebars = setupSidebars(workspace.panels, () => { persist(); viewportAttachment?.resize(); });
-const layout = (): WorkspaceState["panels"] => ({ ...sidebars.snapshot(),
-  lighting: $<HTMLDetailsElement>("lighting-panel").open,
-  previewQuality: $<HTMLDetailsElement>("quality-panel").open,
-  layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY });
-const workspaceComposer = new WorkspaceComposer(workspace, {
-  editor: () => authoring.export(), uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
-  savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
-  collections: () => collectionApp?.workspaceSnapshot() ?? workspace.collections,
-  quality: () => qualityActions?.snapshot().size ?? initialTextureSize,
-  preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
-  uiPreferences: () => uiPreferences.snapshot(),
-  sidebar: () => sidebars.snapshot(), layout,
+const lightingPanel = $<HTMLDetailsElement>("lighting-panel");
+const qualityPanel = $<HTMLDetailsElement>("quality-panel");
+const workspaceSession = createBrowserWorkspaceSession({
+  workspace, verification, restored, storage: localStorage,
+  capture: {
+    editor: () => authoring.export(), uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
+    savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
+    collections: () => collectionApp?.workspaceSnapshot() ?? workspace.collections,
+    quality: () => qualityActions?.snapshot().size ?? initialTextureSize,
+    preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+    uiPreferences: () => uiPreferences.snapshot(), sidebar: () => sidebars.snapshot(),
+    layout: () => captureBrowserPanels({ sidebar: () => sidebars.snapshot(),
+      lighting: lightingPanel, previewQuality: qualityPanel,
+      layers: layersPanel, properties: panel, page: window }),
+  },
+  sources: [authoring, uiPreferences], window, document,
+  scrollTargets: [panel, layersPanel], toggleTargets: [lightingPanel, qualityPanel],
+  onStatus: state => { $("save-state").textContent = state.message; },
 });
-function snapshot(): WorkspaceState { return workspaceComposer.capture(); }
-const workspacePersistence = new WorkspacePersistence({ storage: localStorage,
-  key: workspaceKeys(verification).workspace, writable: restored.writable,
-  restoreError: restored.error, capture: snapshot });
-workspacePersistence.subscribe(state => { $("save-state").textContent = state.message; });
-authoring.subscribe(() => workspacePersistence.request());
-uiPreferences.subscribe(() => workspacePersistence.request());
-function flushWorkspace() { workspacePersistence.flush(); }
-function persist() { workspacePersistence.request(); }
-window.addEventListener("pagehide", flushWorkspace);
-window.addEventListener("scroll", persist);
-document.addEventListener("visibilitychange", () => { if (document.hidden) flushWorkspace(); });
+function flushWorkspace() { workspaceSession.flush(); }
+function persist() { workspaceSession.request(); }
 // UI adapters trigger one snapshot after their own handlers update state.
-document.addEventListener("input", persist);
-document.addEventListener("change", persist);
-document.addEventListener("click", persist);
-$("lighting-panel").addEventListener("toggle", persist);
-$("quality-panel").addEventListener("toggle", persist);
-$<HTMLDetailsElement>("quality-panel").open = workspace.panels.previewQuality;
-panel.addEventListener("scroll", persist);
-layersPanel.addEventListener("scroll", persist);
+qualityPanel.open = workspace.panels.previewQuality;
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
 const headHost = $("viewport"), uvHost = $("uv");
 const viewportDevice = createBrowserViewportDevice({
@@ -475,42 +463,9 @@ const studioBootstrap = createTrustedStudioBootstrap({
     load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
     ready: () => !!viewer,
   },
-  fileDevice: {
-  pick: kind => new Promise(resolve => {
-    const id: Record<StudioFileKind, string> = { recipe: "file", collection: "collection-file", savedV: "v-file" };
-    const picker = input(id[kind]);
-    const complete = () => {
-      picker.removeEventListener("change", selected);
-      picker.removeEventListener("cancel", cancelled);
-      const file = picker.files?.[0]; picker.value = "";
-      resolve(file ? { name: file.name, size: file.size, text: () => file.text(),
-        bytes: async () => new Uint8Array(await file.arrayBuffer()) } : undefined);
-    };
-    const selected = () => complete(), cancelled = () => complete();
-    picker.value = "";
-    picker.addEventListener("change", selected, { once: true });
-    picker.addEventListener("cancel", cancelled, { once: true });
-    picker.click();
-  }),
-  download: (blob, name) => {
-    const url = URL.createObjectURL(blob), anchor = document.createElement("a");
-    anchor.href = url; anchor.download = name; anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  },
-  bakeMask: layer => new Promise((resolve, reject) => {
-    const bake = new Worker("/build/raster-worker.js", { type: "module" });
-    bake.onmessage = e => {
-      try {
-        const canvas = document.createElement("canvas"); canvas.width = canvas.height = 2048;
-        canvas.getContext("2d")!.putImageData(new ImageData(e.data.data, 2048, 2048), 0, 0);
-        bake.terminate();
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(Error("Mask export failed.")));
-      } catch (error) { bake.terminate(); reject(error); }
-    };
-    bake.onerror = () => { bake.terminate(); reject(Error("Mask export failed.")); };
-    bake.postMessage({ i: 0, version: 0, layer: { ...layer, enabled: true }, size: 2048 });
-  }),
-  },
+  fileDevice: createBrowserFileDevice({ document, pickers: {
+    recipe: input("file"), collection: input("collection-file"), savedV: input("v-file"),
+  } }),
 });
 const fileOperations = studioBootstrap.files;
 async function runFile(action: StudioFileAction) {
@@ -630,7 +585,7 @@ for (let i = 0; i <= 21; i++) {
 }
 for (let i = 0; i < authoring.recipe.layers.length; i++) previewCoordinator.render(i);
 sync();
-workspacePersistence.activate();
+workspaceSession.activate();
 try {
   // Discover hardware limits before attaching any full-size generated texture.
   viewer = await viewportDevice.loadHead(emptyPreviewCanvases());
@@ -764,14 +719,14 @@ try {
   layersPanel.scrollTop = workspace.panels.layersScroll;
   panel.scrollTop = workspace.panels.propertiesScroll;
   window.scrollTo(workspace.panels.pageX, workspace.panels.pageY);
-  workspaceComposer.setPreviewReady();
+  workspaceSession.setPreviewReady();
   flushWorkspace();
   // Shift gestures belong to the surface editor's whole-shape rotation/scaling.
   // Read-only diagnostics for offline browser verification and future capture manifests.
   Object.assign(window, {
     eyeArtistryDiagnostics: () => ({
       ready: true,
-      workspace: snapshot(),
+      workspace: workspaceSession.snapshot(),
       surface: surface.diagnostics(),
       inputCapture: viewportDevice.capture(),
       uv: uvEditor!.diagnostics(),
