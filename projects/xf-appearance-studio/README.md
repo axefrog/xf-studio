@@ -1,5 +1,7 @@
 # XF Studio
 
+The [desktop architecture checkpoint](../../research/authoring/desktop-packaging.md) defines configurable game/MO2/tool paths, a reversible install transaction and a consented update gate while retaining the independent localhost app. It is design only: no desktop shell, installer or updater is shipped yet.
+
 New features follow the [XF Studio architecture contract](../../research/authoring/architecture-contract.md): validated application actions and detached state, browser/renderer device ports, and replaceable presentation. The independent [presentation-port acceptance](../../research/authoring/ui-port-acceptance-2026-09-24.md) is the current boundary baseline.
 
 The [Studio-to-mod pipeline guide](../../research/authoring/studio-to-mod-pipeline.md) diagrams how editable collections become private, offline-verified Cyberpunk mod candidates and where runtime proof is still missing.
