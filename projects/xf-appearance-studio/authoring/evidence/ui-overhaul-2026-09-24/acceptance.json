@@ -201,10 +201,10 @@
       "step": "performance: UV drag with the Library panel visible keeps frame pacing (p95 ≤ 34 ms)",
       "pass": true,
       "detail": {
-        "n": 93,
-        "p50": 16.700000000000728,
-        "p95": 16.80000000000291,
-        "max": 17
+        "n": 94,
+        "p50": 16.69999999999709,
+        "p95": 16.799999999999272,
+        "max": 16.900000000001455
       }
     },
     {
@@ -292,7 +292,7 @@
       "detail": {
         "fresh": "current",
         "stale": "stale",
-        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p411b432292424d87850196594efcd1b4Untitled lookxfs_p2dd6b1998e8c4d1f82c0c9c8fa3ed9d3xfs.recipexfs_p4d26f10d010941f096181a6fc541d282Omit"
+        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p14b25a98d9614d90926deddbff2e3236Untitled lookxfs_pa8020c0925ae4537bc63023916a60199xfs.recipexfs_p3aee0c48f39348f7a79abcd70f98ea2cOmit"
       }
     },
     {
@@ -374,15 +374,13 @@
       "step": "reload restores layout, theme, selection, preset names, UV view and FOV",
       "pass": true,
       "detail": {
-        "diff": [
-          "fov"
-        ],
+        "diff": [],
         "floating": 1,
         "before": {
-          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
-          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
+          "preset": "3aee0c48-f393-48f7-a79a-bcd70f98ea2c",
+          "layer": "5b4672a6-e2bd-4f74-bcb9-8f969a0bcf73",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
-          "fov": 30,
+          "fov": 42,
           "theme": "light",
           "names": [
             "Chrome dusk",
@@ -392,8 +390,8 @@
           ]
         },
         "after": {
-          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
-          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
+          "preset": "3aee0c48-f393-48f7-a79a-bcd70f98ea2c",
+          "layer": "5b4672a6-e2bd-4f74-bcb9-8f969a0bcf73",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 42,
           "theme": "light",

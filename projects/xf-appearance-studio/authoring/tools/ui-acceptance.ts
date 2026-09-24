@@ -416,18 +416,27 @@ try {
     record("theme: explicit Light overrides a dark OS preference", light === "light" && await js<string>(`document.documentElement.dataset.theme`) === "light", { light });
   });
 
+  // Exercise the presentation slider, then capture the state that reload must restore.
+  await js(`(() => {
+    const slider = [...document.querySelectorAll('.control')]
+      .find(control => control.querySelector('label')?.textContent?.includes('Field of view (vertical)'))
+      ?.querySelector('input[type="range"]');
+    if (!slider) throw Error('Field of view slider is missing');
+    slider.value = '42';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await page.wait(900);
   // Reload restores layout, theme, preset/layer selection, UV view and camera.
   const before = await js(`({ layout: ${S}.dock.tree, preset: ${P}.library.summary().draft.selected, layer: ${P}.editor.layer()?.id,
     uv: JSON.stringify(${P}.viewport.snapshot().uv.view), fov: ${P}.authoring.previewState().preview.camera.fov, theme: ${P}.preferences.snapshot().theme, names: ${P}.library.summary().draft.presets.map(p => p.name) })`);
-  await js(`${P}.authoring.dispatch({ kind: 'camera.setFov', degrees: 42 }); ${P}.authoring.dispatch({ kind: 'camera.endFovGesture' })`);
-  await page.wait(600);
   await page.send("Page.reload"); await ready(); await page.wait(800);
   await step("reload restores layout, theme, selection, preset names, UV view and FOV", async () => {
     const after = await js(`({ layout: ${S}.dock.tree, preset: ${P}.library.summary().draft.selected, layer: ${P}.editor.layer()?.id,
       uv: JSON.stringify(${P}.viewport.snapshot().uv.view), fov: ${P}.authoring.previewState().preview.camera.fov, theme: ${P}.preferences.snapshot().theme, names: ${P}.library.summary().draft.presets.map(p => p.name) })`);
     const diff = Object.keys(before).filter(key => canonical(before[key]) !== canonical(after[key]));
     record("reload restores layout, theme, selection, preset names, UV view and FOV",
-      canonical(after.layout) === canonical(before.layout) && after.preset === before.preset && after.layer === before.layer && after.uv === before.uv && Math.round(after.fov) === 42 && after.theme === "light" &&
+      canonical(after.layout) === canonical(before.layout) && after.preset === before.preset && after.layer === before.layer && after.uv === before.uv && before.fov === 42 && after.fov === before.fov && after.theme === "light" &&
       JSON.stringify(after.names) === JSON.stringify(before.names), { diff, floating: after.layout.floating.length, before: { ...before, layout: undefined }, after: { ...after, layout: undefined } });
   });
   await shot("wide-light-reloaded");
