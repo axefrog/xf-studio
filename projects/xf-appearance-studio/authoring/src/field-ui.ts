@@ -1,4 +1,5 @@
-import { MAX_FIELDS, clamp, type Layer, type WarpField } from "./recipe";
+import { MAX_FIELDS, type Layer, type WarpField } from "./recipe";
+import type { RecipeAction } from "./recipe-actions";
 
 /** Presentation adapter: recipe edits use the application's existing transaction hooks. */
 export function setupFields(elements: {
@@ -6,33 +7,25 @@ export function setupFields(elements: {
   reach: HTMLInputElement; value: HTMLElement; note: HTMLElement;
 }, hooks: {
   layer(): Layer | undefined; selected(): WarpField | undefined;
-  select(id: string): void; begin(): void; change(): void;
+  select(id: string): void; begin(): void; edit(action: RecipeAction, record?: boolean): void;
 }) {
   elements.add.onclick = () => {
     const l = hooks.layer(); if (!l || l.fields.length >= MAX_FIELDS) return;
-    const n = l.points.length, i = l.fields.length;
-    const f: WarpField = { id: crypto.randomUUID(),
-      u: clamp(l.points.reduce((sum, p) => sum + p.u, 0) / n + .008 * i),
-      v: clamp(l.points.reduce((sum, p) => sum + p.v, 0) / n), du: 0, dv: 0, radius: .03 };
-    hooks.begin(); l.fields.push(f); hooks.select(f.id); hooks.change();
+    hooks.edit({ kind: "field.add", layerId: l.id }, true);
   };
   elements.remove.onclick = () => {
     const l = hooks.layer(), f = hooks.selected(); if (!l || !f) return;
-    const i = l.fields.indexOf(f); if (i < 0) return;
-    hooks.begin(); l.fields.splice(i, 1);
-    const next = l.fields[Math.min(i, l.fields.length - 1)];
-    if (next) hooks.select(next.id);
-    hooks.change();
+    hooks.edit({ kind: "field.remove", layerId: l.id, fieldId: f.id }, true);
   };
   elements.clear.onclick = () => {
-    const f = hooks.selected(); if (!f || (!f.du && !f.dv)) return;
-    hooks.begin(); f.du = f.dv = 0; hooks.change();
+    const l = hooks.layer(), f = hooks.selected(); if (!l || !f || (!f.du && !f.dv)) return;
+    hooks.edit({ kind: "field.clear", layerId: l.id, fieldId: f.id }, true);
   };
   elements.reach.addEventListener("pointerdown", () => { if (hooks.selected()) hooks.begin(); });
   elements.reach.addEventListener("keydown", () => { if (hooks.selected()) hooks.begin(); });
   elements.reach.oninput = () => {
-    const f = hooks.selected(); if (!f) return;
-    f.radius = clamp(+elements.reach.value, .005, .2); hooks.change();
+    const l = hooks.layer(), f = hooks.selected(); if (!l || !f) return;
+    hooks.edit({ kind: "field.setReach", layerId: l.id, fieldId: f.id, radius: +elements.reach.value });
   };
   let signature = "";
   return function refresh() {

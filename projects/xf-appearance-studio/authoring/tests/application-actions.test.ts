@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
 import { collectionDraft, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
 import { applyLayerAction, layerCapability, RecipeHistory } from "../src/editor-actions";
+import { applyRecipeAction, RecipeActions, recipeActionCapability, type RecipeActionState } from "../src/recipe-actions";
+import { glitterModel, type GlitterChoices } from "../src/glitter-model";
 import { initialRecipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 
@@ -52,4 +54,64 @@ test("layer commands preserve source recipes and history restores a complete edi
   history.restore([source]);
   const view = history.snapshot(); view[0].layers[0].name = "Changed";
   expect(history.undo()!.layers[0].name).toBe(source.layers[0].name);
+});
+
+test("recipe actions validate point, field, pigment, softness and material edits atomically", () => {
+  const recipe = initialRecipe(), layerId = recipe.layers[0].id;
+  const start: RecipeActionState = { recipe, active: 0, selected: 0, fieldSelection: {} };
+  const added = applyRecipeAction(start, { kind: "field.add", layerId });
+  expect(added.state.recipe.layers[1]).toBe(start.recipe.layers[1]); // Pending renders for other layers keep their identity.
+  const otherEdited = applyRecipeAction(added.state, { kind: "layer.setOpacity",
+    layerId: recipe.layers[1].id, opacity: .6 });
+  expect(otherEdited.state.recipe.layers[0]).toBe(added.state.recipe.layers[0]);
+  expect(added.state.recipe.layers[0].fields).toHaveLength(2);
+  const fieldId = added.state.fieldSelection[layerId];
+  expect(fieldId).toBe(added.state.recipe.layers[0].fields[1].id);
+  expect(start.recipe.layers[0].fields).toHaveLength(1);
+  const reached = applyRecipeAction(added.state, { kind: "field.setReach", layerId, fieldId, radius: .08 });
+  expect(reached.state.recipe.layers[0].fields[1].radius).toBe(.08);
+  const removed = applyRecipeAction(reached.state, { kind: "field.remove", layerId, fieldId });
+  expect(removed.state.recipe.layers[0].fields).toHaveLength(1);
+  expect(recipeActionCapability(removed.state, { kind: "field.clear", layerId, fieldId }).reason).toBe("That warp control no longer exists.");
+  expect(() => applyRecipeAction(removed.state, { kind: "layer.setColor", layerId, color: "bad" })).toThrow("Invalid layer settings");
+  expect(removed.state.recipe.layers[0].color).toBe(recipe.layers[0].color);
+  const pigment = applyRecipeAction(removed.state, { kind: "pigment.edit", layerId,
+    command: { kind: "point-strength", index: 0, value: .4 } });
+  expect(pigment.state.recipe.layers[0].points[0].weight).toBe(.4);
+  const softness = applyRecipeAction(pigment.state, { kind: "softness.edit", layerId,
+    command: { kind: "uniform-softness", value: .02 } });
+  expect(softness.state.recipe.layers[0].feather).toBe(.02);
+  const path = applyRecipeAction(softness.state, { kind: "path.edit", layerId,
+    command: { kind: "point-mode", index: 0, mode: "corner" } });
+  expect(path.state.recipe.layers[0].points[0].handles?.mode).toBe("corner");
+  const point = applyRecipeAction(path.state, { kind: "point.remove", layerId, index: 0 });
+  expect(point.state.recipe.layers[0].points).toHaveLength(recipe.layers[0].points.length - 1);
+  expect(point.effect.kind).toBe("immediate");
+});
+
+test("recipe controller records discrete changes once and keeps inactive Glitter choices local", () => {
+  const original = initialRecipe(), layerId = original.layers[0].id;
+  let state: RecipeActionState = { recipe: original, active: 0, selected: 0, fieldSelection: {} };
+  const choices: GlitterChoices = {}, history = new RecipeHistory(), effects: string[] = [];
+  const actions = new RecipeActions(() => state, (next, effect) => { state = next; effects.push(effect.kind); },
+    history, choices, () => "preset-one");
+  const unsubscribe = actions.subscribe(effect => effects.push(`notify:${effect.kind}`));
+  expect(actions.dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }, true)).toBe(true);
+  expect(history.canUndo).toBe(true);
+  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }, true)).toBe(true);
+  expect(glitterModel(state.recipe.layers[0].flakes)).toBe("fine");
+  expect(actions.dispatch({ kind: "glitter.setDirect", layerId, key: "strength", value: 2.1 }, true)).toBe(true);
+  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "classic" }, true)).toBe(true);
+  expect(glitterModel(state.recipe.layers[0].flakes)).toBe("classic");
+  expect(choices[`preset-one/${layerId}`].fine).toBeDefined();
+  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }, true)).toBe(true);
+  expect(state.recipe.layers[0].flakes).toMatchObject({ strength: 2.1 });
+  expect(() => actions.dispatch({ kind: "glitter.setIrregular", layerId, key: "count", value: 100 })).toThrow("irregular");
+  const detached = actions.snapshot() as unknown as RecipeActionState;
+  detached.recipe.layers[0].color = "#000000";
+  expect(state.recipe.layers[0].color).toBe(original.layers[0].color);
+  expect(history.undo()!.layers[0].finish).toBe("glitter");
+  expect(effects).toEqual(["immediate", "notify:immediate", "immediate", "notify:immediate",
+    "scheduled", "notify:scheduled", "immediate", "notify:immediate", "immediate", "notify:immediate"]);
+  unsubscribe();
 });

@@ -1,7 +1,6 @@
 import {
   MAX_LAYERS,
   parseRecipe,
-  clamp,
   type Recipe,
   type Layer,
 } from "./recipe";
@@ -16,14 +15,14 @@ import { layerRenderQueue } from "./layer-render-queue";
 import { createRasterClient } from "./raster-client";
 import { selectedWarp, type FieldSelection } from "./field-selection";
 import { setupFields } from "./field-ui";
-import { editPigment, type PigmentCommand } from "./pigment-edit";
-import { editSoftness, type SoftnessCommand } from "./softness-edit";
+import type { PigmentCommand } from "./pigment-edit";
+import type { SoftnessCommand } from "./softness-edit";
+import { RecipeActions, type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { setupPreviewQuality } from "./preview-quality-ui";
 import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
-import { convertToBezier, setPointMode } from "./bezier-path";
 import { setupPathControls, type PathCommand } from "./path-ui";
 import { createUVEditor } from "./uv-editor";
 import { setupCollections } from "./collection-ui";
@@ -39,7 +38,7 @@ import {
 } from "./finish";
 import {FLAKE_LIMITS} from "./flake-field";
 import {isDirectGlint} from "./direct-glint-settings";
-import {glitterModel, glitterModels, selectGlitterModel, type GlitterModel} from "./glitter-model";
+import {glitterModel, type GlitterModel} from "./glitter-model";
 import {studioIrregularOpticalKey,maskAlphaKey} from "./makeup-dependencies";
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -95,8 +94,7 @@ function showGlitterMeasurement(){
 }
 const currentField = () => selectedWarp(current(), fieldSelection);
 function selectField(id: string) {
-  const l = current(); if (!l?.fields.some(f => f.id === id)) return;
-  fieldSelection = { ...fieldSelection, [l.id]: id }; sync(); drawUV(); persist();
+  const l = current(); if (l) dispatchRecipeAction({ kind: "field.select", layerId: l.id, fieldId: id });
 }
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
@@ -169,8 +167,9 @@ let refreshQuality: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
 function drawUV() { uvEditor?.draw(); }
 const paintLayerList = layerList($("layers"), {
-  select(i) { active = i; selected = 0; sync(); drawUV(); persist(); },
-  rename(i) { active = i; selected = 0; sync(); drawUV(); persist(); input("layer-name").focus(); input("layer-name").select(); },
+  select(i) { dispatchRecipeAction({ kind: "layer.select", layerId: recipe.layers[i].id }); },
+  rename(i) { dispatchRecipeAction({ kind: "layer.select", layerId: recipe.layers[i].id });
+    input("layer-name").focus(); input("layer-name").select(); },
   toggle(i, enabled) { dispatchLayer({ kind: "layer.setEnabled", id: recipe.layers[i].id, enabled }); },
   edit: changeLayers,
 });
@@ -376,6 +375,24 @@ function render(i = active) {
 }
 const scheduleLayer = layerRenderQueue(() => recipe.layers, run => requestAnimationFrame(run), render);
 function schedule() { scheduleLayer(current()); }
+const recipeActions = new RecipeActions(
+  () => ({ recipe, active, selected, fieldSelection }),
+  (next, effect) => {
+    recipe = next.recipe; active = next.active; selected = next.selected; fieldSelection = next.fieldSelection;
+    if (effect.kind === "selection") { sync(); drawUV(); persist(); }
+    else if (effect.kind === "immediate") render(effect.layerIndex);
+    else if (effect.layerIndex !== active) render(effect.layerIndex);
+    else { schedule(); sync(); persist(); }
+  }, history, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft");
+function dispatchRecipeAction(action: RecipeAction, record = false) {
+  try { recipeActions.dispatch(action, record); }
+  catch (error) {
+    status(action.kind === "glitter.setIrregular"
+      ? "This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount."
+      : (error as Error).message);
+    sync();
+  }
+}
 
 function undo() {
   const next = history.undo();
@@ -395,23 +412,20 @@ for (const id of ["weight", "opacity", "color"]) {
   control.addEventListener("keydown", () => checkpoint());
   control.oninput = () => {
     const l = current();
-    if (id === "color") l.color = control.value;
-    else if (id === "weight") l.points = editPigment(l, { kind: "point-strength", index: selected, value: +control.value }).points;
-    else l.opacity = +control.value;
-    schedule();
+    if (!l) return;
+    if (id === "color") dispatchRecipeAction({ kind: "layer.setColor", layerId: l.id, color: control.value });
+    else if (id === "weight") dispatchRecipeAction({ kind: "pigment.edit", layerId: l.id,
+      command: { kind: "point-strength", index: selected, value: +control.value } });
+    else dispatchRecipeAction({ kind: "layer.setOpacity", layerId: l.id, opacity: +control.value });
   };
 }
 input("symmetry").onchange = () => {
-  checkpoint();
-  current().symmetry = input("symmetry").checked;
-  render();
+  const l = current(); if (l) dispatchRecipeAction({ kind: "layer.setSymmetry", layerId: l.id,
+    symmetry: input("symmetry").checked }, true);
 };
 $<HTMLSelectElement>("finish").onchange = () => {
-  checkpoint();
-  const l=current(), finish=$<HTMLSelectElement>("finish").value as Layer["finish"];
-  if (finish!=="glitter" && (isIrregular(l.flakes)||isDirectGlint(l.flakes))) l.flakes=defaultFlakes();
-  l.finish = finish;
-  render();
+  const l=current(); if (l) dispatchRecipeAction({ kind: "layer.setFinish", layerId: l.id,
+    finish: $<HTMLSelectElement>("finish").value as Layer["finish"] }, true);
 };
 for (const id of ["cells", "density", "tilt"] as const) {
   const control = input("flake-" + id);
@@ -419,20 +433,12 @@ for (const id of ["cells", "density", "tilt"] as const) {
   control.addEventListener("keydown", checkpoint);
   control.oninput = () => {
     const l = current();
-    if (isIrregular(l.flakes)||isDirectGlint(l.flakes)) return;
-    l.flakes ??= defaultFlakes();
-    l.flakes[id] = +control.value;
-    schedule();
+    if (l) dispatchRecipeAction({ kind: "glitter.setClassic", layerId: l.id, key: id, value: +control.value });
   };
 }
 $<HTMLSelectElement>("glitter-model").onchange = () => {
   const layer = current(), model = $<HTMLSelectElement>("glitter-model").value as GlitterModel;
-  if (!layer || layer.finish !== "glitter" || !glitterModels.includes(model)) { sync(); return; }
-  if (glitterModel(layer.flakes) === model) return;
-  checkpoint();
-  recipe = selectGlitterModel(recipe, layer.id, model, glitterChoices,
-    presetLibrary?.snapshot()?.selected ?? "draft");
-  render();
+  if (layer) dispatchRecipeAction({ kind: "glitter.selectModel", layerId: layer.id, model }, true);
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
@@ -440,14 +446,8 @@ for (const id of ["count","radius","spread","tilt","color"] as const) {
   control.addEventListener("keydown",checkpoint);
   control.oninput=()=>{
     const l=current(); if(!l || !isIrregular(l.flakes))return;
-    const next={...l.flakes};
-    if(id==="color") next.color=control.value;
-    else if(id==="count")next.count=+control.value*5000;
-    else next[id]=+control.value;
-    try {parseRecipe({...recipe,layers:recipe.layers.map(layer=>layer===l?{...layer,flakes:next}:layer)});}
-    catch {status("This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount.");sync();return;}
-    l.flakes=next;
-    schedule();
+    dispatchRecipeAction({ kind: "glitter.setIrregular", layerId: l.id, key: id,
+      value: id === "color" ? control.value : id === "count" ? +control.value*5000 : +control.value });
   };
 }
 for(const id of ["density","fineShare","strength","color"] as const){
@@ -455,39 +455,27 @@ for(const id of ["density","fineShare","strength","color"] as const){
   control.addEventListener("pointerdown",checkpoint);
   control.addEventListener("keydown",checkpoint);
   control.oninput=()=>{
-    const l=current();if(!l||!isDirectGlint(l.flakes))return;
-    const next={...l.flakes,[id]:id==="color"?control.value:+control.value};
-    if(!isDirectGlint(next))return;
-    l.flakes=next;schedule();
+    const l=current();if(!l)return;
+    dispatchRecipeAction({ kind: "glitter.setDirect", layerId: l.id, key: id,
+      value: id === "color" ? control.value : +control.value });
   };
 }
 function changePath(command: PathCommand) {
-  const layer = current(); if (!layer) return;
-  try {
-    const next = command.kind === "enable-bezier" ? convertToBezier(layer) : setPointMode(layer, command.index, command.mode);
-    if (JSON.stringify(next) === JSON.stringify(layer)) return;
-    checkpoint(); Object.assign(layer, next); schedule(); sync(); persist();
-  } catch (error) { status((error as Error).message); sync(); }
+  const layer = current(); if (layer) dispatchRecipeAction({ kind: "path.edit", layerId: layer.id, command }, true);
 }
 refreshPath = setupPathControls({
   enable: $("path-enable"), modes: $("point-modes"), note: $("path-note"),
   aligned: $("point-aligned"), symmetric: $("point-symmetric"), corner: $("point-corner"),
 }, { layer: current, selected: () => selected, edit: changePath });
 function changePigment(command: PigmentCommand) {
-  const layer = current(); if (!layer) return;
-  try {
-    Object.assign(layer, editPigment(layer, command)); schedule(); sync(); persist();
-  } catch (error) { status((error as Error).message); sync(); }
+  const layer = current(); if (layer) dispatchRecipeAction({ kind: "pigment.edit", layerId: layer.id, command });
 }
 refreshPigment = setupPigment({
   smooth: input("smooth-strength"), blend: input("strength-blend"),
   value: $("strength-blend-value"), note: $("strength-note"),
 }, { layer: current, begin: checkpoint, edit: changePigment });
 function changeSoftness(command: SoftnessCommand) {
-  const layer = current(); if (!layer) return;
-  try {
-    Object.assign(layer, editSoftness(layer, command)); schedule(); sync(); persist();
-  } catch (error) { status((error as Error).message); sync(); }
+  const layer = current(); if (layer) dispatchRecipeAction({ kind: "softness.edit", layerId: layer.id, command });
 }
 refreshSoftness = setupSoftness({
   variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
@@ -496,14 +484,10 @@ refreshSoftness = setupSoftness({
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),
-}, { layer: current, selected: currentField, select: selectField, begin: checkpoint, change: schedule });
+}, { layer: current, selected: currentField, select: selectField, begin: checkpoint, edit: dispatchRecipeAction });
 $("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
-  if (current().points.length <= 3) return;
-  checkpoint();
-  current().points.splice(selected, 1);
-  selected = Math.min(selected, current().points.length - 1);
-  render();
+  const l = current(); if (l) dispatchRecipeAction({ kind: "point.remove", layerId: l.id, index: selected }, true);
 };
 uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
@@ -511,7 +495,8 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   recipe: () => recipe, layer: current, selected: () => selected,
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
-  select: index => { selected = index; sync(); }, begin: checkpoint, change: schedule,
+  select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
+  begin: checkpoint, change: schedule,
   cancel: undo, persist, message: status,
 }, workspace.uvView);
 function download(blob: Blob, name: string) {
@@ -732,12 +717,7 @@ try {
     layer: current,
     selected: () => selected,
     selectedField: () => currentField()?.id, selectField,
-    select: (i) => {
-      selected = i;
-      sync();
-      drawUV();
-      persist();
-    },
+    select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
     begin: checkpoint,
     change: schedule,
     cancel: undo,
