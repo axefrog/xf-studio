@@ -2,6 +2,8 @@
 
 25 September 2026. This experiment extends [native preview core](../013-native-preview-core/README.md) without changing Studio. It traces the **fixed installed Cyberpunk 2077 2.31 vanilla** `gradient_brown` eye material and normalizes the brown gradient's source stops plus its declared optical inputs. It does not produce a coloured iris texture or claim game rendering.
 
+A [second compiled-shader and gaze-source checkpoint](compiled-shader-and-gaze.md) establishes the iris-mask R lookup and alpha blend, roughness R channel and compatible eye-joint names. It still cannot establish the generated gradient texture's stop interpolation or validate native gaze assembly.
+
 ## Source chain and result
 
 Experiment 013 independently verified that the female eye mesh's `gradient_brown` appearance uses `brown_eye_gradient.mi` on its eye surface (`submesh_01_LOD_1`) and that the mesh-local instance points to the brown profile. This probe follows the file-backed instance further:
@@ -31,7 +33,7 @@ The script gates both full archive hashes, its executable and all three exact re
 
 ## Boundary for a clean-user preview
 
-This establishes a safe **input extraction** route for a fixed vanilla brown profile. It does not establish the shader's gradient lookup coordinate, interpolation space, mask composition, refraction/cornea response, or whether a baked iris would match the game. The [eye optics audit](../../research/eye-artistry/eye-lip-optics-audit.md) established roughness R times `RoughnessScale` for a sampled compiled `eye` variant; this separate `eye_gradient` template requires its own variant check before transferring that rule. Do not simply recolour experiment 013's grey-blue eye diffuse from these stops.
+This establishes a safe **input extraction** route for a fixed vanilla brown profile. At this first checkpoint, the shader's gradient lookup coordinate, interpolation space, mask composition and roughness channel were still unverified. The [subsequent compiled-shader trace](compiled-shader-and-gaze.md) resolves the mask channel, lookup coordinate and roughness path for one `eye_gradient` variant; generated stop interpolation, full refraction/cornea response and rendered appearance remain open. Do not simply recolour experiment 013's grey-blue eye diffuse from these stops.
 
 The native eye GLB in experiment 013 has a 57-joint skin and tiled UVs. Studio's existing historical preview attaches rigid eyes to `l_J_eye_JNT` / `r_J_eye_JNT` from a separate facial idle rig; that path is not proof that the new native GLB and a clean user's game-derived gaze data share validated transforms. The current five-file core intake also does not include a native eye GLB, gradient profile or gaze animation. Assembly design, eye/rig pivots, source winner resolution and the [still unaccepted plate clearance](../012-native-plate-bootstrap/README.md) remain gates before a complete clean-user 3D preview. No game or MO2 files were modified and no game launch was made.
 
