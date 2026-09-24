@@ -3,7 +3,8 @@
 Usage: python tools/check_links.py [--external-clones]
 Links into sibling reference clones outside the repository (e.g. ../Cyberpunk-Modding-Docs)
 are skipped unless --external-clones is given, because they exist only in the local workspace.
-Anchors use GitHub's heading slug rules. Exit status is 1 when anything is broken.
+Links to git-ignored local-only files (inventories, captures, extracted evidence) are accepted
+when absent, since they exist only in the maintainer's workspace. Anchors use GitHub's heading slug rules. Exit status is 1 when anything is broken.
 """
 import argparse
 import os
@@ -41,6 +42,13 @@ def anchors(path):
     return _anchor_cache[path]
 
 
+def is_ignored(path):
+    rel = os.path.relpath(path, ROOT)
+    if rel.startswith('..'):
+        return False
+    return subprocess.run(['git', 'check-ignore', '-q', '--no-index', rel.replace(os.sep, '/')], cwd=ROOT).returncode == 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--external-clones', action='store_true')
@@ -62,6 +70,8 @@ def main():
             elif not args.external_clones:
                 continue
             if not os.path.exists(dest):
+                if is_ignored(dest):
+                    continue  # local-only (git-ignored) evidence: exists only in the maintainer's workspace
                 broken.append((rel, target, 'missing file'))
             elif fragment and dest.endswith('.md') and urllib.parse.unquote(fragment).lower() not in anchors(dest):
                 broken.append((rel, target, 'missing anchor'))
