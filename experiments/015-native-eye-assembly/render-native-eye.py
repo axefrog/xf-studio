@@ -15,7 +15,6 @@ import numpy as np
 from mathutils import Vector
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE / 'generated' / 'clearance'
 SOURCE = HERE.parent / '013-native-preview-core' / 'generated' / 'visual-study'
 MAPS = SOURCE / 'candidate'
 EXTRA = HERE / 'generated' / 'material-textures'
@@ -128,10 +127,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['source', 'eye-only'], default='source')
     parser.add_argument('--frames', default='0,169,331,490')
+    parser.add_argument('--sample', choices=['clearance', 'h091-comparison'], default='clearance')
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
     frames = [int(v) for v in args.frames.split(',')]
     assert all(v in [0, 27, 169, 298, 299, 331, 473, 490, 662] for v in frames)
-    manifest = json.loads((ROOT / 'manifest.json').read_text())
+    root = HERE / 'generated' / args.sample
+    manifest = json.loads((root / 'manifest.json').read_text())
     fixed = json.loads((SOURCE / 'manifest.json').read_text())
     assert fixed['candidate']['head.glb'] == EXPECTED['head-glb']
     assert fixed['candidate']['eyes.glb'] == EXPECTED['eye-glb']
@@ -154,13 +155,13 @@ def main():
         source_uv[name] = accessor(doc, binary, primitive['attributes']['TEXCOORD_0'])
     indices = {}
     for name, row in manifest['meshIndices'].items():
-        path = ROOT / row['file']
+        path = root / row['file']
         assert sha(path) == row['sha256']
         indices[name] = np.asarray(json.loads(path.read_text()), dtype=int).reshape(-1, 3)
-    output = HERE / 'generated' / 'renders' / args.mode
+    output = HERE / 'generated' / 'renders' / (args.sample if args.sample != 'clearance' else '') / args.mode
     output.mkdir(parents=True, exist_ok=True)
     report = {'mode': args.mode, 'frames': frames, 'shapes': manifest['shapes'],
-              'source': {'sampleManifestSha256': sha(ROOT / 'manifest.json'),
+              'source': {'sampleManifestSha256': sha(root / 'manifest.json'),
                          'nativeHeadSha256': sha(head_path), 'nativeEyeSha256': sha(eye_path),
                          'headAlbedoSha256': sha(MAPS / 'head-albedo.png'),
                          'eyeBaseDiffuseSha256': sha(MAPS / 'eye-albedo.png'),
@@ -197,11 +198,11 @@ def main():
                 if args.mode == 'eye-only' and name in ('native-lash', 'native-wetness'):
                     continue
                 row = manifest['surfaces'][f'{shape}/{frame}/{name}']
-                path = ROOT / row['file']
+                path = root / row['file']
                 assert sha(path) == row['sha256']
                 positions = np.fromfile(path, dtype='<f8').reshape(-1, 3)
                 add_surface(name, positions, indices[name], source_uv[name], mats[name])
-            centre = np.fromfile(ROOT / manifest['surfaces'][f'neutral/{frame}/native-eye']['file'],
+            centre = np.fromfile(root / manifest['surfaces'][f'neutral/{frame}/native-eye']['file'],
                                  dtype='<f8').reshape(-1, 3).mean(axis=0)
             target = Vector(to_blender(centre))
             camera_data = bpy.data.cameras.new('fixed-frontal')

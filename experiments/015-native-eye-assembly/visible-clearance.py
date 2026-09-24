@@ -6,6 +6,7 @@ analyze-clearance.py. All source geometry lives in ignored generated/.
 import hashlib
 import json
 import sys
+import argparse
 from pathlib import Path
 
 import bpy
@@ -57,11 +58,15 @@ def make_tree(vertices, faces):
 
 def main():
     self_test()
-    root = HERE / 'generated' / 'clearance'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sample', choices=['clearance', 'h091-comparison'], default='clearance')
+    args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
+    root = HERE / 'generated' / args.sample
     manifest = json.loads((root / 'manifest.json').read_text())
     contact_path = root / 'contact-pairs.json'
     contact = json.loads(contact_path.read_text())
-    assert manifest['schema'] == 'xfs/native-eye-finite-samples-1'
+    assert manifest['schema'] == ('xfs/native-eye-finite-samples-1' if args.sample == 'clearance'
+                                  else 'xfs/native-eye-h091-samples-1')
     assert contact['schema'] == 'xfs/native-eye-finite-contact-1'
     assert contact['sampleManifestSha256'] == sha(root / 'manifest.json')
     faces = {}
@@ -150,7 +155,7 @@ def main():
               'headFacingDotTolerance': HEAD_FACING_TOLERANCE,
               'rows': reports,
               'limits': 'Finite sampled phases and triangle/vertex geometry only. Five head-relative cameras, front-facing head triangles and three actual intersection-segment samples per pair. Opaque BVH proxy ignores alpha, material, refraction, game depth policy and between-frame motion. No visible witness means unresolved, not hidden.'}
-    output = HERE / 'clearance-evidence.json'
+    output = HERE / 'clearance-evidence.json' if args.sample == 'clearance' else root / 'visible-evidence.json'
     output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({'evidence': str(output), 'sha256': sha(output),
                       'exposedRows': sum(r['allOpaqueSurfaceExposedContactPairs'] > 0 for r in reports)}))

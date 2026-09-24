@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sys
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -17,11 +18,16 @@ def sha(path):
 
 def main():
     self_test()
-    root = HERE / 'generated' / 'clearance'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sample', choices=['clearance', 'h091-comparison'], default='clearance')
+    args = parser.parse_args()
+    root = HERE / 'generated' / args.sample
     manifest = json.loads((root / 'manifest.json').read_text())
-    assert manifest['schema'] == 'xfs/native-eye-finite-samples-1'
-    assert manifest['sampleRate'] == 30 and len(manifest['frames']) == 9
-    assert manifest['inputs']['eye']['sha256'] == '0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba'
+    assert manifest['schema'] == ('xfs/native-eye-finite-samples-1' if args.sample == 'clearance'
+                                  else 'xfs/native-eye-h091-samples-1')
+    assert manifest['sampleRate'] == 30 and len(manifest['frames']) == (9 if args.sample == 'clearance' else 4)
+    assert manifest['inputs']['eye']['sha256'] == ('0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba'
+                                                  if args.sample == 'clearance' else '90ec2ee3396c598da5061d7d51f5945c34f7ccbff95246393e11c433e3fc3fdf')
     assert manifest['inputs']['head']['sha256'] == '0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730'
     for entry in manifest['inputs'].values():
         assert sha(Path(entry['path'])) == entry['sha256']
@@ -33,7 +39,7 @@ def main():
     result = {'schema': 'xfs/native-eye-finite-contact-1',
               'sampleManifestSha256': sha(root / 'manifest.json'),
               'shapes': manifest['shapes'], 'frames': manifest['frames'],
-              'selection': manifest['selection'], 'parts': {}, 'rows': []}
+              'selection': manifest.get('selection', {'fixedComparisonFrames': manifest['frames']}), 'parts': {}, 'rows': []}
     surface_names = ['head', 'native-eye', 'native-lash', 'native-wetness']
     for shape in manifest['shapes']:
         for frame in manifest['frames']:

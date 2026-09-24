@@ -1,0 +1,144 @@
+{
+  "schema": "xfs/native-eye-h091-comparison-1",
+  "sourceSha256": {
+    "head": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "eye": "90ec2ee3396c598da5061d7d51f5945c34f7ccbff95246393e11c433e3fc3fdf",
+    "headMeshJson": "be95ec07441a7c894de67eec7269e966c090f649d076167006083bc73eda6066",
+    "eyeMeshJson": "4c1dfbe1ea15e9d94b67767c0e8a4227f66b45efe424822e10d60fc5f9955cd2",
+    "headMorphJson": "232131a62f0131f0e6f2968f31e9fd5bcfd6e3ddd73aded76b27399a0353f72d",
+    "eyeMorphJson": "29804e40b7ec86429a44e4629bd3a75ae996dd1349eb431db09f095c17698724",
+    "headMorphRaw": "3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e",
+    "eyeMorphRaw": "42a19b6a4d2f4060f6785de525d8c55f663fb2a13db804cd84e929e5110d1323",
+    "body": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
+    "face": "5a52d9b9e59acc2630336c3a280e179e57ad4ca5815f97d5397cf15748f2b3e7",
+    "binding": "72712873bcd65190207c9b83ff44a4a8dd2dd0190b20cea21beb1571deabe568"
+  },
+  "sampleManifestSha256": "c0a449e230dd43efde9ee725618f361bd17739b10308f4af2adff78bef3d3d30",
+  "contactPairsSha256": "ce1d739e73036c32c45fda47a027743a435555051f43d7542ff486a551557b96",
+  "visibleEvidenceSha256": "a6c64368986bc6556cc85d01744f549a440bafbb3f7c0f55c7614d398f3454b6",
+  "renderManifestSha256": {
+    "source": "aa830c2854258517fcef3b5d6bc0d5647a8186a88c32eb7e0ae6e0834baf0945",
+    "eye-only": "aaa766d5c5129e9d08198734567dd1934a28dacd02b736085833641420914d4f"
+  },
+  "maximumSourceBindPositionErrorMeters": 2.0984639080334365e-07,
+  "sharedExactH091Matrices": 34,
+  "rows": [
+    {
+      "frame": 0,
+      "parts": {
+        "head": {
+          "neutralMaxComponentDifferenceMeters": 4.9206748453656246e-08,
+          "savedMaxVertexDisplacementMeters": 4.943459019514028e-08
+        },
+        "native-eye": {
+          "neutralMaxComponentDifferenceMeters": 4.625847349615242e-08,
+          "savedMaxVertexDisplacementMeters": 0.003060255938596052
+        },
+        "native-lash": {
+          "neutralMaxComponentDifferenceMeters": 4.838493961045742e-08,
+          "savedMaxVertexDisplacementMeters": 0.004034565808870813
+        },
+        "native-wetness": {
+          "neutralMaxComponentDifferenceMeters": 4.308980261491513e-08,
+          "savedMaxVertexDisplacementMeters": 0.003963175279436178
+        }
+      },
+      "savedEyeFiniteContactPairs": {
+        "old": 481,
+        "h091": 628
+      },
+      "savedEyeOpaqueExposedContactPairs": {
+        "old": 177,
+        "h091": 0
+      }
+    },
+    {
+      "frame": 169,
+      "parts": {
+        "head": {
+          "neutralMaxComponentDifferenceMeters": 4.9219951003820483e-08,
+          "savedMaxVertexDisplacementMeters": 4.943453025793425e-08
+        },
+        "native-eye": {
+          "neutralMaxComponentDifferenceMeters": 4.6120223196055576e-08,
+          "savedMaxVertexDisplacementMeters": 0.0030602559390159956
+        },
+        "native-lash": {
+          "neutralMaxComponentDifferenceMeters": 4.837156453163516e-08,
+          "savedMaxVertexDisplacementMeters": 0.003985401193099737
+        },
+        "native-wetness": {
+          "neutralMaxComponentDifferenceMeters": 4.307479151144378e-08,
+          "savedMaxVertexDisplacementMeters": 0.003931040353570923
+        }
+      },
+      "savedEyeFiniteContactPairs": {
+        "old": 628,
+        "h091": 659
+      },
+      "savedEyeOpaqueExposedContactPairs": {
+        "old": 255,
+        "h091": 25
+      }
+    },
+    {
+      "frame": 331,
+      "parts": {
+        "head": {
+          "neutralMaxComponentDifferenceMeters": 4.91824141413133e-08,
+          "savedMaxVertexDisplacementMeters": 4.943371838130279e-08
+        },
+        "native-eye": {
+          "neutralMaxComponentDifferenceMeters": 4.600653857878001e-08,
+          "savedMaxVertexDisplacementMeters": 0.003060255940261397
+        },
+        "native-lash": {
+          "neutralMaxComponentDifferenceMeters": 4.8394720897348975e-08,
+          "savedMaxVertexDisplacementMeters": 0.004034015283287528
+        },
+        "native-wetness": {
+          "neutralMaxComponentDifferenceMeters": 4.309298162752384e-08,
+          "savedMaxVertexDisplacementMeters": 0.003962748162238938
+        }
+      },
+      "savedEyeFiniteContactPairs": {
+        "old": 511,
+        "h091": 624
+      },
+      "savedEyeOpaqueExposedContactPairs": {
+        "old": 208,
+        "h091": 7
+      }
+    },
+    {
+      "frame": 490,
+      "parts": {
+        "head": {
+          "neutralMaxComponentDifferenceMeters": 4.930140473646816e-08,
+          "savedMaxVertexDisplacementMeters": 4.943480855145428e-08
+        },
+        "native-eye": {
+          "neutralMaxComponentDifferenceMeters": 4.633751737870284e-08,
+          "savedMaxVertexDisplacementMeters": 0.0030602559376398317
+        },
+        "native-lash": {
+          "neutralMaxComponentDifferenceMeters": 4.842620526801511e-08,
+          "savedMaxVertexDisplacementMeters": 0.004034558246740802
+        },
+        "native-wetness": {
+          "neutralMaxComponentDifferenceMeters": 4.3121522352862485e-08,
+          "savedMaxVertexDisplacementMeters": 0.00396314604018507
+        }
+      },
+      "savedEyeFiniteContactPairs": {
+        "old": 482,
+        "h091": 628
+      },
+      "savedEyeOpaqueExposedContactPairs": {
+        "old": 165,
+        "h091": 0
+      }
+    }
+  ],
+  "limits": "Offline current world-bind-relative idle solve; opaque finite rays and approximate materials. Neither live morph/graph activation nor REDengine parity is proved."
+}

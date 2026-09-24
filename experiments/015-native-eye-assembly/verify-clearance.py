@@ -33,24 +33,28 @@ def maximum_axis_gap(a, b):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--sample', choices=['clearance', 'h091-comparison'], default='clearance')
     parser.add_argument('--reference-posed', type=Path,
                         help='Optional prior Experiment 006 posed/ directory for exact saved-head overlap')
     args = parser.parse_args()
-    root = HERE / 'generated' / 'clearance'
+    root = HERE / 'generated' / args.sample
     manifest = json.loads((root / 'manifest.json').read_text())
     contact = json.loads((root / 'contact-pairs.json').read_text())
-    report = json.loads((HERE / 'clearance-evidence.json').read_text())
+    report_path = HERE / 'clearance-evidence.json' if args.sample == 'clearance' else root / 'visible-evidence.json'
+    report = json.loads(report_path.read_text())
     assert report['schema'] == 'xfs/native-eye-visible-clearance-1'
     assert report['inputs']['sampleManifestSha256'] == sha(root / 'manifest.json')
     assert report['inputs']['contactPairsSha256'] == sha(root / 'contact-pairs.json')
-    assert len(report['rows']) == len(contact['rows']) == 2 * 9 * 3
-    assert {key: value['sha256'] for key, value in manifest['inputs'].items()} == {
-        'eye': '0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba',
+    assert len(report['rows']) == len(contact['rows']) == 2 * len(manifest['frames']) * 3
+    expected = {
+        'eye': ('0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba'
+                if args.sample == 'clearance' else '90ec2ee3396c598da5061d7d51f5945c34f7ccbff95246393e11c433e3fc3fdf'),
         'head': '0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730',
         'body': 'b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8',
         'face': '5a52d9b9e59acc2630336c3a280e179e57ad4ca5815f97d5397cf15748f2b3e7',
         'binding': '72712873bcd65190207c9b83ff44a4a8dd2dd0190b20cea21beb1571deabe568',
     }
+    assert {key: manifest['inputs'][key]['sha256'] for key in expected} == expected
     for value in manifest['inputs'].values():
         assert sha(Path(value['path'])) == value['sha256']
     faces = {}
@@ -100,7 +104,7 @@ def main():
     print(json.dumps({'visibleWitnessesIndependentlyChecked': len(witness_gaps),
                       'largestWitnessSeparatingAxisGapMeters': max(witness_gaps),
                       'priorHeadPoseMaxComponentErrors': overlap,
-                      'evidenceSha256': sha(HERE / 'clearance-evidence.json')}))
+                      'evidenceSha256': sha(report_path)}))
 
 
 if __name__ == '__main__':
