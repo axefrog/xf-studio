@@ -9,6 +9,7 @@ import { skinPackedRgToRgb, skinRoughnessToGreen } from "./skin-study-maps";
 import { browScreenMetrics } from "./brow-study-metrics";
 
 type View = "lip" | "eye" | "brow";
+type Pose = "neutral" | "saved";
 type Variant = { value: string; label: string };
 const lipVariants: Variant[] = [
   { value: "baseline", label: "Unchanged baseline" },
@@ -42,7 +43,8 @@ const browVariants: Variant[] = [
 ];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const controls = $<HTMLFieldSetElement>("controls"), status = $<HTMLParagraphElement>("status");
-const variant = $<HTMLSelectElement>("variant"), light = $<HTMLInputElement>("light");
+const variant = $<HTMLSelectElement>("variant"), pose = $<HTMLSelectElement>("pose");
+const light = $<HTMLInputElement>("light");
 const exposure = $<HTMLInputElement>("exposure"), height = $<HTMLInputElement>("height");
 const distance = $<HTMLInputElement>("distance"), rightLabel = $<HTMLElement>("right-label");
 const metrics = $<HTMLParagraphElement>("metrics");
@@ -327,6 +329,8 @@ async function main() {
   const roughnessRed = eyeRoughness(roughness, "red");
   const roughnessGreen = eyeRoughness(roughness, "green");
   let view: View = "lip";
+  const poseByView: Record<View, Pose> = { lip: "neutral", eye: "neutral", brow: "saved" };
+  pose.value = poseByView[view];
   setOptions(view, !!sourceMaps, !!browNormal);
   function markView() {
     document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(button =>
@@ -337,8 +341,10 @@ async function main() {
     button.addEventListener("click", () => {
       view = button.dataset.view as View;
       distance.value = "0"; height.value = "0";
+      pose.value = poseByView[view];
       setOptions(view, !!sourceMaps, !!browNormal); markView(); render();
     }));
+  pose.addEventListener("change", () => { poseByView[view] = pose.value as Pose; render(); });
   for (const input of [variant, light, exposure, height, distance]) input.addEventListener("input", render);
   window.addEventListener("resize", render);
   $<HTMLButtonElement>("capture").addEventListener("click", () => {
@@ -350,7 +356,7 @@ async function main() {
     if (!context) return;
     context.drawImage(a, 0, 0); context.drawImage(b, a.width, 0);
     const link = document.createElement("a");
-    link.download = `xfs-render-study-${view}-${variant.value}.png`;
+    link.download = `xfs-render-study-${view}-${pose.value}-${variant.value}.png`;
     link.href = canvas.toDataURL("image/png"); link.click();
   });
   controls.disabled = false;
@@ -420,7 +426,7 @@ async function main() {
         active === "roughness-green" ? roughnessGreen : null;
       pane.eye.roughness = pane.eye.roughnessMap ? savedEyeRoughnessScale : 0.18;
       pane.eye.needsUpdate = true;
-      setPose(pane, view === "brow");
+      setPose(pane, pose.value === "saved");
       for (const browMesh of pane.brows) browMesh.visible = view === "brow";
       if (pane.brow) {
         pane.brow.normalMap = view === "brow" && active.endsWith("normal") ? browNormal : null;
@@ -441,19 +447,23 @@ async function main() {
       pane.renderer.render(pane.scene, pane.camera);
       if (silhouette) (pane as Pane & { silhouette?: typeof silhouette }).silhouette = silhouette;
     }
-    if (view === "lip" && height.value === "0" && distance.value === "0") {
+    if (view === "lip" && pose.value === "neutral" && height.value === "0" && distance.value === "0") {
       const [left, right] = panes.map(pane => lipMetric(pane.renderer.domElement));
       metrics.textContent = `Default-frame broad lip crop (${left.pixels} pixels): near-white RGB>220 ${left.bright} → ${right.bright}; mean linear luminance ${left.meanLinear.toFixed(4)} → ${right.meanLinear.toFixed(4)}.`;
     } else if (view === "brow") {
       const [left, right] = panes.map(pane => (pane as Pane & { silhouette?: ReturnType<typeof browSilhouette> }).silhouette!);
       metrics.textContent = `Brow-only screen alpha, left → right: >10% ${left.visible10} → ${right.visible10} px; >50% ${left.visible50} → ${right.visible50} px. Bounds ${left.bounds} → ${right.bounds}. Mean display RGB within >50% alpha ${left.strongMeanRgb.toFixed(1)} → ${right.strongMeanRgb.toFixed(1)} (lighting diagnostic, not perceived width).`;
-    } else metrics.textContent = view === "lip" ? "Reset framing height and distance to 0 for comparable fixed-crop metrics." : "";
+    } else metrics.textContent = view === "lip"
+      ? pose.value === "saved"
+        ? "The fixed lip crop was calibrated only for the neutral face. Saved-pose pixels are shown without that crop metric."
+        : "Reset framing height and distance to 0 for comparable fixed-crop metrics."
+      : "";
     status.textContent = view === "lip"
       ? sourceMaps
         ? `Source-map inputs are private and SHA-256 checked. Left: old Blender maps. Right: selected installed base or current-MO2 Arkhe candidate. Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
         : `Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
       : view === "eye" ? `Eye: exact local Kala eye-16 diffuse and roughness hashes verified. Source R/G tests use the same 0.493 scale; the game shader reads R, but its normal, UV transform and refraction are absent here.`
-      : `Brow: saved five-morph static face; verified Arkhe Fuller style-18 mesh and double-diffuse primary/secondary alpha plus Alliekat gradient. ${sourceMaps ? "Base/Arkhe skin candidates verified." : "Private D05 skin maps unavailable."} ${browNormal ? "Normal study uses verified style-18 packed RG decoded for Three at a provisional scale." : "Style-18 packed normal not staged."} Same geometry and coverage in both panes; no matched game capture or runtime winner.`;
+      : `Brow: ${pose.value === "saved" ? "saved five-morph" : "neutral"} static face; verified Arkhe Fuller style-18 mesh and double-diffuse primary/secondary alpha plus Alliekat gradient. ${sourceMaps ? "Base/Arkhe skin candidates verified." : "Private D05 skin maps unavailable."} ${browNormal ? "Normal study uses verified style-18 packed RG decoded for Three at a provisional scale." : "Style-18 packed normal not staged."} Same geometry and coverage in both panes; no matched game capture or runtime winner.`;
   }
   render();
 }
