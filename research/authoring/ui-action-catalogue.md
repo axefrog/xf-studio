@@ -108,6 +108,17 @@ Sources: [preview actions](../../projects/xf-studio/authoring/src/preview-action
 
 The desktop first-run **Continue without paths** control dispatches the existing `setup.save` with the validated default fields. That explicit opt-out advances the private settings revision, so fresh-start prompting stops across restarts while Check and UV authoring stay available; About can reopen setup later. A damaged primary continues to offer `setup.restorePrevious` instead of this opt-out. No recipe, SQLite collection or package result changes. [Desktop browser acceptance](../../projects/xf-studio/authoring/desktop/tools/review-first-run.ts).
 
+### Host actions
+
+`InstallDetectionActions` is published on `StudioPresentationPort` as `installDetection`. Its two read-only host requests are `detect.gameInstalls` and `detect.mo2Instances`. Both have scope `host`, effect `read`, no payload and no Undo, and both are listed in `DETECTION_DESCRIPTORS`. `capability(action)` reports when the host has no transport or when a detection is already running. `dispatch` rechecks that capability. It publishes a detached result, or a typed error when the host returns an unexpected schema.
+
+The snapshot holds the latest `xfs/game-install-detection-1` and `xfs/mo2-instance-detection-1` results:
+
+- game install candidates confirmed by executable, each with its Steam/GOG/Epic/MO2 evidence, plus rejected registered paths;
+- MO2 instances, each with its kind, game path, selected profile, configured directories and profile list.
+
+These results are private host metadata. Detection changes no setting: a setup view offers a candidate, and saving the choice goes through `setup.save`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
+
 ## Persistence, async boundaries and truthful state
 
 | Kind of state | Current owner and safe read | Persistence/Undo rule |
