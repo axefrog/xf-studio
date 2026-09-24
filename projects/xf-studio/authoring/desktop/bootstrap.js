@@ -118,7 +118,7 @@ document.body.append(aboutButton, about);
 aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Local setup</h2><p>These paths stay in this Windows account. You can set them now and change them later.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="submit" id="desktop-setup-save">Save setup</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+setup.innerHTML = '<h2>Local setup</h2><p>These paths stay in this Windows account. You can set them now and change them later. Prepared preview files are optional; use Enable 3D preview when you have them.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Continue without paths</button><button type="submit" id="desktop-setup-save">Save setup</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
 document.body.append(setup);
 const descriptors = [
   ["gameRoot", "Cyberpunk 2077 game folder"],
@@ -157,6 +157,7 @@ for (const [name, labelText] of descriptors) {
 const setupStatus = setup.querySelector("#desktop-setup-status");
 const saveSetup = setup.querySelector("#desktop-setup-save");
 const restoreSetup = setup.querySelector("#desktop-setup-restore");
+const deferSetup = setup.querySelector("#desktop-setup-defer");
 saveSetup.disabled = true;
 const aboutReadiness = about.querySelector("#desktop-setup-readiness");
 const setupActions = createBrowserLocalSetup();
@@ -173,6 +174,7 @@ function showSetup(view) {
   showRoute();
   const recovery = view.source === "backup";
   restoreSetup.hidden = !recovery;
+  deferSetup.hidden = view.source !== "new";
   saveSetup.disabled = recovery;
   const pathIssues = view.readiness.sourceDiscovery.issues.map(issue => issue.reason);
   const pathStatus = pathIssues.length ? pathIssues.join(" ") : "Game and mod source paths pass the current presence checks.";
@@ -196,6 +198,13 @@ async function openSetup() {
 }
 about.querySelector("#desktop-setup-open").addEventListener("click", () => { about.close(); void openSetup(); });
 setup.querySelector("#desktop-setup-close").addEventListener("click", () => setup.close());
+deferSetup.addEventListener("click", async () => {
+  if (setupView?.source !== "new") return;
+  deferSetup.disabled = true;
+  try { await setupAction({ kind: "setup.save", fields: setupView.fields }); setup.close(); }
+  catch (error) { setupStatus.textContent = error.message; }
+  finally { deferSetup.disabled = false; }
+});
 setup.querySelector("#desktop-setup-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (!setupView || setupView.source === "backup") return;
@@ -213,7 +222,12 @@ restoreSetup.addEventListener("click", async () => {
   finally { restoreSetup.disabled = false; }
 });
 const initialSetup = setupAction({ kind: "setup.refresh" });
-void initialSetup.catch(() => { aboutReadiness.textContent = "Local setup is unavailable."; });
+void initialSetup.then(() => {
+  // Fresh or damaged local settings deserve the first-run prompt. Existing
+  // users can still open setup from About, and missing assets have their own
+  // optional intake button rather than reopening a modal on every launch.
+  if (setupView?.source === "new" || setupView?.source === "backup") setup.showModal();
+}).catch(() => { aboutReadiness.textContent = "Local setup is unavailable."; });
 if (capabilities.previewAssets !== "ready") {
   const intakeButton = document.createElement("button");
   intakeButton.id = "desktop-intake-open";
@@ -262,7 +276,6 @@ if (capabilities.previewAssets !== "ready") {
   }
   inspect.addEventListener("click", () => void intake("inspect"));
   importButton.addEventListener("click", () => { if (inspected === folder.value.trim()) void intake("import"); });
-  root.showModal();
 }
 document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
 void import("/build/studio-main.js").catch(error => {

@@ -106,6 +106,8 @@ Sources: [preview actions](../../projects/xf-studio/authoring/src/preview-action
 
 `LocalSetupActions` is an additional typed host-configuration port on `StudioPresentationPort`: `setup.refresh`, `setup.save` with validated game/build/source fields and expected revision, and `setup.restorePrevious` for damaged-primary recovery. Its read-only snapshot supplies readiness codes/reasons, current editable fields, revision, recovery state and active environment-override names. The browser device sends these only to the same-origin `/api/local-settings` endpoint; the package action still accepts just a collection snapshot and action. This state is private host configuration, separate from recipe, collection, browser layout and package manifest. [Local setup contract](../../projects/xf-studio/authoring/LOCAL-SETTINGS.md).
 
+The desktop first-run **Continue without paths** control dispatches the existing `setup.save` with the validated default fields. That explicit opt-out advances the private settings revision, so fresh-start prompting stops across restarts while Check and UV authoring stay available; About can reopen setup later. A damaged primary continues to offer `setup.restorePrevious` instead of this opt-out. No recipe, SQLite collection or package result changes. [Desktop browser acceptance](../../projects/xf-studio/authoring/desktop/tools/review-first-run.ts).
+
 ## Persistence, async boundaries and truthful state
 
 | Kind of state | Current owner and safe read | Persistence/Undo rule |

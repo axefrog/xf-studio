@@ -16,7 +16,24 @@ const server = createDesktopServer(resolve(import.meta.dir, "../static"), resolv
 let browser: Awaited<ReturnType<typeof launch>> | undefined;
 try {
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
-  await browser.waitFor("document.querySelector('#desktop-setup-open-inline')");
+  await browser.waitFor("document.querySelector('#desktop-setup')?.open && document.querySelector('#desktop-setup-defer')?.hidden === false");
+  const firstRun = await browser.evaluate(`({ setupOpen: document.querySelector('#desktop-setup').open,
+    intakeOpen: document.querySelector('#desktop-intake').open,
+    previewButton: !!document.querySelector('#desktop-intake-open') })`);
+  if (!firstRun.setupOpen || firstRun.intakeOpen || !firstRun.previewButton)
+    throw Error(`Desktop first run did not lead with optional path setup: ${JSON.stringify(firstRun)}`);
+  await browser.screenshot(resolve(screenshots, "desktop-local-setup-first-run.png"));
+  await browser.evaluate("document.querySelector('#desktop-setup-defer').click()");
+  await browser.waitFor("!document.querySelector('#desktop-setup').open");
+  const deferred = await browser.evaluate(`(async () => {
+    const response = await fetch('/api/local-settings');
+    const view = await response.json();
+    return { source: view.source, gameRoot: view.fields.gameRoot, check: view.readiness.check.ready };
+  })()`);
+  if (deferred.source !== "primary" || deferred.gameRoot !== null || !deferred.check)
+    throw Error(`Deferring setup changed an unexpected setting or disabled Check: ${JSON.stringify(deferred)}`);
+  await browser.evaluate("document.documentElement.dataset.testReload = 'before'; location.reload()");
+  await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && !document.querySelector('#desktop-setup').open && !document.querySelector('#desktop-intake').open");
   await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'error'");
   const uvOnly = await browser.evaluate(`(() => {
     const port = window.xfStudioPresentation, layer = port.editor.layer();
@@ -55,7 +72,6 @@ try {
   if (!workflows.mask.ok || !workflows.saved.ok || workflows.saved.kind !== "saved" ||
     !workflows.check.ok || workflows.check.kind !== "packageCheck" || !maskDownloaded)
     throw Error(`UV-only workflows failed: ${JSON.stringify(workflows)}`);
-  await browser.evaluate("document.querySelector('#desktop-intake-close').click()");
   await browser.screenshot(resolve(screenshots, "desktop-uv-only-editor.png"));
   await browser.evaluate("document.querySelector('#desktop-intake-open').click()");
   await browser.evaluate(`document.querySelector('#desktop-intake-folder').value = ${JSON.stringify(resolve(directory, "absent"))};
