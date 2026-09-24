@@ -1,0 +1,32 @@
+# XF Studio architecture contract
+
+24 September 2026. This is the default rule for new XF Studio work and for changes to an existing feature. It records the boundary being established for a replaceable UI; the [current gap assessment](ui-architecture-boundary.md) remains authoritative about what has **not** been migrated yet. Existing coupling is migration work, not a pattern to copy.
+
+## Ownership and dependency direction
+
+| Owner | Owns | Must not own |
+| --- | --- | --- |
+| Domain and application services | Recipe/collection validation, edit actions, Undo transactions, selection, persistent state policy, async operation state and export eligibility | DOM elements, CSS/layout, browser events, Three scene objects, raw worker messages or HTTP implementation details |
+| Device and renderer adapters | Canvas and Three resources, picking and coordinate conversion, worker transport, local file selection/download, browser storage and network calls | Recipe rules, SQLite revision policy, finish eligibility or undocumented edits to live authoring state |
+| Presentation | Layout, controls, docking, focus, theme, labels, menus and gesture affordances | Mutable recipes, direct database writes, package decisions inferred from labels, direct raster scheduling or hidden state outside the application/workspace contract |
+
+Dependencies point inward: presentation calls typed application actions and reads detached snapshots/capabilities; application services use typed ports for device work; adapters implement those ports. Keep pure evaluators, recipe parsing, compiler and serialization reusable without a browser. `main.ts` is currently a transitional composition root, not a place to put new behavior simply because the feature has a button.
+
+## Rules for each feature change
+
+1. Put the state transition and validation in a domain/application action before wiring a control. The same action must serve buttons, shortcuts, context menus and a future scripted in-process UI. Describe its target, input, capability/disabled reason, Undo or recovery policy, persistence effect and async result where applicable. Do not expose writable recipe objects or a remote execution endpoint.
+2. Publish complete, detached state. A view may cache a versioned geometry projection for drawing and picking, but must not mutate the authoritative recipe. Reject stale target IDs or gesture sessions at dispatch. A pointer drag, wheel burst or form edit has one explicit begin/commit/cancel transaction; Escape restores its starting state.
+3. Keep rendering policy separate from resource ownership. Application code may request a complete preview or cancellation through a port; the adapter owns worker, texture and scene lifetimes. Preserve the established raster arithmetic, cooperative cancellation and complete-bundle publication contracts when changing that path.
+4. Keep portable recipes, local workspace preferences, SQLite revisions, imported save context and exported mod files distinct. Add schema versions/migrations for persisted shape changes. Do not silently rewrite old revisions or change export behavior as a side effect of a UI edit. Package checks and builds must share eligibility and disclose partial omissions.
+5. Add an action/capability entry to [the catalogue](ui-action-catalogue.md), update [the capability inventory](ui-capability-inventory.md) when user-visible scope changes, and update the relevant architecture or feature contract. Update the [mod pipeline guide](studio-to-mod-pipeline.md) and visually recheck its diagrams for any pipeline change. Credit community learning in [the provenance record](../../docs/community-credits.md).
+6. Verify the behavior at its boundary: focused pure tests for validation/state/Undo; adapter tests for worker, geometry or transport behavior; and a `?verify=1` task flow when interaction or persistence changes. Keep authored draft data and private assets out of fixtures and Git. Run the authoring suite, type check and build for a coherent integration checkpoint.
+
+## Change review questions
+
+- Can another UI invoke this capability without clicking today's DOM control or importing `main.ts`?
+- Can a disabled action explain why it is unavailable for the concrete target, and does dispatch revalidate after the UI query?
+- Are Undo, cancellation, persistence and async failure visible and consistent across entry points?
+- Does this alter preview, recipe, SQLite or game-export semantics? If so, are those effects explicit and tested independently of layout?
+- Could the renderer/device port fail, cancel or load late without publishing a partial or stale result?
+
+If the current boundary cannot support a feature, add the smallest typed port or application action needed and record the remaining gap in [the architecture assessment](ui-architecture-boundary.md). A deliberate exception needs a written reason, owner and removal criterion there; urgency alone does not make direct UI-to-core access the new standard. The Opus handoff remains gated by its separate [acceptance brief](../backlog/claude-ui-overhaul.md), not by this document's existence.
