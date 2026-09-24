@@ -1,6 +1,6 @@
 import type { DirectGlintFlakes } from "../../direct-glint-settings";
 // Conditional flake-size limits are not expressible in the static action descriptor yet (audit A-7).
-import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS, type IrregularFlakes } from "../../flake-field";
+import type { IrregularFlakes } from "../../flake-field";
 import type { LegacyFlakes } from "../../finish";
 import type { GlitterModel } from "../../glitter-model";
 import type { Layer } from "../../recipe";
@@ -167,10 +167,12 @@ export function finishPanel(rt: StudioRuntime): PanelController {
         classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
       }
       if (!irregularSection.hidden && flakes && "model" in flakes && flakes.model === "irregular-planar-1") {
-        const f = flakes as ReadonlyDeep<IrregularFlakes>, dense = f.count > FLAKE_LIMITS.count;
-        irregular.count.update(Math.round(f.count / 5000));
-        irregular.radius.update(f.radius, { min: dense ? REGION_FLAKE_STUDY_LIMITS.minRadius : FLAKE_LIMITS.minRadius,
-          max: dense ? REGION_FLAKE_STUDY_LIMITS.maxRadius : FLAKE_LIMITS.maxRadius, note: dense ? "Dense fields are restricted to the eye UV regions and small flakes." : undefined });
+        const f = flakes as ReadonlyDeep<IrregularFlakes>, target = { kind: "layer" as const, id: layer.id };
+        // Flake size and density bound each other; the application publishes the current limits.
+        const count = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "count").value;
+        const radius = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "radius").value;
+        irregular.count.update(Math.round(f.count / 5000), { note: count?.note });
+        irregular.radius.update(f.radius, { min: radius?.min, max: radius?.max, note: radius?.note });
         irregular.spread.update(f.spread); irregular.tilt.update(f.tilt); irregular.color.update(f.color);
         const measured = frame.status.glitter.find(item => item.layerId === layer.id);
         setText(measurement, measured?.current

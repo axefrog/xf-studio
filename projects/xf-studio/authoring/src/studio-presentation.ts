@@ -15,7 +15,7 @@ export type StudioPresentationPort<Slot> = {
   readonly authoring: Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
     "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
-    "choicesFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
+    "choicesFor" | "limitsFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
@@ -95,6 +95,7 @@ export function createStudioPresentation<Slot>(sources: {
     targetCapability: target => a.targetCapability(target),
     contextCapability: (target, action) => a.contextCapability(target, action),
     choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base),
+    limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
     contextFor: hit => a.contextFor(hit),
     contextOptionsFor: context => a.contextOptionsFor(context),
     contextQuery: hit => a.contextQuery(hit),

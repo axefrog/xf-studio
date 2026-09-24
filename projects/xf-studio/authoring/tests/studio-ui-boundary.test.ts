@@ -19,7 +19,6 @@ const valueAllowlist = new Map<string, string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["uv-view", ["uvAspect"]],
-  ["flake-field", ["FLAKE_LIMITS", "REGION_FLAKE_STUDY_LIMITS"]],
 ]);
 
 test("studio-ui imports only types from the core plus a documented allowlist of pure helpers", () => {

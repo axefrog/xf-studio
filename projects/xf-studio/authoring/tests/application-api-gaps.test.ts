@@ -118,3 +118,26 @@ test("form and gesture transactions are labelled by their first edit; cancelling
   const restored = coreFixture(); restored.document.restore({ ...document.export() });
   expect(restored.app.history().undo).toEqual({ label: "Earlier change", actionKind: "unknown" });
 });
+
+test("limitsFor publishes static and state-dependent input limits for a concrete target", () => {
+  const { app, document } = coreFixture(), layer = document.recipe.layers[0], id = layer.id;
+  expect(app.limitsFor({ kind: "layer", id }, "layer.setOpacity")).toEqual({ opacity: { min: 0, max: 1, unit: "fraction" } });
+  expect(app.limitsFor({ kind: "layer", id }, "layer.edit", "move").to).toEqual({ min: 0, max: 3, unit: "index" });
+  expect(app.limitsFor({ kind: "layer", id }, "layer.edit", "rename").name).toMatchObject({ minLength: 1, maxLength: 80 });
+  expect(app.dispatch({ kind: "layer.setFinish", layerId: id, finish: "glitter" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "glitter.selectModel", layerId: id, model: "irregular" }).ok).toBe(true);
+  const target = { kind: "layer" as const, id };
+  const dense = app.limitsFor(target, "glitter.setIrregular", "radius").value;
+  expect(dense).toMatchObject({ min: .00025, max: .0006, dependsOn: ["count"], unit: "uv" });
+  expect(dense.note).toContain("Dense");
+  expect(app.dispatch({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 20000 }).ok).toBe(true);
+  expect(app.limitsFor(target, "glitter.setIrregular", "radius").value).toMatchObject({ min: .0004, max: .003 });
+  expect(app.dispatch({ kind: "glitter.setIrregular", layerId: id, key: "radius", value: .002 }).ok).toBe(true);
+  const count = app.limitsFor(target, "glitter.setIrregular", "count").value;
+  expect(count).toMatchObject({ min: 0, max: 32768, dependsOn: ["radius"] });
+  expect(app.dispatch({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 40000 }).ok).toBe(false);
+  const other = document.recipe.layers[1].id;
+  app.dispatch({ kind: "softness.edit", layerId: other, command: { kind: "variable-softness", enabled: false } });
+  expect(app.limitsFor({ kind: "point", layerId: other, index: 0 }, "softness.edit", "point-softness").value.requires?.reason)
+    .toContain("point edge softness");
+});

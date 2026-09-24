@@ -3,6 +3,7 @@ import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import type { AuthoringHistory, HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
+import { actionLimits, type FieldLimit } from "./action-limits";
 import type { CollectionAction } from "./collection-actions";
 import type { CollectionRequest, CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
@@ -144,6 +145,14 @@ export class StudioApplication {
       if (issue) return issue;
     }
     return this.capability(action);
+  }
+  /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
+  limitsFor(target: StudioTarget, kind: StudioAction["kind"], variant?: string): Record<string, FieldLimit> {
+    const limits = actionLimits(this.services.document.recipe, target, kind, variant);
+    const presets = this.services.collection?.summary().draft?.presets.length;
+    if (kind === "preset.edit" && variant === "move" && limits.to && presets !== undefined)
+      limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
+    return limits;
   }
   /** Enumerated values and their live capability for a concrete target. */
   choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
