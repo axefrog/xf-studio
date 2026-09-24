@@ -1,11 +1,13 @@
-import { preflightPackageCollection } from "../src/package-preflight";
-import { parseCollection } from "../src/preset-collection";
+import { resolve } from "node:path";
+import { runDesktopCheck } from "./check-runner";
 
 const maxBytes = 16_000_000;
+let checking = false;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
 /** Desktop package port. Build has no portable resource/verifier adapter yet. */
-export async function desktopPackageRequest(request: Request): Promise<Response> {
+export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
+  timeoutMs?: number): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
     return json({ error: "Expected a JSON package request." }, 403);
@@ -22,18 +24,16 @@ export async function desktopPackageRequest(request: Request): Promise<Response>
       (input.action !== "check" && input.action !== "build") ||
       Object.keys(input).some(key => key !== "action" && key !== "collection") || !("collection" in input))
     return json({ error: "Expected a package action and collection only." }, 400);
-  let collection;
-  try { collection = parseCollection(input.collection); }
-  catch (error) { return json({ error: (error as Error).message }, 400); }
   if (input.action === "build") return json({ code: "package_build_host_unavailable",
     error: "Desktop mod builds are unavailable until the external plate, WolvenKit and independent verifier pipeline has a portable adapter." }, 503);
-  try {
-    // Mirror localhost's request normalization before the shared CLI preflight.
-    const { packagedCollectionJson: _snapshot, ...result } = preflightPackageCollection(collection);
-    return json(result);
-  } catch (error) {
-    const message = (error as Error).message;
-    return json({ error: message, ...(message.startsWith("No mod files can be made") ? { code: "no_exportable_content" } : {}) },
-      422);
-  }
+  if (checking) return json({ code: "package_check_busy", error: "A package Check is already running. Wait for its result before starting another." }, 409);
+  checking = true;
+  let result;
+  try { result = await runDesktopCheck(input.collection, workerPath, timeoutMs, request.signal); }
+  finally { checking = false; }
+  if (result.kind === "success") return json(result.result);
+  if (result.kind === "invalid") return json({ error: result.message }, 400);
+  const status = result.code === "package_check_timeout" ? 504 : result.code === "package_check_cancelled" ? 499 :
+    result.code?.startsWith("package_check_worker") ? 503 : 422;
+  return json({ error: result.message, ...(result.code ? { code: result.code } : {}) }, status);
 }

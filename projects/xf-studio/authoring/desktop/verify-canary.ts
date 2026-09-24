@@ -45,7 +45,7 @@ const members = tar(["-tf", archive]).trim().split(/\r?\n/);
 const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
-sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js",
+sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
   "build/studio-main.js", "build/raster-worker.js"], "Packaged Studio view");
 if (members.some(name => /(?:^|\/)(?:assets|preview-assets|data)(?:\/|$)|\.sqlite(?:-wal|-shm)?$|\.(?:glb|blend|sav)$/i.test(name)))
   throw Error("Canary bundle contains a private asset or data path.");
@@ -65,4 +65,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified private Windows setup: ${installer}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Six allowlisted Studio view files; no bundled private preview assets or update feed.");
+console.log("Seven allowlisted Studio view files; no bundled private preview assets or update feed.");

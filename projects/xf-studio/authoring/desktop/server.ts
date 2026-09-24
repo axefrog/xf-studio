@@ -8,7 +8,8 @@ import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
 
-export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion) {
+export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
+  checkWorkerPath = resolve(import.meta.dir, "check-worker.ts")) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -54,7 +55,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         console.log(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
         return new Response(null, { status: 204 });
       }
-      if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest);
+      if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);

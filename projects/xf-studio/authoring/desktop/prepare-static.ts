@@ -23,4 +23,10 @@ const result = await Bun.build({
   target: "browser",
 });
 if (!result.success) throw Error(result.logs.map(String).join("\n"));
-console.log(`Prepared ${result.outputs.length} browser bundles and four allowlisted static files.`);
+const check = await Bun.build({
+  entrypoints: [resolve(import.meta.dir, "check-worker.ts")], target: "bun",
+  outdir: output,
+});
+if (!check.success || check.outputs.length !== 1)
+  throw Error(check.logs.map(String).join("\n") || "Desktop Check worker did not bundle.");
+console.log(`Prepared ${result.outputs.length} browser bundles, one Bun Check worker and four allowlisted static files.`);
