@@ -34,10 +34,16 @@ function validGlb(bytes: Buffer): boolean {
       offset += length;
     }
     if (offset !== bytes.length || json?.asset?.version !== "2.0" || !Array.isArray(json.meshes) ||
+      !Array.isArray(json.nodes) || !Array.isArray(json.skins) ||
       !Array.isArray(json.buffers) || !Number.isInteger(json.buffers[0]?.byteLength) ||
       json.buffers[0].byteLength > binLength || !binLength) return false;
     for (const name of ["head", "makeup_plate", "eyes"]) {
-      const mesh = json.meshes.find((entry: any) => entry?.name === name);
+      // Blender retains source IDs on meshes; GLTFLoader exposes the semantic
+      // names from mesh-bearing nodes.
+      const node = json.nodes.find((entry: any) => entry?.name === name);
+      if (!node || !Number.isInteger(node.mesh) || node.mesh < 0 ||
+        (name !== "eyes" && (!Number.isInteger(node.skin) || !json.skins[node.skin]))) return false;
+      const mesh = json.meshes[node.mesh];
       if (!mesh || !Array.isArray(mesh.primitives) || !mesh.primitives.some((entry: any) =>
         Number.isInteger(entry?.attributes?.POSITION))) return false;
     }

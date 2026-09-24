@@ -7,7 +7,9 @@ import { createCoreAssetReadiness, importCoreAssets, inspectCoreAssets } from ".
 
 function glbFixture(): Buffer {
   const json = Buffer.from(JSON.stringify({ asset: { version: "2.0" }, buffers: [{ byteLength: 4 }],
-    meshes: ["head", "makeup_plate", "eyes"].map(name => ({ name, primitives: [{ attributes: { POSITION: 0 } }] })) }));
+    skins: [{}],
+    meshes: ["source_head", "source_plate", "source_eyes"].map(name => ({ name, primitives: [{ attributes: { POSITION: 0 } }] })),
+    nodes: ["head", "makeup_plate", "eyes"].map((name, mesh) => ({ name, mesh, ...(mesh < 2 ? { skin: 0 } : {}) })) }));
   const padded = Buffer.alloc(Math.ceil(json.length / 4) * 4, 32);
   json.copy(padded);
   const output = Buffer.alloc(12 + 8 + padded.length + 8 + 4);
@@ -45,7 +47,7 @@ function prepared(folder: string) {
     writeFileSync(resolve(folder, name), pngFixture());
 }
 
-test("a valid prepared set with different hashes opens and imports without overwriting user data", async () => {
+test("semantic GLB node names work with different source mesh names and output hashes", async () => {
   const root = mkdtempSync(resolve(tmpdir(), "xfs-core-intake-"));
   try {
     const source = resolve(root, "prepared"), data = resolve(root, "data");
@@ -84,6 +86,12 @@ test("corrupt PNG and GLB files are rejected before publication", async () => {
     writeFileSync(resolve(source, "head.glb"), Buffer.from("glTFbroken"));
     report = await inspectCoreAssets(source);
     expect(report.files.find(file => file.name === "head.glb")?.status).toBe("invalid");
+    const wrongNodes = glbFixture();
+    const at = wrongNodes.indexOf(Buffer.from("makeup_plate"));
+    expect(at).toBeGreaterThan(0);
+    Buffer.from("makeup_plato").copy(wrongNodes, at);
+    writeFileSync(resolve(source, "head.glb"), wrongNodes);
+    expect((await inspectCoreAssets(source)).files.find(file => file.name === "head.glb")?.status).toBe("invalid");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
