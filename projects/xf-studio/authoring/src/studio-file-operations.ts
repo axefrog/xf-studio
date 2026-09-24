@@ -1,4 +1,4 @@
-import type { CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
+import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
 import type { PackageBuild, PackageCheck } from "./package-action";
 import { parseRecipe, type Layer, type Recipe } from "./recipe";
 import type { ReadonlyDeep } from "./read-only";
@@ -21,12 +21,20 @@ export type StudioFileOutcome = { ok: true; code: string; message: string;
   savedAppearance?: Readonly<SavedAppearanceState> } |
   { ok: false; code: string; message: string };
 type PackageResult = { kind: "packageCheck"; result: PackageCheck } | { kind: "packageBuild"; result: PackageBuild };
+/**
+ * One unified list of work in flight (audit A-3): a local file workflow and/or the collection
+ * request it (or another caller) started. `requestId` links an entry to collection progress.
+ * Nothing here is cancellable today; see `cancel`.
+ */
+export type StudioActivity = { id: string; scope: "file" | "collection" | "package"; kind: string;
+  startedAt: number; requestId?: number; cancellable: false };
 export type StudioFileState = { busy?: StudioFileAction["kind"];
   collectionBusy: boolean;
   last?: { kind: StudioFileAction["kind"] | CollectionRequest["kind"];
     ok: boolean; code: string; message: string };
   package?: PackageResult & { freshness: "current" | "stale" };
   progress?: CollectionProgress;
+  activity: StudioActivity[];
   recovery: { available: boolean; reason?: string } };
 type FileSources = {
   recipe(): ReadonlyDeep<Recipe>;
@@ -45,7 +53,8 @@ type FileSources = {
 export class StudioFileOperations {
   private collection?: CollectionService;
   private collectionUnsubscribe?: () => void;
-  private busy?: { kind: StudioFileAction["kind"]; owner: symbol };
+  private busy?: { kind: StudioFileAction["kind"]; owner: symbol; id: number; startedAt: number };
+  private sequence = 0;
   private last?: StudioFileState["last"];
   private package?: PackageResult;
   private listeners = new Set<() => void>();
@@ -64,7 +73,27 @@ export class StudioFileOperations {
     return structuredClone({ busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
       last: this.last, package: this.package && { ...this.package,
         freshness: this.collection?.lastPackageIsCurrent() ? "current" : "stale" },
-      progress, recovery });
+      progress, activity: this.activity(), recovery });
+  }
+  /** Current file and collection work as one list; the collection request is folded into its file workflow. */
+  activity(): StudioActivity[] {
+    const request = this.collection?.activity(), list: StudioActivity[] = [];
+    const scopeOf = (kind: string) => kind.startsWith("package") ? "package" as const :
+      kind.startsWith("collection") || kind === "initialize" || kind === "refresh" || kind === "open" ||
+      kind === "save" || kind === "saveCopy" || kind === "import" || kind.startsWith("export") ? "collection" as const : "file" as const;
+    if (this.busy) list.push({ id: `file-${this.busy.id}`, scope: scopeOf(this.busy.kind), kind: this.busy.kind,
+      startedAt: this.busy.startedAt, ...(request ? { requestId: request.requestId } : {}), cancellable: false });
+    else if (request) list.push({ id: `request-${request.requestId}`, scope: request.kind === "package" ? "package" : "collection",
+      kind: request.kind === "package" ? `package.${request.action}` : request.kind, startedAt: request.startedAt,
+      requestId: request.requestId, cancellable: false });
+    return list;
+  }
+  /** Honest cancellation: file pickers close themselves, and local library/package work cannot be aborted. */
+  cancel(id: string): CancelResult {
+    const known = this.activity().some(entry => entry.id === id);
+    return { accepted: false, reason: known
+      ? "This work cannot be cancelled once started; its result will still arrive and can be retried after it completes."
+      : "Nothing with that ID is running." };
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string } {
     if (this.busy) return { available: false, reason: "Another file operation is in progress." };
@@ -91,7 +120,7 @@ export class StudioFileOperations {
     // A refused call never acquired the transaction, so it must not release or replace its result.
     if (!allowed.available) return { ok: false, code: this.busy ? "busy" : "unavailable", message: allowed.reason! };
     const owner = Symbol(action.kind);
-    this.busy = { kind: action.kind, owner }; this.notify();
+    this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
     try {
       let outcome: StudioFileOutcome;
       switch (action.kind) {

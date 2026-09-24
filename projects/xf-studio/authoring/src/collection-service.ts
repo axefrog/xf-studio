@@ -21,7 +21,13 @@ export type CollectionResult =
   | { kind: "imported" }
   | { kind: "packageCheck"; result: PackageCheck }
   | { kind: "packageBuild"; result: PackageBuild };
-export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string };
+export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string;
+  /** The request this progress belongs to (audit A-9). */
+  requestId?: number };
+/** One accepted async request in flight. Library and package requests cannot be cancelled. */
+export type CollectionActivity = { requestId: number; kind: CollectionRequest["kind"]; action?: PackageAction;
+  startedAt: number; cancellable: false };
+export type CancelResult = { accepted: false; reason: string };
 export type CollectionServiceState = { busy: boolean; progress?: CollectionProgress;
   summaries: CollectionSummary[]; draft?: ReadonlyDeep<CollectionWorkspace> };
 /** Cheap detached projection for frequently repainted views; see `view()` for the full draft. */
@@ -37,8 +43,9 @@ export type CollectionServiceSummary = { busy: boolean; progress?: CollectionPro
 export type DraftPersistence = { collectionId: string; savedRevision?: number;
   baseline: "none" | "unknown" | "known"; dirty?: boolean; dirtyPresets: string[]; structureDirty?: boolean };
 type Baseline = { name: string; order: string[]; presets: Map<string, { name: string; recipe: string }> };
-export type CollectionOutcome = { ok: true; result: CollectionResult } |
-  { ok: false; code: string; message: string };
+/** Accepted requests carry their `requestId`; a refused request never started and has none. */
+export type CollectionOutcome = { ok: true; result: CollectionResult; requestId?: number } |
+  { ok: false; code: string; message: string; requestId?: number };
 export type CollectionTransport = {
   list(): Promise<CollectionSummary[]>;
   get(id: string): Promise<StoredCollection>;
@@ -64,6 +71,8 @@ export class CollectionService {
   /** Library content by `id@revision`, recorded when this session saved or loaded it (bounded). */
   private baselines = new Map<string, Baseline>();
   private persistenceCache?: { key: string; value: DraftPersistence };
+  private requestSeq = 0;
+  private running?: CollectionActivity;
   constructor(restored: CollectionWorkspace | undefined, private legacy: LibraryState,
     private read: () => EditorSnapshot, private show: (editor: EditorSnapshot) => void,
     private transport: CollectionTransport,
@@ -120,6 +129,17 @@ export class CollectionService {
       summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary() };
   }
   snapshot() { return this.actions?.snapshot(); }
+  /** The accepted request in flight, if any (requests are serialized). */
+  activity(): CollectionActivity | undefined { return this.running && { ...this.running }; }
+  /**
+   * Honest cancellation: the local server cannot abort a save, SQLite write or package
+   * build once sent, so a running request is never cancelled; its result still arrives.
+   */
+  cancel(requestId: number): CancelResult {
+    return this.running?.requestId === requestId
+      ? { accepted: false, reason: "Library and package requests cannot be cancelled once started; the result will still arrive." }
+      : { accepted: false, reason: "No running request has that ID." };
+  }
   /** Version of the draft's collection/preset content, for binding menus to what they were opened on. */
   contentVersion() { return this.content; }
   /** Cheap ownership read: `loaded` is false until a draft exists; `id` is the preset the editor belongs to. */
@@ -185,7 +205,10 @@ export class CollectionService {
     const allowed = this.capability(request);
     if (!allowed.available) return { ok: false, code: "unavailable", message: allowed.reason! };
     this.busy = true;
-    this.setProgress({ phase: "working", code: request.kind,
+    const requestId = ++this.requestSeq;
+    this.running = { requestId, kind: request.kind, ...(request.kind === "package" ? { action: request.action } : {}),
+      startedAt: Date.now(), cancellable: false };
+    this.setProgress({ phase: "working", code: request.kind, requestId,
       message: request.kind === "package" ? request.action === "check"
         ? "Checking which layers in the current collection can become Cyberpunk mod files…"
         : "Building and verifying Cyberpunk mod files from the current collection. This can take several minutes…"
@@ -272,13 +295,13 @@ export class CollectionService {
           message = "Imported collection draft. Existing IDs are preserved; Save a copy creates a separate collection. Undo collection open recovers the previous draft."; break;
         }
       }
-      this.setProgress({ phase: "success", code: result.kind, message });
-      return { ok: true, result };
+      this.setProgress({ phase: "success", code: result.kind, message, requestId });
+      return { ok: true, result, requestId };
     } catch (error) {
       const code = error instanceof CollectionServiceError ? error.code : error instanceof SyntaxError ? "invalid_json" : "request_failed";
       const message = (error as Error).message;
-      this.setProgress({ phase: "error", code, message });
-      return { ok: false, code, message };
-    } finally { this.busy = false; this.notify(); }
+      this.setProgress({ phase: "error", code, message, requestId });
+      return { ok: false, code, message, requestId };
+    } finally { this.busy = false; this.running = undefined; this.notify(); }
   }
 }

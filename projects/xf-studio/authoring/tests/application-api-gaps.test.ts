@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { cancelsGesture } from "../src/gesture-cancel";
+import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 
@@ -230,4 +231,33 @@ test("an empty saved collection initializes with a known baseline", async () => 
     () => ({ recipe: fixture.document.recipe, revision: fixture.document.geometryVersion.revision }));
   expect(await service.execute({ kind: "initialize" })).toMatchObject({ ok: true });
   expect(service.persistence()).toMatchObject({ baseline: "known", savedRevision: 1, dirty: true, structureDirty: true });
+});
+
+test("async work is one activity list linked to request IDs, and cancellation is honestly refused", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
+    save: async (collection, revision) => { await gate; return { collection: structuredClone(collection), revision: (revision ?? 0) + 1 } as never; },
+    package: async () => { throw Error("not used"); } };
+  const { service, document } = withCollection(transport);
+  const files = new StudioFileOperations({ pick: async () => undefined, download: () => {}, bakeMask: async () => new Blob() }, {
+    recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[0], importRecipe: () => {},
+    hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => { throw Error("not used"); }, savedVReady: () => false,
+    executeCollection: request => service.execute(request), recoverCollection: () => {} });
+  files.attachCollection(service);
+  expect(files.activity()).toEqual([]);
+  const saving = files.executeCollection({ kind: "save" });
+  const [active] = files.activity();
+  expect(active).toMatchObject({ scope: "collection", kind: "save", cancellable: false, requestId: 1 });
+  expect(files.snapshot().progress).toMatchObject({ phase: "working", requestId: 1 });
+  expect(service.cancel(1)).toMatchObject({ accepted: false, reason: expect.stringContaining("cannot be cancelled") });
+  expect(files.cancel(active.id)).toMatchObject({ accepted: false, reason: expect.stringContaining("cannot be cancelled") });
+  expect(files.cancel("file-99").reason).toContain("Nothing");
+  const refused = await service.execute({ kind: "refresh" });
+  expect(refused).toMatchObject({ ok: false, code: "unavailable" });
+  expect((refused as { requestId?: number }).requestId).toBeUndefined();
+  release();
+  expect(await saving).toMatchObject({ ok: true, requestId: 1 });
+  expect(files.activity()).toEqual([]);
+  expect(files.snapshot().progress).toMatchObject({ phase: "success", requestId: 1 });
 });

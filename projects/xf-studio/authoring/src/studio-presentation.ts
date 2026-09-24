@@ -24,7 +24,7 @@ export type StudioPresentationPort<Slot> = {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
-  readonly files: Pick<StudioFileOperations, "capability" | "execute"> & {
+  readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
@@ -135,7 +135,7 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const files: StudioPresentationPort<Slot>["files"] = {
     snapshot: () => f.snapshot(), capability: action => f.capability(action),
-    execute: action => f.execute(action),
+    execute: action => f.execute(action), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),
