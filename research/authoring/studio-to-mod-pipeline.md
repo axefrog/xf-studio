@@ -1,6 +1,6 @@
 # From XF Studio collection to a Cyberpunk mod candidate
 
-24 September 2026. This is a map of the **current local pipeline**, for a reviewer who knows the idea of a mod but not the file formats. The result is an offline-verified, private **candidate**. No XF Studio package has yet been installed and observed rendering in Cyberpunk 2077. “Loadable” here means the expected archive/declaration files have been built and independently unpacked and checked; it does **not** mean ArchiveXL registration, selector switching, visual fidelity or save persistence have passed an in-game test.
+25 September 2026. This is a map of the **current local pipeline**, for a reviewer who knows the idea of a mod but not the file formats. The result is an offline-verified, private **candidate**. No XF Studio package has yet been installed and observed rendering in Cyberpunk 2077. “Loadable” here means the expected archive/declaration files have been built and independently unpacked and checked; it does **not** mean ArchiveXL registration, selector switching, visual fidelity or save persistence have passed an in-game test.
 
 The short version: the Studio saves editable makeup as data. Check and Build make a package-only copy that omits active layers with unsupported finishes and presets left without active exportable layers. They report every omission while leaving the authored collection untouched. Build then merges each retained preset's visible layers into three 1024-pixel texture maps, attaches those maps to one shared eye-plate material pattern, writes a character-creator selector with an Off choice, packs the resources, independently checks the package, and places only a verified copy in a private `dist` folder. It never installs the files. [Product decision](../../projects/xf-studio/data/product-direction.md), [local build boundary](local-package-build.md), [runtime test card](../../docs/validation.md#prepared-single-session-test-card).
 
@@ -17,17 +17,19 @@ flowchart TB
     draft --> ui["Check mod export / Build mod files<br/>snapshot includes unsaved edits"]
   end
 
-  ui --> server["Local server<br/>validate original draft and snapshot"]
+  ui --> server["Localhost server<br/>validate original draft and snapshot"]
+  ui --> desktop["Desktop host<br/>authenticated Check only<br/>Build unavailable"]
   server --> filter["Shared export filter<br/>package-only copy"]
+  desktop --> filter
   export --> filter
   filter --> decision{"Any exportable<br/>preset remains?"}
   decision -- No --> reject["Refuse empty package<br/>original collection unchanged"]
   decision -- Yes --> omitted{"Any active layer or<br/>whole preset omitted?"}
   omitted -- Yes --> warn["Report every excluded<br/>preset and layer"]
-  omitted -- No --> cli["Local package CLI<br/>32-pixel compiler preflight"]
-  warn --> cli
-  cli -- Check only --> ready["Eligibility and omissions<br/>no package created"]
-  cli -- Build --> setup["Host local setup and server overrides<br/>plate, game and build tools"]
+  omitted -- No --> preflight["Shared TypeScript<br/>32-pixel compiler preflight"]
+  warn --> preflight
+  preflight -- Check --> ready["Eligibility and omissions<br/>no package created"]
+  preflight -- "Localhost Build" --> setup["Host local setup and server overrides<br/>plate, game and build tools"]
   setup --> snapshot["Hash original and filtered snapshots<br/>continue with filtered copy below"]
 
   classDef blocked fill:#ffe7e7,stroke:#b42318,color:#6e1611;
@@ -52,7 +54,7 @@ flowchart TB
   class runtime pending;
 ```
 
-The diagram has two entries into the same TypeScript export filter: a Studio request and an exported collection JSON file passed to the CLI. Both use that filter and compiler preflight. **Check mod export** stops after validation and a small 32-pixel compile; it does not require the local plate, WolvenKit or game files. **Build mod files** needs those inputs and takes longer. Studio requests pass a validated original collection snapshot to a same-origin localhost server. Build paths come from the host's private local settings, with server environment overrides taking precedence; the server resolves them for each Build, not from browser package input. The browser's separate Local setup form can edit the saved fields with revision checks. The server runs one build at a time and checks the returned filtered identity, omissions and manifest against its own filter of that exact snapshot. [Server boundary](../../projects/xf-studio/authoring/src/package-server.ts), [local setup](../../projects/xf-studio/authoring/LOCAL-SETTINGS.md), [filter](../../projects/xf-studio/authoring/src/package-filter.ts), [CLI](../../projects/xf-studio/authoring/tools/build_collection_package.py).
+The diagram has entries into the same TypeScript filter from a localhost Studio request, an authenticated desktop request and an exported collection JSON file passed to the CLI. All use the same filter and 32-pixel compiler preflight. **Check mod export** stops after eligibility and needs no plate, WolvenKit or game file. The desktop host runs this preflight directly from bundled TypeScript modules, without a source checkout. The localhost CLI still runs the shared module through Bun. **Build mod files** currently works on localhost only and takes the filtered snapshot into the resource pipeline; the desktop returns 503 because that pipeline has no portable host adapter yet. Build paths come from private local settings, with server environment overrides taking precedence on localhost. The browser's separate Local setup form can edit saved fields with revision checks. The localhost server runs one build at a time and checks returned identity, omissions and manifest against its own filter of the exact snapshot. [Server boundary](../../projects/xf-studio/authoring/src/package-server.ts), [desktop adapter](../../projects/xf-studio/authoring/desktop/package.ts), [shared preflight](../../projects/xf-studio/authoring/src/package-preflight.ts), [local setup](../../projects/xf-studio/authoring/LOCAL-SETTINGS.md), [CLI](../../projects/xf-studio/authoring/tools/build_collection_package.py).
 
 ## What each kind of data means
 
@@ -157,5 +159,6 @@ After any change to collection/recipe schema, finish eligibility, map compilatio
 | 2026-09-24, archive path gate | Mermaid CLI 11.17.0 with Chrome; rendered all three current diagrams to temporary PNGs at 800px and 1600px and visually inspected both sizes. | The new pre-pack gate sits after resource generation and before WolvenKit pack; its Fail arrow joins No promotion, while Pass reaches the independent verifier. Check remains on the first diagram only. All labels, arrows, layer merge and the dashed untested-game boundary were legible at normal and enlarged widths. Temporary renders were asset-free and remain ignored under project `build/`; no new visual files were committed. |
 | 2026-09-24, new-layer contour | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to ignored 800px and 1600px PNGs and visually inspected both sizes. | The updated editable-recipe label is readable. The Check and Build branches still diverge after the shared preflight; eligible layers merge before resources are packed; failure paths end without promotion; and the dashed game-session arrow remains visibly unproven. The tall authoring diagram still requires scrolling at normal width. No game-derived pixels were committed. |
 | 2026-09-24, local package setup | Mermaid CLI 11.17.0 with Chrome; rendered all three diagrams to ignored 800px and 1600px PNGs and visually inspected both sizes. | The new host setup node is legible solely on the Build branch, with Check ending separately. All arrows and labels remain readable; eligible layers still merge before packing and the dashed game-session boundary remains unproven. The authoring overview remains tall at ordinary reading width. |
+| 2026-09-25, desktop Check | Mermaid CLI 11.17.0 with Chrome; rendered all three current diagrams to ignored 800px and 1600px PNGs, then visually inspected normal and enlarged renderings. | The authoring diagram now shows localhost and desktop entering the same filter/preflight. The desktop label states Check only and Build unavailable; the localhost Build branch alone reaches setup and the resource pipeline. The first draft's separate desktop-unavailable arrow looked as though it emerged from localhost, so it was folded into the desktop node and rerendered. Labels, No/Yes arrows, layer merge, verifier failure and dashed untested-game boundary are readable at ordinary width. The overview remains tall; no private images or resources were rendered. |
 
 Primary implementation sources: [recipe](../../projects/xf-studio/authoring/src/recipe.ts), [collection plan](../../projects/xf-studio/authoring/src/preset-collection.ts), [flat compiler](../../projects/xf-studio/authoring/src/preset-compiler.ts), [package server](../../projects/xf-studio/authoring/src/package-server.ts), [CLI wrapper](../../projects/xf-studio/authoring/tools/build_collection_package.py), [Experiment 005 builder](../../experiments/005-preset-collection/build.py) and [independent verifier](../../experiments/005-preset-collection/verify.py). The guide explains the code as checked on this date; it is not a runtime observation.

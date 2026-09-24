@@ -1,6 +1,6 @@
 # XF Studio — authoring editor
 
-For the complete path from a draft or exported collection through layer merging, resource generation, independent verification and private mod files, see the illustrated [Studio-to-mod pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md). Check mod export tests eligibility and names any active unsupported layers or whole presets that a package would omit. Build mod files uses that same filtered snapshot and creates an offline-verified candidate while leaving the authored collection unchanged; it does not install or game-test the files.
+For the complete path from a draft or exported collection through layer merging, resource generation, independent verification and private mod files, see the illustrated [Studio-to-mod pipeline guide](../../../research/authoring/studio-to-mod-pipeline.md). Check mod export tests eligibility and names any active unsupported layers or whole presets that a package would omit. It also runs in the private Electrobun host once the editor can open with local preview assets. Build mod files currently works in localhost only; it uses that same filtered snapshot and creates an offline-verified candidate while leaving the authored collection unchanged. It does not install or game-test the files.
 
 ## Interface (redesigned 24 September)
 

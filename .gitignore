@@ -19,6 +19,7 @@ __pycache__/
 node_modules/
 projects/*/authoring/public/assets/
 projects/*/authoring/public/build/
+projects/*/authoring/build/
 projects/*/authoring/evidence/screenshots/
 projects/*/authoring/.server-*.log
 projects/*/authoring/data/

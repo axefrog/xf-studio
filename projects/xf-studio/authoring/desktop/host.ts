@@ -8,7 +8,7 @@ export type DesktopCapabilities = Readonly<{
   metadataStatus: "ready" | "unavailable";
   userDataPath: string;
   library: true;
-  packageCheck: false;
+  packageCheck: true;
   packageBuild: false;
   installation: false;
   updater: false;
@@ -38,7 +38,7 @@ export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewA
   ...version,
   userDataPath,
   library: true,
-  packageCheck: false,
+  packageCheck: true,
   packageBuild: false,
   installation: false,
   updater: false,

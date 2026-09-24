@@ -86,9 +86,9 @@ function showSetup(view) {
   const pathIssues = view.readiness.sourceDiscovery.issues.map(issue => issue.reason);
   const pathStatus = pathIssues.length ? pathIssues.join(" ") : "Game and mod source paths pass the current presence checks.";
   setupStatus.textContent = recovery ? "The current settings file is damaged. Restore the previous copy before editing." :
-    `${pathStatus} Mod export checks and builds are unavailable in this desktop trial.`;
+    `${pathStatus} Mod export Check uses the collection alone. Mod builds are unavailable in this desktop trial.`;
   aboutReadiness.textContent = recovery ? "Local setup needs recovery." :
-    `Local setup: ${view.source === "new" ? "not saved" : pathIssues.length ? "paths need attention" : "paths saved"}. Mod export is unavailable in this desktop trial.`;
+    `Local setup: ${view.source === "new" ? "not saved" : pathIssues.length ? "paths need attention" : "paths saved"}. Mod export Check is available; Build is unavailable.`;
 }
 async function setupAction(action) {
   const result = await setupActions.dispatch(action);
@@ -126,7 +126,7 @@ void initialSetup.catch(() => { aboutReadiness.textContent = "Local setup is una
 if (capabilities.previewAssets === "missing") {
   const root = document.getElementById("studio");
   root.removeAttribute("aria-busy");
-  root.innerHTML = '<div class="boot desktop-first-run" role="status"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Configure your game and mod paths now or later. To open the editor, add your prepared preview assets to the private folder below, then restart the app.</p><code id="desktop-asset-path"></code><p>This desktop trial includes no game or mod files. Mod export is not yet available here.</p><button type="button" id="desktop-setup-open-inline">Configure local setup</button></div>';
+  root.innerHTML = '<div class="boot desktop-first-run" role="status"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Configure your game and mod paths now or later. To open the editor, add your prepared preview assets to the private folder below, then restart the app.</p><code id="desktop-asset-path"></code><p>This desktop trial includes no game or mod files. Mod export Check works after the editor opens; Build is unavailable.</p><button type="button" id="desktop-setup-open-inline">Configure local setup</button></div>';
   root.querySelector("#desktop-asset-path").textContent = `${capabilities.userDataPath}\\preview-assets`;
   root.querySelector("#desktop-setup-open-inline").addEventListener("click", () => void openSetup());
 } else {

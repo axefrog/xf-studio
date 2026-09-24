@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createDesktopServer } from "../server";
 import { desktopVersionFromMetadata } from "../host";
+import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
+import { createPackageHandler } from "../../src/package-server";
+
+const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
+  "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-test-"));
 const staticRoot = resolve(root, "static");
@@ -28,7 +33,7 @@ test("session gates static files and narrowly typed host facts", async () => {
   expect((await fetch(base + "/%2e%2e/%2e%2e/secret", { headers })).status).toBe(404);
   const response = await fetch(base + "/api/desktop/capabilities", { headers });
   expect(await response.json()).toMatchObject({ schema: "xfs/desktop-capabilities-1", library: true,
-    packageBuild: false, updater: false, previewAssets: "missing", version: "0.0.1", channel: "dev",
+    packageCheck: true, packageBuild: false, updater: false, previewAssets: "missing", version: "0.0.1", channel: "dev",
     buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot });
   const assetRoot = resolve(root, "data", "preview-assets");
   mkdirSync(assetRoot, { recursive: true });
@@ -70,7 +75,7 @@ test("SQLite library initializes in the supplied user-data root", async () => {
     .toBe("Desktop trial");
 });
 
-test("desktop first run saves local setup only in its own user data and reports unsupported package work", async () => {
+test("desktop first run saves local setup only in its own user data and reports Check ready", async () => {
   const base = `http://127.0.0.1:${app.port}`;
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
   const headers = { Cookie: cookie };
@@ -78,8 +83,7 @@ test("desktop first run saves local setup only in its own user data and reports 
   expect(initial.status).toBe(200);
   const view = await initial.json();
   expect(view).toMatchObject({ revision: 0, source: "new", fields: { gameRoot: null, launchRoute: "direct" },
-    readiness: { check: { ready: false }, build: { ready: false }, updates: { ready: false } }, overridden: [] });
-  expect(view.readiness.check.issues[0].code).toBe("package_check_host_unavailable");
+    readiness: { check: { ready: true }, build: { ready: false }, updates: { ready: false } }, overridden: [] });
   const game = resolve(root, "sample-game");
   mkdirSync(resolve(game, "bin", "x64"), { recursive: true });
   mkdirSync(resolve(game, "archive", "pc"), { recursive: true });
@@ -90,7 +94,7 @@ test("desktop first run saves local setup only in its own user data and reports 
   expect(saved.status).toBe(200);
   const current = await saved.json();
   expect(current).toMatchObject({ revision: 1, source: "primary", fields: { gameRoot: game },
-    readiness: { sourceDiscovery: { ready: true }, check: { ready: false }, build: { ready: false } } });
+    readiness: { sourceDiscovery: { ready: true }, check: { ready: true }, build: { ready: false } } });
   const store = new LocalSettingsStore(dataRoot);
   expect(JSON.parse(readFileSync(store.file, "utf8")).gameRoot).toBe(game);
   expect((await fetch(base + "/api/local-settings", { method: "PATCH", headers: writeHeaders,
@@ -100,7 +104,51 @@ test("desktop first run saves local setup only in its own user data and reports 
   expect((await fetch(base + "/api/local-settings", { method: "PATCH", headers,
     body })).status).toBe(403);
   expect((await fetch(base + "/api/package", { method: "POST", headers: writeHeaders,
-    body: "{}" })).status).toBe(503);
+    body: "{}" })).status).toBe(400);
+});
+
+test("desktop Check matches localhost preflight for a partial export and rejects unsafe requests", async () => {
+  const base = `http://127.0.0.1:${app.port}`;
+  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
+  const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+  const collection = structuredClone(collectionFixture);
+  collection.presets[0].recipe.layers[0].finish = "glitter";
+  collection.presets[1].recipe.layers[0].finish = "shimmer";
+  const body = JSON.stringify({ action: "check", collection });
+  const desktop = await fetch(base + "/api/package", { method: "POST", headers, body });
+  expect(desktop.status).toBe(200);
+  const local = await createPackageHandler()(new Request(base + "/api/package", { method: "POST",
+    headers: { Origin: base, "Content-Type": "application/json" }, body }));
+  expect(local.status).toBe(200);
+  const checked = await desktop.json();
+  expect(checked).toEqual(await local.json());
+  expect(checked.omissions.map((item: { kind: string }) => item.kind)).toEqual(["layer", "preset", "layer", "preset"]);
+  expect(checked.presets).toHaveLength(2);
+  expect((await fetch(base + "/api/package", { method: "POST", headers: { ...headers,
+    Origin: "https://attacker.example" }, body })).status).toBe(403);
+  expect((await fetch(base + "/api/package", { method: "POST", headers: { Cookie: cookie,
+    "Content-Type": "application/json" }, body })).status).toBe(403);
+  expect((await fetch(base + "/api/package", { method: "POST", headers,
+    body: JSON.stringify({ action: "check", collection, outputRoot: "F:/Games/Cyberpunk 2077" }) })).status).toBe(400);
+  expect((await desktopPackageRequest(new Request(base + "/api/package", { method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": "16000001" }, body }))).status).toBe(413);
+});
+
+test("desktop Check refuses an empty filtered package; Build remains unavailable", async () => {
+  const base = `http://127.0.0.1:${app.port}`;
+  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
+  const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+  const collection = structuredClone(collectionFixture);
+  for (const preset of collection.presets) for (const layer of preset.recipe.layers)
+    if (layer.enabled && layer.opacity > 0) layer.finish = "glitter";
+  const check = await fetch(base + "/api/package", { method: "POST", headers,
+    body: JSON.stringify({ action: "check", collection }) });
+  expect(check.status).toBe(422);
+  expect((await check.json()).code).toBe("no_exportable_content");
+  const build = await fetch(base + "/api/package", { method: "POST", headers,
+    body: JSON.stringify({ action: "build", collection: collectionFixture }) });
+  expect(build.status).toBe(503);
+  expect((await build.json()).code).toBe("package_build_host_unavailable");
 });
 
 test("desktop settings recovery uses previous copy and blocks editing damaged primary", async () => {
