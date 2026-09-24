@@ -24,6 +24,12 @@ export type Session = {
   wait(ms: number): Promise<void>;
   waitFor(expression: string, timeout?: number): Promise<any>;
   console: { type: string; text: string }[];
+  /** Subscribe to a CDP event on this page session. */
+  on(method: string, handler: (params: any) => void): void;
+  /** Answer native file choosers with the next queued path (or cancel when the queue is empty). */
+  chooseFiles(paths: string[]): Promise<void>;
+  /** Save downloads into a directory. */
+  downloadTo(dir: string): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -57,8 +63,10 @@ export async function launch(url: string, options: { width?: number; height?: nu
   let id = 0;
   const pending = new Map<number, { ok(value: any): void; fail(error: Error): void }>();
   const consoleLog: { type: string; text: string }[] = [];
+  const handlers = new Map<string, ((params: any) => void)[]>();
   socket.onmessage = event => {
     const message = JSON.parse(String(event.data));
+    if (message.method) for (const handler of handlers.get(message.method) ?? []) handler(message.params);
     if (message.id && pending.has(message.id)) {
       const entry = pending.get(message.id)!; pending.delete(message.id);
       if (message.error) entry.fail(Error(message.error.message)); else entry.ok(message.result);
@@ -74,8 +82,27 @@ export async function launch(url: string, options: { width?: number; height?: nu
     const next = ++id; pending.set(next, { ok, fail }); socket.send(JSON.stringify({ id: next, method, params }));
   });
   await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
+  const chooserQueue: string[] = [];
+  let chooserArmed = false;
   const session: Session = {
     send, console: consoleLog,
+    on(method, handler) { handlers.set(method, [...(handlers.get(method) ?? []), handler]); },
+    async chooseFiles(paths) {
+      chooserQueue.push(...paths);
+      if (chooserArmed) return;
+      chooserArmed = true;
+      await send("DOM.enable");
+      await send("Page.setInterceptFileChooserDialog", { enabled: true });
+      session.on("Page.fileChooserOpened", params => {
+        const next = chooserQueue.shift();
+        void send("DOM.setFileInputFiles", { files: next ? [next] : [], backendNodeId: params.backendNodeId });
+      });
+    },
+    async downloadTo(dir) {
+      mkdirSync(dir, { recursive: true });
+      try { await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dir, eventsEnabled: true }); }
+      catch { await send("Page.setDownloadBehavior", { behavior: "allow", downloadPath: dir }); }
+    },
     async evaluate(expression) {
       const result = await send<any>("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
       if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);

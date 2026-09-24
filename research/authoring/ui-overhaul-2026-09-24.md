@@ -135,7 +135,7 @@ The port key-list test was updated for `editor` and `status`. `main.ts` and `por
 
 ## Acceptance — isolated `?verify=1`, disposable library, throwaway Chrome profile
 
-`bun tools/ui-acceptance.ts` (Chrome 153 headless, D3D11 ANGLE, 1600×1000 and 900×900). **22 of 22 checks passed** on the final code. No application exceptions; the only console error was the intentional HTTP 409 from the conflict check.
+`bun tools/ui-acceptance.ts` (Chrome 153 headless, D3D11 ANGLE, 1600×1000 and 900×900). **23 of 23 checks passed** on the final code. No application exceptions; the only console error was the intentional HTTP 409 from the conflict check.
 
 | Check | Result |
 |---|---|
@@ -149,7 +149,8 @@ The port key-list test was updated for `editor` and `status`. `main.ts` and `por
 | Performance | UV drag with the Library panel visible: frame deltas p50 16.7 ms, p95 16.8 ms, max 16.8 ms. File-operation capabilities still re-validate the whole draft (~27 ms each), so Library and Mod package repaint at most every 400 ms and never mid-gesture |
 | Native menus | text field context menu not prevented; tab-bar menu prevented |
 | Preview quality | 2K → `updating:2048` → `ready:2048` |
-| Library | Ctrl+S saved r2; a same-origin "other window" saved r3 → chip *Newer r3 saved* → Save produced the conflict toast with *Refresh library* and *Save as copy*; the unsaved opacity (0.61) was kept; open r3 then *Recover previous draft* restored the original draft and edit |
+| Files | CDP file-chooser interception and download capture (no automation gap this time): *Export preset recipe* wrote `xfs.recipe.json` (`xfs/recipe-7`); *Export collection* saved first and wrote `xfs.collection.json` with every preset; *Export layer mask* wrote a 2048×2048 PNG; *Import recipe as preset…* added preset `xfs.recipe` beside the others; *Import collection…* replaced the draft with the exported collection and the toast's *Undo import* restored the renamed draft |
+| Library | Ctrl+S saved a revision; a same-origin "other window" saved r3 → chip *Newer r3 saved* → Save produced the conflict toast with *Refresh library* and *Save as copy*; the unsaved opacity (0.61) was kept; open r3 then *Recover previous draft* restored the original draft and edit |
 | Package | Check with a Glitter layer → *Current*, omissions named (layer and whole preset); an edit → *Stale* |
 | Cursor-only snapping | a 760×520 floating panel dragged so it **overlapped** Colour & finish while the cursor stayed on the Head body → no preview, dropped as floating; cursor on the Colour & finish compass centre → *Add as tab* → merged |
 | Magnetic composite + keyboard | cursor in Motion window's right band → composite (split, 800 px wide); Shift+F10 › Add as tab to › first group docked it back |
@@ -162,7 +163,7 @@ The port key-list test was updated for `editor` and `status`. `main.ts` and `por
 
 Masked evidence (viewport canvases hidden; no game-derived pixels): `wide-dark-default`, `context-menu-uv-point`, `context-menu-head-point`, `context-menu-layer-disabled-reason`, `library-conflict`, `package-check-current`, `package-check-stale`, `dock-large-overlap-no-snap`, `dock-cursor-on-centre-guide`, `dock-magnetic-composite`, `wide-light-after-edits`, `wide-light-reloaded`, `compact-dark`, `compact-light`, `wide-dark-system`, plus `stress-long-names-dense` and the before-state `legacy-before` (`.png` in `projects/xf-appearance-studio/authoring/evidence/ui-overhaul-2026-09-24/`).
 
-**Limits of this pass.** Native file pickers (recipe/collection import, saved-V load) were not driven by automation, so saved-V import and file import were not re-exercised in the browser (service contracts are unchanged and covered by existing tests). *Build mod files* was not run in this pass (`--build` flag available; it is slow and depends on local tools). The on-head gesture path was covered by prior acceptance and is unchanged (the same device adapter is only rehosted). Screen-reader output was not verified with an actual screen reader. No game launch, install or rendering claim.
+**Limits of this pass.** Saved-V import was not exercised because no save file is available to the isolated run (the picker path itself is the same one recipe/collection import now exercise, and the saved-V service contract is unchanged and tested). *Build mod files* was not run in this pass (`--build` flag available; it is slow and depends on local tools). The on-head gesture path was covered by prior acceptance and is unchanged (the same device adapter is only rehosted). Screen-reader output was not verified with an actual screen reader. No game launch, install or rendering claim.
 
 ## Verification
 

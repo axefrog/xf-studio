@@ -6,6 +6,9 @@
  * Full screenshots go to evidence/screenshots/ (ignored); asset-free masked copies
  * go to evidence/ui-overhaul-2026-09-24/ for review.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { launch, MASK_VIEWPORTS, MOD, saveJson, startServer, UNMASK_VIEWPORTS, type Session } from "./cdp";
 
 const PORT = 4401, withBuild = process.argv.includes("--build");
@@ -223,6 +226,50 @@ try {
     await js(`${P}.authoring.dispatch({ kind: 'quality.set', size: 1024 })`); await ready();
   });
 
+  await step("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import", async () => {
+    const dir = join(tmpdir(), `xfs-ui-downloads-${Date.now()}`);
+    await page.downloadTo(dir);
+    await js(`${S}.dock.reveal('library')`); await page.wait(250);
+    const clickButton = async (label: string) => {
+      const r = await js<{ x: number; y: number } | null>(`(() => { const b = [...document.querySelectorAll('.btn')].find(b => b.textContent.trim() === ${JSON.stringify(label)} && b.offsetParent);
+        if (!b) return null; b.scrollIntoView({ block: "center" }); const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+      await page.wait(120);
+      if (!r) throw Error(`No visible button ${label}`);
+      await page.mouse("mouseMoved", r.x, r.y, { button: "none", buttons: 0 }); await page.mouse("mousePressed", r.x, r.y); await page.mouse("mouseReleased", r.x, r.y);
+    };
+    const waitFile = async (name: string) => { for (let n = 0; n < 100; n++) { if (existsSync(join(dir, name))) { await page.wait(200); return join(dir, name); } await page.wait(100); } throw Error(`No download ${name}`); };
+    await clickButton("Export preset recipe");
+    const recipePath = await waitFile("xfs.recipe.json");
+    const recipe = JSON.parse(readFileSync(recipePath, "utf8"));
+    await clickButton("Export collection");
+    const collectionPath = await waitFile("xfs.collection.json");
+    const collection = JSON.parse(readFileSync(collectionPath, "utf8"));
+    const layerId = await js<string>(`${P}.editor.layer().id`);
+    await clickButton("Export layer mask");
+    const maskPath = await waitFile(`xfs-${layerId}-alpha.png`);
+    const png = readFileSync(maskPath), size = { w: png.readUInt32BE(16), h: png.readUInt32BE(20) };
+    const presetsBefore = await js<number>(`${P}.library.summary().draft.presets.length`);
+    await page.chooseFiles([recipePath]);
+    await clickButton("Import recipe as preset…"); await page.wait(800);
+    const presetsAfter = await js<string[]>(`${P}.library.summary().draft.presets.map(p => p.name)`);
+    const draftBefore = await js<string>(`${P}.library.summary().draft.name`);
+    await js(`${P}.authoring.dispatch({ kind: 'collection.rename', name: 'Renamed before import' })`); await page.wait(150);
+    await page.chooseFiles([collectionPath]);
+    await clickButton("Import collection…"); await page.wait(400);
+    const confirm = await js<string | null>(`document.querySelector('.menu .menu-heading')?.textContent ?? null`);
+    if (confirm) { await js(`[...document.querySelectorAll('.menu .menu-item')].find(i => i.textContent.includes('Continue')).click()`); }
+    await page.wait(900);
+    const imported = await js<{ name: string; presets: number }>(`({ name: ${P}.library.summary().draft.name, presets: ${P}.library.summary().draft.presets.length })`);
+    await js(`[...document.querySelectorAll('.toast button')].find(b => b.textContent === 'Undo import')?.click()`); await page.wait(700);
+    const restored = await js<string>(`${P}.library.summary().draft.name`);
+    record("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import",
+      /^xfs\/recipe-/.test(recipe.schema) && collection.presets?.length === presetsBefore && size.w === 2048 && size.h === 2048 &&
+      presetsAfter.length === presetsBefore + 1 && presetsAfter.includes("xfs.recipe") && imported.name === collection.name && imported.presets === collection.presets.length &&
+      restored === "Renamed before import",
+      { recipeSchema: recipe.schema, collectionPresets: collection.presets?.length, mask: size, presetsAfter, confirm, draftBefore, imported, restored });
+    await js(`${P}.authoring.dispatch({ kind: 'collection.rename', name: ${JSON.stringify("Makeup collection")} })`);
+  });
+
   await step("library: Ctrl+S saves a revision; an external newer revision produces a conflict with recovery actions", async () => {
     await page.key("s", { modifiers: MOD.ctrl, code: "KeyS" });
     await page.waitFor(`${P}.library.summary().draft.revision >= 2 && !${P}.library.summary().busy`, 20000);
@@ -269,8 +316,9 @@ try {
     await page.waitFor(`${P}.files.snapshot().package && !${P}.library.summary().busy`, 60000);
     const card = await js<{ fresh: string; text: string }>(`({ fresh: document.querySelector('.result-card')?.dataset.freshness, text: document.querySelector('.package-result')?.textContent })`);
     await shot("package-check-current");
-    await js(`${P}.authoring.dispatch({ kind: 'layer.setOpacity', layerId: ${P}.editor.layer().id, opacity: .58 })`); await page.wait(300);
-    const stale = await js<string>(`document.querySelector('.result-card')?.dataset.freshness`);
+    await js(`${P}.authoring.dispatch({ kind: 'layer.setOpacity', layerId: ${P}.editor.layer().id, opacity: .58 })`);
+    // The Mod package panel repaints at most every 400 ms (it re-validates the whole draft).
+    const stale = await page.waitFor(`document.querySelector('.result-card')?.dataset.freshness === 'stale' && 'stale'`, 3000).catch(() => "current");
     record("package: Check omits the preview-study layer, shows Current, turns Stale after an edit",
       card.fresh === "current" && /Glitter veil/.test(card.text) && /Omitted/i.test(card.text) && stale === "stale", { fresh: card.fresh, stale, excerpt: card.text.slice(0, 240) });
     await shot("package-check-stale");

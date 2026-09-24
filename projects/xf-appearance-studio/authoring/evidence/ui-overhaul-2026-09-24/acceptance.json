@@ -201,10 +201,10 @@
       "step": "performance: UV drag with the Library panel visible keeps frame pacing (p95 ≤ 34 ms)",
       "pass": true,
       "detail": {
-        "n": 93,
+        "n": 92,
         "p50": 16.700000000000728,
         "p95": 16.799999999999272,
-        "max": 16.80000000000291
+        "max": 17
       }
     },
     {
@@ -230,15 +230,40 @@
       ]
     },
     {
+      "step": "files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Undo import",
+      "pass": true,
+      "detail": {
+        "recipeSchema": "xfs/recipe-7",
+        "collectionPresets": 3,
+        "mask": {
+          "w": 2048,
+          "h": 2048
+        },
+        "presetsAfter": [
+          "Chrome dusk",
+          "Chrome dusk (copy)",
+          "Untitled look",
+          "xfs.recipe"
+        ],
+        "confirm": null,
+        "draftBefore": "Makeup collection",
+        "imported": {
+          "name": "Makeup collection",
+          "presets": 3
+        },
+        "restored": "Renamed before import"
+      }
+    },
+    {
       "step": "library: Ctrl+S saves a revision; an external newer revision produces a conflict with recovery actions",
       "pass": true,
       "detail": {
-        "revision": 2,
+        "revision": 3,
         "external": {
           "ok": true,
           "status": 200
         },
-        "chip": "Newer r3 saved",
+        "chip": "Newer r4 saved",
         "toast": {
           "text": "LibraryThis collection changed in another window. Open the saved version or save a separate copy.Refresh librarySave as copy",
           "actions": [
@@ -267,7 +292,7 @@
       "detail": {
         "fresh": "current",
         "stale": "stale",
-        "excerpt": "Check resultCurrent2 of 3 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p6cb9c2f0e3984301b3e0eace065c5835Untitled lookxfs_pe488af13a8a24c02b3a7d605c1c8a3a3Omitted from the packageWhole preset “Chrome dusk” "
+        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_pfa38116f8ca34f30ab932a92526e8e67Untitled lookxfs_pc08e9a8486ed4bfc86e822c4f63857c5xfs.recipexfs_pbaaa3f0d20bc4b45beb45014b5dad2efOmit"
       }
     },
     {
@@ -342,27 +367,29 @@
         ],
         "floating": 1,
         "before": {
-          "preset": "6cb9c2f0-e398-4301-b3e0-eace065c5835",
-          "layer": "03e314c0-7800-4b5f-bd22-1a745193c541",
+          "preset": "baaa3f0d-20bc-4b45-beb4-5014b5dad2ef",
+          "layer": "505bfbfa-554c-4d22-915a-7faeaa95ac9f",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 30,
           "theme": "light",
           "names": [
             "Chrome dusk",
             "Chrome dusk (copy)",
-            "Untitled look"
+            "Untitled look",
+            "xfs.recipe"
           ]
         },
         "after": {
-          "preset": "6cb9c2f0-e398-4301-b3e0-eace065c5835",
-          "layer": "03e314c0-7800-4b5f-bd22-1a745193c541",
+          "preset": "baaa3f0d-20bc-4b45-beb4-5014b5dad2ef",
+          "layer": "505bfbfa-554c-4d22-915a-7faeaa95ac9f",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 42,
           "theme": "light",
           "names": [
             "Chrome dusk",
             "Chrome dusk (copy)",
-            "Untitled look"
+            "Untitled look",
+            "xfs.recipe"
           ]
         }
       }
