@@ -36,6 +36,7 @@ type FileSources = {
   savedV(): SavedV | undefined;
   loadSavedV(bytes: Uint8Array): Readonly<SavedAppearanceState>;
   savedVReady(): boolean;
+  savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
   recoverCollection(): void;
 };
@@ -72,9 +73,10 @@ export class StudioFileOperations {
       case "mask.export": return this.sources.selectedLayer() ? { available: true } :
         { available: false, reason: "Select a layer before exporting a mask." };
       case "savedV.import": return this.sources.savedVReady() ? { available: true } :
-        { available: false, reason: "Wait for the preview assets to finish loading." };
+        { available: false, reason: this.sources.savedVUnavailableReason?.() ?? "Wait for the preview assets to finish loading." };
       case "savedV.export": return this.sources.hasSavedV() ? { available: true } :
-        { available: false, reason: "Load a saved V before exporting its appearance." };
+        { available: false, reason: this.sources.savedVUnavailableReason?.() ??
+          "Load a saved V before exporting its appearance." };
       case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
         { available: false, reason: "Collection is still loading." };
       default: {

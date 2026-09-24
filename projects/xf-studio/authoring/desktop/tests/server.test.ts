@@ -35,6 +35,9 @@ test("session gates static files and narrowly typed host facts", async () => {
   expect(await response.json()).toMatchObject({ schema: "xfs/desktop-capabilities-1", library: true,
     packageCheck: true, packageBuild: false, updater: false, previewAssets: "missing", version: "0.0.1", channel: "dev",
     buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot });
+  expect((await fetch(base + "/api/desktop/smoke", { method: "POST", headers: { ...headers,
+    Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-smoke-1",
+    state: "uv-only", webgl2: true, worker: true }) })).status).toBe(204);
   const assetRoot = resolve(root, "data", "preview-assets");
   mkdirSync(assetRoot, { recursive: true });
   writeFileSync(resolve(assetRoot, "head.glb"), "local-only fixture");

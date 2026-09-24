@@ -54,12 +54,15 @@ export class StudioApplication {
   private listeners = new Set<() => void>();
   private unsubs: (() => void)[] = [];
   private collectionRevision = 0;
+  private previewUnavailable?: string;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   constructor(services: Services) { this.services = services; this.subscribeSources(); }
   attach(next: Partial<Omit<Services, "document" | "recipe" | "layer" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
   }
+  /** A device failure is terminal for this page load; edits and mask work remain available. */
+  setPreviewUnavailable(reason: string) { this.previewUnavailable = reason; this.notify(); }
   private notify() { for (const listener of this.listeners) listener(); }
   private subscribeSources() {
     for (const unsub of this.unsubs) unsub();
@@ -248,6 +251,9 @@ export class StudioApplication {
   }
   capability(action: StudioAction): StudioCapability {
     const s = this.services;
+    if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
+      action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
+      return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     let raw: { available: boolean; reason?: string };
     if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
       { available: false, reason: "There is no recipe change to undo." };
@@ -324,7 +330,9 @@ export class StudioApplication {
   }
   async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
     ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
-  canBeginGesture(_source: GestureSource, layerId: string): StudioCapability {
+  canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
+    if (source === "surface" && this.previewUnavailable)
+      return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }

@@ -64,6 +64,23 @@ test("recipe Undo is a current workspace action with live capability and one ato
   expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: false });
 });
 
+test("unavailable 3D device leaves authoring and Undo available with explicit reasons", () => {
+  const { app, document } = fixture();
+  const reason = "3D preview assets are missing. Import the five prepared files to enable the head view.";
+  app.setPreviewUnavailable(reason);
+  expect(app.capability({ kind: "camera.front" })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "motion.setBlink", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "preview.setWire", enabled: true })).toEqual({ available: false, code: "asset_unavailable", reason });
+  const layer = document.recipe.layers[0], originalColor = layer.color;
+  expect(app.canBeginGesture("surface", layer.id)).toMatchObject({ available: false, code: "asset_unavailable" });
+  expect(app.canBeginGesture("uv", layer.id).available).toBe(true);
+  expect(app.dispatch({ kind: "layer.setColor", layerId: layer.id, color: "#123456" })).toMatchObject({ ok: true });
+  expect(document.recipe.layers[0].color).toBe("#123456");
+  expect(app.capability({ kind: "recipe.undo" }).available).toBe(true);
+  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: true });
+  expect(document.recipe.layers[0].color).toBe(originalColor);
+});
+
 test("saved-V eye suggestion updates application state without applying the morph a second time", () => {
   const { app } = fixture(), calls: number[] = [];
   const preview = new PreviewActions(freshWorkspace().preview, {

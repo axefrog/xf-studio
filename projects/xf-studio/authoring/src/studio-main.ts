@@ -139,6 +139,7 @@ async function start() {
       read: () => savedAppearance?.snapshot().savedV,
       load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
       ready: () => !!scene,
+      unavailableReason: () => viewportDevice.attachment.snapshot().head.error,
     },
     fileDevice: createBrowserFileDevice({ document, pickers: {
       recipe: byId<HTMLInputElement>("device-recipe-picker"),
@@ -154,6 +155,17 @@ async function start() {
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });
+  const desktopAssets = document.documentElement.dataset.desktopPreviewAssets;
+  if (desktopAssets === "missing" || desktopAssets === "incomplete") {
+    const reason = desktopAssets === "missing"
+      ? "3D preview assets are missing. Import the five prepared files to enable the head view."
+      : "3D preview assets are incomplete. Inspect the private preview folder and import a valid prepared set.";
+    core.app.setPreviewUnavailable(reason);
+    viewportDevice.failHead(reason);
+    statusSource.changed();
+    session.flush();
+    return;
+  }
   try {
     scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
     let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
@@ -189,8 +201,9 @@ async function start() {
     session.setPreviewReady(); session.flush(); drawUV();
     statusSource.changed();
   } catch (error) {
-    viewportDevice.failHead((error as Error).message);
-    status = { ...status, assets: { ...status.assets, loaded: true } };
+    const reason = `3D preview unavailable: ${(error as Error).message}`;
+    core.app.setPreviewUnavailable(reason);
+    viewportDevice.failHead(reason);
     statusSource.changed();
     console.error(error); session.flush();
   }

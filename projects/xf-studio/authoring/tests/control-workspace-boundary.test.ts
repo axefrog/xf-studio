@@ -82,6 +82,28 @@ test("workspace composer keeps pre-preview restoration safe and later uses typed
   expect(document.recipe.layers[0].color).not.toBe("#123456");
 });
 
+test("UV-only saves preserve stored camera and motion until a head actually loads", () => {
+  const workspace = freshWorkspace();
+  workspace.preview.camera = { position: [0, 0, 1], target: [0, 0, 0], fov: 42 };
+  workspace.preview.idle = true;
+  workspace.preview.idleTime = 8.5;
+  workspace.preview.idlePaused = true;
+  workspace.preview.idleBody = false;
+  workspace.preview.idleFace = true;
+  const composer = new WorkspaceComposer(workspace, {
+    editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: [], fieldSelection: {} }),
+    uvView: () => ({ ...workspace.uvView, span: .25 }),
+    savedV: () => workspace.savedV, collections: () => workspace.collections,
+    quality: () => 512, preview: () => undefined, motion: () => undefined,
+    sidebar: () => ({ sidebarLeft: 260, sidebarRight: 350 }), layout: () => workspace.panels,
+  });
+  const saved = composer.capture();
+  expect(saved.preview.camera).toEqual(workspace.preview.camera);
+  expect(saved.preview).toMatchObject({ idle: true, idleTime: 8.5, idlePaused: true, idleBody: false, idleFace: true,
+    textureSize: 512 });
+  expect(saved.uvView.span).toBe(.25);
+});
+
 test("preview policy exposes capacity, active priority, optics and disabled placeholders", () => {
   const recipe = freshWorkspace().recipe;
   recipe.layers[0].finish = "shimmer";

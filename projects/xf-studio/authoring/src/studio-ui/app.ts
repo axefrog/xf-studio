@@ -240,8 +240,10 @@ function statusBar(rt: StudioRuntime) {
       setText(gesture, preview.gesture ? "Gesture in progress · Esc cancels" : preview.control ? "Adjusting · Esc restores" : "");
       const r = frame.readiness, label = r.size >= 1024 ? `${r.size / 1024}K` : String(r.size);
       ready.dataset.phase = r.phase;
-      setText(ready, r.phase === "ready" ? `Preview ${label} · ready` : r.phase === "updating" ? `Preview ${label} · updating` : "Preview blocked");
-      ready.title = r.error ?? "";
+      const labelPrefix = frame.viewport.head.phase === "ready" ? "Preview" : "UV masks";
+      setText(ready, r.phase === "ready" ? `${labelPrefix} ${label} · ready` : r.phase === "updating"
+        ? `${labelPrefix} ${label} · updating` : `${labelPrefix} blocked`);
+      ready.title = r.error ?? frame.viewport.head.error ?? "";
     },
   };
 }

@@ -33,6 +33,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     read(): SavedV | undefined;
     load(bytes: Uint8Array): Readonly<SavedAppearanceState>;
     ready(): boolean;
+    unavailableReason?(): string | undefined;
   };
 }) {
   const { workspace, core } = options;
@@ -50,6 +51,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       return applied;
     },
     savedVReady: options.savedAppearance.ready,
+    savedVUnavailableReason: options.savedAppearance.unavailableReason,
     executeCollection: request => core.app.execute(request),
     recoverCollection: () => collection.recover(),
   });

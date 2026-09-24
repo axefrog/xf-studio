@@ -42,11 +42,12 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const state = frame.preview, preview = state.preview, saved = state.savedV, assets = frame.status.assets;
       applyCapability(load, port.files.capability({ kind: "savedV.import" }));
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
-      const key = JSON.stringify(saved);
+      const key = JSON.stringify([saved, frame.viewport.head.error]);
       if (summary.dataset.key !== key) {
         summary.dataset.key = key;
         const result = saved.result;
-        summary.replaceChildren(...(!saved.loaded || !result ? [emptyState("Reference head", "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
+        summary.replaceChildren(...(!saved.loaded || !result ? [emptyState("Reference head", frame.viewport.head.error ??
+          "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
           fact(icon("check"), `${result.applied.length} facial regions applied`, `${result.appearanceReferences} appearance references read${saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : ""}`),
           fact(icon(result.matchedDetails.length === 2 ? "check" : "info"), result.matchedDetails.length === 2 ? "Brows and lashes matched" : "Brows and lashes: reference styles",
             result.matchedDetails.length === 2 ? "Colours are approximate." : "Not a resolved match for this save."),
@@ -55,13 +56,15 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           fact(icon("info"), "Eyes", result.eyeAppearance.message),
         ]));
       }
-      eyeShape.update(eyeChoices, String(preview?.eyeShape ?? 9), !preview, "Preview is still loading.");
+      eyeShape.update(eyeChoices, String(preview?.eyeShape ?? 9), !preview,
+        frame.viewport.head.error ?? "Preview is still loading.");
       setText(eyeNote, saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Overriding the saved eye shape (${String(saved.suggestedEyeShape).padStart(2, "0")}) in this viewport only.` : "");
       eyeNote.hidden = !eyeNote.textContent;
       for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
         const enabled = !!preview?.[detail], allowed = enableReason(rt, { kind: "preview.setDetail", detail, enabled: true });
-        control.update(enabled, { disabled: !preview || (!enabled && !allowed.available), reason: allowed.reason ?? "Preview is still loading." });
+        control.update(enabled, { disabled: !preview || (!enabled && !allowed.available), reason: allowed.reason ??
+          frame.viewport.head.error ?? "Preview is still loading." });
       }
       const hairAllowed = enableReason(rt, { kind: "preview.setHair", enabled: true });
       hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? "Preview is still loading.",
@@ -126,7 +129,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
-      const loading = { disabled: !ready, reason: "Preview is still loading." };
+      const loading = { disabled: !ready, reason: frame.viewport.head.error ?? "Preview is still loading." };
       fov.update(preview?.camera.fov, loading); exposure.update(preview?.exposure, loading); angle.update(preview?.lightAngle, loading);
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       front.disabled = !ready;
@@ -168,7 +171,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
       const motion = frame.preview.motion;
-      const unavailable = { disabled: !motion?.available, reason: motion?.error ? `Idle unavailable: ${motion.error}` : "Motion preview is still loading." };
+      const unavailable = { disabled: !motion?.available, reason: frame.viewport.head.error ??
+        (motion?.error ? `Idle unavailable: ${motion.error}` : "Motion preview is still loading.") };
       idle.update(!!motion?.idle, unavailable);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
@@ -200,15 +204,17 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const quality = frame.preview.quality, readiness = frame.readiness;
       tiers.update(quality?.size, size => port.authoring.capability({ kind: "quality.set", size }));
-      const key = JSON.stringify(readiness);
+      const key = JSON.stringify([readiness, frame.viewport.head.phase]);
       if (stateLine.dataset.key !== key) {
         stateLine.dataset.key = key;
         const label = readiness.size >= 1024 ? `${readiness.size / 1024}K` : String(readiness.size);
         stateLine.replaceChildren(
-          readiness.phase === "ready" ? badge(`Ready · ${label}`, "success") : readiness.phase === "updating" ? badge(`Updating · ${label}`, "info") : badge("Blocked", "error"),
+          readiness.phase === "ready" ? badge(`${frame.viewport.head.phase === "ready" ? "Preview" : "UV masks"} ready · ${label}`, "success") :
+            readiness.phase === "updating" ? badge(`Updating UV masks · ${label}`, "info") : badge("UV masks blocked", "error"),
           h("span", { class: "small", text: readiness.error ?? (readiness.phase === "updating"
             ? `${readiness.pending} texture job${readiness.pending === 1 ? "" : "s"} queued${readiness.waiting ? "; some layers still show their previous complete result" : ""}.`
-            : "Every enabled layer shows its latest complete texture.") }),
+            : frame.viewport.head.phase === "ready" ? "Every enabled layer shows its latest complete texture."
+              : "Generated UV masks are ready; the 3D head preview is unavailable.") }),
           h("span", { class: "muted small", text: `Estimated generated-texture peak ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB; native assets and browser overhead are additional.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));

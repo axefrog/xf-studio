@@ -63,7 +63,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
-        if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "missing-assets", "starting", "interactive"].includes(value.state) ||
+        if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "uv-only", "starting", "interactive"].includes(value.state) ||
           typeof value.webgl2 !== "boolean" || typeof value.worker !== "boolean") return new Response("Bad report", { status: 400 });
         console.log(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
         return new Response(null, { status: 204 });

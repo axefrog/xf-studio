@@ -124,9 +124,16 @@ restoreSetup.addEventListener("click", async () => {
 const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.catch(() => { aboutReadiness.textContent = "Local setup is unavailable."; });
 if (capabilities.previewAssets !== "ready") {
-  const root = document.getElementById("studio");
-  root.removeAttribute("aria-busy");
-  root.innerHTML = '<div class="boot desktop-first-run" role="status"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Configure your game and mod paths now or later. To open the editor, import your own prepared preview files from a local folder.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is optional and does not verify ownership, source provenance or game fidelity. This installer includes no game or mod files. Mod export Check and Build become available after the editor opens, subject to Local setup.</p><button type="button" id="desktop-setup-open-inline">Configure local setup</button></div>';
+  const intakeButton = document.createElement("button");
+  intakeButton.id = "desktop-intake-open";
+  intakeButton.type = "button";
+  intakeButton.textContent = "Enable 3D preview";
+  const root = document.createElement("dialog");
+  root.id = "desktop-intake";
+  root.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>UV editor is ready</h1><p>You can edit makeup shapes, use Undo, save collections, export masks and run Check without 3D preview files. Head and saved-V controls will become available after you import your own prepared assets.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is optional and does not verify ownership, source provenance or game fidelity. This installer includes no game or mod files. Build needs separately configured host tools and plate inputs.</p><div class="desktop-intake-actions"><button type="button" id="desktop-setup-open-inline">Configure local setup</button><button type="button" id="desktop-intake-close">Continue in UV editor</button></div></div>';
+  document.body.append(intakeButton, root);
+  intakeButton.addEventListener("click", () => root.showModal());
+  root.querySelector("#desktop-intake-close").addEventListener("click", () => root.close());
   root.querySelector("#desktop-asset-path").textContent = `${capabilities.userDataPath}\\preview-assets`;
   root.querySelector("#desktop-setup-open-inline").addEventListener("click", () => void openSetup());
   const folder = root.querySelector("#desktop-intake-folder");
@@ -134,7 +141,7 @@ if (capabilities.previewAssets !== "ready") {
   const importButton = root.querySelector("#desktop-intake-import");
   const status = root.querySelector("#desktop-intake-status");
   if (capabilities.previewAssets === "incomplete") status.textContent =
-    "The private preview folder already exists but its core files do not match the recorded set. Intake preserves that folder; inspect or move it yourself before importing.";
+    "The private preview folder exists but its five core files are incomplete or invalid. Intake preserves that folder; inspect or move it yourself before importing.";
   let inspected = "";
   folder.addEventListener("input", () => { inspected = ""; importButton.disabled = true; });
   async function intake(action) {
@@ -164,15 +171,16 @@ if (capabilities.previewAssets !== "ready") {
   }
   inspect.addEventListener("click", () => void intake("inspect"));
   importButton.addEventListener("click", () => { if (inspected === folder.value.trim()) void intake("import"); });
-} else {
-  void import("/build/studio-main.js").catch(error => {
+  root.showModal();
+}
+document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
+void import("/build/studio-main.js").catch(error => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");
     root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
       textContent: "XF Studio desktop could not load its editor. Restart XF Studio and retry." }));
     console.error("XF desktop editor import failed");
-  });
-}
+});
 const report = () => {
   const studio = document.getElementById("studio");
   if (studio?.classList.contains("studio-ready")) studio.removeAttribute("aria-busy");
@@ -182,8 +190,7 @@ const report = () => {
   try { const probe = new Worker("/build/raster-worker.js", { type: "module" }); worker = true; probe.terminate(); }
   catch { /* Missing worker support. */ }
   const state = document.querySelector(".boot-error") ? "error" :
-    capabilities.previewAssets !== "ready" ? "missing-assets" :
-    studio?.classList.contains("studio-ready") ? "interactive" : "starting";
+    studio?.classList.contains("studio-ready") ? capabilities.previewAssets === "ready" ? "interactive" : "uv-only" : "starting";
   void fetch("/api/desktop/smoke", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker }) });
 };

@@ -70,10 +70,14 @@ function readinessBadge() {
   const element = h("span", { class: "ready-badge" });
   return { element, update(frame: Frame) {
     const r = frame.readiness, label = r.size >= 1024 ? `${r.size / 1024}K` : String(r.size);
+    const headAvailable = frame.viewport.head.phase === "ready";
     element.dataset.phase = r.phase;
-    setText(element, r.phase === "ready" ? `Preview ${label} · ready` : r.phase === "updating"
-      ? `Updating ${label}${r.pending ? ` · ${r.pending} queued` : ""}` : `Preview blocked`);
-    element.title = r.error ?? (r.phase === "ready" ? "Every enabled layer shows its latest complete texture." : "Showing the last complete textures while new ones compute.");
+    setText(element, r.phase === "ready" ? `${headAvailable ? "Preview" : "UV masks"} ${label} · ready` : r.phase === "updating"
+      ? `Updating ${headAvailable ? "preview" : "UV masks"} ${label}${r.pending ? ` · ${r.pending} queued` : ""}` : `${headAvailable ? "Preview" : "UV masks"} blocked`);
+    element.title = r.error ?? (r.phase === "ready" ? headAvailable
+      ? "Every enabled layer shows its latest complete texture in the 3D preview."
+      : "UV masks are ready. 3D preview assets are unavailable."
+      : "Showing the last complete textures while new ones compute.");
   } };
 }
 
