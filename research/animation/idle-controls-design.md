@@ -13,7 +13,7 @@ Use “Head movement” as the accessible UI term, but describe it internally as
 
 ## What local evidence establishes
 
-The current [adapter](../../projects/xf-appearance-studio/authoring/src/idle-animation.ts) already composes two independently looped sources. Its elapsed time is shared, but the body and facial mixers sample `elapsed % theirOwnDuration`. Each target bone receives:
+The current [adapter](../../projects/xf-studio/authoring/src/idle-animation.ts) already composes two independently looped sources. Its elapsed time is shared, but the body and facial mixers sample `elapsed % theirOwnDuration`. Each target bone receives:
 
 `bodyWorldDelta × facialWorldDelta × targetWorldBind`
 
@@ -21,7 +21,7 @@ The result is then converted into the actual target-parent space. That is the ap
 
 Read-only inspection of the local derived GLBs found 213 body channels on 71 nodes, including `Root`, `Spine3`, `Neck`, `Neck1` and `Head`; the face bake has 506 rotation/translation channels on 253 nodes. The face bake has no channels on those five structural body nodes, `face_root_JNT` or `jaw_root_JNT`. Its eye rotations and `mid_J_jaw_JNT` rotation/translation do vary. Thus removing the body contribution is supported by this particular decoded asset, rather than guessed from naming. This does not establish the game controller's complete layering behavior.
 
-The bake and clip provenance are already recorded in [CC idle research](cc-idle.md), [face bake evidence](../../projects/xf-appearance-studio/authoring/evidence/idle-face-bake.json), and the [user guide](../../docs/idle-animation-guide.md). The face bake uses Cyberpunk Blender Add-on / IO Suite at `7a4ee793c36d9615946fe87ec9d42cde7568021d`; no new external source or copied code was introduced by this design review.
+The bake and clip provenance are already recorded in [CC idle research](cc-idle.md), [face bake evidence](../../projects/xf-studio/authoring/evidence/idle-face-bake.json), and the [user guide](../../docs/idle-animation-guide.md). The face bake uses Cyberpunk Blender Add-on / IO Suite at `7a4ee793c36d9615946fe87ec9d42cde7568021d`; no new external source or copied code was introduced by this design review.
 
 ## Exact integration points
 

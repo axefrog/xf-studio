@@ -1,11 +1,11 @@
 {
   "source": "F:\\Games\\RedModding\\Projects\\xf-eye-artistry-ccxl\\v-character-model\\v2\\xfea_head2.blend",
   "sourceSha256": "c7a5fa8a90bcd4c45b78f85ad27b9f4a16056b370c664908bd7940adf3a6995d",
-  "preserved": "D:\\Dev\\cp2077-modding-hq\\projects\\xf-appearance-studio\\assets\\imported\\plate-source\\xfea_head2.blend",
+  "preserved": "D:\\Dev\\cp2077-modding-hq\\projects\\xf-studio\\assets\\imported\\plate-source\\xfea_head2.blend",
   "blender": "5.0.0",
   "sourceObject": "submesh_00_LOD_1.010",
   "master": {
-    "path": "D:\\Dev\\cp2077-modding-hq\\projects\\xf-appearance-studio\\assets\\authored\\xfas_eye_plate.blend",
+    "path": "D:\\Dev\\cp2077-modding-hq\\projects\\xf-studio\\assets\\authored\\xfas_eye_plate.blend",
     "sha256": "f1b6c09d1bf7cd8cc78f8431fdbf8ae15bdc369cb7c34a0cee2a129f0f5b1265",
     "bytes": 1118195
   },

@@ -24,7 +24,7 @@ The target starts at `[0, 1.67, .005]`, inside the head and below the eye centre
 
 The installed `public/assets/head.glb`, SHA-256 `72b46566276bf87786d2b8025800278b41833194b45359792d380009bc3f82e8`, was loaded with Three.js 0.186.0. Original first-set weights and the studio's full eight-influence CPU skinning were restored. Both head and plate were given the saved morph set `h091_eyes`, `h012_nose`, `h053_mouth`, `h054_jaw`, `h145_ear`; no idle or synthetic blink was applied. All 1,620 plate vertices were transformed to world space. This is the current preview plate, not a newly corrected experiment-006 release candidate.
 
-Local reproduction inputs and full measurements are ignored under `projects/xf-appearance-studio/authoring/data/`: run `camera-zoom-study.ts`, then `camera-anchor-study.ts` with Bun from the authoring directory. The result is `camera-zoom-measurements.json`.
+Local reproduction inputs and full measurements are ignored under `projects/xf-studio/authoring/data/`: run `camera-zoom-study.ts`, then `camera-anchor-study.ts` with Bun from the authoring directory. The result is `camera-zoom-measurements.json`.
 
 | Measurement | Result |
 |---|---|

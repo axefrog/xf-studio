@@ -4,7 +4,7 @@
 
 ## Why a file search is insufficient
 
-A save stores appearance resource hashes and definition names, not the bytes that rendered them. The [saved-V reader](../../projects/xf-appearance-studio/authoring/src/save-reader.ts) preserves unsigned 64-bit hashes as decimal strings. Its present [eye adapter](../../projects/xf-appearance-studio/authoring/src/eye-appearance.ts) recognizes one locally researched `(app hash, definition)` pair with a verified PNG; it deliberately does not resolve general mod sources. In [Nathan's eye trace](../eye-artistry/modded-eye-resolution.md), `eye_16_diffuse` is absent from the serialized shared `.app`, registered by nutboy's CCXL resource and mesh patch, and ultimately uses Kala's texture archive. A search of the base `.app` alone would reject a valid saved choice.
+A save stores appearance resource hashes and definition names, not the bytes that rendered them. The [saved-V reader](../../projects/xf-studio/authoring/src/save-reader.ts) preserves unsigned 64-bit hashes as decimal strings. Its present [eye adapter](../../projects/xf-studio/authoring/src/eye-appearance.ts) recognizes one locally researched `(app hash, definition)` pair with a verified PNG; it deliberately does not resolve general mod sources. In [Nathan's eye trace](../eye-artistry/modded-eye-resolution.md), `eye_16_diffuse` is absent from the serialized shared `.app`, registered by nutboy's CCXL resource and mesh patch, and ultimately uses Kala's texture archive. A search of the base `.app` alone would reject a valid saved choice.
 
 Resolve four distinct questions in order. They have different winners:
 

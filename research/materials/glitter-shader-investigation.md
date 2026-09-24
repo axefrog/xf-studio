@@ -8,7 +8,7 @@ The installed game has `F:/Games/Cyberpunk 2077/engine/shader_final.cache` (161,
 
 The extracted glitter containers have DXBC headers containing DXIL compiled programs. They are useful references, but are not editable HLSL source. The installed Windows SDK's `dxc.exe -dumpbin` successfully disassembles selected programs. Custom shader injection/replacement is not established by this discovery.
 
-Reproduce the index with `bun projects/xf-appearance-studio/authoring/tools/inspect_shader_cache.ts` from HQ. [Index and hashes](evidence/shader-cache-index.json) retain all matching glitter/decal compilation metadata. The 78 distinct glitter shader extracts and disassemblies remain ignored local research under `research/consumers/glitter/raw/shaders/`.
+Reproduce the index with `bun projects/xf-studio/authoring/tools/inspect_shader_cache.ts` from HQ. [Index and hashes](evidence/shader-cache-index.json) retain all matching glitter/decal compilation metadata. The 78 distinct glitter shader extracts and disassemblies remain ignored local research under `research/consumers/glitter/raw/shaders/`.
 
 Reader caveat: the reference reader's PixelShader/VertexShader field names disagree with the actual stages in the inspected MeshSkinned record. Our index now preserves first/second field order and identifies the stage from each DXIL program header. Disassembly confirms first GUID `15657999486617040344` is vertex and second GUID `15760075574186250120` is pixel. Unknown parameter metadata bytes remain labelled unknown rather than guessed types/slots.
 
@@ -35,4 +35,4 @@ A first [shared-map flake experiment](../../experiments/002-flake-material/READM
 
 Rendering reference: [DreamWorks MoonRay glitter guide](https://docs.openmoonray.org/user-reference/how-to-guides/glitter-shader/) describes randomly oriented reflective flakes, independent distribution controls and filtering at small pixel footprints. Its dedicated rendering lobe is a conceptual reference, not a claim that REDengine or Three.js implements the same model.
 
-Related: [required material task](../backlog/glitter-material.md), [project scope](../../projects/xf-appearance-studio/data/naming.md).
+Related: [required material task](../backlog/glitter-material.md), [project scope](../../projects/xf-studio/data/naming.md).

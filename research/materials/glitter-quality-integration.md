@@ -6,7 +6,7 @@
 
 The older proposal's separate `flake-worker.ts`, synchronous `makeup-stack` baking warning, fixed 1024 sizing, and recipe-5 assumption are superseded. Current production uses recipe-6, supports 512/1024/2048/4096, and already has one cancellable combined mask/optical job. Extend that path; a second independent worker would add synchronization and peak allocation without a demonstrated need.
 
-Concrete inspected sources, relative to `projects/xf-appearance-studio/authoring/`:
+Concrete inspected sources, relative to `projects/xf-studio/authoring/`:
 
 | Source | Established behavior | Candidate integration implication |
 |---|---|---|

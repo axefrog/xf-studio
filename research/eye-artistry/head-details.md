@@ -27,6 +27,6 @@ Local extracted/serialized files are under `research/consumers/saved-v-brows` an
 1. Unbundle selected resources from each mod archive by recorded hash/path; serialize `.app`, `.morphtarget`, `.mesh` and `.mi` for inspection.
 2. Unbundle the vanilla brow morph from `F:/Games/Cyberpunk 2077/archive/pc/content`. `unbundle` requires that explicit input path even if `-gp` is supplied.
 3. `export <vanilla morph> -o <existing output directory> -gp "F:/Games/Cyberpunk 2077"` preserves geometry, morphs and skin. Export mod XBM textures with `--uext png`. Export the lash morph against the isolated archive context above.
-4. Run `bun tools/intake_details.ts` in authoring. It copies local derived assets and records SHA-256 hashes in [details manifest](../../projects/xf-appearance-studio/authoring/evidence/details-manifest.json).
+4. Run `bun tools/intake_details.ts` in authoring. It copies local derived assets and records SHA-256 hashes in [details manifest](../../projects/xf-studio/authoring/evidence/details-manifest.json).
 
 Browser checks: on/off visibility, open/closed pose, saved five-region morph import and hash/definition matching. Automated asset checks verify morph counts, multiple weight sets and normalized total weights. No game launch was needed. The assets are local reference material and must not be included in a redistributable release.

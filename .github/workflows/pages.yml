@@ -1,25 +1,25 @@
-# Public XF Studio site: test, build, check and deploy projects/xf-appearance-studio/site to GitHub Pages.
+# Public XF Studio site: test, build, check and deploy projects/xf-studio/site to GitHub Pages.
 # Site or style-guide design changes (or a manual run) trigger it; the Studio app is not built.
-# Required repository settings and maintenance: projects/xf-appearance-studio/site/README.md
+# Required repository settings and maintenance: projects/xf-studio/site/README.md
 name: Pages site
 
 on:
   push:
     branches: [main]
     paths:
-      - "projects/xf-appearance-studio/site/**"
-      - "projects/xf-appearance-studio/authoring/public/style-guide.html"
-      - "projects/xf-appearance-studio/authoring/public/studio.css"
-      - "projects/xf-appearance-studio/authoring/tools/build-style-guide.ts"
-      - "projects/xf-appearance-studio/authoring/src/studio-ui/**"
+      - "projects/xf-studio/site/**"
+      - "projects/xf-studio/authoring/public/style-guide.html"
+      - "projects/xf-studio/authoring/public/studio.css"
+      - "projects/xf-studio/authoring/tools/build-style-guide.ts"
+      - "projects/xf-studio/authoring/src/studio-ui/**"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
-      - "projects/xf-appearance-studio/site/**"
-      - "projects/xf-appearance-studio/authoring/public/style-guide.html"
-      - "projects/xf-appearance-studio/authoring/public/studio.css"
-      - "projects/xf-appearance-studio/authoring/tools/build-style-guide.ts"
-      - "projects/xf-appearance-studio/authoring/src/studio-ui/**"
+      - "projects/xf-studio/site/**"
+      - "projects/xf-studio/authoring/public/style-guide.html"
+      - "projects/xf-studio/authoring/public/studio.css"
+      - "projects/xf-studio/authoring/tools/build-style-guide.ts"
+      - "projects/xf-studio/authoring/src/studio-ui/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -38,7 +38,7 @@ jobs:
       DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     defaults:
       run:
-        working-directory: projects/xf-appearance-studio/site
+        working-directory: projects/xf-studio/site
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -72,7 +72,7 @@ jobs:
         if: env.DEPLOY == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
-          path: projects/xf-appearance-studio/site/dist
+          path: projects/xf-studio/site/dist
 
   deploy:
     needs: build

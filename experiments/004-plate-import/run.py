@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
 HQ=HERE.parents[1]
-PROJECT=HQ/'projects/xf-appearance-studio'
+PROJECT=HQ/'projects/xf-studio'
 OUT=HERE/'generated'
 WK=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
 BLENDER=Path('C:/Program Files/Blender Foundation/Blender 5.0/blender.exe')

@@ -8,10 +8,10 @@
 | --- | --- | --- |
 | Typed actions, detached state, Undo, stale targets and gesture transactions | [Architecture checkpoint](ui-architecture-boundary.md), authoring tests and independent facade fixture | Exercise them through the final public application port. |
 | UV/head point and shape editing | Isolated browser passes described in the architecture checkpoint | One UV and one on-head edit with Undo and Escape. |
-| Workspace restore: saved V, camera, selection and history | [Workspace evidence](../../projects/xf-appearance-studio/authoring/evidence/workspace-persistence-2026-09-23.json) | Reload after edits and verify restored values through the public snapshot. |
-| Library conflict/recovery, preset/layer order | [Collection evidence](../../projects/xf-appearance-studio/authoring/evidence/preset-collections-2026-09-23.json) | Repeat one conflict and one recovery, preserving unsaved work. |
-| Worker cancellation and complete preview publication | [Raster evidence](../../projects/xf-appearance-studio/authoring/evidence/raster-scheduling-2026-09-23.json), [quality evidence](../../projects/xf-appearance-studio/authoring/evidence/preview-quality-2026-09-23.json) | Change quality during a live bake and confirm no partial/stale result is announced ready. |
-| Unsaved draft Check/Build and partial omissions | [Package UI evidence](../../projects/xf-appearance-studio/authoring/evidence/package-ui-bridge-2026-09-24.md), [partial export](partial-mod-export-checkpoint.md) | Check a mixed eligible/Glitter collection; compare Build omissions and identities without installing it. |
+| Workspace restore: saved V, camera, selection and history | [Workspace evidence](../../projects/xf-studio/authoring/evidence/workspace-persistence-2026-09-23.json) | Reload after edits and verify restored values through the public snapshot. |
+| Library conflict/recovery, preset/layer order | [Collection evidence](../../projects/xf-studio/authoring/evidence/preset-collections-2026-09-23.json) | Repeat one conflict and one recovery, preserving unsaved work. |
+| Worker cancellation and complete preview publication | [Raster evidence](../../projects/xf-studio/authoring/evidence/raster-scheduling-2026-09-23.json), [quality evidence](../../projects/xf-studio/authoring/evidence/preview-quality-2026-09-23.json) | Change quality during a live bake and confirm no partial/stale result is announced ready. |
+| Unsaved draft Check/Build and partial omissions | [Package UI evidence](../../projects/xf-studio/authoring/evidence/package-ui-bridge-2026-09-24.md), [partial export](partial-mod-export-checkpoint.md) | Check a mixed eligible/Glitter collection; compare Build omissions and identities without installing it. |
 
 ## One compact final scenario
 

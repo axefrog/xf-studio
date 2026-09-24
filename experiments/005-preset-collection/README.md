@@ -4,7 +4,7 @@ The current builder rejects a generated resource tree that differs from the coll
 
 Two editable authored looks, **Violet ink** and **Copper edge**, compile into an actual local archive plus ArchiveXL registration. Each combines two overlapping layers. One character-creator appearance control lists **Off**, Violet ink and Copper edge. This is an offline-verified fixture, not a deployed or render-verified release.
 
-Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate source retains its historical filename; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-appearance-studio/data/naming.md).
+Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate source retains its historical filename; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-studio/data/naming.md).
 
 ## Current editor-to-archive check
 
@@ -32,7 +32,7 @@ python experiments/005-preset-collection/verify.py
 
 `build.py --collection <collection.json>` accepts another validated `xfas/collection-1` collection. Each build gets a new output directory, preserving prior outputs. The independent verifier follows the latest successfully completed build. No runtime install action is part of either command.
 
-`create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-appearance-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-appearance-studio/authoring/tools/bake_collection.ts) writes the material inputs. The accordion editor and SQLite collection store now feed this same contract; its source export remains separate from installable packaging.
+`create_fixture.ts` reproduces the checked-in two-look example from the studio's initial recipe. It is not required for normal rebuilds and is not a user-library migration. The [collection domain module](../../projects/xf-studio/authoring/src/preset-collection.ts) validates snapshots and derives resource identities; the [bake adapter](../../projects/xf-studio/authoring/tools/bake_collection.ts) writes the material inputs. The accordion editor and SQLite collection store now feed this same contract; its source export remains separate from installable packaging.
 
 ## Evidence and limits
 

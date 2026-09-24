@@ -1,12 +1,12 @@
 # XF Studio authoring requests
 
-Scope expanded by Nathan on 2026-09-23: this is now XF Studio, with other appearance details and potentially full-body editing later. Continue the first makeup milestone while designing reusable surface, asset-resolution and material tools. All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-appearance-studio/data/naming.md).
+Scope expanded by Nathan on 2026-09-23: this is now XF Studio, with other appearance details and potentially full-body editing later. Continue the first makeup milestone while designing reusable surface, asset-resolution and material tools. All new archive appearance names use `xfs_`, including expanded mesh appearances; see the [naming contract](../../projects/xf-studio/data/naming.md).
 
 Persistent user requests, 23 September 2026. Read this across context changes; conversation history is not the only record.
 
 **Execution order, 23 September:** complete the makeup tasks, then investigate eyebrow shape and correct brow/lash colours (including the newly reported missing brow-area idle motion), then add optional hair-mesh rendering. Other queue items follow. These are preview improvements; later feature authoring still requires discussion.
 
-**Latest product decision:** [complete authored presets, SQLite library, one eye-makeup selector](../../projects/xf-appearance-studio/data/product-direction.md). Collection editing and portable source export work; a [separate local CLI](../authoring/local-package-build.md) now verifies flat-finish collection packages before placing them in ignored `dist`. Mixed optical finishes, runtime selector/save proof and a release-safe plate remain open. Later features are ordered: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, full-body tattoos. Discuss each with Nathan before building it. Desktop Electron/Electrobun assessment is [recorded](../authoring/desktop-packaging.md); no wrapper chosen yet.
+**Latest product decision:** [complete authored presets, SQLite library, one eye-makeup selector](../../projects/xf-studio/data/product-direction.md). Collection editing and portable source export work; a [separate local CLI](../authoring/local-package-build.md) now verifies flat-finish collection packages before placing them in ignored `dist`. Mixed optical finishes, runtime selector/save proof and a release-safe plate remain open. Later features are ordered: piercings/earrings, eyebrows, cheek makeup, hair, facial expressions/custom idles, full-body tattoos. Discuss each with Nathan before building it. Desktop Electron/Electrobun assessment is [recorded](../authoring/desktop-packaging.md); no wrapper chosen yet.
 
 | Priority | Requested outcome | Current state / acceptance criterion |
 |---|---|---|
@@ -35,7 +35,7 @@ Nathan explicitly permits replacing every old Eye Artistry design, name, preset 
 
 Nathan supplied two current in-game V reference images; paths/hashes and appearance observations are saved in [save-import research](../eye-artistry/save-import.md#user-provided-visual-references). Use them for fidelity comparisons without treating photographed colours or apparent shape as exact resource parameters.
 
-Related: [XF Appearance Studio](../../projects/xf-appearance-studio/authoring/README.md), [saved V](../eye-artistry/save-import.md), [CCXL research](ccxl-character-creator-capabilities.md).
+Related: [XF Appearance Studio](../../projects/xf-studio/authoring/README.md), [saved V](../eye-artistry/save-import.md), [CCXL research](ccxl-character-creator-capabilities.md).
 
 Sidebar request implemented: both sidebars resize by pointer/keyboard and retain preferred widths across reload. Responsive limits keep preview space; narrow layouts retain both panels. Scrollbars are themed.
 

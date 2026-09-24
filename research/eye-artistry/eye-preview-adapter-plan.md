@@ -2,7 +2,7 @@
 
 The [resolved Kala eye option](modded-eye-resolution.md) can replace the yellow placeholder using the existing eye mesh and diffuse-texture path. The current UVs support that bounded correction. A diffuse swap will not reproduce the game's cornea, iris depth, reflection or subsurface response. The initial investigation changed no application source; the subsequent integration below implements its bounded diffuse contract.
 
-**Integration checkpoint:** `eye-appearance.ts` validates an optional local manifest, verifies image hashes, preloads before save selection and requires exact app-hash/definition identity. `scene.ts` retains the existing opaque material and gaze rig, explicitly resetting the diffuse on unresolved choices. `tools/intake_eyes.ts` prepares ignored local inputs only. The saved-V card names the selected source. Browser reload, gaze and unavailable-image fallback pass; [evidence](../../projects/xf-appearance-studio/authoring/evidence/saved-eye-preview-2026-09-23.json). General resource resolution and optical parity remain open.
+**Integration checkpoint:** `eye-appearance.ts` validates an optional local manifest, verifies image hashes, preloads before save selection and requires exact app-hash/definition identity. `scene.ts` retains the existing opaque material and gaze rig, explicitly resetting the diffuse on unresolved choices. `tools/intake_eyes.ts` prepares ignored local inputs only. The saved-V card names the selected source. Browser reload, gaze and unavailable-image fallback pass; [evidence](../../projects/xf-studio/authoring/evidence/saved-eye-preview-2026-09-23.json). General resource resolution and optical parity remain open.
 
 ## Measured inputs
 

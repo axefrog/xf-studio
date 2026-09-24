@@ -18,8 +18,8 @@ The shape is a deterministic bake of the initial editor layer, including its 85%
 From HQ:
 
 ```powershell
-bun projects/xf-appearance-studio/authoring/tools/bake_finish_study.ts
-bun projects/xf-appearance-studio/authoring/tools/bake_decal_inputs.ts
+bun projects/xf-studio/authoring/tools/bake_finish_study.ts
+bun projects/xf-studio/authoring/tools/bake_decal_inputs.ts
 python experiments/003-decal-material-import/build_fixture.py
 python experiments/003-decal-material-import/verify_pixels.py
 ```

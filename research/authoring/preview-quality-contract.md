@@ -10,7 +10,7 @@ The initial audit below is now implemented; this checkpoint supersedes its prosp
 - Worker constructor/send failures and malformed/stale results cannot permanently block the queue. Rebuild or another edit retries failed work without automatic retry loops. Initial optical caches are validated against current recipe/size; every published canvas is rebound, even when CPU dimensions already match.
 - Browser checks verified complete 2K/4K glitter bundles, 512 downgrade, rapid size changes, capacity rejection/recovery, disabled release, panel/size reload and independent 2048 PNG export. Quality changes preserved recipe, Undo, camera and UV state. No console errors/warnings observed.
 - Performance limit: a complex directional-softness/warped 4K layer was still baking when cancelled; do not claim all 4K designs are interactive. A simpler 4K glitter layer completed. Prefer 512/1K for exploratory editing; future acceleration must preserve evaluator semantics.
-- Validation: 160 tests / 493,753 assertions / 38 files, typecheck/build pass. Tests cover frozen legacy optical hashes, cooperative cancellation/failure recovery and disposal. [Evidence](../../projects/xf-appearance-studio/authoring/evidence/preview-quality-2026-09-23.json).
+- Validation: 160 tests / 493,753 assertions / 38 files, typecheck/build pass. Tests cover frozen legacy optical hashes, cooperative cancellation/failure recovery and disposal. [Evidence](../../projects/xf-studio/authoring/evidence/preview-quality-2026-09-23.json).
 
 23 September 2026. Read-only audit for Nathan's requested configurable studio texture resolution. No production changes. Scope: generated makeup masks **and** their generated optical maps; existing head/eye/detail assets remain at their actual source resolutions. This is distinct from canvas display sharpness, renderer pixel ratio and eventual export quality.
 
@@ -24,7 +24,7 @@ Define a typed local action `setPreviewTextureSize(size)` and a state snapshot i
 
 ## Exact source integration points
 
-Paths below are relative to `projects/xf-appearance-studio/authoring/`, inspected before implementation:
+Paths below are relative to `projects/xf-studio/authoring/`, inspected before implementation:
 
 | File | Current assumption | Required behaviour |
 |---|---|---|

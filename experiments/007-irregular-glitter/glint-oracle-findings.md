@@ -23,7 +23,7 @@ This also suggests a practical next experiment: encode or evaluate a small distr
 
 ## Reproduce and limits
 
-From `projects/xf-appearance-studio/authoring`:
+From `projects/xf-studio/authoring`:
 
 ```powershell
 bun tools/glint-oracle.ts --write-evidence

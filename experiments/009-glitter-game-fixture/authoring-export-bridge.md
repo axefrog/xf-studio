@@ -1,6 +1,6 @@
 # Authoring data to game-material candidate: explicit lossy bridge
 
-24 September 2026. This is a proposed offline adapter boundary, **not** a Studio compiler implementation or export permission. The [fixture](README.md) uses an independently generated eye-shaped test mask rather than one of Nathan's recipes; its numerical findings test material channels and filtering, not a saved preset's look. The production [`mesh-decal-flat-v1` compiler](../../projects/xf-appearance-studio/authoring/src/preset-compiler.ts) still rejects every Glitter layer.
+24 September 2026. This is a proposed offline adapter boundary, **not** a Studio compiler implementation or export permission. The [fixture](README.md) uses an independently generated eye-shaped test mask rather than one of Nathan's recipes; its numerical findings test material channels and filtering, not a saved preset's look. The production [`mesh-decal-flat-v1` compiler](../../projects/xf-studio/authoring/src/preset-compiler.ts) still rejects every Glitter layer.
 
 | Authoring source | Candidate output | What survives / changes |
 | --- | --- | --- |

@@ -6,7 +6,7 @@ Owned procedural texture research for the user-supplied glitter references. The 
 
 ## Reproduce
 
-From `projects/xf-appearance-studio/authoring`:
+From `projects/xf-studio/authoring`:
 
 ```powershell
 bun tools/glitter-study.ts

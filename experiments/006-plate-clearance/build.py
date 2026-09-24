@@ -102,8 +102,8 @@ def main():
     assert sha(source) == json.loads((BASE/'head-shading-transfer.json').read_text())['output']['sha256']
     source_hash = sha(source)
     wk = Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-    adapter = HQ/'projects/xf-appearance-studio/tools/morph-import/bin/Debug/net9.0/MorphImport.dll'
-    run(out, 'build-adapter', ['dotnet', 'build', HQ/'projects/xf-appearance-studio/tools/morph-import', '--nologo', '-v', 'quiet'])
+    adapter = HQ/'projects/xf-studio/tools/morph-import/bin/Debug/net9.0/MorphImport.dll'
+    run(out, 'build-adapter', ['dotnet', 'build', HQ/'projects/xf-studio/tools/morph-import', '--nologo', '-v', 'quiet'])
     # Morph export needs its original mesh archive to recover bones/weights, too.
     head_json = json.loads((HQ/'research/consumers/eye-plate/json/h0_000_pwa__morphs.morphtarget.json').read_text(encoding='utf-8-sig'))
     head_depot = Path(head_json['Data']['RootChunk']['baseMesh']['DepotPath']['$value'].replace('\\','/'))

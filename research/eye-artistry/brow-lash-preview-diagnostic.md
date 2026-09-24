@@ -17,7 +17,7 @@ The saved material instance derives from `base\materials\mesh_decal_double_diffu
 Channel means are diagnostic statistics, not visual opacity estimates. Reproduce them with Pillow installed:
 
 ```powershell
-python projects/xf-appearance-studio/authoring/tools/brow-channels.py D:\Dev\cp2077-modding-hq\research\consumers\saved-v-brows
+python projects/xf-studio/authoring/tools/brow-channels.py D:\Dev\cp2077-modding-hq\research\consumers\saved-v-brows
 ```
 
 ## Compiled coverage and colour trace
@@ -25,7 +25,7 @@ python projects/xf-appearance-studio/authoring/tools/brow-channels.py D:\Dev\cp2
 The installed `shader_final.cache` has a `mesh_decal_double_diffuse` `MeshSkinned` `renderstage_post_gbuffer` pixel variant, GUID `8834363738920290566`. Its extracted 7,737-byte DXBC has SHA-256 `8397be365eb46c682e35d452cc9de7bb11dd5fe30b9f2a00eb2c96164ae73133`. Reproduce the ignored extraction and disassembly with:
 
 ```powershell
-bun projects/xf-appearance-studio/authoring/tools/extract-brow-shader.ts 8834363738920290566
+bun projects/xf-studio/authoring/tools/extract-brow-shader.ts 8834363738920290566
 & 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxc.exe' -dumpbin research/consumers/brow-shader/raw/8834363738920290566.dxbc
 ```
 

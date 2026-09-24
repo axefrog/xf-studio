@@ -4,7 +4,7 @@
 
 ## Brow mip check
 
-The installed Arkhe Beautiful EYEBROWS II FULLER style-18 primary `ark_heb__base_d18.xbm` and secondary `ark_heb_wa__base_ds18.xbm` each serialize a 2048×1024, 12-level, uncompressed RGBA mip chain. Their existing locally serialized resources were checked with [`audit-brow-mips.py`](../../projects/xf-appearance-studio/authoring/tools/audit-brow-mips.py). The script compares each **stored alpha mip** to a 2×2 box reduction of the preceding stored mip; that is a controlled numerical reference, not a reconstruction of WebGL or REDengine filtering.
+The installed Arkhe Beautiful EYEBROWS II FULLER style-18 primary `ark_heb__base_d18.xbm` and secondary `ark_heb_wa__base_ds18.xbm` each serialize a 2048×1024, 12-level, uncompressed RGBA mip chain. Their existing locally serialized resources were checked with [`audit-brow-mips.py`](../../projects/xf-studio/authoring/tools/audit-brow-mips.py). The script compares each **stored alpha mip** to a 2×2 box reduction of the preceding stored mip; that is a controlled numerical reference, not a reconstruction of WebGL or REDengine filtering.
 
 | Stored level | Size | Primary alpha mean absolute error / max, 8-bit units | Secondary alpha mean absolute error / max |
 |---:|---:|---:|---:|
@@ -28,7 +28,7 @@ The installed Arkhe style-18 registration and `.xl` copy of vanilla render buffe
 Reproduction on Nathan's local 2.31 resource extraction:
 
 ```powershell
-python projects/xf-appearance-studio/authoring/tools/audit-brow-mips.py `
+python projects/xf-studio/authoring/tools/audit-brow-mips.py `
   D:/Dev/cp2077-modding-hq/research/consumers/saved-v-brows/json/ark_heb__base_d18.xbm.json `
   D:/Dev/cp2077-modding-hq/research/consumers/saved-v-brows/json/ark_heb_wa__base_ds18.xbm.json
 ```

@@ -62,7 +62,7 @@ From HQ, run the sequence below for `shading`, then repeat with `geometry`:
 ```powershell
 python experiments/006-plate-clearance/build.py --method shading
 python experiments/006-plate-clearance/verify_static.py
-& 'C:/Users/Nathan/.bun/bin/bun.exe' projects/xf-appearance-studio/authoring/tools/sample_plate_clearance.ts
+& 'C:/Users/Nathan/.bun/bin/bun.exe' projects/xf-studio/authoring/tools/sample_plate_clearance.ts
 python experiments/006-plate-clearance/verify_posed.py
 python experiments/006-plate-clearance/analyze_contacts.py
 python experiments/006-plate-clearance/compare.py --archive-only

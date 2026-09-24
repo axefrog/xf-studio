@@ -1,6 +1,6 @@
 # ArchiveXL expansion strategy for XF Appearance Studio makeup
 
-**Product direction superseded, 2026-09-23:** the user now wants one eye-makeup selector switching complete studio-authored presets, not a design/colour/finish matrix or four in-game layer selectors. The mechanisms and measured legacy comparisons below remain research evidence; the proposed naming/palette contract is a historical experiment. New work follows the [preset compiler direction](../../projects/xf-appearance-studio/data/product-direction.md), compiling only authored looks and deduplicating resources.
+**Product direction superseded, 2026-09-23:** the user now wants one eye-makeup selector switching complete studio-authored presets, not a design/colour/finish matrix or four in-game layer selectors. The mechanisms and measured legacy comparisons below remain research evidence; the proposed naming/palette contract is a historical experiment. New work follows the [preset compiler direction](../../projects/xf-studio/data/product-direction.md), compiling only authored looks and deduplicating resources.
 
 Decision, 2026-09-23: design against **ArchiveXL 1.27.3**, the current stable release verified from the author's GitHub API. Installed 1.26.3 must be updated before runtime validation. Nathan explicitly prefers current releases and a larger palette; 49 colours is only the legacy comparison point, never a new product limit.
 

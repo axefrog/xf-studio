@@ -87,7 +87,7 @@ def main():
     for kind in ['mesh', 'morphtarget']:
         shutil.copy2(Path(source['resources'][0]['path']).parent / f'xfas_eye_plate.{kind}', resources)
     wk = Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-    adapter_project = ROOT / 'projects/xf-appearance-studio/tools/morph-import'
+    adapter_project = ROOT / 'projects/xf-studio/tools/morph-import'
     run(out, 'build-adapter', ['dotnet', 'build', adapter_project, '--nologo', '-v', 'quiet'])
     adapter = adapter_project / 'bin/Debug/net9.0/MorphImport.dll'
     env = os.environ.copy()

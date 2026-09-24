@@ -28,7 +28,7 @@ parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077
 parser.add_argument('--no-latest',action='store_true',help='Do not change the experiment fixture pointer')
 args=parser.parse_args()
 HQ=HERE.parents[1]
-APP=HQ/'projects/xf-appearance-studio/authoring'
+APP=HQ/'projects/xf-studio/authoring'
 WK=args.wolvenkit.resolve()
 BUN=args.bun.resolve()
 PLATE=args.plate.resolve()

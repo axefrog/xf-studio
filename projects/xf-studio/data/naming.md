@@ -15,7 +15,7 @@ The current product model is [one selector for complete authored presets](produc
 
 ## Compatibility and historical evidence
 
-The technical project directory stays `projects/xf-appearance-studio`, and the depot root stays `axefrog/appearance_studio/`. The running app, source intake and reproducible pipelines already reference them; neither is user-facing product branding. Existing package/health identifiers and the `XFAS_DATA_DIR` setting also remain compatible.
+The technical project directory is `projects/xf-studio` as of 24 September 2026. The game depot root remains `axefrog/appearance_studio/`; changing a repository directory does not rename deployed resource paths. Existing package/health identifiers and the `XFAS_DATA_DIR` setting also remain compatible.
 
 Keep serialized IDs (`eye-artistry/recipe-1`, `eye-artistry/saved-v-1`, `xfas/collection-1`, `xfas/export-plan-1`, `xfas/workspace-1`), browser storage keys and SQLite data unchanged. Existing collections load and compile into the new XFS namespace; they need no manual conversion. Visible UI, errors and new recipe/mask download filenames use XF Studio / XFS.
 

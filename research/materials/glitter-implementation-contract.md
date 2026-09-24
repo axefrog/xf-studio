@@ -75,7 +75,7 @@ Avoid a custom `onBeforeCompile` colour mix for this first step. `extendSkin` cu
 
 ## Integration files and ownership boundaries
 
-All paths below are relative to `projects/xf-appearance-studio/authoring/`.
+All paths below are relative to `projects/xf-studio/authoring/`.
 
 | File | Necessary change |
 |---|---|

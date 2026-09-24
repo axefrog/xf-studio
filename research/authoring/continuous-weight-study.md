@@ -1,6 +1,6 @@
 # Continuous pigment strength: measured candidates
 
-**Implementation follow-up:** the chosen positive boundary blend is now integrated in recipe-4 with explicit legacy preservation, user-controlled blend and Undo. See the [authoring guide](../../projects/xf-appearance-studio/authoring/README.md#continuous-point-pigment). The measurements below describe the original research checkpoint. The runner now explicitly selects legacy mode for its old-evaluator baselines so v4 defaults do not invalidate comparisons.
+**Implementation follow-up:** the chosen positive boundary blend is now integrated in recipe-4 with explicit legacy preservation, user-controlled blend and Undo. See the [authoring guide](../../projects/xf-studio/authoring/README.md#continuous-point-pigment). The measurements below describe the original research checkpoint. The runner now explicitly selects legacy mode for its old-evaluator baselines so v4 defaults do not invalidate comparisons.
 
 23 September 2026. Research prototype only: no production evaluator, recipe schema, library data, UI or compiled mask was changed. This follows the confirmed [nearest-edge seam](path-and-falloff-design.md#3-confirmed-nearest-segment-weight-discontinuity).
 
@@ -10,14 +10,14 @@ This selects an algorithm for implementation/interaction trials, not a final app
 
 ## Reproduce
 
-From `projects/xf-appearance-studio/authoring`:
+From `projects/xf-studio/authoring`:
 
 ```powershell
 bun test tools/weight-study/fields.test.ts
 bun tools/weight-study/run.ts
 ```
 
-Sources: [fields.ts](../../projects/xf-appearance-studio/authoring/tools/weight-study/fields.ts), [run.ts](../../projects/xf-appearance-studio/authoring/tools/weight-study/run.ts), [independent checks](../../projects/xf-appearance-studio/authoring/tools/weight-study/fields.test.ts). Numerical output is local/ignored at `authoring/data/weight-study/results.json`. Measurements used Bun 1.4.2 on an Intel Core Ultra 7 265KF. Four prototype tests pass, **11,923 assertions**. Results below are one executed run; timings are not a cross-machine performance promise.
+Sources: [fields.ts](../../projects/xf-studio/authoring/tools/weight-study/fields.ts), [run.ts](../../projects/xf-studio/authoring/tools/weight-study/run.ts), [independent checks](../../projects/xf-studio/authoring/tools/weight-study/fields.test.ts). Numerical output is local/ignored at `authoring/data/weight-study/results.json`. Measurements used Bun 1.4.2 on an Intel Core Ultra 7 265KF. Four prototype tests pass, **11,923 assertions**. Results below are one executed run; timings are not a cross-machine performance promise.
 
 Recorded result SHA-256: `39f01b4bd2041892f63a5d88803b0dac0785d6cbe27aa181c6f9476589fc65b7`. Rerunning includes fresh timings and therefore changes this identity. The later addition of exact `bufferBytes` metadata to the solver does not alter these recorded numerical results; the memory figures below are calculated from its typed-array dimensions.
 
