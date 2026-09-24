@@ -13,7 +13,8 @@ import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
-import { layerRenderQueue } from "./layer-render-queue";
+import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
+import { AuthoringGestures } from "./authoring-gestures";
 import { createRasterClient } from "./raster-client";
 import { selectedWarp } from "./field-selection";
 import { setupFields } from "./field-ui";
@@ -188,7 +189,7 @@ function replaceRecipe(next: Recipe, nextActive = 0) {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas;
   }));
   viewer?.setLayerCanvases(canvases);
-  for (let i = 0; i < authoring.recipe.layers.length; i++) render(i);
+  renderScheduler.renderAll("stack");
   sync(); drawUV(); persist();
 }
 function changeLayers(command: LayerCommand) {
@@ -201,7 +202,7 @@ function dispatchLayer(action: LayerAction) {
     const next = applyLayerAction(authoring.recipe, current()?.id, action);
     checkpoint();
     if (next.structure) replaceRecipe(next.recipe, next.active);
-    else { authoring.recipe = next.recipe; render(next.changed); }
+    else authoring.publishLayer(next.recipe, next.changed);
   } catch (error) { status((error as Error).message); sync(); }
 }
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
@@ -340,7 +341,7 @@ qualityActions = new PreviewQualityActions(textureSize, { assess: size => qualit
   // the target-only budget assesses the smaller replacement.
   canvases.splice(0,canvases.length,...emptyPreviewCanvases());
   initialOptics=[]; viewer?.setLayerCanvases(canvases);
-  for (const i of [authoring.active, ...authoring.recipe.layers.map((_,i) => i).filter(i => i !== authoring.active)]) render(i);
+  renderScheduler.renderAll();
 } });
 qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
@@ -365,7 +366,7 @@ function render(i = authoring.active) {
   if (qualityActions.snapshot().blocked) {
     // Capacity/failure recovery rebuilds every potentially stale slot.
     qualityActions.recover(); maskClient.reset();
-    for (const slot of [authoring.active, ...authoring.recipe.layers.map((_,slot) => slot).filter(slot => slot !== authoring.active)]) render(slot);
+    renderScheduler.renderAll();
     return;
   }
   qualityActions.recover();
@@ -378,19 +379,16 @@ function render(i = authoring.active) {
   sync();
   drawUV();
 }
-const scheduleLayer = layerRenderQueue(() => authoring.recipe.layers, run => requestAnimationFrame(run), render);
-function schedule() { scheduleLayer(current()); }
+const renderScheduler = new AuthoringRenderScheduler(authoring, {
+  frame: run => requestAnimationFrame(run), render,
+  refreshSelection: () => { sync(); drawUV(); persist(); },
+});
 const recipeActions = new RecipeActions(
   () => ({ recipe: authoring.recipe, active: authoring.active,
     selected: authoring.selected, fieldSelection: authoring.fieldSelection }),
-  (next, effect) => {
-    authoring.recipe = next.recipe; authoring.active = next.active; authoring.selected = next.selected; authoring.fieldSelection = next.fieldSelection;
-    if (effect.kind === "selection") { sync(); drawUV(); persist(); }
-    else if (effect.kind === "immediate") render(effect.layerIndex);
-    else if (effect.layerIndex !== authoring.active) render(effect.layerIndex);
-    else { schedule(); sync(); persist(); }
-  }, authoring, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
-  i => { authoring.gestureChanged(); scheduleLayer(authoring.recipe.layers[i]); });
+  (next, effect) => authoring.applyActionState(next, effect),
+  authoring, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
+  i => authoring.gestureChanged(i));
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -406,6 +404,7 @@ function undo() {
   if (!next) return;
   replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
 }
+const gestures = new AuthoringGestures(authoring, recipeActions, undo);
 $("undo").onclick = undo;
 window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
@@ -503,8 +502,8 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
-  begin: checkpoint, apply: action => recipeActions.applyGesture(action),
-  cancel: undo, persist, message: status,
+  begin: () => { gestures.begin("uv", current()); }, apply: action => gestures.apply("uv", action),
+  cancel: () => gestures.cancel("uv"), finish: () => gestures.commit("uv"), persist, message: status,
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
 function download(blob: Blob, name: string) {
@@ -735,9 +734,10 @@ try {
     selected: () => authoring.selected,
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
-    begin: checkpoint,
-    apply: action => recipeActions.applyGesture(action),
-    cancel: undo,
+    begin: () => { gestures.begin("surface", current()); },
+    apply: action => gestures.apply("surface", action),
+    cancel: () => gestures.cancel("surface"),
+    finish: () => gestures.commit("surface"),
     message: status,
   });
   viewport.attach("surface", surface);

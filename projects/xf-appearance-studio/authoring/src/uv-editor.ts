@@ -10,7 +10,7 @@ type Hooks = {
   recipe(): Recipe; layer(): Layer | undefined; selected(): number;
   canvases(): HTMLCanvasElement[]; albedo(): HTMLImageElement | undefined;
   select(index: number): void; selectedField(): string | undefined; selectField(id: string): void;
-  begin(): void; apply(action: GestureEdit): boolean; cancel(): void;
+  begin(): void; apply(action: GestureEdit): boolean; cancel(): void; finish?(): void;
   persist(): void; message(text: string): void;
 };
 type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; fieldId?: string;
@@ -170,7 +170,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   function finishWheel(cancel = false) {
     if (!wheel) return;
     const valid = validWheel(); clearTimeout(wheel.timer); wheel = undefined;
-    if (cancel && valid) hooks.cancel();
+    if (cancel && valid) hooks.cancel(); else hooks.finish?.();
   }
   function stop(cancel = false) {
     if (!drag) return;
@@ -179,7 +179,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (cancel && old.changed && mayCancel) {
       if (old.kind === "pan") { view = old.original; hooks.persist(); }
       else hooks.cancel();
-    }
+    } else if (old.changed && old.kind !== "pan") hooks.finish?.();
     draw();
   }
   function updateView(next: UVView) {
@@ -332,6 +332,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const chosen = candidates[0], result = chosen && insertPathPoint(l.points, chosen.click, scale);
     if (!result) { hooks.message(l.points.length >= 24 ? "A shape supports up to 24 points." : "Choose a curve section inside the texture area and away from existing points."); return; }
     hooks.begin(); hooks.apply({ kind: "path.replacePoints", layerId: l.id, expectedLayer: l, points: result.points });
+    hooks.finish?.();
     hooks.select(result.index);
     view.side = p.u <= .5 ? "low" : "high";
   };

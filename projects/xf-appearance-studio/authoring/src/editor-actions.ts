@@ -34,6 +34,7 @@ export class RecipeHistory {
   private entries: string[];
   constructor(initial: Recipe[] = []) { this.entries = initial.map(recipe => JSON.stringify(parseRecipe(recipe))).slice(-80); }
   get canUndo() { return this.entries.length > 0; }
+  get depth() { return this.entries.length; }
   checkpoint(recipe: Recipe) {
     const encoded = JSON.stringify(recipe);
     if (this.entries.at(-1) !== encoded) this.entries.push(encoded);

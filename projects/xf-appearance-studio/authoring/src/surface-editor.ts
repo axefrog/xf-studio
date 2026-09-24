@@ -33,6 +33,7 @@ type Hooks = {
   begin: () => void;
   apply: (action: GestureEdit) => boolean;
   cancel: () => void;
+  finish?: () => void;
   message: (text: string) => void;
 };
 
@@ -145,7 +146,7 @@ export function createSurfaceEditor(
     const old = wheel;
     wheel = undefined;
     clearTimeout(old.timer);
-    if (cancel && old.changed && validShape(old)) hooks.cancel();
+    if (cancel && old.changed && validShape(old)) hooks.cancel(); else if (old.changed) hooks.finish?.();
   }
   function stopShape(cancel = false) {
     if (!shapeDrag) return;
@@ -153,7 +154,7 @@ export function createSurfaceEditor(
     shapeDrag = undefined;
     controls.enabled = old.controlsEnabled;
     if (canvas.hasPointerCapture(old.pointer)) canvas.releasePointerCapture(old.pointer);
-    if (cancel && old.changed && validShape(old)) hooks.cancel();
+    if (cancel && old.changed && validShape(old)) hooks.cancel(); else if (old.changed) hooks.finish?.();
     canvas.style.cursor = "";
   }
   function applyShape(state: ShapeGesture, next: Layer | null) {
@@ -444,7 +445,7 @@ export function createSurfaceEditor(
       canvas.releasePointerCapture(old.pointer);
     // A preset/layer/field replacement owns a different Undo context. Never undo
     // its edit because an old pointer gesture later loses capture or is cancelled.
-    if (cancel && old.changed && mayCancel) hooks.cancel();
+    if (cancel && old.changed && mayCancel) hooks.cancel(); else if (old.changed) hooks.finish?.();
     canvas.style.cursor = "";
   }
   canvas.addEventListener(
