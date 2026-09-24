@@ -1,6 +1,6 @@
 <!--page {
   "title": "XF Studio — a customisation studio for Cyberpunk 2077",
-  "description": "XF Studio is an in-development local studio for customising Cyberpunk 2077, starting with your own V. Eye makeup is its first working feature. No public release yet.",
+  "description": "XF Studio is an in-development local studio for customising Cyberpunk 2077, starting with your own V. Eye makeup is its first working feature. {{releaseSummary}}",
   "nav": "overview"
 } -->
 <section class="hero" aria-labelledby="hero-title" id="overview">
@@ -9,10 +9,7 @@
       <p class="eyebrow">Customisation studio for Cyberpunk 2077</p>
       <h1 id="hero-title">Customise your game, starting with your own V.</h1>
       <p class="lede">XF Studio is a local studio for customising Cyberpunk 2077. It begins with your own V and is intended to grow into other areas of the game. Its first working feature is eye makeup: complete layered looks designed on V’s deforming head and compiled into mod files for one in-game selector.</p>
-      <div class="release-status" data-release-status>
-        <span class="tag dev">In development</span>
-        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source, and the eye-makeup mod files it builds have not yet been tested in the game.</p>
-      </div>
+      {{releaseStatement}}
       <div class="hero-actions">
         <a class="btn primary" href="#capabilities">See what works today</a>
         <a class="btn" href="{{repo}}"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/></svg>View the source</a>
@@ -106,7 +103,7 @@
       <li class="step current">
         <span class="step-num">Now</span>
         <h3>Eye makeup</h3>
-        <p>Complete layered looks designed on your V’s head, kept in a local library and compiled into mod files for one in-game selector.</p>
+        <p>Complete layered looks designed on your V’s head, kept in a local library and built into your own copy of <strong>XF Eye Artistry</strong>, a mod with one in-game selector.</p>
         <span class="tag ok">Works locally</span>
       </li>
       <li class="step target">
@@ -131,7 +128,7 @@
     <header class="section-head">
       <p class="eyebrow"><span class="num">02</span>Eye makeup: how it works</p>
       <h2 id="how-title">From a blank layer to one in-game choice</h2>
-      <p class="lede">You design complete eye-makeup looks in the Studio. The game only needs to offer one selector that switches between them, instead of separate menus for every colour, design and finish.</p>
+      <p class="lede">You design complete eye-makeup looks in the Studio and build them into XF Eye Artistry, your own copy of an eye-makeup mod. The game only needs to offer one selector that switches between them, instead of separate menus for every colour, design and finish.</p>
     </header>
     <ol class="steps">
       <li class="step">
@@ -149,7 +146,7 @@
       <li class="step">
         <span class="step-num">03 · Check and build</span>
         <h3>Make private mod files</h3>
-        <p>Check lists exactly which layers or presets a package would omit. Build compiles a package-only copy, runs an independent verifier and leaves your collection untouched.</p>
+        <p>Check lists exactly which layers or presets a package would omit. Build makes your XF Eye Artistry mod files: it compiles a package-only copy, runs an independent verifier and leaves your collection untouched.</p>
         <span class="tag ok">Verified offline</span>
       </li>
       <li class="step target">
@@ -252,17 +249,15 @@
       <div><dt>Game target</dt><dd>Cyberpunk 2077 2.31</dd></div>
       <div><dt>Framework target</dt><dd>ArchiveXL 1.27.3</dd></div>
     </dl>
-    <div class="callout">
-      <h3>Can I try it?</h3>
-      <p>Not as a finished product: there is nothing to download or install. Developers can run the prototype from the repository with Bun, but it needs resources extracted from their own copy of the game, because none are included. The <a href="{{blob}}/projects/xf-studio/authoring/README.md">authoring guide</a> describes the setup and its limits.</p>
-    </div>
   </div>
 </section>
 
-<section class="section alt" id="directions" aria-labelledby="directions-title" data-future>
+{{downloadSection}}
+
+<section class="section" id="directions" aria-labelledby="directions-title" data-future>
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">05</span>Directions</p>
+      <p class="eyebrow"><span class="num">06</span>Directions</p>
       <h2 id="directions-title">Where the studio could go</h2>
       <p class="lede">Eye makeup comes first. Everything beyond it is a direction rather than a commitment: each area is discussed before any building starts, and none has a date.</p>
     </header>
@@ -291,10 +286,10 @@
   </div>
 </section>
 
-<section class="section" id="principles" aria-labelledby="principles-title">
+<section class="section alt" id="principles" aria-labelledby="principles-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">06</span>Principles</p>
+      <p class="eyebrow"><span class="num">07</span>Principles</p>
       <h2 id="principles-title">How the project works</h2>
     </header>
     <ul class="principles">
@@ -306,12 +301,12 @@
   </div>
 </section>
 
-<section class="section alt" id="docs" aria-labelledby="docs-title">
+<section class="section" id="docs" aria-labelledby="docs-title">
   <div class="wrap split">
     <div class="prose">
-      <p class="eyebrow"><span class="num">07</span>Community and documentation</p>
+      <p class="eyebrow"><span class="num">08</span>Community and documentation</p>
       <h2 id="docs-title">Built on what the community has learned</h2>
-      <p>XF Studio stands on ArchiveXL, WolvenKit, the Cyberpunk 2077 Modding Wiki and the resource work of many mod authors. The credits page summarises who taught us what; the repository keeps the full learning record.</p>
+      <p>XF Studio stands on ArchiveXL, WolvenKit, the Cyberpunk 2077 Modding Wiki and the resource work of many mod authors. The credits page summarises who taught us what, from the community credits kept in the repository.</p>
       <a class="btn" href="{{root}}credits.html">Read the credits</a>
     </div>
     <ul class="doc-links" aria-label="Documentation in the source repository">

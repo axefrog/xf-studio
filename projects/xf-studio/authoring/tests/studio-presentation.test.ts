@@ -40,7 +40,7 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },
     save: async () => { throw Error("No SQLite write in this fixture."); },
     package: async (_action, value) => { packageInput = value; return {
-      ready: true, collectionId: value.id, namespace: "xfs_test", originalPresetCount: value.presets.length,
+      ready: true, collectionId: value.id, namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: value.presets.length,
       omissions: [], packagedCollectionSha256: "fixture-hash",
       presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision,
         appearance: "xfs_fixture" })),
@@ -78,7 +78,7 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
-    pending: 0, waiting: false, estimatedBytes: 1024 }), subscribe: (_listener: () => void) => () => {} };
+    pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
     previewReadiness }),
     packageInput: () => packageInput, downloads, locations };
@@ -86,7 +86,7 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "library", "localSetup", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "installDetection", "library", "localSetup", "preferences",
     "previewReadiness", "snapshot", "status", "subscribe", "viewport"]);
   expect("document" in shell.authoring).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);

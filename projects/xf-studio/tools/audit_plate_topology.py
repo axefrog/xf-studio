@@ -59,7 +59,7 @@ for o in bpy.data.objects:
         row['plateToHeadVertexIndices']=indices.tolist()
     heads.append(row)
 report={'source':str(SOURCE),'sha256':before,
-    'userProvenance':'Nathan confirms the expanded plate was cut from the larger head mesh (2026-09-23).',
+    'userProvenance':'The maintainer confirms the expanded plate was cut from the larger head mesh (2026-09-23).',
     'vertices':len(xyz),'triangles':len(tri),'edges':len(edges),'boundaryEdges':len(boundary),
     'boundaryDegreeHistogram':dict(Counter(boundary_degrees.values())),
     'nonManifoldEdgesOver2Faces':sum(n>2 for n in edges.values()),'isolatedVertices':sum(not a for a in adj),

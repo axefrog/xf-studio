@@ -3,6 +3,7 @@ import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { openPalette, openShortcuts, type Command } from "./commands";
+import { studioShortcut } from "./shortcuts";
 import { button } from "./controls";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
@@ -114,19 +115,19 @@ export function mountStudio(port: Port, root: HTMLElement) {
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
     if (event.defaultPrevented) return;
-    const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
     const modalOpen = !!document.querySelector("dialog[open]");
-    if (mod && (key === "k" || (event.shiftKey && key === "p"))) { event.preventDefault(); if (!modalOpen) { closeMenus(false); openPalette(commands); } return; }
-    if (mod && key === "s") { event.preventDefault(); void rt.request({ kind: "save" }); return; }
-    if (mod && key === "z" && !event.shiftKey && !isTextInput(event.target)) {
-      event.preventDefault();
+    const shortcut = studioShortcut(event, { textInput: isTextInput(event.target), modalOpen });
+    if (!shortcut) return;
+    event.preventDefault();
+    if (shortcut === "palette") { if (!modalOpen) { closeMenus(false); openPalette(commands); } }
+    else if (shortcut === "save") void rt.request({ kind: "save" });
+    else if (shortcut === "undo" || shortcut === "redo") {
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
       const state = port.authoring.previewState();
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
-      rt.dispatch({ kind: "recipe.undo" }); return;
-    }
-    if (event.key === "F6") { event.preventDefault(); cycleRegions(root, event.shiftKey); return; }
-    if (event.key === "?" && !isTextInput(event.target) && !mod && !modalOpen) { event.preventDefault(); openShortcuts(); }
+      rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
+    } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
+    else openShortcuts();
   });
   header.bindPalette(() => openPalette(commands));
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands } });
@@ -178,6 +179,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: "Undo (Ctrl+Z)", onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
+  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: "Redo (Ctrl+Shift+Z)", onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
   const save = button({ label: "Save", icon: "save", title: "Save to library (Ctrl+S)", onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: "Command palette (Ctrl+K)", onClick: () => {} });
@@ -199,7 +201,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
-    h("div", { class: "header-actions" }, undo, save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, panelsButton, themeButton));
+    h("div", { class: "header-actions" }, undo, redo, save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, panelsButton, themeButton));
   return {
     element,
     bindPalette(open: () => void) { palette.onclick = open; },
@@ -209,8 +211,10 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
       setText(preset, draft?.presets.find(item => item.id === draft.selected)?.name ?? "No preset");
       const state = libraryState(frame);
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
-      const undoCap = port.authoring.capability({ kind: "recipe.undo" });
-      undo.disabled = !undoCap.available; undo.title = undoCap.available ? "Undo (Ctrl+Z)" : `Undo — ${undoCap.reason}`;
+      const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
+      const history = port.authoring.history();
+      undo.disabled = !undoCap.available; undo.title = undoCap.available ? `Undo ${history.undo?.label ?? ""} (Ctrl+Z)`.replace("  ", " ") : `Undo — ${undoCap.reason}`;
+      redo.disabled = !redoCap.available; redo.title = redoCap.available ? `Redo ${history.redo?.label ?? ""} (Ctrl+Shift+Z)`.replace("  ", " ") : `Redo — ${redoCap.reason}`;
       const saveCap = port.authoring.requestCapability({ kind: "save" });
       save.disabled = !saveCap.available; save.title = saveCap.available ? "Save to library (Ctrl+S)" : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
@@ -272,6 +276,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
   const preview = port.authoring.previewState(), motion = preview.motion;
   return [
     act("undo", "Undo", "Edit", { kind: "recipe.undo" }, { icon: "undo", shortcut: "Ctrl+Z" }),
+    act("redo", "Redo", "Edit", { kind: "recipe.redo" }, { icon: "redo", shortcut: "Ctrl+Shift+Z", keywords: "ctrl+y" }),
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
     { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", capability: () => rt.addLayerCapability(), run: () => { rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }); } },

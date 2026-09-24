@@ -3,6 +3,7 @@ import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 import type { RecipeActionEffect, RecipeActionState } from "./recipe-actions";
 import type { ReadonlyDeep } from "./read-only";
+import type { HistoryLabel } from "./history-labels";
 
 export type DocumentState = { recipe: Recipe; active: number; selected: number;
   fieldSelection: FieldSelection; history: Recipe[] };
@@ -75,7 +76,20 @@ export class AuthoringDocument {
     this.notify("recipe");
     this.effect({ kind: "immediate", layerIndex });
   }
-  checkpoint(_recipe?: Recipe) { this.history.checkpoint(this.state.recipe); this.notify("history"); }
+  private pendingLabel?: HistoryLabel;
+  /** Run `change` so any checkpoint it creates is labelled (session-only; persisted history has no labels). */
+  withHistoryLabel<T>(label: HistoryLabel, change: () => T): T {
+    const prior = this.pendingLabel; this.pendingLabel = label;
+    try { return change(); } finally { this.pendingLabel = prior; }
+  }
+  checkpoint(_recipe?: Recipe, label?: HistoryLabel) {
+    this.history.checkpoint(this.state.recipe, label ?? this.pendingLabel); this.notify("history");
+  }
+  /** Name an open transaction's entry once its first edit shows what it does. */
+  relabelCheckpoint(depth: number, label: HistoryLabel) {
+    if (this.history.depth === depth) this.history.relabelTop(label);
+  }
+  historyLabel() { return this.history.topLabel(); }
   undoRecipe() { const recipe = this.history.undo(); if (recipe) this.notify("history"); return recipe; }
   get canUndo() { return this.history.canUndo; }
   get undoDepth() { return this.history.depth; }

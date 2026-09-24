@@ -130,6 +130,7 @@ test("a matching staged result is promoted with partial-export identities and no
   const manifest = { schema: "xfs/local-package-1", collectionId: parsed.id,
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex"),
     originalPresetCount: parsed.presets.length, omissions: prepared.omissions, namespace,
+    modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
     presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
     verifiedPresetCount: prepared.packaged.presets.length,
     files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
@@ -143,6 +144,7 @@ test("a matching staged result is promoted with partial-export identities and no
     files.map(([name, bytes]) => `(payload/${JSON.stringify(name)}).write_bytes(bytes.fromhex(${JSON.stringify(bytes.toString("hex"))}))\n`).join("") +
     `(final/'manifest.json').write_text(json.dumps(m))\n` +
     `print('XFS_PACKAGE_RESULT='+json.dumps({'package':str(final),'manifest':str(final/'manifest.json'),` +
+    `'modName':m['modName'],'selectorLabel':m['selectorLabel'],` +
     `'archiveSha256':m['files'][0]['sha256'],'presetCount':m['verifiedPresetCount'],` +
     `'originalPresetCount':m['originalPresetCount'],'omissions':m['omissions'],` +
     `'packagedCollectionSha256':m['packagedCollectionSha256'],'installed':False,'gameRenderingVerified':False}))\n`;

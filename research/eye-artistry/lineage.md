@@ -31,7 +31,7 @@ Creation dates establish local copying/import history; modification times, Git c
 
 ### Intake and cut-surface findings, 2026-09-23
 
-Nathan confirms that he created the expanded plate by loading the larger head and cutting a plate out of it. The [topology audit](evidence/plate-topology-audit.json) independently establishes exact correspondence: all 1,620 Blender vertex positions and all 105 shape-key positions match the source head. It has four connected components (790, 790, 20, 20 vertices), 226 boundary edges with degree two throughout, no isolated vertices, no edges shared by more than two faces and no near-zero-area triangles in Basis or any individual customization shape. Open boundaries are expected for this cut surface. Normal turns around some eye shapes are inspection candidates, not proof of erroneous topology; posed intersection checks remain pending.
+The expanded plate is confirmed to have been created by loading the larger head and cutting a plate out of it. The [topology audit](evidence/plate-topology-audit.json) independently establishes exact correspondence: all 1,620 Blender vertex positions and all 105 shape-key positions match the source head. It has four connected components (790, 790, 20, 20 vertices), 226 boundary edges with degree two throughout, no isolated vertices, no edges shared by more than two faces and no near-zero-area triangles in Basis or any individual customization shape. Open boundaries are expected for this cut surface. Normal turns around some eye shapes are inspection candidates, not proof of erroneous topology; posed intersection checks remain pending.
 
 The [evaluated comparison](evidence/plate-evaluated-comparison.json) resolves `.011`: it is `.010` with the five saved customization shapes baked in, matching within 3.84e-9 units, with identical UVs and bone weights. It is not a different plate design. The source Displace modifier was hidden in the viewport but enabled for rendering; explicitly enabling it shifts the surface about 0.00005 units. The owned neutral master removes that ambiguous offset and retains all shapes and eight bone influences. Original and intake copies remain unchanged; [intake manifest](../../projects/xf-studio/data/plate-intake.json) records hashes. Later exports supersede its initial GLB snapshot; see [Experiment 004](../../experiments/004-plate-import/README.md).
 
@@ -41,7 +41,7 @@ The first conversion exposed clipped normal/tangent morph deltas from Blender's 
 
 ## Old code findings worth retaining, not copying
 
-- Four layers; 20 designs (9 eyeliner, 11 eyeshadow); 49 sampled colours × four finish labels. Nathan wanted a larger palette; the old material matrix prevented it from being practical in WolvenKit.
+- Four layers; 20 designs (9 eyeliner, 11 eyeshadow); 49 sampled colours × four finish labels. A larger palette was wanted; the old material matrix prevented it from being practical in WolvenKit.
 - `materials.ts` emits identical property sets for matte/regular and for shimmer/glitter in the inspected source. Finish labels do not prove four distinct implemented shaders.
 - A structural comparison with `General/references/mesh_decal.json` finds exactly one template-field difference: `materialPriority` from `EMP_Normal` to `EMP_Front`. This is a historical baseline comparison, not a fresh extraction of the current game's authoritative material. [Diff](evidence/legacy-material-diff.json).
 - Layer generation combines that priority choice with `enableMask` toggling. Those material flags should not become the new layer-order contract.

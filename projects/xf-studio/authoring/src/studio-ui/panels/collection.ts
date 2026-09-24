@@ -1,5 +1,6 @@
 import type { PackageBuild, PackageCheck } from "../../package-action";
 import type { LocalSetupFields } from "../../local-settings-server";
+import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
@@ -26,6 +27,16 @@ export function libraryState(frame: Frame) {
     detail: "This collection has never been saved to the local library. Your draft autosaves in this browser." };
   if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: `Newer r${stored.revision} saved`,
     detail: `Your draft is based on revision ${draft.revision}; the library has revision ${stored.revision} from elsewhere. Saving will report a conflict — save a copy or reopen it.` };
+  const persistence = frame.persistence;
+  if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: `Saved r${draft.revision}`,
+    detail: `The draft matches library revision ${draft.revision}.` };
+  if (persistence?.baseline === "known") {
+    const presets = persistence.dirtyPresets.length;
+    const what = [persistence.structureDirty ? "the collection name or preset order" : "",
+      presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
+    return { tone: "info" as const, label: `Unsaved · based on r${draft.revision}`,
+      detail: `Changed since library revision ${draft.revision}: ${what}. Edits are autosaved in this browser; Save to library records a new immutable revision.` };
+  }
   return { tone: "neutral" as const, label: `Based on r${draft.revision}`,
     detail: `Draft based on library revision ${draft.revision}. Edits since then are autosaved in this browser; Save to library records a new immutable revision.` };
 }
@@ -124,10 +135,11 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
  * would evict the oldest recoverable draft.
  */
 export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: string, run: () => void) {
-  const draft = rt.port.library.summary().draft;
-  if (!draft || draft.recoveryCount < draft.recoveryLimit) { run(); return; }
-  const oldest = draft.oldestRecoverable!;
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.name}” will be discarded. To keep it, recover it and save it to the library first.` },
+  // Opening and importing share one consequence: the application says what would be lost.
+  const consequence = rt.port.authoring.consequences({ file: { kind: "collection.import" } });
+  const oldest = consequence.discards.find(item => item.kind === "recovery-draft");
+  if (!consequence.confirm || !oldest) { run(); return; }
+  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.` },
     { kind: "action", label: "Continue", icon: "import", run },
     { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
       run: () => void rt.file({ kind: "collection.recover" }) }],
@@ -292,7 +304,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
   }
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note("Creates private Cyberpunk mod files for ONE in-game eye-makeup selector (plus Off) from the current draft, including unsaved edits. Your collection and library revisions are never changed."),
+    section("Mod package", note(`Builds your own ${EYE_MAKEUP_MOD.modName} mod: private Cyberpunk mod files for ONE in-game eye-makeup selector, labelled “${EYE_MAKEUP_MOD.selectorLabel}” (plus Off), from the current draft, including unsaved edits. Your collection and library revisions are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     h("details", { class: "section" }, h("summary", { text: "Local setup" }),
@@ -355,6 +367,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
       pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — draft changed since", "warning")),
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
+  // Results restored from before mod branding lack these fields; show them only when present.
+  if (r.modName) card.append(h("p", { class: "muted small" }, "Mod ", h("strong", { text: r.modName }),
+    r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
   if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
     h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
   if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),

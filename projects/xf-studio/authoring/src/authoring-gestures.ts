@@ -1,6 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { GestureEdit, RecipeActions } from "./recipe-actions";
 import type { Layer } from "./recipe";
+import { gestureHistoryLabel } from "./history-labels";
 
 export type GestureSource = "uv" | "surface";
 
@@ -24,6 +25,8 @@ export class AuthoringGestures {
     if (!active || active.source !== source || active.layer !== action.expectedLayer ||
       !this.document.recipe.layers.includes(active.layer)) return false;
     const changed = this.actions.applyGesture(action);
+    if (changed && !active.changed && active.checkpointCreated)
+      this.document.relabelCheckpoint(active.checkpointDepth, gestureHistoryLabel(action));
     if (changed) active.changed = true;
     return changed;
   }

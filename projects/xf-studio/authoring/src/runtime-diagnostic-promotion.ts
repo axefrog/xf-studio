@@ -4,7 +4,9 @@ import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, m
   readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { inspectLocalPackageCandidate } from "./mod-install-transport";
-import type { RuntimeDiagnosticOptions, RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
+import { diagnosticModlist, legacyModFolder, type RuntimeDiagnosticOptions,
+  type RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
+import { EYE_MAKEUP_MOD, eyeMakeupModFolders, isEyeMakeupModFolder } from "./mod-branding";
 
 const metadata = ["modlist.txt", "plugins.txt", "loadorder.txt", "settings.ini", "archives.txt",
   "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
@@ -39,14 +41,6 @@ function absentCaseInsensitive(parent: string, name: string) {
   directory(parent);
   requireValue(!readdirSync(parent).some(entry => entry.toLowerCase() === name.toLowerCase()),
     `Destination already exists (case-insensitive): ${join(parent, name)}`);
-}
-function expectedList(source: string) {
-  const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  let lines = source.split(/\r?\n/).filter((line, i, all) => i < all.length - 1 || line);
-  lines = lines.map(line => line === "+XF Eye Artistry CCXL - Dev" ? "-XF Eye Artistry CCXL - Dev" : line);
-  lines = lines.filter(line => line !== "-XF Studio");
-  lines.push("+XF Studio");
-  return lines.join(newline) + newline;
 }
 function inventory(root: string, names: string[]): Entry[] {
   directory(root);
@@ -102,8 +96,12 @@ function validate(options: PromotionOptions) {
   requireValue(sha(sourceModlist) === saved.sourceProfileModlistSha256,
     "Source profile modlist changed since staging.");
   const stageProfile = join(stage, "mo2", "profiles", options.profileId);
-  const stageMod = join(stage, "mo2", "mods", "XF Studio");
+  const stageMod = join(stage, "mo2", "mods", EYE_MAKEUP_MOD.modName);
   const stagePayload = join(stageMod, "archive", "pc", "mod");
+  const legacyStage = EYE_MAKEUP_MOD.legacyModFolders.find(name =>
+    saved.stageReceipt!.target === join(stage, "mo2", "mods", name, "archive", "pc", "mod"));
+  requireValue(!legacyStage, `This stage used the legacy mod folder "${legacyStage}". ` +
+    `Stage again so the promoted mod is named "${EYE_MAKEUP_MOD.modName}".`);
   requireValue(saved.stageReceipt.target === stagePayload, "Stage receipt target mismatch.");
   const receiptsDir = join(stage, "receipts"); directory(receiptsDir);
   const receiptNames = readdirSync(receiptsDir).filter(name => name.endsWith(".json"));
@@ -123,7 +121,7 @@ function validate(options: PromotionOptions) {
   for (const name of present) {
     const source = join(sourceProfile, name); file(source);
     if (name === "modlist.txt") requireValue(readFileSync(join(stageProfile, name), "utf8") ===
-      expectedList(readFileSync(source, "utf8")), "Staged modlist differs from expected isolated changes.");
+      diagnosticModlist(readFileSync(source, "utf8")), "Staged modlist differs from expected isolated changes.");
     else requireValue(sha(source) === sha(join(stageProfile, name)), `Source profile metadata changed: ${name}`);
   }
   const expectedPayloadNames = candidate.manifest.files.map(entry => basename(entry.path));
@@ -138,7 +136,9 @@ function validate(options: PromotionOptions) {
   file(join(game, "bin", "x64", "Cyberpunk2077.exe"));
   const sourceLines = readFileSync(sourceModlist, "utf8").split(/\r?\n/);
   const enabled = sourceLines.filter(line => line.startsWith("+")).map(line => line.slice(1));
-  requireValue(!enabled.some(name => name.toLowerCase() === "xf studio"), "Source profile already enables XF Studio.");
+  const enabledMod = enabled.find(isEyeMakeupModFolder);
+  requireValue(!enabledMod, `Source profile already enables ${EYE_MAKEUP_MOD.modName}` +
+    (enabledMod?.toLowerCase() === EYE_MAKEUP_MOD.modName.toLowerCase() ? "." : ` under its earlier name "${enabledMod}".`));
   for (const entry of modFiles) {
     const name = entry.path;
     requireValue(!existsSync(join(game, "archive", "pc", "mod", name)), `Direct game archive collision: ${name}`);
@@ -149,7 +149,11 @@ function validate(options: PromotionOptions) {
     }
   }
   const profiles = join(mo2, "profiles"), mods = join(mo2, "mods");
-  absentCaseInsensitive(profiles, options.newProfileId); absentCaseInsensitive(mods, "XF Studio");
+  absentCaseInsensitive(profiles, options.newProfileId); absentCaseInsensitive(mods, EYE_MAKEUP_MOD.modName);
+  // An earlier diagnostic install under a legacy folder name is the same mod: never create a second copy beside it.
+  const legacy = legacyModFolder(mods);
+  requireValue(!legacy, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy ` +
+    `folder "${legacy}". Roll back that promotion (or remove the folder in MO2) before promoting another copy.`);
   return { stage, mo2, sourceProfile, sourceModlist, stageProfile, stageMod,
     profileFiles: stageProfileFiles, modFiles, candidate, saved };
 }
@@ -158,7 +162,7 @@ function validate(options: PromotionOptions) {
 export function planRuntimePromotion(options: PromotionOptions): PromotionPreview {
   const v = validate(options);
   const newProfile = join(v.mo2, "profiles", options.newProfileId);
-  const dedicatedMod = join(v.mo2, "mods", "XF Studio");
+  const dedicatedMod = join(v.mo2, "mods", EYE_MAKEUP_MOD.modName);
   return { schema: "xfs/runtime-promotion-preview-1", sourceProfile: v.sourceProfile,
     newProfile, dedicatedMod, stageProfile: v.stageProfile, stageMod: v.stageMod,
     candidateId: options.candidateId, namespace: v.candidate.manifest.namespace,
@@ -168,7 +172,7 @@ export function planRuntimePromotion(options: PromotionOptions): PromotionPrevie
         target: join(dedicatedMod, "archive", "pc", "mod", entry.path), sha256: entry.sha256, bytes: entry.bytes }))],
     sourceModlistSha256: v.saved.sourceProfileModlistSha256,
     changes: ["Create only the named new profile from staged metadata.",
-      "Create only the dedicated XF Studio mod from the staged pair.",
+      `Create only the dedicated ${EYE_MAKEUP_MOD.modName} mod from the staged pair.`,
       "Leave the original profile, other mods, and MO2 global selected-profile setting unchanged."],
     recovery: `Private journal and receipt in ${v.stage}; recovery removes only matching newly created paths.`,
   };
@@ -196,10 +200,11 @@ function ownedRecord(path: string): Record {
 }
 function removeOwned(record: Record, options: PromotionOptions) {
   const mo2 = resolve(options.mo2Root), stage = resolve(options.stagingRoot);
-  requireValue(record.preview.newProfile === join(mo2, "profiles", options.newProfileId) &&
-    record.preview.dedicatedMod === join(mo2, "mods", "XF Studio") &&
+  // Records from before mod branding name the legacy folder; recovery and rollback still accept them.
+  const folder = eyeMakeupModFolders.find(name => record.preview.dedicatedMod === join(mo2, "mods", name));
+  requireValue(folder !== undefined && record.preview.newProfile === join(mo2, "profiles", options.newProfileId) &&
     record.preview.stageProfile === join(stage, "mo2", "profiles", options.profileId) &&
-    record.preview.stageMod === join(stage, "mo2", "mods", "XF Studio") &&
+    record.preview.stageMod === join(stage, "mo2", "mods", folder) &&
     record.preview.candidateId === options.candidateId, "Promotion record target mismatch.");
   const profile = record.preview.newProfile, mod = record.preview.dedicatedMod;
   const tempProfile = join(mo2, "profiles", `.xfs-promotion-${record.transactionId}`);

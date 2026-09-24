@@ -1,6 +1,13 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
+import type { AuthoringHistory, HistoryState } from "./authoring-history";
+import { historyLabel } from "./history-labels";
+import { actionLimits, type FieldLimit } from "./action-limits";
+import { nameIssue, type ValidationIssue } from "./validation-issues";
+import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
+import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
+import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import type { CollectionAction } from "./collection-actions";
 import type { CollectionRequest, CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
@@ -10,20 +17,23 @@ import type { QualityAction, PreviewQualityActions } from "./preview-quality-act
 import type { Layer, Point, WarpField } from "./recipe";
 import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
-import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
+import { ACTION_DESCRIPTORS, actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ValueSchema } from "./studio-action-descriptors";
+import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
 
-export type StudioAction = { kind: "recipe.undo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
+export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
   { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
 export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
   "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
-export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode };
+export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode;
+  /** Structured validation detail when the refusal concerns one input value or mode. */
+  issue?: ValidationIssue };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
   undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
 export type StudioGestureProposal =
@@ -34,6 +44,8 @@ export type StudioGestureProposal =
 
 type Services = { document: AuthoringDocument; recipe: RecipeActions;
   layer: (action: LayerAction) => void; undo: () => boolean;
+  /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
+  history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
@@ -42,7 +54,8 @@ const recipeKinds = new Set<StudioAction["kind"]>([
   "layer.select", "point.select", "point.remove", "path.edit", "field.select", "field.add",
   "field.remove", "field.clear", "field.setReach", "pigment.edit", "softness.edit",
   "layer.setColor", "layer.setOpacity", "layer.setSymmetry", "layer.setFinish",
-  "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect"]);
+  "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect",
+  "point.move", "point.insert", "point.setTangent", "shape.transform", "field.setOrigin", "field.setVector"]);
 const collectionKinds = new Set<StudioAction["kind"]>([
   "preset.edit", "preset.select", "preset.expand", "collection.rename", "collection.filesOpen",
   "collection.open", "collection.undoOpen", "collection.importRecipe"]);
@@ -54,6 +67,7 @@ export class StudioApplication {
   private listeners = new Set<() => void>();
   private unsubs: (() => void)[] = [];
   private collectionRevision = 0;
+  private seenContent?: number;
   private previewUnavailable?: string;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   constructor(services: Services) { this.services = services; this.subscribeSources(); }
@@ -68,8 +82,12 @@ export class StudioApplication {
     for (const unsub of this.unsubs) unsub();
     const s = this.services;
     this.unsubs = [s.document.subscribe(() => this.notify())];
+    this.seenContent = s.collection?.contentVersion();
+    // Save progress, busy flags and list refreshes must not invalidate an open menu (audit A-14).
     if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
-      this.collectionRevision++; this.notify();
+      const content = s.collection!.contentVersion();
+      if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
+      this.notify();
     }));
     for (const source of [s.preview, s.motion, s.quality, s.savedV])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
@@ -81,6 +99,11 @@ export class StudioApplication {
   actionDescriptors() { return structuredClone(ACTION_DESCRIPTORS); }
   requestDescriptors() { return structuredClone(REQUEST_DESCRIPTORS); }
   gestureDescriptors() { return structuredClone(GESTURE_DESCRIPTORS); }
+  /** File workflow IDs (dispatched through `StudioFileOperations`) share the registry. */
+  fileKinds() { return Object.keys(FILE_DESCRIPTORS) as StudioFileAction["kind"][]; }
+  fileDescriptors() { return structuredClone(FILE_DESCRIPTORS); }
+  /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
+  registry() { return actionRegistry(); }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
     const targetCapability = this.targetCapability(target);
@@ -124,16 +147,24 @@ export class StudioApplication {
       typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
       return { available: false, code: "missing_target", reason: "The command targets a different item." };
     for (const [name, schema] of Object.entries(descriptor.payload)) {
-      const issue = fieldIssue(flattened[name], schema);
+      const issue = fieldIssue(flattened[name], schema, name);
       if (issue) return issue;
     }
     const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
     const variantFields = variant && descriptor.variants?.[String(variant)]?.payload;
     if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
-      const issue = fieldIssue(flattened[name], schema);
+      const issue = fieldIssue(flattened[name], schema, name);
       if (issue) return issue;
     }
     return this.capability(action);
+  }
+  /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
+  limitsFor(target: StudioTarget, kind: StudioAction["kind"], variant?: string): Record<string, FieldLimit> {
+    const limits = actionLimits(this.services.document.recipe, target, kind, variant);
+    const presets = this.services.collection?.summary().draft?.presets.length;
+    if (kind === "preset.edit" && variant === "move" && limits.to && presets !== undefined)
+      limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
+    return limits;
   }
   /** Enumerated values and their live capability for a concrete target. */
   choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
@@ -242,6 +273,17 @@ export class StudioApplication {
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
   }
+  /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
+  consequences(subject: ConsequenceSubject): Consequence {
+    return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT });
+  }
+  /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
+  history(): HistoryState {
+    const s = this.services;
+    return s.history?.state() ?? { undo: s.document.canUndo ? s.document.historyLabel() : undefined,
+      depth: s.document.undoDepth, redoDepth: 0 };
+  }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(); }
   glitterModelCatalogue() { return glitterModelCatalogue(); }
@@ -251,12 +293,20 @@ export class StudioApplication {
   }
   capability(action: StudioAction): StudioCapability {
     const s = this.services;
+    // With a loaded collection but no selected preset the editor shows an empty recipe no
+    // preset owns; content written there would be discarded at the next preset switch.
+    if (ACTION_DESCRIPTORS[action.kind].effect === "content" && this.unowned())
+      return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
       action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    let raw: { available: boolean; reason?: string };
+    let raw: { available: boolean; reason?: string; issue?: ValidationIssue };
+    if ((action.kind === "recipe.undo" || action.kind === "recipe.redo") && (s.gestures.snapshot() || s.controls.snapshot()))
+      return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
       { available: false, reason: "There is no recipe change to undo." };
+    else if (action.kind === "recipe.redo") raw = !s.history ? { available: false, reason: "Redo is not available in this host." } :
+      s.history.canRedo() ? { available: true } : { available: false, reason: "There is no undone change to redo." };
     else if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
     else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
       raw = layerCapability(s.document.recipe, action);
@@ -269,7 +319,7 @@ export class StudioApplication {
     else if (action.kind.startsWith("quality."))
       raw = s.quality?.capability(action as QualityAction) ?? missing("Preview quality is still loading.");
     else raw = s.savedV?.capability(action as SavedAppearanceAction) ?? missing("Saved appearance preview is still loading.");
-    return raw.available ? { available: true } : { ...raw, code: reasonCode(action, raw.reason ?? "") };
+    return raw.available ? { available: true } : { ...raw, code: raw.issue ? issueCode(raw.issue) : reasonCode(action, raw.reason ?? "") };
   }
   /** Candidate actions use the hit target, never the currently selected row. */
   actionsFor(target: StudioTarget): StudioActionInfo[] {
@@ -306,8 +356,11 @@ export class StudioApplication {
       const s = this.services;
       let result: unknown;
       if (action.kind === "recipe.undo") result = s.undo();
-      else if (recipeKinds.has(action.kind)) s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind));
-      else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled") s.layer(action);
+      else if (action.kind === "recipe.redo") result = s.history!.redo();
+      else if (recipeKinds.has(action.kind)) s.document.withHistoryLabel(historyLabel(action as RecipeAction),
+        () => s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind)));
+      else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
+        s.document.withHistoryLabel(historyLabel(action), () => s.layer(action));
       else if (collectionKinds.has(action.kind)) s.collection!.dispatch(action as CollectionAction);
       else if (action.kind.startsWith("preview.") || action.kind.startsWith("camera.")) result = s.preview!.dispatch(action as PreviewAction);
       else if (action.kind.startsWith("motion.")) result = s.motion!.dispatch(action as MotionAction);
@@ -316,10 +369,15 @@ export class StudioApplication {
       return { ok: true, result };
     } catch (error) { return { ok: false, code: "invalid_value", message: (error as Error).message }; }
   }
+  /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
+    if (this.gesture || this.unowned()) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
-  controlEdit(id: string, action: RecipeAction) { this.services.controls.edit(id, action.layerId, action); }
+  controlEdit(id: string, action: RecipeAction) {
+    if (this.gesture || this.unowned()) return;
+    this.services.controls.edit(id, action.layerId, action);
+  }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
   requestCapability(request: CollectionRequest): StudioCapability {
@@ -330,7 +388,13 @@ export class StudioApplication {
   }
   async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
     ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
+  /** True when a collection is loaded and no preset owns the editor recipe. */
+  private unowned() {
+    const owner = this.services.collection?.selectedPreset();
+    return !!owner?.loaded && !owner.id;
+  }
   canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (source === "surface" && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
@@ -354,7 +418,11 @@ export class StudioApplication {
   beginGesture(source: GestureSource, layerId: string) {
     if (!this.canBeginGesture(source, layerId).available) return false;
     const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
-    if (!layer || !this.services.gestures.begin(source, layer)) return false;
+    if (!layer) return false;
+    // Finish an open form transaction first, so its later Escape cannot revert this gesture.
+    const control = this.services.controls.snapshot();
+    if (control) this.services.controls.commit(control.id);
+    if (!this.services.gestures.begin(source, layer)) return false;
     this.gesture = { source, layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
   }
@@ -381,9 +449,11 @@ export class StudioApplication {
     this.gesture = undefined; this.notify();
   }
 }
-function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | undefined {
+function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioCapability | undefined {
+  const refused = (code: StudioReasonCode, issue: ValidationIssue): StudioCapability =>
+    ({ available: false, code, reason: issue.message, issue });
   if (value === undefined || value === null) return schema.required
-    ? { available: false, code: "needs_input", reason: "This command needs a value." } : undefined;
+    ? refused("needs_input", { code: "required", field, message: "This command needs a value." }) : undefined;
   const good = schema.type === "enum" ? schema.values?.includes(value as string | number) :
     schema.type === "integer" ? Number.isInteger(value) :
     schema.type === "number" ? typeof value === "number" && Number.isFinite(value) :
@@ -392,14 +462,23 @@ function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | und
     schema.type === "boolean" ? typeof value === "boolean" :
     schema.type === "bytes" ? value instanceof Uint8Array || value instanceof ArrayBuffer :
     typeof value === "object";
-  if (!good) return { available: false, code: "invalid_value", reason: "The value has the wrong type or choice." };
+  if (!good) return refused("invalid_value", { code: "format", field, message: "The value has the wrong type or choice." });
   if (typeof value === "number" && (schema.min !== undefined && value < schema.min ||
     schema.max !== undefined && value > schema.max))
-    return { available: false, code: "limit", reason: "The value is outside the supported range." };
+    return refused("limit", { code: "range", field, message: "The value is outside the supported range." });
+  if (typeof value === "string" && field === "name") {
+    const issue = nameIssue(value, schema.maxLength ?? Number.POSITIVE_INFINITY, field);
+    if (issue) return refused("invalid_value", issue);
+  }
   if (typeof value === "string" && (schema.minLength !== undefined && value.length < schema.minLength ||
     schema.maxLength !== undefined && value.length > schema.maxLength))
-    return { available: false, code: "limit", reason: "The text length is outside the supported range." };
+    return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
 }
+function issueCode(issue: ValidationIssue): StudioReasonCode {
+  return issue.code === "range" ? "limit" : issue.code === "mode" ? "incompatible_mode" :
+    issue.code === "required" ? "needs_input" : "invalid_value";
+}
+const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
@@ -416,7 +495,7 @@ function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
   return "invalid_value";
 }
 function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
-  if (action.kind === "recipe.undo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
+  if (action.kind === "recipe.undo" || action.kind === "recipe.redo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
     action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
     action.kind.startsWith("quality.") || action.kind.startsWith("savedV.")) return "none";
   if (action.kind === "preset.edit" && action.command.kind === "remove" ||

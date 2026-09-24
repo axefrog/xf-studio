@@ -1,9 +1,10 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
+import { cancelsGesture } from "./gesture-cancel";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
-import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
+import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
 import type { ViewportHit } from "./viewport-attachment";
 import type { UVViewCommand } from "./viewport-attachment";
@@ -195,6 +196,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       fitUVView(view, hooks.layer());
     updateView(next); return true;
   }
+  function navigate(command: { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: UV }): boolean {
+    stop(); finishWheel();
+    const next = command.kind === "pan" ? panUVView(view, command.du, command.dv)
+      : zoomUVView(view, command.at ?? { u: view.u, v: view.v }, command.factor);
+    if (JSON.stringify(next) === JSON.stringify(view)) return false;
+    updateView(next); return true;
+  }
   if (elements) {
     elements.both.onclick = () => { viewCommand("both"); };
     elements.single.onclick = () => { viewCommand("single"); };
@@ -342,7 +350,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     { capture: true, signal: listeners.signal });
   window.addEventListener("blur", () => { stop(true); finishWheel(true); }, { signal: listeners.signal });
   window.addEventListener("keydown", e => {
-    if ((drag || wheel) && (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "z"))) {
+    if ((drag || wheel) && cancelsGesture(e)) {
       // If another context replaced this one, leave its keyboard action alone.
       const valid = drag ? validDrag() : validWheel();
       if (valid) { e.preventDefault(); e.stopImmediatePropagation(); }
@@ -386,9 +394,14 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
     if (elements) elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
-  return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand,
+  return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand, navigate,
     inputCapture: () => !!drag || !!wheel,
-    snapshot: () => ({ ...view }), diagnostics: () => {
+    snapshot: () => ({ ...view }),
+    selection: () => {
+      const l = hooks.layer(), b = bounds();
+      return l ? selectionVisibility(view, b.width / b.height, l, hooks.selected(), hooks.selectedField()) : undefined;
+    },
+    diagnostics: () => {
     const b = bounds();
     return { view: { ...view }, region: region(), aspect: b.width / b.height,
       resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),

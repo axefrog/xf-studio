@@ -1,6 +1,6 @@
 # Replacement-UI handoff acceptance
 
-24 September 2026. Run this once **after** the application, viewport and current-workflow I/O ports are stable and before dispatching the Opus 5.5 redesign. Use only an isolated `?verify=1` workspace and a disposable library; never touch Nathan's active draft. This checks the boundary the replacement UI will receive, not the visual redesign itself or game rendering.
+24 September 2026. Run this once **after** the application, viewport and current-workflow I/O ports are stable and before dispatching the Opus 5.5 redesign. Use only an isolated `?verify=1` workspace and a disposable library; never touch the active working draft. This checks the boundary the replacement UI will receive, not the visual redesign itself or game rendering.
 
 ## Existing focused evidence
 

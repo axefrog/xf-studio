@@ -17,7 +17,7 @@ function fixture() {
     get: async () => saved,
     save: async (value, revision) => { saves++; return { collection: structuredClone(value), revision: (revision ?? 0) + 1, updatedAt: "now" }; },
     package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
-      namespace: "xfs_test", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "test",
+      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "test",
       presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
   };
   const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
@@ -64,7 +64,7 @@ test("async collection service preserves an unsaved draft in package snapshots w
 test("successful partial check names omitted layers and whole presets in the Studio result", async () => {
   const f = fixture(); await f.service.execute({ kind: "initialize" });
   f.transport.package = async (_action, value) => ({ ready: true, collectionId: value.id,
-    namespace: "xfs_test", originalPresetCount: 2, packagedCollectionSha256: "test",
+    namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 2, packagedCollectionSha256: "test",
     presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }],
     omissions: [
       { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",

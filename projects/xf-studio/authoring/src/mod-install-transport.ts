@@ -4,9 +4,11 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
-  readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
+  readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { LocalSettings } from "./local-settings";
+import { EYE_MAKEUP_MOD } from "./mod-branding";
+import { readConfiguredMo2Instance } from "./install-detection-host";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
@@ -112,7 +114,8 @@ function atomicJson(path: string, value: unknown) {
   finally { closeSync(fd); }
   renameSync(temp, path);
 }
-function targetFor(settings: LocalSettings): { route: InstallRoute; target: string; activation: string } {
+type Target = { route: InstallRoute; target: string; activation: string; legacyInstall: string | null };
+function targetFor(settings: LocalSettings): Target {
   const route = settings.installMode;
   assert(route !== "none" && route === settings.launchRoute, "Select a matching install and launch route.");
   assert(settings.gameRoot && isAbsolute(settings.gameRoot), "Configured game root is missing.");
@@ -123,17 +126,26 @@ function targetFor(settings: LocalSettings): { route: InstallRoute; target: stri
   if (route === "direct") {
     const target = join(settings.gameRoot, "archive", "pc", "mod");
     noLinks(target);
-    return { route, target, activation: "Files are staged in the game's archive/pc/mod folder; game loading is unverified." };
+    return { route, target, activation: "Files are staged in the game's archive/pc/mod folder; game loading is unverified.",
+      legacyInstall: null };
   }
   assert(settings.mo2Root && isAbsolute(settings.mo2Root) && settings.mo2ProfileId && profileSegment(settings.mo2ProfileId),
     "Configured MO2 instance and profile are missing.");
   noLinks(settings.mo2Root);
-  directory(join(settings.mo2Root, "mods"));
-  noLinks(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"));
-  regular(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"));
-  const target = join(settings.mo2Root, "mods", "XF Studio", "archive", "pc", "mod");
+  // Use the instance's configured directories (ModOrganizer.ini [Settings]), not assumed defaults.
+  const { paths } = readConfiguredMo2Instance(settings.mo2Root);
+  noLinks(paths.mods);
+  directory(paths.mods);
+  noLinks(join(paths.profiles, settings.mo2ProfileId, "modlist.txt"));
+  regular(join(paths.profiles, settings.mo2ProfileId, "modlist.txt"));
+  // An earlier diagnostic install of this same mod may sit under a legacy folder name.
+  // Install refuses rather than silently creating a second copy beside it (see preflight).
+  const legacyInstall = readdirSync(paths.mods).find(entry =>
+    EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
+  const target = join(paths.mods, EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
   noLinks(target);
-  return { route, target, activation: "Enable the dedicated XF Studio mod in the chosen MO2 profile; activation and game loading are unverified." };
+  return { route, target, legacyInstall,
+    activation: `Enable the dedicated ${EYE_MAKEUP_MOD.modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
 }
 
 /** The host owns this object; never expose its root paths as renderer-editable options. */
@@ -212,9 +224,12 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   const preflight = (candidateId: string): InstallPreview => {
     noLinks(journalFile);
     assert(!existsSync(journalFile), "An interrupted install needs recovery before another action.");
+    assert(!target.legacyInstall, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} install under the legacy ` +
+      `folder "${target.legacyInstall}". Roll back or remove that diagnostic mod before installing "${EYE_MAKEUP_MOD.modName}".`);
     const { manifest } = candidate(candidateId), prior = owned();
     checkCurrent(prior, manifest.files);
-    return { ...target, candidateId, files: manifest.files, replacingOwned: !!prior };
+    const { legacyInstall: _legacy, ...route } = target;
+    return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior };
   };
   const recover = (): { recovered: boolean; conflicts: string[] } => withLock(() => {
     noLinks(journalFile);

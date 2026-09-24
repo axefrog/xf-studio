@@ -1,5 +1,7 @@
 # Experiment 001: dynamic material contract
 
+**Status:** superseded — it showed offline (serialization and a source-derived resolver model only, never a runtime test) that the legacy Eye Artistry 4 × 20 × 49 × 4 matrix and ArchiveXL dynamic `design+colour+finish` material references can be modelled and round-tripped, but XF Studio no longer uses that matrix: users author complete presets that export as a collection for one selector ([Experiment 005](../005-preset-collection/README.md)).
+
 Result: passed offline. Run `check_contract.py`; inspect [result.json](result.json). The experiment creates only local generated fixtures, never modifies a reference resource and never installs a mod.
 
 - Enumerates the legacy baseline of 4 layers × 20 designs × 49 colours × 4 finishes with unique selectors.

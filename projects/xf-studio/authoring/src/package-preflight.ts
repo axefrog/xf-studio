@@ -13,6 +13,8 @@ export function preflightPackageCollection(value: unknown): PackageCheck & { pac
     ready: true,
     collectionId: plan.collectionId,
     namespace: plan.namespace,
+    modName: plan.modName,
+    selectorLabel: plan.selectorLabel,
     originalPresetCount: source.presets.length,
     omissions,
     packagedCollectionSha256: createHash("sha256").update(packagedCollectionJson).digest("hex"),

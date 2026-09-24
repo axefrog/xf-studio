@@ -1,6 +1,6 @@
 # Character-creator idle: local playback investigation
 
-23 September 2026. This delivers a useful browser playback slice; it does not prove exact equivalence to the live character-creator controller. Nathan explicitly clarified that mouth, eye direction and other facial changes belong to the requested idle, so body movement alone was insufficient.
+23 September 2026. This delivers a useful browser playback slice; it does not prove exact equivalence to the live character-creator controller. The request explicitly includes mouth, eye direction and other facial changes in the idle, so body movement alone was insufficient.
 
 ## Inputs and processing
 
@@ -37,7 +37,7 @@ The original eyeballs were unskinned. The preview now gives each disconnected ey
 
 From `projects/xf-studio/authoring`, run `bun tools/verify_idle.ts`, `bun test`, `bun run check`, and `bun run build`. [Offline report](../../projects/xf-studio/authoring/evidence/idle-offline-check.json) verifies movement in gaze, jaw, lip and eyelid controls over the facial loop, finite skinned head/plate/brow/lash positions, shared bone transforms agreeing within about 1e-7, and zero restore error. The local asset check covers 385 existing head/detail bones; the browser additionally has two new eyeball joints, giving 387 mappings with zero unmapped.
 
-Browser verification in the isolated `?verify=1` page: actual moving head/facial preview rendered; eyes stayed attached; makeup guides followed the posed surface; toggle disabled competing blink controls, then restored them and the editing pose; recipe comparison was unchanged and console had no warnings/errors. Nathan's main draft/tab was not edited. No game launch was required.
+Browser verification in the isolated `?verify=1` page: actual moving head/facial preview rendered; eyes stayed attached; makeup guides followed the posed surface; toggle disabled competing blink controls, then restored them and the editing pose; recipe comparison was unchanged and console had no warnings/errors. The main working draft/tab was not edited. No game launch was required.
 
 ## Remaining fidelity questions
 

@@ -1,5 +1,7 @@
 # Local landscape inventory
 
+**Local-only outputs:** everything in `inventory/` except this README is ignored by Git (`inventory/*` in `.gitignore`). The linked catalogues (`dev.md`, `redmodding.md`, `mo2.md`), `summary.json`, `mo2-mods.json`, `classifications.json`, the reference-update and framework-release records and the snapshots exist only in the maintainer's local workspace, so the links below resolve only there. The scripts in [tools/inventory](../tools/README.md) regenerate the generated outputs; the curated classifications and historical records cannot be recreated from a fresh clone.
+
 The 2026-09-23 census covered all top-level folders in `D:/Dev` and `F:/Games/RedModding`, nested project/repository/container boundaries, all MO2 mod folders, profiles and both overwrite trees.
 
 - [D:/Dev catalogue](dev.md): Cyberpunk frameworks and third-party mod references; personal legacy sources; unrelated and indirect projects.
@@ -21,4 +23,4 @@ Scope honesty: file metadata and project purposes are inventoried; not every doc
 
 `F:/Games/MO2` supporting folders: `downloads` contains original install packages; `profiles` holds saved enablement/order; `overwrite` contains current runtime outputs; `_overwrite_` is an older February 2026 output tree; `logs`/`crashDumps` diagnose MO2/virtualisation failures; `plugins` includes integrations; `dlls`, `platforms`, `qml`, `resources`, `translations`, `styles`, `stylesheets`, `licenses`, `tutorials`, `loot`, `explorer++`, and `webcache` are manager/runtime support rather than authored mods. Root INI/executable/DLL files configure and run MO2. The configured Nexus connection remains in MO2.
 
-Refresh: run `tools/inventory/scan.py`, then `tools/inventory/report.py` after reviewing classification changes. The reporting script is pinned to this survey date; select a new snapshot explicitly before a later census report. Do not silently replace historical provenance.
+Refresh: run `tools/inventory/scan.py`, then `tools/inventory/report.py` after reviewing classification changes. `report.py` reads the curated local `inventory/classifications.json` and the dated snapshot, so it cannot run in a fresh clone without them. The reporting script is pinned to this survey date; select a new snapshot explicitly before a later census report. Do not silently replace historical provenance.

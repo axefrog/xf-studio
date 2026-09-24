@@ -2,9 +2,11 @@ import { parseCollection, type PresetCollection } from "./preset-collection";
 import type { PackageOmission } from "./package-filter";
 
 export type PackageAction = "check" | "build";
-export type PackageCheck = { ready: true; collectionId: string; namespace: string; presets: { id: string; revision: number; appearance: string }[];
+/** `modName`/`selectorLabel` come from the shared mod-branding module via the export plan. */
+export type PackageCheck = { ready: true; collectionId: string; namespace: string; modName: string; selectorLabel: string; presets: { id: string; revision: number; appearance: string }[];
   originalPresetCount: number; omissions: PackageOmission[]; packagedCollectionSha256: string };
-export type PackageBuild = { package: string; manifest: string; archiveSha256: string; presetCount: number;
+export type PackageBuild = { package: string; manifest: string; modName: string; selectorLabel: string;
+  archiveSha256: string; presetCount: number;
   originalPresetCount: number; omissions: PackageOmission[]; packagedCollectionSha256: string;
   installed: false; gameRenderingVerified: false };
 export class PackageRequestError extends Error {

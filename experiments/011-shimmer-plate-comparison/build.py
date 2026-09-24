@@ -1,4 +1,5 @@
 """Private one-selector Shimmer plate A/B/Off candidate. Never installs or enables export."""
+import shutil
 import argparse
 import copy
 import hashlib
@@ -15,7 +16,7 @@ HQ = HERE.parents[1]
 STUDY = HERE.parent / '010-shimmer-game-adapter'
 BASE_BUILDER = HERE.parent / '005-preset-collection' / 'build.py'
 WK_DEFAULT = Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe')
-BUN_DEFAULT = Path('C:/Users/Nathan/.bun/bin/bun.exe')
+BUN_DEFAULT = Path(shutil.which('bun') or 'bun')
 GAME_DEFAULT = Path('F:/Games/Cyberpunk 2077')
 PLATE_DEFAULT = HERE.parent / '004-plate-import/generated/archive/axefrog/appearance_studio/studies'
 TEMPLATE_DEFAULT = Path('D:/Dev/cp2077-modding-hq/research/consumers/glitter/extracted/base/materials/mesh_decal.mt')
@@ -185,7 +186,8 @@ def main(args):
     cc_path = f'{DEPOT}/xfs_shimmer_plate.inkcharcustomization'
     option = base_cc['Data']['RootChunk']['headCustomizationOptions'][0]['Data']
     option['name'] = option['uiSlot'] = cname(NAMESPACE)
-    option['localizedName'] = 'XF Studio Shimmer diagnostic'
+    # Mod branding comes from the Studio (src/mod-branding.ts) through the scaffold plan.
+    option['localizedName'] = f"{plan['modName']} Shimmer diagnostic"
     option['resource'] = ref(app_path, True)
     base_cc['Data']['RootChunk']['headGroups'][0]['options'] = [cname(NAMESPACE)]
     off = copy.deepcopy(base_app['Data']['RootChunk']['appearances'][0])

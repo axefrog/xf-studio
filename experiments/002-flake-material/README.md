@@ -1,6 +1,8 @@
 # Reflective flake material candidate
 
-Status: working browser study and reproducible texture bake; **not a convincing, validated REDengine glitter implementation yet**. This is a material-input experiment for XF Appearance Studio, not a deployed mod.
+**Status:** superseded by [003](../003-decal-material-import/README.md), [005](../005-preset-collection/README.md) and [007](../007-irregular-glitter/README.md) — it established a reproducible browser bake of seeded UV-space flake normal/roughness/metalness maps for Shimmer and Glitter, never a validated REDengine glitter; game import moved to 003, packaging to 005 and glitter modelling to 007.
+
+Checkpoint status (23 September): working browser study and reproducible texture bake; **not a convincing, validated REDengine glitter implementation yet**. This is a material-input experiment for XF Appearance Studio, not a deployed mod.
 
 This experiment studies Shimmer and Glitter using seeded, stationary UV-space facets encoded in tangent-space normals, roughness and metalness. Ordinary Three.js lighting supplies reflections; there is no emissive sparkle or time-based texture animation. Shimmer has twice the cell frequency, gentler orientation spread, broader reflection and less metalness than glitter. Fineness, density and orientation spread are editable per layer and persist in recipes. `satin` remains an alias for `regular`; **metallic is a separate finish**, never an alias for shimmer. The expanded seven-family editor menu is documented in the [finish taxonomy](../../research/materials/makeup-finish-taxonomy.md); this flake experiment still only bakes its two candidates.
 
@@ -16,7 +18,11 @@ The browser interprets normal XYZ as linear tangent-space data, with UV0 top-lef
 
 - 19 authoring tests, typecheck and build passed. New checks cover deterministic seed behavior, normalized encoded normals, zero-density flat/nonmetallic output, bounded settings, old finish aliases and unchanged shape coverage across finishes.
 - In isolated `?verify=1`, selected glitter/shimmer/satin, moved the camera and key light, set density to zero and observed flakes disappear, then used Undo to restore 65%. No shader warnings/errors were reported during these checks. Refined shimmer uses smaller/weaker facets after visual inspection of its overly speckled first candidate.
-- Recipe retains the finish after reload. Nathan's active browser draft was not used for testing. A startup race found during verification now applies the Surface controls checkbox's current value when the model finishes loading.
+- Recipe retains the finish after reload. The active working browser draft was not used for testing. A startup race found during verification now applies the Surface controls checkbox's current value when the model finishes loading.
 - Actual asset loading, skinning and alpha coverage continue to work. This does not prove in-game decal normals, layer compositing, mip stability, or physical accuracy.
 
+## Next (historical, superseded)
+
 The first import and selected decal shader trace are now complete in [Experiment 003](../003-decal-material-import/README.md). It includes explicit blend weights, both normal modes/signs, independent normal coverage and colour-alpha compensation. Next, assemble the actual mesh/morph/app fixture and compare variants in the already planned batched runtime session. Additional candidate models may be necessary to avoid excessively dark flakes while retaining light-dependent highlights.
+
+This next-step note is kept as a historical record. The mesh/morph fixture was built in [Experiment 004](../004-plate-import/README.md) and packaged through [Experiment 005](../005-preset-collection/README.md). Shimmer on-plate sign/mode variants are in [Experiment 011](../011-shimmer-plate-comparison/README.md). Glitter modelling continued in [Experiment 007](../007-irregular-glitter/README.md) and [Experiment 009](../009-glitter-game-fixture/README.md). The batched runtime session has **not** happened yet. The first in-game smoke test is prepared in the [runtime preflight card](../../research/authoring/first-makeup-runtime-preflight-2026-09-25.md). It covers Matte and Metallic, with Satin optional, but not Shimmer or Glitter.

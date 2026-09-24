@@ -1,5 +1,7 @@
 # Plate clearance under facial deformation
 
+**Status:** superseded by [Experiment 012](../012-native-plate-bootstrap/README.md) — offset and morph-aware corrections of the owned cut reduced eyelid contacts but never removed them (the last post-packing candidate failed the dense 664-frame idle gate). Clearance work continued on the native-head reconstruction in 012, which is itself paused pending in-game evidence of whether the contacts are visible. The sections below are the historical record, oldest first; their "next" steps were carried into 012.
+
 **Result: useful candidates and a repeatable contact test, but no release offset selected.** The unchanged cut-out has packing-related overlaps. Offsets improve it greatly, yet small eyelid folds/corners still contact the head. A positive distance at every corresponding vertex does not prove that the triangles between them stay outside the skin.
 
 **Latest improvement:** native skin bytes now survive conversion in both the mesh and the morph resource's embedded base buffer. Exported weights match the original head exactly, instead of differing by up to 0.004329. The paired idle comparison isolates the correction from geometry/morph changes; residual eyelid contacts remain. Visibility tests show that some contacts are exposed, and a constrained-offset audit rejects an unbounded local extrusion as a universal solution. Details below.
@@ -12,7 +14,7 @@ The original cut-out is sound in the aspect examined here: **all 3,010 plate tri
 - **Shading-normal method:** offset the base along the game's lighting normal and adjust each position morph for its corresponding morphed normal.
 - **Geometry-normal method:** use angle-weighted normals calculated from the full head's triangles for each shape. Preserve the game's normal/tangent data for shading; alter only base and morph positions.
 - Actual WolvenKit mesh/morph import and GLB export, retaining all 105 shapes, UVs, 122 weighted bones and eight influences. A local resolver archive also lets the head export retain its original game weights and bind transforms; its geometry and all morph arrays are checked against the earlier unbound reference.
-- 107 static cases: Basis, all 105 individual shapes, and Nathan's five-shape combination.
+- 107 static cases: Basis, all 105 individual shapes, and the reference save's five-shape combination.
 - 73 sampled poses across 22.1 seconds of the current decoded body/facial idle adapter. Sampling includes every ten frames and upper/lower eyelid surface-joint distance extrema found at 30 Hz. All 1,016 bones across the four source rigs map. This is not execution of the REDengine animation graph.
 - Full-head triangle contact queries in those samples, including coplanar cases. Synthetic cases exercise narrow-phase behavior; a small all-pairs comparison checks that spatial pruning does not lose candidates. Degenerate triangles are separately reported.
 
@@ -62,7 +64,7 @@ From HQ, run the sequence below for `shading`, then repeat with `geometry`:
 ```powershell
 python experiments/006-plate-clearance/build.py --method shading
 python experiments/006-plate-clearance/verify_static.py
-& 'C:/Users/Nathan/.bun/bin/bun.exe' projects/xf-studio/authoring/tools/sample_plate_clearance.ts
+bun projects/xf-studio/authoring/tools/sample_plate_clearance.ts
 python experiments/006-plate-clearance/verify_posed.py
 python experiments/006-plate-clearance/analyze_contacts.py
 python experiments/006-plate-clearance/compare.py --archive-only

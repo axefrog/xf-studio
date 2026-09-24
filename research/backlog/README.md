@@ -1,28 +1,54 @@
-# Research queue
+# Research and work queue
 
-| Priority | Work item | Status / trigger |
-|---|---|---|
-| 1 | Complete XF Studio makeup tasks | Editor, materials, plate and export work remain first. |
-| 2 — active alongside makeup | [Eyebrow shape and brow/lash colours](preview-fidelity.md) | Nathan elevated this overdue work on 24 September. Trace the actual saved texture/material/gradient and correct preview shape/colour, with browser comparison. |
-| 3 — after brows/lashes | [Saved hair fidelity](../eye-artistry/saved-v-hair-preview.md) | Optional skinned saved-style mesh and toggle are integrated; resolve actual colour/profile, materials, physics and effective winner. Hair authoring remains a later discussion. |
-| Parallel preview/research; behind brow/lash fidelity | [Hair, piercings and jewellery](jewellery-and-customization.md) | Saved-V hair and [vanilla female piercing](../jewellery/vanilla-piercing-preview.md) context are integrated with local assets; PRC inventory and a [jewellery construction-set proposal](../jewellery/construction-set-design.md) are documented. The design awaits Nathan's review before authoring begins. |
-| Parallel architecture | [Data-driven customization and portable mod sources](jewellery-and-customization.md#data-driven-character-customization-preset-editor) | Derive selectors from effective vanilla/modded resources and saved V, with provider-neutral game/manual/MO2/Vortex discovery. Start read-only and preserve uncertain winners. |
-| Thereafter | [CCXL and character-creator capability map](ccxl-character-creator-capabilities.md) | Pull forward findings when they unblock current makeup work. |
-| Thereafter | Photo Mode Tools engine/API audit | Other queued work after the above priorities; see project README. |
-| Required for XF Studio | [Makeup finish families and glitter](glitter-material.md) | Seven recognizable finish families; prove mixed-finish preset compilation and game/browser effects. |
-| Current product | [Preset library and compiler](../../projects/xf-studio/data/product-direction.md) | Editable SQLite collections and portable export implemented; one-selector archive verified offline. Plate clearance, optical adapters and runtime proof remain. Later feature categories require discussion before building. |
-| Requested; no assigned priority | [Preview fidelity and persistent workspace](preview-fidelity.md) | Actual modded eyes, adjustable FOV, all UI/camera state, imported-V reload fix, and SSS/material artifact investigation. Screenshot references preserved locally. |
-| Future direction; discuss before implementation | Quest design and other capabilities beyond appearance | The XF Studio rename leaves room for these; eye makeup stays first. See the product direction. |
-| During rendering-fidelity pass | [wgpu and ray-tracing assessment](wgpu-renderer-assessment.md) | Nathan's source lead; verify native/browser capabilities, material benefits and measured cost before recommending a renderer change. |
-| Next UI priority | [Claude UI/UX overhaul](claude-ui-overhaul.md) | Independent presentation-port gate passed. Local `claude` authentication and exact Opus 5.5/xhigh probe now work; dispatch in an isolated worktree. Cyberpunk 2077 aesthetic with freedom to rethink UI strategy. |
+**Current as of 25 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
 
-This is a durable work queue within the headquarters, not a scheduled automation or a separate Codex task. It does not create recurring runs. Nathan explicitly authorizes bounded parallel subagents; current research findings are integrated into the linked notes.
-## Authoring and character rendering follow-up
+## Ranked tracks
 
-The first [XF Studio](../../projects/xf-studio/authoring/README.md) now provides concrete exploratory work. Continue game-material adaptation, authentic blink extraction, richer procedural control, and [saved-V resource resolution](../eye-artistry/save-import.md). The decoded save is a useful input to the CCXL boundary study. Old Eye Artistry content/identities may be discarded; legacy parity is not required.
+| Priority | Track | Status | Owner doc |
+|---|---|---|---|
+| 1 | **First in-game makeup smoke test** | Prepared, awaiting the maintainer's session. Check/Build produce independently verified private candidates for Matte, Satin and Metallic; a diagnostic MO2 profile is staged with the four-preset (Matte/Metallic/Off) candidate; a five-preset Satin candidate is built but not staged. **No in-game test has happened.** The maintainer runs all game tests. | [Runtime preflight and session card](../authoring/first-makeup-runtime-preflight-2026-09-25.md) |
+| 2 | **Character detail rendering completeness** — brow, lash and hair *colours* correct first (a long-standing, top feature priority), then render **all** character-customisation details in the viewport | Open. Brow material path corrected from source (study approximation); lash colour source ambiguous (Alliekat vs vanilla `brown_liquorice.hp`); hair colour uses an approximate dark brown instead of the `ash_brown.hp` profile. Skin/eye/lip parity not reached. | [Preview fidelity](preview-fidelity.md), [brow/lash study](../eye-artistry/brow-lash-fidelity.md), [hair profile resolution](../eye-artistry/saved-hair-profile-resolution.md) |
+| 3 | **CC controls and presets** — expose all character-creator options in the Studio, not just eye shape and piercings; later save back and share CC presets | Open (new track). Read-only catalogue probe exists. *Parallel* with 2 where assets do not conflict. | [CC controls and presets](cc-controls-and-presets.md) |
+| 4 | **Materials system and shader reverse-engineering** — skin, hair, eye, decal/multilayered and related shaders | Open; a long-standing directive, never properly begun as a systematic study. Finish-specific and resource-chain studies exist. *Parallel*. | [Materials and shader RE](materials-shader-re.md) |
+| 5 | **Character-customisation file-chain study** — consolidate how CC files tie together, mining legacy xf-omega and the local wiki clone (text **and** images) | Open; wiki-based map exists. *Parallel* (read-only research). | [CC file chain](cc-file-chain.md) |
+| 6 | **Eye-makeup editor and remaining finish export adapters** (Shimmer, Glitter, Glossy, Colour-shifting) | Editor feature set largely done (see linked backlogs). Export adapters depend on track 4; browser Glitter models recipe-7..10 exist but game export stays guarded. | [Finishes and glitter](glitter-material.md), [path and falloff](path-and-falloff-controls.md), [viewport and editor](viewport-and-editor-controls.md), [authoring requests](eye-artistry-authoring.md) |
+| 7 | **UI follow-ups** | Opus overhaul delivered and merged 24 Sep; reviewed only cursorily so far. Open: in-depth review, API gaps, `legacy.html` retirement after acceptance. | [UI overhaul follow-ups](claude-ui-overhaul.md), [boundary assessment](../authoring/ui-architecture-boundary.md) |
+| 8 | **CCXL character-creator capability study** | Queued explicit request (keep). Source/resource merge boundary mapped; runtime and UI probes remain. Feeds tracks 3 and 5. | [CCXL capabilities](ccxl-character-creator-capabilities.md) |
+| 9 | **Desktop app release and public site** — standing request: finish the desktop app build and keep a preliminary GitHub Pages site for it | Pages site **live** at https://axefrog.github.io/xf-studio/ (deployed from `main` by CI since 24 Sep; says no release/download yet). Electrobun Windows trial works in installed canaries (edit, library, intake, Check, Build, restart persistence). Open: signing and a real release channel, standard-user install, signed A→B updater, clean-machine first run, a download/release section on the site once a build is published. *Parallel*. | [Desktop packaging](../authoring/desktop-packaging.md), [desktop README](../../projects/xf-studio/authoring/desktop/README.md), [update gate](../authoring/desktop-update-ab-gate.md), [site README](../../projects/xf-studio/site/README.md) |
 
-The [persistent authoring queue](eye-artistry-authoring.md) tracks optional head details, direct live editing on the model surface, saved-V assembly, material/blink fidelity and richer procedural controls. A first direct surface-editing implementation is now verified; richer controls and fidelity work remain. Required glitter development has its own research task above.
+Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
-- [Viewport and editor controls](viewport-and-editor-controls.md): idle pause/subsets, stable-head facial motion, FOV/zoom/pan ergonomics, compact layers, rename and live reorder feedback.
+## Queued R&D and background work
 
-- [Path, falloff and surface controls](path-and-falloff-controls.md): nearest-curve insertion, single-eye UV view, weight seams, Bézier/corner handles, directional softness, overlay handles, whole-shape transforms and UV wheel zoom/right-drag pan.
+- **Runtime access baseline** (early mod R&D, start when a research slot frees, ideally after the first in-game test): minimal, heavily logged base mods per type (RED4ext C++, redscript, CET Lua, ArchiveXL/TweakXL) plus a loopback bridge so agents can read and change live game state while the maintainer plays. See [runtime access baseline](runtime-access-baseline.md).
+- **Shader decompile annotator** (R&D tooling, in progress): rename decompiled material constants and bindless textures from template register maps. See [shader-system tooling](../materials/shader-system/README.md).
+- **Generic game-file resolver** (architecture, feeds tracks 2–3): support for installed mods and frameworks such as PRC and CCXL packs must come from interpreting files as the game does, not per-mod adapters. The existing PRC-specific preview code is migration debt. Specified by the [CC file chain](cc-file-chain.md) research.
+- **Python-free Build (next after the built-in plate lands):** the product Build path still runs about 800 lines of experiment-005 Python (`build.py`, `mip_maps.py`, `verify.py`, `archive_inventory.py`, `tools/build_collection_package.py`) and requires users to supply Python with NumPy and Pillow. Port it to a TypeScript compiler module in the app, keep the verifier as an independent code path, and keep Python for research only. The end state is that Build needs only the game folder and WolvenKit.
+- **Native archive and resource reader** (later R&D, approved): a TypeScript reader for the game's `.archive` and CR2W resource formats, decompressing through the user's installed game DLL via `bun:ffi` rather than redistributing it. It removes WolvenKit from the user path and underpins the generic resolver. Respect licences and credit the format research it builds on (WolvenKit, RED4ext SDK, wiki).
+- **Public knowledge pages** (low priority, background): periodically publish mature, attributed and caveated knowledge on the Pages site. See [public knowledge pages](public-knowledge-site.md).
+
+## Paused pending in-game evidence
+
+- **Expanded-plate clearance** ([Experiment 006](../../experiments/006-plate-clearance/README.md), [012](../../experiments/012-native-plate-bootstrap/README.md)). Many offline candidates were rejected; no correction is accepted. Pause until the smoke test shows whether residual eyelid contacts are visible in game. Any resumed candidate must be morph-aware and finite-contact-aware and preserve exact native skin bytes in mesh and morph base buffers.
+- **Native eye assembly** ([013](../../experiments/013-native-preview-core/README.md), [014](../../experiments/014-native-eye-gradient/README.md), [015](../../experiments/015-native-eye-assembly/README.md)). Offline candidates and gates only; not selected by the Studio renderer.
+
+## Later features — discuss with the maintainer before building each
+
+In order:
+
+1. Piercings/earrings design (a [jewellery construction-set proposal](../jewellery/construction-set-design.md) awaits review)
+2. Eyebrows
+3. Cheek makeup
+4. Hair design
+5. Facial expressions and idles (static/animated; varied idle animations)
+6. Tattoos
+7. Full body customisation
+8. World integration: quest design, area design
+
+Existing brow, lash, hair and piercing *preview context* is not permission to build those editors.
+
+**Photo Mode Tools** remains an independent second project (engine/API audit queued after the XF Studio tracks); see its project README.
+
+## Working rules for this queue
+
+This is a durable queue, not a scheduled automation. Bounded parallel subagents are explicitly authorised; code-changing agents work in their own worktree under `D:/Dev/worktrees/<slug>` on a `claude/` branch. Offline verification never substitutes for in-game proof: batch game-only questions into one prepared session for the maintainer to run.

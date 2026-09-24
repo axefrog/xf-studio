@@ -1,16 +1,18 @@
 import type { CameraState } from "./workspace-state";
-import type { UVView } from "./uv-view";
+import type { UVSelectionVisibility, UVView } from "./uv-view";
 import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
 
 export type ViewportHostKind = "head" | "uv";
 export type UVViewCommand = "both" | "single" | "other" | "fit";
+/** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
+export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 export type ViewportSize = { width: number; height: number };
 export type ViewportPhase = "loading" | "ready" | "error";
 export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; captured: boolean };
 export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState };
-  uv: ViewportHostState & { view?: UVView };
+  uv: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
 };
 export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
   affordance: "point" | "tangent" | "warp-origin" | "warp-vector" | "shape" | "empty" };
@@ -26,7 +28,11 @@ export type ViewportAttachmentPort<Slot> = {
   inputCapture(kind: ViewportHostKind): boolean;
   headView(): CameraState | undefined;
   uvView(): UVView | undefined;
+  /** Optional: whether the selected point/warp is inside the current UV view. */
+  uvSelection?(): UVSelectionVisibility | undefined;
   uvCommand(command: UVViewCommand): boolean;
+  /** Optional: apply a UV pan/zoom and persist the view. */
+  uvNavigate?(command: UVNavigation): boolean;
   hitAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportHit | undefined;
   queryContext(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
 };
@@ -40,6 +46,8 @@ export class ViewportAttachment<Slot> {
   constructor(private port: ViewportAttachmentPort<Slot>) {}
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private publish() { for (const listener of this.listeners) listener(); }
+  /** The device reports a view change (UV pan/zoom/mode) so readers of `snapshot()` can repaint. */
+  viewChanged() { this.publish(); }
   setReady(kind: ViewportHostKind) { this.phases[kind] = { phase: "ready" }; this.publish(); }
   setError(kind: ViewportHostKind, error: string) {
     this.phases[kind] = { phase: "error", error }; this.publish();
@@ -77,6 +85,20 @@ export class ViewportAttachment<Slot> {
     if (changed) this.publish();
     return changed;
   }
+  uvNavigateCapability(command: UVNavigation) {
+    if (this.phases.uv.phase !== "ready" || !this.port.uvNavigate) return { available: false as const, reason: "UV editor is not ready." };
+    const values = command.kind === "pan" ? [command.du, command.dv] : [command.factor, command.at?.u ?? 0, command.at?.v ?? 0];
+    if (!values.every(Number.isFinite) || command.kind === "zoom" && command.factor <= 0)
+      return { available: false as const, reason: "UV navigation needs finite values and a positive zoom factor." };
+    return { available: true as const };
+  }
+  /** View state only: no recipe, Undo or selection change. */
+  uvNavigate(command: UVNavigation) {
+    if (!this.uvNavigateCapability(command).available) return false;
+    const changed = this.port.uvNavigate!(command);
+    if (changed) this.publish();
+    return changed;
+  }
   /** Picking is read-only; the application binds identity and geometry revision. */
   contextAt(kind: ViewportHostKind, clientX: number, clientY: number): ViewportContextQuery | undefined {
     if (this.phases[kind].phase !== "ready") return;
@@ -91,7 +113,8 @@ export class ViewportAttachment<Slot> {
     });
     return {
       head: { ...state("head"), view: structuredClone(this.port.headView()) },
-      uv: { ...state("uv"), view: structuredClone(this.port.uvView()) },
+      uv: { ...state("uv"), view: structuredClone(this.port.uvView()),
+        ...(this.port.uvSelection?.() ? { selection: structuredClone(this.port.uvSelection()) } : {}) },
     };
   }
 }

@@ -2,7 +2,7 @@
 
 **Product direction superseded, 2026-09-23:** the user now wants one eye-makeup selector switching complete studio-authored presets, not a design/colour/finish matrix or four in-game layer selectors. The mechanisms and measured legacy comparisons below remain research evidence; the proposed naming/palette contract is a historical experiment. New work follows the [preset compiler direction](../../projects/xf-studio/data/product-direction.md), compiling only authored looks and deduplicating resources.
 
-Decision, 2026-09-23: design against **ArchiveXL 1.27.3**, the current stable release verified from the author's GitHub API. Installed 1.26.3 must be updated before runtime validation. Nathan explicitly prefers current releases and a larger palette; 49 colours is only the legacy comparison point, never a new product limit.
+Decision, 2026-09-23: design against **ArchiveXL 1.27.3**, the current stable release verified from the author's GitHub API. Installed 1.26.3 must be updated before runtime validation. The project explicitly prefers current releases and requires a larger palette; 49 colours is only the legacy comparison point, never a new product limit.
 
 Evidence anchor: [release](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3), commit `5474e34d56112f5d8843ae863e1e72ff510957c0`; selected source snapshots and hashes in [upstream manifest](upstream/manifest.json). The top-level local reference checkout has also been updated to that commit. Latest development branches and released binaries must remain distinct.
 
@@ -12,7 +12,7 @@ The current RedModding `source/raw` export contains 15,681 mesh appearances, ent
 
 The multiplication is 4 layers × 20 designs × 49 colours × 4 finishes. Each design/layer `.app` enumerates 196 appearances, each containing a morph-skinned component; each combination also adds a mesh appearance and material. Only the input texture and diffuse colour change across many instances. Source: `D:/Dev/xf-omega/source/projects/xf-eye-artistry-ccxl/{xf-eye-artistry-ccxl,atlas,materials}.ts`.
 
-Nathan reports that larger palettes caused WolvenKit to grind to a halt for other people opening the mod. No timing measurement was made here, but the duplicated resource structure is directly verified. Success means materially reducing editor resource load as well as supporting more colours, not merely shortening generator code.
+Larger palettes reportedly caused WolvenKit to grind to a halt for other people opening the mod. No timing measurement was made here, but the duplicated resource structure is directly verified. Success means materially reducing editor resource load as well as supporting more colours, not merely shortening generator code.
 
 ## Distinct mechanisms, not one universal feature
 

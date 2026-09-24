@@ -2,7 +2,7 @@
 
 24 September 2026. **No safe replacement plate was found or selected.** The previous bounded finite correction failed both the all-static neighbor-smoothness and sampled contact gates. This follow-up identifies where those two failures overlap, so a future correction can be narrowly designed and independently checked. It reads the retained-weight game-derived files but changes no mesh, morph, Blender master, archive, or release asset.
 
-The [reproducible diagnostic](morph_contact_boundary.py) independently reconstructs the pairwise necessary smoothness test from the head and converted plate GLBs. It evaluates Basis, all 105 individual morphs, and Nathan's five-morph saved combination (107 static cases); there are 4,642 plate edges. It also joins the certified edges to the already measured combined head-plus-plate exposed-contact detail at idle frames 0 and 25. The machine-readable [report](morph-contact-boundary.json) includes resource SHA-256 hashes, every witness, UV positions and explicit limits.
+The [reproducible diagnostic](morph_contact_boundary.py) independently reconstructs the pairwise necessary smoothness test from the head and converted plate GLBs. It evaluates Basis, all 105 individual morphs, and the reference save's five-morph combination (107 static cases); there are 4,642 plate edges. It also joins the certified edges to the already measured combined head-plus-plate exposed-contact detail at idle frames 0 and 25. The machine-readable [report](morph-contact-boundary.json) includes resource SHA-256 hashes, every witness, UV positions and explicit limits.
 
 | Result | Measurement |
 |---|---:|

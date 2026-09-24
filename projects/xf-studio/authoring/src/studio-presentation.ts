@@ -9,26 +9,27 @@ import type { StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
+import { InstallDetectionActions } from "./install-detection-actions";
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
   readonly authoring: Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
-    "gestureDescriptors" | "descriptorsFor" | "targetCapability" | "contextCapability" |
-    "choicesFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
+    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
+    "choicesFor" | "limitsFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "consequences" | "finishCatalogue" |
     "glitterModelCatalogue"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
-  readonly files: Pick<StudioFileOperations, "capability" | "execute"> & {
+  readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
-    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "contextAt"> & {
+    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "uvNavigateCapability" | "uvNavigate" | "contextAt"> & {
       snapshot(): ReadonlyDeep<ReturnType<ViewportAttachment<Slot>["snapshot"]>>;
     };
   readonly preferences: Pick<UIPreferenceActions, "capability" | "dispatch"> & {
@@ -54,6 +55,10 @@ export type StudioPresentationPort<Slot> = {
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
     snapshot(): ReadonlyDeep<ReturnType<LocalSetupActions["snapshot"]>>;
   };
+  /** Read-only discovery of game installs and MO2 instances for setup suggestions. */
+  readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<ReturnType<InstallDetectionActions["snapshot"]>>;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -63,6 +68,7 @@ export type StudioPresentationPort<Slot> = {
     previewReadiness: PreviewReadiness;
     status: PresentationStatus;
     localSetup: ReturnType<LocalSetupActions["snapshot"]>;
+    installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -80,6 +86,7 @@ export function createStudioPresentation<Slot>(sources: {
   editor?: AuthoringPresentation;
   status?: StatusSource;
   localSetup?: LocalSetupActions;
+  installDetection?: InstallDetectionActions;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -90,10 +97,12 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
     requestDescriptors: () => a.requestDescriptors(), gestureDescriptors: () => a.gestureDescriptors(),
+    fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
     contextCapability: (target, action) => a.contextCapability(target, action),
     choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base),
+    limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
     contextFor: hit => a.contextFor(hit),
     contextOptionsFor: context => a.contextOptionsFor(context),
     contextQuery: hit => a.contextQuery(hit),
@@ -110,7 +119,7 @@ export function createStudioPresentation<Slot>(sources: {
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), finishCatalogue: () => a.finishCatalogue(),
+    previewState: () => a.previewState(), history: () => a.history(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
   };
   const fallback = () => a.snapshot().document;
@@ -125,14 +134,15 @@ export function createStudioPresentation<Slot>(sources: {
     revision: () => -1, canUndo: () => a.capability({ kind: "recipe.undo" }).available,
   };
   const library: CollectionViewPort = {
-    view: () => l.view(), summary: () => l.summary(), subscribe: listener => l.subscribe(listener),
+    view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
+    subscribe: listener => l.subscribe(listener),
     capability: action => l.capability(action), dispatch: action => l.dispatch(action),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
   };
   const files: StudioPresentationPort<Slot>["files"] = {
     snapshot: () => f.snapshot(), capability: action => f.capability(action),
-    execute: action => f.execute(action),
+    execute: action => f.execute(action), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),
@@ -140,6 +150,7 @@ export function createStudioPresentation<Slot>(sources: {
     cancelInput: kind => v.cancelInput(kind),
     uvCommandCapability: command => v.uvCommandCapability(command),
     uvCommand: command => v.uvCommand(command),
+    uvNavigateCapability: command => v.uvNavigateCapability(command), uvNavigate: command => v.uvNavigate(command),
     contextAt: (kind, x, y) => v.contextAt(kind, x, y),
   };
   const preferences: StudioPresentationPort<Slot>["preferences"] = {
@@ -154,17 +165,25 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Local setup is unavailable on this host." }),
     dispatch: async () => ({ ok: false, code: "unavailable", message: "Local setup is unavailable on this host." }),
   };
+  const detection = sources.installDetection ?? new InstallDetectionActions(null);
+  const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
+    snapshot: () => detection.snapshot(), capability: action => detection.capability(action),
+    dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
+  };
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
+    installDetection: Object.freeze(installDetection),
     status: Object.freeze({ snapshot: () => s.snapshot() }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
-      status: s.snapshot(), localSetup: localSetup.snapshot() }),
+      status: s.snapshot(), localSetup: localSetup.snapshot(),
+      installDetection: installDetection.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
-        ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : [])];
+        ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
+        ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

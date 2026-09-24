@@ -48,3 +48,16 @@ test("view state persists independently of recipe and legacy workspaces have the
   const copied = parseUVView(workspace.uvView); copied.u = .2;
   expect(workspace.uvView.u).toBe(.63);
 });
+
+test("selection visibility reports whether the selected point or warp origin is inside the UV view", async () => {
+  const { selectionVisibility, defaultUVView } = await import("../src/uv-view");
+  const layer = { symmetry: false, points: [{ u: .3, v: .28 }, { u: .9, v: .9 }], fields: [{ id: "w", u: .31, v: .27 }] };
+  const view = defaultUVView();
+  expect(selectionVisibility(view, 720 / 310, layer, 0, "w")).toEqual({ point: { index: 0, visible: true }, field: { id: "w", visible: true } });
+  expect(selectionVisibility(view, 720 / 310, layer, 1).point).toEqual({ index: 1, visible: false });
+  // A mirrored layer counts as visible when its reflected instance is in view.
+  const single = { ...view, mode: "single" as const, u: .75, span: .3 };
+  expect(selectionVisibility(single, 720 / 520, layer, 0).point?.visible).toBe(false);
+  expect(selectionVisibility(single, 720 / 520, { ...layer, symmetry: true }, 0).point?.visible).toBe(true);
+  expect(selectionVisibility(view, 1, layer, 7)).toEqual({});
+});

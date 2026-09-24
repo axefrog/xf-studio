@@ -1,77 +1,141 @@
 <!--page {
   "title": "Credits and acknowledgements · XF Studio",
-  "description": "The modders, tools, documentation and research that XF Studio learns from, with what each contributed and how it is used.",
+  "description": "The Cyberpunk 2077 modders, frameworks, tools, documentation and research that XF Studio learns from, and how each is used.",
   "nav": "credits"
 } -->
 <header class="page-head">
   <div class="wrap">
     <p class="eyebrow">Credits</p>
     <h1>Built on the modding community’s work</h1>
-    <p class="lede">XF Studio builds on the discoveries, tools and creativity of the Cyberpunk 2077 modding community. This page summarises who taught us what. The complete record, with versions, commits and exact uses, is the <a href="{{blob}}/docs/community-credits.md">community credits and learning record</a> in the repository.</p>
-    <p class="notice"><strong>Acknowledgement is not endorsement, and credit is not permission.</strong> Listing a project here does not mean its authors endorse XF Studio. Neither this site nor the repository distributes any of the mod assets named below; where a mod’s files inform the private local preview, they come from the user’s own installation.</p>
+    <p class="lede">XF Studio stands on the work of the Cyberpunk 2077 modding community: the people who build its frameworks and tools, document the game’s inner workings, and share their mods and techniques. Much of what we know came from studying their work, and we are grateful to every one of them. This page summarises the <a href="{{blob}}/docs/community-credits.md">community credits</a> in the repository, which remain the authoritative list.</p>
+    <p class="notice"><strong>Acknowledgement is not endorsement, and credit is not permission.</strong> Listing someone here does not mean they endorse XF Studio, and it does not grant permission to reuse their work; where we use or depend on something, the entry says so. Neither this site nor the Studio distributes any of the mod or game assets named below. Where a mod’s files inform the private local preview, they come from the user’s own installation.</p>
   </div>
 </header>
 
-<section class="section" aria-labelledby="tools-title">
+<section class="section" aria-labelledby="foundations-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">01</span>Frameworks, tools and documentation</p>
-      <h2 id="tools-title">The foundations</h2>
+      <p class="eyebrow"><span class="num">01</span>Game and frameworks</p>
+      <h2 id="foundations-title">The foundations</h2>
     </header>
     <ul class="credit-list">
       <li class="credit">
+        <h3>Cyberpunk 2077</h3>
+        <p class="by"><b>CD PROJEKT RED</b></p>
+        <p>The game’s own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article <a href="https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/">“A World Full of Substance”</a> explained the shared-surface and mask approach behind the game’s materials.</p>
+        <p class="use"><span>Private local reference only; nothing redistributed</span></p>
+      </li>
+      <li class="credit">
         <h3>ArchiveXL</h3>
-        <p class="by">By <b>psiberx</b> and contributors</p>
-        <p>Its character-creator, mesh and material extension source showed exactly how options register, templates clone and dynamic material paths expand. It is the technical foundation for replacing the old per-combination material matrix with one selector.</p>
-        <p class="use"><span>Source learning · build target</span><a href="https://github.com/psiberx/cp2077-archive-xl">Repository</a></p>
+        <p class="by"><b>psiberx</b> and contributors</p>
+        <p>Its source taught us how character-creator options register, how appearance templates clone and how dynamic material paths expand: the foundation of the single-selector preset export, which avoids a separate material for every combination.</p>
+        <p class="use"><span>Learning · intended runtime dependency; no code included</span><a href="https://github.com/psiberx/cp2077-archive-xl">Repository</a></p>
+      </li>
+      <li class="credit">
+        <h3>Codeware and TweakXL</h3>
+        <p class="by"><b>psiberx</b> and contributors</p>
+        <p>Their published version and compatibility information helped us choose stable framework versions for runtime testing.</p>
+        <p class="use"><span>Learning</span><a href="https://github.com/psiberx/cp2077-codeware">Codeware</a><a href="https://github.com/psiberx/cp2077-tweak-xl">TweakXL</a></p>
+      </li>
+      <li class="credit">
+        <h3>RED4ext and RED4ext SDK</h3>
+        <p class="by"><b>wopss</b> and contributors</p>
+        <p>RED4ext set our framework baseline, and the SDK’s resource-depot declarations clarified which parts of archive lookup order the game leaves unspecified.</p>
+        <p class="use"><span>Learning</span><a href="https://github.com/wopss/RED4ext">RED4ext</a><a href="https://github.com/wopss/RED4ext.SDK">SDK</a></p>
+      </li>
+      <li class="credit">
+        <h3>redscript</h3>
+        <p class="by"><b>jac3km4</b> and contributors</p>
+        <p>Helped set a stable framework baseline for runtime testing.</p>
+        <p class="use"><span>Learning</span><a href="https://github.com/jac3km4/redscript">Repository</a></p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section alt" aria-labelledby="tools-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">02</span>Modding tools and documentation</p>
+      <h2 id="tools-title">Tools and shared knowledge</h2>
+    </header>
+    <ul class="credit-list">
+      <li class="credit">
+        <h3>WolvenKit</h3>
+        <p class="by">The <b>WolvenKit team</b> and contributors</p>
+        <p>The backbone of our export pipeline: its command-line tools convert, serialise and pack resources, and its source taught us the game’s save, archive, mesh, morph, animation and appearance formats and informed our pre-pack path checks.</p>
+        <p class="use"><span>External tool (GPL-3.0) · learning; no code included</span><a href="https://github.com/WolvenKit/WolvenKit">Repository</a></p>
+      </li>
+      <li class="credit">
+        <h3>Cyberpunk Blender Add-on (IO Suite)</h3>
+        <p class="by">Its <b>authors</b> and the <b>RED Modding maintainers</b></p>
+        <p>Its facial solver, run offline, gave the preview a working character-creator idle with blinks, gaze and mouth movement, and its eye material setup was a precedent for our preview shaders.</p>
+        <p class="use"><span>External tool (GPL-3.0-or-later), unmodified; no code included</span><a href="https://github.com/WolvenKit/Cyberpunk-Blender-add-on">Repository</a></p>
+      </li>
+      <li class="credit">
+        <h3>Mod Organizer 2</h3>
+        <p class="by">The <b>ModOrganizer2</b> contributors; the Cyberpunk plugin credits <b>6788</b> and <b>Zash</b></p>
+        <p>The plugin and its load-order guide taught us to separate MO2’s virtual file priority from the game’s own archive load order, which shaped how XF Studio discovers installed mods.</p>
+        <p class="use"><span>Learning</span><a href="https://github.com/ModOrganizer2/modorganizer">MO2</a><a href="https://github.com/ModOrganizer2/modorganizer-basic_games">Plugin</a></p>
       </li>
       <li class="credit">
         <h3>Cyberpunk 2077 Modding Wiki</h3>
         <p class="by"><b>manavortex</b> and the contributor community</p>
-        <p>Special thanks to manavortex for writing much of the wiki and helping keep it available to modders. Its resource, material, CCXL and decal guides, and their screenshots, framed much of our resource-chain research.</p>
-        <p class="use"><span>Documentation learning</span><a href="https://wiki.redmodding.org/cyberpunk-2077-modding">Wiki</a></p>
+        <p>Special thanks to manavortex, who wrote much of the wiki and keeps it available to modders. Its guides and screenshots taught us the character resource chain, character-creator hair, eye and switcher setups, material families, decals and load order. We are particularly grateful to guide authors and editors <b>icxrus</b>, <b>island_dancer</b>, <b>nutboy</b>, <b>Mx_OrcBoi</b> and <b>minnierylands</b>, and to the CyberCAT documentation for pointing us to external preset files.</p>
+        <p class="use"><span>Documentation learning</span><a href="https://wiki.redmodding.org/cyberpunk-2077-modding">Wiki</a><a href="https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs">Source</a></p>
       </li>
-      <li class="credit">
-        <h3>WolvenKit</h3>
-        <p class="by">The <b>WolvenKit team</b> and contributors</p>
-        <p>Save-format facts, shader-cache structures and mesh, morph and animation conversion. Its command-line tools make extraction, serialization and round-trip verification possible.</p>
-        <p class="use"><span>Tool use · format learning</span><a href="https://github.com/WolvenKit/WolvenKit">Repository</a></p>
-      </li>
-      <li class="credit">
-        <h3>Cyberpunk Blender Add-on / IO Suite</h3>
-        <p class="by">Its <b>authors</b> and the <b>RED Modding maintainers</b></p>
-        <p>Its documentation and native facial solver opened the route from animation tracks to real facial movement, and its material code informed the eye preview.</p>
-        <p class="use"><span>Source learning</span><a href="https://github.com/WolvenKit/Cyberpunk-Blender-add-on">Repository</a></p>
-      </li>
-      <li class="credit">
-        <h3>Mod Organizer 2 Cyberpunk support</h3>
-        <p class="by"><b>6788</b>, <b>Zash</b> and contributors</p>
-        <p>Its plugin and guide separate MO2’s virtual file priority from archive load order, which corrected the design of our mod-source resolver.</p>
-        <p class="use"><span>Source and documentation learning</span><a href="https://github.com/ModOrganizer2/modorganizer-basic_games">Repository</a></p>
-      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="libraries-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">03</span>Libraries, runtimes and general tools</p>
+      <h2 id="libraries-title">What the Studio is built with</h2>
+    </header>
+    <ul class="credit-list">
       <li class="credit">
         <h3>Three.js</h3>
-        <p class="by"><b>mrdoob</b> and contributors</p>
-        <p>The browser renderer behind the preview: skinning, raycasting, cameras and the material hooks that the finish studies extend.</p>
-        <p class="use"><span>Dependency</span><a href="https://github.com/mrdoob/three.js">Repository</a></p>
+        <p class="by"><b>mrdoob</b> and the three.js authors</p>
+        <p>Renders the entire preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure and carries the MIT notice.</p>
+        <p class="use"><span>Dependency (MIT)</span><a href="https://github.com/mrdoob/three.js">Repository</a></p>
+      </li>
+      <li class="credit">
+        <h3>Bun and SQLite</h3>
+        <p class="by">The <b>Bun</b> contributors and the <b>SQLite</b> project</p>
+        <p>Bun runs the local service, the SQLite library and our test suites, and hosts the desktop app’s main process. SQLite keeps the library of immutable look and collection versions.</p>
+        <p class="use"><span>Runtime dependencies</span><a href="https://github.com/oven-sh/bun">Bun</a><a href="https://sqlite.org/">SQLite</a></p>
+      </li>
+      <li class="credit">
+        <h3>Electrobun and Hutch</h3>
+        <p class="by"><b>Blackboard Technologies Inc.</b> and contributors</p>
+        <p>The framework for the desktop app. Its documentation shaped our packaging, update, shutdown and uninstall design.</p>
+        <p class="use"><span>Dependency (MIT)</span><a href="https://github.com/blackboardsh/electrobun">Electrobun</a><a href="https://github.com/blackboardsh/hutch">Hutch</a></p>
+      </li>
+      <li class="credit">
+        <h3>Microsoft platform tools and documentation</h3>
+        <p class="by"><b>Microsoft</b></p>
+        <p>The DirectX shader compiler and DXIL reference let us read the game’s compiled shaders, and the WebView2 debugging documentation enabled automated testing of the desktop window. WebView2 is a platform dependency of the desktop app.</p>
+        <p class="use"><span>Tools · platform dependency</span><a href="https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/DXIL.rst">DXIL</a><a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-visual-studio-code">WebView2</a></p>
       </li>
       <li class="credit">
         <h3>Blender</h3>
         <p class="by">The <b>Blender Foundation</b> and contributors</p>
-        <p>The eye-plate pipeline, geometry diagnostics and contact-visibility studies.</p>
+        <p>Offline mesh work, eye-plate clearance studies and diagnostic renders; its ray casting separates visible intersections from hidden ones.</p>
         <p class="use"><span>Tool use</span><a href="https://www.blender.org/">blender.org</a></p>
       </li>
       <li class="credit">
-        <h3>Bun and SQLite</h3>
-        <p class="by"><b>Bun</b> and <b>SQLite</b> contributors</p>
-        <p>The local server and test runner, and the transactional library that keeps immutable preset revisions.</p>
-        <p class="use"><span>Dependencies</span><a href="https://github.com/oven-sh/bun">Bun</a><a href="https://sqlite.org/">SQLite</a></p>
+        <h3>NumPy, SciPy and Pillow</h3>
+        <p class="by">The <b>NumPy</b>, <b>SciPy</b> and <b>Pillow</b> developers</p>
+        <p>Eye-plate correction studies, image encoding and measurement, and rasterising the desktop icon.</p>
+        <p class="use"><span>Research tooling</span><a href="https://numpy.org/">NumPy</a><a href="https://scipy.org/">SciPy</a><a href="https://github.com/python-pillow/Pillow">Pillow</a></p>
       </li>
       <li class="credit">
-        <h3>NumPy, SciPy and LZ4</h3>
-        <p class="by"><b>NumPy</b>, <b>SciPy</b> and <b>LZ4</b> developers</p>
-        <p>Numerical eye-plate feasibility studies, and the block-format specification behind the read-only save reader’s decompression.</p>
-        <p class="use"><span>Research dependencies · specification</span><a href="https://numpy.org/">NumPy</a><a href="https://scipy.org/">SciPy</a><a href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md">LZ4 spec</a></p>
+        <h3>LZ4, Mermaid CLI and wgpu</h3>
+        <p class="by">The <b>LZ4</b>, <b>Mermaid</b> and <b>gfx-rs/wgpu</b> contributors</p>
+        <p>The LZ4 block specification behind the save reader’s independent decompression; Mermaid CLI for rendering and reviewing pipeline diagrams; and wgpu’s documentation for our assessment of rendering backends and ray-tracing support.</p>
+        <p class="use"><span>Specification · tool use · learning</span><a href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md">LZ4 spec</a><a href="https://github.com/mermaid-js/mermaid-cli">Mermaid CLI</a><a href="https://github.com/gfx-rs/wgpu">wgpu</a></p>
       </li>
     </ul>
   </div>
@@ -80,70 +144,76 @@
 <section class="section alt" aria-labelledby="mods-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">02</span>Mods</p>
-      <h2 id="mods-title">Mods that taught us concrete techniques</h2>
-      <p class="lede">Authorship as recorded in the learning record from each mod’s page. “Private local preview” means a Studio user’s own installed copy is read by their local preview; nothing is redistributed.</p>
+      <p class="eyebrow"><span class="num">04</span>Mods</p>
+      <h2 id="mods-title">Mods and creators whose work we studied</h2>
+      <p class="lede">Studied from local installations. “Private local reference” means a Studio user’s own installed copy is read by their local preview; it is never packaged or redistributed, and each mod’s own terms continue to apply.</p>
     </header>
     <ul class="credit-list">
       <li class="credit">
-        <h3>Hair Color Profiles CCXL</h3>
-        <p class="by"><b>island_dancer</b> and <b>psiberx</b></p>
-        <p>Shared material templates, dynamic material paths and explicit character-creator colour definitions, and the lesson that colour-profile patches can reach brow and lash meshes as well as hair.</p>
-        <p class="use"><span>Learning from resource inspection</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/19115">Nexus Mods</a></p>
+        <h3>Hair Color Profiles CCXL and Photoreal Eyes CCXL</h3>
+        <p class="by"><b>island_dancer</b>, co-credited with <b>psiberx</b></p>
+        <p>Shared material templates and dynamic material paths showed how far material duplication can shrink, and the hair profiles drive the preview’s saved-hair shading. island_dancer also generously explained a Substance glitter graph and reviewed our glitter preview; the lesson that facets need visibly varied tilts shaped every glitter model since.</p>
+        <p class="use"><span>Private local reference · inspiration; graph not reused</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/19115">Hair profiles</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/22412">Photoreal Eyes</a></p>
       </li>
       <li class="credit">
-        <h3>Photoreal Eyes CCXL</h3>
-        <p class="by"><b>island_dancer</b> and <b>psiberx</b></p>
-        <p>Thirty-two appearance stubs sharing one material template: concrete evidence that material duplication can shrink dramatically.</p>
-        <p class="use"><span>Learning from resource inspection</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/22412">Nexus Mods</a></p>
-      </li>
-      <li class="credit">
-        <h3>Heterochromia Eyes - CCXL</h3>
+        <h3>Heterochromia Eyes and Soft Natural Eyelashes (CCXL)</h3>
         <p class="by"><b>icxrus</b></p>
-        <p>Separate left and right appearance routing: a real example of independently selected components.</p>
-        <p class="use"><span>Learning from resource inspection</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/20349">Nexus Mods</a></p>
+        <p>A clear example of independently selected components, and the lash geometry and material used in the preview, which showed how dynamic colour profiles bind to custom meshes.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/20349">Heterochromia</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/29582">Eyelashes</a></p>
       </li>
       <li class="credit">
-        <h3>Soft Natural Eyelashes - CCXL</h3>
-        <p class="by"><b>icxrus</b></p>
-        <p>Lash geometry and deformation for the preview, and the lesson that mod resources must be resolved through the mod manager, not the game folder alone.</p>
-        <p class="use"><span>Learning · private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/29582">Nexus Mods</a></p>
-      </li>
-      <li class="credit">
-        <h3>Beautiful EYEBROWS II - CCXL</h3>
+        <h3>Beautiful EYEBROWS II, Universal Skin Tone and Realistic Complexion III</h3>
         <p class="by"><b>Arkhe</b></p>
-        <p>Copy and patch declarations that complete resources from vanilla geometry, and a two-map alpha brow material; its style 18 gives nearby brow context in the preview.</p>
-        <p class="use"><span>Learning · private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/26168">Nexus Mods</a></p>
-      </li>
-      <li class="credit">
-        <h3>Unique Eyes to CCXL</h3>
-        <p class="by"><b>nutboy</b>, whose credits acknowledge psiberx, icxrus, island dancer and halvkyrie</p>
-        <p>Resolved a saved eye choice through a shared appearance, material patch and texture fallback chain.</p>
-        <p class="use"><span>Learning from resource inspection</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/23263">Nexus Mods</a></p>
-      </li>
-      <li class="credit">
-        <h3>Kala’s Eyes Standalone V2</h3>
-        <p class="by"><b>Kala</b>; source eye texture credited to <b>Sarah Cartwright</b></p>
-        <p>Supplies the saved eye maps shown in the private preview, and explained why a generic study texture looked different.</p>
-        <p class="use"><span>Private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/3242">Nexus Mods</a></p>
-      </li>
-      <li class="credit">
-        <h3>PRC jewellery framework and packs</h3>
-        <p class="by"><b>eagul</b>, whose framework credits Auska and manavortex</p>
-        <p>A morph-compatible, slot-based route for modular jewellery, informing attachment and deformation research for possible future piercing work.</p>
-        <p class="use"><span>Learning · private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/8590">Framework</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/10236">Mirrors</a></p>
+        <p>How ArchiveXL copy and patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows. The skin mods provided alternative maps for render-fidelity comparisons.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/26168">Eyebrows</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/15426">Skin tone</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/19314">Complexion</a></p>
       </li>
       <li class="credit">
         <h3>Natural Hair Tones</h3>
         <p class="by"><b>Alliekat</b></p>
-        <p>The hair-tone gradient behind the saved brow colour, used for brow context in the preview.</p>
-        <p class="use"><span>Private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/15787">Nexus Mods</a></p>
+        <p>Supplies the saved character’s brow colour gradient, and taught us that an installed override need not change the visible colour.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/15787">Nexus Mods</a></p>
+      </li>
+      <li class="credit">
+        <h3>PRC jewellery framework and packs</h3>
+        <p class="by"><b>eagul</b>; the framework credits Auska and manavortex</p>
+        <p>A working route to morph-compatible modular jewellery, informing future jewellery design. The pages require the author’s permission for reuse or modification.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/8590">Framework</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/8611">Collection</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/10236">Mirrors</a></p>
+      </li>
+      <li class="credit">
+        <h3>Kala’s Eyes Standalone V2</h3>
+        <p class="by"><b>Kala</b>; source eye texture credited to <b>Sarah Cartwright</b></p>
+        <p>Supplies the saved character’s eye textures in the preview. The page’s credit, noncommercial and game-use conditions apply.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/3242">Nexus Mods</a></p>
+      </li>
+      <li class="credit">
+        <h3>Unique Eyes to CCXL</h3>
+        <p class="by"><b>nutboy</b>, crediting psiberx, icxrus, island dancer and halvkyrie</p>
+        <p>Resolves the saved character’s eye choice, and gave us a concrete case for reading character-creator option catalogues.</p>
+        <p class="use"><span>Studied only</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/23263">Nexus Mods</a></p>
       </li>
       <li class="credit">
         <h3>MELUMINARY Long Length Pak Vol. 3 #011</h3>
-        <p class="by">Creator attribution not yet confirmed</p>
-        <p>Its registration and skinned meshes resolve a saved hairstyle for the optional hair preview, and showed why each preview binding needs its own fidelity report.</p>
-        <p class="use"><span>Private local preview</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/27125">Nexus Mods</a></p>
+        <p class="by">Creator credits still being confirmed</p>
+        <p>Supplies the saved character’s hair geometry for the optional hair preview; its maps taught us to check whether an apparently missing texture is genuinely constant.</p>
+        <p class="use"><span>Private local reference</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/27125">Nexus Mods</a></p>
+      </li>
+      <li class="credit">
+        <h3>-KS- UV Texture Framework</h3>
+        <p class="by">The <b>KnowSo team</b>, crediting original authors Zosoab70 and AllKnowingLion</p>
+        <p>Its skin template and seam-fix resources showed why each file’s effective load-order winner must be resolved before changing preview materials.</p>
+        <p class="use"><span>Studied only</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/3783">Nexus Mods</a></p>
+      </li>
+      <li class="credit">
+        <h3>Morphtarget and AnimRig Additions; Facial Customisation Rig Fix</h3>
+        <p class="by"><b>NoraLee</b>; <b>xBaebsae</b></p>
+        <p>Their alternative teeth and head-morph resources reinforced the need to resolve each file’s effective winner.</p>
+        <p class="use"><span>Studied only</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/4673">NoraLee</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/7179">xBaebsae</a></p>
+      </li>
+      <li class="credit">
+        <h3>Hair-colour packs and Kwek EquipmentEx earrings</h3>
+        <p class="by">Individual authors still being confirmed</p>
+        <p>Four hair-colour packs showed how colour profiles are scoped and layered by data, and an inventory-worn earring mod provided a packaging precedent for jewellery design.</p>
+        <p class="use"><span>Studied only</span><a href="https://www.nexusmods.com/cyberpunk2077/mods/30027">MCH Pt 1</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/29943">Washed Out</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/23002">Illegally Blonde</a><a href="https://www.nexusmods.com/cyberpunk2077/mods/22664">Pink</a></p>
       </li>
     </ul>
   </div>
@@ -152,45 +222,34 @@
 <section class="section" aria-labelledby="research-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">03</span>Research and references</p>
+      <p class="eyebrow"><span class="num">05</span>Research and references</p>
       <h2 id="research-title">Ideas from further afield</h2>
+      <p class="lede">These papers informed our thinking about filtering tiny glitter highlights; no algorithm from them was implemented.</p>
     </header>
     <ul class="credit-list">
       <li class="credit">
         <h3>Discrete Stochastic Microfacet Models</h3>
         <p class="by"><b>Jakob, Hašan, Yan, Lawrence, Ramamoorthi and Marschner</b>, 2014</p>
-        <p>Why tiny normal-mapped glitter aliases and flickers, framing the glitter preview studies.</p>
+        <p>Framed the aliasing and temporal-coherence problem of tiny normal-mapped glitter.</p>
         <p class="use"><span>Conceptual learning</span><a href="https://research.cs.cornell.edu/stochastic-sg14/">Paper</a></p>
-      </li>
-      <li class="credit">
-        <h3>Real-time Image-based Lighting of Glints</h3>
-        <p class="by"><b>Kneiphof and Klein</b>, 2025</p>
-        <p>Identified environment lighting as a separate filtering requirement for glints.</p>
-        <p class="use"><span>Conceptual learning</span><a href="https://arxiv.org/abs/2507.02674v1">Paper</a></p>
       </li>
       <li class="credit">
         <h3>Glint rendering on anisotropic grids</h3>
         <p class="by"><b>Thomas Deliot and Laurent Belcour</b>, 2023</p>
-        <p>A pixel-footprint counting lead for glitter density.</p>
-        <p class="use"><span>Conceptual learning</span><a href="https://arxiv.org/html/2306.05051v1">Paper</a></p>
+        <p>A lead on counting glints within a pixel’s footprint.</p>
+        <p class="use"><span>Conceptual learning</span><a href="https://arxiv.org/abs/2306.05051v1">Paper</a></p>
       </li>
       <li class="credit">
-        <h3>Glitter facet feedback</h3>
-        <p class="by"><b>island_dancer</b></p>
-        <p>Feedback on facet tilt that shaped the direct-light glitter preview targets.</p>
-        <p class="use"><span>Visual feedback</span></p>
+        <h3>Real-time Image-based Lighting of Glints</h3>
+        <p class="by"><b>Kneiphof and Klein</b>, 2025</p>
+        <p>Showed that environment lighting is a separate filtering requirement.</p>
+        <p class="use"><span>Conceptual learning</span><a href="https://arxiv.org/abs/2507.02674v1">Paper</a></p>
       </li>
       <li class="credit">
-        <h3>Cyberpunk 2077</h3>
-        <p class="by"><b>CD PROJEKT RED</b></p>
-        <p>The original game art, rigs, facial setups, animation and materials underpin the local preview and experiments. The studio’s <a href="https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/">“A World Full of Substance”</a> technical-art article informed the case for shared surfaces and masks.</p>
-        <p class="use"><span>Game-derived references, kept local</span></p>
-      </li>
-      <li class="credit">
-        <h3>Eye Artistry</h3>
-        <p class="by"><b>axefrog</b></p>
-        <p>The original layered eye-makeup concept, generator and hand-painted art set XF Studio’s starting requirements, and the expanded eye plate is its authored starting geometry.</p>
-        <p class="use"><span>Predecessor project</span></p>
+        <h3>Jewellery form and fit references</h3>
+        <p class="by">The <b>Association of Professional Piercers</b>, with material by <b>Elayne Angel</b> and photographs credited to <b>Paul King</b>, <b>Neometal</b> and <b>Industrial Strength Body Jewelry</b>; product pages from Anatometal, Maria Tash, Stone and Strand and BVLA</p>
+        <p>Taught us gauges, ring sizes, closures and connection patterns for jewellery design. Viewed as references only; no image or design was copied, and the APP jewellery brochure is licensed CC BY-NC-ND 4.0.</p>
+        <p class="use"><span>Reference only</span><a href="https://safepiercing.org/wp-content/uploads/2020/05/APP_Initial_Print.pdf">Jewellery brochure</a><a href="https://safepiercing.org/wp-content/uploads/2020/10/APP_Procedures_2013_A_Web.pdf">Procedures brochure</a></p>
       </li>
     </ul>
   </div>
@@ -199,15 +258,14 @@
 <section class="section alt" aria-labelledby="unresolved-title">
   <div class="wrap">
     <header class="section-head">
-      <p class="eyebrow"><span class="num">04</span>Open attributions</p>
-      <h2 id="unresolved-title">Contributions still to attribute</h2>
-      <p class="lede">These people helped, but we have not yet confirmed who they are. The record will be updated as each is identified.</p>
+      <p class="eyebrow"><span class="num">06</span>Open attributions</p>
+      <h2 id="unresolved-title">Community members we are still identifying</h2>
+      <p class="lede">If you recognise your contribution here or anywhere in this project, please let us know so we can credit you properly.</p>
     </header>
     <ul class="unresolved">
-      <li><strong>The modder who recommended ArchiveXL’s dynamic expansion.</strong> That advice motivated the central single-selector investigation.</li>
-      <li><strong>The Discord member who suggested a shimmer finish.</strong> The idea is theirs; the current optical interpretation is ours.</li>
-      <li><strong>The creator of the MELUMINARY hair pack,</strong> whose page could not be inspected during the credit check.</li>
-      <li><strong>The designers and photographers of the makeup and earring reference photographs</strong> used privately as visual targets. None of the photographs is redistributed or traced.</li>
+      <li><strong>The Discord community member who suggested shimmer</strong> as a makeup finish.</li>
+      <li><strong>The modder who recommended ArchiveXL dynamic expansion,</strong> which set the direction of our export design.</li>
+      <li><strong>The photographers and makeup artists</strong> behind the glitter makeup photographs, and the designers and photographers behind the earring photographs, used as visual references.</li>
     </ul>
   </div>
 </section>

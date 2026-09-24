@@ -1,6 +1,6 @@
 # Bezier handles across eye openings
 
-23 September 2026. Nathan reported that a Bezier handle cannot be dragged over the eyeball.
+23 September 2026. Reported defect: a Bezier handle cannot be dragged over the eyeball.
 
 ## Reproduced cause
 
@@ -18,7 +18,7 @@ Both arms share parent calculations within a frame. The projection retains click
 
 ## Evidence
 
-Final checkpoint: 175 tests / 529,657 assertions across 42 files, typecheck/build pass. Browser tests used the isolated verification workspace, leaving Nathan's draft untouched.
+Final checkpoint: 175 tests / 529,657 assertions across 42 files, typecheck/build pass. Browser tests used the isolated verification workspace, leaving the working draft untouched.
 
 The real-head gesture now reaches (530.21,376.11), releases and re-grabs to reach (540.21,381.11), with no rejection. Escape restores the exact pre-gesture recipe; two Undo operations restore the original recipe after the two completed drags. The same gesture was repeated after the visibility optimization, again reaching the requested eye-overlap position and remaining selectable. No browser console warnings/errors were observed.
 

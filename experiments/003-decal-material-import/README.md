@@ -1,6 +1,10 @@
 # Decal material import fixture
 
-Status: **ten texture resources and ten material instances imported and checked offline**. No mesh, morph, app, CCXL registration, packaged install or runtime proof yet. Outputs are isolated under ignored `generated/archive/axefrog/appearance_studio/studies/`.
+**Status:** concluded — ten decal textures and ten material instances imported offline against the authoritative `mesh_decal.mt` with measured compression error, without runtime proof; its open normal-mode/green-sign question moved to the uninstalled on-plate comparison in [Experiment 011](../011-shimmer-plate-comparison/README.md), which awaits a runtime session.
+
+Checkpoint status (23 September): **ten texture resources and ten material instances imported and checked offline**. No mesh, morph, app, CCXL registration, packaged install or runtime proof yet. Outputs are isolated under ignored `generated/archive/axefrog/appearance_studio/studies/`.
+
+**Naming note:** the `xfas_` resource prefix and `appearance_studio` output path in this experiment are historical (XF Appearance Studio). Current generated appearance and resource names use the lowercase `xfs_` prefix ([naming contract](../../projects/xf-studio/data/naming.md)). Existing historical identifiers here are intentionally not renamed.
 
 This bridges [the browser flake candidate](../002-flake-material/README.md) to the [inspected game decal shader](../../research/materials/mesh-decal-shader-contract.md), using the authoritative `base\materials\mesh_decal.mt` rather than the old priority-modified copy.
 
@@ -34,4 +38,4 @@ CLI caveats discovered: this build reports exit 3 after successful folder import
 
 At partially covered source texels, corrected colour-coverage mean error after BC7 import is 0.0040 (0.40 percentage points), versus 0.1477 for the uncompensated square. Corrected worst observed error is 0.0251. The PNG/XBM/PNG path preserves decoded row order. BC5 exports do not restore blue; the comparison reconstructs Z from red/green exactly as the selected shader does. Scalar measurements read red rather than luminance.
 
-Lower mip behavior, tangent-space sign on the actual eye plate, UV assembly, skin-normal blending and overlapping decals remain open. Import/export can reverse row order twice and still agree, so this round-trip does not prove in-game orientation. Likewise, square-root alpha compensation and mip filtering do not commute. The two normal modes/signs belong in one upcoming game comparison, together with material appearance and geometric stacking tests. Prepare the mesh/morph/app fixture before asking Nathan to launch the game.
+Lower mip behavior, tangent-space sign on the actual eye plate, UV assembly, skin-normal blending and overlapping decals remain open. Import/export can reverse row order twice and still agree, so this round-trip does not prove in-game orientation. Likewise, square-root alpha compensation and mip filtering do not commute. The two normal modes/signs belong in one upcoming game comparison, together with material appearance and geometric stacking tests. Prepare the mesh/morph/app fixture before asking the maintainer to launch the game.

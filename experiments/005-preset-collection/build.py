@@ -3,6 +3,7 @@
 Uses the owned imported plate from experiment 004, fresh resource definitions, and the
 pure studio material compiler. Old Eye Artistry code/resources are not build inputs.
 """
+import shutil
 import hashlib
 import argparse
 import itertools
@@ -23,7 +24,7 @@ parser.add_argument('--collection',type=Path,default=HERE/'collection.json')
 parser.add_argument('--output',type=Path,help='Fresh isolated intermediate build directory')
 parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies')
 parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
-parser.add_argument('--bun',type=Path,default=Path('C:/Users/Nathan/.bun/bin/bun.exe'))
+parser.add_argument('--bun',type=Path,default=Path(shutil.which('bun') or 'bun'))
 parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077'))
 parser.add_argument('--app-root',type=Path,help='Studio authoring source root')
 parser.add_argument('--work-root',type=Path,help='Working directory for child tools')
@@ -71,6 +72,9 @@ def handle(data): return {'HandleId':str(next(handles)),'Data':data}
 
 run('bake',[BUN,BAKE,args.collection.resolve(),OUT/'baked'])
 plan=load(OUT/'baked/plan.json');compiled=load(OUT/'baked/compiled.json')
+# The mod's selector label comes from the Studio's mod-branding module through the plan.
+if not isinstance(plan.get('selectorLabel'),str) or not plan['selectorLabel'].startswith('XF '):
+    raise ValueError('Export plan lacks an XF-branded selectorLabel; rebake with the current Studio.')
 depot=plan['depot'];archive=OUT/'archive';modeldir=archive/Path(plan['mesh']).parent
 appdir=archive/Path(plan['app']).parent;texturedir=archive/depot/'textures'
 for path in [modeldir,appdir,texturedir]: path.mkdir(parents=True,exist_ok=True)
@@ -128,7 +132,7 @@ write(OUT/'app-json'/(Path(plan['app']).name+'.json'),app)
 definitions=[{'$type':'gameuiIndexedAppearanceDefinition','name':cname(plan['offAppearance']),'index':0,'localizedName':'Common-Off'}]
 definitions += [{'$type':'gameuiIndexedAppearanceDefinition','name':cname(p['appAppearance']),'index':p['index'],'localizedName':p['name']} for p in plan['presets']]
 option={'$type':'gameuiAppearanceInfo','name':cname(plan['selector']),'uiSlot':cname(plan['selector']),
-    'localizedName':'XF Studio · Eye makeup','enabled':1,'hidden':0,'index':311,'defaultIndex':0,
+    'localizedName':plan['selectorLabel'],'enabled':1,'hidden':0,'index':311,'defaultIndex':0,
     'editTags':['NewGame','HairDresser','Ripperdoc'],'randomizeCategory':'Makeup','useThumbnails':0,
     'resource':ref(plan['app'],True),'definitions':definitions}
 cc=document({'$type':'gameuiCharacterCustomizationInfoResource','cookingPlatform':'PLATFORM_PC',

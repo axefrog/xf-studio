@@ -1,8 +1,9 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
+import { historyLabel } from "./history-labels";
 
-type Transaction = { id: string; layer: Layer; baseline: string; depth: number; created: boolean };
+type Transaction = { id: string; layer: Layer; baseline: string; depth: number; created: boolean; labelled?: boolean };
 
 /** Groups continuous form edits into one Undo entry without depending on input events. */
 export class AuthoringControlEdits {
@@ -32,6 +33,9 @@ export class AuthoringControlEdits {
     }
     try {
       this.dispatch(action);
+      if (this.active && !this.active.labelled && this.active.created) {
+        this.document.relabelCheckpoint(this.active.depth, historyLabel(action)); this.active.labelled = true;
+      }
       const current = this.document.recipe.layers.find(layer => layer.id === layerId);
       if (current) this.active.layer = current;
     }
