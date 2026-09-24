@@ -15,21 +15,21 @@ import { InstallDetectionActions } from "./install-detection-actions";
 export type StudioPresentationPort<Slot> = {
   readonly authoring: Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
-    "gestureDescriptors" | "descriptorsFor" | "targetCapability" | "contextCapability" |
-    "choicesFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
+    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
+    "choicesFor" | "limitsFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "consequences" | "finishCatalogue" |
     "glitterModelCatalogue"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
-  readonly files: Pick<StudioFileOperations, "capability" | "execute"> & {
+  readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
-    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "contextAt"> & {
+    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "uvNavigateCapability" | "uvNavigate" | "contextAt"> & {
       snapshot(): ReadonlyDeep<ReturnType<ViewportAttachment<Slot>["snapshot"]>>;
     };
   readonly preferences: Pick<UIPreferenceActions, "capability" | "dispatch"> & {
@@ -97,10 +97,12 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
     requestDescriptors: () => a.requestDescriptors(), gestureDescriptors: () => a.gestureDescriptors(),
+    fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
     contextCapability: (target, action) => a.contextCapability(target, action),
     choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base),
+    limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
     contextFor: hit => a.contextFor(hit),
     contextOptionsFor: context => a.contextOptionsFor(context),
     contextQuery: hit => a.contextQuery(hit),
@@ -117,7 +119,7 @@ export function createStudioPresentation<Slot>(sources: {
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), finishCatalogue: () => a.finishCatalogue(),
+    previewState: () => a.previewState(), history: () => a.history(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
   };
   const fallback = () => a.snapshot().document;
@@ -132,14 +134,15 @@ export function createStudioPresentation<Slot>(sources: {
     revision: () => -1, canUndo: () => a.capability({ kind: "recipe.undo" }).available,
   };
   const library: CollectionViewPort = {
-    view: () => l.view(), summary: () => l.summary(), subscribe: listener => l.subscribe(listener),
+    view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
+    subscribe: listener => l.subscribe(listener),
     capability: action => l.capability(action), dispatch: action => l.dispatch(action),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
   };
   const files: StudioPresentationPort<Slot>["files"] = {
     snapshot: () => f.snapshot(), capability: action => f.capability(action),
-    execute: action => f.execute(action),
+    execute: action => f.execute(action), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),
@@ -147,6 +150,7 @@ export function createStudioPresentation<Slot>(sources: {
     cancelInput: kind => v.cancelInput(kind),
     uvCommandCapability: command => v.uvCommandCapability(command),
     uvCommand: command => v.uvCommand(command),
+    uvNavigateCapability: command => v.uvNavigateCapability(command), uvNavigate: command => v.uvNavigate(command),
     contextAt: (kind, x, y) => v.contextAt(kind, x, y),
   };
   const preferences: StudioPresentationPort<Slot>["preferences"] = {

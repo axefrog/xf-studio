@@ -1,4 +1,6 @@
-import { convertToBezier, setPointMode } from "./bezier-path";
+import { convertToBezier, moveTangent, setPointMode, type PathCommand } from "./bezier-path";
+import { insertPathPoint } from "./path-edit";
+import { transformLayer } from "./shape-transform";
 import { isDirectGlint } from "./direct-glint-settings";
 import type { FieldSelection } from "./field-selection";
 import { defaultFlakes, isIrregular, type Flakes } from "./finish";
@@ -6,7 +8,7 @@ import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, t
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
-import type { PathCommand } from "./path-ui";
+import { refuse, type ValidationIssue } from "./validation-issues";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =
@@ -24,9 +26,21 @@ export type RecipeAction =
   | { kind: "glitter.selectModel"; layerId: string; model: GlitterModel }
   | { kind: "glitter.setClassic"; layerId: string; key: "cells" | "density" | "tilt"; value: number }
   | { kind: "glitter.setIrregular"; layerId: string; key: "count" | "radius" | "spread" | "tilt" | "color"; value: number | string }
-  | { kind: "glitter.setDirect"; layerId: string; key: "density" | "fineShare" | "strength" | "color"; value: number | string };
+  | { kind: "glitter.setDirect"; layerId: string; key: "density" | "fineShare" | "strength" | "color"; value: number | string }
+  // Coordinate commands (audit A-5): canonical (unmirrored) UV, one Undo each, parser-validated.
+  | { kind: "point.move"; layerId: string; index: number; u: number; v: number }
+  | { kind: "point.insert"; layerId: string; u: number; v: number }
+  | { kind: "point.setTangent"; layerId: string; index: number; side: "in" | "out"; du: number; dv: number }
+  | { kind: "shape.transform"; layerId: string; command: ShapeCommand; pivotIndex?: number }
+  | { kind: "field.setOrigin"; layerId: string; fieldId: string; u: number; v: number }
+  | { kind: "field.setVector"; layerId: string; fieldId: string; du: number; dv: number };
+/** Whole-shape transform about a contour point (the selected point unless `pivotIndex` is given). */
+export type ShapeCommand = { kind: "translate"; du: number; dv: number } | { kind: "rotate"; radians: number } |
+  { kind: "scale"; factor: number };
+/** Contour point limit shared with pointer insertion. */
+export const MAX_CONTOUR_POINTS = 24;
 
-export type RecipeActionCapability = { available: boolean; reason?: string };
+export type RecipeActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
 export type RecipeActionEffect = { kind: "selection" | "scheduled" | "immediate"; layerIndex: number };
 export type GestureEdit =
   | { kind: "shape.replace"; layerId: string; expectedLayer: Layer; next: Layer }
@@ -64,26 +78,38 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
   const layer = state.recipe.layers.find(l => l.id === action.layerId);
   if (!layer) return { available: false, reason: "That layer no longer exists." };
   if (action.kind.startsWith("glitter.") && action.kind !== "glitter.setClassic" && layer.finish !== "glitter")
-    return { available: false, reason: "Select a Glitter layer first." };
+    return refuse({ code: "mode", field: "finish", message: "Select a Glitter layer first." });
+  if ((action.kind === "point.move" || action.kind === "point.setTangent") &&
+      (!Number.isInteger(action.index) || !layer.points[action.index]))
+    return { available: false, reason: "That control point no longer exists." };
+  if (action.kind === "point.setTangent" && (layer.pathMode !== "bezier" || !layer.points[action.index]?.handles))
+    return refuse({ code: "mode", field: "pathMode", message: "Enable Bézier handles before editing a tangent." });
+  if (action.kind === "point.insert" && layer.points.length >= MAX_CONTOUR_POINTS)
+    return refuse({ code: "range", field: "points", message: `A contour supports up to ${MAX_CONTOUR_POINTS} points.` });
+  if (action.kind === "shape.transform") {
+    const pivot = action.pivotIndex ?? (state.recipe.layers[state.active]?.id === layer.id ? state.selected : 0);
+    if (!Number.isInteger(pivot) || !layer.points[pivot])
+      return refuse({ code: "range", field: "pivotIndex", message: "The pivot point no longer exists." });
+  }
   if ((action.kind === "point.select" || action.kind === "point.remove") &&
       (!Number.isInteger(action.index) || !layer.points[action.index]))
     return { available: false, reason: "That control point no longer exists." };
   if (action.kind === "point.remove" && layer.points.length <= 3)
-    return { available: false, reason: "A closed contour needs at least three points." };
+    return refuse({ code: "range", field: "points", message: "A closed contour needs at least three points." });
   if (action.kind === "field.add" && layer.fields.length >= MAX_FIELDS)
-    return { available: false, reason: `A layer supports up to ${MAX_FIELDS} warp controls.` };
-  if ((action.kind === "field.select" || action.kind === "field.remove" ||
-       action.kind === "field.clear" || action.kind === "field.setReach") &&
+    return refuse({ code: "range", field: "fields", message: `A layer supports up to ${MAX_FIELDS} warp controls.` });
+  if ((action.kind === "field.select" || action.kind === "field.remove" || action.kind === "field.setOrigin" ||
+       action.kind === "field.setVector" || action.kind === "field.clear" || action.kind === "field.setReach") &&
       !layer.fields.some(field => field.id === action.fieldId))
     return { available: false, reason: "That warp control no longer exists." };
   if (action.kind === "glitter.setIrregular" && !isIrregular(layer.flakes))
-    return { available: false, reason: "Select the irregular Glitter model first." };
+    return refuse({ code: "mode", field: "model", message: "Select the irregular Glitter model first." });
   if (action.kind === "glitter.setDirect" && !isDirectGlint(layer.flakes))
-    return { available: false, reason: "Select a direct-light Glitter model first." };
+    return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
-    return { available: false, reason: "Select a classic flake model first." };
+    return refuse({ code: "mode", field: "model", message: "Select a classic flake model first." });
   if (action.kind === "glitter.selectModel" && !glitterModels.includes(action.model))
-    return { available: false, reason: "Unknown Glitter model." };
+    return refuse({ code: "format", field: "model", message: "Unknown Glitter model." });
   return { available: true };
 }
 
@@ -146,6 +172,27 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     changed.flakes = { ...layer.flakes!, [action.key]: action.value } as Layer["flakes"];
   } else if (action.kind === "glitter.setDirect") {
     changed.flakes = { ...layer.flakes!, [action.key]: action.value } as Layer["flakes"];
+  } else if (action.kind === "point.move") {
+    changed.points = layer.points.map((point, i) => i === action.index ? { ...point, u: action.u, v: action.v } : point);
+  } else if (action.kind === "point.insert") {
+    // Isotropic UV distance chooses the nearest section; Bézier paths split the exact cubic.
+    const inserted = insertPathPoint(layer.points, { u: action.u, v: action.v }, { u: 1, v: 1 });
+    if (!inserted) throw Error("No contour section could take a point there.");
+    changed.points = inserted.points; next.active = index; next.selected = inserted.index; effect = "immediate";
+  } else if (action.kind === "point.setTangent") {
+    const point = layer.points[action.index];
+    const moved = moveTangent(point, action.side, { u: point.u + action.du, v: point.v + action.dv });
+    changed.points = layer.points.map((entry, i) => i === action.index ? moved : entry);
+  } else if (action.kind === "shape.transform") {
+    const pivotIndex = action.pivotIndex ?? (state.recipe.layers[state.active]?.id === layer.id ? state.selected : 0);
+    const pivot = { u: layer.points[pivotIndex].u, v: layer.points[pivotIndex].v }, command = action.command;
+    const transformed = transformLayer(layer, command.kind === "translate" ? command : { ...command, pivot });
+    if (!transformed) throw Error("That transform would take the shape outside the supported range.");
+    changed = transformed;
+  } else if (action.kind === "field.setOrigin") {
+    changed.fields = layer.fields.map(field => field.id === action.fieldId ? { ...field, u: action.u, v: action.v } : field);
+  } else if (action.kind === "field.setVector") {
+    changed.fields = layer.fields.map(field => field.id === action.fieldId ? { ...field, du: action.du, dv: action.dv } : field);
   }
   if (effect !== "selection") {
     const validated = parseRecipe({ ...next.recipe,

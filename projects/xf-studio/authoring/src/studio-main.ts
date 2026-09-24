@@ -6,15 +6,13 @@
 import { createBrowserFileDevice } from "./browser-file-device";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
-import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
+import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
 import { collectionTransport } from "./collection-transport";
-import { FLAKE_LIMITS } from "./flake-field";
-import { maskAlphaKey } from "./makeup-dependencies";
-import { emptyPresentationStatus, PresentationStatusSource, type GlitterPreviewMeasurement } from "./presentation-status";
-import type { GlitterStats } from "./raster-processor";
+import { GlitterMeasurements } from "./glitter-measurements";
+import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
 import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
@@ -24,7 +22,6 @@ import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import { createTrustedPreviewServices } from "./trusted-preview-services";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 import { UIPreferenceActions } from "./ui-preferences";
-import { isIrregular } from "./finish";
 
 const byId = <T extends HTMLElement>(id: string) => {
   const found = document.getElementById(id);
@@ -57,20 +54,11 @@ async function start() {
 
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
-  const measurements = new Map<string, { opticalKey: string; maskKey: string; size: number; stats: GlitterStats }>();
+  const measurements = new GlitterMeasurements({
+    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size });
   const statusSource = new PresentationStatusSource(() => {
-    const glitter: GlitterPreviewMeasurement[] = [];
-    for (const layer of core.document.recipe.layers) {
-      const measured = measurements.get(layer.id);
-      if (!measured || layer.finish !== "glitter" || !isIrregular(layer.flakes)) continue;
-      glitter.push({ layerId: layer.id, size: measured.size, maskCentres: measured.stats.maskCentres,
-        regionRetained: measured.stats.regionRetained, coveredPixels: measured.stats.coveredPixels,
-        dense: layer.flakes.count > FLAKE_LIMITS.count,
-        current: measured.opticalKey === previewOpticalKey(layer, previewDevice.coordinator.size) &&
-          measured.maskKey === maskAlphaKey(layer, previewDevice.coordinator.size) });
-    }
     const eye = scene?.eyeAppearance().optics;
-    return { ...status, glitter, assets: { ...status.assets,
+    return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
 
@@ -114,7 +102,7 @@ async function start() {
     refreshQuality: () => { persist(); }, drawUV,
     report: text => adapterMessage("preview", text),
     measurement: (layer: Layer, size, stats) => {
-      measurements.set(layer.id, { opticalKey: previewOpticalKey(layer, size), maskKey: maskAlphaKey(layer, size), size, stats });
+      measurements.record(layer, size, stats);
       statusSource.changed();
     },
   });
@@ -133,7 +121,8 @@ async function start() {
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
-    persist, message: text => adapterMessage("uv", text),
+    persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
+    message: text => adapterMessage("uv", text),
   }, workspace.uvView);
   bootstrap = createTrustedStudioBootstrap({
     workspace, core, preferences, localSetup, installDetection, viewport: viewportDevice.attachment,

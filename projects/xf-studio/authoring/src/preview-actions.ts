@@ -1,4 +1,5 @@
 import type { CameraState, PreviewState } from "./workspace-state";
+import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "piercingStyle" | "piercingDefinition" |
@@ -8,6 +9,7 @@ export type PreviewAction =
   | { kind: "camera.setFov"; degrees: number }
   | { kind: "camera.endFovGesture" }
   | { kind: "camera.restore"; camera: CameraState }
+  | { kind: "camera.navigate"; command: CameraNavigation }
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
   | { kind: "preview.setEyeShape"; index: number }
@@ -53,6 +55,10 @@ export class PreviewActions {
   capability(action: PreviewAction): PreviewCapability {
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
       return { available: false, reason: "Field of view must be between 10° and 90°." };
+    if (action.kind === "camera.navigate") {
+      const invalid = validNavigation(action.command);
+      if (invalid) return { available: false, reason: invalid };
+    }
     if (action.kind === "preview.setExposure" && (!Number.isFinite(action.value) || action.value < .5 || action.value > 2))
       return { available: false, reason: "Exposure must be between 0.5 and 2." };
     if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
@@ -81,6 +87,7 @@ export class PreviewActions {
       case "camera.setFov": limited = this.port.setFov(action.degrees); break;
       case "camera.endFovGesture": this.port.endFovGesture(); break;
       case "camera.restore": this.port.restoreCamera(action.camera); break;
+      case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); break;
       case "preview.setExposure": this.port.setExposure(action.value); this.state.exposure = action.value; break;
       case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;

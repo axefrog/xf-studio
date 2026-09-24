@@ -78,7 +78,7 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
-    pending: 0, waiting: false, estimatedBytes: 1024 }), subscribe: (_listener: () => void) => () => {} };
+    pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
     previewReadiness }),
     packageInput: () => packageInput, downloads, locations };

@@ -7,7 +7,7 @@ import { editLayers } from "../src/layer-stack";
 function harness() {
   const document = new AuthoringDocument(freshWorkspace());
   const calls: string[] = [];
-  let maxTextureSize = 4096, queue = { queued: 0, running: null as object | null };
+  let maxTextureSize = 4096, queue: { queued: number; running: object | null; queuedIndices?: number[] } = { queued: 0, running: null };
   let sizes = document.recipe.layers.map(() => 1);
   let opticsMissing = false, presentationMapsMissing = false;
   const port: PreviewRenderPort = {
@@ -36,6 +36,7 @@ function harness() {
   const coordinator = new AuthoringPreviewCoordinator(document, 1024, port);
   return { coordinator, document, calls, get sizes() { return sizes; }, setMax: (size: number) => maxTextureSize = size,
     setQueue: (queued: number, running: object | null) => queue = { queued, running },
+    setQueueDetail: (value: typeof queue) => queue = value,
     setOptics: (missing: boolean) => opticsMissing = missing,
     setPresentationMaps: (missing: boolean) => presentationMapsMissing = missing };
 }
@@ -168,4 +169,24 @@ test("duplicating a layer queues its new ID without rebuilding completed sibling
   h.coordinator.syncStack(original);
   expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:1:true:1024:false"]);
   expect(h.sizes).toEqual([1024, 1, 1024, 1024, 1024]);
+});
+
+test("per-layer readiness attributes queued, running, stale-tier and disabled slots", () => {
+  const h = harness(), ids = h.document.recipe.layers.map(layer => layer.id);
+  for (const layer of h.document.recipe.layers) layer.enabled = true;
+  for (let i = 0; i < ids.length; i++) h.coordinator.publish({ i, size: 1024, ms: 1, version: 1, data: new Uint8ClampedArray(1024 * 1024 * 4) });
+  expect(h.coordinator.readiness().layers.map(layer => layer.state)).toEqual(["ready", "ready", "ready", "ready"]);
+  h.setQueue(1, { i: 2 });
+  // Without slot indices the queue cannot attribute work, so every enabled layer is updating.
+  expect(h.coordinator.readiness().layers.every(layer => layer.state === "updating")).toBe(true);
+  h.setQueueDetail({ queued: 1, running: { i: 2 }, queuedIndices: [0] });
+  expect(h.coordinator.readiness().layers.map(layer => layer.state)).toEqual(["updating", "ready", "updating", "ready"]);
+  h.setQueueDetail({ queued: 0, running: null, queuedIndices: [] });
+  h.document.recipe.layers[3].enabled = false;
+  h.sizes[1] = 512;
+  expect(h.coordinator.readiness().layers).toEqual([
+    { layerId: ids[0], state: "ready", size: 1024 }, { layerId: ids[1], state: "updating", size: 512 },
+    { layerId: ids[2], state: "ready", size: 1024 }, { layerId: ids[3], state: "disabled", size: 1024 }]);
+  h.setMax(256);
+  expect(h.coordinator.readiness().layers.slice(0, 3).every(layer => layer.state === "blocked")).toBe(true);
 });

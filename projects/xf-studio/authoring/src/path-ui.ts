@@ -1,9 +1,6 @@
 import type { Layer } from "./recipe";
 import type { ReadonlyDeep } from "./read-only";
-
-export type PathCommand =
-  | { kind: "enable-bezier" }
-  | { kind: "point-mode"; index: number; mode: "aligned" | "symmetric" | "corner" };
+import type { PathCommand } from "./bezier-path";
 
 /** Presentation adapter; pure curve operations and application history stay outside. */
 export function setupPathControls(elements: {

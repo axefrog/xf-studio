@@ -7,7 +7,7 @@ const imports = (text: string) => [...text.matchAll(/\bfrom\s+["']([^"']+)["']/g
 test("trusted application and presentation services keep browser devices outside their import boundary", () => {
   const trusted = ["studio-application", "studio-presentation", "trusted-authoring-core",
     "trusted-studio-bootstrap", "trusted-preview-services", "collection-application",
-    "studio-file-operations", "authoring-preview-coordinator"];
+    "studio-file-operations", "authoring-preview-coordinator", "glitter-measurements", "makeup-dependencies"];
   for (const name of trusted) {
     const code = source(name);
     for (const dependency of imports(code))
@@ -33,4 +33,24 @@ test("install detection keeps parsing pure and host access in its adapter", () =
   // The action layer and browser device reach the host only through a typed transport.
   expect(imports(source("install-detection-actions")).filter(path => !path.startsWith("./"))).toEqual([]);
   expect(imports(source("browser-install-detection-device"))).toEqual(["./install-detection-actions"]);
+});
+
+// Dependencies point inward. Presentation modules (legacy `*-ui` controls, the
+// `studio-ui/` tree) and browser entry points may import the core, never the
+// reverse. `context-menu` is presentation policy shared by both shells.
+const presentation = (path: string) => /^\.\/(?:[\w-]+-ui|studio-ui\/.*|context-menu)$/.test(path);
+const entries = new Set(["main", "studio-main", "port-smoke", "application-boundary-fixture"]);
+
+test("core modules never import presentation modules or browser entry points", () => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  const modules = readdirSync(new URL("../src/", import.meta.url))
+    .filter(file => file.endsWith(".ts") && !file.endsWith(".d.ts"))
+    .map(file => file.slice(0, -3));
+  const core = modules.filter(name => !presentation(`./${name}`) && !entries.has(name));
+  expect(core).toContain("recipe-actions");
+  expect(core).toContain("studio-application");
+  const violations = core.flatMap(name => imports(source(name))
+    .filter(path => presentation(path) || entries.has(path.replace(/^\.\//, "")))
+    .map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
 });

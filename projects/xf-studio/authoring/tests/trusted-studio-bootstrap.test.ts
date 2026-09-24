@@ -34,7 +34,7 @@ test("a presentation mounts from trusted services without loading legacy UI cont
   const bootstrap = createTrustedStudioBootstrap({ workspace, core,
     preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, transport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024,
-      pending: 0, waiting: false, estimatedBytes: 1024 }), subscribe: () => () => {} },
+      pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: () => () => {} },
     onEditorRestored: () => { resets++; }, onRecipeImported: () => { imports++; },
     savedAppearance: { has: () => false, read: () => undefined,
       load: () => { throw Error("No saved V device."); }, ready: () => false },

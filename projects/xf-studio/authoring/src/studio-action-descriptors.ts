@@ -1,6 +1,7 @@
 import type { CollectionRequest } from "./collection-service";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
+import type { StudioFileAction } from "./studio-file-operations";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -35,6 +36,7 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
   "recipe.undo": desc("workspace", "content", "none"),
+  "recipe.redo": desc("workspace", "content", "none"),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
   "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),
@@ -68,6 +70,16 @@ export const ACTION_DESCRIPTORS = {
   "glitter.setDirect": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["density", "fineShare", "strength", "color"]), value: input("number|string") }, {
     density: { value: input("number", 0, 1) }, fineShare: { value: input("number", 0, 1) },
     strength: { value: input("number", 0, 32) }, color: { value: inputText(7, 7) } }),
+  "point.move": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.insert": desc("layer", "content", "recipe", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.setTangent": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"),
+    side: enumerated(["in", "out"]), du: input("number", -1, 1), dv: input("number", -1, 1) }),
+  "shape.transform": desc("layer", "content", "recipe", { layerId: target("string"), command: input("object"),
+    pivotIndex: { type: "integer", required: false, from: "state", min: 0 } }, {
+    translate: { du: input("number", -1, 1), dv: input("number", -1, 1) }, rotate: { radians: input("number") },
+    scale: { factor: input("number", .01, 100) } }),
+  "field.setOrigin": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "field.setVector": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
   "layer.edit": desc(["layer", "collection"], "content", "recipe", { command: input("object") }, {
     add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
     reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
@@ -88,6 +100,9 @@ export const ACTION_DESCRIPTORS = {
   "camera.setFov": desc("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
   "camera.endFovGesture": desc("viewport", "workspace", "none"),
   "camera.restore": desc("viewport", "workspace", "none", { camera: input("object") }),
+  "camera.navigate": desc("viewport", "workspace", "none", { command: input("object") }, {
+    orbit: { yaw: input("number"), pitch: input("number") }, dolly: { factor: input("number", .01, 100) },
+    pan: { dx: input("number", -10, 10), dy: input("number", -10, 10) } }),
   "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
   "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
@@ -136,3 +151,42 @@ export const GESTURE_DESCRIPTORS = {
   "field.replace": desc("field", "content", "transaction", { fieldId: target("string"), next: input("object") }),
   "path.replacePoints": desc("layer", "content", "transaction", { points: input("object") }),
 } satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;
+
+/**
+ * File workflows (`StudioFileOperations`). Each runs asynchronously through a device
+ * port; `device` names the browser mechanism it needs, `savesFirst` marks exports that
+ * write a SQLite revision before downloading, and `recovery` marks draft switches that
+ * the collection recovery queue can undo. None records a recipe Undo entry.
+ */
+export type FileDescriptor = { scope: readonly ActionScope[];
+  effect: "import" | "download" | "package" | "recover"; device: "picker" | "download" | "none";
+  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy };
+const file = (scope: ActionScope | readonly ActionScope[], effect: FileDescriptor["effect"],
+  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy } = {}): FileDescriptor =>
+  ({ scope: typeof scope === "string" ? [scope] : scope, effect, device, async: true, cancellable: false,
+    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none" });
+export const FILE_DESCRIPTORS = {
+  "recipe.import": file(["file", "collection"], "import", "picker"),
+  "recipe.export": file(["file", "layer"], "download", "download"),
+  "mask.export": file(["file", "layer"], "download", "download"),
+  "savedV.import": file("file", "import", "picker"),
+  "savedV.export": file("file", "download", "download"),
+  "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
+  "collection.export": file("collection", "download", "download", { savesFirst: true }),
+  "collection.plan": file("collection", "download", "download", { savesFirst: true }),
+  "package.check": file("collection", "package", "none"),
+  "package.build": file("collection", "package", "none"),
+  "collection.recover": file("collection", "recover", "none", { undo: "recovery" }),
+} satisfies Record<StudioFileAction["kind"], FileDescriptor>;
+
+/** One flat index over every family, for palettes, scripts and documentation checks. */
+export type RegistryEntry = { id: string; family: "action" | "request" | "gesture" | "file";
+  scope: readonly ActionScope[]; undo: UndoPolicy; async: boolean };
+export function actionRegistry(): RegistryEntry[] {
+  return [
+    ...Object.entries(ACTION_DESCRIPTORS).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(REQUEST_DESCRIPTORS).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),
+    ...Object.entries(GESTURE_DESCRIPTORS).map(([id, d]) => ({ id, family: "gesture" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(FILE_DESCRIPTORS).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo, async: true })),
+  ].map(entry => structuredClone(entry));
+}
