@@ -6,6 +6,8 @@ Observed 2026-09-23. Source checkouts, installed files, saved MO2 profile state 
 
 The latest inspected RED4ext session is September 16 2026, 11:14-11:25 Brisbane time, game 2.31 / file version 3.0.80.51928. The snapshot is retained in `captures/20260923-085239-949631-foundation-existing-logs/`; capture date is not game-session date.
 
+**25 September diagnostic recheck:** the selected MO2 profile still enables ArchiveXL, TweakXL, Codeware and redscript. MO2 metadata and the locally inspected DLL versions agree at ArchiveXL 1.26.3, TweakXL 1.11.3 and Codeware 1.20.3; redscript metadata is 0.5.31 and the game-root RED4ext DLL is 1.30.0. These are installed-file observations, not evidence of a new game launch. The stable release targets below were rechecked against their official release pages. ArchiveXL 1.27.3 and Codeware 1.20.5 explicitly list game 2.31 in their tagged READMEs; TweakXL 1.11.4's tagged README still names game 2.3, so its next-run 2.31 compatibility needs fresh runtime confirmation. Preserve the existing entries and profile while preparing newer stable framework entries in a separate diagnostic profile. The 1.28.0 ArchiveXL beta, 1.11.5 TweakXL release candidate and redscript 1.0 development line are not the stable test targets.
+
 | Framework | Observed installed/runtime version | Current stable release | Action before new runtime tests |
 |---|---|---|---|
 | ArchiveXL | 1.26.3 (runtime and MO2 metadata) | [1.27.3](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3) | Update; required by proposed composite-material design |
