@@ -47,7 +47,7 @@ Sources: [collection actions](../../projects/xf-studio/authoring/src/collection-
 
 | Exact request/payload | Effect, side effect and recovery |
 |---|---|
-| `initialize`; `refresh` | List SQLite collection summaries; initialize also merges legacy draft if no restored collection. Read only to library, may populate draft. |
+| `initialize`; `refresh` | List SQLite collection summaries; initialize merges a legacy draft if no restored collection, or creates an unsaved one-preset draft from the current workspace when the library is empty. No SQLite write until Save. |
 | `open` `{id}` | Fetch saved collection by ID, then open as a recoverable prior-draft switch. ID must still be in the current list; otherwise refresh. |
 | `save`; `saveCopy` | SQLite immutable revision; copy creates a new collection ID. Transport enforces revision conflicts. Edits made during the request remain in the live draft; a stale result for another draft is rejected. |
 | `exportCollection`; `exportPlan` | **Save first**, then return portable collection JSON or a compiler build-plan JSON and filename for a download adapter. A build plan is not a mod. These operations can cause a SQLite write or conflict. |

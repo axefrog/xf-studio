@@ -1,4 +1,4 @@
-import { initialRecipe, parseRecipe, type Recipe } from "./recipe";
+import { initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
 import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
@@ -126,7 +126,9 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
     const raw = storage.getItem(keys.workspace);
     if (raw !== null) return { state: parseWorkspace(JSON.parse(raw)), writable: true };
   } catch (e) { error = `Workspace could not be restored: ${(e as Error).message}`; }
-  let state = freshWorkspace();
+  // The fallback shows the small authored contour. Saved workspaces and legacy
+  // recipe-only drafts still pass through their existing parsers unchanged.
+  let state = freshWorkspace(starterRecipe());
   try {
     const legacy = storage.getItem(keys.legacy);
     if (legacy !== null) state = freshWorkspace(parseRecipe(JSON.parse(legacy)));

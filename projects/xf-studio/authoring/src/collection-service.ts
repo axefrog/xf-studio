@@ -121,15 +121,24 @@ export class CollectionService {
         case "initialize": {
           const summaries = await this.list();
           if (!this.actions) {
-            if (!summaries.length) throw new CollectionServiceError("empty_library", "No saved collection is available to restore the draft.");
-            const stored = await this.transport.get(summaries[0].id), draft = collectionDraft(stored.collection, stored.revision), current = this.read();
-            const id = this.legacy.current?.id ?? crypto.randomUUID(), existing = draft.collection.presets.find(p => p.id === id);
-            if (existing) { existing.recipe = current.recipe; existing.name = this.legacy.name.trim() || existing.name; }
-            else draft.collection.presets.push({ id, name: this.legacy.name.trim() || "Unsaved preset", revision: 1, recipe: current.recipe });
+            const current = this.read(), id = this.legacy.current?.id ?? crypto.randomUUID();
+            const stored = summaries.length ? await this.transport.get(summaries[0].id) : undefined;
+            const draft = stored
+              ? collectionDraft(stored.collection, stored.revision)
+              : collectionDraft({ schema: "xfas/collection-1", id: crypto.randomUUID(),
+                name: "My collection", presets: [{ id, name: this.legacy.name.trim() || "First look",
+                  revision: 1, recipe: current.recipe }] });
+            if (stored) {
+              const existing = draft.collection.presets.find(p => p.id === id);
+              if (existing) { existing.recipe = current.recipe; existing.name = this.legacy.name.trim() || existing.name; }
+              else draft.collection.presets.push({ id, name: this.legacy.name.trim() || "Unsaved preset", revision: 1, recipe: current.recipe });
+            }
             draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected,
               fieldSelection: current.fieldSelection, history: current.history };
             this.actions = new CollectionActions(draft, this.read, this.show);
-            message = "Existing looks and your current draft are retained. Save collection to store this arrangement.";
+            message = summaries.length
+              ? "Existing looks and your current draft are retained. Save collection to store this arrangement."
+              : "Your starter collection is ready. Save it to the local library when you want to keep a revision.";
           } else message = "Collection draft restored without replacing unsaved edits from SQLite.";
           result = { kind: "list", summaries }; break;
         }

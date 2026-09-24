@@ -103,6 +103,13 @@ export function newLayerTemplate(): Layer {
     pathMode: "catmull-rom",
   });
 }
+/** First-run authored content. Historical initialRecipe remains a sample/test fixture. */
+export function starterRecipe(): Recipe {
+  const layer = newLayerTemplate();
+  return { schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [
+    { ...layer, id: "layer-1", name: "Eye makeup" },
+  ] };
+}
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
   type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };

@@ -1,6 +1,33 @@
 import { test, expect } from "bun:test";
 import { freshWorkspace, loadWorkspace, parseWorkspace, workspaceKeys } from "../src/workspace-state";
 import { readSavedV } from "../src/save-reader";
+import { initialRecipe, newLayerTemplate, parseRecipe } from "../src/recipe";
+
+test("an absent browser workspace starts with one editable four-point makeup area", () => {
+  const keys = workspaceKeys(false);
+  const empty = { getItem: () => null };
+  const starter = loadWorkspace(empty, false);
+  expect(starter.writable).toBe(true);
+  expect(starter.state.recipe.layers).toHaveLength(1);
+  const layer = starter.state.recipe.layers[0];
+  expect(layer.enabled).toBe(true);
+  expect(layer.points).toEqual(newLayerTemplate().points);
+  expect(layer.fields).toEqual([]);
+  expect(layer.symmetry).toBe(true);
+  expect(layer.finish).toBe("matte");
+  expect(parseRecipe(starter.state.recipe)).toEqual(starter.state.recipe);
+
+  const saved = structuredClone(starter.state);
+  saved.recipe.layers[0].points[0].u += .004;
+  saved.recipe.layers[0].color = "#123456";
+  const restored = loadWorkspace({ getItem: key => key === keys.workspace ? JSON.stringify(saved) : null }, false);
+  expect(restored.state.recipe).toEqual(saved.recipe);
+
+  const historical = initialRecipe();
+  expect(historical.layers).toHaveLength(4);
+  const legacy = loadWorkspace({ getItem: key => key === keys.legacy ? JSON.stringify(historical) : null }, false);
+  expect(legacy.state.recipe).toEqual(historical);
+});
 
 test("workspace migration preserves legacy drafts and isolates verification; unreadable work is protected", () => {
   const main = workspaceKeys(false), verify = workspaceKeys(true), draft = freshWorkspace().recipe;

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
+import { loadWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 
@@ -24,6 +25,26 @@ function fixture() {
   return { service, collection, saved, transport, editor: () => editor, saves: () => saves,
     packageInput: () => packageInput };
 }
+
+test("an empty library initializes a saveable starter draft from the loaded workspace", async () => {
+  const workspace = loadWorkspace({ getItem: () => null }, false).state;
+  let editor: EditorSnapshot = { recipe: workspace.recipe, ...emptyMemory() };
+  let saved: PresetCollection | undefined;
+  const transport: CollectionTransport = {
+    list: async () => [],
+    get: async () => { throw Error("No saved collection"); },
+    save: async value => { saved = structuredClone(value); return { collection: value, revision: 1, updatedAt: "now" }; },
+    package: async () => { throw Error("Unused"); },
+  };
+  const service = new CollectionService(undefined, workspace.library, () => editor, value => editor = value, transport);
+  expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
+  expect(service.snapshot()?.revision).toBeUndefined();
+  expect(service.snapshot()?.collection.presets).toHaveLength(1);
+  expect(service.snapshot()?.collection.presets[0].recipe).toEqual(workspace.recipe);
+  editor.recipe.layers[0].color = "#abcdef";
+  expect((await service.execute({ kind: "save" })).ok).toBe(true);
+  expect(saved?.presets[0].recipe.layers[0].color).toBe("#abcdef");
+});
 
 test("async collection service preserves an unsaved draft in package snapshots without a SQLite save", async () => {
   const f = fixture();
