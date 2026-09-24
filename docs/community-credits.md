@@ -196,6 +196,15 @@ The [follow-up diagnostic](../research/eye-artistry/brow-lash-preview-diagnostic
 
 **[Alliekat / Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787)**, installed 1.0.0.0, metadata modified 15 July 2024, supplies the saved brown-ombre gradient’s unique installed mod override. This is provider/source learning and private local reference-asset use for brow colour; the texture is hash-verified in ignored local preview storage and has not been redistributed.
 
+A [separate base-game versus Alliekat gradient audit](../research/eye-artistry/brown-ombre-gradient-equivalence.md)
+found different XBM metadata and lower mips but **identical decoded base
+pixels** for this saved `brown_ombre` path. Alliekat's candidate therefore
+taught us that an installed resource override need not alter the close-up
+palette; we should investigate material response and effective bindings before
+attributing a brow-colour gap to its image. WolvenKit 9.0.1 decoded both private
+resources. This extends source learning and local tool use; no Alliekat asset or
+tool code was copied to Git or release output.
+
 The same diagnostic identifies Alliekat's `hh_cap_grad__brown_ombre.xbm` as the candidate gradient for the saved brow and traces its role through the game's double-diffuse colour path. Its installed decoded image and SHA-256 are now verified locally, while effective runtime winner and appearance remain unverified. No gradient asset has been packaged.
 
 The already pinned **WolvenKit** `ArchiveReader.cs` layout informed the 1,103-index provider census; no upstream implementation file was copied. Installed **Three.js 0.186.0** `alphamap_fragment.glsl.js` establishes that alphaMap samples green, explaining a measurable mismatch with the diffuse image’s alpha channel. These extend existing format/source-learning and dependency credits, not a claim that game coverage semantics are already solved.

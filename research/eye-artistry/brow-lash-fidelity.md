@@ -12,6 +12,15 @@ The same shader replaces the primary tint path with a gradient sample at `(Gradi
 
 The browser colour path is a **study approximation** of the compiled game's material path. It retains the two diffuse terms and saved gradient input, but MeshStandardMaterial lighting, tonemapping and sRGB conversion differ from the engine's post-G-buffer blend. The instance's packed normal texture and normal-coverage controls are not yet reproduced. The installed archive candidate is not proven to be the effective runtime winner. These limits matter for hair darkness and visual thickness; they preclude a parity claim.
 
+A [separate base-game/Alliekat comparison](brown-ombre-gradient-equivalence.md)
+subsequently found that the two XBM resources differ in metadata and smaller
+mips, while all 128 decoded base-level RGBA texels are identical. The selected
+shader samples the gradient at a constant `(1,0.5)`. Accordingly, Alliekat is
+an installed provider candidate, but its base palette is **not a different
+colour source** for this selected brow close-up. The Studio already uses those
+same base pixels. This narrows the unresolved colour gap to the other material,
+lighting and runtime-binding factors; it does not prove game parity.
+
 ## Controlled browser comparison
 
 The isolated branch server ran at `127.0.0.1:4451/?verify=1`. AutoSave-12 was imported locally, the actual saved eye diffuse resolved, makeup/surface guides/hair were hidden, and brow/lash toggles remained on. The saved camera/pose was kept while comparing the new three-input shader with the former manifest-absent fallback. The browser reported no shader errors. At that pose, the new brow is darker and less opaque at its fringe; the fallback is visibly paler and fuller. Texel-centre coverage statistics over the 2048×1024 source (diagnostic only, **not** screen-pixel counts) are:

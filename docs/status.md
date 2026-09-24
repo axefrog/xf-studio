@@ -2,6 +2,15 @@
 
 **Desktop first-run setup, 24 September:** the Electrobun host now stores the same private local-setup schema as localhost in its own `Utils.paths.userData`. Missing preview assets no longer prevent setting the game/mod paths: the first-run screen opens an authenticated setup form with revision-safe save and backup recovery. About reports path readiness. The desktop accurately marks both mod Check and Build unavailable while its package route remains 503. Host tests, authoring typechecks and an asset-free browser first-run review passed; a new private canary passed its package allowlist. No installer was run and the desktop still cannot export a mod. [Trial and exact evidence](../projects/xf-studio/authoring/desktop/README.md).
 
+**Saved brow gradient comparison, 24 September:** a fresh, separate extraction
+of the game and installed Alliekat `brown_ombre` XBMs found different containers
+but pixel-identical 32×4 base images. The Studio's saved brow already samples
+those exact base pixels at the material's constant gradient coordinate, so
+swapping between these two PNGs cannot explain its close-up colour disparity.
+Smaller mips and one downgrade flag differ; actual runtime binding and shading
+still need a matched game capture. No preview material or geometry changed.
+[Evidence and limits](../research/eye-artistry/brown-ombre-gradient-equivalence.md).
+
 **Desktop canary, 24 September:** a [private XF Studio Windows setup ZIP](../projects/xf-studio/authoring/desktop/README.md) now builds with pinned version/channel/build metadata and checks that private preview assets, SQLite data and an update feed are absent. The UI shows packaged version and user-data location. This canary is unsigned and uninstalled; clean-machine dependency acquisition, installed AppData behavior, data-preserving uninstall, updater trials and a public release remain open.
 
 **Local package setup, 24 September:** localhost now saves game/build and direct/MO2 source paths in private OS user settings through the Mod package panel. Build resolves those settings for each request, with existing `XFS_PACKAGE_*` server overrides taking precedence; there are no developer-specific path fallbacks. Readiness explains why Build is unavailable, while Check stays available without those inputs. This does not install a mod, prove tool-version compatibility or establish a runtime archive winner. [Settings boundary](../projects/xf-studio/authoring/LOCAL-SETTINGS.md).

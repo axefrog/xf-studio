@@ -5,6 +5,7 @@ research/consumers/*/extracted/
 research/consumers/*/json/
 research/consumers/*/raw/
 research/consumers/*/base/
+research/consumers/brow-gradient-check/
 research/archive-xl/upstream/src/
 experiments/*/generated/
 projects/*/build/
