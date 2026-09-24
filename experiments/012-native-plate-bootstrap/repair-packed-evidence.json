@@ -1,0 +1,318 @@
+{
+  "schema": "xfs/native-plate-repair-numeric-verification-1",
+  "inputSha256": {
+    "head": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "native": "0571c4da09595009dbc7e4e305518e95f18a58ba4c59bf51e97e7d56d0f060ea",
+    "nativeMap": "5a6a592c1162e03b140b1a1202e3d025c872f95695cf3b95d731338348d096f3",
+    "packedGlb": "66da683c6acf86b7e7762aa5aa08873dbfc293366d8efca1642f1aff9c533b1e",
+    "priorMap": "6335681719cadab6380ed88dd07391e7a3850045e44ce29cc6bb7d3b75abecd6",
+    "roundtripReport": "8f65c5879b052b99a56ccbe66e0320c1188a3737ac1167819d39355edd5a244b",
+    "posedManifest": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382",
+    "posedHead": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4",
+    "posedLinear": "a15b2ea0b6233b60a55981bcff7c02b93c25e4ba133780d54168cecc635c13aa",
+    "denseManifest": "d7987db6dbfb8de5f8f30643ffdd9085c36159029aaca37328af29b6e8c02969",
+    "denseHead": "2525a6ff36953b5149778a864853ebd5dad6cf4e9c71eac692f6af23319f8628",
+    "denseLinear": "a0f951850b0f8229794f5ad1c19e6115c31aac541c9abacdee4c08d7b3c59e7c"
+  },
+  "nativeVertices": 1620,
+  "nativeTriangles": 3010,
+  "morphNamesAndOrderExact": true,
+  "sourceBaseAnd105MorphAccessorsExact": true,
+  "serializedNativeSkinBothBuffersExact": true,
+  "resourceSha256": {
+    "xfs_bootstrap_eye_plate.mesh": "1ff943f670d1bb5ab2d90f91c4f0b019d572b5e719b3e8a29c38baf82b68205e",
+    "xfs_bootstrap_eye_plate.morphtarget": "9ebb3f496b304c30ee84d859100339dd9eb1948fddd1e7e6f52cd51cad63bf29"
+  },
+  "staticCases": 107,
+  "staticContactPairs": 1,
+  "staticNeighborViolations": 14,
+  "maximumStaticDisplacement": 9.041051197517163e-05,
+  "minimumStaticNeighborSlack": -6.5741524933387454e-06,
+  "minimumStaticTriangleArea": 1.660077573918435e-09,
+  "posedSamples": 73,
+  "denseSamples": 664,
+  "sampleOverlapMaximumHeadError": 0.0,
+  "sampleOverlapMaximumLinearError": 0.0,
+  "gate": "FAIL",
+  "limit": "Serialized resource and sampled geometry only. Combined-scene visibility, continuous animation and game rendering are unproven.",
+  "staticFailureCases": [
+    {
+      "case": "h022_nose",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -1.556965788767614e-07
+    },
+    {
+      "case": "h041_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -1.1807891624522665e-06
+    },
+    {
+      "case": "h051_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 3,
+      "minimumNeighborSlack": -4.44592107138289e-06
+    },
+    {
+      "case": "h101_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -3.4032097915058306e-06
+    },
+    {
+      "case": "h102_nose",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -3.648024241173789e-06
+    },
+    {
+      "case": "h111_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 2,
+      "minimumNeighborSlack": -6.5741524933387454e-06
+    },
+    {
+      "case": "h121_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -3.9310877587434554e-06
+    },
+    {
+      "case": "h131_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 2,
+      "minimumNeighborSlack": -1.0137554424658921e-06
+    },
+    {
+      "case": "h141_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -1.8532566550741168e-07
+    },
+    {
+      "case": "h151_eyes",
+      "contactPairs": [
+        [
+          1123,
+          2311
+        ]
+      ],
+      "neighborViolationCount": 0,
+      "minimumNeighborSlack": 3.308710834085627e-06
+    },
+    {
+      "case": "h211_eyes",
+      "contactPairs": [],
+      "neighborViolationCount": 1,
+      "minimumNeighborSlack": -2.823830705535423e-06
+    }
+  ],
+  "posedContactingFrameCount": 14,
+  "posedContactPairOccurrences": 44,
+  "posedUniqueContactPairs": [
+    {
+      "plateFace": 793,
+      "headFace": 1994,
+      "occurrences": 1
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3670,
+      "occurrences": 2
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3671,
+      "occurrences": 4
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3672,
+      "occurrences": 4
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3668,
+      "occurrences": 9
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3670,
+      "occurrences": 11
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3672,
+      "occurrences": 13
+    }
+  ],
+  "posedContactFrames": [
+    33,
+    100,
+    104,
+    130,
+    140,
+    160,
+    169,
+    180,
+    190,
+    430,
+    440,
+    480,
+    490,
+    500
+  ],
+  "denseContactingFrameCount": 111,
+  "denseContactPairOccurrences": 359,
+  "denseUniqueContactPairs": [
+    {
+      "plateFace": 793,
+      "headFace": 1994,
+      "occurrences": 1
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3670,
+      "occurrences": 14
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3671,
+      "occurrences": 29
+    },
+    {
+      "plateFace": 2013,
+      "headFace": 3672,
+      "occurrences": 29
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3668,
+      "occurrences": 81
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3670,
+      "occurrences": 95
+    },
+    {
+      "plateFace": 2017,
+      "headFace": 3672,
+      "occurrences": 110
+    }
+  ],
+  "denseContactFrames": [
+    33,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161,
+    169,
+    178,
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    422,
+    423,
+    424,
+    425,
+    426,
+    427,
+    428,
+    429,
+    430,
+    431,
+    432,
+    433,
+    434,
+    435,
+    436,
+    437,
+    438,
+    439,
+    440,
+    441,
+    442,
+    443,
+    444,
+    445,
+    446,
+    475,
+    476,
+    477,
+    478,
+    479,
+    480,
+    481,
+    482,
+    483,
+    484,
+    485,
+    486,
+    487,
+    488,
+    489,
+    490,
+    491,
+    492,
+    493,
+    494,
+    495,
+    496,
+    497,
+    498,
+    499,
+    500,
+    501
+  ]
+}

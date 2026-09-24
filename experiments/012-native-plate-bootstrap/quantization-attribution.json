@@ -1,0 +1,219 @@
+{
+  "schema": "xfs/native-plate-quantization-attribution-1",
+  "inputSha256": {
+    "head": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "nativeMap": "5a6a592c1162e03b140b1a1202e3d025c872f95695cf3b95d731338348d096f3",
+    "priorMap": "6335681719cadab6380ed88dd07391e7a3850045e44ce29cc6bb7d3b75abecd6",
+    "float32": "9e4d8960e78d1ea6648417f501f4e9ae33effb40542192f9d5f68b5752202218",
+    "packed": "66da683c6acf86b7e7762aa5aa08873dbfc293366d8efca1642f1aff9c533b1e",
+    "posedManifest": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382",
+    "posedHead": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4",
+    "posedLinear": "a15b2ea0b6233b60a55981bcff7c02b93c25e4ba133780d54168cecc635c13aa"
+  },
+  "maximumBasePositionComponentReadbackDifference": 2.2407621145248413e-06,
+  "maximumMorphPositionComponentReadbackDifference": 9.424984455108643e-06,
+  "maximumObservedNeighborGapIncrease": {
+    "case": "h091_eyes",
+    "headEdge": [
+      5558,
+      5793
+    ],
+    "gapIncrease": 1.2590116675373486e-05,
+    "inputSlack": 4.428029000916733e-05,
+    "packedSlack": 3.169017333379385e-05
+  },
+  "worstPackedNeighborFailure": {
+    "case": "h111_eyes",
+    "headEdge": [
+      6461,
+      6464
+    ],
+    "gapIncrease": 8.704262769624327e-06,
+    "inputSlack": 2.130110276285582e-06,
+    "packedSlack": -6.5741524933387454e-06
+  },
+  "minimumInputSlackAmongPackedFailures": 1.9548090036194124e-06,
+  "packedNeighborFailureCount": 14,
+  "variants": {
+    "float32_input": {
+      "staticContactPairs": 0,
+      "staticContacts": [],
+      "staticNeighborViolations": 0,
+      "minimumStaticNeighborSlack": 1.0000833546955118e-07,
+      "posedContactingFrames": [],
+      "posedContactPairOccurrences": 0,
+      "posedUniquePairs": []
+    },
+    "packed_base_only": {
+      "staticContactPairs": 2,
+      "staticContacts": [
+        {
+          "case": "h141_eyes",
+          "pairs": [
+            [
+              2892,
+              12419
+            ]
+          ]
+        },
+        {
+          "case": "h151_eyes",
+          "pairs": [
+            [
+              1123,
+              2311
+            ]
+          ]
+        }
+      ],
+      "staticNeighborViolations": 4,
+      "minimumStaticNeighborSlack": -1.1807891624522665e-06,
+      "posedContactingFrames": [
+        490
+      ],
+      "posedContactPairOccurrences": 3,
+      "posedUniquePairs": [
+        {
+          "plateFace": 2013,
+          "headFace": 3671,
+          "occurrences": 1
+        },
+        {
+          "plateFace": 2013,
+          "headFace": 3672,
+          "occurrences": 1
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3672,
+          "occurrences": 1
+        }
+      ]
+    },
+    "packed_morph_only": {
+      "staticContactPairs": 1,
+      "staticContacts": [
+        {
+          "case": "h031_eyes",
+          "pairs": [
+            [
+              2889,
+              12308
+            ]
+          ]
+        }
+      ],
+      "staticNeighborViolations": 8,
+      "minimumStaticNeighborSlack": -4.3951632956280176e-06,
+      "posedContactingFrames": [
+        33,
+        130,
+        140,
+        430,
+        440,
+        480,
+        490,
+        500
+      ],
+      "posedContactPairOccurrences": 22,
+      "posedUniquePairs": [
+        {
+          "plateFace": 2013,
+          "headFace": 3671,
+          "occurrences": 2
+        },
+        {
+          "plateFace": 2013,
+          "headFace": 3672,
+          "occurrences": 1
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3668,
+          "occurrences": 6
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3670,
+          "occurrences": 6
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3672,
+          "occurrences": 7
+        }
+      ]
+    },
+    "packed_both": {
+      "staticContactPairs": 1,
+      "staticContacts": [
+        {
+          "case": "h151_eyes",
+          "pairs": [
+            [
+              1123,
+              2311
+            ]
+          ]
+        }
+      ],
+      "staticNeighborViolations": 14,
+      "minimumStaticNeighborSlack": -6.5741524933387454e-06,
+      "posedContactingFrames": [
+        33,
+        100,
+        104,
+        130,
+        140,
+        160,
+        169,
+        180,
+        190,
+        430,
+        440,
+        480,
+        490,
+        500
+      ],
+      "posedContactPairOccurrences": 44,
+      "posedUniquePairs": [
+        {
+          "plateFace": 793,
+          "headFace": 1994,
+          "occurrences": 1
+        },
+        {
+          "plateFace": 2013,
+          "headFace": 3670,
+          "occurrences": 2
+        },
+        {
+          "plateFace": 2013,
+          "headFace": 3671,
+          "occurrences": 4
+        },
+        {
+          "plateFace": 2013,
+          "headFace": 3672,
+          "occurrences": 4
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3668,
+          "occurrences": 9
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3670,
+          "occurrences": 11
+        },
+        {
+          "plateFace": 2017,
+          "headFace": 3672,
+          "occurrences": 13
+        }
+      ]
+    }
+  },
+  "limit": "Crossed base/morph arrays are causal diagnostics for the 107 static cases and 73 preserved poses only; they are not real serialized resources or a dense-animation acceptance test."
+}

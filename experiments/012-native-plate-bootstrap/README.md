@@ -137,3 +137,81 @@ The tracked summary contains identifiers, counts, margins and input hashes;
 the ignored full report carries every failed static edge and pair. This used
 only the previously credited project geometry/contact tools, NumPy and
 game-derived inputs. No new external source informed the correction.
+
+## Constrained native repair: numeric pass, packed failure — 25 September
+
+A second bounded search started from the failed transfer above. It fitted one
+shared base correction on the 12 endpoints of the seven failing native edges,
+then fitted separate `h031_eyes` and `h141_eyes` corrections against their two
+finite static triangle pairs. Two local `h091_eyes` fits addressed dense idle
+frames 298–299 and the newly exposed frame-169 pair. The search kept the
+**0.00025 total displacement** and every original per-edge cap. Its
+[parameterized search scripts](repair_smooth_search.py) and the two [static](repair_static_contacts.py)
+and [posed](repair_pose_contacts.py) finite-contact fits regenerate the ignored
+numeric field; the [independent verifier](verify_repair.py) imports no optimizer.
+The reproduced NPZ has SHA-256
+`e17284d81dc2a2bd38f25be909e5ac7ba829a42321c056bf91cf366fcf6046d2`.
+
+| Gate | Numeric field | Float32 import GLB | Final WolvenKit readback |
+|---|---:|---:|---:|
+| New static nonadjacent pairs, 107 cases | 0 | 0 | **1** (`h151_eyes`, plate 1123/head 2311) |
+| Static neighbor violations | 0 | 0 | **14** |
+| Minimum static neighbor slack | 0.100000 µm | 0.100008 µm | **−6.574152 µm** |
+| New contact occurrences, 73 idle samples | 0 | 0 | **44** across 14 frames |
+| New contact occurrences, 664 baked idle frames | 0 | 0 | **359** across 111 frames |
+| Maximum static displacement | 0.0000869652 | 0.0000869652 | 0.0000904105 |
+
+The [numeric](repair-numeric-evidence.json), [float32](repair-float32-evidence.json)
+and [packed](repair-packed-evidence.json) summaries pin inputs and all measured
+gates. Full per-case and per-frame reports remain ignored. The float32 GLB
+retains the native triangle/UV/skin/shading accessors and all 105 morph names;
+only position accessors were edited. The private resource round trip then
+replaced source-native skin bytes in **both** buffers and independently checked
+them in serialized mesh/morph JSON. Triangle order and both UV sets remained
+exact; all morph identities survived. The resulting private mesh/morph SHA-256
+values are `1ff943f670d1bb5ab2d90f91c4f0b019d572b5e719b3e8a29c38baf82b68205e`
+and `9ebb3f496b304c30ee84d859100339dd9eb1948fddd1e7e6f52cd51cad63bf29`.
+They are **rejected research outputs**, never preview or package inputs.
+
+The failure arises **after** float32 GLB creation, during WolvenKit resource
+serialization/readback. Maximum observed component differences from import GLB
+to exported resource GLB were 2.241 µm in base positions and 9.425 µm in morph
+position deltas. The [crossed-array diagnostic](quantization-attribution.json)
+isolates their effects over the same 107 static cases and 73 poses:
+
+| Readback arrays substituted into the passing float32 candidate | Static edge violations | Static new pairs | Posed pair occurrences |
+|---|---:|---:|---:|
+| Packed base only | 4 | 2 | 3 |
+| Packed morph deltas only | 8 | 1 | 22 |
+| Packed base and morph deltas | 14 | 1 | 44 |
+
+These hybrid arrays are diagnostic counterfactuals, not resource builds. Both
+readbacks contribute, and their combined effect is nonlinear. The largest
+**observed** increase in an edge gap across the 107 cases is **12.590117 µm**
+(`h091_eyes`, head edge 5558–5793); that edge had ample slack and did not fail.
+The worst failed edge (`h111_eyes`, 6461–6464) gained **8.704263 µm** of gap
+against **2.130110 µm** of float32 slack. A future search needs a measured
+resource-stage margin: more than 12.590117 µm of input edge slack would cover
+the largest increase in **this one serialization**, but this is not a guarantee
+for another input or WolvenKit version and may be impossible on short edges.
+Constrain both input and actual packed output, seek positive packed slack and
+finite-triangle separation, and rerun the full static/73/664 gates. A 2 µm
+prepack separating-axis target and 0.1 µm minimum edge slack were insufficient.
+No cap, coverage or failure classification was relaxed to obtain the numeric
+pass. Continuous-time motion, combined-scene visibility and game rendering
+remain unproven even for a future packed survivor.
+
+To reproduce the search, use the same ignored head/neutral/prior GLBs and
+73/664 samples whose hashes appear in the evidence JSON. Run the three search
+scripts in order: `repair_smooth_search.py` with `--head --native --native-map
+--prior-packed --prior-map --scipy-path --output`,
+`repair_static_contacts.py` with `--head --native --input --scipy-path --output`,
+then `repair_pose_contacts.py` twice, first with `--frames 298 299
+--expected-hits 3`, then `--frames 169 298 299 --expected-hits 1`; pass
+`--head --native --input --prior-map --dense --scipy-path --output` each time.
+Use [the verifier](verify_repair.py) on the final NPZ with `--candidate`, then
+[prepare the private GLB](prepare_repair_import.py), run the existing
+`roundtrip.py` into a new ignored directory, and verify its bound GLB with
+`--packed-glb --roundtrip-report`. `quantization_attribution.py` takes the
+float32 and packed GLBs for the crossed-array comparison. The named evidence
+files include every exact input hash so a different local source fails review.
