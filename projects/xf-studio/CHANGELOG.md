@@ -23,12 +23,12 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **Works without any game files.** On first launch you can skip setup and go straight to the flat UV editor, your library and the export check. Add prepared preview resources from your own copy of the game later to switch on the 3D head.
 - **A 3D preview head.** Point the app at five preview files prepared from your own copy of the game to see your makeup on the head, alongside the flat UV view.
 - **Your work is kept.** Presets are saved in a local library with version history, the current draft is restored after you close and reopen the app, and looks can be exported and imported as portable files.
-- **Check before you build.** Check tells you which layers can be turned into mod files and which will be left out, and why. With your own game, WolvenKit and Python set up, Build produces mod files for Matte, Satin and Metallic layers, independently verified before they are kept.
+- **Check before you build.** Check tells you which layers can be turned into mod files and which will be left out, and why. With your own game, WolvenKit and Python set up, Build turns your looks into your own copy of **XF Eye Artistry**, the eye-makeup mod, with Matte, Satin and Metallic layers independently verified before the files are kept.
 
 ### Fixes and under the hood
 
 - Nothing from the game or other mods is included in the download. The build is checked automatically so that only the app's own files can be packaged.
-- The mod files the Studio builds are verified offline only. They have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
+- The XF Eye Artistry mod files the Studio builds are verified offline only. They have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
 - Shimmer, Glitter, Glossy and Colour-shifting finishes are preview experiments. Build leaves them out and says so.
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
 - The desktop preview accepts only the core head files so far. The idle animation, saved-V import, hair, brows, lashes and piercings still need the development version run from source.
