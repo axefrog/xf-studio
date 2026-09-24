@@ -18,7 +18,7 @@ The browser interprets normal XYZ as linear tangent-space data, with UV0 top-lef
 
 - 19 authoring tests, typecheck and build passed. New checks cover deterministic seed behavior, normalized encoded normals, zero-density flat/nonmetallic output, bounded settings, old finish aliases and unchanged shape coverage across finishes.
 - In isolated `?verify=1`, selected glitter/shimmer/satin, moved the camera and key light, set density to zero and observed flakes disappear, then used Undo to restore 65%. No shader warnings/errors were reported during these checks. Refined shimmer uses smaller/weaker facets after visual inspection of its overly speckled first candidate.
-- Recipe retains the finish after reload. Nathan's active browser draft was not used for testing. A startup race found during verification now applies the Surface controls checkbox's current value when the model finishes loading.
+- Recipe retains the finish after reload. The active working browser draft was not used for testing. A startup race found during verification now applies the Surface controls checkbox's current value when the model finishes loading.
 - Actual asset loading, skinning and alpha coverage continue to work. This does not prove in-game decal normals, layer compositing, mip stability, or physical accuracy.
 
 ## Next (historical, superseded)

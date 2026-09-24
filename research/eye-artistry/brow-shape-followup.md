@@ -1,6 +1,6 @@
 # Saved brow 18 shape follow-up
 
-24 September 2026. Read-only resource audit in the isolated `codex/brow-shape-audit` worktree. No game launch, install, authored geometry, saved recipe or browser material changed. Game and mod binaries, serialized JSON and decoded images remain ignored local inputs. This follows the [saved material correction](brow-lash-fidelity.md) and Nathan's thicker-looking studio brow comparison.
+24 September 2026. Read-only resource audit in the isolated `codex/brow-shape-audit` worktree. No game launch, install, authored geometry, saved recipe or browser material changed. Game and mod binaries, serialized JSON and decoded images remain ignored local inputs. This follows the [saved material correction](brow-lash-fidelity.md) and the supplied comparison showing a thicker-looking studio brow.
 
 ## What the current sources establish
 
@@ -12,7 +12,7 @@ The partial style-18 mesh has zero serialized `boneNames` and `boneRigMatrices`;
 
 A captured ArchiveXL 1.26.3 log from **16 September 2026** provides a historical assembly check: `captures/20260923-085239-949631-foundation-existing-logs/mo2-overwrite/archivexl/ArchiveXL-2026-09-16-11-14-16.log` records loading `Arkhe_Beautiful_Eyebrows_02_FULLER_CCXL.xl` (line 31), replacing style 18's `brown_ombre` base-colour appearance (line 8959), and expanding `brown_ombre` from `black_carbon` and instantiating `brown_ombre@brows` (lines 9901/9904). This reduces concern that the partial `.xl` could never assemble, but does not establish which resources won in AutoSave-12's **13 September** session or prove rendered pixels. A separate Ratstick patch also adds `10_washed_brown_ombre`; the captured save selects `10_brown_ombre` and those definitions must not be conflated.
 
-The [installed provider audit](brow-texture-audit.md) found the FULLER archive as the sole installed provider of the selected Arkhe hashes among 1,103 indexed MO2/manual mod archives. Rehashing its current container gave the same SHA-256 `62bc69d17a7f1f0c28e8f12e219e1c717a44d2f3386c40ffdee0c222b99456c0`. The current private browser manifest binds that saved app/definition to the audited primary and secondary PNG digests and Alliekat `brown_ombre` gradient; the primary image still hashes to `5fac5306ee4f32c082a6739457170e5f5d2aac5e2f3a73eb3c903628ebfdb56f`. These are installed and local-preview candidates, **not proven effective winners** in Nathan's earlier game capture.
+The [installed provider audit](brow-texture-audit.md) found the FULLER archive as the sole installed provider of the selected Arkhe hashes among 1,103 indexed MO2/manual mod archives. Rehashing its current container gave the same SHA-256 `62bc69d17a7f1f0c28e8f12e219e1c717a44d2f3386c40ffdee0c222b99456c0`. The current private browser manifest binds that saved app/definition to the audited primary and secondary PNG digests and Alliekat `brown_ombre` gradient; the primary image still hashes to `5fac5306ee4f32c082a6739457170e5f5d2aac5e2f3a73eb3c903628ebfdb56f`. These are installed and local-preview candidates, **not proven effective winners** in the earlier reference game capture.
 
 ## Why a further shape correction is not justified yet
 

@@ -2,7 +2,7 @@
 
 **Status:** concluded — a real Studio Shimmer layer produces a stock `mesh_decal.mt` instance and five textures that round-trip offline, but its fine facet slopes vanish by the 256 mip tier and highlight equivalence is unproven. The on-plate normal sign/mode comparison continues in [Experiment 011](../011-shimmer-plate-comparison/README.md).
 
-24 September 2026. This is a **material-only research fixture**, not a Studio export adapter or game-rendered appearance. It takes an enabled legacy Shimmer layer from a parsed Studio recipe, uses the production `raster` and `bakeFlakes` functions, and produces one stock `mesh_decal.mt` material instance with five imported textures. The checked-in sample is a real `initialRecipe()` layer changed to Shimmer with explicit default optics; `--recipe` and `--layer` can instead select another portable recipe. It does not read Nathan's browser draft or SQLite library.
+24 September 2026. This is a **material-only research fixture**, not a Studio export adapter or game-rendered appearance. It takes an enabled legacy Shimmer layer from a parsed Studio recipe, uses the production `raster` and `bakeFlakes` functions, and produces one stock `mesh_decal.mt` material instance with five imported textures. The checked-in sample is a real `initialRecipe()` layer changed to Shimmer with explicit default optics; `--recipe` and `--layer` can instead select another portable recipe. It does not read the working browser draft or SQLite library.
 
 ## Source and channel mapping
 

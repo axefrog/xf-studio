@@ -19,14 +19,14 @@ The packed candidate GLB SHA-256 is `8f37b8a91f0a502ba8d586b5077c70dfce58f16fd76
 
 ## Reproduction
 
-From this worktree, with the original ignored source build, packed candidate build and idle assets preserved at the indicated local paths:
+From the repository root, with the original ignored source build, packed candidate build and idle assets preserved at the indicated local paths (the dense-idle output and the round-trip candidate were consolidated from their original worktrees into `generated/` on 25 September 2026):
 
 ```powershell
-cd D:/Dev/worktrees/plate-animation-gate/projects/xf-appearance-studio/authoring
+cd projects/xf-studio/authoring
 bun install --frozen-lockfile
-bun tools/sample_plate_dense_idle.ts D:/Dev/cp2077-modding-hq/experiments/006-plate-clearance/generated/build-1790134714546030800 D:/Dev/cp2077-modding-hq/projects/xf-appearance-studio/authoring/public/assets D:/Dev/worktrees/plate-animation-gate/experiments/006-plate-clearance/generated/dense-idle
-cd D:/Dev/worktrees/plate-animation-gate
-python experiments/006-plate-clearance/research/verify_dense_idle.py --source-build D:/Dev/cp2077-modding-hq/experiments/006-plate-clearance/generated/build-1790134714546030800 --candidate-build D:/Dev/worktrees/plate-postpack/experiments/006-plate-clearance/generated/roundtrip-crease-1790203305131926200 --dense D:/Dev/worktrees/plate-animation-gate/experiments/006-plate-clearance/generated/dense-idle --output experiments/006-plate-clearance/research/dense-idle-contact-gate.json
+bun tools/sample_plate_dense_idle.ts ../../../experiments/006-plate-clearance/generated/build-1790134714546030800 public/assets ../../../experiments/006-plate-clearance/generated/dense-idle
+cd ../../..
+python experiments/006-plate-clearance/research/verify_dense_idle.py --source-build experiments/006-plate-clearance/generated/build-1790134714546030800 --candidate-build experiments/006-plate-clearance/generated/roundtrip-crease-1790203305131926200 --dense experiments/006-plate-clearance/generated/dense-idle --output experiments/006-plate-clearance/research/dense-idle-contact-gate.json
 ```
 
 The verifier asserts source/head/animation and candidate resource hashes, exact 73-frame overlap, and separate SAT evidence for each reported contact. It uses the existing all-pair grid/narrow-phase contact checker and excludes source-adjacent pairs and native head intersections. The result is limited to the decoded adapter, the baked 30 Hz frames and one saved morph combination. It does not prove collision at all times between frames, the live REDengine animation graph, or visible in-game artifacts. The newly failed finite gate already prevents promotion; further unsampled or runtime uncertainty does not soften that result. No new community tool or technique informed this check beyond the already credited WolvenKit, Blender IO Suite and Three.js pipeline.

@@ -42,6 +42,7 @@ The Studio architecture is a maintained contract, not a one-time cleanup. Follow
 - **No new coupling.** Do not add business logic or direct mutable recipe access to startup files (`studio-main.ts`, legacy `main.ts`) or UI modules. Existing coupling is migration debt, not precedent.
 - **Grow the catalogue.** Extend the action/capability catalogue and the boundary tests with each user-visible capability.
 - **Record exceptions.** Record any unavoidable exception, with owner and removal criterion, in the [UI architecture boundary](research/authoring/ui-architecture-boundary.md).
+- **Interpret game files the way the game does; no per-mod adapters.** Support for installed mods and frameworks (CCXL packs, PRC piercings, hair-colour packs, future mods) must fall out of a generic, data-driven resolver that follows the engine's and core frameworks' (ArchiveXL, TweakXL) real resolution rules. Do not write mod- or framework-specific intake, schemas or UI branches. When a mod "just works" in game, research *why* until the Studio can reproduce it from the same data. Existing PRC-specific code (`tools/intake_prc.ts`, the `xfs/local-prc-piercings-1` manifest, PRC aggregation in `piercing-preview.ts`, PRC notes in the UI) is migration debt to replace with that resolver.
 - **Design for later domains.** New domain code should extend cleanly to other V features, body customisation and world tools.
 - **UI direction.** Dockable/floating panels, magnetic composites and tabbed groups. Snapping uses the cursor position, never panel bounds. Any future redesign brief prescribes functional requirements and leaves aesthetics and workflow open.
 
@@ -91,6 +92,7 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 
 - **Don't name the maintainer.** Documents in the repo describe the project, not a person. Use neutral phrasing ("the reference save", "the maintainer's reference character", "a supplied recipe") or state the fact without attribution. Git history already records who did what.
 - **Write current truth.** Update or replace stale statements; don't prepend dated diary paragraphs.
+- **Check links.** Run `python tools/check_links.py` before committing documentation changes; CI runs it on every push.
 - **No personal paths or identifiers.** The repository and site are public: no user-folder, save, Downloads or Temp paths, credentials or account identifiers. Use placeholders such as `PATH_TO_GAME` or `%USERPROFILE%`.
 
 ## Sources, assets and repository hygiene

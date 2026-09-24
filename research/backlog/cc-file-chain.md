@@ -11,8 +11,8 @@ Consolidate, in one navigable reference, how character-customisation files tie t
 | Source | Use | Rules |
 |---|---|---|
 | Local wiki clone `D:/Dev/Cyberpunk-Modding-Docs` (tracks `upstream/main` at `be2f44ee` as of 23 Sep) | Documented resource relationships | Inspect each guide's **diagrams and screenshots** as evidence, not just prose. Record source commit, exact guide and image paths, page authorship where evidenced. Separate illustrated/editor examples from runtime proof. |
-| Nathan's legacy xf-omega code, `D:/Dev/xf-omega` (e.g. `source/projects/xf-eye-artistry-ccxl/`, `source/red-engine/`) | How the old generator actually built CCXL makeup resources; lessons and pitfalls | **Reference only** — never resume or modify it. Its outputs are historical, not a compatibility target. See [lineage](../eye-artistry/lineage.md) for the pinned commit. |
-| `D:/Dev/sx-cp2077/docs/xf-eye-artistry-ccxl/` (`modding-knowledge.md`, `xf-omega-architecture.md`, etc.) | Nathan's earlier written knowledge | Reference only; treat archived agent plans as historical evidence, not current mandates. |
+| Legacy xf-omega code, `D:/Dev/xf-omega` (e.g. `source/projects/xf-eye-artistry-ccxl/`, `source/red-engine/`) | How the old generator actually built CCXL makeup resources; lessons and pitfalls | **Reference only** — never resume or modify it. Its outputs are historical, not a compatibility target. See [lineage](../eye-artistry/lineage.md) for the pinned commit. |
+| `D:/Dev/sx-cp2077/docs/xf-eye-artistry-ccxl/` (`modding-knowledge.md`, `xf-omega-architecture.md`, etc.) | Earlier first-party written knowledge | Reference only; treat archived agent plans as historical evidence, not current mandates. |
 | Installed game 2.31 resources and MO2 mods | Ground truth for resource shape | Extracted payloads stay local/ignored; record hashes and tool versions. |
 | ArchiveXL source `D:/Dev/cp2077-archive-xl` | What the extension merges | See the [merge boundary note](../character-customization/ccxl-merge-boundary.md). |
 

@@ -6,7 +6,7 @@ Research notes, contracts and evidence for XF Studio and related Cyberpunk 2077 
 
 | Folder | Contents |
 |---|---|
-| [backlog/](backlog/README.md) | Ranked queue and per-track requirement documents (open vs done). The source of truth for what Nathan has asked for. |
+| [backlog/](backlog/README.md) | Ranked queue and per-track requirement documents (open vs done). The source of truth for what has been requested. |
 | [authoring/](authoring/) | XF Studio contracts, architecture/UI boundary, editor feature contracts, packaging pipeline, desktop packaging, acceptance records. |
 | [materials/](materials/) | Makeup finish taxonomy, REDengine shader/material studies, preset compiler contract, glitter/glossy/colour-shift studies. |
 | [eye-artistry/](eye-artistry/) | Saved-V import and resource resolution (eyes, brows, lashes, hair, skin), preview fidelity audits, Eye Artistry lineage. |

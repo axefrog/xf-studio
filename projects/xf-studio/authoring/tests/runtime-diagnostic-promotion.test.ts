@@ -1,18 +1,19 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
   rollbackRuntimePromotion } from "../src/runtime-diagnostic-promotion";
+import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "xfs-promotion-"));
   const gameRoot = join(root, "game"), mo2Root = join(root, "real-mo2");
   const candidateStore = join(root, "candidates"), candidateId = "build_1";
-  const profileId = "Existing Profile", newProfileId = "XF Studio diagnostic";
+  const profileId = "Existing Profile", newProfileId = "XF Eye Artistry diagnostic";
   const sourceProfile = join(mo2Root, "profiles", profileId);
   const payload = join(candidateStore, candidateId, "archive", "pc", "mod");
   mkdirSync(join(gameRoot, "bin", "x64"), { recursive: true });
@@ -67,7 +68,8 @@ test("explicit promotion creates only new owned paths and rollback removes only 
   try {
     const preview = promoteRuntimeDiagnostic(f.options);
     expect(readFileSync(join(preview.newProfile, "modlist.txt"), "utf8"))
-      .toBe("+Other Mod\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n+XF Studio\r\n");
+      .toBe(`+Other Mod\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n+${EYE_MAKEUP_MOD.modName}\r\n`);
+    expect(preview.dedicatedMod).toBe(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName));
     expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
     expect(readFileSync(join(preview.newProfile, "plugins.txt"), "utf8")).toBe("*fixture.esm\n");
     expect(readFileSync(join(preview.newProfile, "loadorder.txt"), "utf8")).toBe("fixture.esm\n");
@@ -87,7 +89,7 @@ test("explicit promotion creates only new owned paths and rollback removes only 
 test("source/stage drift, collisions, and existing destination refuse before writes", () => {
   const f = fixture();
   try {
-    const stageFile = join(f.options.stagingRoot, "mo2", "mods", "XF Studio", "archive", "pc", "mod", "xfs_fixture.archive");
+    const stageFile = join(f.options.stagingRoot, "mo2", "mods", EYE_MAKEUP_MOD.modName, "archive", "pc", "mod", "xfs_fixture.archive");
     writeFileSync(stageFile, "tampered");
     expect(() => planRuntimePromotion(f.options)).toThrow("Staged payload differs");
     writeFileSync(stageFile, "candidate-0");
@@ -97,8 +99,14 @@ test("source/stage drift, collisions, and existing destination refuse before wri
     writeFileSync(join(f.options.gameRoot, "archive", "pc", "mod", "xfs_fixture.archive"), "collision");
     expect(() => planRuntimePromotion(f.options)).toThrow("Direct game archive collision");
     rmSync(join(f.options.gameRoot, "archive", "pc", "mod", "xfs_fixture.archive"));
-    mkdirSync(join(f.options.mo2Root, "mods", "xf studio"));
+    mkdirSync(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName.toLowerCase()));
     expect(() => planRuntimePromotion(f.options)).toThrow("Destination already exists");
+    rmSync(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName.toLowerCase()), { recursive: true });
+    // The 25 September diagnostic created "XF Studio": the same mod, so never add a second copy.
+    mkdirSync(join(f.options.mo2Root, "mods", "xf studio"));
+    expect(() => planRuntimePromotion(f.options)).toThrow("legacy folder \"xf studio\"");
+    expect(() => promoteRuntimeDiagnostic(f.options)).toThrow("legacy folder");
+    expect(existsSync(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName))).toBe(false);
     expect(existsSync(join(f.options.mo2Root, "profiles", f.options.newProfileId))).toBe(false);
   } finally { f.cleanup(); }
 });
@@ -124,7 +132,7 @@ test("stage and every source root must be disjoint, including equality", () => {
       expect(() => promoteRuntimeDiagnostic(options)).toThrow("outside every source root");
     }
     expect(existsSync(join(f.options.mo2Root, "profiles", f.options.newProfileId))).toBe(false);
-    expect(existsSync(join(f.options.mo2Root, "mods", "XF Studio"))).toBe(false);
+    expect(existsSync(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName))).toBe(false);
     expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
   } finally { f.cleanup(); }
 });
@@ -189,5 +197,42 @@ test("partial promotion recovery removes only matching created content", () => {
     expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
     expect(readFileSync(join(f.options.mo2Root, "mods", "Other Mod", "keep.txt"), "utf8"))
       .toBe("untouched");
+  } finally { f.cleanup(); }
+});
+
+test("a promotion recorded under the legacy XF Studio folder can still be rolled back", () => {
+  const f = fixture();
+  try {
+    const preview = promoteRuntimeDiagnostic(f.options);
+    // Rewrite this promotion as the pre-branding tool recorded it: same files, legacy folder name.
+    const legacyMod = join(f.options.mo2Root, "mods", "XF Studio");
+    renameSync(preview.dedicatedMod, legacyMod);
+    const receipt = join(f.options.stagingRoot, "promotion-receipt.json");
+    const record = JSON.parse(readFileSync(receipt, "utf8"));
+    record.preview.dedicatedMod = legacyMod;
+    record.preview.stageMod = join(f.options.stagingRoot, "mo2", "mods", "XF Studio");
+    writeFileSync(receipt, JSON.stringify(record, null, 2) + "\n");
+    rollbackRuntimePromotion(f.options);
+    expect(existsSync(legacyMod)).toBe(false);
+    expect(existsSync(preview.newProfile)).toBe(false);
+    expect(readFileSync(join(f.options.mo2Root, "mods", "Other Mod", "keep.txt"), "utf8")).toBe("untouched");
+    // Any other folder name in a record is still refused.
+    record.preview.dedicatedMod = join(f.options.mo2Root, "mods", "Other Mod");
+    record.preview.stageMod = join(f.options.stagingRoot, "mo2", "mods", "Other Mod");
+    writeFileSync(join(f.options.stagingRoot, "promotion-journal.json"), JSON.stringify(record));
+    expect(() => recoverRuntimePromotion(f.options)).toThrow("Promotion record target mismatch");
+    expect(readFileSync(join(f.options.mo2Root, "mods", "Other Mod", "keep.txt"), "utf8")).toBe("untouched");
+  } finally { f.cleanup(); }
+});
+
+test("a stage prepared under the legacy folder name must be staged again", () => {
+  const f = fixture();
+  try {
+    const planFile = join(f.options.stagingRoot, "diagnostic-plan.json");
+    const plan = JSON.parse(readFileSync(planFile, "utf8"));
+    plan.stageReceipt.target = join(f.options.stagingRoot, "mo2", "mods", "XF Studio", "archive", "pc", "mod");
+    writeFileSync(planFile, JSON.stringify(plan, null, 2) + "\n");
+    expect(() => planRuntimePromotion(f.options)).toThrow(`Stage again so the promoted mod is named "${EYE_MAKEUP_MOD.modName}"`);
+    expect(existsSync(join(f.options.mo2Root, "profiles", f.options.newProfileId))).toBe(false);
   } finally { f.cleanup(); }
 });

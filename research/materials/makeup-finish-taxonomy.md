@@ -1,6 +1,6 @@
 # Recognizable makeup finish families — 2026-09-23
 
-Nathan requested familiar categories rather than retaining arbitrary legacy labels. Current menu:
+The project requires familiar categories rather than arbitrary legacy labels. Current menu:
 
 | Family | Intended visual distinction | Current browser candidate |
 |---|---|---|

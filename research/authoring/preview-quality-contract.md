@@ -18,7 +18,7 @@ The initial audit below is now implemented; this checkpoint supersedes its prosp
 - Performance limit: a complex directional-softness/warped 4K layer was still baking when cancelled; do not claim all 4K designs are interactive. A simpler 4K glitter layer completed. Prefer 512/1K for exploratory editing; future acceleration must preserve evaluator semantics.
 - Validation: 160 tests / 493,753 assertions / 38 files, typecheck/build pass. Tests cover frozen legacy optical hashes, cooperative cancellation/failure recovery and disposal. [Evidence](../../projects/xf-studio/authoring/evidence/preview-quality-2026-09-23.json).
 
-23 September 2026. Read-only audit for Nathan's requested configurable studio texture resolution. No production changes. Scope: generated makeup masks **and** their generated optical maps; existing head/eye/detail assets remain at their actual source resolutions. This is distinct from canvas display sharpness, renderer pixel ratio and eventual export quality.
+23 September 2026. Read-only audit for the requested configurable studio texture resolution. No production changes. Scope: generated makeup masks **and** their generated optical maps; existing head/eye/detail assets remain at their actual source resolutions. This is distinct from canvas display sharpness, renderer pixel ratio and eventual export quality.
 
 ## Settings and UI
 

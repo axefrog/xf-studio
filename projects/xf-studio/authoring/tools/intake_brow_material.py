@@ -1,4 +1,4 @@
-"""Make an ignored, exact-identity browser intake for Nathan's saved brow material.
+"""Make an ignored, exact-identity browser intake for the reference save's brow material.
 
 Requires Pillow. Arguments are decoded local PNGs, never redistributed source assets.
 The material adapter consumes filtered source alphas at runtime, so this command
