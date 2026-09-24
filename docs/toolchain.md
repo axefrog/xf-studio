@@ -52,7 +52,7 @@ The selected MO2 profile is `2025 (again)` (920 enabled actual mods). Game-root 
 
 ## Offline tools actually exercised
 
-- Python 3.14.6: `C:/Users/Nathan/AppData/Local/Python/bin/python.exe`.
+- Python 3.14.6: `%USERPROFILE%/AppData/Local/Python/bin/python.exe`.
 - Blender 5.0.0: `C:/Program Files/Blender Foundation/Blender 5.0/blender.exe`. Also installed: 4.4 and 4.5 directories. Headless inspection works; no callable Blender MCP tool was exposed in this session. No upgrade needed to open the source successfully.
 - WolvenKit CLI 8.17.4: `F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe`. Verified archive extraction and JSON/CR2W material round-trip; still the production default. Official [CLI 9.0.1](https://github.com/WolvenKit/WolvenKit/releases/tag/9.0.1) is now installed side by side at `F:/Games/RedModding/WolvenKit.Console-9.0.1/WolvenKit.CLI.exe`, with the published ZIP SHA-256 verified. Its [private four-preset round trip](../research/authoring/wolvenkit-9-roundtrip-2026-09-24.md) passed independent verification and reproduced all 16 archive members byte for byte against the validated 8.17.4 build. This is offline fixture compatibility, not game verification or a production-default change. GUI and CLI versions are separate tools.
 - Older MLSB CLI 8.16.2-nightly.2025-06-16: `F:/Games/RedModding/MLSB_WolvenKit.CLI/WolvenKit.CLI.exe`; preserve for historical compatibility, not default builds.

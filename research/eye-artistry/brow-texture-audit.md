@@ -1,6 +1,6 @@
 # Brow texture and installed-provider audit
 
-23 September 2026. Bounded read-only follow-up to Nathan's comparison, `C:/Users/Nathan/AppData/Local/Temp/codex-clipboard-2843978c-711d-4025-a722-9aa046b8384c.png`. No renderer, assets, originals or game installation changed. The screenshot alone cannot identify a texture path or runtime winner.
+23 September 2026. Bounded read-only follow-up to Nathan's comparison, `a local clipboard image (personal Temp path withheld)`. No renderer, assets, originals or game installation changed. The screenshot alone cannot identify a texture path or runtime winner.
 
 ## Result
 

@@ -3,6 +3,7 @@
 Uses the owned imported plate from experiment 004, fresh resource definitions, and the
 pure studio material compiler. Old Eye Artistry code/resources are not build inputs.
 """
+import shutil
 import hashlib
 import argparse
 import itertools
@@ -23,7 +24,7 @@ parser.add_argument('--collection',type=Path,default=HERE/'collection.json')
 parser.add_argument('--output',type=Path,help='Fresh isolated intermediate build directory')
 parser.add_argument('--plate',type=Path,default=HERE.parent/'004-plate-import/generated/archive/axefrog/appearance_studio/studies')
 parser.add_argument('--wolvenkit',type=Path,default=Path('F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe'))
-parser.add_argument('--bun',type=Path,default=Path('C:/Users/Nathan/.bun/bin/bun.exe'))
+parser.add_argument('--bun',type=Path,default=Path(shutil.which('bun') or 'bun'))
 parser.add_argument('--gamepath',type=Path,default=Path('F:/Games/Cyberpunk 2077'))
 parser.add_argument('--app-root',type=Path,help='Studio authoring source root')
 parser.add_argument('--work-root',type=Path,help='Working directory for child tools')

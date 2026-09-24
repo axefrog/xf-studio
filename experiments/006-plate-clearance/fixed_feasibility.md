@@ -66,7 +66,7 @@ From HQ:
 
 ```powershell
 python -m pip install -r experiments/006-plate-clearance/fixed_requirements.txt --target experiments/006-plate-clearance/generated/fixed_python
-& 'C:/Users/Nathan/.bun/bin/bun.exe' projects/xf-studio/authoring/tools/export_plate_skin_matrices.ts
+bun projects/xf-studio/authoring/tools/export_plate_skin_matrices.ts
 python experiments/006-plate-clearance/fixed_feasibility.py
 python experiments/006-plate-clearance/fixed_verify.py
 ```
