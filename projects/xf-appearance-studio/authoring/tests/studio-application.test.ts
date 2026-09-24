@@ -132,3 +132,76 @@ test("context queries validate target, payload and live enum choices for menus a
   expect(app.choicesFor({ kind: "viewport" }, "quality.set", "size").map(choice => choice.value))
     .toEqual([512, 1024, 2048, 4096]);
 });
+
+test("hit-context query binds point, tangent and shape commands to live geometry", () => {
+  const { app, document } = fixture(), layerId = document.recipe.layers[0].id;
+  const empty = app.contextQuery({ kind: "uv-empty" });
+  expect(empty.options).toEqual([]);
+  expect(app.dispatchContext(empty.context, { kind: "field.add", layerId }))
+    .toMatchObject({ ok: false, code: "invalid_value" });
+
+  const shape = app.contextQuery({ kind: "shape", layerId });
+  expect(shape.options.find(item => item.id === "shape.addWarp")?.capability.available).toBe(true);
+  const fieldCount = document.recipe.layers[0].fields.length;
+  expect(app.dispatchContext(shape.context, { kind: "field.add", layerId })).toMatchObject({ ok: true });
+  expect(document.recipe.layers[0].fields).toHaveLength(fieldCount + 1);
+  expect(app.dispatchContext(shape.context, { kind: "field.add", layerId }))
+    .toMatchObject({ ok: false, code: "missing_target" });
+
+  const point = app.contextQuery({ kind: "point", layerId, index: 1 });
+  expect(point.options.find(item => item.id === "point.strength")?.requiresInput).toBe(true);
+  expect(point.options.find(item => item.id === "point.softness")?.capability)
+    .toMatchObject({ available: false, code: "incompatible_mode" });
+  expect(app.boundActionCapability(point.context, { kind: "point.remove", layerId, index: 0 }))
+    .toMatchObject({ available: false, code: "missing_target" });
+  expect(app.dispatchContext(point.context, { kind: "pigment.edit", layerId,
+    command: { kind: "point-strength", index: 1, value: .42 } })).toMatchObject({ ok: true });
+  expect(document.recipe.layers[0].points[1].weight).toBe(.42);
+  expect(app.dispatchContext(point.context, { kind: "point.remove", layerId, index: 1 }))
+    .toMatchObject({ ok: false, code: "missing_target" });
+
+  const tangent = app.contextQuery({ kind: "tangent", layerId, index: 1, side: "outgoing" });
+  expect(tangent.options.find(item => item.id === "point.select")?.capability.available).toBe(true);
+  expect(app.boundActionCapability(tangent.context, { kind: "point.select", layerId, index: 2 }))
+    .toMatchObject({ available: false, code: "missing_target" });
+});
+
+test("hit-context commands recheck field, layer and collection identity at invocation", () => {
+  const { app, document, workspace } = fixture(), layerId = document.recipe.layers[0].id;
+  const fieldId = document.recipe.layers[0].fields[0].id;
+  const field = app.contextQuery({ kind: "field", layerId, id: fieldId });
+  expect(field.options.find(item => item.id === "field.reach")?.requiresInput).toBe(true);
+  expect(app.boundActionCapability(field.context, { kind: "field.setReach", layerId,
+    fieldId, radius: .5 })).toMatchObject({ available: false, code: "limit" });
+  expect(app.dispatchContext(field.context, { kind: "field.remove", layerId, fieldId }))
+    .toMatchObject({ ok: true });
+  expect(app.dispatchContext(field.context, { kind: "field.clear", layerId, fieldId }))
+    .toMatchObject({ ok: false, code: "missing_target" });
+
+  const presetId = crypto.randomUUID();
+  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
+    name: "Draft", presets: [{ id: presetId, name: "One", revision: 1,
+      recipe: document.export().recipe }] };
+  const service = new CollectionService(collectionDraft(collection), workspace.library,
+    () => document.export(), editor => document.restore({ ...editor,
+      fieldSelection: editor.fieldSelection ?? {} }), {
+      list: async () => [], get: async () => { throw Error("not used"); },
+      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); },
+    });
+  app.attach({ collection: service });
+  const layer = app.contextQuery({ kind: "layer", id: layerId });
+  const preset = app.contextQuery({ kind: "preset", id: presetId });
+  expect(preset.options.find(item => item.id === "preset.rename")?.requiresInput).toBe(true);
+  expect(app.dispatchContext(preset.context, { kind: "preset.edit",
+    command: { kind: "rename", id: presetId, name: "Renamed" } })).toMatchObject({ ok: true });
+  expect(app.dispatchContext(preset.context, { kind: "preset.edit",
+    command: { kind: "remove", id: presetId } })).toMatchObject({ ok: false, code: "missing_target" });
+  expect(app.dispatchContext(layer.context, { kind: "layer.edit",
+    command: { kind: "duplicate", id: layerId } })).toMatchObject({ ok: false, code: "missing_target" });
+  const collectionHit = app.contextQuery({ kind: "collection" });
+  expect(collectionHit.options.find(item => item.id === "preset.add")?.capability.available).toBe(true);
+  expect(app.dispatchContext(collectionHit.context, { kind: "preset.edit",
+    command: { kind: "add" } })).toMatchObject({ ok: true });
+  expect(app.dispatchContext(collectionHit.context, { kind: "preset.edit",
+    command: { kind: "add" } })).toMatchObject({ ok: false, code: "missing_target" });
+});

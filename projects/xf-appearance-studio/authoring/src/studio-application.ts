@@ -12,6 +12,8 @@ import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions"
 import type { SavedAppearanceAction, SavedAppearanceActions } from "./saved-appearance-actions";
 import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ValueSchema } from "./studio-action-descriptors";
+import { contextCandidates, contextScope, geometryHit,
+  type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 
 export type StudioAction = RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
@@ -49,9 +51,11 @@ export class StudioApplication {
   private services: Services;
   private listeners = new Set<() => void>();
   private unsubs: (() => void)[] = [];
+  private collectionRevision = 0;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   constructor(services: Services) { this.services = services; this.subscribeSources(); }
   attach(next: Partial<Omit<Services, "document" | "recipe" | "layer" | "gestures" | "controls">>) {
+    if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
   }
   private notify() { for (const listener of this.listeners) listener(); }
@@ -59,7 +63,10 @@ export class StudioApplication {
     for (const unsub of this.unsubs) unsub();
     const s = this.services;
     this.unsubs = [s.document.subscribe(() => this.notify())];
-    for (const source of [s.collection, s.preview, s.motion, s.quality, s.savedV])
+    if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
+      this.collectionRevision++; this.notify();
+    }));
+    for (const source of [s.preview, s.motion, s.quality, s.savedV])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -136,6 +143,80 @@ export class StudioApplication {
       const action = { kind, ...targetPayload, ...base, [field]: value } as StudioAction;
       return { value, action, capability: this.contextCapability(target, action) };
     });
+  }
+  /** Bind an adapter's hit to this draft/geometry before offering existing commands. */
+  contextFor(hit: StudioContextHit): StudioBoundContext {
+    const draft = this.services.collection?.view().draft;
+    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), collectionId: draft?.collection.id,
+      selectedPresetId: draft?.selected,
+      collectionRevision: this.collectionRevision,
+      geometryRevision: this.services.document.geometryVersion.revision });
+  }
+  private boundContextCapability(context: StudioBoundContext): StudioCapability {
+    const draft = this.services.collection?.view().draft;
+    if (context.collectionRevision !== this.collectionRevision)
+      return missingTarget("The collection changed after this menu opened.");
+    if (context.collectionId !== draft?.collection.id)
+      return missingTarget("The collection changed after this menu opened.");
+    if (context.hit.kind !== "collection" && context.hit.kind !== "preset" &&
+      context.selectedPresetId !== draft?.selected)
+      return missingTarget("The selected preset changed after this menu opened.");
+    if (geometryHit(context.hit) && context.geometryRevision !== this.services.document.geometryVersion.revision)
+      return missingTarget("The shape changed after this menu opened.");
+    if (context.hit.kind === "tangent") {
+      const hit = context.hit;
+      const layer = this.services.document.recipe.layers.find(item => item.id === hit.layerId);
+      if (layer?.pathMode !== "bezier" || !layer.points[hit.index]?.handles)
+        return missingTarget("That Bézier tangent no longer exists.");
+    }
+    const target = contextScope(context.hit);
+    if (!target) return { available: true };
+    return this.targetCapability(target);
+  }
+  /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
+  contextOptionsFor(context: StudioBoundContext) {
+    const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
+    return contextCandidates(context.hit, this.services.document.recipe).map(candidate => {
+      if ("action" in candidate) return { ...candidate, requiresInput: false as const,
+        capability: bound.available && target ? this.contextCapability(target, candidate.action) : bound,
+        undo: undoPolicy(candidate.action) };
+      let capability = bound;
+      if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
+        if (candidate.id === "point.softness" &&
+          this.services.document.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
+          capability = { available: false, code: "incompatible_mode",
+            reason: "Enable point edge softness before editing an individual edge." };
+      }
+      return { ...candidate, capability, undo: ACTION_DESCRIPTORS[candidate.actionKind].undo };
+    });
+  }
+  contextQuery(hit: StudioContextHit) {
+    const context = this.contextFor(hit);
+    return { context, targetCapability: this.boundContextCapability(context),
+      options: this.contextOptionsFor(context) };
+  }
+  /** Query a completed input action, then recheck the same binding at invocation. */
+  boundActionCapability(context: StudioBoundContext, action: StudioAction): StudioCapability {
+    const bound = this.boundContextCapability(context);
+    if (!bound.available) return bound;
+    const target = contextScope(context.hit);
+    if (!target) return { available: false, code: "invalid_value",
+      reason: "No standalone edit command applies to empty UV space." };
+    const variant = "command" in action && action.command && typeof action.command === "object" &&
+      "kind" in action.command ? action.command.kind : undefined;
+    const candidate = contextCandidates(context.hit, this.services.document.recipe).find(item =>
+      "action" in item ? item.action.kind === action.kind &&
+        ("command" in item.action && item.action.command && typeof item.action.command === "object" &&
+          "kind" in item.action.command ? item.action.command.kind : undefined) === variant :
+        item.actionKind === action.kind && item.variant === variant);
+    if (!candidate) return { available: false, code: "invalid_value",
+      reason: "This command is not offered for that hit target." };
+    return this.contextCapability(target, action);
+  }
+  dispatchContext(context: StudioBoundContext, action: StudioAction) {
+    const allowed = this.boundActionCapability(context, action);
+    return allowed.available ? this.dispatch(action) : { ok: false as const,
+      code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
   }
   snapshot() {
     const s = this.services;
