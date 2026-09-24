@@ -1,6 +1,6 @@
 # Expanded plate import
 
-**Status:** concluded — it rebuilt the owned expanded plate as game mesh/morph resources with exact retained head shading (offline round trip only; nothing installed or tested in game), and this neutral plate is still the input to [Experiment 005](../005-preset-collection/README.md) and [Experiment 011](../011-shimmer-plate-comparison/README.md). Clearance work moved to [Experiment 006](../006-plate-clearance/README.md) and then [Experiment 012](../012-native-plate-bootstrap/README.md), which is paused pending in-game evidence.
+**Status:** concluded — it rebuilt the owned expanded plate as game mesh/morph resources with exact retained head shading (offline round trip only; nothing installed or tested in game), and it was the packaging input until the Studio's [built-in plate](../012-native-plate-bootstrap/README.md#built-in-production-plate) replaced it. That plate has the same triangles but exact head bytes, native skin data, native vertex colour and no duplicated vertices. It remains available as a developer override and is still the input to [Experiment 011](../011-shimmer-plate-comparison/README.md). Clearance work moved to [Experiment 006](../006-plate-clearance/README.md) and then [Experiment 012](../012-native-plate-bootstrap/README.md), which is paused pending in-game evidence.
 
 Rebuild the owned plate as actual game mesh and morph resources, without the legacy material matrix or any deployment. Source provenance and topology are in the [lineage record](../../research/eye-artistry/lineage.md).
 

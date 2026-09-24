@@ -6,7 +6,7 @@ Two editable authored looks, **Violet ink** and **Copper edge**, compile into an
 
 The current builder rejects a generated resource tree that differs from the collection plan before WolvenKit packs it. Canonical relative paths, supported extensions, unique 64-bit depot hashes and each payload's SHA-256 are recorded in `build.json`; the independent verifier checks the source tree and exact unpacked member set again. [Local package boundary](../../research/authoring/local-package-build.md) explains how this gate fits the private Studio export.
 
-Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate source retains its historical filename; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. The selector label is the mod's own name, **XF Eye Artistry**, taken from the export plan's `selectorLabel` (defined once in [`src/mod-branding.ts`](../../projects/xf-studio/authoring/src/mod-branding.ts)). Builds made before 25 September's branding change carry `XF Studio · Eye makeup`; their recorded results are unchanged. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-studio/data/naming.md).
+Naming update, 2026-09-23: the current generator and verified rebuild use **XF Studio / `xfs_`** for appearances, selector/component names and generated resource filenames. Existing `xfas/collection-1` input files still load. The plate input is the Studio's built-in `xfs_eye_plate.*` or a historical `xfas_eye_plate.*` override; output filenames are derived from the plan. The verifier checks the new prefix, label and resolved references in converted resources, and compares all unpacked payloads. The selector label is the mod's own name, **XF Eye Artistry**, taken from the export plan's `selectorLabel` (defined once in [`src/mod-branding.ts`](../../projects/xf-studio/authoring/src/mod-branding.ts)). Builds made before 25 September's branding change carry `XF Studio · Eye makeup`; their recorded results are unchanged. Earlier XFAS results remain in Git history at `382f227` and the preserved local build `generated/build-1790130339455979000`; they were not rewritten in place. See the [naming contract](../../projects/xf-studio/data/naming.md).
 
 ## Current editor-to-archive check
 
@@ -14,7 +14,7 @@ The latest result uses [four synthetic verification presets authored and ordered
 
 ## Original fixture structure
 
-- One shared mesh/morph pair containing the owned neutral expanded plate and all 105 facial customization shapes.
+- One shared mesh/morph pair containing the neutral expanded plate and all 105 facial customization shapes. The Studio hosts pass the [built-in plate](../../research/authoring/studio-to-mod-pipeline.md#where-the-eye-plate-comes-from), cut byte for byte from the user's installed head.
 - One embedded `@preset` material template using the authoritative `mesh_decal.mt`; no modified material-priority template.
 - Six textures: diffuse/coverage, roughness and metalness for each authored look. Only selected combinations are compiled.
 - Two `.app` definitions: an exact empty Off appearance and a shared morph-skinned component template. ArchiveXL expands requested stable preset suffixes into that template.
@@ -25,7 +25,7 @@ The original fixture archive was **831,488 bytes**, containing 10 resources; the
 
 ## Reproduce
 
-Requires the current locally built experiment 004 plate, WolvenKit CLI 8.17.4, Bun and Python/Pillow/NumPy. Paths are explicit in the scripts. From HQ:
+Requires a plate directory, WolvenKit CLI 8.17.4, Bun and Python/Pillow/NumPy. Pass `--plate` with a directory holding exactly one `xfs_eye_plate` or historical `xfas_eye_plate` mesh/morph pair. For the built-in plate, derive it first with `bun projects/xf-studio/authoring/tools/derive_eye_plate.ts --game PATH_TO_GAME --wolvenkit PATH_TO_WolvenKit.CLI.exe --cache ABSOLUTE_PRIVATE_DIR` and pass its printed `resources` directory. Without `--plate`, the script falls back to the historical experiment 004 output. Other paths are explicit in the scripts. From HQ:
 
 ```powershell
 python experiments/005-preset-collection/build.py --collection experiments/005-preset-collection/editor-collection.json
@@ -54,4 +54,4 @@ Other open work: controlled plate clearance after packing, posed intersections, 
 
 WolvenKit's appearance preprocessor/writer establishes how fresh component definitions become a binary RedPackage; actual CLI conversion confirms the resulting package and bindings. One initial conversion failed because new appearance handles collided with preserved mesh-buffer handles; generated handles now use a distinct range. The scripts inspect conversion logs as well as exit codes.
 
-These lessons extend the [community credits](../../docs/community-credits.md). Historical Eye Artistry was a schema research reference; it is not an input to this clean build. Geometry derives from the owned plate pipeline and underlying CDPR head assets.
+These lessons extend the [community credits](../../docs/community-credits.md). Historical Eye Artistry was a schema research reference; it is not an input to this clean build. Geometry is cut from the user's installed CDPR head by the Studio's plate recipe.

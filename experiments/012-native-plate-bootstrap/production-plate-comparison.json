@@ -1,0 +1,220 @@
+{
+ "schema": "xfs/eye-plate-production-comparison-1",
+ "date": "2026-09-25",
+ "game": "Cyberpunk 2077 2.31",
+ "tools": {
+  "derivation": "XF Studio eye-plate service (TypeScript) with WolvenKit CLI 8.17.4; also reproduced with 9.0.1",
+  "oracle": "independent Python decoder over WolvenKit JSON (private, not tracked)"
+ },
+ "source": {
+  "headMeshSha256": "e877b91a7b3f6bd678f0365d484a0dd32f7d7d4d6c13b213d2a7e73fcce874c6",
+  "headMorphSha256": "3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e",
+  "headMeshAndMorphBaseRenderBuffersIdentical": true,
+  "selectionFaceIdsSha256": "555c2f7e45111083b2826dc8f44c1171bf67b53e109f857e3637fe5cd83f3c2d",
+  "selectionVertexIdsSha256": "5c37e3472aec37abf1f5b6ae1ddcbbeaab84bdb5b877b16e6bcefd0e4bb4f62b",
+  "glbFaceOrderMatchesNative": "all 13,186 exported-GLB triangles use the same vertex sets as the native index buffer (cyclic rotation only), so experiment 012 face IDs are native triangle IDs"
+ },
+ "resources": {
+  "experiment004": {
+   "mesh": "9099726e9842888232ae22c0abf41a6b9fb99c6bf44f36c7786fe0d791223fed",
+   "morph": "7252eaad86f58e31c54c6168a30b3eb34a3e22e2edbb55d6ef826b310eaf6b4b"
+  },
+  "experiment012Neutral": {
+   "mesh": "3f7fc7c9d25b2a44c51bcd383db8b939c544332552cee98040151cd38054e0c1",
+   "morph": "fba40259949c924dcf716e7cbc4f2680984f0355a407915ceb7c1423c1946934"
+  },
+  "builtIn": {
+   "mesh": "58081caf393e7d9e0223e2e646e6ad9bd7107a4ac307edf08fe786e4c38eed26",
+   "morph": "b8b7c055f6e3dd0f9a38bce2862581be13709d16d347bb55d3adb36a4c550131"
+  }
+ },
+ "againstNativeHead": {
+  "experiment004": {
+   "vertices": 1635,
+   "faces": 3010,
+   "uniqueHeadVertices": 1620,
+   "faceSetEqualSelection": true,
+   "facesSameWinding": 3010,
+   "facesInNativeOrder": true,
+   "mesh": {
+    "PS_SkinIndices0": "65/1635",
+    "PS_SkinIndices1": "367/1635",
+    "PS_SkinWeights0": "14/1635",
+    "PS_SkinWeights1": "391/1635",
+    "PS_TexCoord0": "1635/1635",
+    "PS_TexCoord1": "1635/1635",
+    "PS_Normal0": "0/1635 (max 1 LSB)",
+    "PS_Tangent0": "1077/1635 (max 1 LSB)",
+    "PS_Color0": "0/1635",
+    "positionExactBytes": 0,
+    "positionMaxAbsError": 9.90893784080793e-07,
+    "quantEqualHead": false,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morphBase": {
+    "PS_SkinIndices0": "65/1635",
+    "PS_SkinIndices1": "367/1635",
+    "PS_SkinWeights0": "14/1635",
+    "PS_SkinWeights1": "391/1635",
+    "PS_TexCoord0": "1635/1635",
+    "PS_TexCoord1": "1635/1635",
+    "PS_Normal0": "0/1635 (max 1 LSB)",
+    "PS_Tangent0": "1077/1635 (max 1 LSB)",
+    "PS_Color0": "0/1635",
+    "positionExactBytes": 0,
+    "positionMaxAbsError": 2.614478950606347e-06,
+    "quantEqualHead": false,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morph": {
+    "plateDiffs": 73794,
+    "diffRowsByteExact": 0,
+    "diffNormalTangentBytesExact": 0,
+    "diffsWithoutHeadDiff": 0,
+    "headDiffsMissingInPlate": 0,
+    "targetsWithHeadQuantization": 0,
+    "maxPositionDeltaError": 9.42588406647061e-06
+   },
+   "targetOrderEqualHead": true,
+   "appearances": [
+    "xfas_plate_reference"
+   ],
+   "meshBoundingBoxEqualHead": false
+  },
+  "experiment012Neutral": {
+   "vertices": 1620,
+   "faces": 3010,
+   "uniqueHeadVertices": 1620,
+   "faceSetEqualSelection": true,
+   "facesSameWinding": 3010,
+   "facesInNativeOrder": true,
+   "mesh": {
+    "PS_SkinIndices0": "1620/1620",
+    "PS_SkinIndices1": "1620/1620",
+    "PS_SkinWeights0": "1620/1620",
+    "PS_SkinWeights1": "1620/1620",
+    "PS_TexCoord0": "1620/1620",
+    "PS_TexCoord1": "1620/1620",
+    "PS_Normal0": "0/1620 (max 1 LSB)",
+    "PS_Tangent0": "1067/1620 (max 1 LSB)",
+    "PS_Color0": "1620/1620",
+    "positionExactBytes": 0,
+    "positionMaxAbsError": 9.90893784080793e-07,
+    "quantEqualHead": false,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morphBase": {
+    "PS_SkinIndices0": "1620/1620",
+    "PS_SkinIndices1": "1620/1620",
+    "PS_SkinWeights0": "1620/1620",
+    "PS_SkinWeights1": "1620/1620",
+    "PS_TexCoord0": "1620/1620",
+    "PS_TexCoord1": "1620/1620",
+    "PS_Normal0": "0/1620 (max 1 LSB)",
+    "PS_Tangent0": "1067/1620 (max 1 LSB)",
+    "PS_Color0": "1620/1620",
+    "positionExactBytes": 0,
+    "positionMaxAbsError": 2.6122473395315954e-06,
+    "quantEqualHead": false,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morph": {
+    "plateDiffs": 73164,
+    "diffRowsByteExact": 0,
+    "diffNormalTangentBytesExact": 0,
+    "diffsWithoutHeadDiff": 0,
+    "headDiffsMissingInPlate": 0,
+    "targetsWithHeadQuantization": 9,
+    "maxPositionDeltaError": 9.425112815250603e-06
+   },
+   "targetOrderEqualHead": true,
+   "appearances": [
+    "xfs_bootstrap_reference"
+   ],
+   "meshBoundingBoxEqualHead": false
+  },
+  "builtIn": {
+   "vertices": 1620,
+   "faces": 3010,
+   "uniqueHeadVertices": 1620,
+   "faceSetEqualSelection": true,
+   "facesSameWinding": 3010,
+   "facesInNativeOrder": true,
+   "mesh": {
+    "PS_SkinIndices0": "1620/1620",
+    "PS_SkinIndices1": "1620/1620",
+    "PS_SkinWeights0": "1620/1620",
+    "PS_SkinWeights1": "1620/1620",
+    "PS_TexCoord0": "1620/1620",
+    "PS_TexCoord1": "1620/1620",
+    "PS_Normal0": "1620/1620",
+    "PS_Tangent0": "1620/1620",
+    "PS_Color0": "1620/1620",
+    "positionExactBytes": 1620,
+    "positionMaxAbsError": 0.0,
+    "quantEqualHead": true,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morphBase": {
+    "PS_SkinIndices0": "1620/1620",
+    "PS_SkinIndices1": "1620/1620",
+    "PS_SkinWeights0": "1620/1620",
+    "PS_SkinWeights1": "1620/1620",
+    "PS_TexCoord0": "1620/1620",
+    "PS_TexCoord1": "1620/1620",
+    "PS_Normal0": "1620/1620",
+    "PS_Tangent0": "1620/1620",
+    "PS_Color0": "1620/1620",
+    "positionExactBytes": 1620,
+    "positionMaxAbsError": 0.0,
+    "quantEqualHead": true,
+    "extraData": false,
+    "vertexFactory": 4
+   },
+   "morph": {
+    "plateDiffs": 73164,
+    "diffRowsByteExact": 73164,
+    "diffNormalTangentBytesExact": 73164,
+    "diffsWithoutHeadDiff": 0,
+    "headDiffsMissingInPlate": 0,
+    "targetsWithHeadQuantization": 105,
+    "maxPositionDeltaError": 0.0
+   },
+   "targetOrderEqualHead": true,
+   "appearances": [
+    "xfs_eye_plate"
+   ],
+   "meshBoundingBoxEqualHead": true
+  }
+ },
+ "packageBuild": {
+  "fixture": "experiments/005-preset-collection/editor-collection.json",
+  "route": "localhost package handler, WolvenKit CLI 8.17.4",
+  "builtInPlate": {
+   "archiveSha256": "698190ea89b208ce8dfb770aa17e0a581339b163c8557550e9079b9b2b6e6f07",
+   "presets": 4,
+   "unpackedFilesVerified": 16
+  },
+  "experiment004Plate": {
+   "archiveSha256": "3052ccf61c360bfad0af6090967f950f83dcb4053d343bffe9de3122d05c54a8",
+   "presets": 4,
+   "unpackedFilesVerified": 16
+  },
+  "identicalMembers": 14,
+  "differentMembers": [
+   "xfs_eye_plate.mesh",
+   "xfs_eye_plate.morphtarget"
+  ],
+  "archiveXlSha256Both": "5789485c2578d5f990a5de6a1e6dc54f89727686f530055c5e4ccb920ae848cb",
+  "packagedPlatePassesPlateVerifier": true
+ },
+ "limits": [
+  "Offline byte equality with the head does not prove game rendering.",
+  "The neutral cut coincides with the head surface; eyelid contacts and decal depth behaviour remain for the game session."
+ ]
+}
