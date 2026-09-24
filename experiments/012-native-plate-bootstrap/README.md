@@ -378,3 +378,36 @@ remain untested; no production plate was promoted. A next correction must
 include between-frame finite-contact constraints for all three discovered
 intervals and then rerun packed-resource, static, selected-pose, 30 Hz, and
 subframe gates without relaxing the displacement or neighbor limits.
+
+## Bounded subframe correction attempt — 25 September
+
+The [local fit script](fit_subframe_contacts.py) tested four deterministic
+packed-space `h091_eyes` proposals against the exact retained packed GLB.
+It used the 15 measured 120 Hz contact pairs at ticks 479, 1193, 1961 and
+1962, the unchanged static neighbor cap, and explicit positive target
+margins. The fit uses the measured serialized geometry and head skin-affine
+fields. It keeps base geometry and the other 104 morph fields fixed; it can
+only write an import GLB after its numerical static and local subframe
+screens pass.
+
+The raw shortest-axis fit failed its contact constraints. A coherent-axis
+fit cleared all 15 original contact constraints with +0.35 µm static edge
+slack in its predicted field, but created 16 contacts on neighboring faces
+at ticks 477, 479 and 1192–1196. Adding 14 of those neighboring witness pairs
+made two further fits fail the numerical contact constraints; one also
+violated six static edge checks across the eye and saved-V cases. The exact
+options, private report hashes and measured values are in
+[asset-free evidence](subframe-fit-negative-evidence.json). Private reports
+remain under ignored `generated/subframe-fit-{1,2,3,4}-repro/`.
+
+No proposal survived even the local numerical screen, so this bounded
+attempt used **zero new WolvenKit round trips** and did not claim an
+independent 107/73/664 or full 120/240 Hz pass. The original packed/import
+pair and both serialized resource hashes remain preserved privately and
+unchanged. No production, game, MO2, authored master or draft asset changed.
+This result is a local `h091_eyes` fit obstruction, not a proof that all
+corrections are impossible. A further attempt would have to coordinate the
+adjacent 794–803/1227 faces and the old frame-298/299 witnesses, retain
+native skin bytes in **both** resource buffers, allow for measured WolvenKit
+readback shifts, and earn positive margins in the unchanged independent
+static/73/664 and finer subframe gates before promotion.

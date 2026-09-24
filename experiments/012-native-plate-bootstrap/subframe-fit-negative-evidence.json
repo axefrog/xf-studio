@@ -1,0 +1,66 @@
+{
+  "schema": "xfs/native-plate-subframe-fit-negative-evidence-1",
+  "date": "2026-09-25",
+  "status": "NO_LOCAL_NUMERIC_SURVIVOR_NO_NEW_ROUNDTRIP",
+  "startingPackedGlbSha256": "8e9c76b445ec746904bd8d24bfdf93f78f09d7627ffc8b3d4b337d8b524c6499",
+  "preservedPrivateImportGlbSha256": "fb38f67a325506aa6bcdc5dfa4ed034594468e5f74db5a3d0d8e4e95a5f3c603",
+  "nativeMapSha256": "5a6a592c1162e03b140b1a1202e3d025c872f95695cf3b95d731338348d096f3",
+  "constraints": {
+    "originalNewContactOccurrences": 15,
+    "originalTicks120Hz": [479, 1193, 1961, 1962],
+    "originalStaticCases": 107,
+    "originalSelectedPoses": 73,
+    "originalDenseFrames30Hz": 664,
+    "unchangedMaximumDisplacementMetres": 0.00025,
+    "unchangedNeighborCap": "min(0.00005 m, 0.25 * native source edge length)",
+    "targetMorph": "h091_eyes",
+    "skinBytesModified": false
+  },
+  "numericTrials": [
+    {
+      "id": 1,
+      "options": "original 15 contacts, raw minimum-movement axes, 2 um target contact margin, 0.35 um target edge margin",
+      "privateFitReportSha256": "832c982e811d8cecb110a4f96d8496387eeece77eb85520cc4ac9d74b2d14494",
+      "optimizerSuccess": false,
+      "minimumContactConstraintUm": -4.811546734483003,
+      "minimumStaticEdgeSlackUm": 2.7900329458938553,
+      "newContactTicksInLocalCheck": [479, 1193, 1961, 1962],
+      "disposition": "REJECTED_NUMERIC_LOCAL_FIT"
+    },
+    {
+      "id": 2,
+      "options": "original 15 contacts, coherent outward axes, 2 um target contact margin, 0.35 um target edge margin",
+      "privateFitReportSha256": "eeaa502ddd186e94be93cc89af6c9791c02aa60b03644df4693425ed61f9c187",
+      "optimizerSuccess": true,
+      "minimumContactConstraintUm": -1.1738165994756855e-11,
+      "minimumStaticEdgeSlackUm": 0.3499999999938421,
+      "maximumMorphUpdateUm": 41.62447955995794,
+      "newContactTicksInLocalCheck": [477, 479, 1192, 1193, 1194, 1196],
+      "newContactOccurrencesInLocalCheck": 16,
+      "disposition": "REJECTED_CONTACT_MIGRATION"
+    },
+    {
+      "id": 3,
+      "options": "original plus 14 selected migrated witness constraints, coherent outward axes, 1 um target contact margin, 0.35 um target edge margin",
+      "privateFitReportSha256": "dea765a6d947d8e9eca534bdfdc82f4c2b1d20f32e22906007bcd26e842f012d",
+      "optimizerSuccess": false,
+      "minimumContactConstraintUm": -191.6990658073393,
+      "minimumStaticEdgeSlackUm": 2.0719201459646115,
+      "disposition": "REJECTED_NUMERIC_LOCAL_FIT"
+    },
+    {
+      "id": 4,
+      "options": "original plus 14 selected migrated witness constraints, coherent axes for original contacts and minimum-movement axes for migrated contacts, 1 um target contact margin, 0.35 um target edge margin",
+      "privateFitReportSha256": "ffbed21f59a893a450796d0a5ecd347fb19db8ee855610c9fc56c9f754a08ee5",
+      "optimizerSuccess": false,
+      "minimumContactConstraintUm": -24.201722186330613,
+      "minimumStaticEdgeSlackUm": -0.4057470592612952,
+      "staticNeighborViolationsInNumericField": 6,
+      "disposition": "REJECTED_NUMERIC_LOCAL_FIT"
+    }
+  ],
+  "newWolvenKitRoundTrips": 0,
+  "reason": "Every bounded h091_eyes-only local packed-space proposal failed a necessary numerical contact or edge screen. No proposal warranted a WolvenKit round trip or independent acceptance run.",
+  "nextConstraint": "Any further attempt needs a larger coordinated correction across the adjacent 794-803/1227 face region and both static and subframe constraints. It must retain the exact skin bytes in both buffers, account for WolvenKit readback shifts, and independently rerun unchanged 107/73/664 and finer subframe gates. These four trials do not prove global infeasibility.",
+  "promotion": "NONE"
+}
