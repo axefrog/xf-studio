@@ -94,12 +94,11 @@ export function headPanel(rt: StudioRuntime): PanelController {
     if (!motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
     else rt.dispatch({ kind: "motion.setPaused", paused: !motion.idlePaused });
   });
-  const limited = h("span", { class: "viewport-warning", hidden: true });
   const hint = h("div", { class: "viewport-hint" }, "Drag background: orbit · Right-drag: pan · Wheel: zoom · Drag makeup: move · Shift-drag: rotate · Esc: cancel");
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": "Head preview. Shift+F10 for commands on the selected point; F for front view." },
     slot, loading,
     h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, surface, wire, idle)),
-    h("div", { class: "viewport-bottom" }, hint, h("div", { class: "row gap-s" }, limited, badge.element)));
+    h("div", { class: "viewport-bottom" }, hint, badge.element));
   port.viewport.attach("head", slot);
   contextMenuGate(slot, event => viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {
