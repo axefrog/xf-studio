@@ -14,6 +14,8 @@
 #desktop-about::backdrop { background: #080c12ad; }
 #desktop-about h2 { font: 600 21px/1.2 "Bahnschrift", "Segoe UI", sans-serif; margin: 0 0 14px; }
 #desktop-about p { margin: 8px 0; }
+#desktop-about code, #desktop-asset-path { font: 12px/1.5 Consolas, monospace; overflow-wrap: anywhere; }
+#desktop-about code { display: block; padding: 8px; background: var(--bg, #111820); }
 #desktop-about form { text-align: right; margin-top: 20px; }
 #desktop-about form button { padding: 6px 14px; border: 1px solid var(--line-strong, #59616b);
   background: var(--accent, #f2db52); color: var(--accent-ink, #1d2023); font-weight: 600; }

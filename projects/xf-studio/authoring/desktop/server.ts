@@ -37,7 +37,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         headers: new Headers([...request.headers, ["Origin", origin]]),
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
-        return Response.json(desktopCapabilities(existsSync(resolve(assetRoot, "head.glb")) ? "user-provided" : "missing", version),
+        return Response.json(desktopCapabilities(existsSync(resolve(assetRoot, "head.glb")) ? "user-provided" : "missing", version, dataRoot),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;

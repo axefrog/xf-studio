@@ -5,6 +5,7 @@
   "scripts": {
     "prepare:static": "bun prepare-static.ts",
     "build:dev": "bun run prepare:static && bunx electrobun@2.0.1 build --env=dev",
+    "build:canary": "bun run prepare:static && bunx electrobun@2.0.1 build --env=canary && bun verify-canary.ts",
     "run:dev": "bunx electrobun@2.0.1 run --env=dev",
     "check": "tsc --noEmit",
     "test": "bun test tests"
