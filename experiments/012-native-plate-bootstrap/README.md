@@ -87,3 +87,53 @@ WolvenKit and the existing project adapter are credited in
 [`docs/community-credits.md`](../../docs/community-credits.md). The selected
 triangle IDs are an authored coverage decision expressed against a game asset;
 they do not embed game geometry. No extracted game resource is tracked.
+
+## Native-topology correction transfer diagnostic — 25 September
+
+The [transfer diagnostic](transfer_diagnostic.py) tests whether the earlier
+rejected, morph-aware **packed** crease candidate can seed this exact native
+cut. It reads that candidate, joins its 1,635 vertices to the native cut's
+1,620 vertices by head vertex ID, and averages each duplicated vertex's base
+and 105 morph residuals. This is a deterministic numeric proposal only. The
+script asserts the pinned source hashes, exact native base/morph correspondence,
+identical selected head faces, and matching 73-pose samples within the 664-frame
+bake. It then checks the unchanged 0.00025 displacement limit, edge-specific
+`min(0.00005, quarter source edge)` cap, and **finite** newly introduced
+nonadjacent triangle contacts for all 107 static cases and the measured idle.
+
+The [asset-free result](transfer-diagnostic.json) rejects the transfer. Thirteen
+head vertices were duplicated in the prior import, and two versions of one
+vertex differ by up to 0.00006975 in base offset (0.00007012 in a morph
+offset). Collapsing them produces 328 neighbor-limit violations across seven
+native edges; the worst exceeds its cap by 0.00000984. The transferred shell
+introduces two static eye-morph contact pairs (`h031_eyes`, `h141_eyes`) around
+head vertices 6461–6464. All 73 selected idle poses are clear, but the denser
+664-frame bake reproduces three introduced pairs at frames 298–299. Those
+are concrete failures of this transfer, **not** a proof that no native-topology
+correction exists. The pairwise necessary smoothness test finds no base-only
+incompatibility certificate among the seven failing edges; a constrained
+morph-aware repair remains a separate experiment. No resource was imported or
+promoted, and exact native skin bytes were not re-audited for this failed
+numeric proposal.
+
+With the ignored `derived/` output from the reproduction above, the retained
+private 73-pose source build, prior rejected packed GLB, and optional dense
+bake available, reproduce from the repository root:
+
+```powershell
+python experiments/012-native-plate-bootstrap/transfer_diagnostic.py `
+  --head PATH_TO_PINNED_HEAD_GLB `
+  --native experiments/012-native-plate-bootstrap/generated/derived/xfs_bootstrap_eye_plate.glb `
+  --native-map experiments/012-native-plate-bootstrap/generated/derived/vertex-map.json `
+  --prior-packed PATH_TO_REJECTED_PACKED_CREASE_GLB `
+  --prior-map experiments/004-plate-import/head-shading-transfer.json `
+  --poses PATH_TO_RETAINED_73_POSE_BUILD `
+  --dense PATH_TO_664_FRAME_BAKE `
+  --output experiments/012-native-plate-bootstrap/generated/transfer-report.json `
+  --summary-output experiments/012-native-plate-bootstrap/transfer-diagnostic.json
+```
+
+The tracked summary contains identifiers, counts, margins and input hashes;
+the ignored full report carries every failed static edge and pair. This used
+only the previously credited project geometry/contact tools, NumPy and
+game-derived inputs. No new external source informed the correction.

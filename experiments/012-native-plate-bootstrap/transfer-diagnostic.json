@@ -1,0 +1,173 @@
+{
+  "schema": "xfs/native-plate-transfer-diagnostic-1",
+  "inputSha256": {
+    "head": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "native": "0571c4da09595009dbc7e4e305518e95f18a58ba4c59bf51e97e7d56d0f060ea",
+    "nativeMap": "5a6a592c1162e03b140b1a1202e3d025c872f95695cf3b95d731338348d096f3",
+    "priorPacked": "8f37b8a91f0a502ba8d586b5077c70dfce58f16fd76cc5593bef74aa460c6646",
+    "priorMap": "6335681719cadab6380ed88dd07391e7a3850045e44ce29cc6bb7d3b75abecd6"
+  },
+  "sampleSha256": {
+    "posedManifest": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382",
+    "posedHead": "7bfefbe9e8e96461de50366510c944db134ac10dc85f0bf62f02d901af6e9bf4",
+    "posedSkinLinear": "a15b2ea0b6233b60a55981bcff7c02b93c25e4ba133780d54168cecc635c13aa",
+    "denseManifest": "d7987db6dbfb8de5f8f30643ffdd9085c36159029aaca37328af29b6e8c02969",
+    "denseHead": "2525a6ff36953b5149778a864853ebd5dad6cf4e9c71eac692f6af23319f8628",
+    "denseSkinLinear": "a0f951850b0f8229794f5ad1c19e6115c31aac541c9abacdee4c08d7b3c59e7c"
+  },
+  "source": "Rejected, seam-expanded postpack morph-aware correction collapsed by arithmetic mean per native head vertex",
+  "duplicateHeadVertices": 13,
+  "maximumDuplicateBaseOffsetDifference": 6.975278282950538e-05,
+  "worstDuplicateHeadVertex": 6461,
+  "maximumDuplicateMorphOffsetDifference": 7.012385990949759e-05,
+  "worstDuplicateMorphHeadVertex": 6463,
+  "staticCases": 107,
+  "staticNewNonadjacent": 2,
+  "staticCasesWithContacts": [
+    "h031_eyes",
+    "h141_eyes"
+  ],
+  "staticNeighborViolations": 328,
+  "distinctFailingEdges": 7,
+  "baseOnlyIncompatibleEdges": 0,
+  "baseOnlyIncompatibilityWitnesses": [],
+  "minimumStaticNeighborSlack": -9.838742465009785e-06,
+  "maximumStaticDisplacement": 8.696516651717424e-05,
+  "posedSamples": 73,
+  "posedNewContactFrames": [],
+  "maximumDuplicatePoseSkinMatrixError": 0.0,
+  "denseSamples": 664,
+  "denseNewContactFrames": [
+    {
+      "frame": 298,
+      "pairs": [
+        [
+          792,
+          2421
+        ],
+        [
+          800,
+          1987
+        ]
+      ]
+    },
+    {
+      "frame": 299,
+      "pairs": [
+        [
+          793,
+          2421
+        ]
+      ]
+    }
+  ],
+  "maximumDuplicateDenseSkinMatrixError": 0.0,
+  "gate": "FAIL",
+  "limits": "No numeric candidate GLB or resource was created. A numeric pass would still require native topology/skin-preserving import, resource readback, visibility, continuous pose and game validation.",
+  "staticContactWitnesses": [
+    {
+      "case": "h031_eyes",
+      "pairs": [
+        {
+          "plateFace": 2889,
+          "headFace": 12308,
+          "plateVertices": [
+            1583,
+            1584,
+            1582
+          ],
+          "nativeHeadVertices": [
+            6462,
+            6463,
+            6461
+          ]
+        }
+      ]
+    },
+    {
+      "case": "h141_eyes",
+      "pairs": [
+        {
+          "plateFace": 2892,
+          "headFace": 12419,
+          "plateVertices": [
+            1583,
+            1582,
+            1585
+          ],
+          "nativeHeadVertices": [
+            6462,
+            6461,
+            6464
+          ]
+        }
+      ]
+    }
+  ],
+  "worstNeighborWitnesses": [
+    {
+      "case": "h131_eyes",
+      "nativeHeadVertices": [
+        5631,
+        6461
+      ],
+      "excess": 9.838742465009785e-06
+    },
+    {
+      "case": "h102_nose",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 9.298490717200562e-06
+    },
+    {
+      "case": "h111_eyes",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 9.081312567493701e-06
+    },
+    {
+      "case": "h162_nose",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 7.969862492960235e-06
+    },
+    {
+      "case": "h101_eyes",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 7.700414750509447e-06
+    },
+    {
+      "case": "h101_eyes",
+      "nativeHeadVertices": [
+        5631,
+        6461
+      ],
+      "excess": 7.35407278518097e-06
+    },
+    {
+      "case": "h122_nose",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 7.037815149289899e-06
+    },
+    {
+      "case": "h192_nose",
+      "nativeHeadVertices": [
+        6461,
+        6464
+      ],
+      "excess": 6.87464195787703e-06
+    }
+  ]
+}
