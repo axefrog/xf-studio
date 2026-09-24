@@ -6,10 +6,11 @@ import type { LibraryState } from "./workspace-state";
 import { reorderHandle } from "./reorder-ui";
 import type { Recipe } from "./recipe";
 import type { StudioApplication } from "./studio-application";
+import type { StudioFileOperations } from "./studio-file-operations";
 
 export function setupCollections(read: () => EditorSnapshot, show: (editor: EditorSnapshot) => void,
   restored: CollectionWorkspace | undefined, legacy: LibraryState, changed: () => void,
-  download: (blob: Blob, name: string) => void, app: StudioApplication) {
+  filesIO: StudioFileOperations, app: StudioApplication) {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const host = $("presets"), layerEditor = $("makeup-editor"), parked = $("parked-layers"), note = $("collection-state");
   const title = $<HTMLInputElement>("collection-name"), savedList = $("saved-collections");
@@ -17,6 +18,7 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   const endpoint = new URLSearchParams(location.search).has("verify") ? "/api/verification/collections" : "/api/collections";
   const service = new CollectionService(restored, legacy, read, show, collectionTransport(endpoint));
   app.attach({ collection: service });
+  filesIO.attachCollection(service);
   const draft = () => service.view().draft;
   files.open = restored?.filesOpen ?? false;
   files.ontoggle = () => { if (draft() && !service.view().busy) {
@@ -32,11 +34,10 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     title.disabled = state.busy || !state.draft;
     if (state.draft && !state.busy) {
       $<HTMLButtonElement>("preset-restore").disabled = !service.actionCapability({ kind: "preset.edit", command: { kind: "restore" } }).available;
-      $<HTMLButtonElement>("collection-undo-open").disabled = !service.actionCapability({ kind: "collection.undoOpen" }).available;
-      for (const [id, request] of [["collection-export", { kind: "exportCollection" }], ["collection-plan", { kind: "exportPlan" }],
-        ["collection-package-check", { kind: "package", action: "check" }],
-        ["collection-package-build", { kind: "package", action: "build" }]] as const)
-        $<HTMLButtonElement>(id).disabled = !service.capability(request).available;
+      $<HTMLButtonElement>("collection-undo-open").disabled = !filesIO.capability({ kind: "collection.recover" }).available;
+      for (const [id, action] of [["collection-export", "collection.export"], ["collection-plan", "collection.plan"],
+        ["collection-package-check", "package.check"], ["collection-package-build", "package.build"]] as const)
+        $<HTMLButtonElement>(id).disabled = !filesIO.capability({ kind: action }).available;
     }
     for (const actions of host.querySelectorAll<HTMLElement>(".preset-actions")) actions.inert = state.busy;
     for (const field of host.querySelectorAll<HTMLInputElement>(".preset-name-label input")) field.disabled = state.busy;
@@ -109,14 +110,12 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
     }
   }
   async function run(request: CollectionRequest) {
-    const outcome = await app.execute(request);
+    const outcome = await filesIO.executeCollection(request);
     if (!outcome.ok) message(outcome.message);
-    if (outcome.ok && outcome.result.kind === "export")
-      download(new Blob([outcome.result.json], { type: "application/json" }), outcome.result.name);
     paint();
     if (outcome.ok && request.kind !== "package" && request.kind !== "refresh") changed();
   }
-  service.subscribe(() => {
+  filesIO.subscribe(() => {
     buttons(); paintSavedList();
     const progress = service.view().progress;
     if (progress) message(progress.message);
@@ -125,8 +124,11 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   $("collection-save").onclick = () => void run({ kind: "save" });
   $("collection-copy").onclick = () => void run({ kind: "saveCopy" });
   $("collection-refresh").onclick = () => void run({ kind: "refresh" });
-  $("collection-undo-open").onclick = () => { if (draft() && !service.view().busy) {
-    service.dispatch({ kind: "collection.undoOpen" }); paint(); changed(); } };
+  $("collection-undo-open").onclick = () => void (async () => {
+    const outcome = await filesIO.execute({ kind: "collection.recover" });
+    if (!outcome.ok) message(outcome.message);
+    else { paint(); changed(); }
+  })();
   const commitTitle = () => {
     if (!draft()) return;
     if (title.value === draft()!.collection.name) return;
@@ -139,14 +141,10 @@ export function setupCollections(read: () => EditorSnapshot, show: (editor: Edit
   $("collection-plan").onclick = () => void run({ kind: "exportPlan" });
   for (const [id, kind] of [["collection-package-check", "check"], ["collection-package-build", "build"]] as const)
     $(id).onclick = () => void run({ kind: "package", action: kind });
-  const file = $<HTMLInputElement>("collection-file");
-  $("collection-import").onclick = () => file.click();
-  file.onchange = () => void (async () => {
-    try {
-      const source = file.files?.[0]; if (!source) return;
-      await run({ kind: "import", text: source.size > 16_000_000 ? "" : await source.text(), bytes: source.size });
-    } catch (error) { message((error as Error).message);
-    } finally { file.value = ""; }
+  $("collection-import").onclick = () => void (async () => {
+    const outcome = await filesIO.execute({ kind: "collection.import" });
+    if (!outcome.ok) { if (outcome.code !== "cancelled") message(outcome.message); return; }
+    paint(); changed();
   })();
   paint();
   void run({ kind: "initialize" });

@@ -1,8 +1,4 @@
-import {
-  parseRecipe,
-  type Recipe,
-  type Layer,
-} from "./recipe";
+import { type Recipe, type Layer } from "./recipe";
 import { type LayerCommand } from "./layer-stack";
 import { type LayerAction } from "./editor-actions";
 import { AuthoringLayerActions } from "./authoring-layer-actions";
@@ -22,6 +18,7 @@ import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { StudioApplication, type StudioAction } from "./studio-application";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
+import { StudioFileOperations, type StudioFileAction, type StudioFileKind } from "./studio-file-operations";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
 import { setupFields } from "./field-ui";
@@ -479,103 +476,82 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   cancel: () => app.endGesture("uv", true), finish: () => app.endGesture("uv"), persist, message: status,
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
-function download(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob),
-    a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+const fileOperations = new StudioFileOperations({
+  pick: kind => new Promise(resolve => {
+    const id: Record<StudioFileKind, string> = { recipe: "file", collection: "collection-file", savedV: "v-file" };
+    const picker = input(id[kind]);
+    const complete = () => {
+      picker.removeEventListener("change", selected);
+      picker.removeEventListener("cancel", cancelled);
+      const file = picker.files?.[0]; picker.value = "";
+      resolve(file ? { name: file.name, size: file.size, text: () => file.text(),
+        bytes: async () => new Uint8Array(await file.arrayBuffer()) } : undefined);
+    };
+    const selected = () => complete(), cancelled = () => complete();
+    picker.value = "";
+    picker.addEventListener("change", selected, { once: true });
+    picker.addEventListener("cancel", cancelled, { once: true });
+    picker.click();
+  }),
+  download: (blob, name) => {
+    const url = URL.createObjectURL(blob), anchor = document.createElement("a");
+    anchor.href = url; anchor.download = name; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+  bakeMask: layer => new Promise((resolve, reject) => {
+    const bake = new Worker("/build/raster-worker.js", { type: "module" });
+    bake.onmessage = e => {
+      try {
+        const canvas = document.createElement("canvas"); canvas.width = canvas.height = 2048;
+        canvas.getContext("2d")!.putImageData(new ImageData(e.data.data, 2048, 2048), 0, 0);
+        bake.terminate();
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(Error("Mask export failed.")));
+      } catch (error) { bake.terminate(); reject(error); }
+    };
+    bake.onerror = () => { bake.terminate(); reject(Error("Mask export failed.")); };
+    bake.postMessage({ i: 0, version: 0, layer: { ...layer, enabled: true }, size: 2048 });
+  }),
+}, {
+  recipe: () => presentation.recipe(), selectedLayer: current,
+  importRecipe: (recipe, name) => presetLibrary!.importRecipe(recipe, name),
+  hasSavedV: () => savedAppearance?.hasSavedV() ?? false,
+  savedV: () => savedAppearance?.snapshot().savedV,
+  loadSavedV: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
+  savedVReady: () => !!viewer,
+  executeCollection: request => app.execute(request),
+  recoverCollection: () => presetLibrary!.service.dispatch({ kind: "collection.undoOpen" }),
+});
+async function runFile(action: StudioFileAction) {
+  const previousStatus = $("status").textContent ?? "";
+  if (action.kind === "mask.export") status("Baking 2048² mask…");
+  if (action.kind === "savedV.import" && viewer) status("Reading saved appearance locally…");
+  const outcome = await fileOperations.execute(action);
+  if (!outcome.ok) {
+    if (outcome.code === "cancelled") status(previousStatus);
+    else status(outcome.message);
+    return;
+  }
+  if (action.kind === "savedV.import" && outcome.savedAppearance) {
+    showSavedV(outcome.savedAppearance);
+    if (outcome.savedAppearance.suggestedEyeShape !== undefined) {
+      shape.value = String(outcome.savedAppearance.suggestedEyeShape);
+      previewActions?.rememberEyeShape(outcome.savedAppearance.suggestedEyeShape);
+    }
+    persist();
+  }
+  if (action.kind !== "savedV.export") status(outcome.message);
 }
-$("save").onclick = () => {
-  download(
-    new Blob([JSON.stringify(presentation.recipe(), null, 2)], { type: "application/json" }),
-    "xfs.recipe.json",
-  );
-  status("Recipe exported — editable shapes, colours and fields.");
-};
-$("load").onclick = () => input("file").click();
+fileOperations.subscribe(() => {
+  $<HTMLButtonElement>("export").disabled = !fileOperations.capability({ kind: "mask.export" }).available;
+});
+$("save").onclick = () => void runFile({ kind: "recipe.export" });
+$("load").onclick = () => void runFile({ kind: "recipe.import" });
+$("export").onclick = () => void runFile({ kind: "mask.export" });
+$("open-v").onclick = () => void runFile({ kind: "savedV.import" });
 presetLibrary = setupCollections(() => authoring.export(), editor => {
   authoring.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
   resetStackResources();
-}, workspace.collections, workspace.library, persist, download, app);
-input("file").onchange = async () => {
-  const file = input("file").files?.[0];
-  if (!file) return;
-  try {
-    if (file.size > 1_000_000) throw Error("Recipe is too large.");
-    const next = parseRecipe(JSON.parse(await file.text()));
-    presetLibrary!.importRecipe(next, file.name.replace(/\.json$/i, ""));
-    status(`Opened ${file.name}`);
-  } catch (error) {
-    status(`Could not open recipe: ${(error as Error).message}`);
-  }
-  input("file").value = "";
-};
-$("export").onclick = () => {
-  const selected = current(); if (!selected) return;
-  const layer = structuredClone(selected),
-    bake = new Worker("/build/raster-worker.js", { type: "module" });
-  $<HTMLButtonElement>("export").disabled = true;
-  status("Baking 2048² mask…");
-  bake.onmessage = (e) => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 2048;
-    c.getContext("2d")!.putImageData(
-      new ImageData(e.data.data, 2048, 2048),
-      0,
-      0,
-    );
-    bake.terminate();
-    $<HTMLButtonElement>("export").disabled = !current();
-    c.toBlob((blob) => {
-      if (blob) {
-        download(blob, `xfs-${layer.id}-alpha.png`);
-        status("Exported 2048² white + alpha mask; palette remains separate.");
-      }
-    });
-  };
-  bake.onerror = () => {
-    bake.terminate();
-    $<HTMLButtonElement>("export").disabled = !current();
-    status("Mask export failed.");
-  };
-  bake.postMessage({
-    i: 0,
-    version: 0,
-    layer: { ...layer, enabled: true },
-    size: 2048,
-  });
-};
-$("open-v").onclick = () => {
-  if (!viewer) {
-    status("Wait for the preview assets to finish loading.");
-    return;
-  }
-  input("v-file").click();
-};
-input("v-file").onchange = async () => {
-  const file = input("v-file").files?.[0];
-  if (!file || !viewer) return;
-  try {
-    if (file.size > 128 * 1024 * 1024)
-      throw Error("Save is larger than the supported limit.");
-    status("Reading saved appearance locally…");
-    const state = savedAppearance!.dispatch({ kind: "savedV.load", bytes: new Uint8Array(await file.arrayBuffer()) });
-    showSavedV(state);
-    if (state.suggestedEyeShape !== undefined) {
-      shape.value = String(state.suggestedEyeShape);
-      previewActions?.rememberEyeShape(state.suggestedEyeShape);
-    }
-    persist();
-    status(
-      "Saved facial shape applied. Remaining appearance assets still need resolving.",
-    );
-  } catch (error) {
-    status(`Could not apply V: ${(error as Error).message}`);
-  }
-  input("v-file").value = "";
-};
+}, workspace.collections, workspace.library, persist, fileOperations, app);
 function showSavedV(state: Readonly<SavedAppearanceState>) {
   const { result, savedV } = state;
   if (!result || !savedV) return;
@@ -652,14 +628,7 @@ function setupPiercingControls() {
   viewer!.setPiercings(input("piercings").checked);
   input("piercings").onchange = () => previewActions!.dispatch({ kind: "preview.setPiercings", enabled: input("piercings").checked });
 }
-$("v-export").onclick = () => {
-  const savedV = savedAppearance?.snapshot().savedV;
-  if (savedV)
-    download(
-      new Blob([JSON.stringify(savedV, null, 2)], { type: "application/json" }),
-      "v-appearance.json",
-    );
-};
+$("v-export").onclick = () => void runFile({ kind: "savedV.export" });
 const shape = $<HTMLSelectElement>("eye-shape");
 for (let i = 0; i <= 21; i++) {
   const o = document.createElement("option");

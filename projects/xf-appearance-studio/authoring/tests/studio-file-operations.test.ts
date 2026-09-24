@@ -1,0 +1,141 @@
+import { expect, test } from "bun:test";
+import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import { collectionDraft, emptyMemory } from "../src/collection-workspace";
+import { initialRecipe, type Recipe } from "../src/recipe";
+import type { EditorSnapshot } from "../src/collection-session";
+import type { PresetCollection } from "../src/preset-collection";
+import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
+
+const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
+  name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
+});
+function fixture() {
+  const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
+    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
+  let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
+  let saved = 0, packageInput: PresetCollection | undefined;
+  const transport: CollectionTransport = {
+    list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
+    get: async () => ({ collection, revision: 1, updatedAt: "now" }),
+    save: async value => { saved++; return { collection: structuredClone(value), revision: 2, updatedAt: "now" }; },
+    package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
+      namespace: "xfs_test", originalPresetCount: 2, omissions: [
+        { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
+          finish: "glitter", reason: "Active finish has no supported game-export adapter." },
+      ], packagedCollectionSha256: "hash", presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
+  };
+  const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
+    () => editor, value => editor = value, transport);
+  let nextFile: StudioPickedFile | undefined, layer = structuredClone(recipe.layers[0]);
+  const downloads: { name: string; type: string }[] = [];
+  let maskInput: typeof layer | undefined, imported: { recipe: Recipe; name: string } | undefined;
+  let loadedBytes: Uint8Array | undefined;
+  const files = new StudioFileOperations({
+    pick: async () => { const file = nextFile; nextFile = undefined; return file; },
+    download: (blob, name) => { downloads.push({ name, type: blob.type }); },
+    bakeMask: async value => { maskInput = value; return new Blob(["png"], { type: "image/png" }); },
+  }, {
+    recipe: () => editor.recipe, selectedLayer: () => layer,
+    importRecipe: (value, name) => { imported = { recipe: value, name }; },
+    hasSavedV: () => true,
+    savedV: () => ({ gameVersion: 2000 } as any),
+    loadSavedV: bytes => { loadedBytes = bytes; return { suggestedEyeShape: 3 }; },
+    savedVReady: () => true,
+    executeCollection: request => service.execute(request),
+    recoverCollection: () => service.dispatch({ kind: "collection.undoOpen" }),
+  });
+  files.attachCollection(service);
+  return { files, service, transport, recipe, collection, editor: () => editor, layer: () => layer,
+    setFile: (file?: StudioPickedFile) => nextFile = file, downloads, saved: () => saved,
+    packageInput: () => packageInput, imported: () => imported, maskInput: () => maskInput,
+    loadedBytes: () => loadedBytes };
+}
+
+test("recipe and mask workflows use typed file ports with the original names, limits and detached layer", async () => {
+  const f = fixture();
+  expect((await f.files.execute({ kind: "recipe.export" })).ok).toBe(true);
+  expect(f.downloads[0]?.name).toBe("xfs.recipe.json");
+  expect(f.downloads[0]?.type).toStartWith("application/json");
+  f.setFile(picked("wing.json", JSON.stringify(f.recipe)));
+  expect((await f.files.execute({ kind: "recipe.import" })).ok).toBe(true);
+  expect(f.imported()?.name).toBe("wing");
+  f.setFile(picked("large.json", "{}", 1_000_001));
+  expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "too_large" });
+  expect(f.imported()?.name).toBe("wing");
+  expect((await f.files.execute({ kind: "mask.export" })).ok).toBe(true);
+  expect(f.downloads.at(-1)).toMatchObject({ name: `xfs-${f.layer().id}-alpha.png`, type: "image/png" });
+  expect(f.maskInput()).not.toBe(f.layer());
+  expect(f.files.snapshot().busy).toBeUndefined();
+});
+
+test("saved-V acquisition returns typed result and cancellation never applies bytes", async () => {
+  const f = fixture();
+  f.setFile(picked("V.dat", "bytes"));
+  expect(await f.files.execute({ kind: "savedV.import" })).toMatchObject({ ok: true, code: "loaded",
+    savedAppearance: { suggestedEyeShape: 3 } });
+  expect(new TextDecoder().decode(f.loadedBytes())).toBe("bytes");
+  expect(await f.files.execute({ kind: "savedV.import" })).toMatchObject({ ok: false, code: "cancelled" });
+  expect(f.files.snapshot().busy).toBeUndefined();
+  expect((await f.files.execute({ kind: "savedV.export" })).ok).toBe(true);
+  expect(f.downloads.at(-1)?.name).toBe("v-appearance.json");
+});
+
+test("package check exposes progress, partial result and unsaved snapshot without SQLite write", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  f.editor().recipe.layers[0].color = "#123456";
+  const result = await f.files.executeCollection({ kind: "package", action: "check" });
+  expect(result.ok && result.result.kind).toBe("packageCheck");
+  expect(f.saved()).toBe(0);
+  expect(f.packageInput()?.presets[0].recipe.layers[0].color).toBe("#123456");
+  const state = f.files.snapshot();
+  expect(state.progress).toMatchObject({ phase: "success", code: "packageCheck" });
+  expect(state.package).toMatchObject({ kind: "packageCheck", result: { originalPresetCount: 2,
+    omissions: [{ kind: "layer", finish: "glitter" }] } });
+  expect(state.last?.kind).toBe("package.check");
+  (state.package as any).result.omissions[0].layerName = "outside";
+  expect((f.files.snapshot().package as any).result.omissions[0].layerName).toBe("Sparkle");
+});
+
+test("package state subscription exposes working then completed without retaining export JSON", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  const original = f.transport.package;
+  let release!: () => void;
+  f.transport.package = async (action, collection) => {
+    await new Promise<void>(resolve => { release = resolve; });
+    return original(action, collection);
+  };
+  const seen: string[] = [];
+  f.files.subscribe(() => seen.push(`${f.files.snapshot().collectionBusy}:${f.files.snapshot().progress?.phase}`));
+  const pending = f.files.executeCollection({ kind: "package", action: "check" });
+  expect(f.files.snapshot()).toMatchObject({ collectionBusy: true, progress: { phase: "working" } });
+  release(); await pending;
+  expect(f.files.snapshot()).toMatchObject({ collectionBusy: false, progress: { phase: "success" },
+    last: { kind: "package.check", ok: true, code: "packageCheck" } });
+  expect(seen).toContain("true:working");
+});
+
+test("package errors retain stable code and clear an earlier success; recovery capability follows draft history", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  await f.files.executeCollection({ kind: "package", action: "check" });
+  f.transport.package = async () => { throw new CollectionServiceError("no_exportable_content", "Nothing eligible remains."); };
+  expect(await f.files.executeCollection({ kind: "package", action: "build" })).toMatchObject({ ok: false,
+    code: "no_exportable_content" });
+  expect(f.files.snapshot().package).toBeUndefined();
+  expect(f.files.snapshot().progress).toMatchObject({ phase: "error", code: "no_exportable_content" });
+  expect(f.files.snapshot().recovery.available).toBe(false);
+  const other = structuredClone(f.collection); other.id = crypto.randomUUID(); other.name = "Other";
+  f.service.dispatch({ kind: "collection.open", collection: other, revision: 1 });
+  expect(f.files.snapshot().recovery.available).toBe(true);
+  expect((await f.files.execute({ kind: "collection.recover" })).ok).toBe(true);
+  expect(f.service.view().draft?.collection.id).toBe(f.collection.id);
+});
+
+test("collection import reads through file port and delegates strict parsing and recovery to collection service", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  const imported = structuredClone(f.collection); imported.id = crypto.randomUUID();
+  f.setFile(picked("collection.json", JSON.stringify(imported)));
+  expect(await f.files.execute({ kind: "collection.import" })).toMatchObject({ ok: true, code: "imported" });
+  expect(f.service.view().draft?.collection.id).toBe(imported.id);
+  expect(f.files.snapshot().recovery.available).toBe(true);
+  expect(f.saved()).toBe(0);
+});
