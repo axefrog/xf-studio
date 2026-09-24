@@ -15,6 +15,8 @@ Source-derived models are useful for exhaustive naming/path checks. They cannot 
 
 ## Preset compilation and optional geometric layering
 
+The [Studio-to-mod pipeline guide](../research/authoring/studio-to-mod-pipeline.md) shows the current data, merge, resource, verifier and private `dist` stages, with the untested game boundary marked explicitly.
+
 Current product direction is one selector for complete authored looks. [Experiment 005](../experiments/005-preset-collection/README.md) already merges compatible flat finishes into one material per selected look, using a single shared dynamic template. Its archive is verified offline, but selection clearing, rendered appearance and save persistence are not. Geometry offsets are still relevant for skin clearance and for any coordinated stack needed by optical finishes that cannot be merged faithfully.
 
 The historical proposal of several normal-offset meshes may solve coplanar interference. However the inspected decal template has depth writes disabled, so the geometry alone does not establish which translucent/decal draw is blended last. Test component/selection order and camera movement as well as static overlap when a stack is needed. Keep the standard material template as baseline. Do not add new shader-priority tricks just to force a result.
