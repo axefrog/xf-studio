@@ -1,8 +1,8 @@
 # XF Studio
 
-**Make a look of your own for Cyberpunk 2077.** XF Studio is a local editor for designing layered eye makeup directly on a character's face. Draw and reshape coverage, tune colour and finish, arrange layers into complete presets, and save those presets in a local library. The long-term aim is to take an authored collection into the game through one eye-makeup selector.
+**Make Cyberpunk 2077 your own.** XF Studio is a project for authoring and customizing the game, beginning with your own V and growing toward other parts of the game over time. Eye makeup is the first working feature, not the limit of the studio. Today you can draw layered makeup directly on a character's face, tune colour and finish, arrange complete presets, and save them in a local library. The goal for this first feature is to bring an authored collection into the game through one eye-makeup selector.
 
-The editor is a working prototype. It supports head and UV editing, Bézier and softness controls, whole-shape and warp adjustments, a deforming preview, saved-character import, recipe and collection files, and PNG mask export. Its browser finish previews include experimental looks; they are not all game materials. **Check mod export** reports unsupported active details before packaging. **Build mod files** can produce a private, independently verified candidate from the supported content, currently Matte, Satin and Metallic. No package has been installed or verified in the game, and there is no public release or desktop installer yet. See [current state](docs/status.md) and the [collection-to-mod guide](research/authoring/studio-to-mod-pipeline.md) for the precise boundaries.
+The current eye-makeup editor is a working prototype. It supports head and UV editing, Bézier and softness controls, whole-shape and warp adjustments, a deforming preview, saved-character import, recipe and collection files, and PNG mask export. Its browser finish previews include experimental looks; they are not all game materials. **Check mod export** reports unsupported active details before packaging. **Build mod files** can produce a private, independently verified candidate from the supported content, currently Matte, Satin and Metallic. No package has been installed or verified in the game, and there is no public release or desktop installer yet. See [current state](docs/status.md) and the [collection-to-mod guide](research/authoring/studio-to-mod-pipeline.md) for the precise boundaries.
 
 ## Try the local editor
 
@@ -19,7 +19,7 @@ Open [127.0.0.1:4317](http://127.0.0.1:4317/) while the server runs. The [editor
 
 | Project | Where it stands |
 |---|---|
-| [XF Studio](projects/xf-appearance-studio/README.md) | Active priority: eye-makeup authoring, preview and a carefully gated path to a game mod. Appearance authoring may expand later; new feature areas require discussion. |
+| [XF Studio](projects/xf-appearance-studio/README.md) | Broad Cyberpunk authoring vision, starting with eye-makeup creation for V. Further character and game areas are future work to define one feature at a time. |
 | [Photo Mode Tools](projects/xf-photo-mode-tools/README.md) | Independent peer project. Its clean implementation is still at the research stage. |
 
 The repository also keeps [focused experiments](experiments/), [source-grounded research](research/) and [validation notes](docs/validation.md) beside the projects. [Community credits](docs/community-credits.md) record what we learned from other creators and the boundaries on reuse. Contributors can start with the [developer orientation](docs/developer-orientation.md) and [working rules](AGENTS.md).
