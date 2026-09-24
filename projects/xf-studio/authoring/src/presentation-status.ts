@@ -11,7 +11,9 @@ export type PreviewAssetStatus = {
   loaded: boolean;
   detailErrors: string[];
   browMaterial?: "saved-double-diffuse" | "provisional";
-  lashColor?: "saved-profile-swatch-approximation" | "provisional";
+  lashColor?: "saved-hair-profile" | "provisional";
+  /** Which installed hair-profile provider the lash colour uses (explicit, from the local manifest). */
+  lashProfileLabel?: string;
   hairError?: string;
   piercingError?: string;
   prcError?: string;

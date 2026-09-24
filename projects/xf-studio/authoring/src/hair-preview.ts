@@ -1,4 +1,5 @@
 import type { SavedV } from "./save-reader";
+import { resolveHairMaterial, type HairMaterialParameters } from "./hair-colour-model";
 
 /** Local resolved source; a future MO2, Vortex or manual adapter can emit this contract. */
 export type HairAsset = {
@@ -10,9 +11,13 @@ export type HairAsset = {
   /** Present for locally resolved CCXL strand/cap material chains. */
   profile?: {
     sourceSha256: string;
+    /** CHairProfile.sampleCount; absent in legacy v2 manifests. */
+    sampleCount?: number;
     id: HairStop[];
     rootToTip: HairStop[];
   };
+  /** hair.mt parameters after the material-instance chain (v3). Absent: template defaults. */
+  material?: HairMaterialParameters;
   strandId?: { url: string; sha256: string };
   strandGradient?: { url: string; sha256: string };
   capMask?: { url: string; sha256: string };
@@ -33,7 +38,7 @@ const stops = (value: unknown): value is HairStop[] => Array.isArray(value) && v
 
 export function parseHairManifest(value: unknown): HairAsset[] {
   const manifest = value as { schema?: unknown; entries?: unknown } | null;
-  if (!manifest || !["xfs/local-hair-assets-1", "xfs/local-hair-assets-2"].includes(manifest.schema as string) || !Array.isArray(manifest.entries) || manifest.entries.length > 16)
+  if (!manifest || !["xfs/local-hair-assets-1", "xfs/local-hair-assets-2", "xfs/local-hair-assets-3"].includes(manifest.schema as string) || !Array.isArray(manifest.entries) || manifest.entries.length > 16)
     throw Error("Unsupported local hair asset manifest");
   const keys = new Set<string>();
   return manifest.entries.map((entry: unknown) => {
@@ -44,18 +49,31 @@ export function parseHairManifest(value: unknown): HairAsset[] {
       e.parts.some(p => !p || !/^\/assets\/hair\/[a-z0-9_-]+\.glb$/.test(p.url) || !digest(p.sha256)) ||
       !png(e.alpha))
       throw Error("Invalid local hair asset entry");
-    const hasProfile = manifest.schema === "xfs/local-hair-assets-2";
+    const hasProfile = manifest.schema !== "xfs/local-hair-assets-1";
+    const v3 = manifest.schema === "xfs/local-hair-assets-3";
     if (hasProfile && (!e.profile || !digest(e.profile.sourceSha256) || !stops(e.profile.id) ||
       !stops(e.profile.rootToTip) || !png(e.strandId) || !png(e.strandGradient) ||
       !png(e.capMask) || !png(e.capGradient)))
       throw Error("Invalid local hair profile/material chain");
+    if (v3 && (!Number.isInteger(e.profile!.sampleCount) || e.profile!.sampleCount! < 2 || e.profile!.sampleCount! > 1024))
+      throw Error("Invalid local hair profile sample count");
+    let material: HairMaterialParameters | undefined;
+    if (v3) {
+      if (!e.material || typeof e.material !== "object") throw Error("Invalid local hair material: missing parameters");
+      try { material = resolveHairMaterial(e.material); } catch (error) {
+        throw Error(`Invalid local hair material: ${(error as Error).message}`);
+      }
+    }
     const key = JSON.stringify([e.resourceHash, e.definition]);
     if (keys.has(key)) throw Error("Duplicate local hair appearance identity");
     keys.add(key);
     return { resourceHash: e.resourceHash, definition: e.definition, label: e.label,
       parts: e.parts.map(p => ({ url: p.url, sha256: p.sha256 })), alpha: { ...e.alpha },
-      ...(hasProfile ? { profile: e.profile, strandId: e.strandId, strandGradient: e.strandGradient,
-        capMask: e.capMask, capGradient: e.capGradient } : {}) };
+      ...(hasProfile ? { profile: { sourceSha256: e.profile!.sourceSha256,
+        ...(v3 ? { sampleCount: e.profile!.sampleCount } : {}), id: e.profile!.id, rootToTip: e.profile!.rootToTip },
+        strandId: e.strandId, strandGradient: e.strandGradient,
+        capMask: e.capMask, capGradient: e.capGradient } : {}),
+      ...(material ? { material } : {}) };
   });
 }
 

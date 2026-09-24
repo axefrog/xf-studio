@@ -45,8 +45,17 @@ export function browCoverage(primaryAlpha: number, secondaryAlpha: number): numb
   return combined * combined;
 }
 
+/**
+ * The 2.31 brow is a post-G-buffer decal: it writes sqrt(colour) with SrcAlpha
+ * blending into a G-buffer whose albedo target also holds sqrt(albedo). With
+ * `gbufferBlend`, a per-vertex `xfsUnderlay` (linear skin albedo under the
+ * brow) lets an ordinary Three "over" blend reproduce that squared result; see
+ * linearEquivalentDecal in hair-colour-model.ts. Without it, the older linear
+ * blend is kept and reported as such.
+ */
 export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE.Texture,
-                                        gradient: THREE.Texture): THREE.MeshStandardMaterial {
+                                        gradient: THREE.Texture,
+                                        options: { gbufferBlend?: boolean } = {}): THREE.MeshStandardMaterial {
   const material = new THREE.MeshStandardMaterial({
     map: primary,
     alphaMap: secondary,
@@ -56,12 +65,24 @@ export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE
     roughness: 0.8,
     side: THREE.DoubleSide,
   });
+  if (options.gbufferBlend) material.defines = { ...material.defines, XFS_GBUFFER_DECAL: "" };
   material.onBeforeCompile = shader => {
     shader.uniforms.browGradient = { value: gradient };
     shader.uniforms.browSecondaryColor = { value: new THREE.Color(0x3e312a) };
+    if (options.gbufferBlend && shader.vertexShader) {
+      shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
+        attribute vec3 xfsUnderlay;
+        varying vec3 vXfsUnderlay;`).replace("#include <begin_vertex>", `#include <begin_vertex>
+        vXfsUnderlay = xfsUnderlay;`);
+    }
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <map_pars_fragment>",
-      "#include <map_pars_fragment>\nuniform sampler2D browGradient;\nuniform vec3 browSecondaryColor;",
+      `#include <map_pars_fragment>
+uniform sampler2D browGradient;
+uniform vec3 browSecondaryColor;
+#ifdef XFS_GBUFFER_DECAL
+varying vec3 vXfsUnderlay;
+#endif`,
     );
     // Both alphas must be sampled through their actual filtered UVs BEFORE the
     // nonlinear square. Baking per-texel coverage then filtering changes fine hairs.
@@ -74,20 +95,72 @@ export function createSavedBrowMaterial(primary: THREE.Texture, secondary: THREE
        vec3 browGradientColor = clamp(texture2D(browGradient, vec2(1.0, 0.5)).rgb * 0.5, 0.0, 1.0);
        vec3 browColor = browGradientColor * browPrimary.rgb +
          browSecondaryColor * (browS * (1.0 - browPrimary.a) * 0.7);
+       float browCombined = browP + (1.0 - browP) * browS * 0.7;
+       float browAlpha = browCombined * browCombined;
+#ifdef XFS_GBUFFER_DECAL
+       {
+         vec3 underlay = max(vXfsUnderlay, vec3(0.0));
+         vec3 target = a_pow2(browAlpha * sqrt(max(browColor, vec3(0.0))) + (1.0 - browAlpha) * sqrt(underlay));
+         // Smallest "over" alpha that keeps every solved channel non-negative (linearEquivalentDecal).
+         vec3 gap = underlay - browColor;
+         vec3 needed = mix(vec3(0.0), (underlay - target) / max(gap, vec3(1e-6)), step(vec3(1e-6), gap));
+         float solved = clamp(max(browAlpha, max(needed.r, max(needed.g, needed.b))), 0.0, 1.0);
+         if (solved > 0.0) browColor = max(vec3(0.0), (target - (1.0 - solved) * underlay) / solved);
+         browAlpha = solved;
+       }
+#endif
        diffuseColor.rgb *= browColor;`,
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <alphamap_fragment>",
-      `float browCombined = browP + (1.0 - browP) * browS * 0.7;
-       diffuseColor.a *= browCombined * browCombined;`,
-    );
+      `diffuseColor.a *= browAlpha;`,
+    ).replace("#include <common>", `#include <common>
+vec3 a_pow2(vec3 v) { return v * v; }`);
   };
-  material.customProgramCacheKey = () => "xfs-saved-brow-double-diffuse-v1";
+  material.customProgramCacheKey = () => `xfs-saved-brow-double-diffuse-v2${options.gbufferBlend ? "-gbuffer" : ""}`;
   return material;
 }
 
-export async function loadSavedBrowMaterial(loader: THREE.TextureLoader,
-                                             anisotropy: number): Promise<THREE.MeshStandardMaterial | undefined> {
+/**
+ * Per-vertex linear albedo of the surface under each target vertex: nearest
+ * source vertex (same bind space), its UV, bilinear sample of an sRGB8 RGBA
+ * image. Pure over typed arrays so it is testable without a GPU.
+ */
+export function sampleUnderlayAlbedo(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number>,
+                                     sourceUvs: ArrayLike<number>,
+                                     image: { width: number; height: number; data: ArrayLike<number> },
+                                     maxDistance = 0.02): { underlay: Float32Array; maxMatchedDistance: number; unmatched: number } {
+  const targets = targetPositions.length / 3, sources = sourcePositions.length / 3;
+  const underlay = new Float32Array(targets * 3);
+  const decode = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const texel = (x: number, y: number, c: number) => {
+    const px = Math.min(image.width - 1, Math.max(0, x)), py = Math.min(image.height - 1, Math.max(0, y));
+    return decode(image.data[(py * image.width + px) * 4 + c]!);
+  };
+  let maxMatchedDistance = 0, unmatched = 0;
+  for (let t = 0; t < targets; t++) {
+    const tx = targetPositions[t * 3]!, ty = targetPositions[t * 3 + 1]!, tz = targetPositions[t * 3 + 2]!;
+    let best = -1, bestD = Infinity;
+    for (let s = 0; s < sources; s++) {
+      const dx = sourcePositions[s * 3]! - tx, dy = sourcePositions[s * 3 + 1]! - ty, dz = sourcePositions[s * 3 + 2]! - tz;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    const distance = Math.sqrt(bestD);
+    if (best < 0 || distance > maxDistance) { unmatched++; continue; }
+    maxMatchedDistance = Math.max(maxMatchedDistance, distance);
+    const u = (sourceUvs[best * 2]! % 1 + 1) % 1, v = (sourceUvs[best * 2 + 1]! % 1 + 1) % 1;
+    const fx = u * image.width - 0.5, fy = v * image.height - 0.5;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy), wx = fx - x0, wy = fy - y0;
+    for (let c = 0; c < 3; c++)
+      underlay[t * 3 + c] = (texel(x0, y0, c) * (1 - wx) + texel(x0 + 1, y0, c) * wx) * (1 - wy) +
+        (texel(x0, y0 + 1, c) * (1 - wx) + texel(x0 + 1, y0 + 1, c) * wx) * wy;
+  }
+  return { underlay, maxMatchedDistance, unmatched };
+}
+
+export async function loadSavedBrowMaterial(loader: THREE.TextureLoader, anisotropy: number,
+                                             options: { gbufferBlend?: boolean } = {}): Promise<THREE.MeshStandardMaterial | undefined> {
   const response = await fetch("/assets/brows/manifest.json", { signal: AbortSignal.timeout(5000) });
   if (response.status === 404) return undefined;
   if (!response.ok) throw Error(`Local brow manifest: HTTP ${response.status}`);
@@ -112,7 +185,7 @@ export async function loadSavedBrowMaterial(loader: THREE.TextureLoader,
         loaded.push(texture);
       } finally { URL.revokeObjectURL(objectUrl); }
     }
-    return createSavedBrowMaterial(loaded[0]!, loaded[1]!, loaded[2]!);
+    return createSavedBrowMaterial(loaded[0]!, loaded[1]!, loaded[2]!, options);
   } catch (error) {
     for (const t of loaded) t.dispose();
     throw error;

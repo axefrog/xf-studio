@@ -199,7 +199,9 @@ async function start() {
     const evidence = scene.evidence;
     status = { ...status, assets: { ...status.assets, loaded: true, detailErrors: [...evidence.detailErrors],
       browMaterial: evidence.browMaterial as "saved-double-diffuse" | "provisional",
-      lashColor: evidence.lashColor as "saved-profile-swatch-approximation" | "provisional",
+      lashColor: evidence.lashColor as "saved-hair-profile" | "provisional",
+      lashProfileLabel: evidence.lashProfile
+        ? `${evidence.lashProfile.winner} (${evidence.lashProfile.basis.replaceAll("-", " ")})` : undefined,
       hairError: evidence.hairError || undefined, piercingError: evidence.piercingError || undefined,
       prcError: evidence.prcError || undefined, prcAvailable: !!evidence.prc.styles } };
     viewportDevice.headReady();
