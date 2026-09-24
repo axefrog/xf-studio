@@ -12,6 +12,8 @@
 
 Dependencies point inward: presentation calls typed application actions and reads detached snapshots/capabilities; application services use typed ports for device work; adapters implement those ports. Keep pure evaluators, recipe parsing, compiler and serialization reusable without a browser. `main.ts` is currently a transitional composition root, not a place to put new behavior simply because the feature has a button.
 
+The trusted authoring core and Studio bootstrap are independent of today's controls. A new presentation entry must construct device adapters, use `createTrustedAuthoringCore` and `createTrustedStudioBootstrap`, and receive only the `StudioPresentationPort` through the mount callback. Do not import `main.ts` or require its legacy element IDs to make a new shell start. Keep trusted service handles in the composition root. A view must never receive the bootstrap object, `AuthoringDocument`, raw collection service, renderer object or writable recipe. The remaining production adapter and workspace-persistence extraction is tracked in the [gap assessment](ui-architecture-boundary.md).
+
 ## Rules for each feature change
 
 1. Put the state transition and validation in a domain/application action before wiring a control. The same action must serve buttons, shortcuts, context menus and a future scripted in-process UI. Describe its target, input, capability/disabled reason, Undo or recovery policy, persistence effect and async result where applicable. Do not expose writable recipe objects or a remote execution endpoint.

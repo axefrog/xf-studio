@@ -1,11 +1,8 @@
-import { type Recipe, type Layer } from "./recipe";
+import { type Layer } from "./recipe";
 import { type LayerCommand } from "./layer-stack";
 import { type LayerAction } from "./editor-actions";
-import { AuthoringLayerActions } from "./authoring-layer-actions";
-import { AuthoringDocument } from "./authoring-document";
 import type { ReadonlyDeep } from "./read-only";
-import { AuthoringGeometry } from "./authoring-geometry";
-import { AuthoringPresentation } from "./authoring-presentation";
+import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import { WorkspacePersistence } from "./workspace-persistence";
 import { WorkspaceComposer } from "./workspace-composer";
 import { layerList } from "./layer-ui";
@@ -14,19 +11,17 @@ import { setupContextMenus } from "./context-menu";
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
-import { AuthoringGestures } from "./authoring-gestures";
-import { AuthoringControlEdits } from "./authoring-control-edits";
-import { StudioApplication, type StudioAction } from "./studio-application";
-import { createStudioPresentation } from "./studio-presentation";
+import { type StudioAction } from "./studio-application";
+import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 import { UIPreferenceActions } from "./ui-preferences";
 import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
-import { StudioFileOperations, type StudioFileAction, type StudioFileKind } from "./studio-file-operations";
+import { type StudioFileAction, type StudioFileKind } from "./studio-file-operations";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
 import { setupFields } from "./field-ui";
 import type { PigmentCommand } from "./pigment-edit";
 import type { SoftnessCommand } from "./softness-edit";
-import { RecipeActions, type RecipeAction } from "./recipe-actions";
+import { type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
 import { setupPreviewQuality } from "./preview-quality-ui";
 import type { PreviewQualityActions } from "./preview-quality-actions";
@@ -74,17 +69,16 @@ let initialOptics: ({ key: string; data?: PreviewOptics; albedo?:PreviewAlbedo }
 const opticalKey = (layer: ReadonlyDeep<Layer>, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
   ? studioIrregularOpticalKey(layer.flakes,size)
   : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
-const authoring = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
-  selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
-const geometry = new AuthoringGeometry(authoring);
-const presentation = new AuthoringPresentation(authoring, geometry);
-const glitterChoices = workspace.glitterChoices;
+const core = createTrustedAuthoringCore(workspace, {
+  resetStack: () => resetStackResources(),
+  selectedCollection: () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
+  controlAction: action => dispatchRecipeAction(action),
+});
+const { document: authoring, geometry, presentation, layers: layerActions,
+  recipe: recipeActions, app } = core;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 let collectionApp: CollectionApplication | undefined;
-function checkpoint() {
-  authoring.checkpoint();
-}
 const canvases = Array.from({ length: authoring.recipe.layers.length }, () => {
   const c = document.createElement("canvas");
   c.width = c.height = 1;
@@ -198,10 +192,6 @@ const paintLayerList = layerList($("layers"), {
   edit: changeLayers,
 });
 function layerCards() { paintLayerList(presentation.recipe(), presentation.active); }
-function replaceRecipe(next: Recipe, nextActive = 0) {
-  authoring.replaceRecipe(next, nextActive);
-  resetStackResources();
-}
 function resetStackResources() {
   previewCoordinator.resetStack();
 }
@@ -216,7 +206,6 @@ function dispatchLayer(action: LayerAction) {
 function applyLayerCommand(action: LayerAction) {
   layerActions.dispatch(action);
 }
-const layerActions = new AuthoringLayerActions(authoring, resetStackResources);
 $("layer-add").onclick = () => changeLayers({ kind: "add" });
 $("layer-copy").onclick = () => { const layer = current(); if (layer) changeLayers({ kind: "duplicate", id: layer.id }); };
 const layerName = input("layer-name");
@@ -371,12 +360,6 @@ const renderScheduler = new AuthoringRenderScheduler(authoring, {
   frame: run => requestAnimationFrame(run), render: i => previewCoordinator.render(i),
   refreshSelection: () => { sync(); drawUV(); persist(); },
 });
-const recipeActions = new RecipeActions(
-  () => ({ recipe: authoring.recipe, active: authoring.active,
-    selected: authoring.selected, fieldSelection: authoring.fieldSelection }),
-  (next, effect) => authoring.applyActionState(next, effect),
-  authoring, glitterChoices, () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
-  (i, kind) => authoring.gestureChanged(i, kind));
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -387,16 +370,7 @@ function dispatchRecipeAction(action: RecipeAction, record = false) {
   }
 }
 
-function undo() {
-  const next = authoring.undoRecipe();
-  if (!next) return false;
-  replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
-  return true;
-}
-const gestures = new AuthoringGestures(authoring, recipeActions, undo);
-const controlEdits = new AuthoringControlEdits(authoring, action => dispatchRecipeAction(action), undo);
-const app = new StudioApplication({ document: authoring, recipe: recipeActions,
-  layer: applyLayerCommand, undo, gestures, controls: controlEdits, quality: qualityActions });
+app.attach({ quality: qualityActions });
 const beginControl = (id: string) => { const layer = current(); if (layer) app.controlBegin(id, layer.id); };
 const controlAction = (id: string, action: RecipeAction) => app.controlEdit(id, action);
 function dispatchStudio(action: StudioAction) {
@@ -513,7 +487,18 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
 }, workspace.uvView);
 viewport.attach("uv", uvEditor);
 viewportAttachment.setReady("uv");
-const fileOperations = new StudioFileOperations({
+const studioBootstrap = createTrustedStudioBootstrap({
+  workspace, core, preferences: uiPreferences, viewport: viewportAttachment,
+  transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
+  onEditorRestored: resetStackResources,
+  onRecipeImported: () => { presetLibrary?.refresh(); persist(); },
+  savedAppearance: {
+    has: () => savedAppearance?.hasSavedV() ?? false,
+    read: () => savedAppearance?.snapshot().savedV,
+    load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
+    ready: () => !!viewer,
+  },
+  fileDevice: {
   pick: kind => new Promise(resolve => {
     const id: Record<StudioFileKind, string> = { recipe: "file", collection: "collection-file", savedV: "v-file" };
     const picker = input(id[kind]);
@@ -548,23 +533,9 @@ const fileOperations = new StudioFileOperations({
     bake.onerror = () => { bake.terminate(); reject(Error("Mask export failed.")); };
     bake.postMessage({ i: 0, version: 0, layer: { ...layer, enabled: true }, size: 2048 });
   }),
-}, {
-  recipe: () => presentation.recipe(), selectedLayer: current,
-  importRecipe: (recipe, name) => {
-    collectionApp!.importRecipe(recipe, name);
-    presetLibrary!.refresh(); persist();
   },
-  hasSavedV: () => savedAppearance?.hasSavedV() ?? false,
-  savedV: () => savedAppearance?.snapshot().savedV,
-  loadSavedV: bytes => {
-    const applied = savedAppearance!.dispatch({ kind: "savedV.load", bytes });
-    app.recordAppliedSavedAppearance(applied);
-    return applied;
-  },
-  savedVReady: () => !!viewer,
-  executeCollection: request => app.execute(request),
-  recoverCollection: () => collectionApp!.recover(),
 });
+const fileOperations = studioBootstrap.files;
 async function runFile(action: StudioFileAction) {
   const previousStatus = $("status").textContent ?? "";
   if (action.kind === "mask.export") status("Baking 2048² mask…");
@@ -591,12 +562,10 @@ $("save").onclick = () => void runFile({ kind: "recipe.export" });
 $("load").onclick = () => void runFile({ kind: "recipe.import" });
 $("export").onclick = () => void runFile({ kind: "mask.export" });
 $("open-v").onclick = () => void runFile({ kind: "savedV.import" });
-collectionApp = new CollectionApplication(workspace.collections, workspace.library, authoring,
-  resetStackResources, collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
-  app, fileOperations);
-const studioPresentation = createStudioPresentation({ authoring: app, library: collectionApp,
-  files: fileOperations, viewport: viewportAttachment, preferences: uiPreferences });
-if (verification) Object.assign(window, { eyeArtistryStudioPresentation: studioPresentation });
+collectionApp = studioBootstrap.collection;
+studioBootstrap.mount(port => {
+  if (verification) Object.assign(window, { eyeArtistryStudioPresentation: port });
+});
 presetLibrary = setupCollections(collectionApp, persist, workspace.collections?.filesOpen);
 void collectionApp.initialize().then(() => presetLibrary?.refresh());
 function showSavedV(state: Readonly<SavedAppearanceState>) {
