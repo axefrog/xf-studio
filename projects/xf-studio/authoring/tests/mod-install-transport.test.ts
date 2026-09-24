@@ -208,3 +208,23 @@ test("an MO2 folder from an earlier XF Studio-named diagnostic blocks a second i
     expect(f.transport.preflight("first").target).toBe(f.target);
   } finally { f.cleanup(); }
 });
+
+test("MO2 install targets the instance's configured mod and profile directories", () => {
+  const f = fixture("mo2");
+  try {
+    const data = join(f.root, "mo2-data");
+    mkdirSync(join(data, "staged"), { recursive: true });
+    mkdirSync(join(data, "profiles", "2025 (again)"), { recursive: true });
+    writeFileSync(join(data, "profiles", "2025 (again)", "modlist.txt"), "+Other Mod\n");
+    writeFileSync(join(f.mo2, "ModOrganizer.ini"), ["[General]", "gameName=Cyberpunk 2077", "[Settings]",
+      `base_directory=${data.replaceAll("\\", "/")}`, "mod_directory=%BASE_DIR%/staged"].join("\r\n"));
+    f.candidate("first", "one");
+    const transport = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings });
+    const expected = join(data, "staged", EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
+    expect(transport.preflight("first").target).toBe(expected);
+    transport.install("first");
+    expect(existsSync(join(expected, "xfs_test.archive"))).toBe(true);
+    expect(existsSync(f.target)).toBe(false);
+    transport.uninstall();
+  } finally { f.cleanup(); }
+});

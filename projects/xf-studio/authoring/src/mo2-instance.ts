@@ -21,7 +21,7 @@ export function decodeQSettingsValue(raw: string): string {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]!;
     if (ch === "\"") { quoted = !quoted; continue; }
-    if (ch === ";" && !quoted) break;
+    if (ch === ";" && !quoted) { out = out.trimEnd(); break; }
     if (ch !== "\\" || i + 1 >= text.length) { out += ch; continue; }
     const next = text[++i]!;
     if (next === "x") {
@@ -123,8 +123,9 @@ export function describeMo2Instance(text: string | null, root: string, kind: Mo2
     managesCyberpunk: gameName?.trim().toLowerCase() === "cyberpunk 2077",
     selectedProfile: general.get("selected_profile") || null,
     paths: resolveMo2Paths(ini, root),
-    skipFileSuffixes: list(settings.get("skip_file_suffixes"), []).map(item => item.toLowerCase()),
-    skipDirectories: list(settings.get("skip_directories"), []).map(item => item.toLowerCase()),
+    // Settings::skipFileSuffixes/skipDirectories defaults.
+    skipFileSuffixes: list(settings.get("skip_file_suffixes"), [".mohidden"]).map(item => item.toLowerCase()),
+    skipDirectories: list(settings.get("skip_directories"), [".git"]).map(item => item.toLowerCase()),
     profiles: [...profiles].sort((a, b) => a.localeCompare(b)) };
 }
 
