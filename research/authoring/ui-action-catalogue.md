@@ -28,7 +28,7 @@ Sources: [collection actions](../../projects/xf-studio/authoring/src/collection-
 
 ## Exact commands: collection, preset and library
 
-`CollectionAction` targets the **current draft**. `preset.edit.command` is a nested discriminated union; its inner `kind` is not a top-level command ID. IDs are UUIDs. Collection edits do not create a recipe Undo entry; preset removal has its own last-20 recovery stack, and opening/importing a collection has a separate prior-draft recovery slot. Switching presets stashes the recipe, selected layer/point/field and up to 80 recipe Undo entries for the outgoing preset. [Collection session](../../projects/xf-studio/authoring/src/collection-session.ts), [workspace operations](../../projects/xf-studio/authoring/src/collection-workspace.ts).
+`CollectionAction` targets the **current draft**. `preset.edit.command` is a nested discriminated union; its inner `kind` is not a top-level command ID. IDs are UUIDs. Collection edits do not create a recipe Undo entry; preset removal has its own last-20 recovery stack, and opening/importing a collection has a separate four-draft browser recovery queue. Switching presets stashes the recipe, selected layer/point/field and up to 80 recipe Undo entries for the outgoing preset. [Collection session](../../projects/xf-studio/authoring/src/collection-session.ts), [workspace operations](../../projects/xf-studio/authoring/src/collection-workspace.ts).
 
 | Exact action/payload | Target, result and capability/validation |
 |---|---|
@@ -39,7 +39,7 @@ Sources: [collection actions](../../projects/xf-studio/authoring/src/collection-
 | `preset.edit` `{command:{kind:"restore"}}` | Restore most recently removed preset at its old position with editor memory. Disabled if removal stack is empty. |
 | `preset.select` `{id}`; `preset.expand` `{expanded}` | Draft selection or expansion state; selection preserves the outgoing preset's editor state. Unknown preset disables. These are workspace state, not recipe Undo. |
 | `collection.rename` `{name}`; `collection.filesOpen` `{open}` | Current collection name or file-section preference. Invalid collection name fails validation. File-section state is presentation memory, not exported collection data. |
-| `collection.open` `{collection,revision?}`; `collection.undoOpen` | Open a validated collection object; undo/swap the prior draft. The prior slot is queried by `collection.undoOpen` capability. In normal UI, use async `CollectionRequest.open` to fetch by ID first. |
+| `collection.open` `{collection,revision?}`; `collection.undoOpen` | Open a validated collection object; add the current draft to the bounded recovery queue. Recover walks the queue, keeping the draft left behind reachable. `collection.undoOpen` capability reports availability; the summary projects the next draft, queue count/limit and oldest draft for a capacity warning. In normal UI, use async `CollectionRequest.open` to fetch by ID first. |
 | `collection.importRecipe` `{recipe,name}` | Add an imported recipe as a **new preset**; preserves existing presets. File reading/1 MB budget is outside this command. |
 | `collection.saved` `{result,sourceId}` | **Internal reconciliation**, not a user command: update saved identity/revisions after transport returns, retaining in-flight draft edits and rejecting a different current collection. |
 

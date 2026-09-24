@@ -120,15 +120,16 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
 }
 
 /**
- * The application keeps ONE previous draft for recovery (audit B-1). Before an open or
- * import would push an existing recoverable draft out, say so and let the user decide.
+ * Opening keeps a bounded queue of browser drafts. Warn only when the next open
+ * would evict the oldest recoverable draft.
  */
 export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: string, run: () => void) {
-  const previous = rt.port.library.summary().draft?.previous;
-  if (!previous) { run(); return; }
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft becomes the recoverable draft, and the older recoverable draft “${previous.name}” will be discarded. To keep it, switch to it and save it to the library first.` },
+  const draft = rt.port.library.summary().draft;
+  if (!draft || draft.recoveryCount < draft.recoveryLimit) { run(); return; }
+  const oldest = draft.oldestRecoverable!;
+  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.name}” will be discarded. To keep it, recover it and save it to the library first.` },
     { kind: "action", label: "Continue", icon: "import", run },
-    { kind: "action", label: `Switch to “${previous.name}” to save it`, icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
+    { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
       run: () => void rt.file({ kind: "collection.recover" }) }],
   anchor, { label: `${title} confirmation`, invoker: anchor instanceof Element ? anchor : undefined });
 }
@@ -194,7 +195,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       applyCapability(refresh, port.authoring.requestCapability({ kind: "refresh" }));
       const recovery = frame.files.recovery;
       applyCapability(recover, recovery);
-      setText(recoverNote, draft?.previous ? `Previous draft: “${draft.previous.name}”${draft.previous.revision ? ` (r${draft.previous.revision})` : ""}. Recover swaps it back; the current draft becomes recoverable in turn.` : "");
+      setText(recoverNote, draft?.previous ? `Next draft: “${draft.previous.name}”${draft.previous.revision ? ` (r${draft.previous.revision})` : ""}. ${draft.recoveryCount} of ${draft.recoveryLimit} drafts recoverable; recover again to walk through them.` : "");
       recoverNote.hidden = !draft?.previous;
       const signature = JSON.stringify([library.summaries, draft?.id, library.busy]);
       if (signature !== savedSignature) {

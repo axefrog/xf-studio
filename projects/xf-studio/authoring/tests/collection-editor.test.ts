@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { LookLibrary } from "../src/library-store";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
-import { collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
+import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
 import { parseCollection, planCollection } from "../src/preset-collection";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
@@ -60,6 +60,24 @@ test("opening collections is recoverable and save completion never overwrites ed
   next.undoOpen(); expect(editor.recipe.layers[0].color).toBe("#ffeedd"); expect(next.state.collection.id).toBe(priorId);
   next.importRecipe(initialRecipe(), "Portable"); expect(next.state.collection.presets).toHaveLength(2);
   expect(next.state.collection.presets[1].name).toBe("Portable");
+});
+
+test("recovery is bounded and follows the opened drafts in order", () => {
+  const collection = (name: string) => ({ schema: "xfas/collection-1" as const,
+    id: crypto.randomUUID(), name, presets: [] });
+  const first = collection("First");
+  let editor: EditorSnapshot = { recipe: emptyRecipe(), ...emptyMemory() };
+  const session = new CollectionSession(collectionDraft(first), () => editor, value => editor = value);
+  for (let n = 0; n < COLLECTION_RECOVERY_LIMIT + 1; n++) session.open(collection(`Open ${n}`));
+  expect(session.state.previous?.collection.name).toBe(`Open ${COLLECTION_RECOVERY_LIMIT - 1}`);
+  expect(session.state.older?.map(draft => draft.collection.name)).toEqual(
+    Array.from({ length: COLLECTION_RECOVERY_LIMIT - 1 }, (_, index) => `Open ${COLLECTION_RECOVERY_LIMIT - 2 - index}`));
+  for (let n = COLLECTION_RECOVERY_LIMIT - 1; n >= 0; n--) {
+    session.undoOpen();
+    expect(session.state.collection.name).toBe(`Open ${n}`);
+  }
+  expect(session.state.previous?.collection.name).toBe(`Open ${COLLECTION_RECOVERY_LIMIT}`);
+  expect(session.state.older).toHaveLength(COLLECTION_RECOVERY_LIMIT - 1);
 });
 
 test("SQLite migration preserves look revisions; collection saves are atomic, ordered and conflict-protected", () => {

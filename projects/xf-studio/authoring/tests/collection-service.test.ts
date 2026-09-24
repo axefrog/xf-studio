@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
-import { loadWorkspace } from "../src/workspace-state";
+import { freshWorkspace, loadWorkspace, parseWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 
@@ -108,6 +108,46 @@ test("loading a saved list does not replace a restored local draft", async () =>
   expect(result.ok).toBe(true);
   expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#fedcba");
   expect(f.service.view().progress?.message).toContain("without replacing unsaved edits");
+});
+
+test("opening two saved collections keeps the earlier unsaved draft recoverable after reload", async () => {
+  const source = fixture();
+  const draft = source.collection, a = { ...structuredClone(draft), id: crypto.randomUUID(), name: "A" },
+    b = { ...structuredClone(draft), id: crypto.randomUUID(), name: "B" };
+  const saved = [a, b].map(collection => ({ collection, revision: 3, updatedAt: "now" }));
+  source.transport.list = async () => saved.map(item => ({ id: item.collection.id,
+    name: item.collection.name, count: 1, revision: item.revision, updatedAt: item.updatedAt }));
+  source.transport.get = async id => saved.find(item => item.collection.id === id)!;
+  await source.service.execute({ kind: "initialize" });
+  source.editor().recipe.layers[0].color = "#fedcba";
+  source.editor().history = [structuredClone(initialRecipe())];
+  expect((await source.service.execute({ kind: "open", id: a.id })).ok).toBe(true);
+  expect((await source.service.execute({ kind: "open", id: b.id })).ok).toBe(true);
+  expect(source.service.summary().draft?.recoveryCount).toBe(2);
+
+  const workspace = freshWorkspace(); workspace.collections = source.service.snapshot();
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  let editor: EditorSnapshot = { recipe: restored.recipe, active: restored.active, selected: restored.selected,
+    history: restored.history };
+  const resumed = new CollectionService(restored.collections, { selected: "", name: "" },
+    () => editor, value => editor = value, source.transport);
+  await resumed.execute({ kind: "initialize" });
+  resumed.dispatch({ kind: "collection.undoOpen" });
+  expect(resumed.summary().draft).toMatchObject({ id: a.id, revision: 3, recoveryCount: 2 });
+  resumed.dispatch({ kind: "collection.undoOpen" });
+  expect(resumed.summary().draft).toMatchObject({ id: draft.id, revision: 1, recoveryCount: 2 });
+  expect(editor.recipe.layers[0].color).toBe("#fedcba");
+  expect(editor.history).toHaveLength(1);
+  let savedColor: string | undefined, savedRevision: number | undefined;
+  source.transport.save = async (value, revision) => {
+    savedColor = value.presets[0].recipe.layers[0].color; savedRevision = revision;
+    return { collection: structuredClone(value), revision: revision! + 1, updatedAt: "now" };
+  };
+  expect((await resumed.execute({ kind: "save" })).ok).toBe(true);
+  expect(savedColor).toBe("#fedcba"); expect(savedRevision).toBe(1);
+  expect(resumed.summary().draft?.revision).toBe(2);
+  resumed.dispatch({ kind: "collection.undoOpen" });
+  expect(resumed.summary().draft?.id).toBe(b.id); // The draft left during recovery remains reachable.
 });
 
 test("a revision conflict reports its code without replacing the local draft", async () => {

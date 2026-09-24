@@ -9,7 +9,9 @@ export type CollectionDraft = {
   editors: Record<string, EditorMemory>;
   removed: { preset: Preset; index: number; editor: EditorMemory }[];
 };
-export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; filesOpen?: boolean };
+/** Browser-only recovery drafts, most recent first. SQLite collections never contain these. */
+export const COLLECTION_RECOVERY_LIMIT = 4;
+export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; older?: CollectionDraft[]; filesOpen?: boolean };
 export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [] });
 export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
 export function collectionDraft(collection: PresetCollection, revision?: number): CollectionDraft {
@@ -47,6 +49,9 @@ export function parseCollectionWorkspace(value: unknown): CollectionWorkspace {
   const result: CollectionWorkspace = parseDraft(value);
   const previous = (value as CollectionWorkspace).previous;
   if (previous !== undefined) result.previous = parseDraft(previous);
+  const older = (value as CollectionWorkspace).older;
+  if (Array.isArray(older) && result.previous)
+    result.older = older.slice(0, COLLECTION_RECOVERY_LIMIT - 1).map(parseDraft);
   if (typeof (value as CollectionWorkspace).filesOpen === "boolean") result.filesOpen = (value as CollectionWorkspace).filesOpen;
   return result;
 }

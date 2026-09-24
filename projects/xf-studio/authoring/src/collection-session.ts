@@ -1,4 +1,4 @@
-import { collectionDraft, editPresets, emptyMemory, emptyRecipe, parseCollectionWorkspace,
+import { COLLECTION_RECOVERY_LIMIT, collectionDraft, editPresets, emptyMemory, emptyRecipe, parseCollectionWorkspace,
   type CollectionWorkspace, type EditorMemory, type PresetCommand } from "./collection-workspace";
 import { parseRecipe, type Recipe } from "./recipe";
 import { parseCollection, type PresetCollection } from "./preset-collection";
@@ -39,14 +39,17 @@ export class CollectionSession {
     if (previous !== this.state.selected || command.kind === "restore") this.display();
   }
   open(collection: PresetCollection, revision?: number) {
-    const { previous: _discard, ...previous } = this.snapshot();
-    this.state = { ...collectionDraft(collection, revision), previous, filesOpen: this.state.filesOpen };
+    const { previous, older, filesOpen, ...current } = this.snapshot();
+    const recovery = [current, ...(previous ? [previous] : []), ...(older ?? [])].slice(0, COLLECTION_RECOVERY_LIMIT);
+    this.state = { ...collectionDraft(collection, revision), previous: recovery[0], older: recovery.slice(1), filesOpen };
     this.display();
   }
   undoOpen() {
     if (!this.state.previous) throw Error("No previous collection draft.");
-    const previous = this.state.previous, { previous: _discard, ...current } = this.snapshot();
-    this.state = { ...previous, previous: current, filesOpen: this.state.filesOpen }; this.display();
+    const { previous, older, filesOpen, ...current } = this.snapshot();
+    const recovery = [...(older ?? []), current];
+    this.state = { ...previous!, previous: recovery[0], older: recovery.slice(1), filesOpen };
+    this.display();
   }
   importRecipe(recipe: Recipe, name: string) {
     this.edit({ kind: "add" });
