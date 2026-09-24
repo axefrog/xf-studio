@@ -12,7 +12,7 @@ export type DesktopCapabilities = Readonly<{
   packageBuild: false;
   installation: false;
   updater: false;
-  previewAssets: "missing" | "incomplete" | "matched-prepared";
+  previewAssets: "missing" | "incomplete" | "ready";
 }>;
 
 export type DesktopVersion = Pick<DesktopCapabilities, "version" | "channel" | "buildHash" | "metadataStatus">;

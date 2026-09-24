@@ -7,7 +7,7 @@ import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
-import { coreAssetsReady, desktopAssetIntakeRequest } from "./asset-intake";
+import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts")) {
@@ -22,6 +22,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     { updater: false, installer: false, packageCheck: true, packageBuild: false });
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
+  const coreAssetsReady = createCoreAssetReadiness(dataRoot);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
@@ -46,7 +47,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         headers: new Headers([...request.headers, ["Origin", origin]]),
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
-        return Response.json(desktopCapabilities(await coreAssetsReady(dataRoot) ? "matched-prepared" :
+        return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
           existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);

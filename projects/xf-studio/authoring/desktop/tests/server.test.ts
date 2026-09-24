@@ -66,7 +66,7 @@ test("asset intake requires the desktop session and accepts only a folder inspec
   const diagnostic = await report.json();
   expect(diagnostic).toMatchObject({ ready: false, provenance: "unverified" });
   expect(diagnostic.files).toHaveLength(5);
-  expect(diagnostic.files[0]).toEqual({ name: "head.glb", status: "missing" });
+  expect(diagnostic.files[0]).toEqual({ name: "head.glb", status: "missing", matchesKnownOutput: null });
 });
 
 test("SQLite library initializes in the supplied user-data root", async () => {

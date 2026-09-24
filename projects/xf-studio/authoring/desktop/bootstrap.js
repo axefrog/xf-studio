@@ -1,6 +1,6 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
-// This desktop-only bootstrap offers a bounded intake for one recorded set of
-// prepared core preview outputs. Hash matches do not establish ownership.
+// This desktop-only bootstrap offers a bounded intake for prepared core
+// preview outputs. Optional known-hash matches do not establish ownership.
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
@@ -123,10 +123,10 @@ restoreSetup.addEventListener("click", async () => {
 });
 const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.catch(() => { aboutReadiness.textContent = "Local setup is unavailable."; });
-if (capabilities.previewAssets !== "matched-prepared") {
+if (capabilities.previewAssets !== "ready") {
   const root = document.getElementById("studio");
   root.removeAttribute("aria-busy");
-  root.innerHTML = '<div class="boot desktop-first-run" role="status"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Configure your game and mod paths now or later. To open the editor, import your own prepared preview files from a local folder.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import matching files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five known core files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A file hash match identifies the recorded prepared output. It does not verify ownership, source provenance or game fidelity. This installer includes no game or mod files. Mod export Check works after the editor opens; Build is unavailable.</p><button type="button" id="desktop-setup-open-inline">Configure local setup</button></div>';
+  root.innerHTML = '<div class="boot desktop-first-run" role="status"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Configure your game and mod paths now or later. To open the editor, import your own prepared preview files from a local folder.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is optional and does not verify ownership, source provenance or game fidelity. This installer includes no game or mod files. Mod export Check works after the editor opens; Build is unavailable.</p><button type="button" id="desktop-setup-open-inline">Configure local setup</button></div>';
   root.querySelector("#desktop-asset-path").textContent = `${capabilities.userDataPath}\\preview-assets`;
   root.querySelector("#desktop-setup-open-inline").addEventListener("click", () => void openSetup());
   const folder = root.querySelector("#desktop-intake-folder");
@@ -153,7 +153,8 @@ if (capabilities.previewAssets !== "matched-prepared") {
       } else if (action === "inspect") {
         inspected = folder.value.trim();
         importButton.disabled = false;
-        status.textContent = "Five known files match. Import copies these files into private app data; source ownership is unverified.";
+        const known = result.files.filter(file => file.matchesKnownOutput).length;
+        status.textContent = `Five core files passed structural checks. ${known} match the recorded output hashes. Import copies them into private app data; source ownership is unverified.`;
       } else {
         status.textContent = "Core preview files imported. Opening the editor…";
         location.reload();
@@ -181,7 +182,7 @@ const report = () => {
   try { const probe = new Worker("/build/raster-worker.js", { type: "module" }); worker = true; probe.terminate(); }
   catch { /* Missing worker support. */ }
   const state = document.querySelector(".boot-error") ? "error" :
-    capabilities.previewAssets !== "matched-prepared" ? "missing-assets" :
+    capabilities.previewAssets !== "ready" ? "missing-assets" :
     studio?.classList.contains("studio-ready") ? "interactive" : "starting";
   void fetch("/api/desktop/smoke", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker }) });
