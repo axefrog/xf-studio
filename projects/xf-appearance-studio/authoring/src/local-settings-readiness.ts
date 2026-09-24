@@ -1,0 +1,106 @@
+import { accessSync, constants, existsSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import type { LocalSettings } from "./local-settings";
+
+export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" | "install" | "updates";
+export type ReadinessIssue = { code: string; reason: string };
+export type CapabilityReadiness = { ready: boolean; issues: ReadinessIssue[]; limits: string[] };
+export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
+export type HostFeatures = { updater: boolean; installer: boolean };
+const available = (path: string | null, kind: "file" | "directory") => {
+  if (!path) return false;
+  try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); }
+  catch { return false; }
+};
+const item = (issues: ReadinessIssue[] = [], limits: string[] = []): CapabilityReadiness =>
+  ({ ready: issues.length === 0, issues, limits });
+const issue = (code: string, reason: string): ReadinessIssue => ({ code, reason });
+const writableDirectory = (path: string) => {
+  try {
+    if (existsSync(path) && !available(path, "directory")) return false;
+    const target = available(path, "directory") ? path : dirname(path);
+    if (!available(target, "directory")) return false;
+    accessSync(target, constants.W_OK);
+    return true;
+  } catch { return false; }
+};
+
+/** Advisory host readiness. Operations must revalidate paths and versions immediately before acting. */
+export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatures = { updater: false, installer: false }): LocalReadiness {
+  const game = settings.gameRoot;
+  const gameIssues: ReadinessIssue[] = [];
+  if (!game) gameIssues.push(issue("game_root_unset", "Select the Cyberpunk 2077 game folder."));
+  else {
+    if (!available(join(game, "bin", "x64", "Cyberpunk2077.exe"), "file"))
+      gameIssues.push(issue("game_executable_missing", "The selected game folder has no bin/x64/Cyberpunk2077.exe."));
+    if (!available(join(game, "archive", "pc"), "directory"))
+      gameIssues.push(issue("game_archives_missing", "The selected game folder has no archive/pc directory."));
+  }
+
+  const sourceIssues = [...gameIssues];
+  if (settings.launchRoute === "mo2") {
+    if (!settings.mo2Root) sourceIssues.push(issue("mo2_root_unset", "Select the Mod Organizer 2 instance folder."));
+    else {
+      if (!available(join(settings.mo2Root, "mods"), "directory"))
+        sourceIssues.push(issue("mo2_mods_missing", "The selected MO2 instance has no mods directory."));
+      if (!available(join(settings.mo2Root, "profiles"), "directory"))
+        sourceIssues.push(issue("mo2_profiles_missing", "The selected MO2 instance has no profiles directory."));
+    }
+    if (!settings.mo2ProfileId) sourceIssues.push(issue("mo2_profile_unset", "Select an MO2 profile."));
+    else if (settings.mo2Root && !available(join(settings.mo2Root, "profiles", settings.mo2ProfileId, "modlist.txt"), "file"))
+      sourceIssues.push(issue("mo2_profile_missing", "The selected MO2 profile has no modlist.txt."));
+  } else if (settings.manualModRoot && !available(settings.manualModRoot, "directory")) {
+    sourceIssues.push(issue("manual_root_missing", "The optional direct-install mod folder is unavailable."));
+  }
+
+  const buildIssues: ReadinessIssue[] = [];
+  if (!settings.plateInput) buildIssues.push(issue("plate_unset", "Select the private plate input directory."));
+  else if (!available(settings.plateInput, "directory")) buildIssues.push(issue("plate_missing", "The selected plate input directory is unavailable."));
+  if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", "Select the WolvenKit CLI executable."));
+  else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
+  if (settings.pythonExecutable && !available(settings.pythonExecutable, "file"))
+    buildIssues.push(issue("python_missing", "The selected Python executable is unavailable."));
+  if (settings.bunExecutable && !available(settings.bunExecutable, "file"))
+    buildIssues.push(issue("bun_missing", "The selected Bun executable is unavailable."));
+  buildIssues.push(...gameIssues);
+
+  const cacheIssues: ReadinessIssue[] = [];
+  if (settings.sourceCache.directory && !writableDirectory(settings.sourceCache.directory))
+    cacheIssues.push(issue("source_cache_unavailable", "The source cache directory or its parent is unavailable for writing."));
+  const previewIssues: ReadinessIssue[] = [];
+  if (settings.preview.cacheDirectory && !writableDirectory(settings.preview.cacheDirectory))
+    previewIssues.push(issue("preview_cache_unavailable", "The preview cache directory or its parent is unavailable for writing."));
+  if (settings.preview.outputDirectory && !writableDirectory(settings.preview.outputDirectory))
+    previewIssues.push(issue("preview_output_unavailable", "The preview output directory or its parent is unavailable for writing."));
+
+  const installIssues: ReadinessIssue[] = [];
+  if (!host.installer) installIssues.push(issue("install_host_unavailable", "This host does not provide installation."));
+  if (settings.installMode === "none") installIssues.push(issue("install_mode_unset", "Choose an installation target."));
+  else if (settings.installMode !== settings.launchRoute)
+    installIssues.push(issue("install_route_mismatch", "Installation target must match the selected launch route."));
+  installIssues.push(...sourceIssues);
+  // A verified immutable candidate and collision/receipt check are separate operation-time requirements.
+  return {
+    author: item(),
+    check: item([], ["Checks collection eligibility; no game, plate or build tool path is required."]),
+    sourceDiscovery: item(sourceIssues, [settings.launchRoute === "mo2"
+      ? "MO2 modlist '+' is activation evidence only; physical candidates do not prove a runtime winner."
+      : "Direct archive/pc candidates do not prove a runtime winner."]),
+    sourceCache: item(cacheIssues, ["An unset location uses the host's private default once a cache adapter is connected."]),
+    previewStorage: item(previewIssues, ["An unset location uses the host's private default once preview storage is connected."]),
+    build: item(buildIssues, ["Path presence does not prove tool-version compatibility or game rendering."]),
+    install: item(installIssues, ["A verified package and conflict/receipt validation are still required."]),
+    updates: item(host.updater ? [] : [issue("updater_unavailable", "This host does not provide desktop updates.")]),
+  };
+}
+
+/** Environment overrides remain highest priority for localhost until package-server is migrated. */
+export function packageToolPaths(settings: LocalSettings, env: Record<string, string | undefined> = process.env) {
+  return {
+    plate: env.XFS_PACKAGE_PLATE || settings.plateInput,
+    wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli,
+    gamepath: env.XFS_PACKAGE_GAMEPATH || settings.gameRoot,
+    python: env.XFS_PACKAGE_PYTHON || settings.pythonExecutable,
+    bun: settings.bunExecutable,
+  };
+}

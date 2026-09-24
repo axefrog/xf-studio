@@ -2,6 +2,8 @@
 
 Design checkpoint, 24 September 2026. This is an architecture proposal, not an implemented desktop release, installer or game deployment. The current localhost authoring app remains independently usable. The first target is Windows and eye-makeup export. Follow the maintained [architecture contract](architecture-contract.md), [package pipeline](studio-to-mod-pipeline.md) and [partial-export rule](partial-mod-export-checkpoint.md) when implementing this plan. No wrapper has been installed or selected for release.
 
+**Local settings foundation, 24 September:** A trusted, transport-neutral `xfs/local-settings-1` schema, OS user-data store, previous-good backup/recovery, explicit v0 migration and coded readiness evaluator now exist with focused tests. They are not yet connected to the localhost package endpoint or a Settings view, so the current developer path behavior remains in force. [API and handoff](../../projects/xf-appearance-studio/authoring/LOCAL-SETTINGS.md).
+
 This expands the earlier wrapper assessment into a release boundary and acceptance plan. Electron's bundled Chromium and process separation remain the fallback baseline ([official introduction](https://www.electronjs.org/docs/latest), [process model](https://www.electronjs.org/docs/latest/tutorial/process-model)). Bun's built-in [SQLite driver](https://bun.com/docs/runtime/sqlite) currently serves the local prototype. Neither choice entails rewriting the Three.js editor or placing wrapper APIs in its domain model.
 
 ## Decision and present boundary
