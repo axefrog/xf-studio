@@ -14,9 +14,18 @@ GAME=Path('F:/Games/Cyberpunk 2077')
 MO2=Path('F:/Games/MO2')
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--label',default='session')
+parser.add_argument('--profile',default='2025 (again)',
+                    help='MO2 profile whose modlist is captured (default: existing baseline profile)')
 args=parser.parse_args()
 if not args.label or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in args.label):
     raise SystemExit('Use a simple alphanumeric label.')
+if (not args.profile or args.profile in {'.','..'} or
+        any(c in args.profile for c in '/\\:') or
+        any(ord(c) < 32 for c in args.profile)):
+    raise SystemExit('Use a single existing MO2 profile directory name.')
+profile=MO2/'profiles'/args.profile/'modlist.txt'
+if not profile.is_file():
+    raise SystemExit(f'Missing MO2 profile modlist: {profile}')
 dest=HQ/'captures'/(dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'-'+args.label)
 dest.mkdir(parents=True,exist_ok=False)
 sources=[]
@@ -27,9 +36,8 @@ for prefix,root in [('game',GAME),('mo2-overwrite',MO2/'overwrite'),('mo2-legacy
     for name in ['cyber_engine_tweaks.log','scripting.log','gamelog.log']:
         p=root/'bin/x64/plugins/cyber_engine_tweaks'/name
         if p.exists(): sources.append((f'{prefix}/cet',p))
-profile=MO2/'profiles/2025 (again)/modlist.txt'
-if profile.exists(): sources.append(('profile',profile))
-manifest={'captured_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'label':args.label,'sources':[],'warning':'Existing logs may be from earlier sessions. Use source timestamps and log headers, not the capture folder date, as session evidence.'}
+sources.append(('profile',profile))
+manifest={'captured_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'label':args.label,'profile':args.profile,'sources':[],'warning':'Existing logs may be from earlier sessions. Use source timestamps and log headers, not the capture folder date, as session evidence.'}
 for lane,path in sources:
     output=dest/lane/path.name
     output.parent.mkdir(parents=True,exist_ok=True)
