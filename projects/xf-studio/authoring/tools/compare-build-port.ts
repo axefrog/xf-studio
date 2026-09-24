@@ -3,6 +3,7 @@
 // and diffs their outputs. Writes only to ignored folders; never installs anything.
 //
 //   bun tools/compare-build-port.ts mips [collection.json] [--size 1024]
+//   bun tools/compare-build-port.ts supplied <build-dir>   (TS chain vs the build's Python-written input DDS)
 //   bun tools/compare-build-port.ts inventory <build-dir>
 //   bun tools/compare-build-port.ts verify <build-dir> [--wolvenkit WolvenKit.CLI.exe]
 //
@@ -92,6 +93,25 @@ for job in json.load(sys.stdin):
   if (totalDiff) process.exitCode = 1;
 }
 
+function compareSupplied(args: string[]) {
+  const build = resolve(args[0] ?? "");
+  const record = JSON.parse(readFileSync(resolve(build, "build.json"), "utf8"));
+  let files = 0, identical = 0;
+  for (const [i, preset] of record.plan.presets.entries()) {
+    const compiled = record.compiled[i], raw: Record<string, Uint8Array> = {};
+    for (const map of compiled.maps) raw[map.channel] = new Uint8Array(readFileSync(resolve(build, "baked", map.file)));
+    const chain = flatMipChain(raw.diffuse, raw.roughness, raw.metalness, compiled.size);
+    for (const channel of channels) {
+      const group = channel === "diffuse" ? "dds-colour" : "dds-scalar";
+      const python = readFileSync(resolve(build, "input", group, `${preset.appearance}_${channel}.dds`));
+      files++;
+      if (Buffer.compare(python, encodeFlatDds(chain[channel], compiled.size, channel)) === 0) identical++;
+    }
+  }
+  console.log(JSON.stringify({ build, files, identical }, null, 2));
+  if (files !== identical) process.exitCode = 1;
+}
+
 async function compareInventory(args: string[]) {
   const { archiveInventory } = await import("../src/archive-inventory-fs");
   const build = resolve(args[0] ?? "");
@@ -134,7 +154,9 @@ function diffJson(a: Json, b: Json, path: string, out: { path: string; python: J
 
 async function compareVerify(args: string[]) {
   const build = resolve(args[0] ?? "");
-  const wolvenkit = resolve(option(args, "--wolvenkit") ?? "F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe");
+  const configured = option(args, "--wolvenkit") ?? process.env.XFS_WOLVENKIT;
+  if (!configured) throw Error("Pass --wolvenkit <WolvenKit.CLI.exe> or set XFS_WOLVENKIT.");
+  const wolvenkit = resolve(configured);
   if (!existsSync(resolve(build, "build.json"))) throw Error(`Not a build: ${build}`);
   if (resolve(build).toLowerCase().startsWith(resolve(hq, "experiments").toLowerCase()) && !build.includes("port-compare"))
     console.warn("Warning: the Python verifier writes into this build; prefer a private copy.");
@@ -144,6 +166,24 @@ async function compareVerify(args: string[]) {
   const pythonSeconds = (performance.now() - started) / 1000;
   if (py.exitCode !== 0) throw Error(`Python verifier failed: ${py.stderr.toString().slice(-3000)}`);
   const pyReport = JSON.parse(readFileSync(resolve(build, "verification.json"), "utf8"));
+  // Evidence for dropping the verifier's PNG inputs: the builder's input PNGs equal the
+  // baked raw maps, and WolvenKit's PNG export equals the DDS export's level 0.
+  const pngEquivalence = JSON.parse(runPython(`
+import json,sys
+from pathlib import Path
+import numpy as np
+from PIL import Image
+from mip_maps import read_dds_levels
+out=Path(sys.stdin.read().strip());b=json.loads((out/'build.json').read_text());checked=0;same=0
+for preset,record in zip(b['plan']['presets'],b['compiled']):
+    for m in record['maps']:
+        colour=m['channel']=='diffuse';mode='RGBA' if colour else 'L'
+        png=np.asarray(Image.open(out/'input'/('colour' if colour else 'scalar')/(Path(m['file']).stem+'.png')).convert(mode)).tobytes()
+        exported=np.asarray(Image.open(out/'export'/(Path(m['file']).stem+'.png')).convert(mode)).tobytes()
+        level0=read_dds_levels(out/'export-dds'/(Path(m['file']).stem+'.dds'),m['channel'])[1][0].tobytes()
+        checked+=1;same+=int(png==(out/'baked'/m['file']).read_bytes() and exported==level0)
+print(json.dumps({'textures':checked,'inputPngEqualsRawAndExportPngEqualsDdsLevel0':same}))
+`, build));
   const { verifyBuild } = await import("../src/mod-verifier/verify-build");
   const unpackDir = resolve(build, "unpacked-ts");
   rmSync(unpackDir, { recursive: true, force: true });
@@ -157,16 +197,17 @@ async function compareVerify(args: string[]) {
   const numeric = differences.filter(d => d.relative !== undefined);
   const other = differences.filter(d => d.relative === undefined);
   const maxRelative = Math.max(0, ...numeric.map(d => d.relative!));
-  console.log(JSON.stringify({ build, pythonSeconds, tsSeconds, fields: differences.length, numericDifferences: numeric.length,
+  console.log(JSON.stringify({ build, pngEquivalence, pythonSeconds, tsSeconds, fields: differences.length, numericDifferences: numeric.length,
     maxRelativeNumericDifference: maxRelative, nonNumericDifferences: other }, null, 2));
-  if (other.length || maxRelative > 1e-9) process.exitCode = 1;
+  if (other.length || maxRelative > 1e-12 || pngEquivalence.textures !== pngEquivalence.inputPngEqualsRawAndExportPngEqualsDdsLevel0) process.exitCode = 1;
 }
 
 const [command, ...rest] = process.argv.slice(2);
 if (command === "mips") await compareMips(rest);
+else if (command === "supplied") compareSupplied(rest);
 else if (command === "inventory") await compareInventory(rest);
 else if (command === "verify") await compareVerify(rest);
 else {
-  console.error("Usage: bun tools/compare-build-port.ts mips [collection.json] [--size N] | inventory <build> | verify <build> [--wolvenkit exe]");
+  console.error("Usage: bun tools/compare-build-port.ts mips [collection.json] [--size N] | supplied <build> | inventory <build> | verify <build> [--wolvenkit exe]");
   process.exitCode = 2;
 }

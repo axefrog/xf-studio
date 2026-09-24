@@ -115,7 +115,8 @@ export function flatMipChain(diffuse: Uint8Array, roughness: Uint8Array, metalne
   const texels = size * size;
   if (diffuse.length !== texels * 4 || roughness.length !== texels || metalness.length !== texels)
     throw new RangeError("Base map byte length does not match size");
-  const chain = { diffuse: [diffuse.slice()], roughness: [roughness.slice()], metalness: [metalness.slice()] };
+  const chain: { diffuse: Uint8Array[]; roughness: Uint8Array[]; metalness: Uint8Array[] } =
+    { diffuse: [diffuse.slice()], roughness: [roughness.slice()], metalness: [metalness.slice()] };
   let level = destinationContributions(diffuse, roughness, metalness, size), side = size;
   while (side > 1) {
     level = reduceContributions(level, side);
