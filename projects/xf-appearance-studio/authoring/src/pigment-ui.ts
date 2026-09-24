@@ -1,21 +1,22 @@
 import { DEFAULT_STRENGTH_BLEND, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND, type Layer } from "./recipe";
 import type { PigmentCommand } from "./pigment-edit";
+import { bindControlEdit } from "./control-edit-ui";
 
 /** Presentation only; the application owns commands, Undo, persistence and rendering. */
 export function setupPigment(elements: {
   smooth: HTMLInputElement; blend: HTMLInputElement; value: HTMLElement; note: HTMLElement;
-}, hooks: { layer(): Layer | undefined; begin(): void; edit(command: PigmentCommand): void }) {
+}, hooks: { layer(): Layer | undefined; begin(id: string): void; commit(id: string): void;
+  cancel(id: string): void; edit(command: PigmentCommand): void }) {
   elements.blend.min = String(MIN_STRENGTH_BLEND);
   elements.blend.max = String(MAX_STRENGTH_BLEND);
   elements.blend.step = String(MIN_STRENGTH_BLEND);
   elements.smooth.onchange = () => {
     if (!hooks.layer()) return;
-    hooks.begin(); hooks.edit({ kind: "smooth-strength", enabled: elements.smooth.checked });
+    hooks.begin("smooth-strength"); hooks.edit({ kind: "smooth-strength", enabled: elements.smooth.checked });
+    hooks.commit("smooth-strength");
   };
-  elements.blend.addEventListener("pointerdown", () => { if (!elements.blend.disabled) hooks.begin(); });
-  elements.blend.addEventListener("keydown", event => {
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) hooks.begin();
-  });
+  bindControlEdit(elements.blend, { begin: () => hooks.begin("strength-blend"),
+    commit: () => hooks.commit("strength-blend"), cancel: () => hooks.cancel("strength-blend") });
   elements.blend.oninput = () => {
     if (hooks.layer()?.strength.mode === "smooth-boundary")
       hooks.edit({ kind: "strength-blend", value: Number(elements.blend.value) });

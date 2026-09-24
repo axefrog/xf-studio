@@ -8,6 +8,7 @@ import { type LayerCommand } from "./layer-stack";
 import { applyLayerAction, layerCapability, type LayerAction } from "./editor-actions";
 import { AuthoringDocument } from "./authoring-document";
 import { WorkspacePersistence } from "./workspace-persistence";
+import { WorkspaceComposer } from "./workspace-composer";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
@@ -15,6 +16,9 @@ import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { AuthoringGestures } from "./authoring-gestures";
+import { AuthoringControlEdits } from "./authoring-control-edits";
+import { planLayerPreview } from "./authoring-preview-policy";
+import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
 import { selectedWarp } from "./field-selection";
 import { setupFields } from "./field-ui";
@@ -69,7 +73,6 @@ const authoring = new AuthoringDocument({ recipe: workspace.recipe, active: work
   selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
 const glitterChoices = workspace.glitterChoices;
 const glitterMeasurements=new Map<string,{opticalKey:string;maskKey:string;stats:GlitterStats}>();
-let previewRestored = false;
 let presetLibrary: ReturnType<typeof setupCollections> | undefined;
 function checkpoint() {
   authoring.checkpoint();
@@ -107,45 +110,19 @@ const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
 const viewport = new ViewportAdapter();
 const sidebars = setupSidebars(workspace.panels, () => { persist(); viewport.resize(); });
-function snapshot(): WorkspaceState {
-  // Editing/recipe autosave still works if preview assets fail or are still loading.
-  const editing = { ...authoring.export(), uvView: uvEditor?.snapshot() ?? workspace.uvView,
-    savedV: savedAppearance?.snapshot().savedV ?? workspace.savedV,
-    glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
-  if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
-    panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
-  const previewConfig = previewActions?.snapshot();
-  const motion = motionActions?.snapshot();
-  return {
-    schema: "xfas/workspace-1", ...editing,
-    preview: {
-      textureSize: qualityActions?.snapshot().size ?? textureSize,
-      camera: previewConfig?.camera ?? viewer?.cameraState() ?? workspace.preview.camera,
-      eyeShape: previewConfig?.eyeShape ?? +$<HTMLSelectElement>("eye-shape").value,
-      surface: previewConfig?.surface ?? input("surface-controls").checked,
-      wire: previewConfig?.wire ?? input("wire").checked,
-      brows: previewConfig?.brows ?? input("brows").checked,
-      lashes: previewConfig?.lashes ?? input("lashes").checked,
-      hair: previewConfig?.hair ?? input("hair").checked,
-      piercings: previewConfig?.piercings ?? input("piercings").checked,
-      piercingStyle: previewConfig?.piercingStyle ?? $<HTMLSelectElement>("piercing-style").value,
-      piercingDefinition: previewConfig?.piercingDefinition ?? $<HTMLSelectElement>("piercing-colour").value,
-      normals: previewConfig?.normals ?? input("normals").checked,
-      eyeOptics: previewConfig?.eyeOptics ?? input("eye-optics").checked,
-      exposure: previewConfig?.exposure ?? +input("exposure").value,
-      lightAngle: previewConfig?.lightAngle ?? +input("light-angle").value,
-      blink: motion?.blink ?? +input("blink").value, blinkPlaying: motion?.blinkPlaying ?? $("play").getAttribute("aria-pressed") === "true",
-      idle: motion?.idle ?? viewer?.idle?.enabled ?? workspace.preview.idle,
-      idleTime: motion?.idleTime ?? viewer?.idle?.time ?? workspace.preview.idleTime,
-      idlePaused: motion?.idlePaused ?? viewer?.idle?.paused ?? workspace.preview.idlePaused,
-      idleBody: motion?.idleBody ?? viewer?.idle?.bodyEnabled ?? workspace.preview.idleBody,
-      idleFace: motion?.idleFace ?? viewer?.idle?.faceEnabled ?? workspace.preview.idleFace,
-    },
-    panels: { ...sidebars.snapshot(), lighting: $<HTMLDetailsElement>("lighting-panel").open,
-      previewQuality: $<HTMLDetailsElement>("quality-panel").open,
-      layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY },
-  };
-}
+const layout = (): WorkspaceState["panels"] => ({ ...sidebars.snapshot(),
+  lighting: $<HTMLDetailsElement>("lighting-panel").open,
+  previewQuality: $<HTMLDetailsElement>("quality-panel").open,
+  layersScroll: layersPanel.scrollTop, propertiesScroll: panel.scrollTop, pageX: scrollX, pageY: scrollY });
+const workspaceComposer = new WorkspaceComposer(workspace, {
+  editor: () => authoring.export(), uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
+  savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
+  collections: () => presetLibrary?.snapshot() ?? workspace.collections,
+  quality: () => qualityActions?.snapshot().size ?? textureSize,
+  preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+  sidebar: () => sidebars.snapshot(), layout,
+});
+function snapshot(): WorkspaceState { return workspaceComposer.capture(); }
 const workspacePersistence = new WorkspacePersistence({ storage: localStorage,
   key: workspaceKeys(verification).workspace, writable: restored.writable,
   restoreError: restored.error, capture: snapshot });
@@ -349,9 +326,13 @@ refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("q
     set: size => { qualityActions.dispatch({ kind: "quality.set", size }); },
     rebuild: () => { qualityActions.dispatch({ kind: "quality.rebuild" }); } });
 function render(i = authoring.active) {
-  if (!authoring.recipe.layers[i]) return;
-  const layer = authoring.recipe.layers[i], assessment = qualityAssessment();
-  if (!layer.enabled) {
+  const plan = planLayerPreview({ recipe: authoring.recipe, index: i, active: authoring.active,
+    size: textureSize, assessment: qualityAssessment(), blocked: qualityActions.snapshot().blocked,
+    opticsMissing: (layer, size) => viewer ? viewer.needsOptics(i, layer, size)
+      : initialOptics[i]?.key !== opticalKey(layer, size) });
+  if (plan.kind === "missing") return;
+  const layer = plan.layer;
+  if (plan.releaseDisabled) {
     // Release large hidden resources immediately, even if a bake is being cancelled.
     if (canvases[i].width !== 1) {
       const empty = document.createElement("canvas"); empty.width = empty.height = 1;
@@ -359,21 +340,18 @@ function render(i = authoring.active) {
     }
     initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
   }
-  if (!assessment.accepted) {
-    maskClient.reset(); qualityActions.fail(assessment.error);
+  if (plan.kind === "unavailable") {
+    maskClient.reset(); qualityActions.fail(plan.reason);
     status(qualityActions.snapshot().error); refreshQuality?.(); sync(); persist(); return;
   }
-  if (qualityActions.snapshot().blocked) {
+  if (plan.kind === "recover") {
     // Capacity/failure recovery rebuilds every potentially stale slot.
     qualityActions.recover(); maskClient.reset();
     renderScheduler.renderAll();
     return;
   }
   qualityActions.recover();
-  const size = layer.enabled ? textureSize : 1;
-  const needsOptics = layer.enabled && !isDirectGlint(layer.flakes) && ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
-    (viewer ? viewer.needsOptics(i, layer, size) : initialOptics[i]?.key !== opticalKey(layer, size));
-  maskClient.request(i, layer, i === authoring.active, size, needsOptics);
+  maskClient.request(i, layer, plan.priority, plan.size, plan.needsOptics);
   viewer?.updateLayer(i, authoring.recipe.layers[i]);
   persist();
   sync();
@@ -405,6 +383,13 @@ function undo() {
   replaceRecipe(next, next.layers.findIndex(l => l.id === current()?.id));
 }
 const gestures = new AuthoringGestures(authoring, recipeActions, undo);
+const controlEdits = new AuthoringControlEdits(authoring, action => dispatchRecipeAction(action), undo);
+const beginControl = (id: string) => { controlEdits.begin(id, current()?.id); };
+const controlAction = (id: string, action: RecipeAction) => controlEdits.edit(id, current()?.id, action);
+function bindEdit(id: string, control: HTMLInputElement) {
+  bindControlEdit(control, { begin: () => beginControl(id),
+    commit: () => controlEdits.commit(id), cancel: () => controlEdits.cancel(id) });
+}
 $("undo").onclick = undo;
 window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "z" && !((e.target as HTMLElement)?.matches("input:not([type=range]), textarea"))) {
@@ -414,15 +399,14 @@ window.addEventListener("keydown", (e) => {
 });
 for (const id of ["weight", "opacity", "color"]) {
   const control = input(id);
-  control.addEventListener("pointerdown", checkpoint);
-  control.addEventListener("keydown", () => checkpoint());
+  bindEdit(id, control);
   control.oninput = () => {
     const l = current();
     if (!l) return;
-    if (id === "color") dispatchRecipeAction({ kind: "layer.setColor", layerId: l.id, color: control.value });
-    else if (id === "weight") dispatchRecipeAction({ kind: "pigment.edit", layerId: l.id,
+    if (id === "color") controlAction(id, { kind: "layer.setColor", layerId: l.id, color: control.value });
+    else if (id === "weight") controlAction(id, { kind: "pigment.edit", layerId: l.id,
       command: { kind: "point-strength", index: authoring.selected, value: +control.value } });
-    else dispatchRecipeAction({ kind: "layer.setOpacity", layerId: l.id, opacity: +control.value });
+    else controlAction(id, { kind: "layer.setOpacity", layerId: l.id, opacity: +control.value });
   };
 }
 input("symmetry").onchange = () => {
@@ -435,11 +419,10 @@ $<HTMLSelectElement>("finish").onchange = () => {
 };
 for (const id of ["cells", "density", "tilt"] as const) {
   const control = input("flake-" + id);
-  control.addEventListener("pointerdown", checkpoint);
-  control.addEventListener("keydown", checkpoint);
+  bindEdit("flake-" + id, control);
   control.oninput = () => {
     const l = current();
-    if (l) dispatchRecipeAction({ kind: "glitter.setClassic", layerId: l.id, key: id, value: +control.value });
+    if (l) controlAction("flake-" + id, { kind: "glitter.setClassic", layerId: l.id, key: id, value: +control.value });
   };
 }
 $<HTMLSelectElement>("glitter-model").onchange = () => {
@@ -448,21 +431,19 @@ $<HTMLSelectElement>("glitter-model").onchange = () => {
 };
 for (const id of ["count","radius","spread","tilt","color"] as const) {
   const control=input("irregular-"+id);
-  control.addEventListener("pointerdown",checkpoint);
-  control.addEventListener("keydown",checkpoint);
+  bindEdit("irregular-"+id, control);
   control.oninput=()=>{
     const l=current(); if(!l || !isIrregular(l.flakes))return;
-    dispatchRecipeAction({ kind: "glitter.setIrregular", layerId: l.id, key: id,
+    controlAction("irregular-"+id, { kind: "glitter.setIrregular", layerId: l.id, key: id,
       value: id === "color" ? control.value : id === "count" ? +control.value*5000 : +control.value });
   };
 }
 for(const id of ["density","fineShare","strength","color"] as const){
   const control=input("direct-"+id);
-  control.addEventListener("pointerdown",checkpoint);
-  control.addEventListener("keydown",checkpoint);
+  bindEdit("direct-"+id, control);
   control.oninput=()=>{
     const l=current();if(!l)return;
-    dispatchRecipeAction({ kind: "glitter.setDirect", layerId: l.id, key: id,
+    controlAction("direct-"+id, { kind: "glitter.setDirect", layerId: l.id, key: id,
       value: id === "color" ? control.value : +control.value });
   };
 }
@@ -474,23 +455,29 @@ refreshPath = setupPathControls({
   aligned: $("point-aligned"), symmetric: $("point-symmetric"), corner: $("point-corner"),
 }, { layer: current, selected: () => authoring.selected, edit: changePath });
 function changePigment(command: PigmentCommand) {
-  const layer = current(); if (layer) dispatchRecipeAction({ kind: "pigment.edit", layerId: layer.id, command });
+  const layer = current(); if (layer) controlAction(command.kind === "smooth-strength" ? "smooth-strength" : "strength-blend",
+    { kind: "pigment.edit", layerId: layer.id, command });
 }
 refreshPigment = setupPigment({
   smooth: input("smooth-strength"), blend: input("strength-blend"),
   value: $("strength-blend-value"), note: $("strength-note"),
-}, { layer: current, begin: checkpoint, edit: changePigment });
+}, { layer: current, begin: beginControl, commit: id => controlEdits.commit(id),
+  cancel: id => controlEdits.cancel(id), edit: changePigment });
 function changeSoftness(command: SoftnessCommand) {
-  const layer = current(); if (layer) dispatchRecipeAction({ kind: "softness.edit", layerId: layer.id, command });
+  const layer = current(); if (layer) controlAction(command.kind === "variable-softness" ? "variable-softness" : "feather",
+    { kind: "softness.edit", layerId: layer.id, command });
 }
 refreshSoftness = setupSoftness({
   variable: input("variable-softness"), width: input("feather"), label: $("feather-label"),
   value: $("feather-value"), note: $("softness-note"),
-}, { layer: current, selected: () => authoring.selected, begin: checkpoint, edit: changeSoftness });
+}, { layer: current, selected: () => authoring.selected, begin: beginControl,
+  commit: id => controlEdits.commit(id), cancel: id => controlEdits.cancel(id), edit: changeSoftness });
 refreshFields = setupFields({
   list: $("field-list"), add: $("field-add"), remove: $("field-remove"), clear: $("clear-field"),
   reach: input("radius"), value: $("radius-value"), note: $("field-note"),
-}, { layer: current, selected: currentField, select: selectField, begin: checkpoint, edit: dispatchRecipeAction });
+}, { layer: current, selected: currentField, select: selectField, begin: beginControl,
+  commit: id => controlEdits.commit(id), cancel: id => controlEdits.cancel(id),
+  edit: (action, record) => action.kind === "field.setReach" ? controlAction("radius", action) : dispatchRecipeAction(action, record) });
 $("reset").onclick = () => { if (current()) changeLayers({ kind: "reset", id: current().id }); };
 $("remove").onclick = () => {
   const l = current(); if (l) dispatchRecipeAction({ kind: "point.remove", layerId: l.id, index: authoring.selected }, true);
@@ -830,7 +817,7 @@ try {
   layersPanel.scrollTop = workspace.panels.layersScroll;
   panel.scrollTop = workspace.panels.propertiesScroll;
   window.scrollTo(workspace.panels.pageX, workspace.panels.pageY);
-  previewRestored = true;
+  workspaceComposer.setPreviewReady();
   flushWorkspace();
   // Shift gestures belong to the surface editor's whole-shape rotation/scaling.
   // Read-only diagnostics for offline browser verification and future capture manifests.

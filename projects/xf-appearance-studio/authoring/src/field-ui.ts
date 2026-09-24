@@ -1,5 +1,6 @@
 import { MAX_FIELDS, type Layer, type WarpField } from "./recipe";
 import type { RecipeAction } from "./recipe-actions";
+import { bindControlEdit } from "./control-edit-ui";
 
 /** Presentation adapter: recipe edits use the application's existing transaction hooks. */
 export function setupFields(elements: {
@@ -7,7 +8,8 @@ export function setupFields(elements: {
   reach: HTMLInputElement; value: HTMLElement; note: HTMLElement;
 }, hooks: {
   layer(): Layer | undefined; selected(): WarpField | undefined;
-  select(id: string): void; begin(): void; edit(action: RecipeAction, record?: boolean): void;
+  select(id: string): void; begin(id: string): void; commit(id: string): void; cancel(id: string): void;
+  edit(action: RecipeAction, record?: boolean): void;
 }) {
   elements.add.onclick = () => {
     const l = hooks.layer(); if (!l || l.fields.length >= MAX_FIELDS) return;
@@ -21,8 +23,8 @@ export function setupFields(elements: {
     const l = hooks.layer(), f = hooks.selected(); if (!l || !f || (!f.du && !f.dv)) return;
     hooks.edit({ kind: "field.clear", layerId: l.id, fieldId: f.id }, true);
   };
-  elements.reach.addEventListener("pointerdown", () => { if (hooks.selected()) hooks.begin(); });
-  elements.reach.addEventListener("keydown", () => { if (hooks.selected()) hooks.begin(); });
+  bindControlEdit(elements.reach, { begin: () => { if (hooks.selected()) hooks.begin("radius"); },
+    commit: () => hooks.commit("radius"), cancel: () => hooks.cancel("radius") });
   elements.reach.oninput = () => {
     const l = hooks.layer(), f = hooks.selected(); if (!l || !f) return;
     hooks.edit({ kind: "field.setReach", layerId: l.id, fieldId: f.id, radius: +elements.reach.value });

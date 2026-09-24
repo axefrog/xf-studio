@@ -1,20 +1,21 @@
 import type { Layer } from "./recipe";
 import type { SoftnessCommand } from "./softness-edit";
+import { bindControlEdit } from "./control-edit-ui";
 
 /** Presentation only; the application owns history, persistence and rendering. */
 export function setupSoftness(elements: {
   variable: HTMLInputElement; width: HTMLInputElement; label: HTMLElement;
   value: HTMLElement; note: HTMLElement;
-}, hooks: { layer(): Layer | undefined; selected(): number; begin(): void; edit(command: SoftnessCommand): void }) {
+}, hooks: { layer(): Layer | undefined; selected(): number; begin(id: string): void;
+  commit(id: string): void; cancel(id: string): void; edit(command: SoftnessCommand): void }) {
   elements.width.min = ".0005"; elements.width.max = ".06"; elements.width.step = ".0005";
   elements.variable.onchange = () => {
     if (!hooks.layer()) return;
-    hooks.begin(); hooks.edit({ kind: "variable-softness", enabled: elements.variable.checked });
+    hooks.begin("variable-softness"); hooks.edit({ kind: "variable-softness", enabled: elements.variable.checked });
+    hooks.commit("variable-softness");
   };
-  elements.width.addEventListener("pointerdown", () => { if (!elements.width.disabled) hooks.begin(); });
-  elements.width.addEventListener("keydown", event => {
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) hooks.begin();
-  });
+  bindControlEdit(elements.width, { begin: () => hooks.begin("feather"),
+    commit: () => hooks.commit("feather"), cancel: () => hooks.cancel("feather") });
   elements.width.oninput = () => {
     const layer = hooks.layer(); if (!layer) return;
     hooks.edit(layer.softness.mode === "boundary"
