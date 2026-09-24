@@ -1,6 +1,6 @@
 # XF Studio
 
-The [desktop architecture checkpoint](../../research/authoring/desktop-packaging.md) defines guided first-run configuration, separate per-user data, configurable game/MO2/tool paths, a reversible install transaction and a consented update gate while retaining the independent localhost app. Its proposed Windows AppData installation and data-preserving uninstall require a packaged trial; no desktop shell, installer or updater is shipped yet.
+The [desktop architecture checkpoint](../../research/authoring/desktop-packaging.md) defines guided first-run configuration, separate per-user data, configurable game/MO2/tool paths, a reversible install transaction and a consented update gate while retaining the independent localhost app. Local settings and a [read-only source discovery foundation](../../research/authoring/source-discovery-foundation.md) are implemented. Its proposed Windows AppData installation and data-preserving uninstall require a packaged trial; no desktop shell, installer, updater or general asset resolver is shipped yet.
 
 New features follow the [XF Studio architecture contract](../../research/authoring/architecture-contract.md): validated application actions and detached state, browser/renderer device ports, and replaceable presentation. The independent [presentation-port acceptance](../../research/authoring/ui-port-acceptance-2026-09-24.md) is the current boundary baseline.
 
