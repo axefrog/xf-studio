@@ -23,7 +23,7 @@ const isKnotHandle = (h: Handle) => h.kind === "point" || h.kind === "tangent";
 export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   both: HTMLButtonElement; single: HTMLButtonElement; other: HTMLButtonElement;
   fit: HTMLButtonElement; note: HTMLElement;
-}, hooks: Hooks, initial: UVView) {
+} | undefined, hooks: Hooks, initial: UVView) {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
   const listeners = new AbortController();
   let view = parseUVView(initial);
@@ -83,9 +83,9 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     ctx.setTransform(resolution.scaleX, 0, 0, resolution.scaleY, 0, 0);
     ctx.globalAlpha = 1;
     const width = b.width, height = b.height;
-    elements.both.setAttribute("aria-pressed", String(view.mode === "both"));
-    elements.single.setAttribute("aria-pressed", String(view.mode === "single"));
-    elements.other.disabled = view.mode !== "single";
+    elements?.both.setAttribute("aria-pressed", String(view.mode === "both"));
+    elements?.single.setAttribute("aria-pressed", String(view.mode === "single"));
+    if (elements) elements.other.disabled = view.mode !== "single";
     const r = uvRegion(view, width / height), unit = 1;
     const pixel = (p: UV) => uvToPixel(p, r, width, height);
     ctx.fillStyle = "#253132"; ctx.fillRect(0, 0, width, height);
@@ -113,7 +113,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     ctx.setLineDash([3 * unit, 4 * unit]); ctx.strokeStyle = "#c4ddca55";
     ctx.beginPath(); ctx.moveTo(centre.x, 0); ctx.lineTo(centre.x, height); ctx.stroke(); ctx.setLineDash([]);
     const l = hooks.layer();
-    if (!l) { elements.note.textContent = "Add a layer to edit its shape."; return; }
+    if (!l) { if (elements) elements.note.textContent = "Add a layer to edit its shape."; return; }
     for (const mirror of l.symmetry ? [false, true] : [false]) {
       const path = curve(l.points);
       ctx.strokeStyle = "#f1dbee"; ctx.lineWidth = 1.25 * unit; ctx.beginPath();
@@ -152,7 +152,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       if (h.kind !== "origin") ctx.fill();
       ctx.stroke();
     }
-    elements.note.textContent = selectedVisible
+    if (elements) elements.note.textContent = selectedVisible
       ? l.pathMode === "bezier" ? "Gold diamonds shape the curve · dotted handles extend a collapsed tangent." : "View only · Fit shape recentres the controls."
       : "Selected point outside this view · use Fit shape or Other eye.";
   }
@@ -195,10 +195,12 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       fitUVView(view, hooks.layer());
     updateView(next); return true;
   }
-  elements.both.onclick = () => { viewCommand("both"); };
-  elements.single.onclick = () => { viewCommand("single"); };
-  elements.other.onclick = () => { viewCommand("other"); };
-  elements.fit.onclick = () => { viewCommand("fit"); };
+  if (elements) {
+    elements.both.onclick = () => { viewCommand("both"); };
+    elements.single.onclick = () => { viewCommand("single"); };
+    elements.other.onclick = () => { viewCommand("other"); };
+    elements.fit.onclick = () => { viewCommand("fit"); };
+  }
   function pickHandle(p: UV): Handle | undefined {
     const b = bounds(), r = region();
     let closest: Handle | undefined, best = 11;
@@ -382,7 +384,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     resize.disconnect?.(); dprQuery?.removeEventListener("change", changedDPR);
     canvas.onpointerdown = canvas.onpointermove = canvas.onpointerup = canvas.onpointercancel = null;
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
-    elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
+    if (elements) elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
   return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand,
     inputCapture: () => !!drag || !!wheel,

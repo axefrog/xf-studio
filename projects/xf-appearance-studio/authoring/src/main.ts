@@ -8,8 +8,7 @@ import { WorkspaceComposer } from "./workspace-composer";
 import { layerList } from "./layer-ui";
 import { setupSidebars } from "./sidebar-ui";
 import { setupContextMenus } from "./context-menu";
-import { createScene } from "./scene";
-import { createSurfaceEditor } from "./surface-editor";
+import type { createScene } from "./scene";
 import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { type StudioAction } from "./studio-application";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
@@ -28,8 +27,8 @@ import type { PreviewQualityActions } from "./preview-quality-actions";
 import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
-import { createUVEditor } from "./uv-editor";
-import { ViewportAdapter } from "./viewport-adapter";
+import type { createUVEditor } from "./uv-editor";
+import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { ViewportAttachment } from "./viewport-attachment";
 import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
@@ -112,7 +111,6 @@ function selectField(id: string) {
 }
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
-const viewport = new ViewportAdapter();
 let viewportAttachment: ViewportAttachment<HTMLElement> | undefined;
 const sidebars = setupSidebars(workspace.panels, () => { persist(); viewportAttachment?.resize(); });
 const layout = (): WorkspaceState["panels"] => ({ ...sidebars.snapshot(),
@@ -150,37 +148,18 @@ $<HTMLDetailsElement>("quality-panel").open = workspace.panels.previewQuality;
 panel.addEventListener("scroll", persist);
 layersPanel.addEventListener("scroll", persist);
 let uvEditor: ReturnType<typeof createUVEditor> | undefined;
-let surfaceEditor: ReturnType<typeof createSurfaceEditor> | undefined;
 const headHost = $("viewport"), uvHost = $("uv");
-viewportAttachment = new ViewportAttachment<HTMLElement>({
-  moveHost: (kind, slot) => {
-    const host = kind === "head" ? headHost : uvHost;
-    if (slot === host || host.contains(slot)) throw Error("A viewport cannot be hosted inside itself.");
-    slot.append(host);
-  },
-  measure: kind => {
-    const host = kind === "head" ? headHost : uvHost;
-    return { width: host.clientWidth, height: host.clientHeight };
-  },
-  resize: kind => {
-    if (kind === "head") { viewer?.resize(); viewport.resize("surface"); }
-    else viewport.resize("uv");
-  },
-  cancelInput: kind => viewport.cancelInput(kind === "head" ? "surface" : "uv"),
-  inputCapture: kind => viewport.capture()[kind === "head" ? "surface" : "uv"],
-  headView: () => viewer?.cameraState(),
-  uvView: () => uvEditor?.snapshot(),
-  uvCommand: command => uvEditor?.viewCommand(command) ?? false,
-  hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
-  queryContext: hit => app.contextQuery(hit),
+const viewportDevice = createBrowserViewportDevice({
+  headHost, uvHost, queryContext: hit => app.contextQuery(hit),
 });
+viewportAttachment = viewportDevice.attachment;
 if (verification) Object.assign(window, { eyeArtistryViewportAttachment: viewportAttachment });
 let refreshFields: (() => void) | undefined;
 let refreshPigment: (() => void) | undefined;
 let refreshSoftness: (() => void) | undefined;
 let refreshQuality: (() => void) | undefined;
 let refreshPath: (() => void) | undefined;
-function drawUV() { uvEditor?.draw(); }
+function drawUV() { viewportDevice.drawUV(); }
 const paintLayerList = layerList($("layers"), {
   select(i) { const layer = presentation.recipe().layers[i]; if (layer)
     dispatchRecipeAction({ kind: "layer.select", layerId: layer.id }); },
@@ -474,7 +453,7 @@ $("reset").onclick = () => { const layer = current(); if (layer) changeLayers({ 
 $("remove").onclick = () => {
   const l = current(); if (l) dispatchStudio({ kind: "point.remove", layerId: l.id, index: presentation.selected });
 };
-uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
+uvEditor = viewportDevice.mountUV($<HTMLCanvasElement>("uv"), {
   both: $("uv-both"), single: $("uv-single"), other: $("uv-other"), fit: $("uv-fit"), note: $("uv-view-note"),
 }, {
   recipe: () => geometry.recipe(), layer: () => geometry.layer(), selected: () => presentation.selected,
@@ -485,8 +464,6 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   apply: action => { const accepted = app.applyGesture("uv", action); if (accepted) geometry.recipe(); return accepted; },
   cancel: () => app.endGesture("uv", true), finish: () => app.endGesture("uv"), persist, message: status,
 }, workspace.uvView);
-viewport.attach("uv", uvEditor);
-viewportAttachment.setReady("uv");
 const studioBootstrap = createTrustedStudioBootstrap({
   workspace, core, preferences: uiPreferences, viewport: viewportAttachment,
   transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
@@ -656,7 +633,7 @@ sync();
 workspacePersistence.activate();
 try {
   // Discover hardware limits before attaching any full-size generated texture.
-  viewer = await createScene($("viewport"), emptyPreviewCanvases());
+  viewer = await viewportDevice.loadHead(emptyPreviewCanvases());
   savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
   app.attach({ savedV: savedAppearance });
   savedAppearance.subscribe(persist);
@@ -683,7 +660,7 @@ try {
   viewer.setExposure(preview.exposure);
   viewer.setLightAngle(preview.lightAngle);
   $<HTMLDetailsElement>("lighting-panel").open = workspace.panels.lighting;
-  const surface = createSurfaceEditor(viewer, {
+  const surface = viewportDevice.mountSurface({
     layer: () => geometry.layer(),
     selected: () => presentation.selected,
     selectedField: () => currentField()?.id, selectField,
@@ -694,8 +671,6 @@ try {
     finish: () => app.endGesture("surface"),
     message: status,
   });
-  surfaceEditor = surface;
-  viewport.attach("surface", surface);
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
     previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
@@ -798,7 +773,7 @@ try {
       ready: true,
       workspace: snapshot(),
       surface: surface.diagnostics(),
-      inputCapture: viewport.capture(),
+      inputCapture: viewportDevice.capture(),
       uv: uvEditor!.diagnostics(),
       recipe: structuredClone(presentation.recipe()),
       assets: viewer!.evidence,
@@ -857,9 +832,9 @@ try {
     }),
   });
   status("Ready · actual head & expanded plate · all skin weights retained");
-  viewportAttachment.setReady("head");
+  viewportDevice.headReady();
 } catch (error) {
-  viewportAttachment.setError("head", (error as Error).message);
+  viewportDevice.failHead((error as Error).message);
   $("loading").textContent = `Preview unavailable: ${(error as Error).message}`;
   status("Asset or renderer error — see the preview message.");
   console.error(error);
