@@ -20,11 +20,12 @@ export type StudioFileOutcome = { ok: true; code: string; message: string;
   result?: CollectionResult;
   savedAppearance?: Readonly<SavedAppearanceState> } |
   { ok: false; code: string; message: string };
+type PackageResult = { kind: "packageCheck"; result: PackageCheck } | { kind: "packageBuild"; result: PackageBuild };
 export type StudioFileState = { busy?: StudioFileAction["kind"];
   collectionBusy: boolean;
   last?: { kind: StudioFileAction["kind"] | CollectionRequest["kind"];
     ok: boolean; code: string; message: string };
-  package?: { kind: "packageCheck"; result: PackageCheck } | { kind: "packageBuild"; result: PackageBuild };
+  package?: PackageResult & { freshness: "current" | "stale" };
   progress?: CollectionProgress;
   recovery: { available: boolean; reason?: string } };
 type FileSources = {
@@ -45,7 +46,7 @@ export class StudioFileOperations {
   private collectionUnsubscribe?: () => void;
   private busy?: StudioFileAction["kind"];
   private last?: StudioFileState["last"];
-  private package?: StudioFileState["package"];
+  private package?: PackageResult;
   private listeners = new Set<() => void>();
   constructor(private port: StudioFilePort, private sources: FileSources) {}
   attachCollection(collection: CollectionService) {
@@ -59,7 +60,8 @@ export class StudioFileOperations {
     const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
       { available: false, reason: "Collection is still loading." };
     return structuredClone({ busy: this.busy, collectionBusy: collection?.busy ?? false,
-      last: this.last, package: this.package,
+      last: this.last, package: this.package && { ...this.package,
+        freshness: this.collection?.lastPackageIsCurrent() ? "current" : "stale" },
       progress, recovery });
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string } {

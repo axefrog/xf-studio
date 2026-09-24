@@ -41,6 +41,8 @@ export class CollectionService {
   private actions?: CollectionActions;
   private busy = false;
   private progress?: CollectionProgress;
+  /** Exact authored input of the last successful package request, before transport filtering. */
+  private packageSource?: string;
   private summaries: CollectionSummary[] = [];
   private listeners = new Set<() => void>();
   constructor(restored: CollectionWorkspace | undefined, private legacy: LibraryState,
@@ -55,6 +57,12 @@ export class CollectionService {
       draft: this.actions?.view() });
   }
   snapshot() { return this.actions?.snapshot(); }
+  /** A package response describes its request snapshot, not necessarily the live draft. */
+  lastPackageIsCurrent(): boolean {
+    if (!this.packageSource || !this.actions) return false;
+    try { return this.packageSource === JSON.stringify(parseCollection(this.actions.snapshot().collection)); }
+    catch { return false; }
+  }
   capability(request: CollectionRequest): { available: boolean; reason?: string } {
     if (this.busy) return { available: false, reason: "Another collection request is in progress." };
     if (request.kind === "initialize") return { available: true };
@@ -142,7 +150,9 @@ export class CollectionService {
         case "package": {
           // Snapshot the unsaved editor state once; this request never writes SQLite or changes revision.
           const snapshot = parseCollection(this.actions!.snapshot().collection);
+          const source = JSON.stringify(snapshot);
           const response = await this.transport.package(request.action, snapshot);
+          this.packageSource = source;
           if (request.action === "check") {
             const checked = response as PackageCheck;
             result = { kind: "packageCheck", result: checked };

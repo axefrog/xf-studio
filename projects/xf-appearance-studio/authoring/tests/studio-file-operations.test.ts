@@ -90,10 +90,30 @@ test("package check exposes progress, partial result and unsaved snapshot withou
   const state = f.files.snapshot();
   expect(state.progress).toMatchObject({ phase: "success", code: "packageCheck" });
   expect(state.package).toMatchObject({ kind: "packageCheck", result: { originalPresetCount: 2,
-    omissions: [{ kind: "layer", finish: "glitter" }] } });
+    omissions: [{ kind: "layer", finish: "glitter" }] }, freshness: "current" });
   expect(state.last?.kind).toBe("package.check");
   (state.package as any).result.omissions[0].layerName = "outside";
   expect((f.files.snapshot().package as any).result.omissions[0].layerName).toBe("Sparkle");
+});
+
+test("package freshness follows exact authored content across edits, refresh and draft switches", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  await f.files.executeCollection({ kind: "package", action: "check" });
+  expect(f.files.snapshot().package?.freshness).toBe("current");
+  await f.service.execute({ kind: "refresh" });
+  expect(f.files.snapshot().package?.freshness).toBe("current");
+
+  const original = f.editor().recipe.layers[0].color;
+  f.editor().recipe.layers[0].color = "#123456";
+  expect(f.files.snapshot().package?.freshness).toBe("stale");
+  f.editor().recipe.layers[0].color = original;
+  expect(f.files.snapshot().package?.freshness).toBe("current");
+
+  const other = structuredClone(f.collection); other.id = crypto.randomUUID(); other.name = "Other";
+  f.service.dispatch({ kind: "collection.open", collection: other, revision: 1 });
+  expect(f.files.snapshot().package?.freshness).toBe("stale");
+  f.service.dispatch({ kind: "collection.undoOpen" });
+  expect(f.files.snapshot().package?.freshness).toBe("current");
 });
 
 test("package state subscription exposes working then completed without retaining export JSON", async () => {
@@ -108,9 +128,12 @@ test("package state subscription exposes working then completed without retainin
   f.files.subscribe(() => seen.push(`${f.files.snapshot().collectionBusy}:${f.files.snapshot().progress?.phase}`));
   const pending = f.files.executeCollection({ kind: "package", action: "check" });
   expect(f.files.snapshot()).toMatchObject({ collectionBusy: true, progress: { phase: "working" } });
+  f.editor().recipe.layers[0].color = "#123456";
   release(); await pending;
   expect(f.files.snapshot()).toMatchObject({ collectionBusy: false, progress: { phase: "success" },
-    last: { kind: "package.check", ok: true, code: "packageCheck" } });
+    last: { kind: "package.check", ok: true, code: "packageCheck" },
+    package: { freshness: "stale" } });
+  expect(f.packageInput()?.presets[0].recipe.layers[0].color).not.toBe("#123456");
   expect(seen).toContain("true:working");
 });
 

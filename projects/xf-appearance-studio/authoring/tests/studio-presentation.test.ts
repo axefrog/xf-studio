@@ -124,7 +124,11 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(downloads).toContain("xfs.recipe.json");
   expect((await shell.files.execute({ kind: "package.check" })).ok).toBe(true);
   expect(shell.files.snapshot().package?.kind).toBe("packageCheck");
+  expect(shell.snapshot().files.package?.freshness).toBe("current");
   expect(packageInput()?.id).toBe(shell.library.view().draft?.collection.id);
+  expect(shell.authoring.dispatch({ kind: "layer.setOpacity", layerId: firstLayer.id,
+    opacity: .42 }).ok).toBe(true);
+  expect(shell.snapshot().files.package?.freshness).toBe("stale");
   expect(shell.preferences.capability({ kind: "theme.set", theme: "dark" }).available).toBe(true);
   shell.preferences.dispatch({ kind: "theme.set", theme: "dark" });
   expect(shell.snapshot().preferences.theme).toBe("dark");
