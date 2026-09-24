@@ -6,7 +6,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { inspectLocalPackageCandidate } from "./mod-install-transport";
 import type { RuntimeDiagnosticOptions, RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
 
-const metadata = ["modlist.txt", "settings.ini", "archives.txt", "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
+const metadata = ["modlist.txt", "plugins.txt", "loadorder.txt", "settings.ini", "archives.txt",
+  "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
 type Entry = { path: string; sha256: string; bytes: number };
 export type PromotionOptions = RuntimeDiagnosticOptions & { newProfileId: string };
 export type PromotionPreview = { schema: "xfs/runtime-promotion-preview-1"; sourceProfile: string;

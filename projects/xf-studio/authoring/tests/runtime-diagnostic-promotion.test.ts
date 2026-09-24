@@ -23,6 +23,8 @@ function fixture() {
   mkdirSync(sourceProfile, { recursive: true });
   const sourceList = "+Other Mod\r\n+XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n";
   writeFileSync(join(sourceProfile, "modlist.txt"), sourceList);
+  writeFileSync(join(sourceProfile, "plugins.txt"), "*fixture.esm\n");
+  writeFileSync(join(sourceProfile, "loadorder.txt"), "fixture.esm\n");
   writeFileSync(join(sourceProfile, "settings.ini"), "private fixture settings\n");
   writeFileSync(join(mo2Root, "ModOrganizer.ini"), "selected_profile=old\n");
   mkdirSync(payload, { recursive: true });
@@ -46,8 +48,10 @@ test("default preview is read-only and spells out every exact promoted file", ()
   const f = fixture();
   try {
     const plan = planRuntimePromotion(f.options);
-    expect(plan.files).toHaveLength(4);
+    expect(plan.files).toHaveLength(6);
     expect(plan.files.map(item => item.target)).toContain(join(plan.newProfile, "modlist.txt"));
+    expect(plan.files.map(item => item.target)).toContain(join(plan.newProfile, "plugins.txt"));
+    expect(plan.files.map(item => item.target)).toContain(join(plan.newProfile, "loadorder.txt"));
     expect(plan.files.map(item => item.target)).toContain(join(plan.dedicatedMod, "archive", "pc", "mod", "xfs_fixture.archive.xl"));
     expect(existsSync(plan.newProfile)).toBe(false);
     expect(existsSync(plan.dedicatedMod)).toBe(false);
@@ -62,6 +66,8 @@ test("explicit promotion creates only new owned paths and rollback removes only 
     expect(readFileSync(join(preview.newProfile, "modlist.txt"), "utf8"))
       .toBe("+Other Mod\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n+XF Studio\r\n");
     expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
+    expect(readFileSync(join(preview.newProfile, "plugins.txt"), "utf8")).toBe("*fixture.esm\n");
+    expect(readFileSync(join(preview.newProfile, "loadorder.txt"), "utf8")).toBe("fixture.esm\n");
     expect(readFileSync(join(f.options.mo2Root, "ModOrganizer.ini"), "utf8"))
       .toBe("selected_profile=old\n");
     expect(readFileSync(join(f.options.mo2Root, "mods", "Other Mod", "keep.txt"), "utf8"))

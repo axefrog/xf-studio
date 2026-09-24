@@ -146,7 +146,8 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   const stagedProfile = join(stagedMo2, "profiles", options.profileId);
   mkdirSync(stagedProfile, { recursive: true });
   mkdirSync(join(stagedMo2, "mods"), { recursive: true });
-  const metadataNames = ["modlist.txt", "settings.ini", "archives.txt", "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
+  const metadataNames = ["modlist.txt", "plugins.txt", "loadorder.txt", "settings.ini", "archives.txt",
+    "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
   for (const name of metadataNames) {
     const source = join(paths.profile, name);
     if (existsSync(source)) { regular(source); copyFileSync(source, join(stagedProfile, name)); }

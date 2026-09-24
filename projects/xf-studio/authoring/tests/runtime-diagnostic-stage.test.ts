@@ -20,6 +20,8 @@ function fixture() {
   mkdirSync(profile, { recursive: true });
   const original = "+Other Mod\r\n+ArchiveXL\r\n+XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n";
   writeFileSync(join(profile, "modlist.txt"), original);
+  writeFileSync(join(profile, "plugins.txt"), "*fixture.esm\n");
+  writeFileSync(join(profile, "loadorder.txt"), "fixture.esm\n");
   writeFileSync(join(profile, "settings.ini"), "selected=true\n");
   mkdirSync(join(mo2Root, "mods", "ArchiveXL"));
   writeFileSync(join(mo2Root, "mods", "ArchiveXL", "meta.ini"), "version=1.26.3.0\n");
@@ -62,6 +64,8 @@ test("explicit staging copies profile metadata and uses the trusted transport on
     expect(stagedList).toContain("-XF Eye Artistry CCXL - Dev\r\n");
     expect(stagedList).toContain("+XF Studio\r\n");
     expect(readFileSync(join(result.stagedProfile, "settings.ini"), "utf8")).toBe("selected=true\n");
+    expect(readFileSync(join(result.stagedProfile, "plugins.txt"), "utf8")).toBe("*fixture.esm\n");
+    expect(readFileSync(join(result.stagedProfile, "loadorder.txt"), "utf8")).toBe("fixture.esm\n");
     expect(readFileSync(join(f.options.mo2Root, "profiles", f.options.profileId, "modlist.txt"), "utf8"))
       .toBe(f.original);
     for (const entry of f.files) {
