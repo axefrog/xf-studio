@@ -127,7 +127,8 @@ export function createStudioPresentation<Slot>(sources: {
     revision: () => -1, canUndo: () => a.capability({ kind: "recipe.undo" }).available,
   };
   const library: CollectionViewPort = {
-    view: () => l.view(), summary: () => l.summary(), subscribe: listener => l.subscribe(listener),
+    view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
+    subscribe: listener => l.subscribe(listener),
     capability: action => l.capability(action), dispatch: action => l.dispatch(action),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),

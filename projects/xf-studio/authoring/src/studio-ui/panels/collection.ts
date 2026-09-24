@@ -26,6 +26,16 @@ export function libraryState(frame: Frame) {
     detail: "This collection has never been saved to the local library. Your draft autosaves in this browser." };
   if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: `Newer r${stored.revision} saved`,
     detail: `Your draft is based on revision ${draft.revision}; the library has revision ${stored.revision} from elsewhere. Saving will report a conflict — save a copy or reopen it.` };
+  const persistence = frame.persistence;
+  if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: `Saved r${draft.revision}`,
+    detail: `The draft matches library revision ${draft.revision}.` };
+  if (persistence?.baseline === "known") {
+    const presets = persistence.dirtyPresets.length;
+    const what = [persistence.structureDirty ? "the collection name or preset order" : "",
+      presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
+    return { tone: "info" as const, label: `Unsaved · based on r${draft.revision}`,
+      detail: `Changed since library revision ${draft.revision}: ${what}. Edits are autosaved in this browser; Save to library records a new immutable revision.` };
+  }
   return { tone: "neutral" as const, label: `Based on r${draft.revision}`,
     detail: `Draft based on library revision ${draft.revision}. Edits since then are autosaved in this browser; Save to library records a new immutable revision.` };
 }

@@ -1,7 +1,8 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { CollectionAction } from "./collection-actions";
 import { CollectionService, type CollectionOutcome, type CollectionRequest,
-  type CollectionServiceState, type CollectionServiceSummary, type CollectionTransport } from "./collection-service";
+  type CollectionServiceState, type CollectionServiceSummary, type CollectionTransport,
+  type DraftPersistence } from "./collection-service";
 import type { CollectionWorkspace } from "./collection-workspace";
 import type { ReadonlyDeep } from "./read-only";
 import type { Recipe } from "./recipe";
@@ -14,6 +15,8 @@ export type CollectionViewPort = {
   view(): ReadonlyDeep<CollectionServiceState>;
   /** Primitive-only projection for repainting lists; the selected preset uses its live layer count. */
   summary(): ReadonlyDeep<CollectionServiceSummary>;
+  /** Draft versus library revision: saved revision, dirty presets and structure (undefined while loading). */
+  persistence(): DraftPersistence | undefined;
   subscribe(listener: () => void): () => void;
   capability(action: ViewAction): ReturnType<StudioApplication["capability"]>;
   dispatch(action: ViewAction): ReturnType<StudioApplication["dispatch"]>;
@@ -34,7 +37,7 @@ export class CollectionApplication implements CollectionViewPort {
       () => document.export(), editor => {
         document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
         onEditorRestored();
-      }, transport);
+      }, transport, () => ({ recipe: document.recipe, revision: document.geometryVersion.revision }));
     app.attach({ collection: this.service });
     files.attachCollection(this.service);
   }
@@ -47,6 +50,7 @@ export class CollectionApplication implements CollectionViewPort {
   }
   subscribe(listener: () => void) { return this.files.subscribe(listener); }
   workspaceSnapshot() { return this.service.snapshot(); }
+  persistence() { return this.service.persistence(); }
   currentLayerCount() { return this.document.recipe.layers.length; }
   capability(action: ViewAction) { return this.app.capability(action); }
   dispatch(action: ViewAction) { return this.app.dispatch(action); }

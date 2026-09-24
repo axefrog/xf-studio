@@ -25,6 +25,7 @@ export class Frame {
   get revision() { return this.once("revision", () => this.port.editor.revision()); }
   get canUndo() { return this.once("canUndo", () => this.port.editor.canUndo()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
+  get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
   get preview() { return this.once("preview", () => this.port.authoring.previewState()); }
   get readiness() { return this.once("readiness", () => this.port.previewReadiness.snapshot()); }

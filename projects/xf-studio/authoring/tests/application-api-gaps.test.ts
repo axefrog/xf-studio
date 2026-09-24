@@ -181,3 +181,53 @@ test("save progress and list refreshes keep an open collection menu bound; conte
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "rename", id: presetId, name: "Renamed" } }).ok).toBe(true);
   expect(app.boundActionCapability(query.context, copy)).toMatchObject({ available: false, code: "missing_target" });
 });
+
+test("draft persistence compares the live draft with the library revision it was saved or opened from", async () => {
+  const library = new Map<string, { collection: import("../src/preset-collection").PresetCollection; revision: number }>();
+  const transport: CollectionTransport = {
+    list: async () => [...library.values()].map(item => ({ id: item.collection.id, name: item.collection.name, revision: item.revision,
+      presetCount: item.collection.presets.length, updated: "now" })) as never,
+    get: async id => structuredClone(library.get(id)!) as never,
+    save: async (collection, revision) => {
+      const stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 };
+      library.set(collection.id, stored); return structuredClone(stored) as never; },
+    package: async () => { throw Error("not used"); } };
+  const { app, document, presetId, service } = withCollection(transport);
+  expect(service.persistence()).toMatchObject({ baseline: "none", dirty: true, dirtyPresets: [presetId], structureDirty: true });
+  expect(await app.execute({ kind: "save" })).toMatchObject({ ok: true });
+  expect(service.persistence()).toMatchObject({ baseline: "known", savedRevision: 1, dirty: false, dirtyPresets: [], structureDirty: false });
+  const layerId = document.recipe.layers[0].id, u = document.recipe.layers[0].points[0].u;
+  app.beginGesture("uv", layerId);
+  app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: u + .004 } });
+  app.endGesture("uv");
+  expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [presetId], structureDirty: false });
+  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(service.persistence()).toMatchObject({ dirty: false });
+  expect(app.dispatch({ kind: "collection.rename", name: "Other" }).ok).toBe(true);
+  expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [], structureDirty: true });
+  expect(app.dispatch({ kind: "collection.rename", name: "Draft" }).ok).toBe(true);
+  expect(service.persistence()?.dirty).toBe(false);
+
+  // After a reload the restored draft knows only its revision until initialize loads that revision once.
+  const restored = coreFixture();
+  const reloaded = new CollectionService(service.snapshot(), restored.workspace.library, () => restored.document.export(),
+    editor => restored.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
+    () => ({ recipe: restored.document.recipe, revision: restored.document.geometryVersion.revision }));
+  expect(reloaded.persistence()).toMatchObject({ baseline: "unknown", savedRevision: 1 });
+  expect(reloaded.persistence()?.dirty).toBeUndefined();
+  expect(await reloaded.execute({ kind: "initialize" })).toMatchObject({ ok: true });
+  expect(reloaded.persistence()).toMatchObject({ baseline: "known" });
+});
+
+test("an empty saved collection initializes with a known baseline", async () => {
+  const empty = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Makeup collection", presets: [] };
+  const fixture = coreFixture();
+  const service = new CollectionService(undefined, fixture.workspace.library, () => fixture.document.export(),
+    editor => fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), {
+      list: async () => [{ id: empty.id, name: empty.name, revision: 1 }] as never,
+      get: async () => ({ collection: structuredClone(empty), revision: 1 }) as never,
+      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); } },
+    () => ({ recipe: fixture.document.recipe, revision: fixture.document.geometryVersion.revision }));
+  expect(await service.execute({ kind: "initialize" })).toMatchObject({ ok: true });
+  expect(service.persistence()).toMatchObject({ baseline: "known", savedRevision: 1, dirty: true, structureDirty: true });
+});
