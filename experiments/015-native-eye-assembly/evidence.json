@@ -1,0 +1,269 @@
+{
+  "inputSha256": {
+    "native": "0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba",
+    "mesh": "4d5dfa91efdf54485c5637ad34d64c32ae2f02cad7c52915062f3a0ec0f7aa19",
+    "head": "72b46566276bf87786d2b8025800278b41833194b45359792d380009bc3f82e8",
+    "body": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
+    "face": "5a52d9b9e59acc2630336c3a280e179e57ad4ca5815f97d5397cf15748f2b3e7",
+    "binding": "72712873bcd65190207c9b83ff44a4a8dd2dd0190b20cea21beb1571deabe568"
+  },
+  "source": {
+    "nativeVertices": 668,
+    "oldVertices": 662,
+    "nativeJoints": 57,
+    "sampledPhases": 663,
+    "durationSeconds": 22.066667556762695
+  },
+  "bind": {
+    "maximumPositionGap": 3.069198850555268e-7,
+    "maximumAngleGapRad": 3.1415918169408075,
+    "eyeJoints": [
+      {
+        "name": "l_J_eye_JNT",
+        "position": 1.7533558325118423e-7,
+        "angleRad": 3.1415918169408075,
+        "nativePosition": [
+          -0.030150631,
+          1.6914253,
+          -0.04666795
+        ],
+        "facialPosition": [
+          -0.0301506886297799,
+          1.691425460168008,
+          -0.04666799204264948
+        ]
+      },
+      {
+        "name": "r_J_eye_JNT",
+        "position": 8.089400850458974e-8,
+        "angleRad": 3.1415918169408075,
+        "nativePosition": [
+          0.030389369,
+          1.6915354,
+          -0.046647877
+        ],
+        "facialPosition": [
+          0.030389319237925802,
+          1.6915354479495879,
+          -0.046647919052510124
+        ]
+      }
+    ],
+    "nativeCentroids": [
+      [
+        -0.027122210298944602,
+        1.6150228719848805,
+        -0.08298148700577988
+      ],
+      [
+        0.03425091107937306,
+        1.6160760113661958,
+        -0.07558602025045744
+      ]
+    ],
+    "oldCentroids": [
+      [
+        -0.025181798766824328,
+        1.612787686842266,
+        -0.08233478848062116
+      ],
+      [
+        0.03233654756671515,
+        1.6140800464391039,
+        -0.07535125939159493
+      ]
+    ],
+    "centroidDistances": [
+      0.003029763772671508,
+      0.0027755677454587694
+    ],
+    "influencedByEye": 649,
+    "influencedByOther": 184,
+    "inverseBindError": 4.843750001093383e-8,
+    "phaseZeroDisplacementFromRestWithBodyClip": 0.08252377596935129,
+    "maxNativeRestoreError": 0,
+    "otherJointInfluence": [
+      [
+        "r_J_eye_pupil_JNT",
+        44.47716568317264
+      ],
+      [
+        "l_J_eye_pupil_JNT",
+        38.60629895888269
+      ]
+    ]
+  },
+  "trajectory": {
+    "maxNativeVertexMotion": 0.012376161126240372,
+    "maxHistoricalRigidVertexMotion": 0.01227922088727843,
+    "maxCentroidMotionDifference": 0.0002958683821680786,
+    "maxSharedEyeJointMatrixDifference": 1.9967626178025173,
+    "maxSharedEyeJointDeltaDifference": 5.019578439013905e-8,
+    "maxNativeVsCurrentHeadJointDeltaDifference": 5.896672039540363e-14,
+    "maxNativeVsCurrentHeadJointPositionGap": 4.843924874132481e-8,
+    "maxNativeVsRigidOnNativeVertex": 0.00034520417902589686,
+    "maxNativeVsRigidVertex": 652,
+    "maxNativeVsRigidFrame": 27,
+    "maxGazeOnlyRigidDifference": 1.1133411481696098e-15,
+    "maxPupilRigidDifference": 0.00034520417902589686,
+    "perSide": [
+      {
+        "nativeMotion": 0.011964935760970474,
+        "oldMotion": 0.011928911818146455,
+        "centroidGap": 0.00023560048966165872
+      },
+      {
+        "nativeMotion": 0.012376161126240372,
+        "oldMotion": 0.01227922088727843,
+        "centroidGap": 0.0002958683821680786
+      }
+    ],
+    "largestOtherWeightMismatches": [
+      {
+        "distance": 0.00034520417902589686,
+        "vertex": 652,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.00034520417902589686,
+        "vertex": 660,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.000345204179025896,
+        "vertex": 659,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.0003452041790258895,
+        "vertex": 656,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.0003452041790258895,
+        "vertex": 657,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.00034520417902588873,
+        "vertex": 662,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.0003452041790258831,
+        "vertex": 654,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "distance": 0.0003452041790258822,
+        "vertex": 649,
+        "frame": 27,
+        "weights": [
+          {
+            "name": "r_J_eye_pupil_JNT",
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  },
+  "nativeParts": [
+    {
+      "name": "submesh_00_LOD_1_doubled",
+      "vertices": 12393,
+      "summedWeightByJointRole": {
+        "gaze": 2.3582677245140076,
+        "pupil": 0.6417322754859924,
+        "eyelid": 12132.410066551063,
+        "other": 257.5899494588375
+      }
+    },
+    {
+      "name": "submesh_01_LOD_1",
+      "vertices": 668,
+      "summedWeightByJointRole": {
+        "gaze": 584.9165366189554,
+        "pupil": 83.08346464205533,
+        "eyelid": 0,
+        "other": 0
+      }
+    },
+    {
+      "name": "submesh_02_LOD_1",
+      "vertices": 152,
+      "summedWeightByJointRole": {
+        "gaze": 0,
+        "pupil": 0,
+        "eyelid": 150.5859447568655,
+        "other": 1.4140558522194624
+      }
+    }
+  ],
+  "missingHeadJoints": [
+    "face_root_JNT",
+    "l_J_eye_lid_lashes_dn_rowA_1_JNT",
+    "l_J_eye_lid_lashes_dn_rowA_2_JNT",
+    "l_J_eye_lid_lashes_up_rowA_1_JNT",
+    "l_J_eye_lid_lashes_up_rowA_2_JNT",
+    "l_J_eye_lid_lashes_up_rowA_0_JNT",
+    "l_J_eye_lid_lashes_up_rowA_3_JNT",
+    "l_J_eye_wetness_0_JNT",
+    "r_J_eye_lid_lashes_dn_rowA_1_JNT",
+    "r_J_eye_lid_lashes_dn_rowA_2_JNT",
+    "r_J_eye_lid_lashes_up_rowA_1_JNT",
+    "r_J_eye_lid_lashes_up_rowA_2_JNT",
+    "r_J_eye_lid_lashes_up_rowA_0_JNT",
+    "r_J_eye_lid_lashes_up_rowA_3_JNT",
+    "r_J_eye_wetness_0_JNT",
+    "l_J_eye_lid_lashes_dn_rowA_0_JNT",
+    "l_J_eye_lid_lashes_dn_rowA_3_JNT",
+    "r_J_eye_lid_lashes_dn_rowA_0_JNT",
+    "r_J_eye_lid_lashes_dn_rowA_3_JNT",
+    "l_J_eye_JNT",
+    "l_J_eye_pupil_JNT",
+    "r_J_eye_JNT",
+    "r_J_eye_pupil_JNT"
+  ]
+}

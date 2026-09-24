@@ -1,0 +1,33 @@
+# Native eye skin and default idle — offline assembly gate
+
+25 September 2026. This study binds the installed vanilla female eye GLB to the already pinned, solved `ui_closeup_shot` body/face idle and compares it with Studio's historical rigid eye attachment. It uses Three.js's actual `SkinnedMesh.getVertexPosition` path and Studio's existing `IdleAnimation` composer. The numerical result is [evidence.json](evidence.json); its SHA-256 is `96507abbcb0622ee65189a9372f03dc9f78d7f3f23015c311b47a1d23c0a1b35`. The study changes no production renderer, game, MO2 state or user draft. It creates no brown iris texture.
+
+## Inputs and reproduction
+
+The eye mesh is `base/characters/head/player_base_heads/player_female_average/h0_000_pwa_c__basehead/he_000_pwa_c__basehead.mesh` from installed Cyberpunk 2077 2.31 `basegame_4_appearance.archive` (archive SHA-256 `9c20370467e71d49ffb0a6415fe0415b2349ac22fe5afd38daf2783f54f2443b`). The mesh SHA-256 is `4d5dfa91efdf54485c5637ad34d64c32ae2f02cad7c52915062f3a0ec0f7aa19`; its WolvenKit 8.17.4 `MeshOnly` GLB SHA-256 is `0e5420a75e5a65eded91bb68338860e119692f0868f78e7ef89c98c0c56eaeba`. The exporter executable SHA-256 is `fdffea5f19a13a5abf57487acf4e9cffce35e789d8f0d8ef551130021a086201`. The fixed extraction and source-chain gate are detailed in [experiment 013](../013-native-preview-core/README.md); [experiment 014](../014-native-eye-gradient/README.md) identifies the eye joints in the sibling facial rig. This experiment verifies the mesh and GLB hashes again before analysis.
+
+The current private Studio `head.glb`, `cc-idle-body.glb`, `cc-idle-face.glb` and `cc-idle-binding.json` are read from the existing local asset directory. Their exact SHA-256 values are in `evidence.json`. The facial bake uses the pinned Cyberpunk Blender Add-on numerical solver commit `7a4ee793c36d9615946fe87ec9d42cde7568021d` at 30 Hz; its 663 frames cover 22.0667 seconds. This is a preview solve of installed game clips, not proof of the live character creator's graph or phase/blend policy.
+
+With Bun and the existing Studio dependencies available, extract the eye beneath this experiment's ignored `generated/` folder and run:
+
+```powershell
+& 'PATH_TO_WOLVENKIT_CLI_EXE' uncook 'PATH_TO_GAME/archive/pc/content/basegame_4_appearance.archive' -o 'PATH_TO_WORKTREE/experiments/015-native-eye-assembly/generated/eye-export' -r 'he_000_pwa_c__basehead\.mesh$' -u --mesh-export-type MeshOnly -v Quiet
+$env:XFS_PRIVATE_ASSETS = 'PATH_TO_EXISTING_PRIVATE_STUDIO_ASSETS'
+bun experiments/015-native-eye-assembly/analyze.ts
+```
+
+The script resolves the fixed female-average sibling path, rejects changed native mesh/GLB hashes, checks all 57 joint names against the facial source, checks each inverse bind, runs all 663 phases, tests restore, and writes only numeric evidence. WolvenKit also exports a similarly named `pwa` sibling; the analysis never selects it. The existing [independent Python GLB verifier](../013-native-preview-core/verify.py) separately checked the selected eye surface: 668 vertices, 1,292 triangles, normalized weights, valid indices, no morphs and tiled UV0. Two consecutive analysis runs produced byte-identical `evidence.json`.
+
+## Result and interpretation
+
+All 57 eye joints map by name to the facial source. Native-eye and facial-source eye-joint **positions** agree within `1.76×10⁻⁷ m`; across all 57, the largest position gap is `3.07×10⁻⁷ m`. Their exported **orientations** differ by about π radians at the eye pivots. Copying source joint rotations directly would therefore be wrong. Studio's world-bind-relative composition agrees with the old rigid eye-pivot motion within `5.02×10⁻⁸` per matrix element over all phases. The native eye GLB's bone/inverse-bind products agree with identity within `4.85×10⁻⁸`, and disabling the idle restores native eye vertices exactly in this run. The current head shares 34 of the eye GLB's 57 joints, including eyelid controls; their world motion deltas agree within `5.90×10⁻¹⁴`. The absent head joints are eye/pupil, lash/wetness and face-root attachments, which the eye GLB supplies itself.
+
+The main native eye surface has 668 vertices, versus 662 in the historical preview eye. Its 668 vertices receive gaze and/or pupil-joint weights only: 649 have some gaze weight, 184 some pupil weight, and none has an eyelid weight. Its gaze-only vertices follow a rigid eye-joint counterfactual to floating-point precision (`1.12×10⁻¹⁵ m` maximum). Pupil-weighted vertices depart by up to **0.345 mm** at frame 27, because the pinned facial clip moves the pupil joints independently. The older rigid preview cannot reproduce that motion. Native and historical eye-centroid *displacements* differ by at most 0.296 mm over the loop. Their phase-zero centroids are about 2.8–3.0 mm apart, but the meshes have different topology and provenance; this is a geometric comparison, not a measured misregistration of the native eye to the native head.
+
+The other two native GLB chunks matter for eyelids. The 12,393-vertex doubled chunk is dominated by eyelid/lash weights; the 152-vertex wetness chunk is almost wholly eyelid weighted. The current historical preview instead uses separate brow/lash context and has no direct vertex-for-vertex match for these native chunks. The shared eyelid **joint trajectories** agree, but this study does not establish eyelid-surface clearance, closure seam quality or visual likeness. Head morph choice, native lash/wetness material and source-game rendering are separate variables. The 0.345 mm pupil divergence is a concrete gaze limitation in the existing rigid attachment; it is not evidence of an eyelid collision.
+
+## Next discriminator
+
+For a clean-user preview, a private isolated viewport should first render this exact native GLB with all three chunks, repeated eye UVs and a deliberately neutral material. Compare neutral and saved morph poses at selected blink/gaze phases against the already mapped head, then run a finite eye-to-eyelid distance/visibility check on the same phases. This separates geometry contact from gradient/cornea shader work. Do not promote an eye material or alter Studio's renderer based on the numeric assembly alone: [the brown gradient's generated atlas/filter remains unknown](../014-native-eye-gradient/compiled-shader-and-gaze.md), the accepted plate is still absent, and the clean-user five-file intake has no native-eye slot. No extracted resource is committed or licensed for redistribution.
+
+[Community provenance](../../docs/community-credits.md) records the installed game mesh/animation, WolvenKit, Three.js and external facial solver roles. The trajectory analysis is project-authored; no external implementation was copied.
