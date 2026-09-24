@@ -20,7 +20,7 @@
   <h1>Render fidelity study</h1>
   <p>Locked A/B view of the current preview head. The left side keeps the current browser material; the right tests a labelled material change or private source-map set. This page does not read or save your studio draft.</p>
   <fieldset id="controls" disabled>
-    <div class="views"><button type="button" data-view="lip">Lip seam</button><button type="button" data-view="eye">Saved eye</button></div>
+    <div class="views"><button type="button" data-view="lip">Lip seam</button><button type="button" data-view="eye">Saved eye</button><button type="button" data-view="brow">Saved brow</button></div>
     <label>Right-hand test<select id="variant"></select></label>
     <label>Key light direction <output id="light-value">−31°</output><input id="light" type="range" min="-90" max="90" value="-31"></label>
     <label>Exposure <output id="exposure-value">1.2</output><input id="exposure" type="range" min="0.5" max="2" step="0.05" value="1.2"></label>
@@ -30,7 +30,7 @@
   </fieldset>
   <p id="status" role="status">Loading local preview resources…</p>
   <p id="metrics" aria-live="polite"></p>
-  <small id="normal-note">Neutral static pose. Both panes share camera, light and exposure. Eye shader, refraction, bubble normal and game skin transport remain unmodelled. No game rendering claim.</small>
+  <small id="normal-note">Lip/eye views use a neutral pose; brow view uses the saved five-morph face. Both panes share camera, light and exposure. Browser shading is an approximation. No game rendering claim.</small>
 </aside><section id="compare" aria-label="Locked material comparison">
   <figure id="left"><figcaption>Current browser baseline</figcaption></figure>
   <figure id="right"><figcaption id="right-label">Test</figcaption></figure>

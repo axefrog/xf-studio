@@ -2,11 +2,13 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { parseEyeManifest, verifyEyeBytes } from "./eye-appearance";
+import { loadSavedBrowMaterial } from "./brow-material";
 import { roughnessRedToGreen } from "./eye-optics";
 import { extendSkin, restoreFirstWeights } from "./skin";
 import { skinPackedRgToRgb, skinRoughnessToGreen } from "./skin-study-maps";
+import { browScreenMetrics } from "./brow-study-metrics";
 
-type View = "lip" | "eye";
+type View = "lip" | "eye" | "brow";
 type Variant = { value: string; label: string };
 const lipVariants: Variant[] = [
   { value: "baseline", label: "Unchanged baseline" },
@@ -30,6 +32,14 @@ const eyeVariants: Variant[] = [
   { value: "roughness-green", label: "Kala roughness G × 0.493" },
   { value: "no-environment", label: "No room environment (all IBL)" },
 ];
+const browVariants: Variant[] = [
+  { value: "baseline", label: "Current browser skin and brow" },
+  { value: "brow-normal", label: "Current skin + brow packed normal study" },
+  { value: "base-brow-flat", label: "Base D05 skin + current brow" },
+  { value: "base-brow-normal", label: "Base D05 skin + brow normal study" },
+  { value: "arkhe-brow-flat", label: "Arkhe skin candidate + current brow" },
+  { value: "arkhe-brow-normal", label: "Arkhe skin candidate + brow normal study" },
+];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const controls = $<HTMLFieldSetElement>("controls"), status = $<HTMLParagraphElement>("status");
 const variant = $<HTMLSelectElement>("variant"), light = $<HTMLInputElement>("light");
@@ -46,6 +56,9 @@ type PrivateSkinManifest = {
 };
 type SourceSet = { color: THREE.Texture; normal: THREE.Texture; roughnessR: THREE.Texture; roughnessRB: THREE.Texture };
 type SourceMaps = { base: SourceSet; arkhe: SourceSet; headHash: string };
+const BROW_GLB_HASH = "da1e38700d2549335d6c6b9bf8ad12899fc8dbb2d9b25c8ce70de77db80edcae";
+const BROW_NORMAL_HASH = "2426e263edecb13d79ba8b902780c82a5f15ca13f4bbb3fcf5e8474b0bc84584";
+const SAVED_FACE = ["h091_eyes", "h012_nose", "h053_mouth", "h054_jaw", "h145_ear"] as const;
 const EXPECTED_SKIN_HASHES = {
   head: "72b46566276bf87786d2b8025800278b41833194b45359792d380009bc3f82e8",
   roughness: "5a258560cb9b7056159d28d0f17dd9f90aad5caf833760c3562779a57dd102d4",
@@ -154,16 +167,33 @@ async function loadSourceMaps(manifest: PrivateSkinManifest): Promise<SourceMaps
   };
 }
 
+async function loadBrowNormal() {
+  const response = await fetch("/assets/brow-study/manifest.json", { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw Error(`Private brow study manifest failed (${response.status})`);
+  const manifest = await response.json() as { schema?: string; glbSha256?: string; normal?: PrivateMap };
+  if (manifest.schema !== "xfs/private-brow-study-1" || manifest.glbSha256 !== BROW_GLB_HASH ||
+      manifest.normal?.url !== "/assets/brow-study/normal.png" || manifest.normal.sha256 !== BROW_NORMAL_HASH)
+    throw Error("Private brow normal manifest changed");
+  const packed = await imageTexture(manifest.normal.url, false, manifest.normal.sha256);
+  const pixels = sourcePixels(packed);
+  const normal = dataMap(skinPackedRgToRgb(pixels.data), pixels.width, pixels.height);
+  packed.dispose();
+  return normal;
+}
+
 type Pane = {
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera;
   key: THREE.DirectionalLight; head: THREE.MeshStandardMaterial; eye: THREE.MeshStandardMaterial;
+  brow?: THREE.MeshStandardMaterial; browError?: string;
+  headMesh: THREE.SkinnedMesh; brows: THREE.SkinnedMesh[];
 };
 
 async function createPane(host: HTMLElement, maps: {
   skinColor: THREE.Texture; skinNormal: THREE.Texture; skinRoughness: THREE.Texture;
   eyeColor: THREE.Texture;
 }, headHash?: string) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setClearColor(0x20282d);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -191,7 +221,8 @@ async function createPane(host: HTMLElement, maps: {
     normalMap: maps.skinNormal, normalScale: new THREE.Vector2(0.35, -0.35),
   });
   const eye = new THREE.MeshStandardMaterial({ map: maps.eyeColor, roughness: 0.18 });
-  let foundHead = false, foundEyes = false;
+  let headMesh: THREE.SkinnedMesh | undefined;
+  let foundEyes = false;
   gltf.scene.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
     object.frustumCulled = false;
@@ -204,25 +235,53 @@ async function createPane(host: HTMLElement, maps: {
     }
     if (object.name === "head") {
       if (!(object instanceof THREE.SkinnedMesh)) throw Error("Head is not skinned");
-      object.material = head; extendSkin(object, head); foundHead = true;
+      object.material = head; extendSkin(object, head); headMesh = object;
     } else if (object.name === "eyes") {
       object.material = eye;
       if (object instanceof THREE.SkinnedMesh) extendSkin(object, eye);
       foundEyes = true;
     } else object.visible = false;
   });
-  if (!foundHead || !foundEyes) throw Error("Head preview is missing its head or eye mesh");
-  return { renderer, scene, camera, key, head, eye } satisfies Pane;
+  if (!headMesh || !foundEyes) throw Error("Head preview is missing its head or eye mesh");
+  let brow: THREE.MeshStandardMaterial | undefined, browError: string | undefined;
+  const brows: THREE.SkinnedMesh[] = [];
+  try {
+    brow = await loadSavedBrowMaterial(new THREE.TextureLoader(), 8);
+    if (brow) {
+      const browBytes = await loadBytes("/assets/brows.glb", BROW_GLB_HASH);
+      const browWeights = restoreFirstWeights(browBytes.buffer as ArrayBuffer);
+      const browGltf = await new GLTFLoader().parseAsync(browBytes.buffer as ArrayBuffer, "/assets/");
+      browGltf.scene.traverse(object => {
+        if (!(object instanceof THREE.SkinnedMesh)) return;
+        const association = browGltf.parser.associations.get(object);
+        const name = browGltf.parser.json.meshes[association?.meshes ?? -1]?.name;
+        const weights = browWeights.get(name);
+        if (!weights) throw Error(`Cannot restore brow skin weights: ${name}`);
+        object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(weights, 4));
+        object.frustumCulled = false;
+        object.material = brow!;
+        extendSkin(object, brow!);
+        object.visible = false;
+        brows.push(object);
+      });
+      if (!brows.length) throw Error("Saved brow GLB has no skinned geometry");
+      scene.add(browGltf.scene);
+    }
+  } catch (error) { browError = (error as Error).message; }
+  return { renderer, scene, camera, key, head, eye, brow, browError, headMesh, brows } satisfies Pane;
 }
 
-function setOptions(view: View, sourceReady: boolean) {
-  const choices = view === "lip" ? [...lipVariants, ...(sourceReady ? sourceVariants : [])] : eyeVariants;
+function setOptions(view: View, sourceReady: boolean, browNormalReady: boolean) {
+  const choices = view === "lip" ? [...lipVariants, ...(sourceReady ? sourceVariants : [])] :
+    view === "brow" ? browVariants.filter(option =>
+      (sourceReady || !/^(base|arkhe)-/.test(option.value)) &&
+      (browNormalReady || !option.value.endsWith("normal"))) : eyeVariants;
   variant.replaceChildren(...choices.map(option => {
     const node = document.createElement("option");
     node.value = option.value; node.textContent = option.label;
     return node;
   }));
-  variant.value = view === "lip" ? "uniform-roughness" : "roughness-red";
+  variant.value = view === "lip" ? "uniform-roughness" : view === "eye" ? "roughness-red" : "baseline";
 }
 
 function lipMetric(canvas: HTMLCanvasElement) {
@@ -246,6 +305,7 @@ function lipMetric(canvas: HTMLCanvasElement) {
 async function main() {
   const skinManifest = await privateSkinManifest();
   const sourceMaps = skinManifest ? await loadSourceMaps(skinManifest) : null;
+  const browNormal = await loadBrowNormal();
   const manifestResponse = await fetch("/assets/eyes/manifest.json");
   if (!manifestResponse.ok) throw Error("Local saved-eye manifest is unavailable. Stage private eye assets for this study.");
   const savedEye = parseEyeManifest(await manifestResponse.json()).find(entry =>
@@ -262,10 +322,12 @@ async function main() {
     createPane($<HTMLElement>("left"), maps, sourceMaps?.headHash),
     createPane($<HTMLElement>("right"), maps, sourceMaps?.headHash),
   ]);
+  const browReady = panes.every(pane => !!pane.brow && pane.brows.length > 0);
+  document.querySelector<HTMLButtonElement>('[data-view="brow"]')!.disabled = !browReady;
   const roughnessRed = eyeRoughness(roughness, "red");
   const roughnessGreen = eyeRoughness(roughness, "green");
   let view: View = "lip";
-  setOptions(view, !!sourceMaps);
+  setOptions(view, !!sourceMaps, !!browNormal);
   function markView() {
     document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(button =>
       button.setAttribute("aria-pressed", String(button.dataset.view === view)));
@@ -275,7 +337,7 @@ async function main() {
     button.addEventListener("click", () => {
       view = button.dataset.view as View;
       distance.value = "0"; height.value = "0";
-      setOptions(view, !!sourceMaps); markView(); render();
+      setOptions(view, !!sourceMaps, !!browNormal); markView(); render();
     }));
   for (const input of [variant, light, exposure, height, distance]) input.addEventListener("input", render);
   window.addEventListener("resize", render);
@@ -292,12 +354,47 @@ async function main() {
     link.href = canvas.toDataURL("image/png"); link.click();
   });
   controls.disabled = false;
+  function setPose(pane: Pane, saved: boolean) {
+    for (const mesh of [pane.headMesh, ...pane.brows]) {
+      if (!mesh.morphTargetInfluences) throw Error("A study mesh has no morphs");
+      mesh.morphTargetInfluences.fill(0);
+      if (saved) for (const name of SAVED_FACE) {
+        const index = mesh.morphTargetDictionary?.[name];
+        if (index === undefined) throw Error(`Study mesh lacks saved morph ${name}`);
+        mesh.morphTargetInfluences[index] = 1;
+      }
+    }
+  }
+  function browSilhouette(pane: Pane) {
+    const hidden: THREE.Object3D[] = [];
+    pane.scene.traverse(object => {
+      if (object instanceof THREE.Mesh && !pane.brows.includes(object as THREE.SkinnedMesh) && object.visible) {
+        object.visible = false; hidden.push(object);
+      }
+    });
+    pane.renderer.setClearColor(0, 0);
+    pane.renderer.render(pane.scene, pane.camera);
+    const source = pane.renderer.domElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width; canvas.height = source.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw Error("Cannot measure brow silhouette");
+    context.drawImage(source, 0, 0);
+    const result = browScreenMetrics(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+    for (const object of hidden) object.visible = true;
+    pane.renderer.setClearColor(0x20282d, 1);
+    return result;
+  }
   function render() {
     const selected = variant.value;
     const angle = Number(light.value) * Math.PI / 180;
-    const y = (view === "eye" ? 1.67 : 1.55) + Number(height.value);
-    const x = view === "eye" ? -0.036 : 0;
-    const z = 0.44 + Number(distance.value);
+    const y = (view === "brow" ? 1.71 : view === "eye" ? 1.67 : 1.55) + Number(height.value);
+    const x = view === "eye" || view === "brow" ? -0.036 : 0;
+    const z = (view === "brow" ? 0.28 : 0.44) + Number(distance.value);
+    // Both screen masks must use an identical pixel grid, even when the right
+    // figure loses a CSS pixel to its dividing border or viewport rounding.
+    const widthPx = Math.min(...panes.map(pane => pane.renderer.domElement.parentElement!.clientWidth));
+    const heightPx = Math.min(...panes.map(pane => pane.renderer.domElement.parentElement!.clientHeight));
     $<HTMLOutputElement>("light-value").textContent = `${light.value}°`;
     $<HTMLOutputElement>("exposure-value").textContent = Number(exposure.value).toFixed(2);
     $<HTMLOutputElement>("height-value").textContent = Number(height.value).toFixed(3);
@@ -306,13 +403,15 @@ async function main() {
     for (const [index, pane] of panes.entries()) {
       const active = index === 1 ? selected : "baseline";
       const match = /^(base|arkhe)-(r|rb)-(packed|flat)$/.exec(active);
-      const source = match && sourceMaps ? sourceMaps[match[1] as "base" | "arkhe"] : null;
+      const browSource = view === "brow" ? /^(base|arkhe)-brow-/.exec(active) : null;
+      const sourceKey = match?.[1] ?? browSource?.[1];
+      const source = sourceKey && sourceMaps ? sourceMaps[sourceKey as "base" | "arkhe"] : null;
       pane.head.map = source?.color ?? skinColor;
       pane.head.normalMap = source
-        ? match![3] === "flat" ? null : source.normal
+        ? match?.[3] === "flat" ? null : source.normal
         : active === "flat-normal" ? null : skinNormal;
       pane.head.roughnessMap = source
-        ? match![2] === "rb" ? source.roughnessRB : source.roughnessR
+        ? match?.[2] === "rb" ? source.roughnessRB : source.roughnessR
         : active === "uniform-roughness" || active === "high-roughness" ? null : skinRoughness;
       pane.head.roughness = source ? 1 : active === "high-roughness" ? 1 : 0.85;
       pane.head.wireframe = active === "wireframe";
@@ -321,27 +420,40 @@ async function main() {
         active === "roughness-green" ? roughnessGreen : null;
       pane.eye.roughness = pane.eye.roughnessMap ? savedEyeRoughnessScale : 0.18;
       pane.eye.needsUpdate = true;
+      setPose(pane, view === "brow");
+      for (const browMesh of pane.brows) browMesh.visible = view === "brow";
+      if (pane.brow) {
+        pane.brow.normalMap = view === "brow" && active.endsWith("normal") ? browNormal : null;
+        pane.brow.normalScale.set(0.8, -0.8);
+        pane.brow.needsUpdate = true;
+      }
       pane.scene.environmentIntensity = active === "no-environment" ? 0 : 1;
       pane.key.position.set(0.65 * Math.sin(angle), 1.9, -0.65 * Math.cos(angle));
       pane.renderer.toneMappingExposure = Number(exposure.value);
-      const width = pane.renderer.domElement.parentElement!.clientWidth;
-      const heightPx = pane.renderer.domElement.parentElement!.clientHeight;
-      pane.renderer.setSize(width, heightPx, false);
-      pane.camera.aspect = width / heightPx;
+      pane.renderer.setSize(widthPx, heightPx, false);
+      pane.renderer.domElement.style.width = `${widthPx}px`;
+      pane.renderer.domElement.style.height = `${heightPx}px`;
+      pane.camera.aspect = widthPx / heightPx;
       pane.camera.position.set(x, y, -z);
       pane.camera.lookAt(x, y, 0);
       pane.camera.updateProjectionMatrix();
+      const silhouette = view === "brow" ? browSilhouette(pane) : null;
       pane.renderer.render(pane.scene, pane.camera);
+      if (silhouette) (pane as Pane & { silhouette?: typeof silhouette }).silhouette = silhouette;
     }
     if (view === "lip" && height.value === "0" && distance.value === "0") {
       const [left, right] = panes.map(pane => lipMetric(pane.renderer.domElement));
       metrics.textContent = `Default-frame broad lip crop (${left.pixels} pixels): near-white RGB>220 ${left.bright} → ${right.bright}; mean linear luminance ${left.meanLinear.toFixed(4)} → ${right.meanLinear.toFixed(4)}.`;
+    } else if (view === "brow") {
+      const [left, right] = panes.map(pane => (pane as Pane & { silhouette?: ReturnType<typeof browSilhouette> }).silhouette!);
+      metrics.textContent = `Brow-only screen alpha, left → right: >10% ${left.visible10} → ${right.visible10} px; >50% ${left.visible50} → ${right.visible50} px. Bounds ${left.bounds} → ${right.bounds}. Mean display RGB within >50% alpha ${left.strongMeanRgb.toFixed(1)} → ${right.strongMeanRgb.toFixed(1)} (lighting diagnostic, not perceived width).`;
     } else metrics.textContent = view === "lip" ? "Reset framing height and distance to 0 for comparable fixed-crop metrics." : "";
     status.textContent = view === "lip"
       ? sourceMaps
-        ? "Source-map inputs are private and SHA-256 checked. Left: old Blender maps. Right: selected installed base or current-MO2 Arkhe candidate. Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved."
-        : "Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B."
-      : `Eye: exact local Kala eye-16 diffuse and roughness hashes verified. Source R/G tests use the same 0.493 scale; the game shader reads R, but its normal, UV transform and refraction are absent here.`;
+        ? `Source-map inputs are private and SHA-256 checked. Left: old Blender maps. Right: selected installed base or current-MO2 Arkhe candidate. Roughness uses source R in Three's G slot; R+B uses a 0.93 constant lower-bound bracket, not the game's spatial bias. Packed RG reconstructs Z; tangent handedness, detail maps, SSS, teeth and runtime winners remain unproved.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
+        : `Private D05 map manifest unavailable; old Blender-map diagnostics remain. Stage verified local source maps to enable source A/B.${!browReady ? ` Brow study unavailable: ${panes[0].browError ?? "private brow assets missing"}.` : ""}`
+      : view === "eye" ? `Eye: exact local Kala eye-16 diffuse and roughness hashes verified. Source R/G tests use the same 0.493 scale; the game shader reads R, but its normal, UV transform and refraction are absent here.`
+      : `Brow: saved five-morph static face; verified Arkhe Fuller style-18 mesh and double-diffuse primary/secondary alpha plus Alliekat gradient. ${sourceMaps ? "Base/Arkhe skin candidates verified." : "Private D05 skin maps unavailable."} ${browNormal ? "Normal study uses verified style-18 packed RG decoded for Three at a provisional scale." : "Style-18 packed normal not staged."} Same geometry and coverage in both panes; no matched game capture or runtime winner.`;
   }
   render();
 }
