@@ -3,6 +3,9 @@ import { CollectionActions } from "../src/collection-actions";
 import { collectionDraft, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
 import { applyLayerAction, layerCapability, RecipeHistory } from "../src/editor-actions";
 import { applyRecipeAction, RecipeActions, recipeActionCapability, type RecipeActionState } from "../src/recipe-actions";
+import { PreviewActions, type PreviewPort } from "../src/preview-actions";
+import { ViewportAdapter, type ViewportPort } from "../src/viewport-adapter";
+import { freshWorkspace } from "../src/workspace-state";
 import { glitterModel, type GlitterChoices } from "../src/glitter-model";
 import { initialRecipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
@@ -114,4 +117,65 @@ test("recipe controller records discrete changes once and keeps inactive Glitter
   expect(effects).toEqual(["immediate", "notify:immediate", "immediate", "notify:immediate",
     "scheduled", "notify:scheduled", "immediate", "notify:immediate", "immediate", "notify:immediate"]);
   unsubscribe();
+});
+
+test("pointer edits preserve target identity, reject stale presets and leave one gesture Undo entry", () => {
+  const recipe = initialRecipe(), id = recipe.layers[0].id, target = recipe.layers[0], point = target.points[0];
+  let state: RecipeActionState = { recipe, active: 0, selected: 0, fieldSelection: {} }, changes = 0;
+  const history = new RecipeHistory(), actions = new RecipeActions(() => state, next => state = next,
+    history, {}, () => "draft", () => changes++);
+  history.checkpoint(recipe);
+  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+    index: 0, expectedPoint: point, next: { u: point.u + .005 } })).toBe(true);
+  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+    index: 0, expectedPoint: point, next: { u: point.u + .005 } })).toBe(true);
+  expect(state.recipe.layers[0]).toBe(target);
+  expect(state.recipe.layers[0].points[0]).toBe(point);
+  expect(changes).toBe(2);
+  const replaced = structuredClone(recipe);
+  state = { ...state, recipe: replaced };
+  expect(actions.applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
+    index: 0, expectedPoint: point, next: { u: .9 } })).toBe(false);
+  expect(replaced.layers[0].points[0].u).not.toBe(.9);
+  expect(history.undo()!.layers[0].points[0].u).toBe(initialRecipe().layers[0].points[0].u);
+  expect(history.canUndo).toBe(false);
+});
+
+test("viewport lifecycle cancels capture before disposal and routes resize to attached ports", () => {
+  const events: string[] = [], viewport = new ViewportAdapter();
+  const port = (name: string): ViewportPort => ({
+    resize: () => events.push(`${name}:resize`), cancelInput: () => events.push(`${name}:cancel`),
+    inputCapture: () => name === "uv", dispose: () => events.push(`${name}:dispose`),
+  });
+  viewport.attach("uv", port("uv")); viewport.attach("surface", port("surface"));
+  expect(viewport.capture()).toEqual({ uv: true, surface: false });
+  viewport.resize(); viewport.detach("uv");
+  expect(viewport.capture()).toEqual({ uv: false, surface: false });
+  viewport.detach();
+  expect(events).toEqual(["uv:resize", "surface:resize", "uv:resize", "surface:resize",
+    "uv:cancel", "uv:dispose", "surface:cancel", "surface:dispose"]);
+});
+
+test("preview commands keep camera and lighting state readable without DOM and explain unavailable actions", () => {
+  const calls: string[] = [], camera = { position: [0, 0, 1], target: [0, 0, 0], fov: 30 };
+  const port: PreviewPort = {
+    cameraState: () => structuredClone(camera), front: () => { calls.push("front"); return false; },
+    setFov: degrees => { camera.fov = degrees; return degrees === 10; },
+    endFovGesture: () => calls.push("end"), restoreCamera: value => { camera.fov = value.fov; },
+    setExposure: value => calls.push(`exposure:${value}`), setLightAngle: value => calls.push(`angle:${value}`),
+    setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {},
+    setHair: () => {}, setDetail: () => {}, availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
+  };
+  const actions = new PreviewActions(freshWorkspace().preview, port);
+  expect(actions.capability({ kind: "preview.setHair", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
+  expect(() => actions.dispatch({ kind: "camera.setFov", degrees: 200 })).toThrow("Field of view");
+  let notifications = 0; actions.subscribe(() => notifications++);
+  expect(actions.dispatch({ kind: "camera.setFov", degrees: 10 }).limited).toBe(true);
+  actions.dispatch({ kind: "preview.setExposure", value: 1.5 });
+  actions.dispatch({ kind: "preview.setKeyAngle", degrees: 120 });
+  const detached = actions.snapshot();
+  expect(detached.camera.fov).toBe(10);
+  expect(detached.exposure).toBe(1.5);
+  expect(notifications).toBe(3);
+  expect(calls).toEqual(["exposure:1.5", "angle:120"]);
 });

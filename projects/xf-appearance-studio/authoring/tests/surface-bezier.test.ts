@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { initialRecipe } from "../src/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
+import { applyGestureEdit } from "../src/recipe-actions";
 
 /** Exercise real ray picking/anchors without a WebGL context or game assets. */
 test("surface tangents retain knot identity, mirror edits and report missing anchors", () => {
@@ -41,7 +42,8 @@ test("surface tangents retain knot identity, mirror edits and report missing anc
     const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
       layer: () => layer, selected: () => 0, select: () => {},
       selectedField: () => undefined, selectField: () => {},
-      begin: () => checkpoints++, change: () => changes++, cancel: () => cancels++,
+      begin: () => checkpoints++, apply: action => { const changed = applyGestureEdit(action); if (changed) changes++; return changed; },
+      cancel: () => cancels++,
       message: text => messages.push(text),
     });
     frame();

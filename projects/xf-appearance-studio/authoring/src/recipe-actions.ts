@@ -4,7 +4,7 @@ import type { FieldSelection } from "./field-selection";
 import { defaultFlakes, isIrregular, type Flakes } from "./finish";
 import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, type GlitterModel } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
-import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Recipe, type WarpField } from "./recipe";
+import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import type { PathCommand } from "./path-ui";
 import { RecipeHistory } from "./editor-actions";
@@ -29,9 +29,37 @@ export type RecipeAction =
 
 export type RecipeActionCapability = { available: boolean; reason?: string };
 export type RecipeActionEffect = { kind: "selection" | "scheduled" | "immediate"; layerIndex: number };
+export type GestureEdit =
+  | { kind: "shape.replace"; layerId: string; expectedLayer: Layer; next: Layer }
+  | { kind: "point.replace"; layerId: string; expectedLayer: Layer; index: number; expectedPoint: Point; next: Partial<Point> }
+  | { kind: "field.replace"; layerId: string; expectedLayer: Layer; fieldId: string; expectedField: WarpField; next: Partial<WarpField> }
+  | { kind: "path.replacePoints"; layerId: string; expectedLayer: Layer; points: Point[] };
 type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
 export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
+
+/** Validate a gesture proposal before changing its live target, preserving point/field identity. */
+export function applyGestureEdit(action: GestureEdit, schema: Recipe["schema"] = "xfs/recipe-7"): boolean {
+  const layer = action.expectedLayer;
+  const proposal = structuredClone(action.kind === "shape.replace" ? action.next : layer);
+  let pointIndex = -1, fieldIndex = -1;
+  if (action.kind === "point.replace") {
+    pointIndex = action.index;
+    if (layer.points[pointIndex] !== action.expectedPoint) return false;
+    proposal.points[pointIndex] = { ...proposal.points[pointIndex], ...action.next };
+  } else if (action.kind === "field.replace") {
+    fieldIndex = layer.fields.findIndex(field => field.id === action.fieldId);
+    if (fieldIndex < 0 || layer.fields[fieldIndex] !== action.expectedField) return false;
+    proposal.fields[fieldIndex] = { ...proposal.fields[fieldIndex], ...action.next };
+  } else if (action.kind === "path.replacePoints") proposal.points = action.points;
+  const validated = parseRecipe({ schema, uv: "gltf-uv0-top-left", layers: [proposal] }).layers[0];
+  if (JSON.stringify(validated) === JSON.stringify(layer)) return false;
+  if (action.kind === "shape.replace") Object.assign(layer, validated);
+  else if (action.kind === "point.replace") Object.assign(layer.points[pointIndex], validated.points[pointIndex]);
+  else if (action.kind === "field.replace") Object.assign(layer.fields[fieldIndex], validated.fields[fieldIndex]);
+  else layer.points = validated.points;
+  return true;
+}
 
 export function recipeActionCapability(state: RecipeActionState, action: RecipeAction): RecipeActionCapability {
   const layer = state.recipe.layers.find(l => l.id === action.layerId);
@@ -134,7 +162,8 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
 export class RecipeActions {
   private listeners = new Set<(effect: RecipeActionEffect) => void>();
   constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
-    private history: RecipeHistory, private choices: GlitterChoices, private presetId: () => string) {}
+    private history: RecipeHistory, private choices: GlitterChoices, private presetId: () => string,
+    private gestureChanged?: (layerIndex: number) => void) {}
   snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
   capability(action: RecipeAction) { return recipeActionCapability(this.read(), action); }
   subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -146,6 +175,18 @@ export class RecipeActions {
     if (action.kind === "glitter.selectModel") Object.assign(this.choices, result.choices);
     this.write(result.state, result.effect);
     for (const listener of this.listeners) listener(result.effect);
+    return true;
+  }
+  /** Pointer adapters calculate coordinates; the application validates and applies the result in place.
+   * Stable target identities are required until pointer release so a stale gesture cannot edit a new preset. */
+  applyGesture(action: GestureEdit): boolean {
+    const state = this.read(), index = state.recipe.layers.findIndex(layer => layer.id === action.layerId);
+    const layer = state.recipe.layers[index];
+    if (!layer || layer !== action.expectedLayer) return false;
+    if (!applyGestureEdit(action, state.recipe.schema)) return false;
+    this.gestureChanged?.(index);
+    const effect: RecipeActionEffect = { kind: "scheduled", layerIndex: index };
+    for (const listener of this.listeners) listener(effect);
     return true;
   }
 }

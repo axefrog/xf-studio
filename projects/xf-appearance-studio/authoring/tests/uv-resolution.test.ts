@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { canvasResolution } from "../src/canvas-resolution";
 import { createUVEditor } from "../src/uv-editor";
+import { applyGestureEdit } from "../src/recipe-actions";
 import { defaultUVView, pixelToUV, uvToPixel } from "../src/uv-view";
 import { initialRecipe } from "../src/recipe";
 
@@ -39,7 +40,7 @@ test("UV resize sharpens backing buffer without resetting view or changing CSS-s
     const element=()=>({setAttribute(){},disabled:false,textContent:""}) as any;
     const editor=createUVEditor(canvas,{both:element(),single:element(),other:element(),fit:element(),note:element()},
       {recipe:()=>recipe,layer:()=>layer,selected:()=>selected,select:i=>{selected=i;},selectedField:()=>undefined,selectField(){},
-        canvases:()=>[],albedo:()=>undefined,begin:()=>begins++,change(){},cancel(){},persist(){},message(){}},defaultUVView());
+        canvases:()=>[],albedo:()=>undefined,begin:()=>begins++,apply:action=>applyGestureEdit(action),cancel(){},persist(){},message(){}},defaultUVView());
     editor.draw();
     expect(bufferWidth).toBe(1440);
     const saved=editor.snapshot(), firstWrites=writes;

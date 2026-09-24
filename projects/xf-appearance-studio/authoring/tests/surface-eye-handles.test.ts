@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { initialRecipe } from "../src/recipe";
 import { createSurfaceEditor } from "../src/surface-editor";
+import { applyGestureEdit } from "../src/recipe-actions";
 import { SurfaceMap } from "../src/surface-map";
 
 /** Real geometry/ray tests: the eye blocks painted-surface gestures, not an
@@ -49,7 +50,8 @@ test("projected tangents cross eye holes while actual surface controls keep head
       onFrame:(fn:()=>void)=>{frame=fn;} };
     const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
       layer:()=>layer,selected:()=>0,select:()=>{},selectedField:()=>undefined,selectField:()=>{},
-      begin:()=>{checkpoints++;snapshot=structuredClone(layer);},change:()=>changes++,
+      begin:()=>{checkpoints++;snapshot=structuredClone(layer);},
+      apply:action=>{const changed=applyGestureEdit(action);if(changed)changes++;return changed;},
       cancel:()=>{cancellations++;Object.assign(layer,structuredClone(snapshot));},message:text=>messages.push(text),
     });
     let headRays=0,headBounds=0;

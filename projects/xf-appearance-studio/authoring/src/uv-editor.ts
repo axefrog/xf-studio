@@ -4,12 +4,13 @@ import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
+import type { GestureEdit } from "./recipe-actions";
 
 type Hooks = {
   recipe(): Recipe; layer(): Layer | undefined; selected(): number;
   canvases(): HTMLCanvasElement[]; albedo(): HTMLImageElement | undefined;
   select(index: number): void; selectedField(): string | undefined; selectField(id: string): void;
-  begin(): void; change(): void; cancel(): void;
+  begin(): void; apply(action: GestureEdit): boolean; cancel(): void;
   persist(): void; message(text: string): void;
 };
 type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; fieldId?: string;
@@ -22,6 +23,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   fit: HTMLButtonElement; note: HTMLElement;
 }, hooks: Hooks, initial: UVView) {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
+  const listeners = new AbortController();
   let view = parseUVView(initial);
   // Establish layout before observing it; the initial observer callback must not
   // itself change the canvas aspect and trigger a resize-observer feedback pass.
@@ -254,7 +256,9 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       drag.limited = false;
       if (JSON.stringify(next) === JSON.stringify(drag.layer)) return;
       if (!drag.changed) { hooks.begin(); drag.changed = true; }
-      Object.assign(drag.layer, next); drag.expected = drag.layer.points; hooks.change(); return;
+      if (hooks.apply({ kind: "shape.replace", layerId: drag.layer.id, expectedLayer: drag.layer, next }))
+        drag.expected = drag.layer.points;
+      return;
     }
     const l = drag.layer, h = drag.handle, p = reflectUV(coordinate(e), h.mirror);
     if (h.kind === "tangent") {
@@ -263,7 +267,8 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       if ((["in", "out"] as const).every(side => Math.hypot(next.handles![side].u - point.handles![side].u,
         next.handles![side].v - point.handles![side].v) < 1e-10)) return;
       if (!drag.changed) { hooks.begin(); drag.changed = true; }
-      Object.assign(point, next); hooks.change(); return;
+      hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
+        index: h.index, expectedPoint: point, next }); return;
     }
     const f = l.fields.find(f => f.id === h.fieldId);
     if (h.kind !== "point" && !f) { stop(); return; }
@@ -272,7 +277,10 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const target = h.kind === "point" ? l.points[h.index] : f!;
     if (Object.entries(next).every(([key, value]) => Math.abs((target as unknown as Record<string, number>)[key] - value) < 1e-7)) return;
     if (!drag.changed) { hooks.begin(); drag.changed = true; }
-    Object.assign(target, next); hooks.change();
+    if (h.kind === "point") hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
+      index: h.index, expectedPoint: target as Layer["points"][number], next });
+    else hooks.apply({ kind: "field.replace", layerId: l.id, expectedLayer: l,
+      fieldId: h.fieldId!, expectedField: target as Layer["fields"][number], next });
   };
   canvas.onpointerup = e => { if (drag?.pointer === e.pointerId) stop(); };
   canvas.onpointercancel = e => { if (drag?.pointer === e.pointerId) stop(true); };
@@ -295,12 +303,15 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       hooks.begin();
       wheel = { layer: l, recipe: hooks.recipe(), expected: l.points, state: "", selected: hooks.selected() };
     } else clearTimeout(wheel.timer);
-    Object.assign(l, next); wheel.expected = l.points; wheel.state = JSON.stringify(hooks.recipe());
-    wheel.timer = setTimeout(() => finishWheel(), 250); hooks.change();
-  }, { passive: false });
+    if (hooks.apply({ kind: "shape.replace", layerId: l.id, expectedLayer: l, next })) {
+      wheel.expected = l.points; wheel.state = JSON.stringify(hooks.recipe());
+    }
+    wheel.timer = setTimeout(() => finishWheel(), 250);
+  }, { passive: false, signal: listeners.signal });
   canvas.oncontextmenu = e => e.preventDefault();
-  window.addEventListener("pointerdown", e => { if (e.target !== canvas) finishWheel(); }, true);
-  window.addEventListener("blur", () => { stop(true); finishWheel(true); });
+  window.addEventListener("pointerdown", e => { if (e.target !== canvas) finishWheel(); },
+    { capture: true, signal: listeners.signal });
+  window.addEventListener("blur", () => { stop(true); finishWheel(true); }, { signal: listeners.signal });
   window.addEventListener("keydown", e => {
     if ((drag || wheel) && (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "z"))) {
       // If another context replaced this one, leave its keyboard action alone.
@@ -308,7 +319,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       if (valid) { e.preventDefault(); e.stopImmediatePropagation(); }
       stop(true); finishWheel(true);
     }
-  }, true);
+  }, { capture: true, signal: listeners.signal });
   canvas.ondblclick = e => {
     stop(); finishWheel();
     if (e.shiftKey || e.button !== 0) return;
@@ -320,13 +331,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     candidates.sort((a, b) => (a.section?.distancePx ?? Infinity) - (b.section?.distancePx ?? Infinity));
     const chosen = candidates[0], result = chosen && insertPathPoint(l.points, chosen.click, scale);
     if (!result) { hooks.message(l.points.length >= 24 ? "A shape supports up to 24 points." : "Choose a curve section inside the texture area and away from existing points."); return; }
-    hooks.begin(); l.points = result.points; hooks.select(result.index);
+    hooks.begin(); hooks.apply({ kind: "path.replacePoints", layerId: l.id, expectedLayer: l, points: result.points });
+    hooks.select(result.index);
     view.side = p.u <= .5 ? "low" : "high";
-    hooks.change();
   };
   const resize = new ResizeObserver(draw); resize.observe(canvas);
   // Browser zoom / moving between screens can change DPR without a CSS resize.
-  window.addEventListener("resize", draw);
+  window.addEventListener("resize", draw, { signal: listeners.signal });
   let dprQuery: MediaQueryList | undefined;
   function trackDPR() {
     dprQuery?.removeEventListener("change", changedDPR);
@@ -337,7 +348,17 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   }
   function changedDPR() { trackDPR(); draw(); }
   trackDPR();
-  return { draw, snapshot: () => ({ ...view }), diagnostics: () => {
+  const cancelInput = () => { stop(true); finishWheel(true); };
+  function dispose() {
+    cancelInput(); listeners.abort();
+    resize.disconnect?.(); dprQuery?.removeEventListener("change", changedDPR);
+    canvas.onpointerdown = canvas.onpointermove = canvas.onpointerup = canvas.onpointercancel = null;
+    canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
+    elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
+  }
+  return { draw, resize: draw, cancelInput, dispose,
+    inputCapture: () => !!drag || !!wheel,
+    snapshot: () => ({ ...view }), diagnostics: () => {
     const b = bounds();
     return { view: { ...view }, region: region(), aspect: b.width / b.height,
       resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),

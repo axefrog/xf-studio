@@ -25,6 +25,8 @@ import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
 import { createUVEditor } from "./uv-editor";
+import { ViewportAdapter } from "./viewport-adapter";
+import { PreviewActions } from "./preview-actions";
 import { setupCollections } from "./collection-ui";
 import { setupMotionControls } from "./motion-ui";
 import { readSavedV, type SavedV } from "./save-reader";
@@ -78,6 +80,7 @@ function emptyPreviewCanvases() {
   return recipe.layers.map(() => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas; });
 }
 let viewer: Awaited<ReturnType<typeof createScene>> | undefined;
+let previewActions: PreviewActions | undefined;
 let savedV: SavedV | undefined = workspace.savedV;
 const current = () => recipe.layers[active];
 function showGlitterMeasurement(){
@@ -98,24 +101,31 @@ function selectField(id: string) {
 }
 const panel = document.querySelector<HTMLElement>(".properties")!;
 const layersPanel = document.querySelector<HTMLElement>(".layers-panel")!;
-const sidebars = setupSidebars(workspace.panels, persist);
+const viewport = new ViewportAdapter();
+const sidebars = setupSidebars(workspace.panels, () => { persist(); viewport.resize(); });
 function snapshot(): WorkspaceState {
   // Editing/recipe autosave still works if preview assets fail or are still loading.
   const editing = { recipe, active, selected, fieldSelection, uvView: uvEditor?.snapshot() ?? workspace.uvView, history: history.snapshot(), savedV,
     glitterChoices, library: workspace.library, collections: presetLibrary?.snapshot() ?? workspace.collections };
   if (!previewRestored) return { ...workspace, ...editing, preview: { ...workspace.preview, textureSize },
     panels: { ...workspace.panels, ...sidebars.snapshot(), previewQuality: $<HTMLDetailsElement>("quality-panel").open } };
+  const previewConfig = previewActions?.snapshot();
   return {
     schema: "xfas/workspace-1", ...editing,
     preview: {
       textureSize,
-      camera: viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
-      surface: input("surface-controls").checked, wire: input("wire").checked,
-      brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked,
+      camera: previewConfig?.camera ?? viewer?.cameraState() ?? workspace.preview.camera, eyeShape: +$<HTMLSelectElement>("eye-shape").value,
+      surface: previewConfig?.surface ?? input("surface-controls").checked,
+      wire: previewConfig?.wire ?? input("wire").checked,
+      brows: previewConfig?.brows ?? input("brows").checked,
+      lashes: previewConfig?.lashes ?? input("lashes").checked,
+      hair: previewConfig?.hair ?? input("hair").checked,
       piercings: input("piercings").checked, piercingStyle: $<HTMLSelectElement>("piercing-style").value,
-      piercingDefinition: $<HTMLSelectElement>("piercing-colour").value, normals: input("normals").checked,
-      eyeOptics: input("eye-optics").checked,
-      exposure: +input("exposure").value, lightAngle: +input("light-angle").value,
+      piercingDefinition: $<HTMLSelectElement>("piercing-colour").value,
+      normals: previewConfig?.normals ?? input("normals").checked,
+      eyeOptics: previewConfig?.eyeOptics ?? input("eye-optics").checked,
+      exposure: previewConfig?.exposure ?? +input("exposure").value,
+      lightAngle: previewConfig?.lightAngle ?? +input("light-angle").value,
       blink: +input("blink").value, blinkPlaying: $("play").getAttribute("aria-pressed") === "true",
       idle: viewer?.idle?.enabled ?? workspace.preview.idle,
       idleTime: viewer?.idle?.time ?? workspace.preview.idleTime,
@@ -383,7 +393,8 @@ const recipeActions = new RecipeActions(
     else if (effect.kind === "immediate") render(effect.layerIndex);
     else if (effect.layerIndex !== active) render(effect.layerIndex);
     else { schedule(); sync(); persist(); }
-  }, history, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft");
+  }, history, glitterChoices, () => presetLibrary?.snapshot()?.selected ?? "draft",
+  i => scheduleLayer(recipe.layers[i]));
 function dispatchRecipeAction(action: RecipeAction, record = false) {
   try { recipeActions.dispatch(action, record); }
   catch (error) {
@@ -496,9 +507,10 @@ uvEditor = createUVEditor($<HTMLCanvasElement>("uv"), {
   selectedField: () => currentField()?.id, selectField, canvases: () => canvases,
   albedo: () => viewer?.albedo.image as HTMLImageElement | undefined,
   select: index => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index }); },
-  begin: checkpoint, change: schedule,
+  begin: checkpoint, apply: action => recipeActions.applyGesture(action),
   cancel: undo, persist, message: status,
 }, workspace.uvView);
+viewport.attach("uv", uvEditor);
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
     a = document.createElement("a");
@@ -719,13 +731,14 @@ try {
     selectedField: () => currentField()?.id, selectField,
     select: (i) => { const l = current(); if (l) dispatchRecipeAction({ kind: "point.select", layerId: l.id, index: i }); },
     begin: checkpoint,
-    change: schedule,
+    apply: action => recipeActions.applyGesture(action),
     cancel: undo,
     message: status,
   });
+  viewport.attach("surface", surface);
   surface.setEnabled(input("surface-controls").checked);
   input("surface-controls").onchange = () =>
-    surface.setEnabled(input("surface-controls").checked);
+    previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
   for (let i = 0; i < recipe.layers.length; i++) {
     const stored = initialOptics[i];
     if (initialQuality.accepted && !(recipe.layers[i].finish==="glitter" &&
@@ -737,21 +750,21 @@ try {
   $("loading").hidden = true;
   drawUV();
   $("front").onclick = () => {
-    const limited = viewer!.front();
+    const limited = previewActions!.dispatch({ kind: "camera.front" }).limited;
     $("fov-help").textContent = limited
       ? "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV."
       : "Camera distance follows the viewed face area as lens angle changes. Game FOV numbers may use a different convention.";
   };
-  input("wire").onchange = () => viewer!.setWire(input("wire").checked);
-  for (const name of ["brows", "lashes"]) {
+  input("wire").onchange = () => previewActions!.dispatch({ kind: "preview.setWire", enabled: input("wire").checked });
+  for (const name of ["brows", "lashes"] as const) {
     input(name).disabled = !viewer.details[name];
     input(name).checked &&= !!viewer.details[name];
     viewer.setDetail(name, input(name).checked);
-    input(name).onchange = () => viewer!.setDetail(name, input(name).checked);
+    input(name).onchange = () => previewActions!.dispatch({ kind: "preview.setDetail", detail: name, enabled: input(name).checked });
   }
   if (!savedV) input("hair").disabled = true;
   viewer.setHair(input("hair").checked);
-  input("hair").onchange = () => viewer!.setHair(input("hair").checked);
+  input("hair").onchange = () => previewActions!.dispatch({ kind: "preview.setHair", enabled: input("hair").checked });
   if (viewer.evidence.hairError) $("hair-note").textContent =
     `${viewer.hair.length ? "Some local hair styles unavailable" : "Hair preview unavailable"}: ${viewer.evidence.hairError}`;
   if (viewer.evidence.detailErrors.length)
@@ -762,27 +775,39 @@ try {
       ? "Saved Arkhe brow maps · brown liquorice lash profile, colour preview approximate"
       : "Saved Arkhe brow maps + installed brown ombre gradient · lash shading approximate";
   setupMotionControls(viewer, preview);
+  previewActions = new PreviewActions({ ...preview, surface: input("surface-controls").checked,
+    brows: input("brows").checked, lashes: input("lashes").checked, hair: input("hair").checked }, {
+    cameraState: viewer.cameraState, front: viewer.front, setFov: viewer.setFov,
+    endFovGesture: viewer.endFovGesture, restoreCamera: viewer.restoreCamera,
+    setExposure: viewer.setExposure, setLightAngle: viewer.setLightAngle,
+    setSurfaceControls: enabled => surface.setEnabled(enabled), setWire: viewer.setWire,
+    setNormals: viewer.setNormals, setEyeOptics: viewer.setEyeOptics,
+    setHair: viewer.setHair, setDetail: viewer.setDetail,
+    availability: target => target === "hair" ? !savedV || !viewer!.hair.length ? "Saved hair preview is unavailable." : undefined
+      : !viewer!.details[target] ? `${target} preview assets are unavailable.` : undefined,
+  });
+  previewActions.subscribe(persist);
   shape.onchange = () => viewer!.eyeShape(+shape.value);
   input("exposure").oninput = () =>
-    viewer!.setExposure(+input("exposure").value);
+    previewActions!.dispatch({ kind: "preview.setExposure", value: +input("exposure").value });
   input("light-angle").oninput = () =>
-    viewer!.setLightAngle(+input("light-angle").value);
+    previewActions!.dispatch({ kind: "preview.setKeyAngle", degrees: +input("light-angle").value });
   input("normals").onchange = () =>
-    viewer!.setNormals(input("normals").checked);
+    previewActions!.dispatch({ kind: "preview.setNormals", enabled: input("normals").checked });
   input("eye-optics").onchange = () => {
-    viewer!.setEyeOptics(input("eye-optics").checked);
+    previewActions!.dispatch({ kind: "preview.setEyeOptics", enabled: input("eye-optics").checked });
     refreshEyeOpticsNote();
   };
   input("fov").oninput = () => {
-    const limited = viewer!.setFov(+input("fov").value);
+    const limited = previewActions!.dispatch({ kind: "camera.setFov", degrees: +input("fov").value }).limited;
     $("fov-value").textContent = `${input("fov").value}°`;
     $("fov-help").textContent = limited
       ? "Framing reached the camera limit. Pan or use Front view to recover the subject."
       : "Camera distance follows the viewed face area as lens angle changes. Game FOV numbers may use a different convention.";
   };
-  input("fov").onchange = () => viewer!.endFovGesture();
+  input("fov").onchange = () => previewActions!.dispatch({ kind: "camera.endFovGesture" });
   // Motion is restored before the neutral-space camera, applying its offset once.
-  if (preview.camera) viewer.restoreCamera(preview.camera);
+  if (preview.camera) previewActions.dispatch({ kind: "camera.restore", camera: preview.camera });
   viewer.controls.addEventListener("change", persist);
   layersPanel.scrollTop = workspace.panels.layersScroll;
   panel.scrollTop = workspace.panels.propertiesScroll;
@@ -796,6 +821,7 @@ try {
       ready: true,
       workspace: snapshot(),
       surface: surface.diagnostics(),
+      inputCapture: viewport.capture(),
       uv: uvEditor!.diagnostics(),
       recipe: structuredClone(recipe),
       assets: viewer!.evidence,

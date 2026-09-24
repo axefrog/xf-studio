@@ -11,6 +11,7 @@ import {
 import type { createScene } from "./scene";
 import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
 import { createSurfaceOcclusion } from "./surface-occlusion";
+import type { GestureEdit } from "./recipe-actions";
 
 type Handle = {
   kind: "point" | "tangent" | "origin" | "field";
@@ -30,7 +31,7 @@ type Hooks = {
   selectedField: () => string | undefined;
   selectField: (id: string) => void;
   begin: () => void;
-  change: () => void;
+  apply: (action: GestureEdit) => boolean;
   cancel: () => void;
   message: (text: string) => void;
 };
@@ -42,6 +43,7 @@ export function createSurfaceEditor(
 ) {
   const { renderer, scene, camera, plate, head, controls } = viewer,
     canvas = renderer.domElement;
+  const listeners = new AbortController();
   const map = new SurfaceMap(plate.geometry),
     group = new THREE.Group();
   const headVisibility=createSurfaceOcclusion(head);
@@ -161,9 +163,8 @@ export function createSurfaceEditor(
     }
     if (JSON.stringify(next) === state.expected) return true;
     if (!state.changed) { hooks.begin(); state.changed = true; }
-    Object.assign(state.layer, next);
+    if (!hooks.apply({ kind: "shape.replace", layerId: state.layer.id, expectedLayer: state.layer, next })) return false;
     state.expected = JSON.stringify(state.layer);
-    hooks.change();
     return true;
   }
   let hovered: Handle | undefined,
@@ -339,7 +340,7 @@ export function createSurfaceEditor(
     );
     p.needsUpdate = true;
   }
-  viewer.onFrame(update);
+  const offFrame = viewer.onFrame(update);
   function setRay(x: number, y: number) {
     const r = canvas.getBoundingClientRect();
     mouse.set(
@@ -497,7 +498,7 @@ export function createSurfaceEditor(
       canvas.setPointerCapture(e.pointerId);
       canvas.style.cursor = "grabbing";
     },
-    true,
+    { capture: true, signal: listeners.signal },
   );
   canvas.addEventListener(
     "pointermove",
@@ -555,26 +556,28 @@ export function createSurfaceEditor(
       const h = drag.handle,
         u = h.mirror ? 1 - uv.u : uv.u,
         v = uv.v;
+      let accepted = false;
       if (h.kind === "point") {
-        l.points[h.index].u = clamp(u);
-        l.points[h.index].v = clamp(v);
+        accepted = hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
+          index: h.index, expectedPoint: l.points[h.index], next: { u: clamp(u), v: clamp(v) } });
       } else if (h.kind === "tangent") {
         // Keep knot identity stable so an in-progress gesture remains valid.
-        Object.assign(l.points[h.index], moveTangent(l.points[h.index], h.side!, { u, v }));
+        accepted = hooks.apply({ kind: "point.replace", layerId: l.id, expectedLayer: l,
+          index: h.index, expectedPoint: l.points[h.index], next: moveTangent(l.points[h.index], h.side!, { u, v }) });
       } else {
         const field = l.fields.find((f) => f.id === h.fieldId)!;
         if (h.kind === "origin") {
-          field.u = clamp(u);
-          field.v = clamp(v);
+          accepted = hooks.apply({ kind: "field.replace", layerId: l.id, expectedLayer: l,
+            fieldId: field.id, expectedField: field, next: { u: clamp(u), v: clamp(v) } });
         } else {
-          field.du = clamp(u - field.u, -0.1, 0.1);
-          field.dv = clamp(v - field.v, -0.1, 0.1);
+          accepted = hooks.apply({ kind: "field.replace", layerId: l.id, expectedLayer: l,
+            fieldId: field.id, expectedField: field,
+            next: { du: clamp(u - field.u, -0.1, 0.1), dv: clamp(v - field.v, -0.1, 0.1) } });
         }
       }
-      drag.last = uv;
-      hooks.change();
+      if (accepted) drag.last = uv;
     },
-    true,
+    { capture: true, signal: listeners.signal },
   );
   canvas.addEventListener(
     "pointerup",
@@ -587,16 +590,16 @@ export function createSurfaceEditor(
       e.stopImmediatePropagation();
       stop();
     },
-    true,
+    { capture: true, signal: listeners.signal },
   );
   canvas.addEventListener("pointercancel", (e) => {
     if (e.pointerId === drag?.pointer) stop(true);
     if (e.pointerId === shapeDrag?.pointer) stopShape(true);
-  }, true);
+  }, { capture: true, signal: listeners.signal });
   canvas.addEventListener("lostpointercapture", (e) => {
     if (e.pointerId === drag?.pointer) stop(true);
     if (e.pointerId === shapeDrag?.pointer) stopShape(true);
-  });
+  }, { signal: listeners.signal });
   canvas.addEventListener("wheel", (e) => {
     if (!enabled || !e.shiftKey) return;
     // A scale gesture never leaks through to camera zoom, including rejected edits.
@@ -615,13 +618,14 @@ export function createSurfaceEditor(
       wheel.factor = factor;
     clearTimeout(wheel.timer);
     wheel.timer = setTimeout(() => finishWheel(), 250);
-  }, { capture: true, passive: false });
+  }, { capture: true, passive: false, signal: listeners.signal });
   // Committing a wheel burst before focus moves keeps a later Escape in a text
   // field or the UV pane from cancelling an unrelated surface transaction.
   window.addEventListener("pointerdown", (e) => {
     if (e.target !== canvas) finishWheel();
-  }, true);
-  window.addEventListener("blur", () => { stop(true); stopShape(true); finishWheel(true); });
+  }, { capture: true, signal: listeners.signal });
+  window.addEventListener("blur", () => { stop(true); stopShape(true); finishWheel(true); },
+    { signal: listeners.signal });
   window.addEventListener(
     "keydown",
     (e) => {
@@ -636,9 +640,20 @@ export function createSurfaceEditor(
         finishWheel(true);
       }
     },
-    true,
+    { capture: true, signal: listeners.signal },
   );
+  const cancelInput = () => { stop(true); stopShape(true); finishWheel(true); };
+  function dispose() {
+    cancelInput(); listeners.abort();
+    if (typeof offFrame === "function") offFrame();
+    scene.remove(group);
+    pointGeometry.dispose(); lineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();
+    pointMaterial.dispose(); tangentMaterial.dispose();
+    (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
+  }
   return {
+    resize: update, cancelInput, dispose,
+    inputCapture: () => !!drag || !!shapeDrag || !!wheel,
     setEnabled: (value: boolean) => {
       stop();
       stopShape();

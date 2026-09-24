@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { initialRecipe } from "../src/recipe";
 import { convertToBezier, tangentEndpoint } from "../src/bezier-path";
 import { createUVEditor } from "../src/uv-editor";
+import { applyGestureEdit } from "../src/recipe-actions";
 import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/uv-view";
 
 test("UV Fit includes all explicit tangents, including outside-atlas and mirrored endpoints", () => {
@@ -68,7 +69,8 @@ test("UV tangent adapter mirrors drags, cancels exactly, guards replaced targets
       recipe: () => recipe, layer: () => recipe.layers[0], selected: () => selected,
       canvases: () => [], albedo: () => undefined, select: index => { selected = index; },
       selectedField: () => undefined, selectField() {}, begin: () => { checkpoint = structuredClone(recipe); begins++; },
-      change: () => { changes++; }, cancel: () => { recipe = structuredClone(checkpoint); }, persist() {}, message() {},
+      apply: action => { const changed=applyGestureEdit(action); if(changed)changes++; return changed; },
+      cancel: () => { recipe = structuredClone(checkpoint); }, persist() {}, message() {},
     }, defaultUVView());
     editor.draw();
     const event = (x: number, y: number) => ({ clientX: x, clientY: y, button: 0, pointerId: 7, preventDefault() {} });
