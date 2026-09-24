@@ -106,6 +106,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
       if (action === "check") {
         const checked = result as PackageCheck;
         if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||
+            checked.modName !== plan.modName || checked.selectorLabel !== plan.selectorLabel ||
             checked.originalPresetCount !== collection.presets.length || checked.packagedCollectionSha256 !== packagedHash ||
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.presets) !== JSON.stringify(plan.presets.map(p =>

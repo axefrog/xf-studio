@@ -186,7 +186,8 @@ def main(args):
     cc_path = f'{DEPOT}/xfs_shimmer_plate.inkcharcustomization'
     option = base_cc['Data']['RootChunk']['headCustomizationOptions'][0]['Data']
     option['name'] = option['uiSlot'] = cname(NAMESPACE)
-    option['localizedName'] = 'XF Studio Shimmer diagnostic'
+    # Mod branding comes from the Studio (src/mod-branding.ts) through the scaffold plan.
+    option['localizedName'] = f"{plan['modName']} Shimmer diagnostic"
     option['resource'] = ref(app_path, True)
     base_cc['Data']['RootChunk']['headGroups'][0]['options'] = [cname(NAMESPACE)]
     off = copy.deepcopy(base_app['Data']['RootChunk']['appearances'][0])

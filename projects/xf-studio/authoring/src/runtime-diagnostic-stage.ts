@@ -1,9 +1,10 @@
 /** A private MO2 diagnostic clone. This never writes to the source MO2 or game. */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { defaultLocalSettings } from "./local-settings";
 import { createModInstallTransport, inspectLocalPackageCandidate } from "./mod-install-transport";
+import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "./mod-branding";
 
 export type RuntimeDiagnosticOptions = {
   candidateStore: string; candidateId: string; gameRoot: string; mo2Root: string;
@@ -14,14 +15,36 @@ export type RuntimeDiagnosticPlan = {
   candidateFiles: { path: string; sha256: string; bytes: number }[];
   verifiedUnpackedFiles: number; presetCount: number; omissions: number;
   sourceProfileModlistSha256: string; sourceProfileEnabledMods: number;
-  sourceProfileLegacyEnabled: boolean; sourceProfileXfStudioPresent: boolean;
+  sourceProfileLegacyEnabled: boolean;
+  /** The profile lists the dedicated mod (enabled or disabled) under its current name. */
+  sourceProfileModEntryPresent: boolean;
+  /** The profile lists a legacy folder name of this mod, e.g. the 25 September "XF Studio" diagnostic. */
+  sourceProfileLegacyModEntryPresent: boolean;
   sourceDedicatedModExists: boolean;
+  /** An existing MO2 folder holding an earlier install of this mod under a legacy name. */
+  sourceLegacyModFolder: string | null;
   frameworkMetadataVersions: Record<string, string | null>;
   exactFilenameConflicts: string[]; stagingRoot: string;
   actions: string[]; cautions: string[];
 };
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
+/** The legacy development selector that a diagnostic clone disables. */
+const legacyDevelopmentMod = "XF Eye Artistry CCXL - Dev";
+/** The isolated modlist a diagnostic clone uses; shared with promotion so both agree exactly. */
+export function diagnosticModlist(source: string): string {
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  let lines = source.split(/\r?\n/).filter((line, index, all) => index < all.length - 1 || line);
+  lines = lines.map(line => line === `+${legacyDevelopmentMod}` ? `-${legacyDevelopmentMod}` : line);
+  lines = lines.filter(line => line !== `-${EYE_MAKEUP_MOD.modName}`);
+  lines.push(`+${EYE_MAKEUP_MOD.modName}`);
+  return lines.join(newline) + newline;
+}
+/** An existing MO2 mod folder that holds an earlier install of this mod under a legacy name. */
+export function legacyModFolder(modsRoot: string): string | null {
+  return readdirSync(modsRoot).find(entry =>
+    EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
+}
 const sha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
 const within = (child: string, root: string) => {
   const rel = relative(root, child);
@@ -81,7 +104,9 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   const lines = text.split(/\r?\n/);
   const names = lines.filter(line => line.startsWith("+")).map(line => line.slice(1));
   for (const name of names) modName(name);
-  requireValue(!names.includes("XF Studio"), "Source profile already enables XF Studio; inspect it before staging.");
+  const enabledMod = names.find(isEyeMakeupModFolder);
+  requireValue(!enabledMod, `Source profile already enables ${EYE_MAKEUP_MOD.modName}` +
+    (enabledMod?.toLowerCase() === EYE_MAKEUP_MOD.modName.toLowerCase() ? "" :` under its earlier name "${enabledMod}"`) + "; inspect it before staging.");
   const frameworkMetadataVersions: Record<string, string | null> = {};
   for (const name of ["ArchiveXL", "TweakXL", "Codeware", "redscript"]) {
     const meta = join(paths.mo2, "mods", name, "meta.ini");
@@ -104,8 +129,10 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   };
   requireValue(Number.isSafeInteger(manifest.verifiedPresetCount) && manifest.verifiedPresetCount! > 0,
     "Diagnostic candidate has no recorded presets.");
-  const legacy = names.includes("XF Eye Artistry CCXL - Dev");
-  const dedicatedModExists = existsSync(join(paths.mo2, "mods", "XF Studio"));
+  const legacy = names.includes(legacyDevelopmentMod);
+  const dedicatedModExists = existsSync(join(paths.mo2, "mods", EYE_MAKEUP_MOD.modName));
+  const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
+  const listed = (name: string) => lines.some(line => /^[+-]/.test(line) && line.slice(1).toLowerCase() === name.toLowerCase());
   const cautions = [
     "This checks paired payload hashes and the manifest claim; it does not rerun the independent archive verifier.",
     "The source profile and old runtime logs do not prove which archives will win in a future session.",
@@ -113,7 +140,8 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     "No plate clearance correction has passed every release gate; watch eyelids and idle poses.",
   ];
   if (legacy) cautions.push("The legacy Eye Artistry selector is enabled in the source profile and will be disabled only in the diagnostic clone.");
-  if (dedicatedModExists) cautions.push("The source MO2 instance already has an XF Studio mod folder; inspect its ownership before promoting a diagnostic clone.");
+  if (dedicatedModExists) cautions.push(`The source MO2 instance already has an ${EYE_MAKEUP_MOD.modName} mod folder; inspect its ownership before promoting a diagnostic clone.`);
+  if (legacyFolder) cautions.push(`The source MO2 instance already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy folder "${legacyFolder}". Promotion refuses to create a second copy until that install is rolled back or removed.`);
   if (exactFilenameConflicts.length) cautions.push("Exact archive filename conflicts require resolution before a diagnostic launch.");
   return {
     schema: "xfs/runtime-diagnostic-plan-1", candidateId: options.candidateId,
@@ -121,13 +149,14 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     verifiedUnpackedFiles: manifest.verifiedUnpackedFiles,
     presetCount: manifest.verifiedPresetCount!, omissions: Array.isArray(manifest.omissions) ? manifest.omissions.length : 0,
     sourceProfileModlistSha256: sha(paths.modlist), sourceProfileEnabledMods: names.length,
-    sourceProfileLegacyEnabled: legacy, sourceProfileXfStudioPresent: lines.some(line => /^[+-]XF Studio$/.test(line)),
-    sourceDedicatedModExists: dedicatedModExists,
+    sourceProfileLegacyEnabled: legacy, sourceProfileModEntryPresent: listed(EYE_MAKEUP_MOD.modName),
+    sourceProfileLegacyModEntryPresent: EYE_MAKEUP_MOD.legacyModFolders.some(listed),
+    sourceDedicatedModExists: dedicatedModExists, sourceLegacyModFolder: legacyFolder,
     frameworkMetadataVersions,
     exactFilenameConflicts, stagingRoot: paths.stage,
     actions: ["Copy selected profile metadata into a new isolated MO2 root.",
       ...(legacy ? ["Disable the legacy Eye Artistry mod only in that copied modlist."] : []),
-      "Enable a dedicated XF Studio entry only in that copied modlist.",
+      `Enable a dedicated ${EYE_MAKEUP_MOD.modName} entry only in that copied modlist.`,
       "Use the trusted transport to copy the verified candidate pair into that isolated MO2 root."],
     cautions,
   };
@@ -154,13 +183,7 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   }
   requireValue(sha(join(stagedProfile, "modlist.txt")) === plan.sourceProfileModlistSha256,
     "Copied MO2 profile changed during diagnostic staging.");
-  const sourceModlist = readFileSync(paths.modlist, "utf8");
-  const newline = sourceModlist.includes("\r\n") ? "\r\n" : "\n";
-  let lines = sourceModlist.split(/\r?\n/).filter((line, index, all) => index < all.length - 1 || line);
-  lines = lines.map(line => line === "+XF Eye Artistry CCXL - Dev" ? "-XF Eye Artistry CCXL - Dev" : line);
-  lines = lines.filter(line => line !== "-XF Studio");
-  lines.push("+XF Studio");
-  writeFileSync(join(stagedProfile, "modlist.txt"), lines.join(newline) + newline);
+  writeFileSync(join(stagedProfile, "modlist.txt"), diagnosticModlist(readFileSync(paths.modlist, "utf8")));
   const settings = defaultLocalSettings();
   settings.gameRoot = paths.game; settings.mo2Root = stagedMo2; settings.mo2ProfileId = options.profileId;
   settings.launchRoute = "mo2"; settings.installMode = "mo2";

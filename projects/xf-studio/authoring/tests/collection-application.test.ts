@@ -36,7 +36,7 @@ function fixture() {
     get: async id => ({ collection: structuredClone(id === other.id ? other : collection), revision: 1, updatedAt: "now" }),
     save: async c => { saves++; return { collection: structuredClone(c), revision: 2, updatedAt: "now" }; },
     package: async (_action, c) => { packageInput = c; return { ready: true, collectionId: c.id,
-      namespace: "xfs_test", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "hash",
+      namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "hash",
       presets: [{ id: c.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
   };
   let bootstrap!: CollectionApplication;

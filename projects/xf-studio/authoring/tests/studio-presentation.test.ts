@@ -40,7 +40,7 @@ function trustedFixture(): { shell: StudioPresentationPort<string>; packageInput
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },
     save: async () => { throw Error("No SQLite write in this fixture."); },
     package: async (_action, value) => { packageInput = value; return {
-      ready: true, collectionId: value.id, namespace: "xfs_test", originalPresetCount: value.presets.length,
+      ready: true, collectionId: value.id, namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: value.presets.length,
       omissions: [], packagedCollectionSha256: "fixture-hash",
       presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision,
         appearance: "xfs_fixture" })),

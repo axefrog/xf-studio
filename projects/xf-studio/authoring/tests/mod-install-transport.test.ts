@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModInstallTransport } from "../src/mod-install-transport";
 import { defaultLocalSettings } from "../src/local-settings";
+import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 
 const digest = (body: string) => createHash("sha256").update(body).digest("hex");
 function fixture(route: "direct" | "mo2") {
@@ -24,7 +25,7 @@ function fixture(route: "direct" | "mo2") {
   const receiptsRoot = join(root, "receipts");
   const transport = createModInstallTransport({ candidateStore: store, receiptsRoot, settings });
   const target = route === "direct" ? join(game, "archive", "pc", "mod") :
-    join(mo2, "mods", "XF Studio", "archive", "pc", "mod");
+    join(mo2, "mods", EYE_MAKEUP_MOD.modName, "archive", "pc", "mod");
   function candidate(candidateId: string, version: string) {
     const folder = join(store, candidateId), payload = join(folder, "archive", "pc", "mod");
     mkdirSync(payload, { recursive: true });
@@ -188,5 +189,22 @@ test("malformed private receipts and journals are rejected before file changes",
       prior: receipt, backup: null }));
     expect(() => f.transport.recover()).toThrow("Install journal target or files mismatch");
     expect(readFileSync(join(f.target, "xfs_test.archive.xl"), "utf8")).toBe("one-1");
+  } finally { f.cleanup(); }
+});
+
+test("an MO2 folder from an earlier XF Studio-named diagnostic blocks a second install beside it", () => {
+  const f = fixture("mo2");
+  try {
+    f.candidate("first", "one");
+    for (const legacy of EYE_MAKEUP_MOD.legacyModFolders) {
+      mkdirSync(join(f.mo2, "mods", legacy.toLowerCase()));
+      const transport = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings });
+      expect(() => transport.preflight("first")).toThrow(`earlier ${EYE_MAKEUP_MOD.modName} install under the legacy folder`);
+      expect(() => transport.install("first")).toThrow("legacy folder");
+      expect(transport.receipt()).toBeNull();
+      expect(existsSync(f.target)).toBe(false);
+      rmSync(join(f.mo2, "mods", legacy.toLowerCase()), { recursive: true });
+    }
+    expect(f.transport.preflight("first").target).toBe(f.target);
   } finally { f.cleanup(); }
 });

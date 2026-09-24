@@ -1,4 +1,7 @@
-"""Build a local, offline-verified XF Studio eye-makeup package. Never installs it.
+"""Build a local, offline-verified XF Eye Artistry package from XF Studio. Never installs it.
+
+The mod and selector names come from the Studio's mod-branding module through the
+preflight summary and export plan; this wrapper keeps no copy of them.
 
 Experiment 005 remains the resource/compiler source of truth. Only a successful
 independent verification is promoted into the ignored project dist directory.
@@ -172,7 +175,8 @@ def main(argv=None):
         if verification['archiveSha256'] != built['archiveSha256'] or verification['presetCount'] != len(summary['presets']):
             raise ValueError('Independent verification does not match the build.')
         built_plan = built['plan']
-        if built_plan['collectionId'] != summary['collectionId'] or built_plan['namespace'] != summary['namespace'] or [
+        if built_plan['collectionId'] != summary['collectionId'] or built_plan['namespace'] != summary['namespace'] or \
+                built_plan.get('modName') != summary['modName'] or built_plan.get('selectorLabel') != summary['selectorLabel'] or [
             {key: preset[key] for key in ('id', 'revision', 'appearance')} for preset in built_plan['presets']
         ] != summary['presets']:
             raise ValueError('Compiled collection identities differ from preflight.')
@@ -192,6 +196,7 @@ def main(argv=None):
             manifest = {
                 'schema': 'xfs/local-package-1', 'collectionId': summary['collectionId'],
                 'collectionSha256': source_hash, 'namespace': summary['namespace'],
+                'modName': summary['modName'], 'selectorLabel': summary['selectorLabel'],
                 'packagedCollectionSha256': packaged_hash,
                 'originalPresetCount': summary['originalPresetCount'], 'omissions': summary['omissions'],
                 'presets': summary['presets'], 'verifiedPresetCount': verification['presetCount'],
@@ -207,7 +212,8 @@ def main(argv=None):
             staging.rename(final)
         finally:
             if staging.exists(): shutil.rmtree(staging)
-        result = {'package': str(final), 'manifest': str(final/'manifest.json'), 'archiveSha256': verification['archiveSha256'],
+        result = {'package': str(final), 'manifest': str(final/'manifest.json'),
+            'modName': summary['modName'], 'selectorLabel': summary['selectorLabel'], 'archiveSha256': verification['archiveSha256'],
             'presetCount': verification['presetCount'], 'originalPresetCount': summary['originalPresetCount'],
             'omissions': summary['omissions'], 'packagedCollectionSha256': packaged_hash, 'installed': False,
             'gameRenderingVerified': False}
