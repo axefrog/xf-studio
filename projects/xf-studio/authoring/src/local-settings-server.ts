@@ -1,5 +1,5 @@
 import { defaultLocalSettings, type LocalSettings, type LocalSettingsDraft } from "./local-settings";
-import { evaluateLocalReadiness, packageToolPaths, type LocalReadiness } from "./local-settings-readiness";
+import { evaluateLocalReadiness, packageToolPaths, type HostFeatures, type LocalReadiness } from "./local-settings-readiness";
 import { LocalSettingsStore } from "./local-settings-store";
 
 export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
@@ -17,7 +17,8 @@ const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
 /** Host-owned configuration endpoint. The browser can edit known fields, never select a settings file. */
-export function createLocalSettingsHandler(store = new LocalSettingsStore(), env = process.env) {
+export function createLocalSettingsHandler(store = new LocalSettingsStore(), env = process.env,
+  host: HostFeatures = { updater: false, installer: false }) {
   const view = (): LocalSetupView => {
     const loaded = store.load();
     const paths = packageToolPaths(loaded.settings, env);
@@ -25,7 +26,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
       wolvenKitCli: paths.wolvenkit, pythonExecutable: paths.python, bunExecutable: paths.bun };
     return { revision: loaded.settings.revision, source: loaded.source,
       fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,
-      readiness: evaluateLocalReadiness(effective),
+      readiness: evaluateLocalReadiness(effective, host),
       overridden: overrideNames.filter(name => !!env[name]),
     };
   };

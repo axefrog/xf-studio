@@ -3,6 +3,8 @@ import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
+import { createLocalSettingsHandler } from "../src/local-settings-server";
+import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion) {
@@ -11,6 +13,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
   const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
+  // Desktop settings follow the Electrobun identity and channel. Never inherit
+  // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
+  const localSettings = createLocalSettingsHandler(new LocalSettingsStore(dataRoot), {},
+    { updater: false, installer: false, packageCheck: false, packageBuild: false });
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   let server: ReturnType<typeof Bun.serve>;
@@ -49,6 +55,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }
       if (url.pathname === "/api/package")
         return Response.json({ error: "Desktop package tools are not configured in this feasibility build." }, { status: 503 });
+      if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

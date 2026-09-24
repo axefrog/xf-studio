@@ -6,7 +6,7 @@ export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCa
 export type ReadinessIssue = { code: string; reason: string };
 export type CapabilityReadiness = { ready: boolean; issues: ReadinessIssue[]; limits: string[] };
 export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
-export type HostFeatures = { updater: boolean; installer: boolean };
+export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean };
 const available = (path: string | null, kind: "file" | "directory") => {
   if (!path) return false;
   try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); }
@@ -54,6 +54,8 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   }
 
   const buildIssues: ReadinessIssue[] = [];
+  if (host.packageBuild === false)
+    buildIssues.push(issue("package_host_unavailable", "This host does not provide mod package builds."));
   if (!settings.plateInput) buildIssues.push(issue("plate_unset", "Select the private plate input directory."));
   else if (!available(settings.plateInput, "directory")) buildIssues.push(issue("plate_missing", "The selected plate input directory is unavailable."));
   if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", "Select the WolvenKit CLI executable."));
@@ -82,7 +84,9 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   // A verified immutable candidate and collision/receipt check are separate operation-time requirements.
   return {
     author: item(),
-    check: item([], ["Checks collection eligibility; no game, plate or build tool path is required."]),
+    check: item(host.packageCheck === false
+      ? [issue("package_check_host_unavailable", "This host does not provide mod export checks.")] : [],
+      ["Collection eligibility checks require no game, plate or build tool path when the host provides them."]),
     sourceDiscovery: item(sourceIssues, [settings.launchRoute === "mo2"
       ? "MO2 modlist '+' is activation evidence only; physical candidates do not prove a runtime winner."
       : "Direct archive/pc candidates do not prove a runtime winner."]),
