@@ -115,15 +115,20 @@ The generator and the script's syntax are checked; the in-sandbox run itself has
 
 ## Before publishing the first alpha
 
-1. **Licence.** The repository has no licence file, so visitors and users currently have no granted rights. SignPath also requires an OSI licence. This is a maintainer decision (open question 1).
+1. **Licence — done.** The repository and app are MIT-licensed (top-level `LICENSE`, decided 25 September 2026). MIT is OSI-approved, which also satisfies SignPath's prerequisite.
 2. **Third-party notices.** The installer ships Electrobun 2.0.1 binaries (`launcher.exe`, `ElectrobunCore.dll`, `libNativeWrapper.dll`, `libasar.dll`, `bspatch.exe`, `zig-zstd.exe`; MIT, whose notice must accompany copies), `bun.exe` (Bun is MIT; its licensing page lists bundled components under other licences, including LGPL JavaScriptCore) and Three.js (MIT) inside the Studio bundle. Add a `THIRD-PARTY-NOTICES` file to the packaged view allowlist and the release assets, built from the actual shipped components. No notices file exists yet.
 3. **First CI run.** Run the workflow manually on `main`, then install the artifact on a clean machine or in the sandbox.
 4. **Draft review.** Read the release body and check that the checksums and `gh attestation verify` work on the downloaded files.
 
+## Decided 25 September 2026
+
+- **Licence:** MIT, matching ArchiveXL, TweakXL, Codeware, RED4ext and CET.
+- **Clean-machine trial:** Windows Sandbox is enabled on the development machine.
+- **WolvenKit delivery:** Build downloads the pinned official WolvenKit CLI release on first use, with the user's consent, and verifies it by SHA-256. We don't redistribute it. A path override remains for advanced users. Bundling may be reconsidered later.
+- **Mod sources:** auto-detect Steam, GOG and Epic installs and MO2 instances. Vortex and manual installs are treated as the game's own `archive/pc/mod` folder. The separate "manual mod folder" setting is dropped.
+
 ## Open questions
 
-1. **Licence:** which licence should the repository and app use (for example MIT, Apache-2.0, MPL-2.0 or GPL-3.0)? This decides user rights, notice obligations and SignPath eligibility.
-2. **Clean-machine trial:** may Windows Sandbox be enabled on the development machine, or is another clean machine or standard (non-administrator) Windows account available for the first-run trial?
-3. **Signing route, when ready to improve:** in which country is the maintainer resident (this decides Azure eligibility), and is **SignPath Foundation** acceptable as the publisher name users see?
+1. **Signing route, when ready to improve:** in which country is the maintainer resident (this decides Azure eligibility), and is **SignPath Foundation** acceptable as the publisher name users see?
 
 Asked later, when updater work starts: may an Ed25519 update-signing key live in a GitHub environment secret with required reviewers? That is a repository-settings change for the maintainer.
