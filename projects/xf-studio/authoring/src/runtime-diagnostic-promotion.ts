@@ -185,11 +185,12 @@ function ownedRecord(path: string): Record {
   requireValue(value.schema === "xfs/runtime-promotion-record-1" &&
     value.preview.schema === "xfs/runtime-promotion-preview-1" && /^[a-f0-9-]{36}$/.test(value.transactionId) &&
     Array.isArray(value.profileFiles) && Array.isArray(value.modFiles), "Invalid promotion record.");
-  requireValue(value.profileFiles.length > 0 && value.profileFiles.every(entry => metadata.includes(entry.path)) &&
+  requireValue(value.profileFiles.length > 0 && value.profileFiles.every(entry => metadata.includes(entry.path) &&
+      /^[a-f0-9]{64}$/.test(entry.sha256) && Number.isSafeInteger(entry.bytes) && entry.bytes >= 0) &&
     value.modFiles.length === 2 &&
     value.modFiles[0].path === `${value.preview.namespace}.archive` &&
     value.modFiles[1].path === `${value.preview.namespace}.archive.xl` &&
-    [...value.profileFiles, ...value.modFiles].every(entry => /^[a-f0-9]{64}$/.test(entry.sha256) &&
+    value.modFiles.every(entry => /^[a-f0-9]{64}$/.test(entry.sha256) &&
       Number.isSafeInteger(entry.bytes) && entry.bytes > 0), "Invalid promotion inventory.");
   return value;
 }
