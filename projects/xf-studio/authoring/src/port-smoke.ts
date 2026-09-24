@@ -46,7 +46,7 @@ async function start() {
     requestAnimationFrame(() => { paintQueued = false; if (port) paint(port); });
   };
   const core = createTrustedAuthoringCore(workspace, {
-    resetStack: () => previewDevice?.coordinator.resetStack(),
+    resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
     controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });

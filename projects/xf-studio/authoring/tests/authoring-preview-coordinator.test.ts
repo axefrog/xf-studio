@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { AuthoringPreviewCoordinator, type CompleteRaster, type PreviewRenderPort } from "../src/authoring-preview-coordinator";
 import { freshWorkspace } from "../src/workspace-state";
+import { editLayers } from "../src/layer-stack";
 
 function harness() {
   const document = new AuthoringDocument(freshWorkspace());
@@ -17,6 +18,11 @@ function harness() {
     queue: () => queue,
     reset: () => { calls.push("cancel"); },
     replaceResources: () => { calls.push("replace"); sizes = document.recipe.layers.map(() => 1); },
+    reconcileResources: (previous, current) => {
+      calls.push("reconcile");
+      const old = new Map(previous.map((layer, i) => [layer.id, sizes[i]]));
+      sizes = current.map(layer => old.get(layer.id) ?? 1);
+    },
     releaseDisabled: i => { calls.push(`release:${i}`); sizes[i] = 1; },
     request: (i, _layer, priority, size, optics) => calls.push(`request:${i}:${priority}:${size}:${optics}`),
     updateLayer: i => { calls.push(`update:${i}`); },
@@ -27,7 +33,7 @@ function harness() {
     report: message => { calls.push(`status:${message}`); },
   };
   const coordinator = new AuthoringPreviewCoordinator(document, 1024, port);
-  return { coordinator, document, calls, sizes, setMax: (size: number) => maxTextureSize = size,
+  return { coordinator, document, calls, get sizes() { return sizes; }, setMax: (size: number) => maxTextureSize = size,
     setQueue: (queued: number, running: object | null) => queue = { queued, running },
     setOptics: (missing: boolean) => opticsMissing = missing,
     setPresentationMaps: (missing: boolean) => presentationMapsMissing = missing };
@@ -102,4 +108,63 @@ test("quality status reflects queue and texture readiness without knowing canvas
   h.setQueue(0, null); h.setPresentationMaps(true);
   expect(h.coordinator.describeQuality()).toStartWith("Updating · 1024");
   unsubscribe();
+});
+
+test("rename and its Undo keep completed textures; move reuses them by identity; colour Undo rerenders only its layer", () => {
+  const h = harness();
+  h.sizes.fill(1024);
+  const original = h.document.recipe;
+  const id = original.layers[0].id;
+  const renamed = editLayers(original, id, { kind: "rename", id, name: "Renamed" }).recipe;
+  h.document.replaceRecipe(renamed, 0);
+  h.coordinator.syncStack(original);
+  expect(h.calls).toEqual(["refresh"]);
+  h.calls.length = 0;
+  h.document.replaceRecipe(original, 0);
+  h.coordinator.syncStack(renamed);
+  expect(h.calls).toEqual(["refresh"]);
+  h.calls.length = 0;
+  const moved = editLayers(original, id, { kind: "move", id, to: 2 }).recipe;
+  h.document.replaceRecipe(moved, 2);
+  h.coordinator.syncStack(original);
+  expect(h.calls).toEqual(["reconcile", "refresh"]);
+  expect(h.sizes).toEqual([1024, 1024, 1024, 1024]);
+  h.calls.length = 0;
+  const recolored = structuredClone(moved);
+  recolored.layers[2].color = "#123456";
+  h.document.replaceRecipe(recolored, 2);
+  h.coordinator.syncStack(moved);
+  expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:2:true:1024:false"]);
+  h.calls.length = 0;
+  h.document.replaceRecipe(moved, 2);
+  h.coordinator.syncStack(recolored);
+  expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:2:true:1024:false"]);
+  h.calls.length = 0;
+  const reshaped = structuredClone(moved);
+  reshaped.layers[2].points[0].u += .001;
+  h.document.replaceRecipe(reshaped, 2);
+  h.coordinator.syncStack(moved);
+  expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:2:true:1024:false"]);
+});
+
+test("reordering restarts only unfinished slots after cancelling their old index requests", () => {
+  const h = harness();
+  h.sizes.splice(0, h.sizes.length, 1024, 1, 1024, 1024);
+  const original = h.document.recipe, id = original.layers[0].id;
+  original.layers[1].enabled = true;
+  const moved = editLayers(original, id, { kind: "move", id, to: 2 }).recipe;
+  h.document.replaceRecipe(moved, 2);
+  h.coordinator.syncStack(original);
+  expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:0:false:1024:false"]);
+});
+
+test("duplicating a layer queues its new ID without rebuilding completed siblings", () => {
+  const h = harness();
+  h.sizes.fill(1024);
+  const original = h.document.recipe, id = original.layers[0].id;
+  const copied = editLayers(original, id, { kind: "duplicate", id }).recipe;
+  h.document.replaceRecipe(copied, 1);
+  h.coordinator.syncStack(original);
+  expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:1:true:1024:false"]);
+  expect(h.sizes).toEqual([1024, 1, 1024, 1024, 1024]);
 });

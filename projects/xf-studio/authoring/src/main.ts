@@ -61,7 +61,7 @@ const uiPreferences = new UIPreferenceActions(workspace.uiPreferences);
 const initialTextureSize = workspace.preview.textureSize;
 let qualityActions: PreviewQualityActions;
 const core = createTrustedAuthoringCore(workspace, {
-  resetStack: () => resetStackResources(),
+  resetStack: previous => previewCoordinator.syncStack(previous),
   selectedCollection: () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
   controlAction: action => dispatchRecipeAction(action),
 });

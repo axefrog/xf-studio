@@ -2,7 +2,8 @@ import type { AuthoringDocument } from "./authoring-document";
 import { planLayerPreview } from "./authoring-preview-policy";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { PreviewQualityActions } from "./preview-quality-actions";
-import type { Layer } from "./recipe";
+import { samePreviewInputs } from "./preview-layer-change";
+import type { Layer, Recipe } from "./recipe";
 import type { RasterResponse } from "./raster-processor";
 
 export type CompleteRaster = Extract<RasterResponse, { data: unknown }>;
@@ -19,6 +20,7 @@ export type PreviewRenderPort = {
   queue(): { queued: number; running: unknown };
   reset(): void;
   replaceResources(): void;
+  reconcileResources(previous: Layer[], current: Layer[]): void;
   releaseDisabled(index: number, layer: Layer): void;
   request(index: number, layer: Layer, priority: boolean, size: number, needsOptics: boolean): void;
   updateLayer(index: number, layer: Layer): void;
@@ -112,6 +114,23 @@ export class AuthoringPreviewCoordinator {
   resetStack() {
     this.port.reset(); this.port.replaceResources(); this.port.renderAll("stack"); this.port.refresh();
     this.notify();
+  }
+  /** Keep complete resources by stable layer ID; only changed inputs require new work. */
+  syncStack(previous: Recipe) {
+    const current = this.document.recipe.layers, old = previous.layers;
+    const oldById = new Map(old.map(layer => [layer.id, layer]));
+    const orderChanged = old.length !== current.length || old.some((layer, i) => layer.id !== current[i]?.id);
+    if (orderChanged) {
+      this.port.reconcileResources(old, current);
+    }
+    for (let i = 0; i < current.length; i++) {
+      const prior = oldById.get(current[i].id);
+      if (!prior || !samePreviewInputs(prior, current[i]) ||
+          orderChanged && current[i].enabled &&
+            (this.port.resourceSize(i) !== this.size || this.port.needsPresentationMaps(i, current[i], this.size)))
+        this.render(i);
+    }
+    this.port.refresh(); this.notify();
   }
   rejectInitialCapacity() {
     const assessment = this.assess();

@@ -737,6 +737,7 @@ export async function createScene(
     pick,
     updateLayer,
     setLayerCanvases: makeup.setCanvases,
+    reconcileLayerCanvases: makeup.reconcileLayerCanvases,
     setLayerCanvas: makeup.setLayerCanvas,
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,

@@ -14,6 +14,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
+  let layerIds: string[] = [];
   anchor.visible = false;
   const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
   anchor.material = anchorMaterial;
@@ -43,25 +44,52 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   function clearDirect(material:THREE.MeshPhysicalMaterial){
     direct.get(material)?.dispose();direct.delete(material);
   }
-  function setCanvases(canvases: HTMLCanvasElement[]) {
+  function disposeSlot(i: number) {
+    const material = materials[i];
+    clearFlakes(material); clearDirect(material); material.dispose(); textures[i].dispose(); plates[i].removeFromParent();
+  }
+  function createSlot(canvas: HTMLCanvasElement, i: number) {
+    const mesh = anchor.clone(), texture = maskTexture(canvas);
+    const material = new THREE.MeshPhysicalMaterial({ map: texture, transparent: true, depthWrite: false,
+      roughness: .85, side: THREE.DoubleSide, wireframe });
+    mesh.name = `makeup_layer_${i + 1}`; mesh.material = material; mesh.skeleton = anchor.skeleton;
+    mesh.morphTargetInfluences = anchor.morphTargetInfluences;
+    mesh.renderOrder = 10 + i;
+    extendSkin(mesh, material, .00008);
+    anchor.parent!.add(mesh);
+    mesh.visible = false;
+    return { mesh, material, texture };
+  }
+  function setCanvases(canvases: HTMLCanvasElement[], ids: string[] = []) {
     // A preset/stack replacement owns fresh slot identities, even at equal length.
     // Never let an old slot's optical maps survive into a different authored layer.
-    while (plates.length) {
-      const material = materials.pop()!;
-      clearFlakes(material); clearDirect(material); material.dispose(); textures.pop()!.dispose(); plates.pop()!.removeFromParent();
-    }
+    for (let i = 0; i < plates.length; i++) disposeSlot(i);
+    plates.length = materials.length = textures.length = 0;
+    layerIds = ids;
     for (let i = 0; i < canvases.length; i++) {
-      const mesh = anchor.clone(), texture = maskTexture(canvases[i]);
-      const material = new THREE.MeshPhysicalMaterial({ map: texture, transparent: true, depthWrite: false,
-        roughness: .85, side: THREE.DoubleSide, wireframe });
-      mesh.name = `makeup_layer_${i + 1}`; mesh.material = material; mesh.skeleton = anchor.skeleton;
-      mesh.morphTargetInfluences = anchor.morphTargetInfluences;
-      mesh.renderOrder = 10 + i;
-      // One preview clearance regardless of count; all native skin influences remain.
-      extendSkin(mesh, material, .00008);
-      anchor.parent!.add(mesh);
+      const { mesh, material, texture } = createSlot(canvases[i], i);
       plates.push(mesh); materials.push(material); textures.push(texture);
-      mesh.visible = false;
+    }
+  }
+  function reconcileLayerCanvases(ids: string[], canvases: HTMLCanvasElement[]) {
+    if (ids.length !== canvases.length || layerIds.length !== plates.length) {
+      setCanvases(canvases, ids); return;
+    }
+    const old = new Map(layerIds.map((id, i) => [id, i]));
+    const retained = new Set(ids);
+    for (let i = 0; i < layerIds.length; i++) if (!retained.has(layerIds[i])) disposeSlot(i);
+    const next = ids.map((id, i) => {
+      const prior = old.get(id);
+      return prior === undefined ? createSlot(canvases[i], i) :
+        { mesh: plates[prior], material: materials[prior], texture: textures[prior] };
+    });
+    plates.splice(0, plates.length, ...next.map(slot => slot.mesh));
+    materials.splice(0, materials.length, ...next.map(slot => slot.material));
+    textures.splice(0, textures.length, ...next.map(slot => slot.texture));
+    layerIds = [...ids];
+    for (let i = 0; i < plates.length; i++) {
+      plates[i].name = `makeup_layer_${i + 1}`;
+      plates[i].renderOrder = 10 + i;
     }
   }
   function setLayerCanvas(i: number, canvas: HTMLCanvasElement) {
@@ -161,6 +189,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
         }, 0) };
     });
   }
-  return { plates, materials, textures, setCanvases, setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics,
+  return { plates, materials, textures, setCanvases, reconcileLayerCanvases,
+    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics,
     setWire(value: boolean) { wireframe = value; for (const m of materials) m.wireframe = value; } };
 }

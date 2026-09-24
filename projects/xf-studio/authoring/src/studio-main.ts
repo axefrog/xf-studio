@@ -74,7 +74,7 @@ async function start() {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   const core = createTrustedAuthoringCore(workspace, {
-    resetStack: () => previewDevice?.coordinator.resetStack(),
+    resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
     controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });

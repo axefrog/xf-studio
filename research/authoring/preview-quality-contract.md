@@ -1,5 +1,11 @@
 # Preview texture quality contract
 
+## Layer-identity reconciliation — 25 September 2026
+
+The editor now compares preview inputs after a layer action or recipe Undo. Names and stable IDs are identity/metadata, so renaming or undoing a rename does not queue a raster job. A move remaps completed canvas, mask texture, material and optical maps by layer ID while updating draw order. Removed layers dispose only their own GPU resources; new and changed layers render at their new indices. Pending index-based worker requests are cancelled on a structural change, and any unfinished enabled layer is requeued at its new index. The worker's monotonic versions still reject an old result after cancellation. A quality-tier change or collection/preset restore remains a full replacement.
+
+The active point follows its surviving layer across rename, move and Undo, and is clamped when the layer has fewer points. Focused service, browser-device and Three stack tests verify this boundary; the authoring suite passed 394 tests with five failures caused by unavailable private GLB fixtures in the isolated worktree. Typecheck and browser build passed. A live `?verify=1` check with private preview assets remains for the primary checkout.
+
 ## Implementation checkpoint — 23 September 2026
 
 The initial audit below is now implemented; this checkpoint supersedes its prospective wording.

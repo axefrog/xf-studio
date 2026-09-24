@@ -6,11 +6,12 @@ import { AuthoringLayerActions } from "./authoring-layer-actions";
 import { AuthoringPresentation } from "./authoring-presentation";
 import { RecipeActions, type RecipeAction } from "./recipe-actions";
 import { StudioApplication } from "./studio-application";
+import type { Recipe } from "./recipe";
 import type { WorkspaceState } from "./workspace-state";
 
 /** Trusted, DOM-free authoring composition. The presentation receives only StudioApplication. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
-  resetStack(): void;
+  resetStack(previous: Recipe): void;
   selectedCollection(): string;
   controlAction(action: RecipeAction): void;
 }) {
@@ -28,9 +29,10 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const undo = () => {
     const next = document.undoRecipe();
     if (!next) return false;
+    const previous = document.recipe;
     const activeId = document.recipe.layers[document.active]?.id;
     document.replaceRecipe(next, next.layers.findIndex(layer => layer.id === activeId));
-    ports.resetStack();
+    ports.resetStack(previous);
     return true;
   };
   const gestures = new AuthoringGestures(document, recipe, undo);

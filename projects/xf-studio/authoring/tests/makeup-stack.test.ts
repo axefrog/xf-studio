@@ -42,3 +42,31 @@ test("new makeup layers inherit morphs and extra bone weights; removal frees onl
   expect(stack.materials[0].wireframe).toBe(true); expect(stack.plates[0].visible).toBe(true);
   stack.setCanvases([]);
 });
+
+test("reordering keeps each layer's complete mask and optical resources with its ID", () => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  const root = new THREE.Group(), anchor = new THREE.SkinnedMesh(geometry);
+  root.add(anchor);
+  const stack = createMakeupStack(anchor, 1);
+  const recipe = initialRecipe(), ids = recipe.layers.slice(0, 2).map(layer => layer.id);
+  const canvases = ids.map(() => ({ width: 32, height: 32 }) as HTMLCanvasElement);
+  stack.setCanvases(canvases, ids);
+  const shimmer = { ...recipe.layers[0], finish: "shimmer" as const };
+  stack.updateLayer(0, shimmer, { size: 32, normal: new Uint8Array(4096), surface: new Uint8Array(4096) });
+  stack.updateLayer(1, recipe.layers[1]);
+  const firstPlate = stack.plates[0], firstMaterial = stack.materials[0];
+  const firstMask = stack.textures[0], firstOptics = firstMaterial.normalMap;
+  stack.reconcileLayerCanvases([...ids].reverse(), [...canvases].reverse());
+  expect(stack.plates[1]).toBe(firstPlate);
+  expect(stack.materials[1]).toBe(firstMaterial);
+  expect(stack.textures[1]).toBe(firstMask);
+  expect(stack.materials[1].normalMap).toBe(firstOptics);
+  expect(stack.plates.map(plate => plate.renderOrder)).toEqual([10, 11]);
+  let disposed = 0;
+  firstMaterial.addEventListener("dispose", () => disposed++);
+  stack.reconcileLayerCanvases([ids[1]], [canvases[1]]);
+  expect(disposed).toBe(1);
+  expect(firstPlate.parent).toBeNull();
+  stack.setCanvases([]);
+});

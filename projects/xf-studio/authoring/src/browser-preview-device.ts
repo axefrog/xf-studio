@@ -68,7 +68,22 @@ export function createBrowserPreviewDevice(options: {
       // Dispose the previous tier or stack before allocating its replacement.
       canvases.splice(0, canvases.length, ...emptyCanvases());
       initialOptics = [];
-      viewer?.setLayerCanvases(canvases);
+      viewer?.setLayerCanvases(canvases, authoring.recipe.layers.map(layer => layer.id));
+    },
+    reconcileResources: (previous, current) => {
+      // Worker slots are indices; old completions must not paint a moved identity.
+      client.reset();
+      const oldSlots = new Map(previous.map((layer, i) => [layer.id, i]));
+      const priorCanvases = [...canvases], priorOptics = [...initialOptics];
+      canvases.splice(0, canvases.length, ...current.map(layer => {
+        const old = oldSlots.get(layer.id);
+        return old === undefined ? makeEmptyCanvas() : priorCanvases[old];
+      }));
+      initialOptics = current.map(layer => {
+        const old = oldSlots.get(layer.id);
+        return old === undefined ? undefined : priorOptics[old];
+      });
+      viewer?.reconcileLayerCanvases(current.map(layer => layer.id), canvases);
     },
     releaseDisabled: (i, layer) => {
       if (canvases[i].width !== 1) {
@@ -111,7 +126,8 @@ export function createBrowserPreviewDevice(options: {
     connectScene(scene: Scene) {
       viewer = scene;
       initialQuality = coordinator.assess();
-      scene.setLayerCanvases(initialQuality.accepted ? canvases : emptyCanvases());
+      scene.setLayerCanvases(initialQuality.accepted ? canvases : emptyCanvases(),
+        authoring.recipe.layers.map(layer => layer.id));
       if (!initialQuality.accepted) coordinator.rejectInitialCapacity();
       return initialQuality;
     },

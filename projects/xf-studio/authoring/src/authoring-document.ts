@@ -39,10 +39,12 @@ export class AuthoringDocument {
     gestureKind: this.changedGestureKind }; }
   set recipe(value: Recipe) { this.state.recipe = value; this.geometryRevision++; this.changedLayerIndex = undefined;
     this.changedGestureKind = undefined; this.notify("recipe"); }
-  /** Atomically replace a stack or Undo result, keeping selection within the new recipe. */
+  /** Atomically replace a stack or Undo result, keeping a surviving point selected. */
   replaceRecipe(value: Recipe, nextActive = 0) {
     const recipe = parseRecipe(value), active = clamp(nextActive, recipe.layers.length);
-    this.state = { ...this.state, recipe, active, selected: 0,
+    const sameLayer = this.state.recipe.layers[this.state.active]?.id === recipe.layers[active]?.id;
+    this.state = { ...this.state, recipe, active,
+      selected: sameLayer ? clamp(this.state.selected, recipe.layers[active]?.points.length ?? 0) : 0,
       fieldSelection: parseFieldSelection(this.state.fieldSelection, recipe) };
     this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
     this.notify("recipe");
