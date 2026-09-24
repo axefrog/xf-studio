@@ -39,8 +39,14 @@ function saveWorkspace(text) {
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: text }),
       keepalive: new TextEncoder().encode(text).length < 60_000 });
     if (!response.ok) throw Error("Private desktop workspace could not be saved. Keep this window open and export your collection.");
-  }).catch(error => { workspaceAlert(error.message); });
+  });
+  void saveQueue.catch(error => { workspaceAlert(error.message); });
 }
+window.xfDesktopWorkspaceError = workspaceAlert;
+window.xfDesktopWorkspaceFlush = async () => {
+  window.dispatchEvent(new Event("xfs-desktop-close-flush"));
+  await saveQueue;
+};
 window.xfDesktopWorkspaceStorage = {
   getItem(key) { return key === workspaceKey ? workspaceText : localStorage.getItem(key); },
   setItem(key, value) {

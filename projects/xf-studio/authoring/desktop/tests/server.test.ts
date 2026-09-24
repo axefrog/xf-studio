@@ -178,6 +178,31 @@ test("an unreadable desktop workspace is preserved and cannot be silently replac
   } finally { desktop.stop(); }
 });
 
+test("close acknowledgement requires a live nonce and authenticated same-origin write", async () => {
+  const data = resolve(root, "close-ack");
+  const desktop = createDesktopServer(staticRoot, data,
+    { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
+  const accepted: string[] = [];
+  desktop.onWorkspaceCloseAck((nonce, status) => {
+    if (nonce !== "pending-nonce") return false;
+    accepted.push(status);
+    return true;
+  });
+  try {
+    const origin = `http://127.0.0.1:${desktop.port}`;
+    const cookie = (await fetch(desktop.url)).headers.get("set-cookie")!.split(";")[0];
+    const url = origin + "/api/desktop/workspace/close-ack";
+    const body = JSON.stringify({ schema: "xfs/desktop-close-ack-1", nonce: "pending-nonce", status: "saved" });
+    const headers = { Cookie: cookie, Origin: origin, "Content-Type": "application/json" };
+    expect((await fetch(url, { method: "POST", headers: { Origin: origin }, body })).status).toBe(403);
+    expect((await fetch(url, { method: "POST", headers: { ...headers, Origin: "https://other.example" }, body })).status).toBe(403);
+    expect((await fetch(url, { method: "POST", headers,
+      body: JSON.stringify({ schema: "xfs/desktop-close-ack-1", nonce: "stale", status: "saved" }) })).status).toBe(409);
+    expect((await fetch(url, { method: "POST", headers, body })).status).toBe(204);
+    expect(accepted).toEqual(["saved"]);
+  } finally { desktop.stop(); }
+});
+
 test("desktop first run saves local setup only in its own user data and reports Check ready", async () => {
   const base = `http://127.0.0.1:${app.port}`;
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];

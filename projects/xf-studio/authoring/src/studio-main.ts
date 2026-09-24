@@ -100,6 +100,8 @@ async function start() {
     sources: [core.document, preferences], window, document, scrollTargets: [], toggleTargets: [],
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
   });
+  if ((window as typeof window & { xfDesktopWorkspaceFlush?: () => Promise<void> }).xfDesktopWorkspaceFlush)
+    window.addEventListener("xfs-desktop-close-flush", () => session.flush());
   const persist = () => session.request();
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({

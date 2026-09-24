@@ -25,6 +25,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
   const workspaceStore = new DesktopWorkspaceStore(dataRoot);
+  let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   const shutdown = new AbortController();
   const updates = new DesktopUpdateService({ version: version.version, channel: version.channel,
     buildHash: version.buildHash }, updateTrial?.native ?? null,
@@ -84,6 +85,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
       if (url.pathname === "/api/desktop/workspace")
         return desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+      if (url.pathname === "/api/desktop/workspace/close-ack" && closeAck) {
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        let body: any;
+        try { body = await routedRequest.json(); } catch { return new Response("Invalid close acknowledgement", { status: 400 }); }
+        if (body?.schema !== "xfs/desktop-close-ack-1" || typeof body.nonce !== "string" ||
+          !["saved", "failed"].includes(body.status) || Object.keys(body).sort().join(",") !== "nonce,schema,status")
+          return new Response("Invalid close acknowledgement", { status: 400 });
+        return new Response(null, { status: closeAck(body.nonce, body.status) ? 204 : 409 });
+      }
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
@@ -123,6 +133,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   return {
     url: `${server.url}?session=${token}`,
     port: server.port,
+    onWorkspaceCloseAck(handler: (nonce: string, status: "saved" | "failed") => boolean) { closeAck = handler; },
     stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }
