@@ -5,6 +5,7 @@ import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { createPackageHandler, localPackageTools } from "./src/package-server";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { LocalSettingsStore } from "./src/local-settings-store";
+import { buildBrowser } from "./browser-build";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
@@ -16,14 +17,7 @@ const settingsRequest = createLocalSettingsHandler(localSettings);
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
 const root = resolve(import.meta.dir, "public");
-const build = await Bun.build({
-  entrypoints: ["studio-main.ts", "main.ts", "port-smoke.ts", "raster-worker.ts", "render-fidelity-study.ts"].map((n) =>
-    resolve(import.meta.dir, "src", n),
-  ),
-  outdir: resolve(root, "build"),
-  target: "browser",
-  sourcemap: "external",
-});
+const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
   process.exit(1);

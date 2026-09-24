@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests", "server.ts"]
+  "include": ["src", "tests", "server.ts", "browser-build.ts"]
 }

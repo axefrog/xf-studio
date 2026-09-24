@@ -7,7 +7,7 @@
     "start": "bun server.ts",
     "test": "bun test",
     "check": "tsc --noEmit",
-    "build": "bun build src/studio-main.ts src/main.ts src/port-smoke.ts src/raster-worker.ts src/render-fidelity-study.ts --outdir public/build --target browser"
+    "build": "bun browser-build.ts"
   },
   "dependencies": {
     "three": "0.186.0"
