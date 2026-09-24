@@ -23,7 +23,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **Works without any game files.** On first launch you can skip setup and go straight to the flat UV editor, your library and the export check. Add prepared preview resources from your own copy of the game later to switch on the 3D head.
 - **A 3D preview head.** Point the app at five preview files prepared from your own copy of the game to see your makeup on the head, alongside the flat UV view.
 - **Your work is kept.** Presets are saved in a local library with version history, the current draft is restored after you close and reopen the app, and looks can be exported and imported as portable files.
-- **Your eye-makeup mod now has its own name: XF Eye Artistry.** It appears under that name in the character creator's selector, in Mod Organizer 2, and in Check and Build results. XF Studio remains the name of the app.
+- **Your eye-makeup mod now has its own name: XF Eye Artistry.** It appears under that name in the character creator's selector and in Check and Build results, and the mod files you install carry that name. XF Studio remains the name of the app.
 - **Check before you build.** Check tells you which layers can be turned into mod files and which will be left out, and why. With your own game, WolvenKit and Python set up, Build turns your looks into your own copy of **XF Eye Artistry**, the eye-makeup mod, with Matte, Satin and Metallic layers independently verified before the files are kept.
 
 ### Fixes and under the hood
@@ -34,5 +34,4 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
 - The desktop preview accepts only the core head files so far. The idle animation, saved-V import, hair, brows, lashes and piercings still need the development version run from source.
 - Automatic updates are switched off. Installing one version over another has not been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
-- Installing into Mod Organizer 2 no longer risks leaving two copies side by side: an earlier test install under the old "XF Studio" folder is recognised and must be rolled back first.
 - Closing the window waits for your latest draft to be saved, and shows a message instead of closing if saving fails.
