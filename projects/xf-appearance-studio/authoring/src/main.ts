@@ -21,7 +21,7 @@ import { AuthoringRenderScheduler } from "./authoring-render-scheduler";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { StudioApplication, type StudioAction } from "./studio-application";
-import { planLayerPreview } from "./authoring-preview-policy";
+import { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import { bindControlEdit } from "./control-edit-ui";
 import { createRasterClient } from "./raster-client";
 import { setupFields } from "./field-ui";
@@ -29,9 +29,8 @@ import type { PigmentCommand } from "./pigment-edit";
 import type { SoftnessCommand } from "./softness-edit";
 import { RecipeActions, type RecipeAction } from "./recipe-actions";
 import { setupSoftness } from "./softness-ui";
-import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { setupPreviewQuality } from "./preview-quality-ui";
-import { PreviewQualityActions } from "./preview-quality-actions";
+import type { PreviewQualityActions } from "./preview-quality-actions";
 import type { RasterResponse,GlitterStats } from "./raster-processor";
 import { setupPigment } from "./pigment-ui";
 import { setupPathControls, type PathCommand } from "./path-ui";
@@ -64,7 +63,7 @@ const status = (text: string) => {
 const verification = new URLSearchParams(location.search).has("verify");
 const restored = loadWorkspace({ getItem: key => localStorage.getItem(key) }, verification);
 const workspace = restored.state;
-let textureSize = workspace.preview.textureSize;
+const initialTextureSize = workspace.preview.textureSize;
 let qualityActions: PreviewQualityActions;
 type PreviewOptics = NonNullable<Extract<RasterResponse, {data: unknown}>["optics"]>;
 type PreviewAlbedo = NonNullable<Extract<RasterResponse, {data: unknown}>["albedo"]>;
@@ -101,12 +100,12 @@ function showGlitterMeasurement(){
   const layer=current();
   if(!layer || layer.finish!=="glitter" || !isIrregular(layer.flakes))return;
   const prior=glitterMeasurements.get(layer.id);
-  const valid=prior?.opticalKey===opticalKey(layer,textureSize) &&
-    prior.maskKey===maskAlphaKey(layer,textureSize);
+  const valid=prior?.opticalKey===opticalKey(layer,previewCoordinator.size) &&
+    prior.maskKey===maskAlphaKey(layer,previewCoordinator.size);
   const note=$("irregular-visible-note");
   const scope=layer.flakes.count>FLAKE_LIMITS.count?"retained in the eye UV regions":"generated across the UV atlas";
   note.textContent=valid
-    ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${textureSize}²; these are not visible screen glints.`
+    ? `${prior.stats.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${prior.stats.regionRetained.toLocaleString()} ${scope}. ${prior.stats.coveredPixels.toLocaleString()} painted texture pixels contain any flake coverage at ${previewCoordinator.size}²; these are not visible screen glints.`
     : "Calculating flakes in this painted shape. Field density is not a visible flake count.";
 }
 const currentField = () => presentation.selectedField();
@@ -125,7 +124,7 @@ const workspaceComposer = new WorkspaceComposer(workspace, {
   editor: () => authoring.export(), uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
   savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
   collections: () => presetLibrary?.snapshot() ?? workspace.collections,
-  quality: () => qualityActions?.snapshot().size ?? textureSize,
+  quality: () => qualityActions?.snapshot().size ?? initialTextureSize,
   preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
   sidebar: () => sidebars.snapshot(), layout,
 });
@@ -172,15 +171,7 @@ function replaceRecipe(next: Recipe, nextActive = 0) {
   resetStackResources();
 }
 function resetStackResources() {
-  maskClient.reset();
-  initialOptics = [];
-  // A structure change cannot reuse an in-flight mask or an old slot's pixels.
-  canvases.splice(0, canvases.length, ...authoring.recipe.layers.map(() => {
-    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; return canvas;
-  }));
-  viewer?.setLayerCanvases(canvases);
-  renderScheduler.renderAll("stack");
-  sync(); drawUV(); persist();
+  previewCoordinator.resetStack();
 }
 function changeLayers(command: LayerCommand) {
   dispatchLayer({ kind: "layer.edit", command });
@@ -285,12 +276,34 @@ function sync() {
   $<HTMLButtonElement>("undo").disabled = !authoring.canUndo;
   layerCards();
 }
-let lastRaster = 0;
+let previewCoordinator: AuthoringPreviewCoordinator;
 const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js", { type: "module" }),
-  ({ i, data, ms, size, optics, albedo, glitterStats }) => {
-    if (!authoring.recipe.layers[i]) return;
-    const layer = authoring.recipe.layers[i];
-    if (size !== (layer.enabled ? textureSize : 1)) return;
+  result => previewCoordinator.publish(result), reason => previewCoordinator.fail(reason));
+previewCoordinator = new AuthoringPreviewCoordinator(authoring, initialTextureSize, {
+  maxTextureSize: () => viewer?.renderer.capabilities.maxTextureSize ?? 4096,
+  resourceSize: i => canvases[i]?.width ?? 0,
+  needsOptics: (i, layer, size) => viewer ? viewer.needsOptics(i, layer, size)
+    : initialOptics[i]?.key !== opticalKey(layer, size),
+  needsPresentationMaps: (i, layer, size) => !!viewer &&
+    (viewer.needsOptics(i, layer, size) || viewer.needsAlbedo(i, layer, size)),
+  queue: () => maskClient.diagnostics(),
+  reset: () => maskClient.reset(),
+  replaceResources: () => {
+    // Dispose the previous tier or stack before allocating its replacement.
+    canvases.splice(0, canvases.length, ...emptyPreviewCanvases());
+    initialOptics = [];
+    viewer?.setLayerCanvases(canvases);
+  },
+  releaseDisabled: (i, layer) => {
+    if (canvases[i].width !== 1) {
+      const empty = document.createElement("canvas"); empty.width = empty.height = 1;
+      canvases[i] = empty; viewer?.setLayerCanvas(i, empty);
+    }
+    initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
+  },
+  request: (i, layer, priority, size, needsOptics) => maskClient.request(i, layer, priority, size, needsOptics),
+  updateLayer: (i, layer) => { viewer?.updateLayer(i, layer); },
+  publish: ({ i, data, size, optics, albedo, glitterStats }, layer) => {
     if (canvases[i].width !== size) {
       const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
       canvases[i] = canvas;
@@ -309,71 +322,21 @@ const maskClient = createRasterClient(() => new Worker("/build/raster-worker.js"
       glitterMeasurements.set(layer.id,{opticalKey:opticalKey(layer,size),maskKey:maskAlphaKey(layer,size),stats:glitterStats});
       if(i===authoring.active)showGlitterMeasurement();
     }
-    lastRaster = ms;
     drawUV();
-    refreshQuality?.();
-    status(`Live makeup · ${size}² · ${Math.round(ms)} ms · layer ${i + 1}`);
-  }, reason => { qualityActions.fail(reason); status(qualityActions.snapshot().error); refreshQuality?.(); });
-function qualityAssessment(size = textureSize) {
-  return assessPreviewQuality(authoring.recipe, size, viewer?.renderer.capabilities.maxTextureSize ?? 4096);
-}
-function describeQuality() {
-  if (qualityActions.snapshot().error) return qualityActions.snapshot().error;
-  const assessment = qualityAssessment(), queue = maskClient.diagnostics();
-  if (!assessment.accepted) return assessment.error!;
-  const pending = queue.queued + (queue.running ? 1 : 0);
-  const waiting = authoring.recipe.layers.some((l,i) => l.enabled && (canvases[i]?.width !== textureSize ||
-    (viewer && (viewer.needsOptics(i,l,textureSize) || viewer.needsAlbedo(i,l,textureSize)))));
-  return `${pending || waiting ? "Updating" : "Ready"} · ${textureSize} × ${textureSize} · estimated generated-texture peak ${Math.ceil(assessment.estimatedBytes / 1048576)} MiB. Native assets and browser overhead are additional.`;
-}
-qualityActions = new PreviewQualityActions(textureSize, { assess: size => qualityAssessment(size), replace: size => {
-  textureSize = size; maskClient.reset();
-  // Release the old quality's textures and CPU canvases before allocating the
-  // next tier. A 4K-to-512 transition must not retain the old 4K bundle while
-  // the target-only budget assesses the smaller replacement.
-  canvases.splice(0,canvases.length,...emptyPreviewCanvases());
-  initialOptics=[]; viewer?.setLayerCanvases(canvases);
-  renderScheduler.renderAll();
-} });
+  },
+  renderAll: order => renderScheduler.renderAll(order),
+  refresh: () => { sync(); drawUV(); persist(); },
+  refreshQuality: () => { refreshQuality?.(); },
+  report: status,
+});
+qualityActions = previewCoordinator.quality;
 qualityActions.subscribe(() => { refreshQuality?.(); persist(); });
 refreshQuality = setupPreviewQuality({ choices: $("quality-options"), note: $("quality-state"), retry: $<HTMLButtonElement>("quality-rebuild") },
-  { current: () => qualityActions.snapshot().size, describe: describeQuality,
+  { current: () => qualityActions.snapshot().size, describe: () => previewCoordinator.describeQuality(),
     set: size => { dispatchStudio({ kind: "quality.set", size }); },
     rebuild: () => { dispatchStudio({ kind: "quality.rebuild" }); } });
-function render(i = authoring.active) {
-  const plan = planLayerPreview({ recipe: authoring.recipe, index: i, active: authoring.active,
-    size: textureSize, assessment: qualityAssessment(), blocked: qualityActions.snapshot().blocked,
-    opticsMissing: (layer, size) => viewer ? viewer.needsOptics(i, layer, size)
-      : initialOptics[i]?.key !== opticalKey(layer, size) });
-  if (plan.kind === "missing") return;
-  const layer = plan.layer;
-  if (plan.releaseDisabled) {
-    // Release large hidden resources immediately, even if a bake is being cancelled.
-    if (canvases[i].width !== 1) {
-      const empty = document.createElement("canvas"); empty.width = empty.height = 1;
-      canvases[i] = empty; viewer?.setLayerCanvas(i, empty);
-    }
-    initialOptics[i] = undefined; viewer?.updateLayer(i, layer);
-  }
-  if (plan.kind === "unavailable") {
-    maskClient.reset(); qualityActions.fail(plan.reason);
-    status(qualityActions.snapshot().error); refreshQuality?.(); sync(); persist(); return;
-  }
-  if (plan.kind === "recover") {
-    // Capacity/failure recovery rebuilds every potentially stale slot.
-    qualityActions.recover(); maskClient.reset();
-    renderScheduler.renderAll();
-    return;
-  }
-  qualityActions.recover();
-  maskClient.request(i, layer, plan.priority, plan.size, plan.needsOptics);
-  viewer?.updateLayer(i, authoring.recipe.layers[i]);
-  persist();
-  sync();
-  drawUV();
-}
 const renderScheduler = new AuthoringRenderScheduler(authoring, {
-  frame: run => requestAnimationFrame(run), render,
+  frame: run => requestAnimationFrame(run), render: i => previewCoordinator.render(i),
   refreshSelection: () => { sync(); drawUV(); persist(); },
 });
 const recipeActions = new RecipeActions(
@@ -705,7 +668,7 @@ for (let i = 0; i <= 21; i++) {
   o.selected = i === workspace.preview.eyeShape;
   shape.append(o);
 }
-for (let i = 0; i < authoring.recipe.layers.length; i++) render(i);
+for (let i = 0; i < authoring.recipe.layers.length; i++) previewCoordinator.render(i);
 sync();
 workspacePersistence.activate();
 try {
@@ -714,10 +677,10 @@ try {
   savedAppearance = new SavedAppearanceActions({ apply: v => viewer!.applySavedV(v) });
   app.attach({ savedV: savedAppearance });
   savedAppearance.subscribe(persist);
-  const initialQuality = qualityAssessment();
+  const initialQuality = previewCoordinator.assess();
   viewer.setLayerCanvases(initialQuality.accepted ? canvases : emptyPreviewCanvases());
   if (!initialQuality.accepted) {
-    maskClient.reset(); qualityActions.fail(initialQuality.error); refreshQuality?.();
+    previewCoordinator.rejectInitialCapacity();
   }
   if (workspace.savedV) showSavedV(savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }));
   const preview = workspace.preview;
@@ -878,11 +841,11 @@ try {
           },
         ]),
       ),
-      lastRasterMs: lastRaster,
+      lastRasterMs: previewCoordinator.lastRasterMs,
       frameTiming:viewer!.frameTiming(),
       rasterQueue: maskClient.diagnostics(),
-      previewQuality: { requestedSize: textureSize, canvases: canvases.map(c => c.width),
-        materials: viewer!.makeupDiagnostics(), assessment: qualityAssessment(), error: qualityActions.snapshot().error },
+      previewQuality: { requestedSize: previewCoordinator.size, canvases: canvases.map(c => c.width),
+        materials: viewer!.makeupDiagnostics(), assessment: previewCoordinator.assess(), error: qualityActions.snapshot().error },
       savedV: savedAppearance!.snapshot().savedV
         ? { gameVersion: savedAppearance!.snapshot().savedV!.gameVersion, evidence: savedAppearance!.snapshot().savedV!.evidence }
         : null,
