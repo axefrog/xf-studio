@@ -14,7 +14,7 @@ bun run build:dev    # prepare static view + build tools, then Electrobun dev bu
 bun run run:dev      # launch the dev build in a WebView2 window
 ```
 
-**Last verified 25 September 2026:** 45 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 460 with the private preview assets present.
+**Last verified 25 September 2026:** 45 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 468 with the private preview assets present.
 
 **Version.** `package.json` `version` (now `0.1.0-alpha.1`) is the only place the app version is set. `electrobun.config.ts` imports it, and `release.ts` derives the tag (`v0.1.0-alpha.1`), release title, asset name and changelog section from it. Change it together with the **Unreleased** section of the [changelog](../../CHANGELOG.md) when cutting a release.
 
