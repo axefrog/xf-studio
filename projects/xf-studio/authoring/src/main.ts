@@ -597,8 +597,8 @@ try {
     $("detail-note").textContent =
       `Some details unavailable: ${viewer.evidence.detailErrors.join("; ")}`;
   else if (viewer.evidence.browMaterial === "saved-double-diffuse")
-    $("detail-note").textContent = viewer.evidence.lashColor === "saved-profile-swatch-approximation"
-      ? "Saved Arkhe brow maps · brown liquorice lash profile, colour preview approximate"
+    $("detail-note").textContent = viewer.evidence.lashColor === "saved-hair-profile"
+      ? `Saved Arkhe brow maps (G-buffer decal blend) · lash profile: ${viewer.evidence.lashProfile?.winner ?? "unknown"}, lighting approximate`
       : "Saved Arkhe brow maps + installed brown ombre gradient · lash shading approximate";
   setupPiercingControls();
   shape.onchange = () => previewActions!.dispatch({ kind: "preview.setEyeShape", index: +shape.value });

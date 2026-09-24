@@ -1,3 +1,113 @@
-# Hair shading
+# Hair shading (`hair.mt` family, game 2.31)
 
-**Seed — in progress.** The hair-template shading reference (`.hp` hair profiles, gradient sampling, alpha passes and specular response for hair, brows and lashes) is being written by the brow, lash and hair colour track. Until it lands, see [materials and shaders](materials-and-shaders.md) §4.3 and the [preview fidelity backlog](../research/backlog/preview-fidelity.md).
+**Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the deferred hair light are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles and the option-driven lighting constants are not in any resource and are still hypotheses. Nothing here has been compared with a matched in-game frame yet; see [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-colour-pipeline-2026-09-25.md#matched-in-game-capture-request).
+
+This page covers hair cards, and lashes that use hair materials. Brows in the reference save use a post-G-buffer decal (`mesh_decal_double_diffuse.mt`), not `hair.mt`. The last section covers that decal's colour blend. For material resources, G-buffer layout and other templates, see [materials and shaders](materials-and-shaders.md).
+
+**Grades:** [source] compiled programs or tool/engine source; [resource] installed game or mod resources; [wiki] Cyberpunk Modding Docs at `be2f44ee`; [runtime] observed in game; [hypothesis] not established.
+
+## 1. Inputs
+
+| Input | Meaning | Grade |
+|---|---|---|
+| `Strand_ID` (reg 0) | Greyscale per-strand identity; its **red** channel indexes the profile's ID gradient. Templates and the inspected textures are `isGamma=0`, so the value is linear. | [source] [resource] |
+| `Strand_Gradient` (reg 1) | Greyscale root(0)-to-tip(1) position; **red** indexes the root-to-tip gradient. | [source] [resource] |
+| `Strand_Alpha` (reg 2) | Coverage; **red** channel. | [source] |
+| `HairProfile` (reg 15) | `CHairProfile` (`.hp`): `gradientEntriesID`, `gradientEntriesRootToTip` (unsorted colour stops), `sampleCount` (127 in all but three vanilla profiles). In the shader it is a row index into a runtime float texture. | [source] [resource] |
+| `AlphaCutoff`, `RoughnessScale`, `RoughnessBias`, `ShadowStrength`, `ShadowMin`, `ShadowMax`, `ShadowRoughness`, `Flow`, `FlowStrength`, `Scattering`, `DebugHairColor` | See below. `VertexColorStrength` (reg 8) is declared but unused by the three pixel programs. | [source] |
+| Vertex colour **red** | Baked self-shadow (red = inner, darker). The vertex program passes `COLOR.r` to the pixel programs (`TEXCOORD1.y`). | [source]; [wiki] runtime screenshot |
+
+Template defaults [resource]: `AlphaCutoff` 0.33, `RoughnessScale` 1, `RoughnessBias` 0, `ShadowStrength` 0, `ShadowMin` −0.5, `ShadowMax` 1, `ShadowRoughness` 1, `FlowStrength` 1, `Scattering` 0.16. Each parameter occupies the `cb4` register equal to its template `register` [source].
+
+## 2. Passes
+
+`hair.mt` has three passes per technique. For `MeshSkinned`, the programs are `alpha_accum` `2782105832921211528`, `basecolor_blend` `7571795766366002052` and `gbuffer_solid` `2903833597335136032`. Their vertex program is `7115927943278841644`.
+
+| Pass | What it does | Grade |
+|---|---|---|
+| `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds a per-pixel, per-frame dither (≈ probability `a`). Inserts `depth \| round(a·63)` into a 3-deep k-buffer (atomic max, reverse-Z). The colour target keeps transmittance `Π(1−a)`. | [source] |
+| `hair_basecolor_blend` | For fragments in the k-buffer, adds `(|colour|·w, w)` with `w = stored alpha/63` (additive blend). | [source] |
+| `hair_gbuffer_solid` | Writes the G-buffer for the most opaque of the two front layers, with the same dithered test. GBuffer0 = `sqrt(Σwc/Σw)`. GBuffer1 = packed strand tangent frame. GBuffer2 = `(0, roughness, 1/3 + 2/3·transmittance·thickness/Scattering, Strand_ID)`. | [source] |
+
+Hair is therefore opaque in the G-buffer, with stochastic coverage that TAA/DLSS averages. Its base colour is the alpha-weighted average of the three nearest layers. It is lit once by the deferred light.
+
+## 3. Base colour
+
+Per fragment, in `basecolor_blend` [source]:
+
+```
+N   = profile row texel 0               // sample count
+id  = row[1 + uint((N−1)·Strand_ID.r)]            // truncation, no filtering
+rt  = row[1 + N + uint((N−1)·Strand_Gradient.r)]
+c   = luma601(rt) < 0.5 ? 2·id·rt : 1 − 2·(1−id)·(1−rt)   // overlay; rt is the base layer
+s   = smoothstep(ShadowMin, ShadowMax, 1 − vertexColour.r)
+c  += (saturate(c·s) − c) · ShadowStrength
+c   = DebugHairColor ≥ 0.5 ? 1 : c;   c ·= wetness factor (1 when dry)
+```
+
+- **It is an overlay, not a multiply.** The branch uses the root-to-tip luminance (Rec.601 weights 0.3/0.59/0.11), so a mid-grey ID (0.5) leaves the root-to-tip colour unchanged. A saturated result can exceed 1 or go negative; the resolve stores `|c|` [source].
+- **The profile is sampled, not filtered.** Indices are truncated. The `Strand_ID`/`Strand_Gradient` textures themselves use the material's linear anisotropic sampler, so a filtered ID at strand edges selects intermediate gradient entries [source].
+- **The bake is not in any shader** [hypothesis]. The Studio takes sample `k` at `t = k/(N−1)`, interpolates the 8-bit stop colours, then **decodes them from sRGB**. Evidence: over the 23 vanilla profiles that have a non-black creator swatch (excluding one duplicated swatch), the mean of this model re-encoded to sRGB matches the swatch hue within a median 4.7°, at a median exposure of 0.92. Using raw stop values gives 19°, multiply gives 6.5°, the Cyberpunk Blender add-on's empirical `id^2.2·rt^4.5` gives 9°, swapped roles give 11°, and decode-then-interpolate gives 6.4° ([`hair-profile-swatch-fit.py`](../projects/xf-studio/authoring/tools/hair-profile-swatch-fit.py)). Swatches are designer-picked UI colours, so this is supporting evidence, not proof.
+- `ShadowMin = ShadowMax` (as in the vanilla eyelash `.mi`) saturates to a factor of 1 for unpainted vertices [source arithmetic].
+- The inspected hair strands of the reference save have all-zero vertex colour, so the shadow term is inert there. Its cap has red AO, but the cap uses `mesh_decal_gradientmap_recolor.mt` [resource].
+
+## 4. Roughness, tangent and scattering
+
+- **Roughness** = `saturate(RoughnessScale·Strand_ID.r + RoughnessBias)`, pulled toward `ShadowRoughness` by `(1−s)·ShadowStrength`. Each strand therefore gets its own roughness [source].
+- **Strand direction** = `max(FlowStrength·(2·flow.g − 2) + 1, 0.01)·bitangent + max(FlowStrength·(2·flow.r − 1), 0.01)·tangent`, where bitangent is `cross(N, T)·w` from the mesh [source]. `Flow` textures are `isGamma=1` [resource], which the Blender add-on also notes. For the MELUMINARY flow (163, 255, 105), the decoded red term clamps to 0.01, so the strand follows the bitangent. On those cards the bitangent runs along UV V, the long axis [resource geometry measurement].
+- **Scattering** scales a depth-difference thickness term written to GBuffer2.z [source]. Its effect in the light is still to be traced.
+
+## 5. Deferred hair light
+
+The Hair branch (stencil class 4) of the global-light compute programs was decoded from `m_shaderLightsComputeGlobalOnly_Clustered_00010001` `7525818560587663624`, SHA-256 `07ebbaf9…c8e3` [source]. It is compared against the Standard-only `…_00000001` `11542214229456522081`. It matches the model published by Karis ("Physically Based Hair Shading in Unreal", SIGGRAPH 2016):
+
+| Term | 2.31 arithmetic | Grade |
+|---|---|---|
+| Frame | T from GBuffer1 (strand); `sinθL = T·L`, `sinθV = T·V`, `cosθD = cos(|asin sinθV − asin sinθL|/2)`, `cosφ` between L and V projected normal to T | [source] |
+| Colour | `C = clamp(albedo·(1−metal)·cb0[17].y, 1e−5, 1)` (albedo multiplier) | [source] |
+| **R** (white) | Gaussian `M(r²·√2·cos(φ/2), sinθL + sinθV − shift)`, where the shift comes from `cb0[16].x` plus a per-strand random value hashed from `Strand_ID` in `[cb0[17].z, cb0[17].w]`. `N = cos(φ/2)/4`. Schlick F0 0.0466 at `√(½ + ½V·L)`. Scaled by `cb0[12].x` and a wrap/shadow term `cb0[19]`. | [source] |
+| **TRT** (tinted) | `M(2r², sinθL + sinθV − shift − cb0[16].z)`, `(1−f)²f` with f at `cosθD/2`, `C^(0.8/cosθD)`, `exp(cb0[20].x·cosφ − cb0[20].y)`, scaled by `cb0[12].z` | [source] |
+| **TT** | Not present in this global path | [source] |
+| **Diffuse** ("multiple scatter") | `C · (1/π) · lerp(wrap(N·L, cb0[18].x), 1 − |sinθL|, cb0[18].y) · shadow · cb0[12].w · pow(C/luma(C), 1 − shadow)` | [source] |
+| r | GBuffer2.y clamped to [0.04, 1] | [source] |
+
+The `cb0` hair registers are runtime options. The executable names them under `Editor/Characters/Hair/…`: `AlphaShifts` (R, TT, TRT), `Specular`, `SpecularRandom_Min/Max`, `MultiScatter`, `TRT_Params`, `DiffuseScatterFactor`, `AlbedoMultiplier`, `ScatterDepth`, `GlobalLight`/`LocalLight`/`EnvProbe`, and `HACKS` [source strings]. Their 2.31 values are unknown. The Studio uses Karis's published defaults (R shift −0.07, TRT shift 0.14, TRT `exp(17cosφ − 16.78)`, wrap 1, Kajiya mix 0.33, intensities 1) as `HAIR_LIGHTING_ASSUMED` [hypothesis]. Local-light and environment-probe hair paths were not decoded.
+
+**Consequence.** Hair albedo is dark (the reference save's alpha-weighted mean under §3 is sRGB ≈ (74, 61, 54)), and hair gets no card-normal dielectric specular or grazing Fresnel. A flat-card PBR material lights the same albedo much brighter and greyer than this model.
+
+## 6. Brow decal colour blend (`mesh_decal_double_diffuse.mt`)
+
+The brow decal writes `sqrt(colour)` with `SrcAlpha/InvSrcAlpha` into GBuffer0, which holds `sqrt(albedo)` [source] ([materials and shaders §2.4](materials-and-shaders.md#24-what-a-post_gbuffer-decal-does-to-the-pixel-under-it)). The resulting albedo is `(a·√c + (1−a)·√skin)²`. For a dark brow over skin this acts like linear coverage `≈ 2a − a²`, so partial coverage looks denser and darker than a linear blend. The brow colour and coverage formula (gradient at `(1, 0.5)` × intensity × primary RGB + secondary tint; coverage `(p + (1−p)·s·0.7)²` at default contrast) is in the [brow material study](../research/eye-artistry/brow-lash-fidelity.md) [source].
+
+## 7. Resolving which `.hp` a material uses
+
+The saved lash's material requests the dynamic path `…\hair_profiles\{material}.hp`. Both the base game and an installed mod archive provide `brown_liquorice.hp`, with very different stops ([overlap audit](../research/eye-artistry/brown-liquorice-profile-overlap.md)). Mod archives before base archives is a **source-supported expectation**: WolvenKit's lookup order, and ArchiveXL inserting `Mod` groups before base groups. It is not a runtime-proven REDengine rule. Several mod providers need the load-order resolver ([source discovery](../research/authoring/source-discovery-foundation.md); MO2's first `modlist.txt` row wins). Under §3, the base-game profile gives the lash an sRGB albedo of (177, 136, 44), a golden tan; the mod profile gives (62, 30, 0), a dark red-brown. The Studio applies the generic rule and records each candidate and the basis of the choice (`src/depot-resolution.ts`).
+
+## 8. Browser preview mapping
+
+Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/brow-material.ts` (Three adapters).
+
+| Game step | Preview | Status |
+|---|---|---|
+| Profile bake, truncated lookup, overlay, shadow term, `|c|` | Float profile texture (ID row, root-to-tip row), `texelFetch` | Faithful to §3; bake grade [hypothesis] |
+| Coverage | Remapped `Strand_Alpha.r`; strands use MSAA alpha-to-coverage with no alpha test (≈ dithered coverage) | Approximate (no 3-layer k-buffer) |
+| Lighting | Hair-class direct light (§5) for key and fill lights on the skinned bitangent; card specular off; Three's diffuse irradiance for ambient | Structure [source], constants [hypothesis]; no local/env hair path |
+| Brow decal | Per-vertex skin albedo under each brow vertex; solves an equivalent linear "over" blend | Faithful where the sampled skin albedo is right |
+
+## Open questions
+
+1. Runtime values of the `Editor/Characters/Hair/*` options (cb0 registers 12, 16–20), especially R/TRT shifts and intensities, `DiffuseScatterFactor` and `AlbedoMultiplier`.
+2. Profile bake: colour space, sample positions and interpolation.
+3. Which `brown_liquorice.hp` the game binds for the saved lashes.
+4. The hair local-light and environment-probe paths, and the Scattering/thickness term.
+5. The global flag that multiplies coverage by 1.33.
+6. Sign of the strand direction (root→tip) as stored in GBuffer1, which sets the direction of the R/TRT shifts.
+
+## Sources
+
+- Compiled 2.31 programs from `shader_final.cache` (SHA-256 `339145…3ccfa`) and `staticshader_final.cache` (`bff160…59ff`), disassembled with Windows SDK `dxc`. Method: [shader-system evidence note](../research/materials/shader-system/README.md); hashes: [evidence note](../research/eye-artistry/hair-colour-pipeline-2026-09-25.md).
+- Installed `hair.mt`, the vanilla eyelash `.mi` chain, 72 vanilla `.hp` profiles and the female creator resource (private extractions with WolvenKit CLI 9.0.1).
+- [wiki] `for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial/vertex-color-and-hair.md` (manavortex, based on island_dancer's notes). Its screenshot `.gitbook/assets/hair_vertex_colour_1.png` shows red-painted cards rendering dark in game. `…/configuring-materials/hair-and-skin-material-properties.md` gives the parameter names and the `AlphaShifts` option.
+- Cyberpunk Blender add-on at `7a4ee79`, `material_types/hair.py`: an empirical multiply-with-gamma importer, used here only as a comparison hypothesis.
+- B. Karis, "Physically Based Hair Shading in Unreal", SIGGRAPH 2016 course notes: the published model the decoded light matches.
+- Earlier research: [lash material](../research/eye-artistry/lash-material-followup.md), [hair profile resolution](../research/eye-artistry/saved-hair-profile-resolution.md), [brow material](../research/eye-artistry/brow-lash-fidelity.md).

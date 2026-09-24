@@ -12,10 +12,11 @@ import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceA
 import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
-import { attachHairColor, hairGradientTexture } from "./hair-shading";
+import { attachHairColor, attachHairLighting, attachHairVertexRed, attachStrandCoverage, hairProfileTexture } from "./hair-shading";
+import { resolveHairMaterial, type ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
-import { loadSavedBrowMaterial } from "./brow-material";
-import { loadSavedLashColor } from "./lash-profile";
+import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
+import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 
 export async function createScene(
@@ -180,16 +181,41 @@ export async function createScene(
   > = {};
   const detailErrors: string[] = [];
   let savedBrowMaterial: THREE.MeshStandardMaterial | undefined;
-  let savedLashColor: THREE.Color | undefined;
+  let savedLash: SavedLashAppearance | undefined;
+  // Profile stops are decoded from sRGB before the shader's overlay (see
+  // knowledge/hair-shading.md). One explicit choice for hair and lashes.
+  const profileEncoding: ProfileEncoding = "srgb-decoded";
+  let browUnderlay: { maxMatchedDistance: number; unmatched: number } | undefined;
   try {
-    savedBrowMaterial = await loadSavedBrowMaterial(loader, renderer.capabilities.getMaxAnisotropy());
+    savedBrowMaterial = await loadSavedBrowMaterial(loader, renderer.capabilities.getMaxAnisotropy(), { gbufferBlend: true });
   } catch (error) {
     detailErrors.push(`brows: ${(error as Error).message}; using the provisional material`);
   }
   try {
-    savedLashColor = await loadSavedLashColor();
+    savedLash = await loadSavedLashAppearance();
   } catch (error) {
     detailErrors.push(`lashes: ${(error as Error).message}; using the provisional colour`);
+  }
+  /** Linear skin albedo under each brow vertex, for the sqrt-encoded G-buffer decal blend. */
+  function browUnderlayAttribute(brow: THREE.Mesh): THREE.BufferAttribute {
+    const image = albedo.image as CanvasImageSource & { width: number; height: number };
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width; canvas.height = image.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw Error("Cannot read the head albedo for the brow decal blend");
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, image.width, image.height);
+    const world = (mesh: THREE.Mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      const source = mesh.geometry.getAttribute("position"), out = new Float32Array(source.count * 3), v = new THREE.Vector3();
+      for (let i = 0; i < source.count; i++) v.fromBufferAttribute(source, i).applyMatrix4(mesh.matrixWorld).toArray(out, i * 3);
+      return out;
+    };
+    const result = sampleUnderlayAlbedo(world(brow), world(head), head.geometry.getAttribute("uv").array,
+      { width: pixels.width, height: pixels.height, data: pixels.data });
+    if (result.unmatched) throw Error(`${result.unmatched} brow vertices are not over the head surface`);
+    browUnderlay = { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched };
+    return new THREE.BufferAttribute(result.underlay, 3);
   }
   for (const [name, color, hash, definition] of [
     ["brows", "#675147", "10685882159528859062", "10_brown_ombre"],
@@ -199,7 +225,8 @@ export async function createScene(
       const buffer = await (await fetch(`/assets/${name}.glb`)).arrayBuffer(),
         original = restoreFirstWeights(buffer);
       const asset = await new GLTFLoader().parseAsync(buffer, "/assets/"),
-        alpha = name === "brows" && savedBrowMaterial ? undefined : await texture(`${name}-alpha`);
+        // Also loaded for brows so a failed decal-underlay estimate can fall back cleanly.
+        alpha = await texture(`${name}-alpha`);
       const parts: THREE.SkinnedMesh[] = [];
       asset.scene.traverse((o) => {
         if (!(o instanceof THREE.SkinnedMesh)) return;
@@ -211,15 +238,29 @@ export async function createScene(
           new THREE.BufferAttribute(raw, 4),
         );
         o.frustumCulled = false;
-        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new THREE.MeshStandardMaterial({
-          color: name === "lashes" && savedLashColor ? savedLashColor : color,
+        if (name === "brows" && savedBrowMaterial) {
+          try { o.geometry.setAttribute("xfsUnderlay", browUnderlayAttribute(o)); } catch (error) {
+            // Keep the brow visible with the provisional material rather than guessing the skin under it.
+            savedBrowMaterial = undefined;
+            detailErrors.push(`brows: ${(error as Error).message}; using the provisional material`);
+          }
+        }
+        // Generic identity check: the strand-profile manifest must describe this detail's saved appearance.
+        const lash = name === "lashes" && savedLash?.appearanceHash === hash && savedLash.definition === definition
+          ? savedLash : undefined;
+        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new (lash ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
+          // Lashes are hair.mt: lit by the hair model below, not by the card's dielectric specular.
+          ...(lash ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
+          color: lash ? lash.color : color,
           alphaMap: alpha,
           transparent: true,
           depthWrite: false,
           alphaTest: 0.01,
-          roughness: 0.8,
+          // Lash .mi chain: RoughnessScale 0, RoughnessBias 1. Three's GGX is not the game's hair BRDF.
+          roughness: lash ? lash.roughness : 0.8,
           side: THREE.DoubleSide,
         });
+        if (lash) { attachStrandCoverage(mat, lash.alphaCutoff); attachHairLighting(mat, lash.roughness); }
         // Geometry is the local game's/mod's source. Hair/decal shading is provisional.
         o.material = mat;
         // Keep context details above the entire editable makeup stack (orders 10–41).
@@ -241,7 +282,8 @@ export async function createScene(
       detailErrors.push(`${name}: ${(error as Error).message}`);
     }
   }
-  const hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[] }[] = [];
+  const hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[];
+    material: "material-instance" | "template-defaults"; sampleCount: number }[] = [];
   const hairErrors: string[] = [];
   // All loaded rigs enter the idle binding once at scene creation. Keep their
   // aggregate CPU/GPU cost bounded even if a local manifest lists many styles.
@@ -283,8 +325,10 @@ export async function createScene(
         // Three's alphaMap samples green. Source hair_lm60_a has grayscale RGB;
         // its nearly opaque PNG alpha channel is not the card cutout.
         alpha = await loadMap(asset.alpha, false);
-        let strand: { id: THREE.Texture; gradient: THREE.Texture; idPalette: THREE.Texture;
-          rootPalette: THREE.Texture } | undefined;
+        // v3 manifests carry the .mi chain; older ones fall back to hair.mt template values, reported below.
+        const hairMaterial = asset.material ?? resolveHairMaterial();
+        const sampleCount = asset.profile?.sampleCount ?? 127;
+        let strand: { id: THREE.Texture; gradient: THREE.Texture; profile: THREE.Texture } | undefined;
         let cap: { mask: THREE.Texture; gradient: THREE.Texture } | undefined;
         if (asset.profile && asset.strandId && asset.strandGradient && asset.capMask && asset.capGradient) {
           const [id, gradient, mask, capGradient] = await Promise.all([
@@ -296,10 +340,9 @@ export async function createScene(
           // over the entire cap, hiding it. The strand cards use 0..1 UVs.
           mask.wrapS = THREE.RepeatWrapping;
           mask.needsUpdate = true;
-          const idPalette = hairGradientTexture(asset.profile.id);
-          const rootPalette = hairGradientTexture(asset.profile.rootToTip);
-          materialTextures.push(idPalette, rootPalette);
-          strand = { id, gradient, idPalette, rootPalette };
+          const profile = hairProfileTexture(asset.profile, sampleCount, profileEncoding);
+          materialTextures.push(profile);
+          strand = { id, gradient, profile };
           cap = { mask, gradient: capGradient };
         }
         for (let index = 0; index < asset.parts.length; index++) {
@@ -314,16 +357,24 @@ export async function createScene(
             if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
             o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
             o.frustumCulled = false;
-            const mat = new THREE.MeshStandardMaterial({
+            // Strands: the hair light model replaces the card's direct lighting (see hair-shading.ts).
+            const mat = new (index && strand ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
+              // anisotropy > 0 makes Three skin and interpolate the vertex tangent frame (strand = bitangent).
+              ...(index && strand ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
               color: strand ? 0xffffff : 0x342c29,
               roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
-              ...(index ? { alphaMap: alpha, alphaTest: 0.12, alphaToCoverage: true } :
+              // Strands: no alpha test, so MSAA alpha-to-coverage keeps coverage proportional to the
+              // remapped Strand_Alpha, like the game's dithered (TAA-resolved) coverage.
+              ...(index ? { alphaMap: alpha, alphaToCoverage: true, ...(strand ? {} : { alphaTest: 0.12 }) } :
                 cap ? { alphaMap: cap.mask, alphaTest: 0.08 } : {}),
             });
             // Source textures and CCXL profile stops, rendered with approximate Three lighting.
             o.material = mat;
             extendSkin(o, mat);
-            if (index && strand) attachHairColor(mat, { kind: "strand", ...strand });
+            if (index && strand) {
+              attachHairVertexRed(o.geometry);
+              attachHairColor(mat, { kind: "strand", ...strand, sampleCount, material: hairMaterial });
+            }
             else if (!index && cap) attachHairColor(mat, { kind: "cap", ...cap });
             o.name = `preview_hair_${index}_${parts.length}`;
             verticesUsed += o.geometry.getAttribute("position").count;
@@ -335,7 +386,8 @@ export async function createScene(
         if (parts.length < 2) throw Error("Saved hair geometry is incomplete");
         root.visible = false;
         scene.add(root);
-        hair.push({ asset, root, meshes: parts });
+        hair.push({ asset, root, meshes: parts, sampleCount,
+          material: asset.material ? "material-instance" : "template-defaults" });
         meshes.push(...parts);
         hairBytes += bytesUsed; hairVertices += verticesUsed; hairBones += bonesUsed;
       } catch (error) {
@@ -702,7 +754,12 @@ export async function createScene(
     blinkBones: bones.length,
     detailErrors,
     browMaterial: savedBrowMaterial ? "saved-double-diffuse" : "provisional",
-    lashColor: savedLashColor ? "saved-profile-swatch-approximation" : "provisional",
+    browBlend: savedBrowMaterial ? "gbuffer-sqrt" : "linear",
+    browUnderlay,
+    lashColor: savedLash ? "saved-hair-profile" : "provisional",
+    lashProfile: savedLash ? { ...savedLash.profile, candidates: savedLash.candidates, roughness: savedLash.roughness,
+      alphaCutoff: savedLash.alphaCutoff, albedoLinear: savedLash.color.toArray() } : undefined,
+    profileEncoding,
     hairError,
     piercingError,
     prcError,
@@ -710,7 +767,7 @@ export async function createScene(
       meshes: [...piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length,
         vertices: parts.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })) },
     prc: { source: prcManifest?.source, styles: prcManifest?.styles.length ?? 0 },
-    hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length,
+    hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length, material: h.material, sampleCount: h.sampleCount,
       vertices: h.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })),
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,

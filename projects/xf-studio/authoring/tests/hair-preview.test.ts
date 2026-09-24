@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseHairManifest, selectSavedHair, verifyHairBytes } from "../src/hair-preview";
-import { attachHairColor, sampleHairGradient } from "../src/hair-shading";
+import { attachHairColor, attachHairVertexRed, hairProfileTexture, sampleHairGradient } from "../src/hair-shading";
+import { bakeHairProfile, resolveHairMaterial } from "../src/hair-colour-model";
 import * as THREE from "three";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import type { SavedV } from "../src/save-reader";
@@ -84,21 +85,72 @@ test("source profile stops interpolate independently, including duplicate final 
   expect(sampleHairGradient(stops, 1)).toEqual([250, 250, 250]);
 });
 
-test("strand and cap pigments use distinct source samplers while leaving alpha-map cutout in place", () => {
+test("strand and cap pigments use distinct source samplers; strands replace the alpha-map cutout", () => {
   const map = new THREE.Texture();
   for (const kind of ["strand", "cap"] as const) {
     const material = new THREE.MeshStandardMaterial({ alphaMap: map });
     if (kind === "strand") attachHairColor(material, {
-      kind, id: map, gradient: map, idPalette: map, rootPalette: map,
+      kind, id: map, gradient: map, profile: map, sampleCount: 127, material: resolveHairMaterial({ alphaCutoff: 0 }),
     });
     else attachHairColor(material, { kind, mask: map, gradient: map });
-    const shader = { uniforms: {}, vertexShader: "", fragmentShader:
-      "#include <common>\n#include <map_fragment>\n#include <alphamap_fragment>" } as THREE.WebGLProgramParametersWithUniforms;
+    const shader = { uniforms: {} as Record<string, { value: unknown }>, vertexShader: "#include <common>\n#include <begin_vertex>",
+      fragmentShader: "#include <common>\n#include <map_fragment>\n#include <alphamap_fragment>" } as THREE.WebGLProgramParametersWithUniforms;
     material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
-    expect(shader.fragmentShader).toContain("#include <alphamap_fragment>");
     expect(shader.fragmentShader).toContain("vAlphaMapUv");
-    expect(shader.fragmentShader).toContain(kind === "strand" ? "xfsRootPalette" : "xfsCapGradient");
+    if (kind === "strand") {
+      // Truncated lookup into the baked two-row profile, luminance-switched overlay, vertex-red shadow, red-channel coverage.
+      expect(shader.fragmentShader).toContain("texelFetch(xfsProfile");
+      expect(shader.fragmentShader).toContain("vec3(0.3, 0.59, 0.11)");
+      expect(shader.fragmentShader).toContain("texture2D(alphaMap, vAlphaMapUv).r");
+      // Hair-class light: the BSDF is declared; it is injected where Three's light loop ends.
+      expect(shader.fragmentShader).toContain("void xfsHairDirect(");
+      expect(shader.fragmentShader).not.toContain("#include <alphamap_fragment>");
+      expect(shader.vertexShader).toContain("vXfsVertexRed = xfsVertexRed");
+      expect(shader.uniforms.xfsAlphaCutoff!.value).toBe(0);
+    } else {
+      expect(shader.fragmentShader).toContain("#include <alphamap_fragment>");
+      expect(shader.fragmentShader).toContain("xfsCapGradient");
+    }
     material.dispose();
   }
   map.dispose();
+});
+
+test("v3 manifests carry the profile sample count and validated material-instance parameters", () => {
+  const png = (name: string) => ({ url: `/assets/hair/${name}.png`, sha256: digest });
+  const entry = { ...manifest.entries[0], strandId: png("id"), strandGradient: png("root"),
+    capMask: png("cap_mask"), capGradient: png("cap_gradient"),
+    profile: { sourceSha256: digest, sampleCount: 127, id: [{ value: 0, color: [1, 2, 3] }, { value: 1, color: [4, 5, 6] }],
+      rootToTip: [{ value: 0, color: [7, 8, 9] }, { value: 1, color: [10, 11, 12] }] },
+    material: { alphaCutoff: 0, shadowStrength: 0.9, shadowMin: -0.4 } };
+  const [parsed] = parseHairManifest({ schema: "xfs/local-hair-assets-3", entries: [entry] });
+  expect(parsed!.profile!.sampleCount).toBe(127);
+  expect(parsed!.material).toEqual(resolveHairMaterial({ alphaCutoff: 0, shadowStrength: 0.9, shadowMin: -0.4 }));
+  expect(() => parseHairManifest({ schema: "xfs/local-hair-assets-3", entries: [{ ...entry, material: undefined }] })).toThrow();
+  expect(() => parseHairManifest({ schema: "xfs/local-hair-assets-3", entries: [{ ...entry, material: { tint: 1 } }] })).toThrow();
+  expect(() => parseHairManifest({ schema: "xfs/local-hair-assets-3", entries: [{ ...entry,
+    profile: { ...entry.profile, sampleCount: 1 } }] })).toThrow();
+  // Legacy v2 stays readable and reports no material; the scene uses (and labels) hair.mt template defaults.
+  const [legacy] = parseHairManifest({ schema: "xfs/local-hair-assets-2", entries: [{ ...entry, material: undefined,
+    profile: { ...entry.profile, sampleCount: undefined } }] });
+  expect(legacy!.material).toBeUndefined();
+  expect(legacy!.profile!.sampleCount).toBeUndefined();
+});
+
+test("profile texture holds the exact baked ID and root-to-tip rows the shader fetches", () => {
+  const rgb = (r: number, g: number, b: number) => [r, g, b] as [number, number, number];
+  const profile = { id: [{ value: 0, color: rgb(0, 0, 0) }, { value: 1, color: rgb(255, 255, 255) }],
+    rootToTip: [{ value: 0, color: rgb(255, 0, 0) }, { value: 1, color: rgb(0, 0, 255) }] };
+  const texture = hairProfileTexture(profile, 5, "srgb-decoded");
+  const data = texture.image.data as Float32Array, id = bakeHairProfile(profile.id, 5), root = bakeHairProfile(profile.rootToTip, 5);
+  expect(texture.image.width).toBe(5); expect(texture.image.height).toBe(2);
+  expect(texture.magFilter).toBe(THREE.NearestFilter);
+  expect([...data.slice(8, 11)]).toEqual([...id.slice(6, 9)]);
+  expect([...data.slice((5 + 4) * 4, (5 + 4) * 4 + 3)]).toEqual([...root.slice(12, 15)]);
+  texture.dispose();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array([0.25, 0, 0, 1, 0.75, 0, 0, 1]), 4));
+  expect(attachHairVertexRed(geometry)).toBe(true);
+  expect([...(geometry.getAttribute("xfsVertexRed").array as Float32Array)]).toEqual([0.25, 0.75]);
 });

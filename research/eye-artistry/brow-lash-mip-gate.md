@@ -17,7 +17,7 @@ The installed Arkhe Beautiful EYEBROWS II FULLER style-18 primary `ark_heb__base
 
 Through level 10, **every pixel's stored alpha differs by at most one byte** from that local box reduction. The final 1×1 level differs by 7 and 11 bytes respectively; it has no resolved eyebrow silhouette. The primary RGB chain has larger differences because it is tagged `isGamma=1`; the secondary is `isGamma=0`. The browser loads decoded base PNGs and lets WebGL create mips, so an exact runtime equivalence is not claimed. Still, the stored alpha chain contains no large authored density or shape alteration that would justify changing the preview geometry or forcing an alternate mip level to make the brow thinner. For the shader study's `coverage = (p + (1-p)·0.7s)²`, the measured level-1 per-texel mean alpha errors bound the mean coverage difference against this box reference below 0.0008, before filtering between levels. This bound does **not** include differences in actual GPU filters, coordinate derivatives or the engine's further decal passes.
 
-The source images, texture bytes and serialized JSON are ignored local research inputs. Their decoded base PNG hashes remain primary `5fac5306ee4f32c082a6739457170e5f5d2aac5e2f3a73eb3c903628ebfdb56f` and secondary `1684bedf441efc495bd06f3c8c1438e7293dc00f7f3b4b55bc6ce254d1546eaf`. [The provider audit](brow-texture-audit.md) identifies the sole installed candidate and archive hash. These files are installed candidates, not measured winners from Nathan's photographed game session.
+The source images, texture bytes and serialized JSON are ignored local research inputs. Their decoded base PNG hashes remain primary `5fac5306ee4f32c082a6739457170e5f5d2aac5e2f3a73eb3c903628ebfdb56f` and secondary `1684bedf441efc495bd06f3c8c1438e7293dc00f7f3b4b55bc6ce254d1546eaf`. [The provider audit](brow-texture-audit.md) identifies the sole installed candidate and archive hash. These files are installed candidates, not measured winners from the photographed game session.
 
 ## Decision and remaining gate
 
@@ -25,7 +25,7 @@ The Soft Natural `05_brown_liquorice` preview already uses the exact saved alpha
 
 The installed Arkhe style-18 registration and `.xl` copy of vanilla render buffers still support the preview's current geometry. The corrected double-diffuse alpha adapter already makes its visible fringe slimmer than the old green-channel fallback. The remaining apparent-thickness gap could involve post-G-buffer normal/skin shading, WebGL versus engine mip sampling, camera/pose/light mismatch, or a runtime resource state not proven by this offline scan. These are hypotheses, not measured causes. Keep the current preview geometry, lash tint label and material behavior. The next useful gate is a fixed pose/camera/light in-game capture of the exact saved choices, with effective resource winners and engine material bindings recorded in the planned batched session. Compare brow *coverage/silhouette* separately from darkness, and lash colour separately from alpha/ordering.
 
-Reproduction on Nathan's local 2.31 resource extraction:
+Reproduction on a local 2.31 resource extraction:
 
 ```powershell
 python projects/xf-studio/authoring/tools/audit-brow-mips.py `

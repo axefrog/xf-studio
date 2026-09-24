@@ -80,8 +80,9 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         "Choose a preview style first.");
       colour.element.hidden = !chosen;
       const provenance = assets.detailErrors.length ? `Some details unavailable: ${assets.detailErrors.join("; ")}`
-        : assets.browMaterial === "saved-double-diffuse" ? assets.lashColor === "saved-profile-swatch-approximation"
-          ? "Saved Arkhe brow maps · lash profile colour approximate." : "Saved Arkhe brow maps + installed ombre gradient · lash shading approximate."
+        : assets.browMaterial === "saved-double-diffuse" ? assets.lashColor === "saved-hair-profile"
+          ? `Saved Arkhe brow maps (G-buffer decal blend) · lash profile: ${assets.lashProfileLabel ?? "unknown"} · hair-shader colour, approximate lighting.`
+          : "Saved Arkhe brow maps + installed ombre gradient · lash shading approximate."
           : assets.loaded ? "Reference brow and lash styles · approximate colours." : "";
       setText(detailNote, [provenance, chosen?.id.startsWith("prc_") ? "Private PRC slot preview: materials and effective game winners remain unverified." : ""].filter(Boolean).join(" "));
       detailNote.hidden = !detailNote.textContent;

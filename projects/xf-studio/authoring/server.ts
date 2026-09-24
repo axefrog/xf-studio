@@ -22,6 +22,7 @@ const detectionRequest = createInstallDetectionHandler();
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
 const root = resolve(import.meta.dir, "public");
+const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
@@ -59,7 +60,14 @@ const server = Bun.serve({
     }
     if (!path.startsWith(root + sep))
       return new Response("Not found", { status: 404 });
-    const file = Bun.file(path);
+    let file = Bun.file(path);
+    // Optional private overlay for /assets (e.g. a worktree whose public/assets is a
+    // read-only link to another checkout). Files present in the overlay win.
+    if (assetOverlay && path.startsWith(resolve(root, "assets") + sep)) {
+      const overlayPath = resolve(assetOverlay, "." + path.slice(resolve(root, "assets").length));
+      if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
+        file = Bun.file(overlayPath);
+    }
     if (!(await file.exists()))
       return new Response("Not found", { status: 404 });
     return new Response(request.method === "HEAD" ? null : file, {
