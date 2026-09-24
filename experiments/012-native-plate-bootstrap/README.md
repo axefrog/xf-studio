@@ -253,3 +253,65 @@ strict positive packed margin on nearby short edges, and re-evaluate after
 each actual mesh+morph serialization. The three failures do not establish an
 impossibility result. Even a future sampled packed pass would still require
 separate continuous-motion, combined-scene visual, and game-runtime review.
+
+## Local packed-resource candidate: sampled gate passes — 25 September
+
+A bounded follow-up found a **private offline candidate** that passes the
+unchanged gate **after actual WolvenKit mesh+morph serialization/readback**.
+The starting point was the 1.0× compensation trial above. The local
+[`h091_eyes` fit](repair_local_packed.py) moved only 17 native-cut vertices'
+one morph position field to separate the frame-298/299 finite witnesses;
+its packed resource cleared all 664 dense frames but retained the short
+head-275–278 edge breach. The [local base fit](repair_local_base_edge.py) then
+worked against each measured packed result, constraining all 107 static
+neighbor cases. The first base fit cleared edges but exposed one frame-298
+finite contact. The second cleared that contact but created three packed edge
+breaches. The final fit **froze head vertex 275** and adjusted neighboring
+edge endpoints, retaining the contact separation while clearing the breaches.
+One-axis and 10 µm proposed fits that failed local numeric contact checks
+were not imported. The [hash-pinned evidence](repair-local-readback-evidence.json)
+records all four actual packed trials and those discarded proposals.
+
+| Independent gate on final actual readback | Result |
+|---|---:|
+| 107 static cases: new nonadjacent finite pairs / neighbor violations | **0 / 0** |
+| Minimum static neighbor slack / maximum displacement | **+0.539 µm** / 0.0000870 mesh units |
+| 73 selected idle poses: new finite pairs | **0** |
+| 664 dense idle frames: new finite pairs | **0** |
+| Mesh and morph-base native skin bytes / triangle order / UV0 and UV1 / 105 morph identities | **Verified** |
+
+The final private mesh and morph SHA-256 values are
+`ad744238134f3d72721047829efd823ace6cc7bce43b214506a15e4bc2e873ee`
+and `d462fb41f5fdcb741158ff64de1cbcce061b2f313d932f1bb7aaa41c63f2651a`;
+the exported readback GLB hash is
+`8e9c76b445ec746904bd8d24bfdf93f78f09d7627ffc8b3d4b337d8b524c6499`.
+Both native skin buffers passed the exact source-row audit. The input GLB
+left triangles, UVs, skin and shading accessors untouched; only base and
+morph **position** accessors changed. The measured WolvenKit normal/tangent
+readback differences remain within the established round-trip audit bounds.
+The final witness-specific packed margins are 2.907–4.176 µm for the repaired
+edges and 3.574–4.440 µm of separating-axis clearance for the tracked
+frame-298/299 finite triangle pairs.
+
+The passing mesh, morph, GLB and full verifier reports remain under ignored
+`generated/local-base-3-roundtrip/` in the isolated experiment worktree;
+only code and asset-free evidence are tracked. To reproduce, use the exact
+hashed neutral head, derived cut, prior packed/import pair, 73-pose build and
+664-frame bake listed in the evidence. Run `repair_local_packed.py` against
+the first compensated packed/import pair at 4 µm edge/contact targets. Then
+run `repair_local_base_edge.py` successively against each preceding packed
+and imported pair at: (1) 4 µm edge target, (2) 2 µm edge and 4 µm contact
+targets with `--dense --prior-map`, and (3) `--all-failed --freeze-head 275`
+with a 4 µm target. For **each** generated input, run `roundtrip.py` into a
+new ignored output directory, followed by independent `verify_repair.py`
+with `--packed-glb --roundtrip-report --poses --dense`; reject every failed
+result. The numeric predicted field in each ignored import directory can be
+checked separately with `verify_repair.py --candidate` but is not a substitute
+for a resource readback. The private hashes and reports make the exact
+passing artifact identifiable without tracking game-derived bytes.
+
+**Acceptance remains limited.** The +0.539 µm minimum sampled edge slack is
+narrow. The 107 static cases and 664 sampled frames cannot prove continuous
+motion clearance, combined-scene appearance, or runtime rendering. No plate
+was promoted to production preview, packaging, the owned master, the game,
+or MO2. Those later gates need separate evidence before adoption.

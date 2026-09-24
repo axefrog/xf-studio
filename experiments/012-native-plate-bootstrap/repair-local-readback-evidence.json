@@ -1,0 +1,117 @@
+{
+  "schema": "xfs/native-plate-local-readback-evidence-1",
+  "date": "2026-09-25",
+  "toolchain": "WolvenKit CLI 8.17.4 and project morph importer",
+  "outcome": "PACKED_SAMPLED_PASS_EXPERIMENT_ONLY",
+  "inputSha256": {
+    "nativeHeadGlb": "0f14804b80b279d28ab84503c9595292e20e0141eee959e67fc63b805f12f730",
+    "nativeCutGlb": "0571c4da09595009dbc7e4e305518e95f18a58ba4c59bf51e97e7d56d0f060ea",
+    "nativeMap": "5a6a592c1162e03b140b1a1202e3d025c872f95695cf3b95d731338348d096f3",
+    "priorMap": "6335681719cadab6380ed88dd07391e7a3850045e44ce29cc6bb7d3b75abecd6",
+    "startPackedGlb": "94dfffd6391c5b021e90f043609a612372b92872d3333e099f8fbd942d8e4d1f",
+    "posedManifest": "2f14f4eeccc6c182109163c9e2b3765b1cd692eac6b3418dcf016e9900995382",
+    "denseManifest": "d7987db6dbfb8de5f8f30643ffdd9085c36159029aaca37328af29b6e8c02969"
+  },
+  "unchangedGates": {
+    "staticCases": 107,
+    "selectedPoseSamples": 73,
+    "denseIdleFrames": 664,
+    "maximumDisplacement": 0.00025,
+    "neighborCap": "min(0.00005, quarter of source edge)",
+    "contactTest": "new nonadjacent finite triangle pairs"
+  },
+  "packedTrials": [
+    {
+      "id": "local-1b",
+      "change": "h091_eyes morph-only fit on 17 native vertices around the head 275-278 edge and two frame-298/299 finite witnesses",
+      "predictedFieldSha256": "5f53c25f65f4f33aff49a72b1c76d57658fc3a41518845dd63361ae9a00b362c",
+      "importGlbSha256": "52fc2bd83290b07dc45290a44c7cf9bcb490b009e9a90ccd418597b53af53366",
+      "packedGlbSha256": "bc871893b514f6d83101f9c6ee5e5e46a1c5620a5f6bf94d366ce7aca0f166ce",
+      "meshSha256": "a78ee93bf17949d90594411bf6c88740c87811d959443d072fcc6c2fe9282c60",
+      "morphSha256": "f094fbaf569234c98e188144aa2008db1c75befb51cf02e7f08707e6a2c288d6",
+      "roundtripReportSha256": "59205d670ffca06b40cab3d33f60757fd7150621304c85b75687a496ba1b1123",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 1,
+      "minimumStaticNeighborSlackUm": -0.29090225034375855,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 0,
+      "gate": "FAIL"
+    },
+    {
+      "id": "local-base-1",
+      "change": "base-field fit for head edge 275-278, all 107 static neighbor cases constrained",
+      "predictedFieldSha256": "19b9182a361e73ff74ca0b563df3d5143887552b32c2831a25a21fc27f1041f5",
+      "importGlbSha256": "86959cac8a16bcf7c299d56bfa3ee4e8d00de1afb9803f7cfc4d5a292642497c",
+      "packedGlbSha256": "0f557fda3dc3a62c1a6829dd13b4019d5253a2915d5a0d26ecd59a4a95de059d",
+      "meshSha256": "b581dca5d92823f6922c276ad2e43676dda393b21d94c73b44fa7f36966726e2",
+      "morphSha256": "427982ec866c878d08c179b81c2316ff48beb095114db0fb59fc80f82ebee611",
+      "roundtripReportSha256": "27c76de235a516d022ac0569ef03b94b51df050eaedb0def58d3b4ded83e08dc",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 0,
+      "minimumStaticNeighborSlackUm": 0.5394572913235647,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 1,
+      "denseWitness": [298, 792, 2421],
+      "gate": "FAIL"
+    },
+    {
+      "id": "local-base-2",
+      "change": "base-field fit for the frame-298 face 792/head 2421 witness with static neighbor constraints",
+      "predictedFieldSha256": "ffd1c265c98c1b0cbd3965ffb49744e67cda9f884596ce8a7ce171f4e6b981d4",
+      "importGlbSha256": "5d6db18bfbe576762b0e0ad55063985ef2c927d02d9f7856d1709f3e1fc73934",
+      "packedGlbSha256": "c7aae67049313a5e9f8ffb36e4746de1f9f547b0322ff71f33315e1f96889182",
+      "meshSha256": "c3b696a54e4782a0883bcfaf3bc072e01ab12b967fe5bc951134cc75fbf1d93e",
+      "morphSha256": "21fd1ac716425ebb5dd7aba0e8b0fb272bf97bd88408e7f028452ff2d3543019",
+      "roundtripReportSha256": "bc57cda2a481c4e6c96f63ad979af31d6aaa5b79fc344b56a0986c02f07c5657",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 3,
+      "minimumStaticNeighborSlackUm": -1.7140433807210506,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 0,
+      "gate": "FAIL"
+    },
+    {
+      "id": "local-base-3",
+      "change": "freeze source head vertex 275 and fit neighboring endpoints of the two remaining packed edges",
+      "predictedFieldSha256": "cc8ba0b3d57b025b0954de968c0f57103d15cf28dd0f21d44c925aa0fae2758f",
+      "importGlbSha256": "fb38f67a325506aa6bcdc5dfa4ed034594468e5f74db5a3d0d8e4e95a5f3c603",
+      "packedGlbSha256": "8e9c76b445ec746904bd8d24bfdf93f78f09d7627ffc8b3d4b337d8b524c6499",
+      "meshSha256": "ad744238134f3d72721047829efd823ace6cc7bce43b214506a15e4bc2e873ee",
+      "morphSha256": "d462fb41f5fdcb741158ff64de1cbcce061b2f313d932f1bb7aaa41c63f2651a",
+      "roundtripReportSha256": "305a1b6a8b5369844b0b4c6166a90475ea94db67fc5e0bb2d58f0e330eb76868",
+      "staticNewPairs": 0,
+      "staticNeighborViolations": 0,
+      "minimumStaticNeighborSlackUm": 0.5394572913235647,
+      "maximumStaticDisplacement": 0.0000870348333011628,
+      "minimumStaticTriangleArea": 1.664774402263996e-9,
+      "selectedPoseNewPairs": 0,
+      "denseNewPairs": 0,
+      "gate": "PACKED_SAMPLED_PASS"
+    }
+  ],
+  "finalPackedWitnessMarginsUm": {
+    "edge_h091_eyes_head_275_278": 3.770310921365002,
+    "edge_h101_eyes_head_275_2505": 2.906528820679577,
+    "edge_saved_v_head_275_278": 4.175635536812155,
+    "finite_frame_298_plate_792_head_2421": 4.439542738543523,
+    "finite_frame_298_plate_800_head_1987": 3.573895499320301,
+    "finite_frame_299_plate_799_head_1989": 4.0981790065952595
+  },
+  "finalResourceProof": {
+    "exactNativeSkinBytesMesh": true,
+    "exactNativeSkinBytesMorphBase": true,
+    "meshMorphSkinRowsEqual": true,
+    "triangleIndicesExact": true,
+    "bothUvSetsExact": true,
+    "morphNamesAndOrderExact": true,
+    "sourceShadingAccessorsUneditedBeforeImport": true,
+    "serializedResourceProof": true,
+    "installed": false,
+    "gameRenderingVerified": false
+  },
+  "unpackedFitAttempts": [
+    "A single frame-299 finite-contact axis moved the contact to frame 298; no resource was imported.",
+    "A 10 micrometre local edge target displaced contact to nearby face 792 at frame 298; no resource was imported."
+  ],
+  "limit": "The 0.539 micrometre global static edge slack is narrow. This is a sampled packed-resource pass, not continuous-time contact clearance, combined-scene visual acceptance, or game-runtime proof. Private resources stay ignored; no production asset was promoted."
+}
