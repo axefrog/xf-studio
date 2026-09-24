@@ -1,4 +1,4 @@
-# Headquarters working rules
+# XF Studio repository working rules
 
 XF Studio architecture is a maintained contract, not a one-time UI-overhaul cleanup. Follow `research/authoring/architecture-contract.md` for every new feature or refactor: domain/application services own validation, state transitions, Undo, persistence and async policy; renderer/device adapters own Three/canvas/worker/file/network mechanics; presentation owns layout, focus, theme and controls and talks through typed actions, read-only snapshots and capabilities. Do not add new business logic or direct mutable recipe access to `main.ts` or UI modules. Extend the action/capability catalogue and boundary tests with each user-visible capability. Existing coupling is migration debt, not precedent. Record any unavoidable exception with owner and removal criterion in `research/authoring/ui-architecture-boundary.md`; do not silently weaken the Opus handoff gate.
 
@@ -26,7 +26,7 @@ Naming/scope decision, 2026-09-23: **XF Studio**, project `projects/xf-appearanc
 
 Nathan welcomes useful unsolicited insights on the topics under investigation; explain meaningful design implications as they arise without making him know which questions to ask. Current finish scope: Matte, **Satin** (internal `regular`), **Metallic**, Shimmer, Glitter. Metallic is an explicit separate requirement; never alias metallic to shimmer. The initial shimmer was an assistant's interpretation, not an established interpretation of the Discord recommendation. Define intended looks clearly and validate against references; cosmetic finish terms overlap between brands. Satin is a soft sheen without distinct sparkles; do not confuse finish names with validated engine appearance. The original four classes are historical intent, not a cap of four now.
 
-Read `README.md` and `docs/status.md` first, then the relevant project README and linked research. Keep them current when work changes the state of a project.
+Read `README.md` and `docs/status.md` first, then the relevant project README and linked research. Use `docs/developer-orientation.md` for the repository map and deferred naming/path inventory. Keep these documents current when work changes the state of a project.
 
 When researching game resource chains in the local Cyberpunk Modding Docs clone, inspect each guide's referenced diagrams and screenshots as evidence, not just its prose. The clone tracks canonical `upstream/main` at `be2f44ee` as of 23 September 2026, while `origin` is Nathan's older fork. Record the source commit, exact guide and image paths, page-specific authorship when evidenced, and separate illustrated/editor examples from runtime proof. See `research/character-customization/file-chain-map.md`.
 
