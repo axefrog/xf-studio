@@ -131,3 +131,33 @@ test("floating windows magnetize only when the cursor enters their edge band", (
   expect(resolveDrop({ x: 1030, y: 450 }, geometry).target).toMatchObject({ kind: "split", groupId: id, side: "right" });
   expect(resolveDrop({ x: 660, y: 450 }, geometry).target.kind).toBe("float");
 });
+
+test("maximize applies only to docked groups; showing a docked panel elsewhere leaves maximize mode", async () => {
+  const { setMaximized, showPanelDocked } = await import("../src/studio-ui/dock/layout");
+  let tree = applyDrop(defaultWide(), { kind: "panel", panelId: "motion" }, { kind: "float", x: 200, y: 200 });
+  const floatingGroup = locate(tree, "motion")!.group.id;
+  expect(setMaximized(tree, floatingGroup).maximized).toBeUndefined();
+  tree = setMaximized(tree, "g-head");
+  expect(tree.maximized).toBe("g-head");
+  expect(showPanelDocked(tree, "motion").maximized).toBe("g-head");
+  expect(showPanelDocked(tree, "head").maximized).toBe("g-head");
+  expect(showPanelDocked(tree, "layers").maximized).toBeUndefined();
+});
+
+test("composites keep member pixels when growing and when a nested split collapses", () => {
+  let tree = applyDrop(defaultWide(), { kind: "panel", panelId: "lighting" }, { kind: "float", x: 400, y: 200, w: 300, h: 300 });
+  const a = locate(tree, "lighting")!.group.id;
+  tree = applyDrop(tree, { kind: "panel", panelId: "motion" }, { kind: "split", groupId: a, side: "right" }, { x: 0, y: 0, w: 300, h: 300 });
+  const b = locate(tree, "motion")!.group.id;
+  // Third member on the same axis: every existing member keeps 300 px.
+  tree = applyDrop(tree, { kind: "panel", panelId: "quality" }, { kind: "split", groupId: b, side: "right" }, { x: 0, y: 0, w: 300, h: 300 });
+  const window = tree.floating[0];
+  expect(window.w).toBe(900);
+  expect(window.node.kind === "split" && window.node.sizes.map(size => Math.round(size * window.w))).toEqual([300, 300, 300]);
+  // Nested: attach below Motion, then remove that nested member; the window keeps its width.
+  tree = applyDrop(tree, { kind: "panel", panelId: "activity" }, { kind: "split", groupId: b, side: "bottom" }, { x: 0, y: 0, w: 300, h: 200 });
+  const before = tree.floating[0].w;
+  tree = applyDrop(tree, { kind: "panel", panelId: "activity" }, { kind: "tab", groupId: "g-layers", index: 1 });
+  expect(tree.floating[0].w).toBe(before);
+  panelsIn(tree);
+});

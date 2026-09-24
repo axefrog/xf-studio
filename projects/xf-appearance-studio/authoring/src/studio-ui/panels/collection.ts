@@ -5,7 +5,8 @@ import { h, setAttr, setText, setValue } from "../dom";
 import type { PanelSpec } from "../dock/dock-view";
 import { icon } from "../icons";
 import { ItemList } from "../item-list";
-import { openMenu } from "../menu";
+import { openMenu, type MenuAnchor } from "../menu";
+import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 
@@ -121,13 +122,32 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
  * The application keeps ONE previous draft for recovery (audit B-1). Before an open or
  * import would push an existing recoverable draft out, say so and let the user decide.
  */
-export function confirmReplace(rt: StudioRuntime, anchor: Element, title: string, run: () => void) {
+export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: string, run: () => void) {
   const previous = rt.port.library.summary().draft?.previous;
   if (!previous) { run(); return; }
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft becomes the recoverable draft, and the older recoverable draft “${previous.name}” will be discarded. Save it to the library first if you need it.` },
+  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft becomes the recoverable draft, and the older recoverable draft “${previous.name}” will be discarded. To keep it, switch to it and save it to the library first.` },
     { kind: "action", label: "Continue", icon: "import", run },
-    { kind: "action", label: "Save current draft first", icon: "save", capability: rt.port.authoring.requestCapability({ kind: "save" }), run: () => void rt.request({ kind: "save" }) }],
-  anchor, { label: `${title} confirmation`, invoker: anchor });
+    { kind: "action", label: `Switch to “${previous.name}” to save it`, icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
+      run: () => void rt.file({ kind: "collection.recover" }) }],
+  anchor, { label: `${title} confirmation`, invoker: anchor instanceof Element ? anchor : undefined });
+}
+/**
+ * “Undo open/import” swaps back to the draft that was current before the request, but
+ * only while that is still the recoverable draft; otherwise it would swap the wrong one.
+ */
+export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAction {
+  const before = rt.port.library.summary().draft?.id;
+  return { label, run: () => {
+    if (!before || rt.port.library.summary().draft?.previous?.id !== before) {
+      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the recoverable draft. Use Recover previous draft in the Library panel if it is listed there.");
+      return;
+    }
+    void rt.file({ kind: "collection.recover" });
+  } };
+}
+/** Shared by the Library panel and the command palette. */
+export function importCollection(rt: StudioRuntime, anchor: MenuAnchor) {
+  confirmReplace(rt, anchor, "Import a collection", () => void rt.file({ kind: "collection.import" }, { actions: [undoReplaceAction(rt, "Undo import")] }));
 }
 
 export function libraryPanel(rt: StudioRuntime): PanelController {
@@ -144,8 +164,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library creates revision 1 of this collection. Drafts still autosave in this browser.");
   const fileButtons = {
-    importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => confirmReplace(rt, event.currentTarget as Element,
-      "Import a collection", () => void rt.file({ kind: "collection.import" }, { actions: [{ label: "Undo import", run: () => void rt.file({ kind: "collection.recover" }) }] })) }),
+    importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => importCollection(rt, event.currentTarget as Element) }),
     exportCollection: button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) }),
     exportPlan: button({ label: "Export compiler plan", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.plan" }) }),
     importRecipe: button({ label: "Import recipe as preset…", icon: "import", small: true, onClick: () => void rt.file({ kind: "recipe.import" }) }),
@@ -183,7 +202,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
           const current = item.id === draft?.id;
           const open = button({ label: current ? "Reopen" : "Open", small: true, variant: current ? "quiet" : undefined,
             onClick: event => confirmReplace(rt, event.currentTarget as Element, `Open “${item.name}”`,
-              () => void rt.request({ kind: "open", id: item.id }, { actions: [{ label: "Undo open", run: () => void rt.file({ kind: "collection.recover" }) }] })) });
+              () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] })) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
           return h("li", { class: `saved-row${current ? " current" : ""}` },
             h("div", { class: "saved-main" }, h("strong", { text: item.name }),

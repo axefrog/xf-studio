@@ -72,7 +72,8 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   }
   const empty = emptyState("No layers in this preset", "Layers stack like makeup: the top of the list is applied last and appears in front.",
     button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
-  const noPreset = emptyState("No preset selected", "Add or select a preset to edit its layers.");
+  const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
+    button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
   const element = h("div", { class: "panel-content" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
     noPreset, empty, list.element,
@@ -91,7 +92,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
         const descriptor = rt.finishes.find(finish => finish.id === (layer.finish === "satin" ? "regular" : layer.finish));
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label.split(" /")[0] ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
-      applyCapability(add, port.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }));
+      applyCapability(add, rt.addLayerCapability());
       applyCapability(duplicate, active ? port.authoring.contextCapability({ kind: "layer", id: active.id },
         { kind: "layer.edit", command: { kind: "duplicate", id: active.id } }) : { available: false, reason: "Select a layer first." });
       applyCapability(more, active ? { available: true } : { available: false, reason: "Select a layer first." });

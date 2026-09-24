@@ -2,7 +2,7 @@ import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
 import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, raiseWindow, recoverWindows,
-  setMaximized, setSizes, setWindowRect, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+  setMaximized, setSizes, setWindowRect, showPanelDocked, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 
@@ -59,6 +59,8 @@ export class DockView {
 
   /** Replace the active size class's tree, render, persist and announce. */
   update(tree: DockTree, message?: string, persist = true) {
+    const area = this.area();
+    if (area.w > 40 && area.h > 40) tree = recoverWindows(tree, area);
     this.state = { ...this.state, [this.sizeClass]: tree };
     this.render();
     if (persist) this.options.save(this.dockState);
@@ -150,7 +152,7 @@ export class DockView {
     const fill = h("div", { class: "dock-tabbar-fill", title: soleWindowGroup ? "Drag to move this floating panel" : "Drag to move this whole group" });
     fill.addEventListener("pointerdown", event => this.pointerDown(event,
       soleWindowGroup ? { kind: "window", windowId: window!.id } : { kind: "group", groupId: group.id }, fill));
-    fill.addEventListener("dblclick", () => this.toggleMaximize(group.id));
+    if (!floating) fill.addEventListener("dblclick", () => this.toggleMaximize(group.id));
     const menuButton = h("button", { class: "icon-btn dock-menu-btn", type: "button", "aria-label": `Layout options for ${titles.join(", ")}`,
       "aria-haspopup": "menu", title: "Layout options" }, icon("more"));
     menuButton.addEventListener("click", () => this.openPanelMenu(group.active, menuButton, menuButton));
@@ -287,8 +289,8 @@ export class DockView {
     if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && event.altKey && event.shiftKey) {
       event.preventDefault();
       const to = clamp(index + (event.key === "ArrowRight" ? 2 : -1), 0, group.panels.length);
-      this.update(applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "tab", groupId: group.id, index: to }),
-        `${this.title(id)} moved to position ${Math.min(to, group.panels.length - 1) + (to > index ? 0 : 1)}`);
+      const moved = applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "tab", groupId: group.id, index: to });
+      this.update(moved, `${this.title(id)} moved to position ${(locate(moved, id)?.index ?? 0) + 1} of ${group.panels.length}`);
       focusTab(id);
     } else if (event.key === "ArrowRight" || event.key === "ArrowLeft" || event.key === "Home" || event.key === "End") {
       event.preventDefault();
@@ -313,7 +315,7 @@ export class DockView {
 
   // ----- Commands usable from menus, shortcuts and the command palette -----
   reveal(id: PanelId, focus = true) {
-    const tree = this.isOpen(id) ? activate(this.tree, id) : openPanel(this.tree, id, this.siblingsInDefault(id), this.area());
+    const tree = showPanelDocked(this.isOpen(id) ? activate(this.tree, id) : openPanel(this.tree, id, this.siblingsInDefault(id), this.area()), id);
     this.update(tree, this.isOpen(id) ? undefined : `${this.title(id)} opened`);
     if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`#dock-tab-${id}`)?.focus());
   }
@@ -333,7 +335,7 @@ export class DockView {
     `${this.title(id)} is floating. Use Move window from its menu to reposition it with the keyboard.`);
   }
   moveTo(id: PanelId, target: DropTarget, message: string) {
-    this.update(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), message);
+    this.update(showPanelDocked(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), id), message);
     requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`#dock-tab-${id}`)?.focus());
   }
   toggleMaximize(groupId: string) {
@@ -381,6 +383,7 @@ export class DockView {
       { kind: "submenu", label: "Dock to workspace edge", icon: "layout", items: () => (["left", "right", "top", "bottom"] as Side[]).map(side => ({
         kind: "action", label: edgeNames[side], run: () => this.moveTo(id, { kind: "edge", side }, `${this.title(id)} docked to the ${edgeNames[side].toLowerCase()}`) })) },
       { kind: "action", label: tree.maximized === at.group.id ? "Restore group size" : "Maximize group", icon: tree.maximized === at.group.id ? "restore" : "maximize",
+        capability: at.windowId ? { available: false, reason: "Floating panels are already above the dock; resize the window instead." } : undefined,
         run: () => this.toggleMaximize(at.group.id) },
       { kind: "separator" },
       { kind: "action", label: `Close ${this.title(id)}`, icon: "close", shortcut: "Del", run: () => this.close(id) },
@@ -476,9 +479,11 @@ export class DockView {
       stop();
       this.beginDrag(e, source, handle, start);
     };
-    const stop = () => { window.removeEventListener("pointermove", pending); window.removeEventListener("pointerup", stop); };
+    const stop = () => { window.removeEventListener("pointermove", pending); window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop); };
     window.addEventListener("pointermove", pending);
     window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   }
   private sourceGroups(source: DragSource): Set<string> {
     const tree = this.tree;
@@ -579,8 +584,7 @@ export class DockView {
           ? { kind: "float", x: latestCursor.x - grab.x, y: latestCursor.y - grab.y }
           : { kind: "float", x: latestCursor.x - Math.min(grab.x, floatSize.w - 24), y: latestCursor.y - Math.min(grab.y, 20), ...floatSize };
       }
-      const next = recoverWindows(applyDrop(this.tree, source, drop, sourceRect), this.area());
-      this.update(next, describeDrop(label, drop, session.resolution));
+      this.update(showPanelDocked(applyDrop(this.tree, source, drop, sourceRect), source.kind === "panel" ? source.panelId : ""), describeDrop(label, drop, session.resolution));
     };
     const cancelDrag = () => finish(true);
     const window_ = globalThis.window;

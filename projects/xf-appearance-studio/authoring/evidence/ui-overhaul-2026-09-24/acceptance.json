@@ -201,9 +201,9 @@
       "step": "performance: UV drag with the Library panel visible keeps frame pacing (p95 ≤ 34 ms)",
       "pass": true,
       "detail": {
-        "n": 92,
+        "n": 93,
         "p50": 16.700000000000728,
-        "p95": 16.799999999999272,
+        "p95": 16.80000000000291,
         "max": 17
       }
     },
@@ -292,7 +292,19 @@
       "detail": {
         "fresh": "current",
         "stale": "stale",
-        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_pfa38116f8ca34f30ab932a92526e8e67Untitled lookxfs_pc08e9a8486ed4bfc86e822c4f63857c5xfs.recipexfs_pbaaa3f0d20bc4b45beb45014b5dad2efOmit"
+        "excerpt": "Check resultCurrent3 of 4 presets can become mod files. This check created no files.Chrome dusk (copy)xfs_p411b432292424d87850196594efcd1b4Untitled lookxfs_p2dd6b1998e8c4d1f82c0c9c8fa3ed9d3xfs.recipexfs_p4d26f10d010941f096181a6fc541d282Omit"
+      }
+    },
+    {
+      "step": "review fixes: Mod package repaints beside a visible Library; a bare slider click opens no transaction",
+      "pass": true,
+      "detail": {
+        "bothVisible": true,
+        "stale": "stale",
+        "fresh": "current",
+        "control": null,
+        "depth0": 4,
+        "depth1": 4
       }
     },
     {
@@ -325,7 +337,7 @@
       "detail": {
         "composite": {
           "kind": "split",
-          "w": 800
+          "w": 760
         },
         "docked": true,
         "menu": [
@@ -367,8 +379,8 @@
         ],
         "floating": 1,
         "before": {
-          "preset": "baaa3f0d-20bc-4b45-beb4-5014b5dad2ef",
-          "layer": "505bfbfa-554c-4d22-915a-7faeaa95ac9f",
+          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
+          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 30,
           "theme": "light",
@@ -380,8 +392,8 @@
           ]
         },
         "after": {
-          "preset": "baaa3f0d-20bc-4b45-beb4-5014b5dad2ef",
-          "layer": "505bfbfa-554c-4d22-915a-7faeaa95ac9f",
+          "preset": "4d26f10d-0109-41f0-9618-1a6fc541d282",
+          "layer": "addc8890-6207-47c5-a30c-d2ebe3a47d64",
           "uv": "{\"mode\":\"both\",\"side\":\"low\",\"u\":0.5,\"v\":0.22791666666666666,\"span\":0.50875}",
           "fov": 42,
           "theme": "light",

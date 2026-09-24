@@ -331,6 +331,27 @@ try {
     record("package: Build (optional) reports a verified local candidate or an honest failure", !!last, { last, pkg });
   });
 
+  await step("review fixes: Mod package repaints beside a visible Library; a bare slider click opens no transaction", async () => {
+    await js(`${S}.dock.reveal('library', false)`); await js(`${S}.dock.float('package')`); await page.wait(400);
+    const bothVisible = await js<boolean>(`${S}.dock.isVisible('library') && ${S}.dock.isVisible('package')`);
+    await js(`${P}.authoring.dispatch({ kind: 'layer.setOpacity', layerId: ${P}.editor.layer().id, opacity: .57 })`);
+    const stale = await page.waitFor(`document.querySelector('.dock-window .result-card')?.dataset.freshness === 'stale' && 'stale'`, 3000).catch(() => "not repainted");
+    await js(`[...document.querySelectorAll('.dock-window .btn')].find(b => b.textContent.includes('Check mod export')).click()`);
+    const fresh = await page.waitFor(`!${P}.library.summary().busy && document.querySelector('.dock-window .result-card')?.dataset.freshness === 'current' && 'current'`, 60000).catch(() => "not repainted");
+    await js(`${S}.dock.reveal('finish')`); await page.wait(250);
+    const thumb = await js<{ x: number; y: number }>(`(() => { const input = [...document.querySelectorAll('.control')].find(c => c.textContent.startsWith('Opacity')).querySelector('input');
+      const r = input.getBoundingClientRect(), f = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
+      return { x: r.left + 6 + f * (r.width - 12), y: r.top + r.height / 2 }; })()`);
+    const depth0 = await js<number>(`${P}.snapshot().authoring.document.history.length`);
+    await page.mouse("mouseMoved", thumb.x, thumb.y, { button: "none", buttons: 0 }); await page.mouse("mousePressed", thumb.x, thumb.y); await page.mouse("mouseReleased", thumb.x, thumb.y);
+    await page.wait(200);
+    const control = await js(`${P}.authoring.previewState().control ?? null`), depth1 = await js<number>(`${P}.snapshot().authoring.document.history.length`);
+    await js(`document.activeElement.blur()`);
+    record("review fixes: Mod package repaints beside a visible Library; a bare slider click opens no transaction",
+      bothVisible && stale === "stale" && fresh === "current" && control === null && depth1 === depth0, { bothVisible, stale, fresh, control, depth0, depth1 });
+    await js(`${S}.dock.reset()`); await page.wait(300);
+  });
+
   await step("dock: a large panel overlapping another group floats until the CURSOR reaches a guide", async () => {
     await js(`${S}.dock.float('character')`); await page.wait(300);
     await js(`(() => { const d = ${S}.dock, w = d.tree.floating.at(-1); d.update(Object.assign(structuredClone(d.tree), { floating: d.tree.floating.map(x => x.id === w.id ? { ...x, x: 380, y: 120, w: 760, h: 520 } : x) })); })()`);

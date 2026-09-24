@@ -118,9 +118,11 @@ function shrinkWindows(before: DockTree, after: DockTree): DockTree {
   after.floating = after.floating.map(window => {
     const old = before.floating.find(item => item.id === window.id);
     if (!old || old.node.kind !== "split") return window;
-    const kept = window.node.kind === "split" && window.node.id === old.node.id
-      ? new Set(window.node.children.map(child => child.id)) : new Set([window.node.id]);
-    const removed = old.node.children.reduce((sum, child, i) => sum + (kept.has(child.id) ? 0 : old.node.kind === "split" ? old.node.sizes[i] : 0), 0);
+    // An old top-level member counts as removed only when none of its groups survive
+    // (a nested split that collapses into its survivor keeps the window size).
+    const surviving = new Set([...groups(window.node)].map(item => item.id));
+    const removed = old.node.children.reduce((sum, child, i) =>
+      sum + ([...groups(child)].some(item => surviving.has(item.id)) ? 0 : old.node.kind === "split" ? old.node.sizes[i] : 0), 0);
     if (removed <= 0 || removed >= 1) return window;
     return old.node.axis === "row"
       ? { ...window, w: Math.max(MIN_WINDOW.w, Math.round(window.w * (1 - removed))) }
@@ -186,7 +188,7 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
     if (!found) return insertNode(next, node, { kind: "float", x: 80, y: 80 }, defaultRect);
     const axis = target.side === "left" || target.side === "right" ? "row" : "column";
     const before = target.side === "left" || target.side === "top";
-    const place = (subtree: DockNode, share: number): DockNode => {
+    const place = (subtree: DockNode, share: number, grow = false): DockNode => {
       // Prefer inserting as a sibling when the parent already splits on this axis.
       let inserted = false;
       const visit = (item: DockNode): DockNode => {
@@ -194,9 +196,12 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
         const index = item.children.findIndex(child => child.id === target.groupId);
         if (index >= 0 && item.axis === axis) {
           inserted = true;
-          const children = [...item.children], sizes = [...item.sizes];
-          const incoming = sizes[index] * share;
-          sizes[index] -= incoming;
+          let sizes = [...item.sizes];
+          const children = [...item.children];
+          let incoming: number;
+          // A growing composite root keeps every member's pixels: siblings scale by (1 - share).
+          if (grow && item === subtree) { sizes = sizes.map(size => size * (1 - share)); incoming = share; }
+          else { incoming = sizes[index] * share; sizes[index] -= incoming; }
           children.splice(before ? index : index + 1, 0, node);
           sizes.splice(before ? index : index + 1, 0, incoming);
           return { ...item, children, sizes: normalizeSizes(sizes, children.length) };
@@ -213,9 +218,10 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
       // A magnetic composite grows by the incoming panel instead of squeezing its current content.
       next.floating = next.floating.map(window => {
         if (window.id !== found.windowId) return window;
-        const extra = axis === "row" ? defaultRect?.w ?? 320 : defaultRect?.h ?? 260;
+        // Matches previewRect(): an attached panel adds at most 360 px across or 300 px down.
+        const extra = axis === "row" ? Math.min(defaultRect?.w ?? 320, 360) : Math.min(defaultRect?.h ?? 260, 300);
         const current = axis === "row" ? window.w : window.h;
-        const node = place(window.node, extra / (current + extra));
+        const node = place(window.node, extra / (current + extra), true);
         return axis === "row"
           ? { ...window, node, w: window.w + extra, x: before ? window.x - extra : window.x }
           : { ...window, node, h: window.h + extra, y: before ? window.y - extra : window.y };
@@ -315,10 +321,17 @@ export function raiseWindow(tree: DockTree, windowId: string): DockTree {
   if (!window || tree.floating[tree.floating.length - 1] === window) return tree;
   return { ...clone(tree), floating: [...tree.floating.filter(item => item !== window), window].map(clone) };
 }
+/** Only docked groups can be maximized; floating windows already sit above the dock. */
 export function setMaximized(tree: DockTree, groupId?: string): DockTree {
-  const next = clone(tree);
-  if (groupId && findGroup(next, groupId)) next.maximized = groupId; else delete next.maximized;
+  const next = clone(tree), found = groupId ? findGroup(next, groupId) : undefined;
+  if (found && !found.windowId) next.maximized = groupId; else delete next.maximized;
   return next;
+}
+/** Leave maximize mode when a panel that must become visible is docked elsewhere. */
+export function showPanelDocked(tree: DockTree, panel: PanelId): DockTree {
+  if (!tree.maximized) return tree;
+  const at = locate(tree, panel);
+  return at && !at.windowId && at.group.id !== tree.maximized ? setMaximized(tree) : tree;
 }
 
 export const MIN_WINDOW = { w: 220, h: 160 };

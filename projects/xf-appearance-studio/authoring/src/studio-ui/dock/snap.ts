@@ -122,6 +122,7 @@ export function previewRect(target: DropTarget, geometry: DropGeometry, floatSiz
   const r = group.rect;
   if (target.kind === "tab") return r;
   if (group.floating) {
+    // Same caps as insertNode(): the composite grows by exactly this much.
     const w = Math.min(floatSize.w, 360), h = Math.min(floatSize.h, 300);
     return target.side === "left" ? { x: r.x - w, y: r.y, w, h: r.h } : target.side === "right" ? { x: r.x + r.w, y: r.y, w, h: r.h } :
       target.side === "top" ? { x: r.x, y: r.y - h, w: r.w, h } : { x: r.x, y: r.y + r.h, w: r.w, h };

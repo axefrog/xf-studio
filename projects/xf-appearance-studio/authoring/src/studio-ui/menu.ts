@@ -37,6 +37,8 @@ function place(element: HTMLElement, anchor: MenuAnchor, submenu = false) {
 }
 
 export function closeMenus(restoreFocus = true) { root?.close(restoreFocus); }
+// One listener for the page: leaving the window closes any open menu.
+if (typeof window !== "undefined") window.addEventListener("blur", () => closeMenus(false));
 export function menuOpen() { return !!root; }
 
 export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void } = { label: "Menu" }) {
@@ -54,7 +56,6 @@ export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label
   const detach = () => document.removeEventListener("pointerdown", outside, { capture: true });
   const previous = root.close;
   root.close = restore => { detach(); previous(restore); };
-  window.addEventListener("blur", () => closeMenus(false), { once: true });
   return root;
 }
 
@@ -92,7 +93,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     const activate = () => {
       if (!available) return;
       if (item.kind === "submenu") { openChild(entry, item); return; }
-      closeMenus(false);
+      closeMenus(true);
       item.run();
     };
     entry.addEventListener("click", activate);

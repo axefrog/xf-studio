@@ -118,6 +118,27 @@ Full signatures proposed by the audit are preserved in the appendix.
 | C-19 | UV hint sounds read-only | New hints are instructions. |
 | C-20 | Unavailable context shown ticked | Disabled switches show the reason in text. |
 
+## Independent code review of this branch
+
+A second read-only agent reviewed `0f1f4b9..HEAD`. It confirmed the dock invariants (every panel exactly once; no empty splits or windows) and that snapping uses only the cursor. Its findings, all verified against the code and fixed in the presentation unless noted:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | High: the Library/Mod package repaint throttle was consumed per panel, so Mod package never repainted while Library was also visible (a Check result or Current→Stale change could stay invisible) | Fixed: one decision per paint. Acceptance check added (floating Mod package beside Library shows Stale, then Current after Check). |
+| 2 | Medium-high: a slider click or an arrow key at a limit began a control transaction without a change; Esc could then revert an unrelated gesture made meanwhile | Fixed: sliders and colour fields begin lazily on the first value change; pointer mode commits after release; keyboard idle timer arms on every key. Acceptance check added. **Core note:** `AuthoringControlEdits.cancel` restores Undo whenever the recipe differs from its baseline, even if a gesture changed it; gestures should commit or refuse an open control transaction. |
+| 3 | Maximizing a floating group rendered it twice | Fixed: `setMaximized` accepts docked groups only; menu item disabled with a reason, double-click ignored for floating groups. Unit test. |
+| 4 | Reveal/open/move did nothing visible while another group was maximized | Fixed: `showPanelDocked` leaves maximize mode when the target is docked elsewhere. Unit test. |
+| 5 | With a loaded collection but no selected preset, layers could be added to an unowned recipe and silently discarded later | Fixed in UI: layer creation is gated with a reason and the empty state offers Add preset. **Core note:** `layer.edit add` capability should refuse without a selected preset. |
+| 6 | The palette's Import collection skipped the recoverable-draft confirmation | Fixed: shared `importCollection()` path; the confirmation now offers *Switch to “…” to save it* (the old *Save current draft first* did not protect the older draft). |
+| 7 | Activity panel froze after 200 entries | Fixed: redraw keyed by the newest entry id. |
+| 8–9 | Composite sizing: nested-split collapse halved the window; attaching to a composite did not preserve member pixels and could exceed the previewed size | Fixed: survivors are detected through nested groups; root-axis siblings scale by (1 − share) and attach size is capped to the preview (360/300 px). Unit tests. |
+| 10 | Esc on the FOV slider left a stale framing anchor | Fixed: cancel also ends the FOV gesture. |
+| 11 | Undo open/import toast actions could swap the wrong draft later | Fixed: guarded by the pre-change draft still being the recoverable draft. |
+| 12 | Menu/keyboard layout moves skipped window recovery | Fixed: every layout update re-clamps floating windows. |
+| 13 | Pending tab drags leaked on pointercancel | Fixed. |
+| 14 | Focus fell to `<body>` after menu or palette commands; rename blur pulled focus back | Fixed: focus returns to the invoker; blur commits without refocusing. |
+| 15 | Minor: tab-reorder announcement, stacked modals, piercing capability, sticky-error eviction, per-menu blur listener | Fixed. The editor view's shared detached geometry remains type-level read-only only (recorded in the boundary assessment since before this work). |
+
 ## Intentional functional API extensions (commit `ebe6a1f`)
 
 All additive and read-only; no recipe, SQLite, material, raster or compiler behavior changed.
@@ -135,7 +156,7 @@ The port key-list test was updated for `editor` and `status`. `main.ts` and `por
 
 ## Acceptance — isolated `?verify=1`, disposable library, throwaway Chrome profile
 
-`bun tools/ui-acceptance.ts` (Chrome 153 headless, D3D11 ANGLE, 1600×1000 and 900×900). **23 of 23 checks passed** on the final code. No application exceptions; the only console error was the intentional HTTP 409 from the conflict check.
+`bun tools/ui-acceptance.ts` (Chrome 153 headless, D3D11 ANGLE, 1600×1000 and 900×900). **24 of 24 checks passed** on the final code. No application exceptions; the only console error was the intentional HTTP 409 from the conflict check.
 
 | Check | Result |
 |---|---|
@@ -167,11 +188,11 @@ Masked evidence (viewport canvases hidden; no game-derived pixels): `wide-dark-d
 
 ## Verification
 
-Authoring suite: **351 tests pass** (330 before this work plus 21 new: dock model and cursor rule, read extensions, presentation boundary, style-guide sync and token contrast), `tsc --noEmit` is clean, and `bun run build` bundles `studio-main.js`, `main.js`, `port-smoke.js`, the raster worker and the fidelity study.
+Authoring suite: **353 tests pass** (330 before this work plus 23 new: dock model, cursor rule and composite/maximize rules, read extensions, presentation boundary, style-guide sync and token contrast), `tsc --noEmit` is clean, and `bun run build` bundles `studio-main.js`, `main.js`, `port-smoke.js`, the raster worker and the fidelity study.
 
 ## Remaining work
 
-1. Core fixes for B-1, B-2, B-3 and adapter items B-7 (case-sensitive cancel) and B-17.
+1. Core fixes for B-1, B-2, B-3, adapter items B-7 (case-sensitive cancel) and B-17, and the two core notes from the code review (control transaction vs gesture; layer add without a selected preset).
 2. API proposals A-1, A-2, A-5, A-7, A-8, A-9, A-10, A-12, A-13, A-14 (appendix signatures).
 3. Core performance: `CollectionService.capability()` for export/package and `lastPackageIsCurrent()` re-parse the whole workspace including every Undo history (~27 ms); validate the collection without editor histories or cache by draft version.
 4. Presentation follow-ups: arrow-key nudging once A-5 exists; relative units (C-17); stable warp names (C-16); virtualised lists for very large collections; screen-reader verification.

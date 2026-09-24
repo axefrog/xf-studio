@@ -102,19 +102,20 @@ export class ItemList<T extends ListItem> {
     row.main.after(input);
     input.focus(); input.select();
     let done = false;
-    const finish = (commit: boolean) => {
+    const finish = (commit: boolean, refocus = true) => {
       if (done) return; done = true;
       this.editing = undefined;
       input.remove(); row.main.hidden = false;
       const value = input.value.trim();
       if (commit && value && value !== original) this.options.onRename(id, value);
-      row.main.focus();
+      if (refocus) row.main.focus();
     };
     input.addEventListener("keydown", event => {
       if (event.key === "Enter") { event.preventDefault(); finish(true); }
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(false); }
     });
-    input.addEventListener("blur", () => finish(true));
+    // Clicking elsewhere commits without pulling focus back from where the user went.
+    input.addEventListener("blur", () => finish(true, false));
   }
   private drag(event: PointerEvent, id: string) {
     if (event.button !== 0 || this.disabled) return;

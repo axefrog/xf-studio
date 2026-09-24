@@ -47,8 +47,9 @@ function layerStrip() {
   } };
 }
 function noLayer(rt: StudioRuntime) {
-  return emptyState("No layer selected", "Select a layer in the Layers panel, or add one to this preset.",
-    button({ label: "Add layer", icon: "plus", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
+  const add = button({ label: "Add layer", icon: "plus", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) });
+  const element = emptyState("No layer selected", "Select a layer in the Layers panel, or add one to this preset.", add);
+  return { element, update(hasLayer: boolean) { element.hidden = hasLayer; if (!hasLayer) applyCapability(add, rt.addLayerCapability()); } };
 }
 
 export function finishPanel(rt: StudioRuntime): PanelController {
@@ -122,13 +123,13 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     section("Pigment", h("div", { class: "row gap-m align-end" }, color.element, opacity.element)),
     section("Finish", finishGroup, description, exportLine),
     glitterSection, classicSection, irregularSection, directSection);
-  const element = h("div", { class: "panel-content" }, strip.element, empty, body);
+  const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "finish", ...PANEL_META["finish"], element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer;
-      empty.hidden = !!layer; body.hidden = !layer;
+      empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       color.update(layer.color); opacity.update(layer.opacity);
       const current = canonical(layer.finish), target = { kind: "layer" as const, id: layer.id };
@@ -222,12 +223,12 @@ export function shapePanel(rt: StudioRuntime): PanelController {
     section("Curve", enable, modes.element, pathNote),
     section("Symmetry", mirror.element),
     gestures);
-  const element = h("div", { class: "panel-content" }, strip.element, empty, body);
+  const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "shape", ...PANEL_META["shape"], element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
+      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       const index = frame.selected, point = layer.points[index];
       setText(pointLabel, `Point ${index + 1} / ${layer.points.length}`);
@@ -274,12 +275,12 @@ export function edgePanel(rt: StudioRuntime): PanelController {
   const body = h("div", { class: "stack" },
     section("Pigment strength", pointLabel, weight.element, smooth.element, blend.element, pigmentNote),
     section("Edge softness", variable.element, width.element, softnessNote));
-  const element = h("div", { class: "panel-content" }, strip.element, empty, body);
+  const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "edge", ...PANEL_META["edge"], element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
+      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       const point = layer.points[frame.selected];
       setText(pointLabel, `Editing point ${frame.selected + 1} of ${layer.points.length} · select points in the UV map or on the head`);
@@ -327,12 +328,12 @@ export function warpPanel(rt: StudioRuntime): PanelController {
   const body = h("div", { class: "stack" },
     section("Warp controls", h("div", { class: "row between" }, chips, add), fieldNote), selected,
     note("A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together."));
-  const element = h("div", { class: "panel-content" }, strip.element, empty, body);
+  const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "warp", ...PANEL_META["warp"], element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
+      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       const field = frame.field;
       const key = JSON.stringify([layer.id, layer.fields.map(item => item.id)]);

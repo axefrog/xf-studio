@@ -39,7 +39,10 @@ export class Feedback {
           h("button", { class: "btn small", type: "button", text: action.label, onclick: () => { close(); action.run(); } }))) : null),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Dismiss notification", onclick: close }, icon("close")));
     this.toasts.append(element);
-    while (this.toasts.children.length > 4) this.toasts.firstElementChild?.remove();
+    while (this.toasts.children.length > 4) {
+      const transient = [...this.toasts.children].find(child => !child.classList.contains("error") && child !== element);
+      (transient ?? this.toasts.firstElementChild)?.remove();
+    }
     if (!options.sticky && tone !== "error") setTimeout(close, actions.length ? 9000 : 5200);
     return close;
   }

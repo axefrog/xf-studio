@@ -24,22 +24,22 @@ export class Slider {
     this.element = h("div", { class: "control" },
       h("label", { class: "control-label", for: id }, h("span", { text: options.label }), this.output),
       this.input, options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note);
-    // Pointer drags commit on release. Browsers fire `change` for every arrow key, so a
-    // keyboard burst stays one transaction until a short pause or blur. After Escape the
-    // control ignores further input until the pointer is released or focus leaves.
-    let mode: "pointer" | "keyboard" | undefined, cancelled = false, idle: ReturnType<typeof setTimeout> | undefined;
-    const begin = (kind: "pointer" | "keyboard") => {
-      if (this.active || this.input.disabled) return;
-      this.active = true; mode = kind; options.transaction.begin?.();
-    };
+    // A transaction begins lazily on the first value change, so a click that changes nothing
+    // never leaves one open. Pointer drags commit after release; browsers fire `change` for
+    // every arrow key, so a keyboard burst stays one transaction until a short pause or blur.
+    // After Escape the control ignores further input until the pointer is released or focus leaves.
+    let pointer = false, mode: "pointer" | "keyboard" | undefined, cancelled = false, idle: ReturnType<typeof setTimeout> | undefined;
     const commit = () => {
       clearTimeout(idle);
       if (this.active) { this.active = false; mode = undefined; options.transaction.commit?.(); }
     };
-    this.input.addEventListener("pointerdown", () => { cancelled = false; begin("pointer"); });
-    this.input.addEventListener("pointerup", () => { if (cancelled) cancelled = false; });
+    const armIdle = () => { clearTimeout(idle); idle = setTimeout(commit, 700); };
+    this.input.addEventListener("pointerdown", () => { pointer = true; cancelled = false; });
+    const release = () => { pointer = false; cancelled = false; if (mode === "pointer") setTimeout(commit); };
+    this.input.addEventListener("pointerup", release);
+    this.input.addEventListener("pointercancel", release);
     this.input.addEventListener("keydown", event => {
-      if (editKeys.has(event.key)) { cancelled = false; begin("keyboard"); }
+      if (editKeys.has(event.key)) { cancelled = false; if (mode === "keyboard") armIdle(); }
       else if (event.key === "Escape" && this.active) {
         event.preventDefault(); event.stopPropagation();
         clearTimeout(idle); this.active = false; mode = undefined; cancelled = true;
@@ -47,19 +47,16 @@ export class Slider {
       }
     });
     this.input.addEventListener("input", () => {
-      if (cancelled) return;
-      if (!this.active) begin("keyboard");
+      if (cancelled || this.input.disabled) return;
+      if (!this.active) { this.active = true; mode = pointer ? "pointer" : "keyboard"; options.transaction.begin?.(); }
+      if (mode === "keyboard") armIdle();
       const value = Number(this.input.value);
       this.fill();
       this.output.textContent = options.format(value);
       options.transaction.edit(value);
     });
-    this.input.addEventListener("change", () => {
-      if (mode === "keyboard") { clearTimeout(idle); idle = setTimeout(commit, 700); }
-      else commit();
-    });
-    this.input.addEventListener("blur", () => { cancelled = false; commit(); });
-    this.input.addEventListener("pointercancel", commit);
+    this.input.addEventListener("change", () => { if (mode === "pointer") commit(); });
+    this.input.addEventListener("blur", () => { cancelled = false; pointer = false; commit(); });
   }
   private fill() {
     const min = Number(this.input.min), max = Number(this.input.max), value = Number(this.input.value);
@@ -137,8 +134,7 @@ export class ColorField {
       h("div", { class: "color-field" }, h("span", { class: "swatch-frame" }, this.input), this.hex));
     const begin = () => { if (!this.active) { this.active = true; options.transaction.begin?.(); } };
     const commit = () => { if (this.active) { this.active = false; options.transaction.commit?.(); } };
-    this.input.addEventListener("pointerdown", begin);
-    this.input.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") begin(); });
+    // Begins on the first picked colour, so opening and dismissing the picker leaves no open transaction.
     this.input.addEventListener("input", () => { begin(); this.hex.value = this.input.value; options.transaction.edit(this.input.value); });
     this.input.addEventListener("change", commit);
     this.input.addEventListener("blur", commit);

@@ -45,7 +45,7 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
   const run = (index: number) => {
     const command = items[index];
     if (!command || !command.capability().available) return;
-    close(false);
+    close(true);
     command.run();
   };
   const close = (restore = true) => {

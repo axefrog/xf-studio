@@ -68,7 +68,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         note: assets.hairError ? `Some local hair styles unavailable: ${assets.hairError}` : "Appears for a matching imported V. Colour, shading and physics are approximate." });
       const options = state.previewOptions ?? [];
       const piercingAllowed = enableReason(rt, { kind: "preview.setPiercings", enabled: true });
-      piercings.update(!!preview?.piercings, { disabled: !preview || !options.length, reason: piercingAllowed.reason ?? "Preview is still loading." });
+      piercings.update(!!preview?.piercings, { disabled: !preview || !options.length || (!preview.piercings && !piercingAllowed.available),
+        reason: piercingAllowed.reason ?? "Preview is still loading." });
       style.update([{ value: "", label: "Saved V / off" }, ...options.map(option => ({ value: option.id, label: option.label }))], preview?.piercingStyle ?? "", !options.length,
         options.length ? undefined : `Piercing preview unavailable${assets.piercingError ? `: ${assets.piercingError}` : ""}.`);
       const chosen = options.find(option => option.id === preview?.piercingStyle);
@@ -100,6 +101,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
           "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       },
       commit: () => { port.authoring.dispatch({ kind: "camera.endFovGesture" }); },
+      cancel: () => { port.authoring.dispatch({ kind: "camera.endFovGesture" }); },
     } });
   const front = button({ label: "Front view", icon: "front", small: true, onClick: () => {
     const result = port.authoring.dispatch({ kind: "camera.front" });
@@ -222,8 +224,9 @@ export function activityPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" }, empty, list, clearHint);
   const draw = () => {
     const log = rt.feedback.log;
-    if (log.length === count) return;
-    count = log.length;
+    const newest = log.at(-1)?.id ?? 0;
+    if (newest === count) return;
+    count = newest;
     empty.hidden = log.length > 0;
     list.replaceChildren(...[...log].reverse().slice(0, 80).map(entry => h("li", { class: `activity-item ${entry.tone}` },
       h("time", { datetime: entry.time.toISOString(), text: entry.time.toLocaleTimeString() }), h("strong", { text: entry.source }), h("span", { text: entry.message }))));

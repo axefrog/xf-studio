@@ -13,7 +13,7 @@ import { icon } from "./icons";
 import { defaultCompact, defaultWide, sizeClassFor } from "./layout-defaults";
 import { closeMenus, openMenu, type MenuItem } from "./menu";
 import { activityPanel, characterPanel, lightingPanel, motionPanel, qualityPanel } from "./panels/preview";
-import { libraryPanel, libraryState, packagePanel, presetsPanel, type PanelController } from "./panels/collection";
+import { importCollection, libraryPanel, libraryState, packagePanel, presetsPanel, type PanelController } from "./panels/collection";
 import { edgePanel, finishPanel, shapePanel, warpPanel } from "./panels/inspector";
 import { layersPanel } from "./panels/layers";
 import { headPanel, uvPanel } from "./panels/viewports";
@@ -74,9 +74,11 @@ export function mountStudio(port: Port, root: HTMLElement) {
       else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
     }
     header.update(frame); status.update(frame);
+    // Decide once per paint so every visible heavy panel repaints together.
+    const heavyOk = [...heavy].some(id => dock.isVisible(id)) && heavyDue(frame);
     for (const panel of panels) {
       if (!dock.isVisible(panel.spec.id)) continue;
-      if (heavy.has(panel.spec.id) && !heavyDue(frame)) continue;
+      if (heavy.has(panel.spec.id) && !heavyOk) continue;
       panel.update(frame);
     }
   };
@@ -113,7 +115,8 @@ export function mountStudio(port: Port, root: HTMLElement) {
   window.addEventListener("keydown", event => {
     if (event.defaultPrevented) return;
     const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
-    if (mod && (key === "k" || (event.shiftKey && key === "p"))) { event.preventDefault(); closeMenus(false); openPalette(commands); return; }
+    const modalOpen = !!document.querySelector("dialog[open]");
+    if (mod && (key === "k" || (event.shiftKey && key === "p"))) { event.preventDefault(); if (!modalOpen) { closeMenus(false); openPalette(commands); } return; }
     if (mod && key === "s") { event.preventDefault(); void rt.request({ kind: "save" }); return; }
     if (mod && key === "z" && !event.shiftKey && !isTextInput(event.target)) {
       event.preventDefault();
@@ -123,7 +126,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
       rt.dispatch({ kind: "recipe.undo" }); return;
     }
     if (event.key === "F6") { event.preventDefault(); cycleRegions(root, event.shiftKey); return; }
-    if (event.key === "?" && !isTextInput(event.target) && !mod) { event.preventDefault(); openShortcuts(); }
+    if (event.key === "?" && !isTextInput(event.target) && !mod && !modalOpen) { event.preventDefault(); openShortcuts(); }
   });
   header.bindPalette(() => openPalette(commands));
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands } });
@@ -269,7 +272,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     act("undo", "Undo", "Edit", { kind: "recipe.undo" }, { icon: "undo", shortcut: "Ctrl+Z" }),
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
-    act("layer.add", "Add layer", "Edit", { kind: "layer.edit", command: { kind: "add" } }, { icon: "plus" }),
+    { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", capability: () => rt.addLayerCapability(), run: () => { rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }); } },
     act("layer.duplicate", "Duplicate selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "duplicate", id: layer.id } }, { icon: "duplicate" }),
     act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash" }),
     act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),
@@ -285,7 +288,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),
     file("library.recover", "Recover previous collection draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
-    file("collection.import", "Import collection…", "Files", { kind: "collection.import" }, { icon: "import" }),
+    { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
+      run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
     file("collection.plan", "Export compiler plan (saves first; not a mod)", "Files", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" }),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
