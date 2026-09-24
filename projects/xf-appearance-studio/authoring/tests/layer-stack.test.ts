@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
-import { initialRecipe, MAX_LAYERS, parseRecipe } from "../src/recipe";
+import { coverage, initialRecipe, MAX_LAYERS, parseRecipe } from "../src/recipe";
 import { editLayers } from "../src/layer-stack";
+import { RecipeHistory } from "../src/editor-actions";
 import { compileFlatPreset } from "../src/preset-compiler";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 
@@ -41,6 +42,32 @@ test("layer operations preserve identity, isolate copies, allow removal of the l
   next = editLayers(next.recipe, undefined, { kind: "add" });
   expect(next.recipe.layers).toHaveLength(1); expect(next.recipe.layers[0].enabled).toBe(true);
   expect(JSON.stringify(original)).toBe(originalText);
+});
+
+test("a new layer starts as a four-point upper-lid wash without changing saved or copied contours", () => {
+  const original = initialRecipe(), saved = JSON.stringify(original), history = new RecipeHistory();
+  history.checkpoint(original);
+  const added = editLayers(original, original.layers[0].id, { kind: "add" });
+  const layer = added.recipe.layers[added.active];
+  expect(layer.points).toHaveLength(4);
+  expect(layer.pathMode).toBe("bezier");
+  expect(layer.points.every(point => point.handles?.mode === "symmetric")).toBe(true);
+  expect(layer.fields).toEqual([]);
+  expect(layer.symmetry).toBe(true);
+  expect(coverage(.37, .225, layer)).toBeGreaterThan(.4);
+  expect(coverage(.63, .225, layer)).toBe(coverage(.37, .225, layer));
+  expect(coverage(.37, .27, layer)).toBe(0);
+  expect(JSON.stringify(original)).toBe(saved);
+  expect(history.undo()).toEqual(parseRecipe(original));
+  const blank = editLayers({ ...original, layers: [] }, undefined, { kind: "add" });
+  expect(parseRecipe(blank.recipe).layers[0].points).toEqual(layer.points);
+  expect(compileFlatPreset(blank.recipe, 128).metadata.coveredTexels).toBeGreaterThan(0);
+  const duplicate = editLayers(added.recipe, layer.id, { kind: "duplicate", id: original.layers[0].id });
+  expect(duplicate.recipe.layers[1].points).toEqual(original.layers[0].points);
+  const reset = editLayers(duplicate.recipe, layer.id, { kind: "reset", id: original.layers[0].id });
+  expect(reset.recipe.layers[0].points).toHaveLength(4);
+  expect(reset.recipe.layers[0].id).toBe(original.layers[0].id);
+  expect(reset.recipe.layers[0].name).toBe(original.layers[0].name);
 });
 
 test("reordering changes compiled overlapping colour, not recipe identities or source shapes", () => {

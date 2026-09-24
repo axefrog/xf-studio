@@ -86,6 +86,23 @@ export function initialRecipe(): Recipe {
     })),
   };
 }
+/** Starting contour for a newly added or reset layer. Keep the historical
+ * four-layer startup recipe above intact for existing drafts and examples. */
+export function newLayerTemplate(): Layer {
+  const base = initialRecipe().layers[0];
+  return convertToBezier({
+    ...base,
+    feather: 0.006,
+    points: [
+      [0.311, 0.236], // inner lid tip
+      [0.335, 0.215], // inner upper edge
+      [0.402, 0.214], // outer upper edge
+      [0.434, 0.246], // outer lid tip
+    ].map(([u, v]) => ({ u, v, weight: 1 })),
+    fields: [],
+    pathMode: "catmull-rom",
+  });
+}
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
   type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };

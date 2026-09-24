@@ -1,4 +1,4 @@
-import { initialRecipe, MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
+import { newLayerTemplate, MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 
 export type LayerCommand =
   | { kind: "add" }
@@ -13,7 +13,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   if ("id" in command && index < 0) throw Error("That layer no longer exists.");
   if (command.kind === "add" || command.kind === "duplicate") {
     if (layers.length >= MAX_LAYERS) throw Error(`This preview currently supports up to ${MAX_LAYERS} layers.`);
-    const layer = structuredClone(command.kind === "duplicate" ? layers[index] : initialRecipe().layers[0]);
+    const layer = structuredClone(command.kind === "duplicate" ? layers[index] : newLayerTemplate());
     layer.id = crypto.randomUUID();
     layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : `Layer ${layers.length + 1}`;
     if (command.kind === "add") layer.enabled = true;
@@ -28,7 +28,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   } else if (command.kind === "rename") {
     layers[index].name = command.name.trim();
   } else {
-    layers[index] = { ...structuredClone(initialRecipe().layers[0]), id: layers[index].id, name: layers[index].name };
+    layers[index] = { ...newLayerTemplate(), id: layers[index].id, name: layers[index].name };
   }
   return { recipe: parseRecipe(recipe), active: Math.max(0, layers.findIndex(l => l.id === activeId)) };
 }
