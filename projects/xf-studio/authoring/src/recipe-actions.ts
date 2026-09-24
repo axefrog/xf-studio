@@ -6,6 +6,7 @@ import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, t
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
+import { refuse, type ValidationIssue } from "./validation-issues";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =
@@ -25,7 +26,7 @@ export type RecipeAction =
   | { kind: "glitter.setIrregular"; layerId: string; key: "count" | "radius" | "spread" | "tilt" | "color"; value: number | string }
   | { kind: "glitter.setDirect"; layerId: string; key: "density" | "fineShare" | "strength" | "color"; value: number | string };
 
-export type RecipeActionCapability = { available: boolean; reason?: string };
+export type RecipeActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
 export type RecipeActionEffect = { kind: "selection" | "scheduled" | "immediate"; layerIndex: number };
 export type GestureEdit =
   | { kind: "shape.replace"; layerId: string; expectedLayer: Layer; next: Layer }
@@ -63,26 +64,26 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
   const layer = state.recipe.layers.find(l => l.id === action.layerId);
   if (!layer) return { available: false, reason: "That layer no longer exists." };
   if (action.kind.startsWith("glitter.") && action.kind !== "glitter.setClassic" && layer.finish !== "glitter")
-    return { available: false, reason: "Select a Glitter layer first." };
+    return refuse({ code: "mode", field: "finish", message: "Select a Glitter layer first." });
   if ((action.kind === "point.select" || action.kind === "point.remove") &&
       (!Number.isInteger(action.index) || !layer.points[action.index]))
     return { available: false, reason: "That control point no longer exists." };
   if (action.kind === "point.remove" && layer.points.length <= 3)
-    return { available: false, reason: "A closed contour needs at least three points." };
+    return refuse({ code: "range", field: "points", message: "A closed contour needs at least three points." });
   if (action.kind === "field.add" && layer.fields.length >= MAX_FIELDS)
-    return { available: false, reason: `A layer supports up to ${MAX_FIELDS} warp controls.` };
+    return refuse({ code: "range", field: "fields", message: `A layer supports up to ${MAX_FIELDS} warp controls.` });
   if ((action.kind === "field.select" || action.kind === "field.remove" ||
        action.kind === "field.clear" || action.kind === "field.setReach") &&
       !layer.fields.some(field => field.id === action.fieldId))
     return { available: false, reason: "That warp control no longer exists." };
   if (action.kind === "glitter.setIrregular" && !isIrregular(layer.flakes))
-    return { available: false, reason: "Select the irregular Glitter model first." };
+    return refuse({ code: "mode", field: "model", message: "Select the irregular Glitter model first." });
   if (action.kind === "glitter.setDirect" && !isDirectGlint(layer.flakes))
-    return { available: false, reason: "Select a direct-light Glitter model first." };
+    return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
-    return { available: false, reason: "Select a classic flake model first." };
+    return refuse({ code: "mode", field: "model", message: "Select a classic flake model first." });
   if (action.kind === "glitter.selectModel" && !glitterModels.includes(action.model))
-    return { available: false, reason: "Unknown Glitter model." };
+    return refuse({ code: "format", field: "model", message: "Unknown Glitter model." });
   return { available: true };
 }
 

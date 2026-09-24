@@ -4,6 +4,7 @@ import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import type { AuthoringHistory, HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
+import { nameIssue, type ValidationIssue } from "./validation-issues";
 import type { CollectionAction } from "./collection-actions";
 import type { CollectionRequest, CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
@@ -27,7 +28,9 @@ export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string
   { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
 export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
   "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
-export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode };
+export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode;
+  /** Structured validation detail when the refusal concerns one input value or mode. */
+  issue?: ValidationIssue };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
   undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
 export type StudioGestureProposal =
@@ -135,13 +138,13 @@ export class StudioApplication {
       typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
       return { available: false, code: "missing_target", reason: "The command targets a different item." };
     for (const [name, schema] of Object.entries(descriptor.payload)) {
-      const issue = fieldIssue(flattened[name], schema);
+      const issue = fieldIssue(flattened[name], schema, name);
       if (issue) return issue;
     }
     const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
     const variantFields = variant && descriptor.variants?.[String(variant)]?.payload;
     if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
-      const issue = fieldIssue(flattened[name], schema);
+      const issue = fieldIssue(flattened[name], schema, name);
       if (issue) return issue;
     }
     return this.capability(action);
@@ -283,7 +286,7 @@ export class StudioApplication {
     if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
       action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    let raw: { available: boolean; reason?: string };
+    let raw: { available: boolean; reason?: string; issue?: ValidationIssue };
     if ((action.kind === "recipe.undo" || action.kind === "recipe.redo") && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
@@ -302,7 +305,7 @@ export class StudioApplication {
     else if (action.kind.startsWith("quality."))
       raw = s.quality?.capability(action as QualityAction) ?? missing("Preview quality is still loading.");
     else raw = s.savedV?.capability(action as SavedAppearanceAction) ?? missing("Saved appearance preview is still loading.");
-    return raw.available ? { available: true } : { ...raw, code: reasonCode(action, raw.reason ?? "") };
+    return raw.available ? { available: true } : { ...raw, code: raw.issue ? issueCode(raw.issue) : reasonCode(action, raw.reason ?? "") };
   }
   /** Candidate actions use the hit target, never the currently selected row. */
   actionsFor(target: StudioTarget): StudioActionInfo[] {
@@ -432,9 +435,11 @@ export class StudioApplication {
     this.gesture = undefined; this.notify();
   }
 }
-function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | undefined {
+function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioCapability | undefined {
+  const refused = (code: StudioReasonCode, issue: ValidationIssue): StudioCapability =>
+    ({ available: false, code, reason: issue.message, issue });
   if (value === undefined || value === null) return schema.required
-    ? { available: false, code: "needs_input", reason: "This command needs a value." } : undefined;
+    ? refused("needs_input", { code: "required", field, message: "This command needs a value." }) : undefined;
   const good = schema.type === "enum" ? schema.values?.includes(value as string | number) :
     schema.type === "integer" ? Number.isInteger(value) :
     schema.type === "number" ? typeof value === "number" && Number.isFinite(value) :
@@ -443,13 +448,21 @@ function fieldIssue(value: unknown, schema: ValueSchema): StudioCapability | und
     schema.type === "boolean" ? typeof value === "boolean" :
     schema.type === "bytes" ? value instanceof Uint8Array || value instanceof ArrayBuffer :
     typeof value === "object";
-  if (!good) return { available: false, code: "invalid_value", reason: "The value has the wrong type or choice." };
+  if (!good) return refused("invalid_value", { code: "format", field, message: "The value has the wrong type or choice." });
   if (typeof value === "number" && (schema.min !== undefined && value < schema.min ||
     schema.max !== undefined && value > schema.max))
-    return { available: false, code: "limit", reason: "The value is outside the supported range." };
+    return refused("limit", { code: "range", field, message: "The value is outside the supported range." });
+  if (typeof value === "string" && field === "name") {
+    const issue = nameIssue(value, schema.maxLength ?? Number.POSITIVE_INFINITY, field);
+    if (issue) return refused("invalid_value", issue);
+  }
   if (typeof value === "string" && (schema.minLength !== undefined && value.length < schema.minLength ||
     schema.maxLength !== undefined && value.length > schema.maxLength))
-    return { available: false, code: "limit", reason: "The text length is outside the supported range." };
+    return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
+}
+function issueCode(issue: ValidationIssue): StudioReasonCode {
+  return issue.code === "range" ? "limit" : issue.code === "mode" ? "incompatible_mode" :
+    issue.code === "required" ? "needs_input" : "invalid_value";
 }
 const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }

@@ -1,6 +1,7 @@
 import { editLayers, type LayerCommand } from "./layer-stack";
 import { MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 import type { ActionCapability } from "./collection-actions";
+import { nameIssue, positionIssue, refuse } from "./validation-issues";
 import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 
 export type LayerAction =
@@ -13,9 +14,12 @@ export function layerCapability(recipe: Recipe, action: LayerAction): ActionCapa
     return { available: false, reason: "That layer no longer exists." };
   if (action.kind === "layer.edit") {
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
-      return { available: false, reason: `This preview currently supports up to ${MAX_LAYERS} layers.` };
-    if (command.kind === "move" && (!Number.isInteger(command.to) || command.to < 0 || command.to >= recipe.layers.length))
-      return { available: false, reason: "Invalid layer position." };
+      return refuse({ code: "range", message: `This preview currently supports up to ${MAX_LAYERS} layers.` });
+    // Layers are stored bottom-to-top: index 0 is the back, the last index the front.
+    const issue = command.kind === "move" ? positionIssue(command.to, recipe.layers.length,
+      { below: "This layer is already at the back.", above: "This layer is already at the front." }) :
+      command.kind === "rename" ? nameIssue(command.name, 80) : undefined;
+    if (issue) return refuse(issue);
   }
   return { available: true };
 }

@@ -141,3 +141,23 @@ test("limitsFor publishes static and state-dependent input limits for a concrete
   expect(app.limitsFor({ kind: "point", layerId: other, index: 0 }, "softness.edit", "point-softness").value.requires?.reason)
     .toContain("point edge softness");
 });
+
+test("refusals carry structured validation issues instead of text to parse", () => {
+  const { app, document, presetId } = withCollection(), front = document.recipe.layers.at(-1)!.id;
+  const back = document.recipe.layers[0].id;
+  expect(app.capability({ kind: "layer.edit", command: { kind: "move", id: front, to: document.recipe.layers.length } }))
+    .toMatchObject({ available: false, code: "limit", reason: "This layer is already at the front.", issue: { code: "range", field: "to" } });
+  expect(app.capability({ kind: "layer.edit", command: { kind: "move", id: back, to: -1 } }).reason).toBe("This layer is already at the back.");
+  expect(app.capability({ kind: "layer.edit", command: { kind: "rename", id: back, name: "   " } }))
+    .toMatchObject({ code: "invalid_value", issue: { code: "name.blank", field: "name" } });
+  expect(app.capability({ kind: "layer.edit", command: { kind: "rename", id: back, name: "x".repeat(81) } }).issue?.code).toBe("name.too-long");
+  expect(app.capability({ kind: "preset.edit", command: { kind: "rename", id: presetId, name: "" } }).issue?.code).toBe("name.blank");
+  expect(app.capability({ kind: "preset.edit", command: { kind: "move", id: presetId, to: 1 } }).reason).toBe("This preset is already last.");
+  expect(app.capability({ kind: "collection.rename", name: " " }).issue?.code).toBe("name.blank");
+  expect(app.capability({ kind: "glitter.setIrregular", layerId: back, key: "count", value: 1 }))
+    .toMatchObject({ code: "incompatible_mode", issue: { code: "mode", field: "finish" } });
+  expect(app.contextCapability({ kind: "layer", id: back }, { kind: "layer.setOpacity", layerId: back, opacity: 2 }))
+    .toMatchObject({ code: "limit", issue: { code: "range", field: "opacity" } });
+  expect(app.contextCapability({ kind: "layer", id: back }, { kind: "layer.setOpacity", layerId: back } as never))
+    .toMatchObject({ code: "needs_input", issue: { code: "required", field: "opacity" } });
+});
