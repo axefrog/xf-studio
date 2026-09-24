@@ -5,6 +5,7 @@
  */
 import { createBrowserFileDevice } from "./browser-file-device";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
+import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice, previewOpticalKey } from "./browser-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -44,6 +45,7 @@ async function start() {
   const restored = loadBrowserWorkspace(storage, verification), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const localSetup = createBrowserLocalSetup();
+  const installDetection = createBrowserInstallDetection();
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
   let savedAppearance: SavedAppearanceActions | undefined;
   let previewActions: ReturnType<ReturnType<typeof createTrustedPreviewServices>["finish"]>["preview"] | undefined;
@@ -134,7 +136,7 @@ async function start() {
     persist, message: text => adapterMessage("uv", text),
   }, workspace.uvView);
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, localSetup, viewport: viewportDevice.attachment,
+    workspace, core, preferences, localSetup, installDetection, viewport: viewportDevice.attachment,
     previewReadiness: previewDevice.coordinator, status: statusSource,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },

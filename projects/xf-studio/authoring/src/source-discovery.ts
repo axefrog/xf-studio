@@ -1,6 +1,7 @@
 import { lstatSync, opendirSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
+import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
 
 /** Physical inventory only. An archive has no known depot members until an index adapter examines it. */
 export type SourceFileKind = "archive" | "archive-xl" | "loose-customization" | "archive-modlist";
@@ -29,7 +30,8 @@ export interface SourceCandidate {
   readonly limitations: readonly string[];
 }
 
-export interface SourceIssue { readonly code: string; readonly detail: string }
+/** A blocking issue makes the scan incomplete; a non-blocking one records MO2's own deterministic handling. */
+export interface SourceIssue { readonly code: string; readonly detail: string; readonly blocking: boolean }
 export interface LooseFileAssessment {
   readonly virtualPath: string;
   readonly contenders: readonly SourceCandidate[];
@@ -62,7 +64,8 @@ const extensions: Record<string, SourceFileKind> = {
 const defaults = { maxEntries: 150_000, maxDepth: 12, maxProfileBytes: 4 * 1024 * 1024 };
 const archiveLimit = "Archive members, hash winners, ArchiveXL patches/merges, REDmod, and actual game loading are unresolved.";
 const safeName = (name: string) => name !== "." && name !== ".." && name.trim() === name &&
-  !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length <= 128;
+  !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length <= 255;
+const iniBytes = 4 * 1024 * 1024;
 const key = (path: string) => path.replaceAll("\\", "/").toLowerCase();
 const portable = (path: string) => path.split(sep).join("/");
 const inside = (root: string, path: string) => {
@@ -99,10 +102,12 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
   const issues: SourceIssue[] = [];
   let entries = 0;
   let complete = true;
-  const issue = (code: string, detail: string) => { issues.push({ code, detail }); complete = false; };
+  const issue = (code: string, detail: string) => { issues.push({ code, detail, blocking: true }); complete = false; };
+  const note = (code: string, detail: string) => { issues.push({ code, detail, blocking: false }); };
+  let skipDirectories: readonly string[] = [];
 
   const scan = (root: string, provider: SourceProviderKind, providerName: string, active: boolean,
-    priority: number | null, prefix = "", profile: string | null = null) => {
+    priority: number | null, prefix = "", profile: string | null = null, evidence: string | null = null) => {
     const absoluteRoot = resolve(root);
     let rootStat;
     try { rootStat = lstatSync(absoluteRoot); }
@@ -126,15 +131,18 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
         try { stat = lstatSync(path); }
         catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
         if (stat.isSymbolicLink()) { issue("symlink_skipped", `${provider} symbolic link was skipped.`); continue; }
-        if (stat.isDirectory()) { walk(path, depth + 1); if (entries > limits.maxEntries) return; continue; }
+        if (stat.isDirectory()) {
+          // MO2's virtual filesystem hides configured directory names (e.g. `.git`) inside mods and overwrite.
+          if (provider.startsWith("mo2-") && skipDirectories.includes(name.toLowerCase())) continue;
+          walk(path, depth + 1); if (entries > limits.maxEntries) return; continue;
+        }
         if (!stat.isFile()) continue;
         const virtualPath = prefix + portable(relative(absoluteRoot, path));
         const kind = kindOf(virtualPath);
         if (!kind) continue;
         candidates.push({ id: `${provider}:${providerName}:${key(virtualPath)}:${path}`,
           provider, providerName, route, profileId: profile, virtualPath, physicalPath: path, kind, active,
-          priority, priorityEvidence: priority === null ? null : provider === "mo2-overwrite"
-            ? "MO2 overwrite staged above listed mods" : "MO2 modlist row; later row has higher virtual-file priority",
+          priority, priorityEvidence: evidence,
           sizeBytes: stat.size, modifiedMs: stat.mtimeMs, sha256: null, discoveredAt,
           limitations: kind === "archive" ? [archiveLimit] : ["Physical presence and selected-route activation do not establish runtime loading."],
         });
@@ -153,30 +161,39 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
   if (route === "mo2") {
     if (!settings.mo2Root || !profileId) issue("mo2_unconfigured", "MO2 root and profile are required.");
     else {
-      const listing = join(settings.mo2Root, "profiles", profileId, "modlist.txt");
-      let rows: string[] = [];
+      // Resolve the instance's configured directories as MO2 does; a folder without
+      // ModOrganizer.ini uses MO2's defaults (<root>/mods, profiles, overwrite).
+      const iniPath = join(settings.mo2Root, "ModOrganizer.ini");
+      let iniText: string | null = null;
+      try {
+        const stat = lstatSync(iniPath);
+        if (stat.isFile() && !linkedAncestor(iniPath) && stat.size <= iniBytes) iniText = readFileSync(iniPath, "utf8");
+        else issue("mo2_ini_unreadable", "The MO2 instance settings file is linked, not a file, or too large.");
+      } catch { /* A bare default-layout folder has no ModOrganizer.ini. */ }
+      const instance = describeMo2Instance(iniText, settings.mo2Root, "configured", basename(settings.mo2Root));
+      skipDirectories = instance.skipDirectories;
+      const listing = join(instance.paths.profiles, profileId, "modlist.txt");
+      let text = "";
       try {
         const stat = lstatSync(listing);
         if (!stat.isFile() || linkedAncestor(listing) || stat.size > limits.maxProfileBytes)
           throw Error("Profile list is missing, linked, or exceeds its byte limit.");
-        rows = readFileSync(listing, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/);
+        text = readFileSync(listing, "utf8");
       } catch { issue("profile_unreadable", "Selected MO2 modlist is unavailable or exceeds its byte limit."); }
-      const seen = new Set<string>();
-      rows.forEach((line, index) => {
-        if (!line || line.startsWith("#") || line.startsWith("*")) return;
-        const name = line.slice(1);
-        if (!["+", "-"].includes(line[0]!) || !safeName(name)) {
-          issue("profile_row_invalid", `Invalid MO2 profile row ${index + 1}.`); return;
-        }
-        if (seen.has(name.toLowerCase())) { issue("profile_duplicate_mod", `Duplicate MO2 mod at row ${index + 1}.`); return; }
-        seen.add(name.toLowerCase());
-        scan(join(settings.mo2Root!, "mods", name), "mo2-mod", name, line[0] === "+", index,
-          "", profileId);
-      });
+      const modlist = parseMo2Modlist(text);
+      for (const entry of modlist.notes)
+        note(entry.code === "duplicate_ignored" ? "profile_duplicate_mod" : "profile_overwrite_row",
+          `MO2 ignores modlist row ${entry.line}${entry.code === "duplicate_ignored" ? " (a repeated mod keeps its first row)" : ""}.`);
+      for (const entry of modlist.entries) {
+        // Separators carry no files; foreign rows are game-plugin entries outside the mods directory.
+        if (entry.kind !== "mod") continue;
+        if (!safeName(entry.name)) { issue("profile_row_invalid", `Invalid MO2 profile row ${entry.line}.`); continue; }
+        scan(join(instance.paths.mods, entry.name), "mo2-mod", entry.name, entry.enabled, entry.priority, "", profileId,
+          `MO2 modlist.txt row ${entry.line}; MO2 writes the list highest priority first, so earlier rows win`);
+      }
       // A missing overwrite directory is valid for an otherwise healthy instance.
-      const overwrite = join(settings.mo2Root, "overwrite");
-      try { if (lstatSync(overwrite).isDirectory()) scan(overwrite, "mo2-overwrite", "MO2 overwrite", true,
-        rows.length + 1, "", profileId); }
+      try { if (lstatSync(instance.paths.overwrite).isDirectory()) scan(instance.paths.overwrite, "mo2-overwrite",
+        "MO2 overwrite", true, modlist.overwritePriority, "", profileId, "MO2 overwrite ranks above every profile mod"); }
       catch { /* optional */ }
     }
   }
