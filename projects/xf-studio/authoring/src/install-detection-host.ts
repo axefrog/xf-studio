@@ -1,8 +1,8 @@
 /** Host adapter for install detection: environment, bounded file reads and `reg query`.
- * Read-only by construction: it spawns only `reg.exe query` with fixed keys (no shell), never
+ * Read-only by construction: it runs only `reg.exe query` with fixed keys (no shell), never
  * follows links into files it reads, and never writes to the game, a launcher or MO2.
  */
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DetectionHostPort } from "./install-detection";
@@ -28,9 +28,9 @@ export function createWindowsDetectionHost(env: NodeJS.ProcessEnv = process.env,
     async registry(key, recursive = false) {
       if (platform !== "win32" || !registryKey.test(key)) return null;
       // reg.exe prints in the console code page; paths outside it may not round-trip.
-      const result = spawnSync("reg.exe", ["query", key, ...(recursive ? ["/s"] : [])],
-        { encoding: "utf8", timeout: timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
-      return result.status === 0 && typeof result.stdout === "string" ? result.stdout : null;
+      return new Promise(done => execFile("reg.exe", ["query", key, ...(recursive ? ["/s"] : [])],
+        { encoding: "utf8", timeout: timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+        (error, stdout) => done(error || typeof stdout !== "string" ? null : stdout)));
     },
     readText(path, maxBytes) {
       const stat = regular(path);

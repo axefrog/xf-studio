@@ -9,6 +9,7 @@ import type { StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
+import { InstallDetectionActions } from "./install-detection-actions";
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
@@ -54,6 +55,10 @@ export type StudioPresentationPort<Slot> = {
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
     snapshot(): ReadonlyDeep<ReturnType<LocalSetupActions["snapshot"]>>;
   };
+  /** Read-only discovery of game installs and MO2 instances for setup suggestions. */
+  readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<ReturnType<InstallDetectionActions["snapshot"]>>;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -63,6 +68,7 @@ export type StudioPresentationPort<Slot> = {
     previewReadiness: PreviewReadiness;
     status: PresentationStatus;
     localSetup: ReturnType<LocalSetupActions["snapshot"]>;
+    installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -80,6 +86,7 @@ export function createStudioPresentation<Slot>(sources: {
   editor?: AuthoringPresentation;
   status?: StatusSource;
   localSetup?: LocalSetupActions;
+  installDetection?: InstallDetectionActions;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -154,17 +161,25 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Local setup is unavailable on this host." }),
     dispatch: async () => ({ ok: false, code: "unavailable", message: "Local setup is unavailable on this host." }),
   };
+  const detection = sources.installDetection ?? new InstallDetectionActions(null);
+  const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
+    snapshot: () => detection.snapshot(), capability: action => detection.capability(action),
+    dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
+  };
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
+    installDetection: Object.freeze(installDetection),
     status: Object.freeze({ snapshot: () => s.snapshot() }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
-      status: s.snapshot(), localSetup: localSetup.snapshot() }),
+      status: s.snapshot(), localSetup: localSetup.snapshot(),
+      installDetection: installDetection.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
-        ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : [])];
+        ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
+        ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

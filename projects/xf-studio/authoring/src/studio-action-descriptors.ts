@@ -1,7 +1,9 @@
 import type { CollectionRequest } from "./collection-service";
+import type { InstallDetectionAction } from "./install-detection-actions";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 
-export type ActionScope = StudioTarget["kind"] | "file";
+/** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
+export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type UndoPolicy = "none" | "recipe" | "transaction" | "recovery";
 export type ValueSchema = { type: "string" | "number" | "number|string" | "integer" | "boolean" | "enum" | "object" | "bytes";
   required: boolean; from: "target" | "state" | "input"; min?: number; max?: number;
@@ -119,6 +121,13 @@ export const REQUEST_DESCRIPTORS = {
   import: request("file", "import", { text: input("string"), bytes: input("integer", 0, 16_000_000) }),
   package: request("collection", "package", { action: enumerated(["check", "build"]) }),
 } satisfies Record<CollectionRequest["kind"], RequestDescriptor>;
+
+/** Read-only host detection. Results are private host metadata (absolute paths) for a setup view to
+ * offer as choices; saving a choice goes through the separate local setup actions. */
+export const DETECTION_DESCRIPTORS = {
+  "detect.gameInstalls": request("host", "read"),
+  "detect.mo2Instances": request("host", "read"),
+} satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands. */
 export const GESTURE_DESCRIPTORS = {

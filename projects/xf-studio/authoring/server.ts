@@ -4,6 +4,7 @@ import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { createPackageHandler, localPackageTools } from "./src/package-server";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
+import { createInstallDetectionHandler } from "./src/install-detection-server";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import { buildBrowser } from "./browser-build";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
@@ -14,6 +15,7 @@ const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
 const localSettings = new LocalSettingsStore();
 const settingsRequest = createLocalSettingsHandler(localSettings);
+const detectionRequest = createInstallDetectionHandler();
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
 const root = resolve(import.meta.dir, "public");
@@ -30,6 +32,7 @@ const server = Bun.serve({
     const url = new URL(request.url);
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
+    if (url.pathname === "/api/install-detection") return detectionRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

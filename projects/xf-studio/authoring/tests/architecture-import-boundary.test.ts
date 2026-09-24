@@ -23,3 +23,14 @@ test("the independent browser entry does not depend on legacy main or control mo
   expect(dependencies).not.toContain("./main");
   expect(dependencies.some(path => /\.\/(?:collection-ui|path-ui|control-edit-ui|motion-ui)$/.test(path))).toBe(false);
 });
+
+test("install detection keeps parsing pure and host access in its adapter", () => {
+  for (const name of ["install-detection", "mo2-instance", "install-detection-actions"]) {
+    for (const dependency of imports(source(name)))
+      expect(dependency, `${name} imports ${dependency}`).not.toMatch(
+        /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|main$|scene|studio-ui))/);
+  }
+  // The action layer and browser device reach the host only through a typed transport.
+  expect(imports(source("install-detection-actions")).filter(path => !path.startsWith("./"))).toEqual([]);
+  expect(imports(source("browser-install-detection-device"))).toEqual(["./install-detection-actions"]);
+});
