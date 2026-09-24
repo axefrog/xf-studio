@@ -140,6 +140,7 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   const paths = checked(options);
   requireValue(sha(paths.modlist) === plan.sourceProfileModlistSha256,
     "Source MO2 profile changed after diagnostic planning.");
+  mkdirSync(dirname(paths.stage), { recursive: true });
   mkdirSync(paths.stage);
   const stagedMo2 = join(paths.stage, "mo2");
   const stagedProfile = join(stagedMo2, "profiles", options.profileId);

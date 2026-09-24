@@ -56,7 +56,8 @@ test("dry-run verifies the candidate and profile without creating a stage or cha
 test("explicit staging copies profile metadata and uses the trusted transport only in the isolated root", () => {
   const f = fixture();
   try {
-    const result = stageRuntimeDiagnostic(f.options);
+    const options = { ...f.options, stagingRoot: join(f.root, "private", "scratch", "stage") };
+    const result = stageRuntimeDiagnostic(options);
     const stagedList = readFileSync(join(result.stagedProfile, "modlist.txt"), "utf8");
     expect(stagedList).toContain("-XF Eye Artistry CCXL - Dev\r\n");
     expect(stagedList).toContain("+XF Studio\r\n");
@@ -69,7 +70,7 @@ test("explicit staging copies profile metadata and uses the trusted transport on
         readFileSync(join(f.options.candidateStore, f.options.candidateId, ...entry.path.split("/")), "utf8"));
       expect(existsSync(join(f.options.mo2Root, "mods", "XF Studio", "archive", "pc", "mod", file))).toBe(false);
     }
-    expect(result.receipt.target.startsWith(f.options.stagingRoot)).toBe(true);
+    expect(result.receipt.target.startsWith(options.stagingRoot)).toBe(true);
   } finally { f.cleanup(); }
 });
 

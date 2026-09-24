@@ -68,8 +68,8 @@ without outputting source pixels. Its base decode also matches the independent
 WolvenKit PNG at every pixel. The source XBM/JSON/PNG files remain under ignored
 `research/consumers/brow-gradient-check/` in the isolated worktree.
 
-The local [hair-profile guide](../../../../Cyberpunk-Modding-Docs/for-mod-creators-theory/files-and-what-they-do/file-formats/materials/hair-profiles-.hp.md)
-and [hair/skin material guide](../../../../Cyberpunk-Modding-Docs/for-mod-creators-theory/materials/configuring-materials/hair-and-skin-material-properties.md)
+The local [hair-profile guide](../../../Cyberpunk-Modding-Docs/for-mod-creators-theory/files-and-what-they-do/file-formats/materials/hair-profiles-.hp.md)
+and [hair/skin material guide](../../../Cyberpunk-Modding-Docs/for-mod-creators-theory/materials/configuring-materials/hair-and-skin-material-properties.md)
 were checked at `be2f44eed8419342ec13f72ed9cab008e9f7b289`. They concern
 hair `Strand_ID` and root-to-tip profile lookups, not this brow-decal gradient.
 Neither guide's hair section illustrates the brow mechanism. The latter page's
