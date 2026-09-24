@@ -14,7 +14,7 @@ Versions actually pinned or used by current XF Studio work. Lockfiles and `packa
 | [Electrobun](https://github.com/blackboardsh/electrobun) | 2.0.1 (compatible global Hutch 0.24.3 as builder fallback) | Private Windows desktop trial | `authoring/desktop/package.json` and its `bunx electrobun@2.0.1` scripts |
 | WolvenKit CLI | 8.17.4 (production default) and 9.0.1 (side by side) | Resource conversion, pack/unbundle, package verification | Local paths below and Local setup; desktop readiness accepts either |
 | Blender | 5.0.0 | Headless intake, plate audit/export, preview GLB export | `C:/Program Files/Blender Foundation/Blender 5.0/blender.exe` |
-| Python | 3.14.6 with Pillow 12.3.0 and NumPy (2.5.2 global) | Package builder/verifier (`NumPy` and `Pillow` required by desktop Build), icon generation, study scripts | Local install below |
+| Python | 3.14.6 with Pillow 12.3.0 and NumPy (2.5.2 global) | Package builder/verifier (`NumPy` and `Pillow` required by desktop Build), study scripts | Local install below |
 | NumPy / SciPy | 2.5.3 / 1.18.1 | Plate clearance and correction studies | [`experiments/006-plate-clearance/fixed_requirements.txt`](../experiments/006-plate-clearance/fixed_requirements.txt), installed into an ignored experiment-local target (SciPy is not in the global Python) |
 | .NET SDK | 9.0.205 (projects target `net9.0`) | `projects/xf-studio/tools/morph-import` and `anim-export`, which reference WolvenKit CLI assemblies (`WolvenKitDir`, default the 8.17.4 console) | `.csproj` files |
 | [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli) | 11.17.0 with Chrome | Rendering pipeline-guide diagrams for visual review (not installed globally) | Recorded in the pipeline guide's visual-review table |

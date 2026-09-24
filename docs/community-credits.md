@@ -82,7 +82,11 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 
 ### Pillow
 
-By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images and to rasterize the desktop icon.
+By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images.
+
+### resvg
+
+The resvg SVG renderer by Yevhenii Reizner and contributors, used through yisibl's [resvg-js](https://github.com/yisibl/resvg-js) bindings (MPL-2.0). Renders the app icon set from its SVG master at build time. Development dependency only; nothing from it ships in the app.
 
 ### SciPy and NumPy
 
