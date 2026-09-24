@@ -83,6 +83,8 @@ The official [uninstall](https://framework.blackboard.sh/electrobun/guides/unins
 
 The 25 September [Updater API](https://framework.blackboard.sh/electrobun/apis/updater/) and [release hosting guide](https://framework.blackboard.sh/electrobun/guides/updates/) informed the [typed desktop update gate](../research/authoring/desktop-packaging.md): separate check/download/apply calls, `before-quit` and native relaunch, and the explicit warning that bundle hashes do not authenticate code. **Use: documentation learning and framework API integration only.** The tracked native adapter calls the Electrobun 2.0.1 API, but the unsigned/no-feed production canary never instantiates it; tests use a project-authored fake port. No upstream source or assets were adapted. The existing MIT and redistribution-notice record above still applies.
 
+The same API/hosting guides and [Windows signing limitation](https://framework.blackboard.sh/electrobun/guides/code-signing/) shaped the [private A→B gate](../research/authoring/desktop-update-ab-gate.md): the native helper's claimed restoration, full-bundle fallback and route hash remain unverified Studio behavior, while downloaded archive authenticity needs separate proof. **Use: Electrobun 2.0.1 documentation learning, no new code adaptation or asset reuse.** The existing license/notice obligations still apply before any distribution.
+
 ### WolvenKit — the WolvenKit team and contributors
 
 [Repository](https://github.com/WolvenKit/WolvenKit). Save-format research used commit `11720772f1e20581301b3dec88a59f7b5ee05675`; conversion experiments use installed CLI 8.17.4. Do not conflate these revisions.
