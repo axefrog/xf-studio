@@ -44,7 +44,7 @@ type FileSources = {
 export class StudioFileOperations {
   private collection?: CollectionService;
   private collectionUnsubscribe?: () => void;
-  private busy?: StudioFileAction["kind"];
+  private busy?: { kind: StudioFileAction["kind"]; owner: symbol };
   private last?: StudioFileState["last"];
   private package?: PackageResult;
   private listeners = new Set<() => void>();
@@ -60,7 +60,7 @@ export class StudioFileOperations {
     const collection = this.collection?.summary(), progress = collection?.progress;
     const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
       { available: false, reason: "Collection is still loading." };
-    return structuredClone({ busy: this.busy, collectionBusy: collection?.busy ?? false,
+    return structuredClone({ busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
       last: this.last, package: this.package && { ...this.package,
         freshness: this.collection?.lastPackageIsCurrent() ? "current" : "stale" },
       progress, recovery });
@@ -86,15 +86,16 @@ export class StudioFileOperations {
   }
   async execute(action: StudioFileAction): Promise<StudioFileOutcome> {
     const allowed = this.capability(action);
-    if (!allowed.available) return this.finish(action.kind,
-      { ok: false, code: this.busy ? "busy" : "unavailable", message: allowed.reason! });
-    this.busy = action.kind; this.notify();
+    // A refused call never acquired the transaction, so it must not release or replace its result.
+    if (!allowed.available) return { ok: false, code: this.busy ? "busy" : "unavailable", message: allowed.reason! };
+    const owner = Symbol(action.kind);
+    this.busy = { kind: action.kind, owner }; this.notify();
     try {
       let outcome: StudioFileOutcome;
       switch (action.kind) {
         case "recipe.import": {
           const file = await this.port.pick("recipe");
-          if (!file) return this.finish(action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });
+          if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });
           if (file.size > 1_000_000) throw new FileOperationError("too_large", "Recipe is too large.");
           const recipe = parseRecipe(JSON.parse(await file.text()));
           this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""));
@@ -112,7 +113,7 @@ export class StudioFileOperations {
         }
         case "savedV.import": {
           const file = await this.port.pick("savedV");
-          if (!file) return this.finish(action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
+          if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
           const savedAppearance = this.sources.loadSavedV(await file.bytes());
           outcome = { ok: true, code: "loaded", message: "Saved facial shape applied. Remaining appearance assets still need resolving.",
@@ -129,7 +130,7 @@ export class StudioFileOperations {
           let request: CollectionRequest;
           if (action.kind === "collection.import") {
             const file = await this.port.pick("collection");
-            if (!file) return this.finish(action.kind, { ok: false, code: "cancelled", message: "Collection selection cancelled." });
+            if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Collection selection cancelled." });
             // Keep the service's exact size validation and error code.
             request = { kind: "import", text: file.size > 16_000_000 ? "" : await file.text(), bytes: file.size };
           } else request = collectionRequest(action.kind);
@@ -144,12 +145,12 @@ export class StudioFileOperations {
             message: this.collection?.view().progress?.message ?? "Collection operation completed.", result: result.result };
         }
       }
-      return this.finish(action.kind, outcome);
+      return this.finish(owner, action.kind, outcome);
     } catch (error) {
       const code = error instanceof FileOperationError ? error.code : error instanceof SyntaxError ? "invalid_json" : "file_failed";
       const prefix = action.kind === "recipe.import" ? "Could not open recipe: " :
         action.kind === "savedV.import" ? "Could not apply V: " : "";
-      return this.finish(action.kind, { ok: false, code, message: prefix + (error as Error).message });
+      return this.finish(owner, action.kind, { ok: false, code, message: prefix + (error as Error).message });
     }
   }
   /** Existing save/open/refresh requests share the same result/download state port. */
@@ -168,9 +169,12 @@ export class StudioFileOperations {
     this.notify();
     return result;
   }
-  private finish(kind: StudioFileAction["kind"], outcome: StudioFileOutcome): StudioFileOutcome {
-    this.busy = undefined; this.last = { kind, ok: outcome.ok, code: outcome.code, message: outcome.message };
-    this.notify(); return outcome;
+  private finish(owner: symbol, kind: StudioFileAction["kind"], outcome: StudioFileOutcome): StudioFileOutcome {
+    if (this.busy?.owner === owner) {
+      this.busy = undefined; this.last = { kind, ok: outcome.ok, code: outcome.code, message: outcome.message };
+      this.notify();
+    }
+    return outcome;
   }
 }
 

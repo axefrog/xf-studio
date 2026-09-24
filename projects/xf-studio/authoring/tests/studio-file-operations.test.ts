@@ -30,10 +30,11 @@ function fixture() {
   const downloads: { name: string; type: string }[] = [];
   let maskInput: typeof layer | undefined, imported: { recipe: Recipe; name: string } | undefined;
   let loadedBytes: Uint8Array | undefined;
+  let bakeMask = async (_value: typeof layer) => new Blob(["png"], { type: "image/png" });
   const files = new StudioFileOperations({
     pick: async () => { const file = nextFile; nextFile = undefined; return file; },
     download: (blob, name) => { downloads.push({ name, type: blob.type }); },
-    bakeMask: async value => { maskInput = value; return new Blob(["png"], { type: "image/png" }); },
+    bakeMask: async value => { maskInput = value; return bakeMask(value); },
   }, {
     recipe: () => editor.recipe, selectedLayer: () => layer,
     importRecipe: (value, name) => { imported = { recipe: value, name }; },
@@ -47,6 +48,7 @@ function fixture() {
   files.attachCollection(service);
   return { files, service, transport, recipe, collection, editor: () => editor, layer: () => layer,
     setFile: (file?: StudioPickedFile) => nextFile = file, downloads, saved: () => saved,
+    setBakeMask: (next: typeof bakeMask) => bakeMask = next,
     packageInput: () => packageInput, imported: () => imported, maskInput: () => maskInput,
     loadedBytes: () => loadedBytes };
 }
@@ -66,6 +68,51 @@ test("recipe and mask workflows use typed file ports with the original names, li
   expect(f.downloads.at(-1)).toMatchObject({ name: `xfs-${f.layer().id}-alpha.png`, type: "image/png" });
   expect(f.maskInput()).not.toBe(f.layer());
   expect(f.files.snapshot().busy).toBeUndefined();
+});
+
+test("refused file actions cannot release or replace an in-flight mask export", async () => {
+  const f = fixture();
+  let release!: (blob: Blob) => void;
+  f.setBakeMask(() => new Promise<Blob>(resolve => { release = resolve; }));
+  const snapshots: { busy?: string; last?: string }[] = [];
+  f.files.subscribe(() => {
+    const state = f.files.snapshot();
+    snapshots.push({ busy: state.busy, last: state.last?.code });
+  });
+
+  const pending = f.files.execute({ kind: "mask.export" });
+  expect(f.files.snapshot().busy).toBe("mask.export");
+  expect(f.files.capability({ kind: "mask.export" })).toMatchObject({ available: false });
+  expect(await f.files.execute({ kind: "recipe.export" })).toMatchObject({ ok: false, code: "busy",
+    message: "Another file operation is in progress." });
+  expect(f.files.snapshot()).toMatchObject({ busy: "mask.export" });
+  expect(f.files.snapshot().last).toBeUndefined();
+  expect(snapshots).toEqual([{ busy: "mask.export", last: undefined }]);
+  expect(await f.files.execute({ kind: "mask.export" })).toMatchObject({ ok: false, code: "busy" });
+  expect(f.downloads).toHaveLength(0);
+
+  release(new Blob(["png"], { type: "image/png" }));
+  expect(await pending).toMatchObject({ ok: true, code: "exported" });
+  expect(f.files.snapshot()).toMatchObject({ last: { kind: "mask.export", ok: true, code: "exported" } });
+  expect(f.files.snapshot().busy).toBeUndefined();
+  expect(snapshots).toEqual([{ busy: "mask.export", last: undefined }, { busy: undefined, last: "exported" }]);
+  expect(f.downloads).toHaveLength(1);
+
+  // An unavailable action reports a reason without replacing the completed operation's status.
+  const denied = await f.files.execute({ kind: "collection.recover" });
+  expect(denied).toMatchObject({ ok: false, code: "unavailable" });
+  expect(denied.message).toBeTruthy();
+  expect(f.files.snapshot().last).toMatchObject({ kind: "mask.export", code: "exported" });
+  expect(snapshots).toHaveLength(2);
+  expect((await f.files.execute({ kind: "recipe.export" })).ok).toBe(true);
+
+  f.setBakeMask(async () => { throw Error("Raster worker failed."); });
+  expect(await f.files.execute({ kind: "mask.export" })).toMatchObject({ ok: false, code: "file_failed",
+    message: "Raster worker failed." });
+  expect(f.files.snapshot()).toMatchObject({ last: { kind: "mask.export", ok: false, code: "file_failed" } });
+  expect(f.files.snapshot().busy).toBeUndefined();
+  expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "cancelled" });
+  expect(f.files.snapshot()).toMatchObject({ last: { kind: "recipe.import", ok: false, code: "cancelled" } });
 });
 
 test("saved-V acquisition returns typed result and cancellation never applies bytes", async () => {
