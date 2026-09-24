@@ -1,5 +1,7 @@
 # Glitter game-material comparison: offline fixture
 
+The [25 September particle-decal audit](particle-decal-audit.md) checked another installed stock shader candidate. Its selected `mesh_decal_particles` programs add animated-atlas controls, not the browser's filtered, light-dependent fine-glint response; the production Glitter export guard remains.
+
 ## Recipe-driven boundary, 24 September
 
 The new [recipe adapter study](recipe-driven-boundary.md) replaces this fixture's

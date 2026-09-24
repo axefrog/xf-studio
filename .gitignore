@@ -6,6 +6,7 @@ research/consumers/*/json/
 research/consumers/*/raw/
 research/consumers/*/base/
 research/consumers/brow-gradient-check/
+research/consumers/glitter/template-probe/
 research/archive-xl/upstream/src/
 experiments/*/generated/
 projects/*/build/
