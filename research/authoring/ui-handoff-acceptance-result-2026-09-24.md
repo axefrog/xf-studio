@@ -1,0 +1,15 @@
+# UI handoff cross-surface check — 24 September 2026
+
+Isolated verification browser at `http://127.0.0.1:4317/?verify=1` with a disposable verification library. Nathan's active draft was not used. This is a browser/application boundary check, not a game install or a visual-design acceptance. The [scenario](ui-handoff-acceptance.md) and [architecture assessment](ui-architecture-boundary.md) define the scope.
+
+| Scenario | Observation |
+| --- | --- |
+| Preset/layer state | Created a zero-layer preset, renamed it with a valid 93-character name, added five Matte layers, renamed/reordered a layer and preset, and confirmed one-step layer Undo. The first automated 127-character rename bypassed the input's 120-character typing limit and received a generic validator message; normal-length rename passed. |
+| Preview tier | Rapid 512 → 2K change displayed Updating and then Ready at 2048², without presenting stale 512 output as ready. |
+| Partial package | An unsaved Glitter edit remained in the authored draft. Check retained seven presets and identified three omitted active layers: the new Glitter layer and two earlier Glossy layers. Build produced the same omissions/IDs, kept seven presets and independently verified 25 unpacked resources. The ignored local manifest records original collection SHA-256 `27ee180d56e13d7e9d5381fb55bf0845b0e91a306072296457bceac249e8d2f2` and filtered SHA-256 `cabc9fed25d46e911f1b05d9c690b0583e4a5329c804225c115566d7fae234e8`, with `installed: false` and `gameRenderingVerified: false`. |
+| Library conflict/recovery | Saved a copy as revision 1; a second verification tab saved a renamed revision 2. The first tab's stale Save returned a conflict while preserving its unsaved name, and Save a copy recovered it as a new revision 1. |
+| Reload | Restored the selected five-layer/Glitter draft, Single eye UV mode, 2K tier, 42° FOV, open lighting panel and the orbited camera view. The browser warning/error log was empty. |
+
+The Chrome extension's file-selection automation returned `Not allowed`, so recipe and saved-V import through the browser picker could not be repeated in this pass. The chooser was cleared by reloading, and the draft restored. File acquisition and parsing have contract tests, and earlier saved-V persistence evidence remains valid; neither substitutes for this missing end-to-end picker observation. No extension setting was changed. No mod was installed or game launched.
+
+The Opus code handoff gate remains **open**. This pass used production controls, not a replacement shell restricted to public ports. `collection-ui.ts` still constructs and directly dispatches trusted `CollectionService` work; `main.ts` combines composition and view wiring; the viewport/render port is private to that file and does not expose a safe rehostable attachment to a docked/floating UI. Context queries accept hit identities, but no public viewport adapter delivers hits. File operations are typed yet separately documented from the application registry. Dock/theme workspace persistence needs a versioned boundary before Opus implements it. These are architecture tasks, not failures observed in the browser pass.
