@@ -16,6 +16,14 @@ export type CollectionAction =
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string };
 
 export type ActionCapability = { available: boolean; reason?: string };
+/** Primitive-only draft projection; building it never clones recipes or Undo histories. */
+export type CollectionDraftSummary = {
+  id: string; name: string; revision?: number; selected?: string;
+  presets: { id: string; name: string; revision: number; layers: number }[];
+  /** Oldest first; `restore` brings back the last entry. */
+  removed: { id: string; name: string; index: number }[];
+  previous?: { id: string; name: string; revision?: number };
+};
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
 
@@ -29,6 +37,16 @@ export class CollectionActions {
   }
 
   view(): ReadonlyDeep<CollectionWorkspace> { return structuredClone(this.session.state); }
+  /** The selected preset's stored layer count can lag the live editor; callers may patch it. */
+  summary(): CollectionDraftSummary {
+    const s = this.session.state;
+    return { id: s.collection.id, name: s.collection.name, revision: s.revision, selected: s.selected,
+      presets: s.collection.presets.map(p => ({ id: p.id, name: p.name, revision: p.revision,
+        layers: p.recipe.layers.length })),
+      removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
+      previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
+        revision: s.previous.revision } : undefined };
+  }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);

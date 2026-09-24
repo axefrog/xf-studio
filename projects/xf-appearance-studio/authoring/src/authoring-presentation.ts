@@ -15,6 +15,9 @@ export class AuthoringPresentation {
   layer(): ReadonlyDeep<Layer> | undefined { return this.geometry.readonlyLayer(); }
   get active() { return this.document.active; }
   get selected() { return this.document.selected; }
+  /** Increments with every published geometry change, including in-place gesture updates. */
+  get revision() { return this.document.geometryVersion.revision; }
+  get canUndo() { return this.document.canUndo; }
   selectedField(): ReadonlyDeep<WarpField> | undefined {
     const layer = this.layer();
     if (!layer) return;

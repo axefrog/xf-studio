@@ -14,6 +14,7 @@ import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ValueSchema } from "./studio-action-descriptors";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
+import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
 
 export type StudioAction = { kind: "recipe.undo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
@@ -226,6 +227,21 @@ export class StudioApplication {
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
   }
+  /**
+   * Preview/motion/quality/saved-V state without the document or collection draft.
+   * `snapshot()` clones every Undo history; repainting views should use this instead.
+   */
+  previewState() {
+    const s = this.services, saved = s.savedV?.snapshot();
+    return structuredClone({ preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
+      motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
+      savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
+        result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
+      gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
+  finishCatalogue() { return finishCatalogue(); }
+  glitterModelCatalogue() { return glitterModelCatalogue(); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);

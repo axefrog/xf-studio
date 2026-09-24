@@ -5,6 +5,7 @@ import type { SavedAppearanceState } from "./saved-appearance-actions";
 import type { SavedV } from "./save-reader";
 import { StudioFileOperations, type StudioFilePort } from "./studio-file-operations";
 import { createStudioPresentation, type StudioPresentationPort } from "./studio-presentation";
+import type { PresentationStatusSource } from "./presentation-status";
 import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
@@ -22,6 +23,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   fileDevice: StudioFilePort;
   transport: CollectionTransport;
   onEditorRestored(): void;
+  /** Optional device status (autosave, asset diagnostics) exposed read-only to the view. */
+  status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -52,7 +55,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     core.document, options.onEditorRestored, options.transport, core.app, files);
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
-    previewReadiness: options.previewReadiness });
+    previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,
