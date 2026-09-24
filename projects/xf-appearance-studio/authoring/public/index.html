@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>XF Studio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M0 0h26l6 6v26H6l-6-6z' fill='%23f4dc4b'/%3E%3Cpath d='M8 9l6 7-6 7M24 9l-6 7 6 7' stroke='%23191712' stroke-width='3' fill='none'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/studio.css" />
+  </head>
+  <body>
+    <!-- Presentation root: studio-ui mounts here through StudioPresentationPort only. -->
+    <div id="studio" class="studio" aria-busy="true">
+      <div class="boot" role="status"><span class="brand-mark" aria-hidden="true">XF</span><span>Starting XF Studio…</span></div>
+    </div>
+    <!-- Device-owned hosts and pickers. The composition root owns them; the view rehosts
+         the same head/UV hosts into its panels through the viewport attachment port. -->
+    <div class="device-parking" aria-hidden="true">
+      <div id="device-head" class="device-head"></div>
+      <div id="device-uv" class="device-uv"><canvas id="device-uv-canvas" aria-label="Editable makeup shape on the head UV map"></canvas></div>
+      <input id="device-recipe-picker" type="file" accept="application/json,.json" hidden />
+      <input id="device-collection-picker" type="file" accept="application/json,.json" hidden />
+      <input id="device-save-picker" type="file" accept=".dat" hidden />
+    </div>
+    <script type="module" src="/build/studio-main.js"></script>
+  </body>
+</html>
