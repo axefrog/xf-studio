@@ -5,6 +5,7 @@ import { ItemList } from "../item-list";
 import type { StudioRuntime } from "../runtime";
 import { layerMenu } from "../target-menus";
 import type { PanelController } from "./collection";
+import { PANEL_META } from "../panel-meta";
 
 export function layersPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -77,7 +78,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     noPreset, empty, list.element,
     note("Top = front. Drag the grip or use Alt+↑/↓ to reorder · F2 renames · Del removes (Ctrl+Z undoes)."));
   return {
-    spec: { id: "layers", title: "Layers", icon: "layers", description: "The current preset's layer stack.", element },
+    spec: { id: "layers", ...PANEL_META["layers"], element },
     update(frame) {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
       const hasPreset = !!frame.library.draft?.selected;

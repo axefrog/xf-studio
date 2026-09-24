@@ -9,6 +9,8 @@ import { openMenu } from "../menu";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 
+import { PANEL_META } from "../panel-meta";
+
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -91,7 +93,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     note("Each preset becomes one choice in the game's single eye-makeup selector, alongside Off."));
   nameInput.addEventListener("contextmenu", event => event.stopPropagation());
   return {
-    spec: { id: "presets", title: "Presets", icon: "presets", description: "Named looks in the current collection.", element },
+    spec: { id: "presets", ...PANEL_META["presets"], element },
     update(frame) {
       const library = frame.library, draft = library.draft, busy = library.busy;
       if (draft) setValue(nameInput, draft.name);
@@ -142,7 +144,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask),
     note("Collection and recipe files keep editable work. Exporting a collection or build plan saves a library revision first. A build plan is compiler input, not a mod. Masks are 2048² white + alpha PNGs of the selected layer.")));
   return {
-    spec: { id: "library", title: "Library", icon: "library", description: "Local library revisions, recovery and portable files.", element },
+    spec: { id: "library", ...PANEL_META["library"], element },
     update(frame) {
       const library = frame.library, draft = library.draft;
       const state = libraryState(frame);
@@ -205,7 +207,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Flat adapter", finish.exportAdapter === "none" ? "warning" : "success")))),
     note("Active layers with preview-study finishes are omitted and named in the result; a preset left with nothing exportable is omitted whole. Check decides — this list is informational.")));
   return {
-    spec: { id: "package", title: "Mod package", icon: "package", description: "Check and build private local mod candidates.", element },
+    spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));

@@ -7,6 +7,7 @@ import { openMenu, type MenuAnchor, type MenuItem } from "../menu";
 import type { Frame, StudioRuntime } from "../runtime";
 import { contextItems } from "../target-menus";
 import type { PanelController } from "./collection";
+import { PANEL_META } from "../panel-meta";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu. */
 function contextMenuGate(target: HTMLElement, open: (event: MouseEvent) => void) {
@@ -106,7 +107,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
     else if (event.key.toLowerCase() === "f") { event.preventDefault(); rt.dispatch({ kind: "camera.front" }); }
   });
   return {
-    spec: { id: "head", title: "Head", icon: "head", description: "Live 3D preview on V's head with on-surface editing.", element,
+    spec: { id: "head", ...PANEL_META["head"], element,
       visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("head")); } },
     update(frame) {
       const state = frame.viewport.head;
@@ -160,7 +161,7 @@ export function uvPanel(rt: StudioRuntime): PanelController {
     else if (key === "f") port.viewport.uvCommand("fit");
   });
   return {
-    spec: { id: "uv", title: "UV map", icon: "uv", description: "Flat editor for the same contour, handles and warps in texture space.", element,
+    spec: { id: "uv", ...PANEL_META["uv"], element,
       visibility: visible => { if (visible) requestAnimationFrame(() => { layout(); port.viewport.resize("uv"); }); } },
     update(frame) {
       const view = frame.viewport.uv.view;

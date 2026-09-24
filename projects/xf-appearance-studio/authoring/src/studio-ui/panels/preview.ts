@@ -4,6 +4,7 @@ import { h, setText } from "../dom";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
+import { PANEL_META } from "../panel-meta";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 
@@ -36,7 +37,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
     section("Preview context", brows.element, lashes.element, hair.element, piercings.element, style.element, colour.element, detailNote,
       note("These details are preview context only — not authoring tools. Piercing choices change this viewport, never the imported V or your makeup.")));
   return {
-    spec: { id: "character", title: "Character", icon: "character", description: "V from your save, eye shape and preview-only details.", element },
+    spec: { id: "character", ...PANEL_META["character"], element },
     update(frame) {
       const state = frame.preview, preview = state.preview, saved = state.savedV, assets = frame.status.assets;
       applyCapability(load, port.files.capability({ kind: "savedV.import" }));
@@ -120,7 +121,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     section("Display", surface.element, wire.element, normals.element, optics.element, opticsNote),
     note("Camera and light are workspace preferences: they persist locally and never enter recipes, Undo or export."));
   return {
-    spec: { id: "lighting", title: "Camera & light", icon: "lighting", description: "Field of view, framing, exposure, key light and display studies.", element },
+    spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
       const loading = { disabled: !ready, reason: "Preview is still loading." };
@@ -162,7 +163,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     section("Eyelid study", blink.element, h("div", { class: "row" }, play),
       note("A separate synthetic study for checking makeup on closed lids. It is unavailable while the game idle plays.")));
   return {
-    spec: { id: "motion", title: "Motion", icon: "motion", description: "Game close-up idle and the synthetic eyelid study.", element },
+    spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
       const motion = frame.preview.motion;
       const unavailable = { disabled: !motion?.available, reason: motion?.error ? `Idle unavailable: ${motion.error}` : "Motion preview is still loading." };
@@ -193,7 +194,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
     section("Makeup preview textures", tiers.element, stateLine, h("div", { class: "row" }, rebuild),
       note("Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail. Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export.")));
   return {
-    spec: { id: "quality", title: "Preview quality", icon: "quality", description: "Resolution of generated preview textures, readiness and resource use.", element },
+    spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
       const quality = frame.preview.quality, readiness = frame.readiness;
       tiers.update(quality?.size, size => port.authoring.capability({ kind: "quality.set", size }));
@@ -229,7 +230,7 @@ export function activityPanel(rt: StudioRuntime): PanelController {
   };
   rt.feedback.subscribe(draw);
   return {
-    spec: { id: "activity", title: "Activity", icon: "activity", description: "Session log of results, warnings and errors.", element },
+    spec: { id: "activity", ...PANEL_META["activity"], element },
     update(_frame: Frame) { draw(); },
   };
 }

@@ -11,6 +11,7 @@ import { h, pct, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
+import { PANEL_META } from "../panel-meta";
 
 type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
@@ -123,7 +124,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     glitterSection, classicSection, irregularSection, directSection);
   const element = h("div", { class: "panel-content" }, strip.element, empty, body);
   return {
-    spec: { id: "finish", title: "Colour & finish", icon: "finish", description: "Pigment colour, opacity and finish of the selected layer.", element },
+    spec: { id: "finish", ...PANEL_META["finish"], element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer;
@@ -227,7 +228,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
     gestures);
   const element = h("div", { class: "panel-content" }, strip.element, empty, body);
   return {
-    spec: { id: "shape", title: "Shape", icon: "shape", description: "Contour points, Bézier handles and mirroring for the selected layer.", element },
+    spec: { id: "shape", ...PANEL_META["shape"], element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
@@ -279,7 +280,7 @@ export function edgePanel(rt: StudioRuntime): PanelController {
     section("Edge softness", variable.element, width.element, softnessNote));
   const element = h("div", { class: "panel-content" }, strip.element, empty, body);
   return {
-    spec: { id: "edge", title: "Pigment & edge", icon: "edge", description: "Point pigment strength and edge softness, independent of each other.", element },
+    spec: { id: "edge", ...PANEL_META["edge"], element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
@@ -332,7 +333,7 @@ export function warpPanel(rt: StudioRuntime): PanelController {
     note("A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together."));
   const element = h("div", { class: "panel-content" }, strip.element, empty, body);
   return {
-    spec: { id: "warp", title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask.", element },
+    spec: { id: "warp", ...PANEL_META["warp"], element },
     update(frame) {
       strip.update(frame);
       const layer = frame.layer; empty.hidden = !!layer; body.hidden = !layer;
