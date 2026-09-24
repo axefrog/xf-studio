@@ -7,7 +7,9 @@
 With Python (NumPy and Pillow), .NET 9 and WolvenKit CLI **8.17.4** installed:
 
 ```powershell
-python experiments/013-native-preview-core/candidate.py --game 'F:/Games/Cyberpunk 2077' --wolvenkit 'F:/Games/RedModding/WolvenKit.Console/WolvenKit.CLI.exe' --output experiments/013-native-preview-core/generated/my-candidate
+$gameRoot = 'PATH_TO_CYBERPUNK_2077'
+$wolvenKitCli = 'PATH_TO_WOLVENKIT_CLI_EXE'
+python experiments/013-native-preview-core/candidate.py --game $gameRoot --wolvenkit $wolvenKitCli --output experiments/013-native-preview-core/generated/my-candidate
 python experiments/013-native-preview-core/verify.py experiments/013-native-preview-core/generated/my-candidate
 ```
 
