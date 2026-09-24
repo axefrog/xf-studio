@@ -86,7 +86,7 @@ function showSetup(view) {
   const pathIssues = view.readiness.sourceDiscovery.issues.map(issue => issue.reason);
   const pathStatus = pathIssues.length ? pathIssues.join(" ") : "Game and mod source paths pass the current presence checks.";
   setupStatus.textContent = recovery ? "The current settings file is damaged. Restore the previous copy before editing." :
-    `${pathStatus} Mod export Check uses the collection alone. Mod builds are unavailable in this desktop trial.`;
+    `${pathStatus} Mod export Check uses the collection alone. Build ${view.readiness.build.ready ? "is ready" : "needs its configured tools and inputs"}.`;
   aboutReadiness.textContent = recovery ? "Local setup needs recovery." :
     `Local setup: ${view.source === "new" ? "not saved" : pathIssues.length ? "paths need attention" : "paths saved"}. Mod export Check is available; Build ${view.readiness.build.ready ? "is ready" : "needs its configured tools and inputs"}.`;
 }

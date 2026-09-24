@@ -9,5 +9,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["main.ts", "server.ts", "host.ts", "asset-intake.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "tests/*.ts"]
+  "include": ["main.ts", "trial-main.ts", "server.ts", "host.ts", "asset-intake.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "tests/*.ts"]
 }

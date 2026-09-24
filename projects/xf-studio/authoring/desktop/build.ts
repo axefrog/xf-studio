@@ -22,7 +22,11 @@ const signature = (path: string, expected: string) => {
   }
   catch { return false; }
 };
-const inside = (path: string, root: string) => path === root || path.startsWith(root + sep);
+const inside = (path: string, root: string) => {
+  const target = process.platform === "win32" ? path.toLowerCase() : path;
+  const base = process.platform === "win32" ? root.toLowerCase() : root;
+  return target === base || target.startsWith(base + sep);
+};
 export type WolvenKitProbe = (path: string) => string | null;
 const wolvenKitCache = new Map<string, { issue: string | null; until: number }>();
 const bunCache = new Map<string, { issue: string | null; until: number }>();
@@ -112,14 +116,18 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     for (const name of ["package-snapshots", "package-work", "package-staging", "package-candidates"])
       privatePath(dataRoot, resolve(dataRoot, name));
   } catch { return "Private build storage uses a linked path."; }
-  // Reject a user-data path nested in any input, including an MO2 root that
-  // the Python wrapper cannot know about. Never build into game/mod sources.
+  // Electrobun installs app resources below userData. Its read-only tool bundle
+  // may share that parent, but none of the writable package roots may overlap
+  // an input (including an MO2 root unknown to the Python wrapper).
   try {
     const output = realpathSync(dataRoot);
+    const writable = ["package-snapshots", "package-work", "package-staging", "package-candidates"]
+      .map(name => resolve(output, name));
     for (const input of [toolsRoot, settings.gameRoot, settings.plateInput,
       settings.wolvenKitCli, settings.pythonExecutable, bun, settings.mo2Root].filter((v): v is string => !!v)) {
       const source = realpathSync(input);
-      if (inside(output, source) || inside(source, output)) return "Private build data overlaps a configured input.";
+      if (writable.some(path => inside(path, source) || inside(source, path)))
+        return "Private build data overlaps a configured input.";
     }
   } catch { return "A configured build path is unavailable."; }
   const probe = spawnSync(settings.pythonExecutable, ["-c", "import numpy; from PIL import Image"],
@@ -142,7 +150,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   catch (error) { return { kind: "failure", code: "invalid_collection", message: (error as Error).message }; }
   const source = JSON.stringify(collection);
   const work = resolve(dataRoot, "package-snapshots", randomUUID());
-  const buildRoot = resolve(dataRoot, "package-work");
+  const buildRoot = resolve(dataRoot, "package-work", randomUUID());
   const stageRoot = resolve(dataRoot, "package-staging", randomUUID());
   const candidateRoot = resolve(dataRoot, "package-candidates");
   try { for (const path of [work, buildRoot, stageRoot, candidateRoot]) privatePath(dataRoot, path); }
@@ -214,5 +222,6 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   } finally {
     rmSync(work, { recursive: true, force: true });
     rmSync(stageRoot, { recursive: true, force: true });
+    rmSync(buildRoot, { recursive: true, force: true });
   }
 }

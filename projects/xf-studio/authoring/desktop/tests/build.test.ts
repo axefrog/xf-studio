@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
@@ -19,9 +19,11 @@ const fixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const fixtureWolvenKit = () => null;
 
-function host(wrapper = "import time; time.sleep(30)\n") {
+function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling" | "installed" | "work" = "sibling") {
   const data = resolve(root, `data-${crypto.randomUUID()}`);
-  const tools = resolve(root, `tools-${crypto.randomUUID()}`);
+  const tools = toolPlacement === "installed" ? resolve(data, "app/Resources/app/build-tools") :
+    toolPlacement === "work" ? resolve(data, "package-work/build-tools") :
+      resolve(root, `tools-${crypto.randomUUID()}`);
   const game = resolve(root, `game-${crypto.randomUUID()}`);
   const plate = resolve(root, `plate-${crypto.randomUUID()}`);
   const wk = resolve(root, `wk-${crypto.randomUUID()}.exe`);
@@ -54,6 +56,9 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
     fixtureWolvenKit)).toContain("cannot run");
   expect(desktopBuildIssue(h.settings, h.data, h.tools, () => "Unsupported CLI version.")).toBe("Unsupported CLI version.");
   expect(desktopBuildIssue({ ...h.settings, mo2Root: h.data }, h.data, h.tools, fixtureWolvenKit)).toContain("overlaps");
+  if (process.platform === "win32")
+    expect(desktopBuildIssue({ ...h.settings, mo2Root: h.data.toUpperCase() }, h.data, h.tools,
+      fixtureWolvenKit)).toContain("overlaps");
   expect(desktopBuildIssue({ ...h.settings, plateInput: null }, h.data, h.tools, fixtureWolvenKit)).toContain("plate");
   try {
     symlinkSync(h.game, resolve(h.data, "package-candidates"), process.platform === "win32" ? "junction" : "dir");
@@ -63,6 +68,13 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
   }
   writeFileSync(resolve(h.tools, "study/verify.py"), "tampered");
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
+});
+
+test("installed Electrobun tools may share userData while writable package roots stay separate", () => {
+  const installed = host("# fixture\n", "installed");
+  expect(desktopBuildIssue(installed.settings, installed.data, installed.tools, fixtureWolvenKit)).toBeNull();
+  const overlap = host("# fixture\n", "work");
+  expect(desktopBuildIssue(overlap.settings, overlap.data, overlap.tools, fixtureWolvenKit)).toContain("overlaps");
 });
 
 test("desktop capabilities and Local setup enable Build only for validated host inputs", async () => {
@@ -124,7 +136,8 @@ test("a matching staged result is promoted with partial-export identities and no
       sha256: createHash("sha256").update(bytes).digest("hex") })),
     installed: false, gameRenderingVerified: false };
   const wrapper = `import argparse,hashlib,json,pathlib\n` +
-    `p=argparse.ArgumentParser();p.add_argument('--collection');p.add_argument('--dist-root');a,_=p.parse_known_args()\n` +
+    `p=argparse.ArgumentParser();p.add_argument('--collection');p.add_argument('--dist-root');p.add_argument('--build-root');a,_=p.parse_known_args()\n` +
+    `work=pathlib.Path(a.build_root);work.mkdir(parents=True);(work/'private-intermediate').write_text('fixture')\n` +
     `final=pathlib.Path(a.dist_root)/'candidate-fixture';payload=final/'archive/pc/mod';payload.mkdir(parents=True)\n` +
     `m=json.loads(${JSON.stringify(JSON.stringify(manifest))});m['collectionSha256']=hashlib.sha256(pathlib.Path(a.collection).read_bytes()).hexdigest()\n` +
     files.map(([name, bytes]) => `(payload/${JSON.stringify(name)}).write_bytes(bytes.fromhex(${JSON.stringify(bytes.toString("hex"))}))\n`).join("") +
@@ -142,4 +155,5 @@ test("a matching staged result is promoted with partial-export identities and no
   expect(result.result.package).toStartWith(resolve(h.data, "package-candidates"));
   expect(existsSync(result.result.manifest)).toBe(true);
   expect(result.result.installed).toBe(false);
+  expect(readdirSync(resolve(h.data, "package-work"))).toEqual([]);
 });
