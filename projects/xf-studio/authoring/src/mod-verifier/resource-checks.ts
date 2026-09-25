@@ -29,7 +29,9 @@ export interface VerifierPreset {
   /** Render chunk of the packaged plate this preset draws (its lift's position in `plan.plate.liftsMm`). */
   readonly plateChunk?: number;
   /** Diagnostic-only export knobs copied from the packaged collection (a prepared test candidate). */
-  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>> };
+  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>>; readonly uvSpace?: string };
+  /** The builder's texture space: the plate-local window or the head atlas; must equal the re-derived one. */
+  readonly uvSpace?: string;
 }
 
 /**
@@ -94,6 +96,30 @@ export const CHANNEL_SETUP: Record<VerifierChannel, { isGamma: 0 | 1; compressio
 };
 /** Side of the uniform Fresnel base-colour texture. */
 export const GRADIENT_SIDE = 16;
+/** Restated texture grids: flat and faceted presets use the plate-local window unless a diagnostic keeps them on head UV. */
+export const VERIFIER_WINDOW_TEXTURE = Object.freeze({ width: 2048, height: 512 });
+export const VERIFIER_HEAD_TEXTURE = 1024;
+/** Routes whose template transforms texture UVs (`mesh_decal`); the gradient-recolour template does not. */
+export const VERIFIER_ROUTE_WINDOW: Readonly<Record<VerifierRoute, boolean>> = { flat: true, faceted: true, fresnel: false };
+export type VerifierUvSpace = "plate-window" | "head";
+/**
+ * The texture space a preset must use, re-derived: the window where the route's template can transform UVs,
+ * unless its diagnostics set `uvSpace: "head"` (allowed only there). The builder's plan must agree.
+ */
+export function uvSpaceOf(preset: VerifierPreset): VerifierUvSpace {
+  const route = routeOf(preset), knob = preset.diagnostics?.uvSpace;
+  ensure(knob === undefined || (knob === "head" && VERIFIER_ROUTE_WINDOW[route]), `Preset ${preset.name} has an invalid diagnostic uvSpace`);
+  const expected: VerifierUvSpace = VERIFIER_ROUTE_WINDOW[route] && knob !== "head" ? "plate-window" : "head";
+  ensure(preset.uvSpace === expected, `Preset ${preset.name} was built on ${String(preset.uvSpace)} UV, but its route and diagnostics need ${expected}`);
+  return expected;
+}
+/** Level-0 size each channel of a preset must have. */
+export function textureDims(preset: VerifierPreset, channel: VerifierChannel): { width: number; height: number } {
+  if (channel === "gradient") return { width: GRADIENT_SIDE, height: GRADIENT_SIDE };
+  return uvSpaceOf(preset) === "plate-window" ? { ...VERIFIER_WINDOW_TEXTURE } : { width: VERIFIER_HEAD_TEXTURE, height: VERIFIER_HEAD_TEXTURE };
+}
+/** The material UV transform parameters, which only window entries carry. */
+export const UV_PARAMETERS = ["UVScaleX", "UVOffsetX", "UVScaleY", "UVOffsetY"] as const;
 
 const srgbDecode = (v: number) => (v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4));
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
@@ -141,17 +167,25 @@ function fnv1a32(text: string): string {
 /** Material entry a flat preset with a diagnostic surface must use: one per distinct override. */
 export const diagnosticEntryOf = (surface: Readonly<Record<string, number>>) =>
   "@flat_" + fnv1a32(JSON.stringify(Object.keys(surface).sort().map(key => [key, surface[key]])));
+/** Suffix of the entry of a flat or faceted preset a diagnostic keeps on head UV. */
+export const HEAD_ENTRY_SUFFIX = "_head";
 /** Entry bound to unused plate chunks when the plate carries several lifts, and its all-zero alphas. */
 export const HIDDEN_ENTRY = "xfs_hidden";
 export const HIDDEN_VALUES: Readonly<Record<string, number>> = { DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 };
 
-/** Expected scalar and colour parameters of each route's material instance (the published specification). */
-export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPreset): Record<string, Node> {
+/**
+ * Expected scalar and colour parameters of each route's material instance (the published specification).
+ * `uv` is the verifier's own window transform, required and added for plate-window presets.
+ */
+export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPreset, uv?: Readonly<Record<string, number>>): Record<string, Node> {
   const white = { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 };
   const flat = { DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
     RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0, DiffuseColor: white };
-  if (route === "flat") return { ...flat, ...(surfaceOf(preset) ?? {}) };
-  if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1 };
+  const windowed = route !== "fresnel" && uvSpaceOf(preset) === "plate-window";
+  ensure(!windowed || uv, `Preset ${preset.name} needs the plate's UV window`);
+  const transform = windowed ? Object.fromEntries(UV_PARAMETERS.map(name => [name, uv![name]])) : {};
+  if (route === "flat") return { ...flat, ...(surfaceOf(preset) ?? {}), ...transform };
+  if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1, ...transform };
   const { shift } = fresnelPigment(preset);
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
   const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
@@ -282,7 +316,7 @@ export interface ResourceSummary {
  * null (a developer override plate) accepts the source plate's own non-zero count.
  */
 export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, artifactPaths: readonly string[],
-  textureSizes: readonly number[], morphTargets: number | null): ResourceSummary {
+  uv: Readonly<Record<string, number>> | undefined, morphTargets: number | null): ResourceSummary {
   const { mesh, morph, app, customization: cc } = r;
   // Everything the build does not own is the plate input's; the blobs are checked against the planned
   // lifts in plate-geometry.ts.
@@ -321,15 +355,16 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     ensure(route !== "fresnel" || plan.presets.filter(p => materialOf(p) === name).length === 1, `Fresnel material ${name} is shared`);
     const surface = route === "flat" ? surfaceOf(preset) : undefined;
     ensure(route === "flat" || preset.diagnostics?.surface === undefined, `Preset ${preset.name} carries a diagnostic surface on the ${route} route`);
-    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (surface ? diagnosticEntryOf(surface) : route === "flat" ? "@preset" : "@faceted"),
+    const head = route !== "fresnel" && uvSpaceOf(preset) === "head" ? HEAD_ENTRY_SUFFIX : "";
+    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (surface ? diagnosticEntryOf(surface) : route === "flat" ? "@preset" : "@faceted") + head,
       `Material entry ${name} does not match its ${route} route`);
-    ensure(plan.presets.filter(p => materialOf(p) === name).every(p => sameJson(p.diagnostics?.surface, preset.diagnostics?.surface)),
-      `Material entry ${name} is shared by presets with different surfaces`);
+    ensure(plan.presets.filter(p => materialOf(p) === name).every(p => sameJson(p.diagnostics?.surface, preset.diagnostics?.surface) &&
+      uvSpaceOf(p) === uvSpaceOf(preset)), `Material entry ${name} is shared by presets with different surfaces or texture spaces`);
     ensure(dep(material.baseMaterial) === ROUTE_SPEC[route].template,
       route === "flat" ? "Material is not based on mesh_decal.mt" : `Material ${name} is not based on ${ROUTE_SPEC[route].template}`);
     const params: Record<string, Node> = {};
     for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
-    const expected = expectedMaterialValues(route, preset);
+    const expected = expectedMaterialValues(route, preset, uv);
     if (route === "flat" && !surface) {
       ensure(params.NormalAlpha === 0 && params.AlphaMaskContrast === 0 && params.SecondaryMaskInfluence === 0, "Material normal/mask parameters are not zero");
       ensure([params.DiffuseAlpha, params.RoughnessMetalnessAlpha, params.RoughnessScale, params.MetalnessScale].every(v => v === 1),
@@ -442,8 +477,9 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
       const path = pattern.slice(1).replaceAll("{material}", suffix);
       ensure(path === preset.textures[channel] && r.archiveHas(path), `${parameter} resolves to ${path}, not the planned generated texture`);
       expanded[channel] = path;
-      const metadata = r.texture(path), setup = metadata.setup, side = channel === "gradient" ? GRADIENT_SIDE : textureSizes[i];
-      ensure(metadata.width === side && metadata.height === side, `${path} has unexpected dimensions`);
+      const metadata = r.texture(path), setup = metadata.setup, dims = textureDims(preset, channel);
+      ensure(metadata.width === dims.width && metadata.height === dims.height,
+        `${path} is ${metadata.width}x${metadata.height}, expected ${dims.width}x${dims.height}`);
       ensure(setup.hasMipchain === 1 && setup.isGamma === CHANNEL_SETUP[channel].isGamma, `${path} has unexpected mip/gamma settings`);
       ensure(setup.compression === CHANNEL_SETUP[channel].compression, `${path} has unexpected compression`);
     }

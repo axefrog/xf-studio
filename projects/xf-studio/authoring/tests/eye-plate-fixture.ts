@@ -114,3 +114,41 @@ export function fixtureRecipe(overrides: Record<string, unknown> = {}): EyePlate
     ...overrides,
   });
 }
+
+/** Half-float bits of a number in [0, 1) (exact for the few values tests use). */
+function halfBits(value: number): number {
+  if (value === 0) return 0;
+  const exponent = Math.floor(Math.log2(value)), mantissa = Math.round((value / 2 ** exponent - 1) * 1024);
+  return ((exponent + 15) << 10) | mantissa;
+}
+/**
+ * A derived plate whose UV0 (stored convention) is replaced by `uv(vertex)`, identically in the mesh render buffer and
+ * the morph's embedded base buffer, so plate-local UV window tests see plate-like UVs (the synthetic head's UV bytes
+ * are arbitrary). Returns new documents.
+ */
+export function withPlateUvs<T extends { mesh: any; morph: any }>(plate: T, uv: (vertex: number, count: number) => [number, number]): T {
+  const out = structuredClone(plate);
+  for (const blob of [out.mesh.Data.RootChunk.renderResourceBlob.Data, out.morph.Data.RootChunk.blob.Data.baseBlob.Data]) {
+    const info = blob.header.renderChunkInfos[0], layout = info.chunkVertices.vertexLayout, raw = Buffer.from(blob.renderBuffer.Bytes, "base64");
+    const sizes: Record<string, number> = { PT_Short4N: 8, PT_UByte4: 4, PT_UByte4N: 4, PT_Float16_4: 8, PT_Float16_2: 4, PT_Dec4: 4, PT_Color: 4, PT_Float1: 4 };
+    const used = new Map<number, number>();
+    let at = -1, stream = -1;
+    for (const e of layout.elements.Elements) {
+      if (e.streamType !== "ST_PerVertex") continue;
+      const offset = used.get(e.streamIndex) ?? 0;
+      if (e.usage === "PS_TexCoord" && e.usageIndex === 0) { at = offset; stream = e.streamIndex; }
+      used.set(e.streamIndex, offset + sizes[e.type]);
+    }
+    for (let v = 0; v < info.numVertices; v++) {
+      const [u, w] = uv(v, info.numVertices), base = info.chunkVertices.byteOffsets.Elements[stream] + v * layout.slotStrides.Elements[stream] + at;
+      raw.writeUInt16LE(halfBits(u), base); raw.writeUInt16LE(halfBits(w), base + 2);
+    }
+    blob.renderBuffer.Bytes = raw.toString("base64");
+  }
+  return out;
+}
+/** Plate-like stored UVs for the synthetic plate: a grid over u 0.30–0.70, stored V 0.70–0.80. */
+export const plateLikeUv = (vertex: number, count: number): [number, number] => {
+  const columns = Math.ceil(Math.sqrt(count)), column = vertex % columns, row = Math.floor(vertex / columns);
+  return [.3 + .4 * column / Math.max(1, columns - 1), .7 + .1 * row / Math.max(1, Math.ceil(count / columns) - 1)];
+};

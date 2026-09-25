@@ -26,6 +26,19 @@ export const ROUTE_ADAPTER: Record<ExportRoute, ExportAdapterId> = {
 /** Local material template entry each route's presets bind to (`<appearance>@<entry>`). */
 export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, string> = { flat: "@preset", faceted: "@faceted" };
 
+/**
+ * Texture grid of each route. `mesh_decal` transforms every texture UV by UVScale/UVOffset, so the flat and
+ * faceted routes spend their texels on a plate-local window (plate-uv-window.ts): 2048 × 512, today's texel
+ * count, about 4.3 × 3.3 times the head atlas's linear density on the plate (0.13 × 0.12 mm per texel against
+ * 0.56 × 0.40 mm). The gradient-recolour template of the Fresnel route has no UV transform (its only UV math
+ * is the flipbook), so it stays on the 1024 head atlas.
+ */
+export const WINDOW_TEXTURE = { width: 2048, height: 512 } as const;
+export const HEAD_TEXTURE_SIZE = 1024;
+export const ROUTE_UV_WINDOW: Record<ExportRoute, boolean> = { flat: true, faceted: true, fresnel: false };
+/** Entry suffix of a flat or faceted preset that a diagnostic keeps on head UV (no UV transform). */
+export const HEAD_UV_ENTRY_SUFFIX = "_head";
+
 /** Colour-shifting base surface: a soft, slightly metallic sheen under the Fresnel tint. */
 export const FRESNEL_SURFACE = { roughness: .32, metalness: .25 } as const;
 /** Shift strength 1 maps to this FresnelColorIntensity (before scaling by the colour's peak channel). */

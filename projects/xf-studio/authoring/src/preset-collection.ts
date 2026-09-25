@@ -1,5 +1,5 @@
-import { fresnelMaterial, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, type ExportRoute, type FresnelMaterial,
-  type TextureChannel } from "./finish-export";
+import { fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, ROUTE_UV_WINDOW, type ExportRoute,
+  type FresnelMaterial, type TextureChannel } from "./finish-export";
 import { parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
@@ -56,11 +56,17 @@ export function planCollection(value: unknown) {
     const exported = planPresetExport(preset.recipe), route: ExportRoute = exported.route;
     const surface = diagnostics?.presets[preset.id]?.surface;
     if (surface && route !== "flat") throw Error(`Diagnostic surface overrides apply only to flat presets; ${preset.name} is ${route}.`);
-    const material = route === "fresnel" ? `@fresnel_${preset.id.replaceAll("-", "")}` : surface ? diagnosticFlatEntry(surface) : ROUTE_MATERIAL_ENTRY[route];
+    // Texture space: the plate-local UV window where the route's template can transform UVs, unless a
+    // diagnostic keeps the preset on head UV. Head-UV flat/faceted presets use their own material entry.
+    const headKnob = diagnostics?.presets[preset.id]?.uvSpace === "head";
+    if (headKnob && !ROUTE_UV_WINDOW[route]) throw Error(`The ${route} route is always on head UV; ${preset.name} cannot set uvSpace.`);
+    const uvSpace: "plate-window" | "head" = ROUTE_UV_WINDOW[route] && !headKnob ? "plate-window" : "head";
+    const material = route === "fresnel" ? `@fresnel_${preset.id.replaceAll("-", "")}`
+      : (surface ? diagnosticFlatEntry(surface) : ROUTE_MATERIAL_ENTRY[route]) + (headKnob ? HEAD_UV_ENTRY_SUFFIX : "");
     const presetDiagnostics = diagnostics?.presets[preset.id];
     // A colour-shift preset's material constants (its one shift colour) are part of the plan.
     const fresnel: FresnelMaterial | undefined = route === "fresnel" ? fresnelMaterial(exported.included[0].optics!.shift!) : undefined;
-    return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`, route, material, ...(fresnel ? { fresnel } : {}),
+    return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`, route, material, uvSpace, ...(fresnel ? { fresnel } : {}),
       plateChunk:liftsMm.indexOf(liftOf(preset.id)), ...(presetDiagnostics ? { diagnostics:presetDiagnostics } : {}),
       textures:Object.fromEntries(ROUTE_CHANNELS[route].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as PlanTextures };
   });

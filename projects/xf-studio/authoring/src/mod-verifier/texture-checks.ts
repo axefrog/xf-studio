@@ -8,12 +8,15 @@
 // four finer contributions and re-encodes them. Supplied chains are compared to
 // this reference byte for byte, so the float order is part of the specification:
 // the 2x2 average is ((top-left + top-right) + bottom-left) + bottom-right, over 4.
+// Non-square maps (the plate-local window) halve both sides until one reaches 1; each
+// further level is the two-texel average (first + second) / 2 along the other side.
 
 export type VerifierChannel = "diffuse" | "roughness" | "metalness";
 
-/** Contribution planes of one square level (separate planes, unlike the compiler's interleaving). */
+/** Contribution planes of one level (separate planes, unlike the compiler's interleaving). */
 export interface ContributionPlanes {
-  readonly side: number;
+  readonly width: number;
+  readonly height: number;
   /** Premultiplied sqrt-linear red, green, blue; roughness; metalness; coverage. */
   readonly planes: readonly [Float64Array, Float64Array, Float64Array, Float64Array, Float64Array, Float64Array];
 }
@@ -29,10 +32,10 @@ const SQRT_LINEAR = (() => {
 })();
 
 /** Contributions of decoded bytes: RGBA diffuse and single-channel roughness/metalness. */
-export function contributionsOf(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, side: number): ContributionPlanes {
-  const n = side * side;
+export function contributionsOf(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, width: number, height = width): ContributionPlanes {
+  const n = width * height;
   if (diffuse.length !== n * 4 || roughness.length !== n || metalness.length !== n)
-    throw new Error(`Texture byte lengths do not match a ${side}x${side} level`);
+    throw new Error(`Texture byte lengths do not match a ${width}x${height} level`);
   const planes = [0, 1, 2, 3, 4, 5].map(() => new Float64Array(n)) as unknown as ContributionPlanes["planes"];
   const [red, green, blue, rough, metal, cover] = planes;
   for (let t = 0; t < n; t++) {
@@ -44,31 +47,46 @@ export function contributionsOf(diffuse: Uint8Array, roughness: Uint8Array, meta
     metal[t] = metalness[t] / 255 * coverage;
     cover[t] = coverage;
   }
-  return { side, planes };
+  return { width, height, planes };
 }
 
-/** Area-average a level to half size. */
-export function halve(level: ContributionPlanes): ContributionPlanes {
-  const side = level.side;
-  if (side < 2 || side % 2) throw new Error(`Cannot halve a ${side}x${side} level`);
-  const half = side / 2;
-  const planes = level.planes.map(source => {
-    const target = new Float64Array(half * half);
-    for (let row = 0; row < half; row++) {
-      const top = 2 * row * side, bottom = top + side;
-      for (let column = 0; column < half; column++) {
-        const left = 2 * column;
-        target[row * half + column] = (((source[top + left] + source[top + left + 1]) + source[bottom + left]) + source[bottom + left + 1]) / 4;
+/** Average separate planes of a width x height level down one mip level (the rule in the header). */
+function averagePlanes(planes: readonly Float64Array<ArrayBufferLike>[], width: number, height: number): Float64Array<ArrayBufferLike>[] {
+  if ((width < 2 && height < 2) || (width > 1 && width % 2) || (height > 1 && height % 2))
+    throw new Error(`Cannot halve a ${width}x${height} level`);
+  if (width > 1 && height > 1) {
+    const halfWidth = width / 2, halfHeight = height / 2;
+    return planes.map(source => {
+      const target = new Float64Array(halfWidth * halfHeight);
+      for (let row = 0; row < halfHeight; row++) {
+        const top = 2 * row * width, bottom = top + width;
+        for (let column = 0; column < halfWidth; column++) {
+          const left = 2 * column;
+          target[row * halfWidth + column] = (((source[top + left] + source[top + left + 1]) + source[bottom + left]) + source[bottom + left + 1]) / 4;
+        }
       }
-    }
+      return target;
+    });
+  }
+  // A single row or column: pairs of consecutive texels.
+  const count = width * height / 2;
+  return planes.map(source => {
+    const target = new Float64Array(count);
+    for (let t = 0; t < count; t++) target[t] = (source[2 * t] + source[2 * t + 1]) / 2;
     return target;
-  }) as unknown as ContributionPlanes["planes"];
-  return { side: half, planes };
+  });
+}
+const halfDims = (width: number, height: number) => ({ width: Math.max(1, width / 2), height: Math.max(1, height / 2) });
+
+/** Area-average a level to the next mip level. */
+export function halve(level: ContributionPlanes): ContributionPlanes {
+  const planes = averagePlanes(level.planes, level.width, level.height) as unknown as ContributionPlanes["planes"];
+  return { ...halfDims(level.width, level.height), planes };
 }
 
 /** Encode contributions back to bytes by un-premultiplying present texels. */
 export function bytesOf(level: ContributionPlanes): Record<VerifierChannel, Uint8Array> {
-  const n = level.side * level.side, [red, green, blue, rough, metal, cover] = level.planes;
+  const n = level.width * level.height, [red, green, blue, rough, metal, cover] = level.planes;
   const diffuse = new Uint8Array(4 * n), roughness = new Uint8Array(n), metalness = new Uint8Array(n);
   for (let t = 0; t < n; t++) {
     const coverage = cover[t];
@@ -86,10 +104,10 @@ export function bytesOf(level: ContributionPlanes): Record<VerifierChannel, Uint
 }
 
 /** Reference chain: base bytes verbatim, then encoded area averages. */
-export function expectedChain(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, side: number) {
+export function expectedChain(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, width: number, height = width) {
   const chain: Record<VerifierChannel, Uint8Array[]> = { diffuse: [diffuse], roughness: [roughness], metalness: [metalness] };
-  const ideal: ContributionPlanes[] = [contributionsOf(diffuse, roughness, metalness, side)];
-  while (ideal[ideal.length - 1].side > 1) {
+  const ideal: ContributionPlanes[] = [contributionsOf(diffuse, roughness, metalness, width, height)];
+  while (ideal[ideal.length - 1].width > 1 || ideal[ideal.length - 1].height > 1) {
     const next = halve(ideal[ideal.length - 1]);
     ideal.push(next);
     const encoded = bytesOf(next);
@@ -144,32 +162,17 @@ export function errorStats(values: Float64Array): ErrorStats {
 const unorm = (b: number) => b / 255 * 2 - 1;
 const clip = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-function meanHalf(planes: readonly Float64Array<ArrayBufferLike>[], side: number): Float64Array<ArrayBufferLike>[] {
-  const half = side / 2;
-  return planes.map(source => {
-    const target = new Float64Array(half * half);
-    for (let row = 0; row < half; row++) {
-      const top = 2 * row * side, bottom = top + side;
-      for (let column = 0; column < half; column++) {
-        const left = 2 * column;
-        target[row * half + column] = (((source[top + left] + source[top + left + 1]) + source[bottom + left]) + source[bottom + left + 1]) / 4;
-      }
-    }
-    return target;
-  });
-}
-
 /** Expected faceted roughness chain, normal X/Y chain and the RGBA normal import chain. */
-export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, normalXY: Uint8Array, side: number) {
-  const n = side * side;
-  if (normalXY.length !== n * 2) throw new Error(`Normal byte length does not match a ${side}x${side} level`);
+export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, normalXY: Uint8Array, width: number, height = width) {
+  const n = width * height;
+  if (normalXY.length !== n * 2) throw new Error(`Normal byte length does not match a ${width}x${height} level`);
   const x = new Float64Array(n), y = new Float64Array(n), m2 = new Float64Array(n);
   for (let t = 0; t < n; t++) { x[t] = unorm(normalXY[2 * t]); y[t] = unorm(normalXY[2 * t + 1]); m2[t] = x[t] * x[t] + y[t] * y[t]; }
-  let moments: Float64Array<ArrayBufferLike>[] = [x, y, m2], level = contributionsOf(diffuse, roughness, metalness, side), s = side;
+  let moments: Float64Array<ArrayBufferLike>[] = [x, y, m2], level = contributionsOf(diffuse, roughness, metalness, width, height);
   const roughChain: Uint8Array[] = [roughness.slice()], xyChain: Uint8Array[] = [normalXY.slice()];
-  while (s > 1) {
-    level = halve(level); moments = meanHalf(moments, s); s /= 2;
-    const count = s * s, r = new Uint8Array(count), xy = new Uint8Array(count * 2);
+  while (level.width > 1 || level.height > 1) {
+    moments = averagePlanes(moments, level.width, level.height); level = halve(level);
+    const count = level.width * level.height, r = new Uint8Array(count), xy = new Uint8Array(count * 2);
     const [mx, my, mm] = moments, cover = level.planes[5], rough = level.planes[3];
     for (let t = 0; t < count; t++) {
       xy[2 * t] = unitByte(mx[t] * .5 + .5); xy[2 * t + 1] = unitByte(my[t] * .5 + .5);
@@ -192,10 +195,10 @@ export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, met
 }
 
 /** Expected linear coverage mask chain. */
-export function maskReference(mask: Uint8Array, side: number): Uint8Array[] {
-  let plane: Float64Array<ArrayBufferLike>[] = [Float64Array.from(mask, b => b / 255)], s = side;
+export function maskReference(mask: Uint8Array, width: number, height = width): Uint8Array[] {
+  let plane: Float64Array<ArrayBufferLike>[] = [Float64Array.from(mask, b => b / 255)], w = width, h = height;
   const chain: Uint8Array[] = [mask.slice()];
-  while (s > 1) { plane = meanHalf(plane, s); s /= 2; chain.push(Uint8Array.from(plane[0], unitByte)); }
+  while (w > 1 || h > 1) { plane = averagePlanes(plane, w, h); ({ width: w, height: h } = halfDims(w, h)); chain.push(Uint8Array.from(plane[0], unitByte)); }
   return chain;
 }
 

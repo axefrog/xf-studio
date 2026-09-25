@@ -158,7 +158,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None. (Reviewed at `ac251d8`.)
+- **Plate-local UV window** (claude/plate-uv-window): `src/plate-uv-window.ts` (window rule and `mesh_decal` UV constants from the plate's UVs), `rasterWindow` in `recipe.ts`, the Shimmer facet sampler in `finish.ts`, texture spaces in the compiler and bake, non-square mip chains, and the verifier's own restatement in `src/mod-verifier/uv-window.ts` (window re-derivation, BC4 stored-row decode, plate-sample mapping gate). The builder now serializes the plate before baking. See [experiment 019](../../experiments/019-uv-window/README.md).
 
 ## Fixed in claude/cleanup-hygiene
 

@@ -3,9 +3,23 @@
 // Pure; deliberately separate from the compiler's DDS writer.
 
 export interface DdsChain {
-  readonly side: number;
+  readonly width: number;
+  readonly height: number;
   /** One byte array per level, largest first; texel size depends on the format. */
   readonly levels: readonly Uint8Array[];
+}
+
+/**
+ * Level dimensions of a complete chain, restated: both sides halve and a side that reaches 1 stays 1,
+ * for log2(longer side) + 1 levels. Both sides must be powers of two.
+ */
+export function chainDimensions(width: number, height: number): { width: number; height: number }[] {
+  const pow2 = (n: number) => Number.isInteger(n) && n >= 1 && (n & (n - 1)) === 0;
+  if (!pow2(width) || !pow2(height)) throw new Error(`Texture sides ${width}x${height} are not powers of two`);
+  const out: { width: number; height: number }[] = [];
+  for (let level = 0; level <= Math.log2(Math.max(width, height)); level++)
+    out.push({ width: Math.max(1, width >>> level), height: Math.max(1, height >>> level) });
+  return out;
 }
 
 /** Texture channels, plus the two normal-map encodings: the RGBA8 import input and WolvenKit's decoded BC5 (RG8). */
@@ -27,19 +41,19 @@ export function readDdsChain(data: Uint8Array, kind: DdsKind, label = "DDS"): Dd
   const height = u32(12), width = u32(16), count = u32(28);
   const format = u32(128), dimension = u32(132), arraySize = u32(140);
   const bytesPerTexel = spec.bytes;
-  const powerOfTwo = width >= 1 && (width & (width - 1)) === 0;
-  if (height !== width || !powerOfTwo || count !== Math.log2(width) + 1)
-    throw new Error(`Unexpected DDS dimensions or mip count: ${label}`);
+  let dims: { width: number; height: number }[];
+  try { dims = chainDimensions(width, height); } catch { throw new Error(`Unexpected DDS dimensions or mip count: ${label}`); }
+  if (count !== dims.length) throw new Error(`Unexpected DDS dimensions or mip count: ${label}`);
   if (format !== spec.format || dimension !== TEXTURE_2D || arraySize !== 1)
     throw new Error(`Unexpected DDS format: ${label}`);
   const levels: Uint8Array[] = [];
   let offset = 148;
-  for (let level = 0; level < count; level++) {
-    const side = Math.max(1, width >>> level), length = side * side * bytesPerTexel;
+  for (const level of dims) {
+    const length = level.width * level.height * bytesPerTexel;
     if (offset + length > data.length) throw new Error(`Truncated DDS mip: ${label}`);
     levels.push(data.slice(offset, offset + length));
     offset += length;
   }
   if (offset !== data.length) throw new Error(`Unexpected trailing DDS data: ${label}`);
-  return { side: width, levels };
+  return { width, height, levels };
 }

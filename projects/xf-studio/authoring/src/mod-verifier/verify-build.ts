@@ -37,13 +37,15 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
-import { readDdsChain, type DdsKind } from "./dds-reader";
+import { chainDimensions, readDdsChain, type DdsKind } from "./dds-reader";
 import { resourceRecords, type ResourceFile } from "./resource-inventory";
 import { checkPlateGeometry, VERIFIER_PLATE_LIFT_MM, type PlateGeometryReport } from "./plate-geometry";
-import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError,
-  type Node, type VerifierPlan, type VerifierRoute } from "./resource-checks";
+import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, textureDims, uvSpaceOf,
+  VerificationError, type Node, type VerifierPlan, type VerifierRoute, type VerifierUvSpace } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
+import { expectedUvConstants, expectedWindow, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
+  type MappingStats, type PlateUvSamples, type VerifierWindow } from "./uv-window";
 
 export { VerificationError } from "./resource-checks";
 
@@ -80,10 +82,15 @@ export const VERIFICATION_LIMITS: readonly string[] = [
   "Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.",
   "Plate lift checked against the vanilla face-decal offset (0.40 mm along the head's normals, morph-aware); depth behaviour, eyelid contact and deformation need in-game evidence.",
   "Flat, faceted and Fresnel decal routes are checked as resources and pixels; the faceted normal sign, the Fresnel colour-parameter encoding and every finish's lit appearance need in-game evidence.",
+  "The plate-local UV window is re-derived from the packaged plate's UVs; window maps are compared with the authored head-UV coverage at plate sample points through the restated mesh_decal UV transform and WolvenKit's stored row order (checked on each build). The game's own sampling of the window is untested.",
   "Glitter has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged.",
 ];
 
-type MipRow = { level: number; size: number; partialTexels: number; coverage?: ErrorStats; premultipliedDestination?: ErrorStats; widenedRoughness?: ErrorStats };
+type MipRow = { level: number; width: number; height: number; partialTexels: number; coverage?: ErrorStats; premultipliedDestination?: ErrorStats; widenedRoughness?: ErrorStats };
+/** The window the verifier derived from the packaged plate, its constants, and how many plate points it sampled. */
+export type PlateUvWindowReport = { bounds: PlateUvSamples["bounds"]; window: VerifierWindow; constants: Record<string, number>; samples: number };
+/** Per preset: texture space, stored row order (checked on a BC4 map) and, for window maps, the plate-sample mapping. */
+type SpaceCheck = { uvSpace: VerifierUvSpace; width: number; height: number; storedRows: "reversed"; mapping?: MappingStats };
 
 export interface VerificationReport {
   build: string; presetCount: number; selectorCount: 1; selectorOptionCount: number; appDefinitions: 2;
@@ -92,10 +99,12 @@ export interface VerificationReport {
   /** The packaged plate against its input: lifted positions, all other bytes exact. */
   plateGeometry: PlateGeometryReport;
   resolvedDynamicPaths: ReturnType<typeof checkResources>["resolved"];
-  decodedPixelChecks: ({
+  /** The plate-local UV window re-derived from the packaged plate. */
+  plateUvWindow: PlateUvWindowReport;
+  decodedPixelChecks: ((SpaceCheck & {
     preset: string; coveredTexels: number; coverageError: ErrorStats; premultipliedEncodedColourError: ErrorStats;
     premultipliedSurfaceError: { roughness: ErrorStats; metalness: ErrorStats }; route?: "faceted"; normalError?: ErrorStats;
-  } | { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats })[];
+  }) | (SpaceCheck & { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats }))[];
   decodedMipChecks: { preset: string; levels: MipRow[] }[];
   /** Each preset's route, re-derived from its recipe and matched by the plan, the compiled record and the resources. */
   presetRoutes: { id: string; route: VerifierRoute }[];
@@ -149,6 +158,46 @@ function readBaked(build: string, record: Node): Record<string, Uint8Array> {
   return raw;
 }
 
+/** The context each preset's texture check needs: its space, the plate samples and window, and converted XBMs. */
+type TextureContext = { exported: Exported; xbm: (depotPath: string) => Node; samples: PlateUvSamples; window: VerifierWindow; uv: Record<string, number> };
+
+/**
+ * Texture space of one preset. Its compiled record must name the re-derived space and grid (and the verifier's window
+ * for window maps). A BC4 map's stored level 0, decoded here, must be the decoded export with its rows reversed: the
+ * import flip every UV mapping below relies on. Window maps are then compared with the authored head-UV coverage at
+ * the plate's own sample points.
+ */
+function checkSpace(build: string, record: Node, preset: VerifierPlan["presets"][number], scalar: "roughness" | "mask",
+  decodedScalar: Uint8Array, coverage: Float64Array, context: TextureContext): SpaceCheck {
+  const uvSpace = uvSpaceOf(preset), name = preset.appearance, dims = textureDims(preset, scalar);
+  ensure(record.uvSpace === uvSpace, `Compiled record for ${name} is on ${String(record.uvSpace)} UV, but its route and diagnostics need ${uvSpace}`);
+  ensure(record.width === dims.width && record.height === dims.height, `Compiled record for ${name} is ${record.width}x${record.height}, expected ${dims.width}x${dims.height}`);
+  if (uvSpace === "plate-window") ensure(sameWindow(record.window, context.window), `Compiled record for ${name} uses another UV window than the packaged plate's`);
+  else ensure(record.window === undefined, `Head-UV record for ${name} names a UV window`);
+  const stored = storedBc4Level0(context.xbm(preset.textures[scalar]!), `${name} ${scalar}`);
+  ensure(stored.width === dims.width && stored.height === dims.height, `${name} ${scalar} stored level 0 has unexpected dimensions`);
+  let worst = 0;
+  for (let y = 0; y < dims.height; y++) for (let x = 0; x < dims.width; x++)
+    worst = Math.max(worst, Math.abs(stored.data[(dims.height - 1 - y) * dims.width + x] - decodedScalar[y * dims.width + x]));
+  ensure(worst <= 1, `${name} ${scalar} is not stored with reversed rows (largest difference ${worst}); the UV mapping assumes WolvenKit's import flip`);
+  const check: SpaceCheck = { uvSpace, width: dims.width, height: dims.height, storedRows: "reversed" };
+  if (uvSpace !== "plate-window") return check;
+  const reference = record.reference;
+  ensure(reference && [reference.grid, reference.x0, reference.y0, reference.width, reference.height].every(Number.isInteger) &&
+    reference.grid >= VERIFIER_REFERENCE_GRID, `Window preset ${name} has no head-UV coverage reference at least ${VERIFIER_REFERENCE_GRID} texels across`);
+  const data = bytes(join(build, "baked", reference.file));
+  ensure(sha256(data) === reference.sha256 && data.length === reference.width * reference.height, `Coverage reference for ${name} differs from the build record`);
+  const mapping = mappingStats(coverage, dims.width, dims.height, context.uv, data, reference, context.samples);
+  // A wrong window, axis flip or offset misplaces whole shapes: many plate points then disagree by more than half.
+  ensure(mapping.covered > 0 && mapping.mean < MAPPING_LIMITS.mean && mapping.farShare < MAPPING_LIMITS.farShare,
+    `Window map for ${name} does not match its authored head-UV content at the plate's UVs: ${JSON.stringify(mapping)}`);
+  return { ...check, mapping };
+}
+/** Plate-sample agreement a window map needs with its head-UV reference (coverage units). */
+export const MAPPING_LIMITS = Object.freeze({ mean: .03, farShare: .01 });
+/** The reference must sample the head atlas at least this finely, so it is as sharp as the window map. */
+export const VERIFIER_REFERENCE_GRID = 4096;
+
 const GROUP: Record<string, string> = { diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar",
   mask: "dds-scalar", normal: "dds-normal" };
 type Exported = (depotPath: string) => string;
@@ -157,17 +206,18 @@ type Exported = (depotPath: string) => string;
  * The builder's supplied import chain must equal the independent reference byte for byte; returns the
  * chain decoded from the verifier's own WolvenKit export of the unbundled member.
  */
-function suppliedAndDecoded(build: string, preset: VerifierPlan["presets"][number], channel: string, side: number,
+function suppliedAndDecoded(build: string, preset: VerifierPlan["presets"][number], channel: string, dims: { width: number; height: number },
   expected: readonly Uint8Array[], what: string, exported: Exported) {
   const name = preset.appearance, depotPath = preset.textures[channel as keyof typeof preset.textures];
   ensure(typeof depotPath === "string", `Preset ${preset.name} plans no ${channel} texture`);
   const suppliedPath = join(build, "input", GROUP[channel], `${name}_${channel}.dds`), decodedPath = exported(depotPath);
   const supplied = readDdsChain(bytes(suppliedPath), channel === "normal" ? "normal-input" : channel as DdsKind, suppliedPath);
   const decoded = readDdsChain(bytes(decodedPath), channel as DdsKind, decodedPath);
-  ensure(supplied.side === side && decoded.side === side, `${name} ${channel} DDS size differs from ${side}`);
+  ensure([supplied, decoded].every(chain => chain.width === dims.width && chain.height === dims.height),
+    `${name} ${channel} DDS size differs from ${dims.width}x${dims.height}`);
   ensure(supplied.levels.length === expected.length && supplied.levels.every((level, i) => Buffer.compare(level, expected[i]) === 0),
     `Supplied ${channel} mip chain for ${name} differs from the independent ${what} reference`);
-  ensure(decoded.levels.length === Math.log2(side) + 1, `Decoded ${channel} chain for ${name} is incomplete`);
+  ensure(decoded.levels.length === chainDimensions(dims.width, dims.height).length, `Decoded ${channel} chain for ${name} is incomplete`);
   return decoded.levels;
 }
 
@@ -177,15 +227,17 @@ const byteErrors = (a: Uint8Array, b: Uint8Array, stride: number, mask: Uint8Arr
   return Float64Array.from(out);
 };
 
-function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], exported: Exported) {
-  const size: number = record.size, name = preset.appearance, raw = readBaked(build, record);
+function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], context: TextureContext) {
+  const exported = context.exported, dims = textureDims(preset, "mask"), name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.mask && raw.gradient, `Build record for ${name} lacks a Fresnel map`);
+  ensure(raw.mask.length === dims.width * dims.height, `Baked mask for ${name} is not ${dims.width}x${dims.height}`);
   const { color } = fresnelPigment(preset), rgba = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)).concat(255);
   const gradientExpected = uniformReference(rgba, GRADIENT_SIDE);
   ensure(Buffer.compare(raw.gradient, gradientExpected[0]) === 0, `Baked gradient for ${name} is not the preset base colour`);
-  const maskChain = maskReference(raw.mask, size);
-  const mask = suppliedAndDecoded(build, preset, "mask", size, maskChain, "linear coverage", exported);
-  const gradient = suppliedAndDecoded(build, preset, "gradient", GRADIENT_SIDE, gradientExpected, "uniform colour", exported);
+  const maskChain = maskReference(raw.mask, dims.width, dims.height);
+  const mask = suppliedAndDecoded(build, preset, "mask", dims, maskChain, "linear coverage", exported);
+  const gradient = suppliedAndDecoded(build, preset, "gradient", textureDims(preset, "gradient"), gradientExpected, "uniform colour", exported);
+  const space = checkSpace(build, record, preset, "mask", mask[0], Float64Array.from(mask[0], v => v / 255), context);
   const covered = Uint8Array.from(raw.mask, v => (v ? 1 : 0)), count = covered.reduce((n, v) => n + v, 0);
   ensure(count > 0, `Fresnel preset ${name} covers no texels`);
   const coverageError = errorStats(byteErrors(mask[0], raw.mask, 1, covered));
@@ -196,37 +248,40 @@ function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan[
   const gradientError = errorStats(byteErrors(gradient[0], gradientExpected[0], 4, null));
   ensure(gradientError.max <= 3 / 255, `Decoded base colour differs for ${name}: ${JSON.stringify(gradientError)}`);
   const levels: MipRow[] = [];
+  const mipDims = chainDimensions(dims.width, dims.height);
   for (let mip = 0; mip < mask.length; mip++) {
-    const side = size >> mip, ideal = maskChain[mip], edge = Uint8Array.from(ideal, v => (v > 0 && v < 255 ? 1 : 0));
+    const { width, height } = mipDims[mip], ideal = maskChain[mip], edge = Uint8Array.from(ideal, v => (v > 0 && v < 255 ? 1 : 0));
     const partial = edge.reduce((n, v) => n + v, 0);
-    if (!partial) { levels.push({ level: mip, size: side, partialTexels: 0 }); continue; }
-    const row: MipRow = { level: mip, size: side, partialTexels: partial, coverage: errorStats(byteErrors(mask[mip], ideal, 1, edge)) };
+    if (!partial) { levels.push({ level: mip, width, height, partialTexels: 0 }); continue; }
+    const row: MipRow = { level: mip, width, height, partialTexels: partial, coverage: errorStats(byteErrors(mask[mip], ideal, 1, edge)) };
     if (mip >= 1 && mip <= 5) ensure(row.coverage!.mean < .05, `Decoded mip ${mip} error too large for ${name}: ${JSON.stringify(row)}`);
     levels.push(row);
   }
-  return { pixel: { preset: preset.name, route: "fresnel" as const, coveredTexels: count, coverageError, outsideCoverageMax, gradientError },
+  return { pixel: { preset: preset.name, route: "fresnel" as const, ...space, coveredTexels: count, coverageError, outsideCoverageMax, gradientError },
     mips: { preset: preset.name, levels } };
 }
 
-function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], exported: Exported) {
+function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], context: TextureContext) {
   const route = routeOf(preset);
   ensure(record.route === route, `Compiled record for ${preset.appearance} is ${record.route ?? "missing its route"}, but its recipe needs the ${route} route`);
-  if (route === "fresnel") return checkFresnelTextures(build, record, preset, exported);
-  const size: number = record.size, name = preset.appearance, raw = readBaked(build, record);
+  if (route === "fresnel") return checkFresnelTextures(build, record, preset, context);
+  const exported = context.exported, dims = textureDims(preset, "diffuse"), { width, height } = dims;
+  const name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.diffuse && raw.roughness && raw.metalness, `Build record for ${name} lacks a base map`);
+  ensure(raw.roughness.length === width * height, `Baked maps for ${name} are not ${width}x${height}`);
   const faceted = route === "faceted";
   if (faceted) ensure(raw.normal, `Build record for ${name} lacks a normal map`);
-  const { chain, ideal: idealChain } = expectedChain(raw.diffuse, raw.roughness, raw.metalness, size);
-  const facets = faceted ? facetedReference(raw.diffuse, raw.roughness, raw.metalness, raw.normal, size) : undefined;
+  const { chain, ideal: idealChain } = expectedChain(raw.diffuse, raw.roughness, raw.metalness, width, height);
+  const facets = faceted ? facetedReference(raw.diffuse, raw.roughness, raw.metalness, raw.normal, width, height) : undefined;
   const expected: Record<string, readonly Uint8Array[]> = { ...chain, ...(facets ? { roughness: facets.roughness } : {}) };
   const decoded: Record<string, readonly Uint8Array[]> = {};
   for (const channel of ["diffuse", "roughness", "metalness"] as const)
-    decoded[channel] = suppliedAndDecoded(build, preset, channel, size, expected[channel],
+    decoded[channel] = suppliedAndDecoded(build, preset, channel, dims, expected[channel],
       facets && channel === "roughness" ? "variance-widened" : "coverage-space", exported);
 
   // Base level: decoded XBM against the compiler's exact base pixels.
-  const source = idealChain[0], actual = contributionsOf(decoded.diffuse[0], decoded.roughness[0], decoded.metalness[0], size);
-  const texels = size * size, active = new Uint8Array(texels);
+  const source = idealChain[0], actual = contributionsOf(decoded.diffuse[0], decoded.roughness[0], decoded.metalness[0], width, height);
+  const texels = width * height, active = new Uint8Array(texels);
   let covered = 0;
   for (let t = 0; t < texels; t++) if (source.planes[5][t] > 1e-5) { active[t] = 1; covered++; }
   const colourPlanes = (level: ContributionPlanes) => level.planes.slice(0, 3);
@@ -239,7 +294,7 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
   const oriented = (level: ContributionPlanes) => [...level.planes.slice(0, 3), level.planes[5]];
   const flipped = oriented(actual).map(plane => {
     const out = new Float64Array(texels);
-    for (let row = 0; row < size; row++) out.set(plane.subarray((size - 1 - row) * size, (size - row) * size), row * size);
+    for (let row = 0; row < height; row++) out.set(plane.subarray((height - 1 - row) * width, (height - row) * width), row * width);
     return out;
   });
   ensure(mean(absoluteErrors(oriented(source), oriented(actual), null, texels)) <
@@ -252,11 +307,12 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
   }
   let normalError: ErrorStats | undefined;
   if (facets) {
-    const normal = suppliedAndDecoded(build, preset, "normal", size, facets.normalInput, "facet normal", exported);
+    const normal = suppliedAndDecoded(build, preset, "normal", dims, facets.normalInput, "facet normal", exported);
     normalError = errorStats(byteErrors(normal[0], raw.normal, 2, active, 127.5));
     ensure(normalError.mean < .03 && normalError.p95 < .1, `Decoded normal error too large for ${name}: ${JSON.stringify(normalError)}`);
   }
-  const pixel = { preset: preset.name, coveredTexels: covered, coverageError: alpha, premultipliedEncodedColourError: colour,
+  const space = checkSpace(build, record, preset, "roughness", decoded.roughness[0], actual.planes[5], context);
+  const pixel = { preset: preset.name, ...space, coveredTexels: covered, coverageError: alpha, premultipliedEncodedColourError: colour,
     premultipliedSurfaceError: scalar, ...(facets ? { route: "faceted" as const, normalError } : {}) };
 
   // Full decoded chain against coverage-space reductions of the original base pixels. Faceted
@@ -266,12 +322,12 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
   let ideal = source;
   for (let mip = 0; mip < decoded.diffuse.length; mip++) {
     if (mip) ideal = halve(ideal);
-    const side = ideal.side, level = contributionsOf(decoded.diffuse[mip], decoded.roughness[mip], decoded.metalness[mip], side);
-    const edge = new Uint8Array(side * side);
+    const { width: w, height: h } = ideal, level = contributionsOf(decoded.diffuse[mip], decoded.roughness[mip], decoded.metalness[mip], w, h);
+    const edge = new Uint8Array(w * h);
     let partial = 0;
     for (let t = 0; t < edge.length; t++) if (ideal.planes[5][t] > .002 && ideal.planes[5][t] < .998) { edge[t] = 1; partial++; }
-    if (!partial) { levels.push({ level: mip, size: side, partialTexels: 0 }); continue; }
-    const row: MipRow = { level: mip, size: side, partialTexels: partial,
+    if (!partial) { levels.push({ level: mip, width: w, height: h, partialTexels: 0 }); continue; }
+    const row: MipRow = { level: mip, width: w, height: h, partialTexels: partial,
       coverage: errorStats(absoluteErrors([level.planes[5]], [ideal.planes[5]], edge, partial)),
       premultipliedDestination: errorStats(absoluteErrors(surfacePlanes.map(k => level.planes[k]), surfacePlanes.map(k => ideal.planes[k]), edge, partial)) };
     if (facets) row.widenedRoughness = errorStats(byteErrors(decoded.roughness[mip], facets.roughness[mip], 1, edge));
@@ -403,6 +459,10 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     return path;
   };
 
+  // The plate-local window, re-derived from the packaged plate's own UVs (the builder's record must agree).
+  const samples = plateUvSamples(root(plan.mesh)), window = expectedWindow(samples.bounds), uv = expectedUvConstants(window);
+  if (plan.presets.some(preset => uvSpaceOf(preset) === "plate-window"))
+    ensure(sameWindow(build.plateUv?.window, window, 1e-12), "Build record's plate UV window differs from the one the packaged plate's UVs give");
   const members = new Set(files.map(f => f.path));
   const summary = checkResources(plan, {
     mesh: root(plan.mesh), morph: root(plan.morph), app: root(plan.app), customization: root(plan.customization),
@@ -410,14 +470,15 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     sourceMorph: converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk,
     texture: path => root(path),
     archiveHas: path => members.has(path),
-  }, build.artifacts.map((a: Node) => a.path), records.map(r => r.size), options.morphTargets ?? null);
+  }, build.artifacts.map((a: Node) => a.path), uv, options.morphTargets ?? null);
 
   const plateGeometry = checkPlateGeometry(converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
     converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
 
   const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
+  const context: TextureContext = { exported, xbm: path => root(path), samples, window, uv };
   plan.presets.forEach((preset, i) => {
-    const { pixel, mips } = checkTextures(out, records[i], preset, exported);
+    const { pixel, mips } = checkTextures(out, records[i], preset, context);
     pixelResults.push(pixel);
     mipResults.push(mips);
   });
@@ -432,7 +493,8 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     appDefinitions: 2, compiledComponentTemplates: 1, meshAppearances: summary.meshAppearances,
     materialTemplates: summary.materialTemplates, textureCount: plan.presets.reduce((n, p) => n + Object.keys(p.textures).length, 0),
     archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
-    plateGeometry, resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
+    plateGeometry, plateUvWindow: { bounds: samples.bounds, window, constants: uv, samples: samples.uv.length / 2 },
+    resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
     decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
     installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };

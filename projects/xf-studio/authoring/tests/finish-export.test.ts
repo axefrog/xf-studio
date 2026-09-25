@@ -8,6 +8,7 @@ import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compileP
 import { describePackageExperimental, preparePackageCollection } from "../src/package-filter";
 import { planCollection } from "../src/preset-collection";
 import { HandleCounter, rewritePlateMesh } from "../src/package-resources";
+import { plateUvWindow, uvTransformConstants } from "../src/plate-uv-window";
 import { initialRecipe, parseRecipe, raster, type Layer, type Recipe } from "../src/recipe";
 import { facetedReference, maskReference } from "../src/mod-verifier/texture-checks";
 import { expectedMaterialValues } from "../src/mod-verifier/resource-checks";
@@ -141,7 +142,15 @@ test("the filter lists experimental finishes and names the preset rule; resource
   expect(plan.presets.map(p => p.route)).toEqual(["flat", "faceted", "fresnel", "fresnel", "flat", "flat"]);
   expect(Object.keys(plan.presets[1].textures)).toEqual(["diffuse", "roughness", "metalness", "normal"]);
   expect(Object.keys(plan.presets[2].textures)).toEqual(["mask", "gradient"]);
-  const mesh = rewritePlateMesh({ Data: { RootChunk: { localMaterialBuffer: {} } } }, plan, new HandleCounter()).Data.RootChunk;
+  const uv = uvTransformConstants(plateUvWindow({ uMin: .27, uMax: .73, vMin: .67, vMax: .82 }));
+  expect(plan.presets.map(p => p.uvSpace)).toEqual(["plate-window", "plate-window", "head", "head", "plate-window", "plate-window"]);
+  const mesh = rewritePlateMesh({ Data: { RootChunk: { localMaterialBuffer: {} } } }, plan, new HandleCounter(), uv).Data.RootChunk;
+  // Window entries carry the UV transform; the gradient-recolour template has none, so Fresnel stays on head UV.
+  const parameters = (i: number) => Object.assign({}, ...mesh.localMaterialBuffer.materials[i].values.map(({ $type: _t, ...rest }: Record<string, unknown>) => rest));
+  for (const i of [0, 1]) expect([parameters(i).UVScaleX, parameters(i).UVOffsetX, parameters(i).UVScaleY, parameters(i).UVOffsetY])
+    .toEqual([uv.UVScaleX, uv.UVOffsetX, uv.UVScaleY, uv.UVOffsetY]);
+  for (const i of [2, 3]) expect(Object.keys(parameters(i)).filter(key => key.startsWith("UV"))).toEqual([]);
+  expect(() => rewritePlateMesh({ Data: { RootChunk: { localMaterialBuffer: {} } } }, plan, new HandleCounter())).toThrow("UV window");
   expect(mesh.materialEntries.map((e: { name: { $value: string } }) => e.name.$value)).toEqual(["@preset", "@faceted",
     plan.presets[2].material, plan.presets[3].material]);
   const chunks = mesh.appearances.map((a: { Data: { chunkMaterials: { $value: string }[] } }) => a.Data.chunkMaterials.map(c => c.$value));

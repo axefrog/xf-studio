@@ -15,6 +15,7 @@ import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package
 import { encodeDds, flatMipChain } from "./flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./route-mip-chains";
 import { liftPlate, type PlateLiftReport } from "./plate-lift";
+import { plateUvBounds, plateUvWindow, uvTransformConstants, type StoredUvBounds, type UvTransformConstants, type UvWindow } from "./plate-uv-window";
 import type { TextureChannel } from "./finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
@@ -42,6 +43,8 @@ export interface BuildRecord {
   plateStem: string; plateInputs: { path: string; sha256: string }[];
   /** The decal lift applied to the plate geometry (one render chunk per lift). */
   plateLift: PlateLiftReport;
+  /** The plate's stored UV0 bounds, the plate-local texture window derived from them and its material constants. */
+  plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants };
   artifacts: ReturnType<typeof archiveInventory>; archiveSha256: string;
   installed: false; gameRenderingVerified: false;
 }
@@ -96,12 +99,21 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
     }
   };
 
-  // 1. Compile each preset's three maps in-process, yielding between presets so a cancel is seen.
+  // 1. The plate's own UVs decide the texture window, so serialize it before compiling (after one yield, so an
+  //    immediate cancel stops before any conversion).
+  await new Promise(done => setImmediate(done));
+  await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
+  const sourceMesh = readJson(join(out, "source-json", stem + ".mesh.json"));
+  const bounds = plateUvBounds(sourceMesh.Data.RootChunk), window = plateUvWindow(bounds);
+  const plateUv = { bounds, window, transform: uvTransformConstants(window) };
+  writeFileSync(join(out, "logs", "plate-uv.log"), JSON.stringify(plateUv) + "\n", "utf8");
+
+  // 2. Compile each preset's route maps in-process, yielding between presets so a cancel is seen.
   const baked = join(out, "baked");
   const { records } = await bakeCollection(options.collection, baked, async () => {
     await new Promise(done => setImmediate(done));
     checkCancelled(options.signal);
-  });
+  }, { window });
   writeFileSync(join(out, "logs", "bake.log"),
     `Compiled ${records.length} authored presets; ${records.reduce((n, r) => n + r.maps.length, 0)} map inputs. No installation.\n`, "utf8");
   steps.push({ name: "bake", exitCode: 0 });
@@ -116,11 +128,12 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   const textureDir = join(archive, ...plan.depot.split("/"), "textures");
   for (const path of [modelDir, appDir, textureDir]) mkdirSync(path, { recursive: true });
 
-  // 2. Full mip chains for each route, written as the DDS inputs WolvenKit imports without regenerating mips.
+  // 3. Full mip chains for each route, written as the DDS inputs WolvenKit imports without regenerating mips.
   const groupsUsed = new Set<string>();
   plan.presets.forEach((preset, i) => {
     const record = compiled[i];
     if (record.id !== preset.id || record.route !== preset.route) throw Error(`Compiled record ${i} does not match preset ${preset.id}`);
+    if (record.uvSpace !== preset.uvSpace) throw Error(`Compiled record ${i} is on ${record.uvSpace} UV, planned ${preset.uvSpace}`);
     const raw = {} as Partial<Record<TextureChannel, Uint8Array>>;
     for (const map of record.maps) {
       const data = new Uint8Array(readFileSync(join(baked, map.file)));
@@ -129,43 +142,42 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
     }
     const chains: Partial<Record<TextureChannel, readonly Uint8Array[]>> = {};
     if (record.route === "fresnel") {
-      chains.mask = maskMipChain(raw.mask!, record.size);
-      chains.gradient = uniformMipChain(raw.gradient!, record.maps.find(m => m.channel === "gradient")!.side);
+      chains.mask = maskMipChain(raw.mask!, record.width, record.height);
+      chains.gradient = uniformMipChain(raw.gradient!, record.maps.find(m => m.channel === "gradient")!.width);
     } else if (record.route === "faceted") {
-      const chain = facetedMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, raw.normal!, record.size);
+      const chain = facetedMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, raw.normal!, record.width, record.height);
       Object.assign(chains, { diffuse: chain.diffuse, roughness: chain.roughness, metalness: chain.metalness, normal: chain.normal.map(normalRgba) });
-    } else Object.assign(chains, flatMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, record.size));
+    } else Object.assign(chains, flatMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, record.width, record.height));
     for (const map of record.maps) {
       const group = CHANNEL_GROUP[map.channel];
       const format = group === "dds-colour" ? "rgba8-srgb" : group === "dds-normal" ? "rgba8-unorm" : "r8";
-      writeFileSync(join(out, "input", group, `${preset.appearance}_${map.channel}.dds`), encodeDds(chains[map.channel]!, map.side, format));
+      writeFileSync(join(out, "input", group, `${preset.appearance}_${map.channel}.dds`),
+        encodeDds(chains[map.channel]!, { width: map.width, height: map.height }, format));
       groupsUsed.add(group);
     }
   });
   for (const [group, settings] of TEXTURE_GROUPS)
     if (groupsUsed.has(group)) await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
 
-  // 3. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
-  //    then rewrite its appearances/materials and the morph's base mesh.
-  await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
+  // 4. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
+  //    then rewrite its appearances/materials (window entries carry the UV transform) and the morph's base mesh.
   const handles = new HandleCounter();
-  const lifted = liftPlate(readJson(join(out, "source-json", stem + ".mesh.json")), readJson(join(out, "source-json", stem + ".morphtarget.json")),
-    plan.plate.liftsMm);
+  const lifted = liftPlate(sourceMesh, readJson(join(out, "source-json", stem + ".morphtarget.json")), plan.plate.liftsMm);
   writeFileSync(join(out, "logs", "plate-lift.log"), JSON.stringify(lifted.report) + "\n", "utf8");
-  const mesh = rewritePlateMesh(lifted.mesh, plan, handles);
+  const mesh = rewritePlateMesh(lifted.mesh, plan, handles, plateUv.transform);
   writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
   const morph = rewritePlateMorph(lifted.morph, plan);
   writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
   await step("deserialize-models", () => options.tools.deserialize(join(out, "models-json"), modelDir));
 
-  // 4. The .app template and the character-customization selector.
+  // 5. The .app template and the character-customization selector.
   const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
   writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
   writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
   await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
   await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
 
-  // 5. Pre-pack gate: the physical tree must equal the planned canonical resource paths exactly.
+  // 6. Pre-pack gate: the physical tree must equal the planned canonical resource paths exactly.
   checkCancelled(options.signal);
   const artifacts = archiveInventory(archive, plan);
   const packageDir = join(out, "package", "archive", "pc", "mod");
@@ -177,7 +189,7 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   writeFileSync(join(packageDir, plan.namespace + ".archive.xl"), archiveXlDeclaration(plan), "utf8");
   const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
     .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
-  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, artifacts,
+  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, plateUv, artifacts,
     archiveSha256: sha256(readFileSync(archiveFile)), installed: false, gameRenderingVerified: false };
   writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
   log(`BUILD ${out}`);

@@ -1,0 +1,5235 @@
+{
+  "schema": "xfas/collection-1",
+  "id": "019a0b1c-2d3e-4f50-8a6b-0000000000b0",
+  "name": "XF UV window (diagnostic)",
+  "presets": [
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000001",
+      "name": "Lines · new density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "uvw-1",
+            "name": "Line 0.3 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.214241,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.214241,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-2",
+            "name": "Line 0.6 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.214981,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.214981,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.216463,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.216463,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-3",
+            "name": "Line 1.2 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.217944,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.217944,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-4",
+            "name": "Line 2.4 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.22387,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.22387,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.229796,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.229796,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-5",
+            "name": "Dot 1",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.600879,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.600879,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-6",
+            "name": "Dot 2",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.601757,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602636,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602636,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-7",
+            "name": "Dot 3",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.603515,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.604394,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.604394,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-8",
+            "name": "Dot 4",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.605272,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606151,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606151,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-9",
+            "name": "Dot 5",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.607909,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.607909,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-10",
+            "name": "Dot 6",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.608787,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.609666,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.609666,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-11",
+            "name": "Dot 7",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.610545,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.611424,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.611424,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-12",
+            "name": "Dot 8",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.612302,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.613181,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.613181,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-13",
+            "name": "Dot 9",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-14",
+            "name": "Dot 10",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.603515,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-15",
+            "name": "Dot 11",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-16",
+            "name": "Dot 12",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.610545,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-17",
+            "name": "Dot 13",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.61406,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.615817,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.615817,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.61406,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-18",
+            "name": "Dot 14",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.617575,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.619332,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.619332,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-19",
+            "name": "Dot 15",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-20",
+            "name": "Dot 16",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-21",
+            "name": "Dot 17",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.61406,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.61406,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-22",
+            "name": "Dot 18",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.62109,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.624605,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.624605,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.62109,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000002",
+      "name": "Lines · old density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "uvw-1",
+            "name": "Line 0.3 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.214241,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.214241,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-2",
+            "name": "Line 0.6 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.214981,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.214981,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.216463,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.216463,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-3",
+            "name": "Line 1.2 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.217944,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.217944,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-4",
+            "name": "Line 2.4 mm",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.302,
+                "v": 0.22387,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.22387,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.442,
+                "v": 0.229796,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.302,
+                "v": 0.229796,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-5",
+            "name": "Dot 1",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.600879,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.600879,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-6",
+            "name": "Dot 2",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.601757,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602636,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602636,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-7",
+            "name": "Dot 3",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.603515,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.604394,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.604394,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-8",
+            "name": "Dot 4",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.605272,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606151,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606151,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-9",
+            "name": "Dot 5",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.607909,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.607909,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-10",
+            "name": "Dot 6",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.608787,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.609666,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.609666,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-11",
+            "name": "Dot 7",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.610545,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.611424,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.611424,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-12",
+            "name": "Dot 8",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.612302,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.613181,
+                "v": 0.2135,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.613181,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.214735,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-13",
+            "name": "Dot 9",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.601757,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-14",
+            "name": "Dot 10",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.603515,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.605272,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-15",
+            "name": "Dot 11",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.608787,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-16",
+            "name": "Dot 12",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.610545,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.612302,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-17",
+            "name": "Dot 13",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.61406,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.615817,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.615817,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.61406,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-18",
+            "name": "Dot 14",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.617575,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.619332,
+                "v": 0.215969,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.619332,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.218438,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-19",
+            "name": "Dot 15",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.603515,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-20",
+            "name": "Dot 16",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.60703,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.610545,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.60703,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-21",
+            "name": "Dot 17",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.61406,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.617575,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.61406,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "uvw-22",
+            "name": "Dot 18",
+            "enabled": true,
+            "color": "#2a1830",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.0005,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.62109,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.624605,
+                "v": 0.220907,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.624605,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.62109,
+                "v": 0.225846,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000003",
+      "name": "Board 1 · new density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-1",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-2",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-3",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-4",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-5",
+            "name": "Glossy (single lobe) right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-6",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000004",
+      "name": "Board 1 · old density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-1",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-2",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-3",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-4",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-5",
+            "name": "Glossy (single lobe) right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-6",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000005",
+      "name": "Shimmer · new density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "uvw-23",
+            "name": "Fine shimmer left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 256,
+              "density": 0.7,
+              "tilt": 1,
+              "seed": 1904
+            }
+          },
+          {
+            "id": "uvw-24",
+            "name": "Fine shimmer right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 256,
+              "density": 0.7,
+              "tilt": 1,
+              "seed": 1904
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "019a0b1c-2d3e-4f50-8a6b-000000000006",
+      "name": "Shimmer · old density",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "uvw-23",
+            "name": "Fine shimmer left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 256,
+              "density": 0.7,
+              "tilt": 1,
+              "seed": 1904
+            }
+          },
+          {
+            "id": "uvw-24",
+            "name": "Fine shimmer right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 256,
+              "density": 0.7,
+              "tilt": 1,
+              "seed": 1904
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "diagnostics": {
+    "schema": "xfs/export-diagnostics-1",
+    "presets": {
+      "019a0b1c-2d3e-4f50-8a6b-000000000002": {
+        "uvSpace": "head"
+      },
+      "019a0b1c-2d3e-4f50-8a6b-000000000004": {
+        "uvSpace": "head"
+      },
+      "019a0b1c-2d3e-4f50-8a6b-000000000006": {
+        "uvSpace": "head"
+      }
+    }
+  }
+}

@@ -9,6 +9,14 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ## Unreleased
 
+### New and improved
+
+- **Exported makeup keeps much finer detail.** Build now spends the whole texture on the eye-makeup area instead of the whole head, so edges, fine lines and Shimmer facets come out about four times sharper in your XF Eye Artistry mod, with no extra memory. Colour-shifting keeps its previous detail for now. Checked by Build's own tests and on three test collections; not yet seen in game.
+
+### Fixes and under the hood
+
+- **Build checks where every texture lands on the eye-makeup area** before it accepts a mod, by following the game's own texture mapping from the eye plate's shape to the finished texture.
+
 ## 0.1.0-alpha.1
 
 ### New and improved
