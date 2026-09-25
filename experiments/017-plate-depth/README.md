@@ -151,7 +151,7 @@ Extract the head and vanilla decals with WolvenKit (`unbundle` from `basegame_4_
 python experiments/017-plate-depth/measure_offsets.py --json research/consumers/plate-depth/raw/json --plate-json research/consumers/plate-depth/raw/platejson --mod-json research/consumers/plate-depth/raw/modjson --output experiments/017-plate-depth/offset-evidence.json
 bun experiments/017-plate-depth/make-candidate.ts
 # from projects/xf-studio/authoring
-bun tools/build_collection_package.ts --collection ../../../experiments/017-plate-depth/depth-candidate.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>
+bun tools/build_collection_package.ts --collection ../../../experiments/017-plate-depth/depth-candidate.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
 ```
 
 Input SHA-256: head mesh `e877b91a…74c6` and morph `3e10c3f7…9b7e` (the audited 2.31 revision); eye-makeup mesh `b2597cfa…ec88` and morph `1bde3fff…d8b7`; legacy mod mesh `93600007…e686`; Winterkissed mesh `759ce74a…a8a2b`. The decoders ([`redmesh.py`](redmesh.py)) follow WolvenKit's `MeshTools`/`MorphTargetTools` formats; the light, SSS and decal programs were decompiled with dxil-spirv and SPIRV-Cross ([shader method](../../research/materials/shader-system/README.md)).

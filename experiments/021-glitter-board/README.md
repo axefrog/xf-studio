@@ -1,6 +1,6 @@
 # Glitter diagnostic board: the resolved-flake route, built and verified offline
 
-**Status:** built through the production pipeline with the diagnostic `glitter` knob and passed the independent verifier, 26 September 2026. **Not staged and not seen in game.** It is the board [experiment 018](../018-glitter-route/README.md#diagnostic-board) designed; the consolidated reading is in [Glitter in game](../../knowledge/glitter-in-game.md), and the pipeline contract is [the diagnostic Glitter route](../../research/authoring/studio-to-mod-pipeline.md#the-diagnostic-glitter-route). The production Glitter guard is unchanged: a Glitter layer in any collection is still omitted with its reason.
+**Status:** built through the production pipeline with the diagnostic `glitter` knob and passed the independent verifier, 26 September 2026; rebuilt the same day after the route's code-health cleanup (regions sized from their layers' outline bounds, a stronger verifier), which changed its textures. **Not staged and not seen in game.** It is the board [experiment 018](../018-glitter-route/README.md#diagnostic-board) designed; the consolidated reading is in [Glitter in game](../../knowledge/glitter-in-game.md), and the pipeline contract is [the diagnostic Glitter route](../../research/authoring/studio-to-mod-pipeline.md#the-diagnostic-glitter-route). The production Glitter guard is unchanged: a Glitter layer in any collection is still omitted with its reason.
 
 Evidence grades as in the knowledge base: **[source]** compiled programs or tool source; **[resource]** installed game or tool output; **[offline]** measured here; **[runtime]** seen in game; **[hypothesis]** not established.
 
@@ -8,7 +8,7 @@ Evidence grades as in the knowledge base: **[source]** compiled programs or tool
 
 - **The route** ([`glitter-route.ts`](../../projects/xf-studio/authoring/src/glitter-route.ts)): knowledge §3's primary route. One `@glitter` `mesh_decal` entry with the plate window's UV transform, `NormalAlphaTex` flake mask, `UseNormalAlphaTex` 1 and `NormalsBlendingMode` 1; five 4096 × 1024 maps (diffuse, roughness, metalness, normal, flakes) with full 13-level non-square chains drawn per level as nested flake mips.
 - **The accent** (knowledge §4): a second plate render chunk at the same 0.4 mm lift, bound to an `@accent_<preset>` entry on `mesh_decal_emissive_subsurface.mt` with a 2048² head-UV mask of the lowest-key 8 % of the left lid's flakes. Every other preset binds that chunk to `xfs_hidden`.
-- **The way in:** the diagnostic `glitter` knob in `xfs/export-diagnostics-1`, on presets whose layers are flat-finish pigment (here Satin patches). Each region names one pigment layer and gives its flake statistics, or mirrors another region's flakes; `mips: "box"` gives a region plain BOX mips below level 0 for the comparison. The Studio never writes the knob.
+- **The way in:** the diagnostic `glitter` knob in `xfs/export-diagnostics-1`, on presets whose layers are flat-finish pigment (here Satin patches). Each region names one pigment layer and gives its flake statistics, or mirrors another region's flakes; `mips: "box"` gives a region plain BOX mips below level 0 for the comparison. A region's flakes are drawn over its layer's outline bounds (knots, handles and half the feather), clipped to the plate window, at most 200,000 per region. The Studio never writes the knob, both hosts drop it, and the CLI honours it only with `--diagnostics`.
 - **The verifier** ([`glitter-checks.ts`](../../projects/xf-studio/authoring/src/mod-verifier/glitter-checks.ts)) restates the route, the materials, the accent chunk and the chains' published properties; see [item 4 of the pipeline guide](../../research/authoring/studio-to-mod-pipeline.md#what-check-build-and-verify-each-prove).
 
 ## The board
@@ -35,41 +35,41 @@ Represented flakes per level on the left lid of *A* (the compiler's record, [`re
 
 | Level | Texel (mm) | Flakes drawn | Mask mean |
 |---|---|---:|---:|
-| 0 (4096 × 1024) | 0.065 × 0.059 | 4,612 of 4,624 | 13.5 % |
-| 1 | 0.13 × 0.12 | 3,087 | 13.4 % |
-| 2 | 0.26 × 0.24 | 611 | 9.6 % |
-| 3 | 0.52 × 0.47 | 106 | 6.6 % |
+| 0 (4096 × 1024) | 0.065 × 0.059 | 5,263 of 5,266 | 12.2 % |
+| 1 | 0.13 × 0.12 | 3,515 | 12.1 % |
+| 2 | 0.26 × 0.24 | 695 | 8.6 % |
+| 3 | 0.52 × 0.47 | 121 | 6.1 % |
 | 4 and coarser | ≥ 1.04 | 0 (sheen only) | 0 |
 
-The accent holds 382 flakes at level 0, 66 at level 1 and none coarser (a 2-texel accent flake would exceed 1.2 mm).
+The mask mean here is over the region's whole rectangle, whose feathered rim holds fewer flakes; over fully covered texels it is 13.9 % (item 4). The accent holds 434 flakes at level 0, 75 at level 1 and none coarser (a 2-texel accent flake would exceed 1.2 mm).
 
 ## Offline checks before a session
 
 All four prerequisites from experiment 018 were run on this build ([`result.json`](result.json), from [`summarize.ts`](summarize.ts); WolvenKit CLI 9.0.1's own BC decode) [offline]:
 
-1. **V sign on a decoded export.** The verifier decodes a stored BC4 level of every preset itself and finds it is the export with its rows reversed, then maps the decoded diffuse coverage through the packaged transform at 19,680 plate points per chunk. Every preset matches its authored head-UV coverage (mean error 0.0011–0.0018, no point off by more than 0.5, offset estimate 0 or 1/16 texel). [`uv-window-probe.ts`](../../projects/xf-studio/authoring/tools/uv-window-probe.ts) on the same build shows the wrong alternatives fail: V offset sign flipped or V mirrored give mean errors of 0.89, rows not reversed 0.89, and 2- and 8-texel shifts are caught by the offset estimate.
-2. **BC5 on 3-texel flakes.** The angle between supplied and decoded normals on level-0 flake texels (mask ≥ ½) is 0.13–0.16° on average, 0.74–1.0° at the 95th percentile and at most 4.9–9.5° (a few edge texels). The flake mask's BC4 error on antialiased edges is 0.019 on average, 0.055 at the 95th percentile. So block compression keeps the flakes' tilts and shapes.
-3. **WolvenKit keeps the supplied nested chains** for the non-square 4096 × 1024 maps and the 2048² accent. Every supplied DDS equals the compiled chain byte for byte, and the decoded levels 1–3 of the flake mask sit 0.003–0.017 (mean absolute) from the supplied nested levels against 0.10–0.29 from a BOX chain of level 0; no decoded level differs from its supplied level by more than 0.0013 on average in any channel.
-4. **The independent verifier** passed with every glitter check: diffuse alpha is the pigment's coverage chain exactly; flakes lie only inside the pigment and near their regions; the smallest fully covered flake component holds 2.63–2.82 texels² (a 2-texel flake holds 2.6, a 1-texel speck 1); 69–79 % of each coarser level's component centroids land on a finer-level flake (an independently drawn level would score near its 15 % cover); tilts stay within each knob's maximum; level-0 mask means are 13.9–15.6 % against 15 % authored; *B*'s BOX lid equals the BOX chain byte for byte (859,624 texels); flake-free levels carry the restated sheen within one byte; 84 % of the accent's 251 level-0 components sit within one window texel of a flake.
+1. **V sign on a decoded export.** The verifier decodes a stored BC4 level of every preset itself and finds it is the export with its rows reversed, then maps the decoded diffuse coverage through the packaged transform at 19,680 plate points per chunk. Every preset matches its authored head-UV coverage (mean error 0.0013–0.0019, no point off by more than 0.5, offset estimate 0 or 1/16 texel). [`uv-window-probe.ts`](../../projects/xf-studio/authoring/tools/uv-window-probe.ts) on the same build shows the wrong alternatives fail: V offset sign flipped or V mirrored give mean errors of 0.89, rows not reversed 0.89, and 2- and 8-texel shifts are caught by the offset estimate.
+2. **BC5 on 3-texel flakes.** The angle between supplied and decoded normals on level-0 flake texels (mask ≥ ½) is 0.13–0.16° on average, 0.78–1.0° at the 95th percentile and at most 5.3–12.4° (a few edge texels). The flake mask's BC4 error on antialiased edges is 0.017 on average, 0.051–0.055 at the 95th percentile. So block compression keeps the flakes' tilts and shapes.
+3. **WolvenKit keeps the supplied nested chains** for the non-square 4096 × 1024 maps and the 2048² accent. Every supplied DDS equals the compiled chain byte for byte, and the decoded levels 1–3 of the flake mask sit 0.002–0.016 (mean absolute) from the supplied nested levels against 0.10–0.26 from a BOX chain of level 0; no decoded level differs from its supplied level by more than 0.0013 on average in any channel.
+4. **The independent verifier** passed with every glitter check: diffuse alpha is the pigment's coverage chain exactly; flakes lie only inside the pigment and near their regions; the smallest fully covered flake component holds 2.63–2.94 texels² (a 2-texel flake holds 2.6, a 1-texel speck 1); 70–81 % of each coarser level's component centroids land on a finer-level flake (an independently drawn level would score near its 15 % cover); tilts stay within each knob's maximum; level-0 mask means are 13.9–15.9 % against 15 % authored; *B*'s BOX lid equals the BOX chain byte for byte (980,704 texels); flake-free levels carry the restated sheen within one byte. The flakes' contents: on 25,500–51,100 fully covered flake texels per preset, roughness, metalness and colour are the region's flake values, 98.7–99.6 % are tilted, and every one carries the tangent of a nearby flake of the verifier's own restated catalogue; 389,000–498,000 level-0 pigment texels carry the plum and the base surface with the restated sheen. For the accent, 85 % of its 160 level-0 components away from the feathered edge (291 in all) sit within one window texel of a flake; its stored rows are reversed; and sampled at 551,060 points of the plate (91 per triangle), none of its drawn mass lies outside its layer.
 
 ## Build record (26 September 2026)
 
-Built with `bun tools/build_collection_package.ts` from the authoring directory, WolvenKit CLI 9.0.1, game 2.31 and the built-in plate (mesh `58081caf…ed26`, morph `b8b7c055…0131`). The build took about 1.5 minutes, verification included. It is private and ignored: the intermediate is in the building checkout's `projects/xf-studio/build/` and the candidate in `projects/xf-studio/dist/xfs_c0210a5e52e554c029d0b0000000000b0-1790375445274206699/`.
+Built with `bun tools/build_collection_package.ts --diagnostics` from the authoring directory, WolvenKit CLI 9.0.1, game 2.31 and the built-in plate (mesh `58081caf…ed26`, morph `b8b7c055…0131`), after the route's code-health cleanup (claude/cleanup-glitter). The build took about 1.5 minutes, verification included. It is private and ignored: the intermediate is in the building checkout's `projects/xf-studio/build/` and the candidate in `projects/xf-studio/dist/xfs_c0210a5e52e554c029d0b0000000000b0-1790380212678492199/`.
 
 | Item | Value |
 |---|---|
-| Archive `xfs_c0210a5e52e554c029d0b0000000000b0.archive` | 6,905,856 bytes, SHA-256 `232ad2f968f46332c6ebdbf5039283aa80c43d2674c135fefef4b2139592a69c` |
+| Archive `xfs_c0210a5e52e554c029d0b0000000000b0.archive` | 7,725,056 bytes, SHA-256 `6eb1fbee3c9a3ba12fc49b27260f551e4928ab968afaffb3d6fc246afdd17b96` |
 | `.archive.xl` | 286 bytes, SHA-256 `b0f1f3a639aa45b4960f4bd3e1fefdba9b7bda0bd5b167b40f13e095ad661607` |
 | Packaged collection | SHA-256 `b09a46e792729780fc0506910e5ac534f17da39e9a4ab225861b8422d77f500d` |
 | Members | 35: 31 textures (6 × 5 plus the accent), the plate mesh and morph, the `.app` and the customization |
 | Plate | two render chunks, both lifted 0.4 mm (`plateLiftsMm` `[0.4, 0.4]`, accent chunk 1); three material entries (`@glitter`, `@accent_…05`, `xfs_hidden`) |
 
-The archive hash changes on every build because WolvenKit writes build times into its index; the members and the `.archive.xl` are reproducible (an earlier build of the same collection gave the same 35 members, byte for byte). GPU memory, block-compressed with full chains: about 19 MiB per glitter preset and 2.7 MiB for the accent mask.
+The archive hash changes on every build because WolvenKit writes build times into its index; the members and the `.archive.xl` are reproducible (three builds of this code gave the same 35 members, byte for byte). Against the first build (6,905,856 bytes, candidate `…-1790375445274206699`), the cleanup changed all 31 textures and nothing else: the mesh, morph, `.app`, customization, `.archive.xl` and packaged collection hash are unchanged. The textures changed because each region is now drawn over its layer's outline bounds, which reach half the 0.004 feather beyond the knots, so every catalogue is larger (the left lid of *A*: 5,266 flakes, was 4,624) and redrawn. GPU memory, block-compressed with full chains: about 19 MiB per glitter preset and 2.7 MiB for the accent mask.
 
 ## Consistency
 
-- **Session 2 unchanged.** The [experiment 020](../020-session-2/README.md) collection rebuilt with this code through the same tool: all 41 archive members are byte-identical to the staged build's, and so are the `.archive.xl` (`f261ddc2…`), the packaged collection hash (`3f5e0b34…`) and the archive size (1,286,144 bytes).
-- **Ordinary builds unchanged.** The [finish board](../016-finish-board/README.md) (flat, faceted and Fresnel presets) rebuilt with this code gives 21 of 21 members byte-identical to the latest build from `main`.
+- **Session 2 unchanged.** The [experiment 020](../020-session-2/README.md) collection rebuilt with this code through the same tool (now with `--diagnostics`, which its knobs require): all 41 archive members are byte-identical to the staged build's, and so are the `.archive.xl` (`f261ddc2…`), the packaged collection hash (`3f5e0b34…`) and the archive size (1,286,144 bytes).
+- **Ordinary builds unchanged.** The [finish board](../016-finish-board/README.md) (flat, faceted and Fresnel presets) rebuilt with the route's first code gave 21 of 21 members byte-identical to the latest build from `main`. Since the cleanup, a golden test pins every committed ordinary collection's plan, plate materials, appearances and `.archive.xl`, and the finish board's and session 2's baked maps, to the results from before it ([`ordinary-package-golden.test.ts`](../../projects/xf-studio/authoring/tests/ordinary-package-golden.test.ts)).
 
 ## Test card
 
@@ -102,7 +102,7 @@ Send the screenshots with a short note per step.
 ```powershell
 bun experiments/021-glitter-board/make-board.ts
 cd projects/xf-studio/authoring
-bun tools/build_collection_package.ts --collection ../../../experiments/021-glitter-board/glitter-board.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>
+bun tools/build_collection_package.ts --collection ../../../experiments/021-glitter-board/glitter-board.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
 bun tools/uv-window-probe.ts ../build/<build>          # the V sign against wrong alternatives
 cd ../../..
 bun experiments/021-glitter-board/summarize.ts projects/xf-studio/build/<build> --json experiments/021-glitter-board/result.json

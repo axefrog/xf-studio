@@ -18,6 +18,7 @@ import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/pl
 import { plateUvFootprint } from "../src/plate-uv-window";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { tmpdir } from "node:os";
+import { withGlitterKnob } from "./glitter-knob-fixture";
 import { join } from "node:path";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -218,4 +219,25 @@ test("PIPE-37: the package CLI's machine error line is read back by code", () =>
     .toBe("package_plate_stale");
   expect(packageErrorCode("Package build failed: no machine line")).toBeNull();
   expect(packageErrorCode("XFS_PACKAGE_ERROR={not json")).toBeNull();
+});
+
+test("PIPE-70: a posted collection's glitter knob gives no glitter route and no diagnostics on localhost", async () => {
+  const knob = withGlitterKnob(fixture);
+  // Precondition: the knob is valid, so only the host's own parsing keeps it from the route.
+  expect(preparePackageCollection(knob).plan.presets.some(p => p.route === "glitter")).toBe(true);
+  // Check through the real local preflight (the builder CLI, run without --diagnostics).
+  const checked = await createPackageHandler()(request({ action: "check", collection: knob }));
+  expect(checked.status).toBe(200);
+  const summary = await checked.json() as PackageCheck;
+  expect(summary.presets.map(p => p.route)).not.toContain("glitter");
+  expect(summary.presets.every(p => !("diagnostics" in p))).toBe(true);
+  expect(summary.plateLiftsMm).toEqual([.4]);
+  // Build: the file handed to the builder carries no knob, and the host adds no --diagnostics.
+  let seen: Record<string, unknown> | undefined;
+  const building = createPackageHandler(localPackageTools(), async (_action, file) => {
+    seen = JSON.parse(readFileSync(file, "utf8")); throw Error("stop after reading the snapshot");
+  });
+  expect((await building(request({ action: "build", collection: knob }))).status).toBe(422);
+  expect(seen && Object.keys(seen)).not.toContain("diagnostics");
+  expect(readFileSync(resolve(import.meta.dir, "../src/package-server.ts"), "utf8")).not.toContain("--diagnostics");
 });

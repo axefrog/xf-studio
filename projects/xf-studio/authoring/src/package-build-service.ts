@@ -34,6 +34,12 @@ export interface PackageCommandOptions {
   readonly collection: string;
   /** Validate the collection and finish support without building. */
   readonly check?: boolean;
+  /**
+   * Honour the collection's diagnostic export knobs (`diagnostics`, export-diagnostics.ts), building a prepared in-game
+   * test candidate. Without it a collection carrying them is refused. Only a developer passes it (CLI `--diagnostics`);
+   * neither host ever does, and both hosts' own parsers drop the knobs before the builder sees the file (PIPE-70).
+   */
+  readonly diagnostics?: boolean;
   /** Eye plate directory prepared by the host (or a developer override). */
   readonly plate?: string;
   /** Verified built-in plate manifest from the host; absent for a developer override. */
@@ -202,6 +208,9 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   const preflight = (plate: PlateReachInput | null) => {
     try {
       value ??= JSON.parse(readFileSync(collection, "utf8").replace(/^﻿/, ""));
+      if (!options.diagnostics && value && typeof value === "object" && "diagnostics" in value)
+        throw Error("This collection carries diagnostic export knobs, which only build a prepared in-game test candidate. " +
+          "Pass --diagnostics to build one on purpose, or export the collection again from XF Studio.");
       return preflightPackageCollection(value, plate);
     } catch (error) {
       const message = (error as Error).message;

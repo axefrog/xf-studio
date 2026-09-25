@@ -1,6 +1,7 @@
 import { ACCENT_ENTRY_PREFIX, fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, ROUTE_UV_WINDOW,
   type ExportRoute, type FresnelMaterial, type TextureChannel } from "./finish-export";
 import { accentConstants, parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
+import { checkRegionPlan } from "./glitter-region";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
 import type { Recipe, RecipeFile } from "./recipe";
@@ -164,6 +165,8 @@ export function planCollection(value: unknown) {
       const active = new Set(exported.included.map(layer => layer.id));
       for (const region of glitter.regions) if (!active.has(region.layer))
         throw Error(`Diagnostic glitter for ${preset.name} names layer ${region.layer}, which is not one of its active layers.`);
+      // Region geometry and the flake budget are planning rules, so Check refuses what Build would (PIPE-69, PIPE-71).
+      checkRegionPlan(preset.name, new Map(exported.included.map(layer => [layer.id, layer])), glitter.regions);
     }
     const route: ExportRoute = glitter ? "glitter" : exported.route;
     const surface = diagnostics?.presets[preset.id]?.surface;

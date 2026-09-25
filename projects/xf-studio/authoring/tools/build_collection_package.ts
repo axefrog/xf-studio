@@ -6,7 +6,10 @@
 // hosts run this entry (desktop runs its bundled copy) as a bounded child process.
 //
 //   bun tools/build_collection_package.ts --collection <file> [--check [--plate-manifest <file>]] [--machine-result]
-//     [--plate <dir> [--plate-manifest <file>] --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>]
+//     [--plate <dir> [--plate-manifest <file>] --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>] [--diagnostics]
+//
+// --diagnostics honours a prepared collection's diagnostic export knobs (plate lifts, surface overrides, head UV, the
+// Glitter route) to build an in-game test candidate; without it such a collection is refused. The hosts never pass it.
 //
 // Check with a prepared plate's manifest also omits presets that never reach that plate; Build always plans on
 // the plate it packages.
@@ -18,7 +21,7 @@ const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
 const valueOptions = ["--collection", "--plate", "--plate-manifest", "--wolvenkit", "--gamepath", "--app-root",
   "--build-root", "--dist-root", "--output-root"] as const;
-const flagOptions = ["--check", "--machine-result"] as const;
+const flagOptions = ["--check", "--machine-result", "--diagnostics"] as const;
 
 function parseArgs(argv: string[]) {
   const values: Record<string, string> = {}, flags = new Set<string>();
@@ -41,7 +44,7 @@ try {
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.
   // Build and dist default to the project's ignored folders.
   const result = await runPackageCommand({
-    collection: values["--collection"], check: flags.has("--check"),
+    collection: values["--collection"], check: flags.has("--check"), diagnostics: flags.has("--diagnostics"),
     plate: values["--plate"], plateManifest: values["--plate-manifest"],
     wolvenkit: values["--wolvenkit"], gamepath: values["--gamepath"],
     appRoot: values["--app-root"] ?? app,

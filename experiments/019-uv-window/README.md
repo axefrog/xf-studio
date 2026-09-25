@@ -145,7 +145,7 @@ Before: board `e555e73c9b1c323cb9abc5709bef57d4159c15a994f5e4bd7e88af4faa88861b`
 ```powershell
 bun experiments/019-uv-window/make-diagnostic.ts
 cd projects/xf-studio/authoring
-bun tools/build_collection_package.ts --collection ../../../experiments/019-uv-window/uv-window.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>
+bun tools/build_collection_package.ts --collection ../../../experiments/019-uv-window/uv-window.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
 bun tools/uv-window-probe.ts ../build/<build>                                  # the mapping gate against wrong alternatives
 cd ../../..
 bun experiments/019-uv-window/measure.ts projects/xf-studio/build/<build> --json experiments/019-uv-window/result.json

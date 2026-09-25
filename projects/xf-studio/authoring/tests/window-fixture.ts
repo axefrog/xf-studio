@@ -43,3 +43,34 @@ export function storedBc4(bytes: Uint8Array, width: number, height: number) {
   return { renderResourceBlobPC: { Data: { header: { mipMapInfo: [{ layout: { rowPitch: blocksWide * 8, slicePitch: data.length },
     placement: { offset: 0, size: data.length } }] }, textureData: { Bytes: data.toString("base64") } } } };
 }
+
+/**
+ * A BC4 encoding of any level 0 (`bytes`, width × height, image rows top to bottom; sides multiples of 4), stored
+ * bottom to top: each block's endpoints are its largest and smallest value with the eight-value palette, each texel
+ * the nearest entry. Returns the serialized `renderTextureResource` and the level as the encoding decodes it (image
+ * rows top to bottom), which a fake texture export must return so the stored-row check compares like with like.
+ */
+export function encodedBc4(bytes: Uint8Array, width: number, height: number) {
+  const blocksWide = width / 4, blocksHigh = height / 4, data = Buffer.alloc(blocksWide * blocksHigh * 8), decoded = new Uint8Array(width * height);
+  for (let by = 0; by < blocksHigh; by++) for (let bx = 0; bx < blocksWide; bx++) {
+    const texels = Array.from({ length: 16 }, (_, k) => (height - 1 - (by * 4 + (k >> 2))) * width + bx * 4 + (k & 3));
+    let hi = 0, lo = 255;
+    for (const t of texels) { hi = Math.max(hi, bytes[t]); lo = Math.min(lo, bytes[t]); }
+    const at = (by * blocksWide + bx) * 8;
+    let bits = 0n;
+    if (hi === lo) { data[at] = hi; data[at + 1] = lo; for (const t of texels) decoded[t] = hi; }
+    else {
+      const palette = [hi, lo, ...Array.from({ length: 6 }, (_, j) => ((6 - j) * hi + (j + 1) * lo) / 7)];
+      data[at] = hi; data[at + 1] = lo;
+      texels.forEach((t, k) => {
+        let best = 0;
+        for (let i = 1; i < 8; i++) if (Math.abs(palette[i] - bytes[t]) < Math.abs(palette[best] - bytes[t])) best = i;
+        bits |= BigInt(best) << BigInt(3 * k);
+        decoded[t] = Math.round(palette[best]);
+      });
+    }
+    for (let k = 0; k < 6; k++) data[at + 2 + k] = Number((bits >> BigInt(8 * k)) & 0xffn);
+  }
+  return { renderTextureResource: { renderResourceBlobPC: { Data: { header: { mipMapInfo: [{ layout: { rowPitch: blocksWide * 8, slicePitch: data.length },
+    placement: { offset: 0, size: data.length } }] }, textureData: { Bytes: data.toString("base64") } } } }, decoded };
+}

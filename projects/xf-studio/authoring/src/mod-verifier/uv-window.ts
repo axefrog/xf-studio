@@ -33,10 +33,16 @@ function half(bits: number): number {
   return exponent === 0 ? sign * mantissa / 16777216 : exponent === 31 ? NaN : sign * (1024 + mantissa) * 2 ** (exponent - 25);
 }
 /** Barycentric points taken inside each triangle, besides its vertices. */
-const INSIDE = [[1 / 3, 1 / 3], [2 / 3, 1 / 6], [1 / 6, 2 / 3], [1 / 6, 1 / 6], [.5, .25], [.25, .5]] as const;
+const INSIDE: readonly (readonly [number, number])[] = [[1 / 3, 1 / 3], [2 / 3, 1 / 6], [1 / 6, 2 / 3], [1 / 6, 1 / 6], [.5, .25], [.25, .5]];
+/**
+ * A dense barycentric grid (every (i, j)/12 with i + j ≤ 12, 91 points per triangle), for a sparse mask such as a
+ * glitter accent, whose flakes a few points per triangle would mostly miss.
+ */
+export const DENSE_INSIDE: readonly (readonly [number, number])[] = Array.from({ length: 13 }, (_, i) =>
+  Array.from({ length: 13 - i }, (_, j) => [i / 12, j / 12] as const)).flat();
 
-/** Stored UV0 of every vertex and six points inside every triangle of each render chunk of a mesh RootChunk. */
-export function plateUvSamples(meshRoot: Node): PlateUvSamples {
+/** Stored UV0 of every vertex and six points (or `inside`) inside every triangle of each render chunk of a mesh RootChunk. */
+export function plateUvSamples(meshRoot: Node, inside: readonly (readonly [number, number])[] = INSIDE): PlateUvSamples {
   const blob = meshRoot?.renderResourceBlob?.Data, infos = blob?.header?.renderChunkInfos;
   ensure(Array.isArray(infos) && infos.length > 0, "The packaged plate has no render chunks for its UVs");
   const raw = Buffer.from(String(blob.renderBuffer?.Bytes ?? ""), "base64"), points: number[] = [];
@@ -58,7 +64,7 @@ export function plateUvSamples(meshRoot: Node): PlateUvSamples {
     const start = blob.header.indexBufferOffset + info.chunkIndices.teOffset;
     for (let i = 0; i + 2 < info.numIndices; i += 3) {
       const [a, b, c] = [0, 1, 2].map(k => vertex(raw.readUInt16LE(start + (i + k) * 2)));
-      for (const [s, t] of INSIDE) points.push(a[0] + s * (b[0] - a[0]) + t * (c[0] - a[0]), a[1] + s * (b[1] - a[1]) + t * (c[1] - a[1]));
+      for (const [s, t] of inside) points.push(a[0] + s * (b[0] - a[0]) + t * (c[0] - a[0]), a[1] + s * (b[1] - a[1]) + t * (c[1] - a[1]));
     }
   }
   const uv = Float64Array.from(points);
@@ -206,6 +212,31 @@ export function mappingOffset(coverage: Float64Array, width: number, height: num
     if (level === 0 && !(most - least >= search.minEdge && most - least > 1e-9 * Math.max(1, most))) return { u: null, v: null };
   }
   return { u: best.u, v: best.v };
+}
+
+/**
+ * A head-UV mask (a glitter accent, no UV transform) where the game draws it on the plate, against its layer's
+ * authored head-UV coverage (PIPE-74). A sample's stored UV (U, V) samples the size² mask at image row (1 − V)·size
+ * and the reference at authored (U, 1 − V). `mass` is the mask's total over the samples, `outside` the part of it at
+ * samples where the layer's coverage (the largest of the sample and its four neighbours one mask texel away, for
+ * the mask's own antialiased edge) is below 1/255.
+ */
+export function headMaskPlacement(mask: Uint8Array, size: number, reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples) {
+  let mass = 0, outside = 0, drawn = 0;
+  const step = crop.grid / size;
+  for (let i = 0; i < samples.uv.length; i += 2) {
+    const U = samples.uv[i], V = samples.uv[i + 1];
+    const a = bilinear(mask, size, size, wrapT(U) * size - .5, (1 - wrapT(V)) * size - .5) / 255;
+    if (a < 1 / 255) continue;
+    const rx = U * crop.grid - .5 - crop.x0, ry = (1 - V) * crop.grid - .5 - crop.y0;
+    ensure(rx >= step && ry >= step && rx < crop.width - 1 - step && ry < crop.height - 1 - step, "A plate sample lies outside the accent's coverage reference");
+    let authored = 0;
+    for (const [dx, dy] of [[0, 0], [step, 0], [-step, 0], [0, step], [0, -step]])
+      authored = Math.max(authored, bilinear(reference, crop.width, crop.height, rx + dx, ry + dy) / 255);
+    mass += a; drawn++;
+    if (authored < 1 / 255) outside += a;
+  }
+  return { samples: samples.uv.length / 2, drawn, mass, outsideShare: mass ? outside / mass : 0 };
 }
 
 /**
