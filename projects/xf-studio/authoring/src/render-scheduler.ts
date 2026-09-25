@@ -61,7 +61,7 @@ export type RenderScheduler = {
 export function createRenderScheduler(options: RenderSchedulerOptions): RenderScheduler {
   const { clock } = options;
   const intervals = new Samples(180), durations = new Samples(180);
-  let dirty = false, handle = 0, scheduled = false, disposed = false;
+  let dirty = false, handle = 0, scheduled = false, disposed = false, inFrame = false;
   let frames = 0, requests = 0, previous = clock.now(), lastFrameAt = previous, continuous = false;
 
   function tick() {
@@ -72,8 +72,10 @@ export function createRenderScheduler(options: RenderSchedulerOptions): RenderSc
     previous = now;
     // Cleared before drawing: a request made while this frame runs (a damped orbit step) asks for the next one.
     dirty = false;
+    inFrame = true;
     try { options.frame(dt, now); }
     finally {
+      inFrame = false;
       frames++;
       lastFrameAt = clock.now();
       durations.record(lastFrameAt - now);
@@ -91,7 +93,9 @@ export function createRenderScheduler(options: RenderSchedulerOptions): RenderSc
       if (disposed) return;
       requests++;
       dirty = true;
-      if (scheduled) return;
+      // Inside a frame (the controls' `change` fires within `controls.update()`) the frame's own end schedules
+      // the next one; resetting `previous` here would shorten the next dt and slow playback (UI-45).
+      if (scheduled || inFrame) return;
       // Waking from idle: the first frame's dt runs from this request, not from the last frame drawn.
       previous = clock.now();
       schedule();

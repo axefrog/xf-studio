@@ -29,7 +29,8 @@ export const LUT_RECHECK_MS = 20_000;
  * while it shows. The host keys its answer by the installation fingerprint the character details use, so a
  * changed route, profile or LUT mod, or WolvenKit becoming ready, is picked up without a restart. Until the
  * first answer arrives the neutral grade is shown; later answers replace the grade only when the host's
- * cube changed, and an answer that never reached the host keeps the current grade.
+ * cube changed, and an answer that never reached the host keeps the current grade. Any change of cube or of
+ * its source notifies subscribers.
  */
 export function createLightingPresetStage(options: {
   scene: THREE.Scene;
@@ -65,10 +66,13 @@ export function createLightingPresetStage(options: {
       if (disposed) return;
       if (first || !result.unreachable) {
         const file = result.file ?? null;
-        if (first || file !== lutFile) { display.setLut(result.lut); lutFile = file; }
+        // A new cube changes the picture even when its source description is identical (PREV-48), so either
+        // change notifies, and the scene's lighting subscription asks for a frame.
+        const graded = first || file !== lutFile;
+        if (graded) { display.setLut(result.lut); lutFile = file; }
         const changed = first || JSON.stringify(result.source) !== JSON.stringify(lutStatus.source);
         lutStatus = { phase: "ready", source: result.source };
-        if (changed) notify();
+        if (changed || graded) notify();
       }
       if (preset === "creator") lutTimer = setTimeout(requestLut, LUT_RECHECK_MS);
     });

@@ -29,6 +29,7 @@ import { attachHeadCameraInput } from "./head-camera-input";
 import type { StageTheme } from "./stage-backdrop";
 import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
+import { viewportPixelRatio, watchDevicePixelRatio } from "./device-pixel-ratio";
 
 /**
  * Creates the 3D head scene in `host`. A failure at any point after the renderer exists releases
@@ -70,7 +71,7 @@ async function assembleScene(
   let renderer: THREE.WebGLRenderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true, preserveDrawingBuffer: true }); }
   catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
   renderer.setClearColor(0x14181c, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
@@ -610,6 +611,8 @@ async function assembleScene(
   const observer = new ResizeObserver(() => { resize(); invalidate(); });
   observer.observe(host);
   releases.push(() => observer.disconnect());
+  // A monitor move or page zoom changes the device pixel ratio without resizing the host (UI-46).
+  releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }));
   resize();
   invalidate();
   const evidence = coreSceneEvidence({ coreDetail, meshes, blinkBones: bones.length,

@@ -5,7 +5,7 @@ import { h, setText, uid } from "../dom";
 import type { PanelController } from "../panels/collection";
 import { PANEL_META } from "../panel-meta";
 import type { Frame, StudioRuntime } from "../runtime";
-import { HELP_LINKS, helpReference, searchTopics, searchTours } from "./help-topics";
+import { HELP_LINKS, helpReference, helpTopicsFor, searchTopics, searchTours } from "./help-topics";
 import { renderHelp } from "./render";
 import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
@@ -60,10 +60,11 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     }));
     return list.length;
   }
+  const helpTopics = helpTopicsFor(rt.finishes);
   function render() {
     const query = search.value.trim();
     const tourCount = renderTours(query);
-    const found = searchTopics(query);
+    const found = searchTopics(query, helpTopics);
     topics.replaceChildren(...found.map(topic => h("details", { class: "help-topic", open: query ? true : undefined },
       h("summary", { text: topic.title }), h("div", { class: "help-topic-body" }, renderHelp(topic.body)))));
     const sections = helpReference(query);

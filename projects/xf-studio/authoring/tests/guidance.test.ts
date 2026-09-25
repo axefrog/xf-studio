@@ -8,10 +8,12 @@ import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
 import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
 import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
-import { HELP_LINKS, HELP_TOPICS, helpReference, searchTopics, searchTours } from "../src/studio-ui/guidance/help-topics";
+import { exportableFinishClause, finishExportHelp } from "../src/studio-ui/guidance/finish-text";
+import { finishCatalogue } from "../src/finish-catalogue";
+import { HELP_LINKS, HELP_TOPICS, helpReference, helpTopicsFor, searchTopics, searchTours } from "../src/studio-ui/guidance/help-topics";
 import { tourKey } from "../src/studio-ui/guidance/overlay";
 import { NARROW_WIDTH, placeCallout } from "../src/studio-ui/guidance/placement";
-import { ONBOARDING_TOUR_ID, TOURS } from "../src/studio-ui/guidance/tours";
+import { ONBOARDING_TOUR_ID, TOURS, toursFor } from "../src/studio-ui/guidance/tours";
 import type { GuidanceFacts, Tour, TourCommand } from "../src/studio-ui/guidance/types";
 import { PANEL_IDS, type StudioPanelId } from "../src/studio-ui/layout-defaults";
 import { studioShortcut } from "../src/studio-ui/shortcuts";
@@ -154,6 +156,28 @@ test("guidance actions are catalogued and follow the start, next, back, skip and
   expect(recorded.at(-1)).toEqual(["t", "completed"]);
 });
 
+test("starting a tour while another runs ends the running one as skipped, recorded once, before the new one starts (UI-43)", () => {
+  const { env, recorded } = environment();
+  const other: Tour = { ...tour([{ content }, { content }]), id: "other", audience: "whats-new" };
+  const service = new GuidanceService([tour([{ content }, { content }, { content }]), other], env);
+  const notices: (string | undefined)[] = [];
+  service.subscribe(() => notices.push(service.snapshot().active?.tour.id));
+  service.dispatch({ kind: "guidance.startTour", tourId: "t" });
+  service.dispatch({ kind: "guidance.next" });
+  expect(service.dispatch({ kind: "guidance.startTour", tourId: "other" })).toEqual({ ok: true });
+  expect(recorded).toEqual([["t", "skipped"]]);
+  expect(service.snapshot()).toMatchObject({ active: { tour: { id: "other" }, index: 0 }, last: { tourId: "t", outcome: "skipped" } });
+  // Readers saw the first tour end before the second began.
+  expect(notices).toEqual(["t", "t", undefined, "other"]);
+  service.dispatch({ kind: "guidance.next" }); service.dispatch({ kind: "guidance.finish" });
+  expect(recorded).toEqual([["t", "skipped"], ["other", "completed"]]);
+  // Restarting the same tour mid-way records the abandoned run too.
+  service.dispatch({ kind: "guidance.startTour", tourId: "t" }); service.dispatch({ kind: "guidance.next" });
+  service.dispatch({ kind: "guidance.startTour", tourId: "t" });
+  expect(recorded.at(-1)).toEqual(["t", "skipped"]);
+  expect(service.snapshot().active).toMatchObject({ tour: { id: "t" }, index: 0 });
+});
+
 test("advanceWhen moves on only when its event happens after the step starts, or its capability condition holds", () => {
   const { env, set } = environment();
   const service = new GuidanceService([tour([
@@ -259,7 +283,7 @@ test("guidance modules stay presentation: no domain internals, and the runner an
     if (/from "\.\.\/\.\.\/(authoring-|collection-|recipe|editor-actions|scene|trusted-|studio-application|studio-file-operations|browser-)/.test(source.replace(/^import type .*$/gm, "")))
       problems.push(`${name} imports a domain module`);
   }
-  for (const pure of ["anchors.ts", "content.ts", "engine.ts", "help-topics.ts", "placement.ts", "tours.ts", "types.ts"]) {
+  for (const pure of ["anchors.ts", "content.ts", "engine.ts", "finish-text.ts", "help-topics.ts", "placement.ts", "tours.ts", "types.ts"]) {
     const source = readFileSync(join(guidanceDir, pure), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
     if (/\bdocument\.|\bwindow\.|\blocalStorage\b|\bfetch\(/.test(source)) problems.push(`${pure} touches the DOM or I/O`);
   }
@@ -304,6 +328,7 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
   }
   expect(searchTopics("").length).toBe(HELP_TOPICS.length);
   expect(searchTopics("GLITTER").map(topic => topic.id)).toContain("finishes");
+  expect(searchTopics("preview only", helpTopicsFor(finishCatalogue())).map(topic => topic.id)).toContain("finishes");
   expect(searchTopics("undo history")[0].id).toBe("undo");
   expect(searchTopics("zzzz nothing")).toEqual([]);
   expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-alpha.1");
@@ -313,6 +338,34 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
     { kind: "p", inlines: [{ kind: "text", text: "Hi " }, { kind: "strong", text: "there" }, { kind: "text", text: " " }, { kind: "key", id: "shell.undo", label: "Ctrl+Z" }] },
     { kind: "list", items: [[{ kind: "text", text: "one" }], [{ kind: "text", text: "two <b>" }]] },
   ]);
+});
+
+test("help and tour text about which finishes export is built from the finish catalogue, never restated (UI-44)", () => {
+  const catalogue = finishCatalogue();
+  const named = (adapter: string) => catalogue.filter(finish => finish.exportAdapter === adapter).map(finish => finish.shortLabel);
+  // The data names no finish; the words are filled in from the catalogue the port publishes.
+  for (const text of [...HELP_TOPICS.map(topic => topic.body), ...TOURS.flatMap(item => item.steps.map(step => step.content.body))])
+    for (const finish of catalogue) expect(text).not.toContain(`**${finish.shortLabel}**`);
+  const topics = helpTopicsFor(catalogue), tours = toursFor(catalogue);
+  for (const text of [...topics.map(topic => topic.body), ...tours.flatMap(item => item.steps.map(step => step.content.body))]) expect(text).not.toContain("{{");
+  const finishes = topics.find(topic => topic.id === "finishes")!;
+  expect(finishes.body).toContain(finishExportHelp(catalogue));
+  // Each finish is named once, in the sentence of its export status.
+  const sentences = plainText(finishes.body).split(/(?<=\.) /);
+  for (const finish of catalogue) {
+    const sentence = sentences.filter(text => text.includes(finish.shortLabel));
+    expect(sentence).toHaveLength(1);
+    expect(sentence[0]).toContain({ "flat-provisional": "can go into your mod", experimental: "can be built as experiments", none: "preview only" }[finish.exportAdapter]);
+  }
+  const step = tours.find(item => item.id === ONBOARDING_TOUR_ID)!.steps.find(item => item.anchor === "finish.picker")!;
+  expect(step.content.body).toContain(exportableFinishClause(catalogue));
+  for (const name of named("flat-provisional")) expect(step.content.body).toContain(name);
+  for (const name of [...named("experimental"), ...named("none")]) expect(step.content.body).not.toContain(name);
+  // A change in the route policy changes the words.
+  const moved = catalogue.map(finish => finish.id === "glitter" ? { ...finish, exportAdapter: "experimental" as const } : finish);
+  expect(finishExportHelp(moved)).not.toContain("preview only");
+  expect(finishExportHelp(moved).split(". ").find(text => text.includes("**Glitter**"))).toContain("can be built as experiments");
+  expect(exportableFinishClause([{ shortLabel: "Matte", exportAdapter: "flat-provisional" }])).toBe("Matte goes into your mod today");
 });
 
 // ---------- Accessibility and layout ----------
