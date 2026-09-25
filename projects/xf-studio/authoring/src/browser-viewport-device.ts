@@ -1,6 +1,7 @@
 import { createScene } from "./scene";
 import { createSurfaceEditor } from "./surface-editor";
 import { createUVEditor } from "./uv-editor";
+import { modifiersOf, NO_MODIFIERS } from "./input-bindings";
 import { ViewportAdapter } from "./viewport-adapter";
 import { ViewportAttachment, type ViewportAttachmentPort } from "./viewport-attachment";
 
@@ -16,6 +17,8 @@ export function createBrowserViewportDevice(options: {
   sceneFactory?: typeof createScene;
   uvFactory?: typeof createUVEditor;
   surfaceFactory?: typeof createSurfaceEditor;
+  /** Source of key, pointer, focus and visibility events for modifier tracking. */
+  window?: Pick<Window, "addEventListener"> & { document?: Pick<Document, "addEventListener" | "visibilityState"> };
 }) {
   const editors = new ViewportAdapter();
   let viewer: Scene | undefined;
@@ -43,11 +46,24 @@ export function createBrowserViewportDevice(options: {
     hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
     queryContext: options.queryContext,
   });
+  // Held modifiers for hints and cursors. Key and pointer events both carry the live state (a
+  // pointer event also resyncs after a key was released elsewhere); blur or a hidden page
+  // clears them, so no modifier can stay stuck after the window loses focus.
+  const events = options.window ?? (typeof window === "undefined" ? undefined : window);
+  if (events) {
+    const track = (event: Event) => attachment.reportModifiers(modifiersOf(event as KeyboardEvent));
+    for (const type of ["keydown", "keyup", "pointermove", "pointerdown"]) events.addEventListener(type, track, { capture: true, passive: true });
+    events.addEventListener("blur", () => attachment.reportModifiers(NO_MODIFIERS));
+    events.document?.addEventListener("visibilitychange", () => {
+      if (events.document?.visibilityState === "hidden") attachment.reportModifiers(NO_MODIFIERS);
+    });
+  }
   return {
     attachment,
     mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
       hooks: Parameters<typeof createUVEditor>[2], initial: Parameters<typeof createUVEditor>[3]) {
-      uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls, hooks, initial);
+      uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls,
+        { ...hooks, input: state => attachment.reportInput("uv", state) }, initial);
       editors.attach("uv", uvEditor);
       attachment.setReady("uv");
       return uvEditor;
@@ -58,7 +74,8 @@ export function createBrowserViewportDevice(options: {
     },
     mountSurface(hooks: Parameters<typeof createSurfaceEditor>[1]) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");
-      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)(viewer, hooks);
+      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)(viewer,
+        { ...hooks, input: state => attachment.reportInput("head", state) });
       editors.attach("surface", surfaceEditor);
       return surfaceEditor;
     },

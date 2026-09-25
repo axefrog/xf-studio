@@ -2,7 +2,8 @@ import { allowsNativeTextMenu } from "../context-menu";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../ui-preferences";
-import { openPalette, openShortcuts, type Command } from "./commands";
+import { shortcutLabel } from "../input-bindings";
+import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
 import { button } from "./controls";
 import { DockView } from "./dock/dock-view";
@@ -28,6 +29,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
   const feedback = new Feedback();
   const rt = new StudioRuntime(port, feedback);
   const theme = themeController(port, feedback);
+  const view = viewPreferences(port, feedback);
   const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
     finishPanel(rt), shapePanel(rt), edgePanel(rt), warpPanel(rt), characterPanel(rt), lightingPanel(rt), motionPanel(rt), qualityPanel(rt),
     activityPanel(rt)];
@@ -52,7 +54,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
   });
   rt.dock = dock;
-  const header = shellHeader(rt, theme);
+  const header = shellHeader(rt, theme, view);
   const status = statusBar(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
   root.replaceChildren(header.element, main, status.element, feedback.toasts, feedback.live, feedback.assertive);
@@ -110,7 +112,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     }, 120);
   });
 
-  const commands = () => buildCommands(rt, theme, byId);
+  const commands = () => buildCommands(rt, theme, view, byId);
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -127,7 +129,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
       rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
-    else openShortcuts();
+    else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands } });
@@ -159,6 +161,28 @@ function themeController(port: Port, feedback: Feedback) {
 }
 type Theme = ReturnType<typeof themeController>;
 
+/** View preferences beyond the theme: viewport input hints (persisted, on by default). */
+function viewPreferences(port: Port, feedback: Feedback) {
+  const hints = () => port.preferences.snapshot().inputHints;
+  const setHints = (enabled: boolean) => {
+    const action = { kind: "inputHints.set" as const, enabled }, allowed = port.preferences.capability(action);
+    if (!allowed.available) { feedback.toast("warning", "View", allowed.reason ?? "This preference could not be saved."); return; }
+    port.preferences.dispatch(action);
+    feedback.announce(enabled ? "Viewport input hints shown" : "Viewport input hints hidden");
+  };
+  const openReference = () => openInputReference({ hints: { enabled: hints(), set: setHints } });
+  return {
+    hints, setHints, openReference,
+    items(): MenuItem[] {
+      return [{ kind: "heading", label: "Viewports", detail: "Stored with this browser workspace" },
+        { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Corner strip and target tooltips that follow the pointer and held keys",
+          run: () => setHints(!hints()) },
+        { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference }];
+    },
+  };
+}
+type ViewPrefs = ReturnType<typeof viewPreferences>;
+
 function themeItems(theme: Theme): MenuItem[] {
   return [{ kind: "heading", label: "Appearance", detail: "Stored with this browser workspace" },
     { kind: "action", label: `Match system (${theme.system})`, icon: "monitor", checked: theme.preference === "system", run: () => theme.set("system") },
@@ -166,7 +190,7 @@ function themeItems(theme: Theme): MenuItem[] {
     { kind: "action", label: "Dark", icon: "moon", checked: theme.preference === "dark", run: () => theme.set("dark") }];
 }
 
-function shellHeader(rt: StudioRuntime, theme: Theme) {
+function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
   const port = rt.port;
   const category = h("button", { class: "category", type: "button", "aria-haspopup": "menu", title: "Authoring category" },
     icon("category"), h("span", { text: "Eye makeup" }), icon("chevronDown"));
@@ -178,11 +202,12 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
   ], category, { label: "Authoring category", invoker: category }));
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
-  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: "Undo (Ctrl+Z)", onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
-  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: "Redo (Ctrl+Shift+Z)", onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
-  const save = button({ label: "Save", icon: "save", title: "Save to library (Ctrl+S)", onClick: () => void rt.request({ kind: "save" }) });
+  const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
+  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
+  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
+  const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
-  const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: "Command palette (Ctrl+K)", onClick: () => {} });
+  const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", title: "Panels and layout", onClick: event => {
     const dock = rt.dock;
     openMenu([{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },
@@ -190,11 +215,12 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
         hint: panel.description, run: () => dock.toggle(panel.id) })),
       { kind: "separator" },
       { kind: "action", label: "Reset this layout", icon: "reset", run: () => dock.reset() },
-      { kind: "action", label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => openShortcuts() }],
+      { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
-  const themeButton = button({ label: "Theme", icon: "monitor", iconOnly: true, variant: "ghost", onClick: event =>
-    openMenu(themeItems(theme), event.currentTarget as Element, { label: "Theme", invoker: event.currentTarget as Element }) });
+  const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", onClick: event =>
+    openMenu([...themeItems(theme), { kind: "separator" }, ...view.items()], event.currentTarget as Element,
+      { label: "View preferences", invoker: event.currentTarget as Element }) });
   const verify = h("span", { class: "verify-flag", title: "Isolated verification draft and library. Your normal work is untouched.", hidden: true }, "Verification workspace");
   const element = h("header", { class: "shell-header" },
     h("div", { class: "brand", "aria-label": "XF Studio" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio")),
@@ -213,13 +239,13 @@ function shellHeader(rt: StudioRuntime, theme: Theme) {
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
       const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
       const history = port.authoring.history();
-      undo.disabled = !undoCap.available; undo.title = undoCap.available ? `Undo ${history.undo?.label ?? ""} (Ctrl+Z)`.replace("  ", " ") : `Undo — ${undoCap.reason}`;
-      redo.disabled = !redoCap.available; redo.title = redoCap.available ? `Redo ${history.redo?.label ?? ""} (Ctrl+Shift+Z)`.replace("  ", " ") : `Redo — ${redoCap.reason}`;
+      undo.disabled = !undoCap.available; undo.title = undoCap.available ? `Undo ${history.undo?.label ?? ""} (${keys.undo})`.replace("  ", " ") : `Undo — ${undoCap.reason}`;
+      redo.disabled = !redoCap.available; redo.title = redoCap.available ? `Redo ${history.redo?.label ?? ""} (${keys.redo})`.replace("  ", " ") : `Redo — ${redoCap.reason}`;
       const saveCap = port.authoring.requestCapability({ kind: "save" });
-      save.disabled = !saveCap.available; save.title = saveCap.available ? "Save to library (Ctrl+S)" : saveCap.reason ?? "";
+      save.disabled = !saveCap.available; save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
-      setAttr(themeButton, "aria-label", `Theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference}`);
+      setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
     },
   };
 }
@@ -261,7 +287,7 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
   (target ?? next).focus();
 }
 
-function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, PanelController>): Command[] {
+function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>): Command[] {
   const port = rt.port, layer = port.editor.layer(), field = port.editor.selectedField();
   const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
@@ -275,13 +301,13 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion;
   return [
-    act("undo", "Undo", "Edit", { kind: "recipe.undo" }, { icon: "undo", shortcut: "Ctrl+Z" }),
-    act("redo", "Redo", "Edit", { kind: "recipe.redo" }, { icon: "redo", shortcut: "Ctrl+Shift+Z", keywords: "ctrl+y" }),
+    act("undo", "Undo", "Edit", { kind: "recipe.undo" }, { icon: "undo", shortcut: shortcutLabel("shell.undo") }),
+    act("redo", "Redo", "Edit", { kind: "recipe.redo" }, { icon: "redo", shortcut: shortcutLabel("shell.redo"), keywords: "ctrl+y" }),
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
     { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", capability: () => rt.addLayerCapability(), run: () => { rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }); } },
-    act("layer.duplicate", "Duplicate selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "duplicate", id: layer.id } }, { icon: "duplicate" }),
-    act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash" }),
+    act("layer.duplicate", "Duplicate selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "duplicate", id: layer.id } }, { icon: "duplicate", shortcut: `${shortcutLabel("rows.duplicate")} in Layers` }),
+    act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash", shortcut: `${shortcutLabel("rows.remove")} in Layers` }),
     act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),
     act("layer.toggle", layer?.enabled === false ? "Show selected layer" : "Hide selected layer", "Edit", layer && { kind: "layer.setEnabled", id: layer.id, enabled: !layer.enabled }, { icon: "eye" }),
     act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: port.editor.selected() }, { icon: "trash" }),
@@ -291,7 +317,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" }),
     ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
       { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview study" : "exports" })),
-    request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: "Ctrl+S" }),
+    request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),
     file("library.recover", "Recover previous collection draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
@@ -306,9 +332,11 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     file("package.build", "Build mod files", "Mod package", { kind: "package.build" }, { icon: "package", keywords: "archive build" }),
     file("savedV.import", "Load V from a save…", "Character", { kind: "savedV.import" }, { icon: "character" }),
     file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
-    act("camera.front", "Front view", "View", { kind: "camera.front" }, { icon: "front" }),
+    // Viewport keys work while that viewport has focus; the palette names the scope.
+    act("camera.front", "Front view", "View", { kind: "camera.front" }, { icon: "front", shortcut: `${shortcutLabel("head.front")} in Head` }),
     ...(["both", "single", "other", "fit"] as const).map(command => ({ id: `uv.${command}`, title: `UV: ${{ both: "Both eyes", single: "Single eye", other: "Other eye", fit: "Fit shape" }[command]}`,
-      group: "View", icon: "uv" as const, capability: () => port.viewport.uvCommandCapability(command), run: () => { port.viewport.uvCommand(command); } })),
+      group: "View", icon: "uv" as const, shortcut: `${shortcutLabel(`uv.${command}`)} in UV`,
+      capability: () => port.viewport.uvCommandCapability(command), run: () => { port.viewport.uvCommand(command); } })),
     act("surface", preview.preview?.surface ? "Hide surface controls" : "Show surface controls", "View", { kind: "preview.setSurfaceControls", enabled: !preview.preview?.surface }, { icon: "handles" }),
     act("wire", preview.preview?.wire ? "Hide plate wireframe" : "Show plate wireframe", "View", { kind: "preview.setWire", enabled: !preview.preview?.wire }, { icon: "wire" }),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
@@ -323,6 +351,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     { id: "theme.system", title: `Theme: match system (${theme.system})`, group: "Appearance", icon: "monitor", ...always, run: () => theme.set("system") },
     { id: "theme.light", title: "Theme: light", group: "Appearance", icon: "sun", ...always, run: () => theme.set("light") },
     { id: "theme.dark", title: "Theme: dark", group: "Appearance", icon: "moon", ...always, run: () => theme.set("dark") },
-    { id: "help.shortcuts", title: "Keyboard shortcuts", group: "Help", icon: "keyboard", shortcut: "?", ...always, run: () => openShortcuts() },
+    { id: "view.hints", title: view.hints() ? "Hide viewport input hints" : "Show viewport input hints", group: "View", icon: "keyboard",
+      keywords: "shortcut hints tooltips status", ...always, run: () => view.setHints(!view.hints()) },
+    { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
+      keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
   ];
 }

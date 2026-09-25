@@ -14,7 +14,7 @@ test("theme preference defaults to system and stays separate from recipe/library
   expect(effectiveTheme("system", false)).toBe("light");
   expect(effectiveTheme("light", true)).toBe("light");
   expect(effectiveTheme("dark", false)).toBe("dark");
-  state.uiPreferences = { schema: "xfs/ui-preferences-1", theme: "dark", layout };
+  state.uiPreferences = { schema: "xfs/ui-preferences-1", theme: "dark", inputHints: false, layout };
   const restored = parseWorkspace(JSON.parse(JSON.stringify(state)));
   expect(restored.uiPreferences).toEqual(state.uiPreferences);
   expect(restored.recipe).toEqual(recipe);
@@ -32,7 +32,21 @@ test("theme preference defaults to system and stays separate from recipe/library
     ? JSON.stringify(damaged) : null }, true);
   expect(loaded.writable).toBe(true);
   expect(loaded.state.recipe).toEqual(recipe);
-  expect(loaded.state.uiPreferences).toEqual({ schema: "xfs/ui-preferences-1", theme: "dark" });
+  expect(loaded.state.uiPreferences).toEqual({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true });
+});
+
+test("viewport input hints are on by default, persist when turned off and ignore malformed values", () => {
+  expect(defaultUIPreferences().inputHints).toBe(true);
+  expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "dark" }).inputHints).toBe(true);
+  expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: "no" }).inputHints).toBe(true);
+  const actions = new UIPreferenceActions();
+  let changes = 0;
+  actions.subscribe(() => changes++);
+  expect(actions.capability({ kind: "inputHints.set", enabled: "off" as unknown as boolean }).available).toBe(false);
+  actions.dispatch({ kind: "inputHints.set", enabled: false });
+  expect(changes).toBe(1);
+  const reloaded = new UIPreferenceActions(JSON.parse(JSON.stringify(actions.snapshot())));
+  expect(reloaded.snapshot()).toMatchObject({ theme: "system", inputHints: false });
 });
 
 test("opaque layout accepts only bounded, lossless JSON without choosing dock geometry", () => {
@@ -63,7 +77,7 @@ test("opaque layout accepts only bounded, lossless JSON without choosing dock ge
   expect(parseDockLayout({ ...layout, format: "<script>" })).toBeUndefined();
   expect(parseDockLayout({ ...layout, state: null })).toBeUndefined();
   expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "light",
-    layout: { ...layout, state: { x: Infinity } } })).toEqual({ schema: "xfs/ui-preferences-1", theme: "light" });
+    layout: { ...layout, state: { x: Infinity } } })).toEqual({ schema: "xfs/ui-preferences-1", theme: "light", inputHints: true });
 });
 
 test("layout restore requires the panel engine to recover and certify current-screen usability", () => {

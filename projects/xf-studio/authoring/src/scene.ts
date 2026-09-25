@@ -38,6 +38,8 @@ export async function createScene(
   controls.enableDamping = true;
   controls.minDistance = MIN_CAMERA_DISTANCE;
   controls.maxDistance = MAX_CAMERA_DISTANCE;
+  // OrbitControls leaves an inline `cursor: auto`; the presentation owns viewport cursors (`[data-cursor]`).
+  renderer.domElement.style.cursor = "";
   const idleFrameOffset = new THREE.Vector3();
   let frontPending = false;
   function front() {

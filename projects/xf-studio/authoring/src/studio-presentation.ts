@@ -29,7 +29,8 @@ export type StudioPresentationPort<Slot> = {
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
-    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "uvNavigateCapability" | "uvNavigate" | "contextAt"> & {
+    "resize" | "cancelInput" | "uvCommandCapability" | "uvCommand" | "uvNavigateCapability" | "uvNavigate" | "contextAt" |
+    "input" | "subscribeInput"> & {
       snapshot(): ReadonlyDeep<ReturnType<ViewportAttachment<Slot>["snapshot"]>>;
     };
   readonly preferences: Pick<UIPreferenceActions, "capability" | "dispatch"> & {
@@ -152,6 +153,7 @@ export function createStudioPresentation<Slot>(sources: {
     uvCommand: command => v.uvCommand(command),
     uvNavigateCapability: command => v.uvNavigateCapability(command), uvNavigate: command => v.uvNavigate(command),
     contextAt: (kind, x, y) => v.contextAt(kind, x, y),
+    input: () => v.input(), subscribeInput: listener => v.subscribeInput(listener),
   };
   const preferences: StudioPresentationPort<Slot>["preferences"] = {
     snapshot: () => p.snapshot(), capability: action => p.capability(action),

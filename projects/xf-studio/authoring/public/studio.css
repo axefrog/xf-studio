@@ -430,7 +430,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .viewport-tools .btn.ghost { color: oklch(.85 .005 255); }
 .viewport-tools .btn.ghost:hover:not(:disabled) { background: oklch(1 0 0 / .1); color: #fff; }
 .viewport-tools .btn.ghost[aria-pressed="true"] { color: oklch(.85 .12 205); background: oklch(.82 .12 205 / .16); }
-.viewport-hint { font-size: var(--fs-xs); color: oklch(.86 .005 255); background: var(--stage-chip); padding: 5px 8px; max-width: 70%; }
 .viewport-state { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--sp-4); text-align: center; color: oklch(.86 .005 255); background: var(--stage); }
 .viewport-state .progress { width: 180px; justify-self: center; background: oklch(1 0 0 / .12); }
 .viewport-state[data-tone="error"] .icon { color: oklch(.72 .17 25); justify-self: center; width: 22px; height: 22px; }
@@ -452,6 +451,52 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .uv-slot > .device-uv { position: relative; }
 .device-uv canvas { width: 100%; height: 100%; border: 1px solid var(--line-strong); touch-action: none; }
 .uv-hint { font-size: var(--fs-xs); color: var(--text-muted); padding: var(--sp-2) var(--sp-4) var(--sp-3); }
+.uv-hint[data-tone="warning"] { color: var(--warning); padding-bottom: 0; }
+
+/* ---------- Input hints, target tooltips and gesture cursors ----------
+ * Derived from the input binding catalogue (src/input-bindings.ts): the strip lists what the
+ * pointer and held keys do here; cursors come from the same bindings. Never interactive. */
+.input-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 3px var(--sp-5); font-size: var(--fs-xs); line-height: 1.35; pointer-events: none; min-width: 0; }
+.viewport-bottom > .input-hints { pointer-events: none; color: oklch(.88 .005 255); background: oklch(.17 .008 255 / .86); padding: 4px 8px; max-width: 72%; }
+.viewport-panel.uv > .input-hints { color: var(--text-muted); padding: var(--sp-2) var(--sp-4) var(--sp-3); }
+.input-hints .hint-group { display: contents; }
+.input-hints .hint { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.input-hints .hint-key, .target-tip .hint-key { font: 600 var(--fs-2xs)/1 var(--font-mono); padding: 2px 4px 1px; border: 1px solid currentColor; border-bottom-width: 2px; border-radius: var(--radius); background: none; color: inherit; opacity: .92; }
+.input-hints .hint-label { color: inherit; }
+.input-hints .hint-more { opacity: .85; }
+.input-hints .hint-hold { font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; }
+.input-hints .hint-state { display: inline-flex; align-items: center; gap: 5px; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--accent-text); }
+.viewport-bottom > .input-hints .hint-state { color: var(--accent); }
+.input-hints[data-tone="held"], .input-hints[data-tone="gesture"] { box-shadow: inset 2px 0 0 var(--accent); }
+.viewport-panel.uv > .input-hints[data-tone="held"], .viewport-panel.uv > .input-hints[data-tone="gesture"] { box-shadow: inset 2px 0 0 var(--accent-edge); }
+.input-hints .hint-note { color: var(--warning); white-space: nowrap; }
+.viewport-bottom > .input-hints .hint-note { color: oklch(.82 .13 70); }
+.target-tip { position: absolute; left: 0; top: 0; z-index: 5; display: grid; gap: 3px; max-width: 260px; padding: 6px 8px; pointer-events: none;
+  font-size: var(--fs-xs); line-height: 1.3; color: oklch(.93 .005 255); background: oklch(.17 .008 255 / .94); border-left: 2px solid var(--accent); box-shadow: var(--shadow-sm);
+  transition: opacity 120ms var(--ease); }
+.target-tip-title { font: 600 var(--fs-2xs)/1.2 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.target-tip .hint { display: flex; gap: 6px; align-items: baseline; }
+.viewport-slot[data-cursor="grab"], .viewport-slot[data-cursor="grab"] canvas { cursor: grab; }
+.viewport-slot[data-cursor="grabbing"], .viewport-slot[data-cursor="grabbing"] canvas { cursor: grabbing; }
+.viewport-slot[data-cursor="move"], .viewport-slot[data-cursor="move"] canvas { cursor: move; }
+.viewport-slot[data-cursor="pan"], .viewport-slot[data-cursor="pan"] canvas { cursor: all-scroll; }
+/* White glyphs with a dark halo stay legible on skin, makeup, the UV atlas and both themes. Hotspot: the pivot/centre. */
+.viewport-slot[data-cursor="rotate"], .viewport-slot[data-cursor="rotate"] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E %3Cg fill='none' stroke-linecap='round'%3E%3Cpath d='M18.5 12A6.5 6.5 0 1 1 15.25 6.37' stroke='%23101418' stroke-width='4'/%3E %3Cpath d='M18.5 12A6.5 6.5 0 1 1 15.25 6.37' stroke='%23fff' stroke-width='1.7'/%3E%3C/g%3E %3Cpath d='M18.3 8.1 13.7 8.9 16.7 3.9z' fill='%23fff' stroke='%23101418' stroke-width='1.3' stroke-linejoin='round'/%3E %3Ccircle cx='12' cy='12' r='1.7' fill='%23fff' stroke='%23101418' stroke-width='1.2'/%3E%3C/svg%3E") 12 12, grab; }
+.viewport-slot[data-cursor="scale"], .viewport-slot[data-cursor="scale"] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E %3Cg fill='none' stroke-linecap='square'%3E%3Cpath d='M8 16 16 8M3.5 9V3.5H9M20.5 15v5.5H15' stroke='%23101418' stroke-width='4'/%3E %3Cpath d='M8 16 16 8M3.5 9V3.5H9M20.5 15v5.5H15' stroke='%23fff' stroke-width='1.6'/%3E%3C/g%3E %3Cpath d='M19 5 17.6 10.7 13.3 6.4zM5 19 6.4 13.3 10.7 17.6z' fill='%23fff' stroke='%23101418' stroke-width='1.3' stroke-linejoin='round'/%3E%3C/svg%3E") 12 12, nwse-resize; }
+.cursor-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: var(--sp-3); }
+.cursor-swatch { display: grid; place-items: center; gap: var(--sp-2); height: 76px; border: 1px dashed var(--line-strong); font-size: var(--fs-2xs); color: var(--text-muted); background: var(--bg-sunken); }
+.cursor-swatch.on-stage { background: var(--stage); color: var(--stage-text); }
+.cursor-swatch .viewport-slot { position: static; width: 100%; height: 100%; display: grid; place-items: center; }
+.reference-sheet { width: min(760px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 48px)); }
+.reference-sheet[open] { display: flex; flex-direction: column; }
+.reference-body { overflow: auto; min-height: 0; padding-right: var(--sp-3); }
+.reference-section + .reference-section { margin-top: var(--sp-6); }
+.reference-section h3 { margin: 0; font: 600 var(--fs-sm)/1.2 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.reference-section p { margin: var(--sp-2) 0 0; }
+.reference-where { color: var(--text-faint); }
+.reference-pref { padding-bottom: var(--sp-5); margin-bottom: var(--sp-5); border-bottom: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { .target-tip { transition: none; } }
+@media (forced-colors: active) { .input-hints, .target-tip { border: 1px solid CanvasText; } .viewport-slot[data-cursor] canvas { forced-color-adjust: none; } }
 
 /* ---------- Status bar ---------- */
 .status-bar { display: flex; align-items: center; gap: var(--sp-5); padding: 0 var(--sp-4); background: var(--bg-panel); border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-muted); min-width: 0; white-space: nowrap; }
@@ -530,7 +575,7 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 }
 @media (max-width: 720px) {
   .category span, .verify-flag, .chip { display: none; }
-  .viewport-hint { display: none; }
+  .input-hints .hint-more { display: none; }
   .status-message { max-width: 40vw; }
 }
 @media (prefers-reduced-motion: reduce) {

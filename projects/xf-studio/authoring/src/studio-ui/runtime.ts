@@ -1,3 +1,4 @@
+import { shortcutLabel } from "../input-bindings";
 import type { CollectionOutcome, CollectionRequest } from "../collection-service";
 import type { ValueSchema } from "../studio-action-descriptors";
 import type { StudioAction } from "../studio-application";
@@ -32,6 +33,7 @@ export class Frame {
   get viewport() { return this.once("viewport", () => this.port.viewport.snapshot()); }
   get status() { return this.once("status", () => this.port.status.snapshot()); }
   get localSetup() { return this.once("localSetup", () => this.port.localSetup.snapshot()); }
+  get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
 }
 export type FrameState = Frame;
 
@@ -105,7 +107,7 @@ export class StudioRuntime {
     const revision = this.port.editor.revision();
     return { label: "Undo", run: () => {
       if (this.port.editor.revision() !== revision) {
-        this.feedback.toast("warning", "Undo", "Other edits happened since. Use Undo (Ctrl+Z) to step back through them in order.");
+        this.feedback.toast("warning", "Undo", `Other edits happened since. Use Undo (${shortcutLabel("shell.undo")}) to step back through them in order.`);
         return;
       }
       this.dispatch({ kind: "recipe.undo" });

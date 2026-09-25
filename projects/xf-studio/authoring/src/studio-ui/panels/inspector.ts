@@ -1,4 +1,5 @@
 import type { DirectGlintFlakes } from "../../direct-glint-settings";
+import { editingReference } from "../../input-bindings";
 // Conditional flake-size limits are not expressible in the static action descriptor yet (audit A-7).
 import type { IrregularFlakes } from "../../flake-field";
 import type { LegacyFlakes } from "../../finish";
@@ -213,13 +214,11 @@ export function shapePanel(rt: StudioRuntime): PanelController {
   const mirror = new Toggle({ label: "Mirror across the face", onChange: checked => {
     const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
   } });
+  // Generated from the input binding catalogue; the full list is in the ? Keyboard & mouse dialog.
   const gestures = h("details", { class: "help-block" }, h("summary", { text: "Editing gestures" }),
-    h("dl", { class: "shortcut-list" },
-      ...[["Drag point / handle", "Reshape (UV map or on the head)"], ["Drag inside the shape", "Move the whole shape"],
-        ["Shift + drag", "Rotate around the selected point"], ["Shift + wheel", "Scale around the selected point"],
-        ["Double-click the outline", "Insert a point at the nearest section"], ["Wheel · right-drag", "Zoom · pan the view (not an edit)"],
-        ["Esc", "Cancel the gesture in progress"], ["Right-click", "Commands for what is under the cursor"]]
-        .flatMap(([key, value]) => [h("dt", { text: key }), h("dd", { text: value })])));
+    h("dl", { class: "shortcut-list" }, ...editingReference().flatMap(row => [h("dt", { text: row.input }),
+      h("dd", { text: `${row.label}${row.where ? ` · ${row.where}` : ""}` })])),
+    h("p", { class: "muted small", text: "The same gestures work in the UV map and on the head. Press ? for every binding." }));
   const body = h("div", { class: "stack" },
     section("Contour point", h("div", { class: "row between" }, h("div", { class: "row gap-xs" }, prev, pointLabel, next), remove)),
     section("Curve", enable, modes.element, pathNote),

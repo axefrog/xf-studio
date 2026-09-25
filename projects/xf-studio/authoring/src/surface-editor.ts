@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { cancelsGesture } from "./gesture-cancel";
+import { CURSOR_FALLBACK, cursorFor, modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+  type GestureKind, type PointerTarget } from "./input-bindings";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, shapeWheelScaleFactor, transformLayer } from "./shape-transform";
+import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./shape-transform";
 import {
   SurfaceMap,
   anchorPosition,
@@ -37,7 +39,11 @@ type Hooks = {
   cancel: () => void;
   finish?: () => void;
   message: (text: string) => void;
+  /** Hover target, active gesture and editability, for hint strips and cursors. Without it
+   * (legacy shell) the adapter sets a keyword cursor itself from the same catalogue. */
+  input?: (state: EditorInputState) => void;
 };
+const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
 /** Face controls operate on the same recipe as the UV editor. No baked geometry edits. */
 export function createSurfaceEditor(
@@ -149,6 +155,7 @@ export function createSurfaceEditor(
     wheel = undefined;
     clearTimeout(old.timer);
     if (cancel && old.changed && validShape(old)) hooks.cancel(); else if (old.changed) hooks.finish?.();
+    publishInput();
   }
   function stopShape(cancel = false) {
     if (!shapeDrag) return;
@@ -157,7 +164,7 @@ export function createSurfaceEditor(
     controls.enabled = old.controlsEnabled;
     if (canvas.hasPointerCapture(old.pointer)) canvas.releasePointerCapture(old.pointer);
     if (cancel && old.changed && validShape(old)) hooks.cancel(); else if (old.changed) hooks.finish?.();
-    canvas.style.cursor = "";
+    publishInput();
   }
   function applyShape(state: ShapeGesture, next: Layer | null) {
     if (!next) {
@@ -167,6 +174,9 @@ export function createSurfaceEditor(
     if (JSON.stringify(next) === state.expected) return true;
     if (!state.changed) { hooks.begin(); state.changed = true; }
     if (!hooks.apply({ kind: "shape.replace", next })) return false;
+    // Detached geometry syncs lazily on read. Read it back before recording what this
+    // gesture wrote, or the next validity check mistakes our own edit for a stale context.
+    hooks.layer();
     state.expected = JSON.stringify(state.layer);
     return true;
   }
@@ -468,48 +478,68 @@ export function createSurfaceEditor(
     // A preset/layer/field replacement owns a different Undo context. Never undo
     // its edit because an old pointer gesture later loses capture or is cancelled.
     if (cancel && old.changed && mayCancel) hooks.cancel(); else if (old.changed) hooks.finish?.();
-    canvas.style.cursor = "";
+    publishInput();
+  }
+  /** Resolve what is under the pointer. Off makeup, or while editing is disabled, is `empty`. */
+  function targetAt(x: number, y: number, needUV = false) {
+    const layer = hooks.layer(), editable = enabled && !!layer?.enabled;
+    if (!editable || !layer) return { target: "empty" as PointerTarget, editable, layer };
+    const handle = handleAt(x, y), uv = !handle || needUV ? hit(x, y) : undefined;
+    const painted = handle ? { mirror: handle.mirror } : uv ? shapeHit(layer, uv) : undefined;
+    return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget,
+      editable, layer, handle, uv, painted };
+  }
+  let hoverTarget: PointerTarget | undefined, hoverModifiers = modifiersOf({}), inputKey = "";
+  function publishInput() {
+    const gesture: GestureKind | undefined = shapeDrag?.kind ?? (drag ? "handle" : wheel ? "scale" : undefined);
+    const state: EditorInputState = { target: hoverTarget, gesture, editable: enabled && !!hooks.layer()?.enabled };
+    if (!hooks.input) {
+      canvas.style.cursor = CURSOR_FALLBACK[cursorFor({ scope: "head", target: hoverTarget, gesture, modifiers: hoverModifiers })];
+      return;
+    }
+    const key = JSON.stringify(state);
+    if (key !== inputKey) { inputKey = key; hooks.input(state); }
   }
   canvas.addEventListener(
     "pointerdown",
     (e) => {
-      if (drag || shapeDrag || e.button !== 0 || e.altKey || e.ctrlKey || e.metaKey)
-        return;
+      if (drag || shapeDrag || e.button !== 0) return;
       update();
-      const handle = handleAt(e.clientX, e.clientY);
-      const layer = hooks.layer();
-      if (!enabled || !layer?.enabled) return;
+      // Every left-button press resolves through the input catalogue. Camera bindings are left
+      // to the orbit controls; everything else, including a consumed no-op, never reaches them.
+      const resolved = targetAt(e.clientX, e.clientY, e.shiftKey);
+      const effect = pointerBinding("head", "drag", resolved.target, modifierKey(modifiersOf(e)))?.effect ?? "none";
+      if (effect === "camera-orbit" || effect === "camera-pan") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const { layer, handle, painted } = resolved;
+      if (effect === "none" || !layer || !painted) return;
       finishWheel();
-      if (e.shiftKey || !handle) {
-        const uv = hit(e.clientX, e.clientY), selected = hooks.selected(), pivot = layer.points[selected];
+      if (effect === "shape-translate" || effect === "shape-rotate") {
+        const uv = resolved.uv ?? hit(e.clientX, e.clientY), selected = hooks.selected(), pivot = layer.points[selected];
         if (!uv || !pivot) return;
-        const painted = handle ? { mirror: handle.mirror } : shapeHit(layer, uv);
-        if (!painted) return;
         const start = canonical(uv, painted.mirror);
-        e.preventDefault();
-        e.stopImmediatePropagation();
         // Rotation at its pivot has no direction; consume it without moving/orbiting.
-        if (e.shiftKey && Math.hypot(start.u - pivot.u, start.v - pivot.v) < 1e-5) {
+        if (effect === "shape-rotate" && Math.hypot(start.u - pivot.u, start.v - pivot.v) < 1e-5) {
           hooks.message("Rotate by dragging away from the selected point");
           return;
         }
-        shapeDrag = { kind: e.shiftKey ? "rotate" : "translate", layer, snapshot: structuredClone(layer),
+        shapeDrag = { kind: effect === "shape-rotate" ? "rotate" : "translate", layer, snapshot: structuredClone(layer),
           expected: JSON.stringify(layer), selected, pivot: { u: pivot.u, v: pivot.v },
           mirror: painted.mirror, changed: false, start, last: uv,
           pointer: e.pointerId, controlsEnabled: controls.enabled };
         controls.enabled = false;
         canvas.setPointerCapture(e.pointerId);
-        canvas.style.cursor = "grabbing";
+        publishInput();
         return;
       }
+      if (effect !== "handle-drag" || !handle) return;
       const target = handle.kind === "point" || handle.kind === "tangent"
         ? layer.points[handle.index]
         : layer.fields.find((f) => f.id === handle.fieldId);
       if (!target) return;
       const initialUV=handle.projected ? projectedHit(handle,e.clientX,e.clientY) : undefined;
       if(handle.projected&&!initialUV)return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
       const controlsEnabled = controls.enabled;
       controls.enabled = false;
       if (handle.kind === "point" || handle.kind === "tangent") hooks.select(handle.index);
@@ -519,7 +549,7 @@ export function createSurfaceEditor(
         ...(initialUV?{grabOffset:{u:initialUV.u-handle.uv.u,v:initialUV.v-handle.uv.v}}:{}) };
       lastDragRejection = null;
       canvas.setPointerCapture(e.pointerId);
-      canvas.style.cursor = "grabbing";
+      publishInput();
     },
     { capture: true, signal: listeners.signal },
   );
@@ -548,10 +578,10 @@ export function createSurfaceEditor(
         return;
       }
       if (!drag) {
-        hovered = handleAt(e.clientX, e.clientY);
-        const layer = hooks.layer(), uv = !hovered && enabled && layer?.enabled
-          ? hit(e.clientX, e.clientY) : undefined;
-        canvas.style.cursor = hovered || (uv && layer && shapeHit(layer, uv)) ? "grab" : "";
+        const resolved = targetAt(e.clientX, e.clientY);
+        hovered = resolved.handle;
+        hoverTarget = resolved.target; hoverModifiers = modifiersOf(e);
+        publishInput();
         return;
       }
       if (e.pointerId !== drag.pointer) return;
@@ -603,15 +633,25 @@ export function createSurfaceEditor(
     "pointerup",
     (e) => {
       if (shapeDrag && e.pointerId === shapeDrag.pointer) {
-        e.preventDefault(); e.stopImmediatePropagation(); stopShape(); return;
+        e.preventDefault(); e.stopImmediatePropagation(); stopShape(); rehover(e); return;
       }
       if (!drag || e.pointerId !== drag.pointer) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      stop();
+      stop(); rehover(e);
     },
     { capture: true, signal: listeners.signal },
   );
+  /** After a gesture the geometry under a still pointer has changed; resolve it again. */
+  function rehover(e: PointerEvent) {
+    update();
+    const resolved = targetAt(e.clientX, e.clientY);
+    hovered = resolved.handle; hoverTarget = resolved.target; hoverModifiers = modifiersOf(e);
+    publishInput();
+  }
+  canvas.addEventListener("pointerleave", () => {
+    hovered = undefined; hoverTarget = undefined; publishInput();
+  }, { signal: listeners.signal });
   canvas.addEventListener("pointercancel", (e) => {
     if (e.pointerId === drag?.pointer) stop(true);
     if (e.pointerId === shapeDrag?.pointer) stopShape(true);
@@ -621,19 +661,25 @@ export function createSurfaceEditor(
     if (e.pointerId === shapeDrag?.pointer) stopShape(true);
   }, { signal: listeners.signal });
   canvas.addEventListener("wheel", (e) => {
-    if (!enabled || !e.shiftKey) return;
+    const mods = modifierKey(modifiersOf(e));
+    if (wheel && !validShape(wheel)) finishWheel();
+    // An open burst keeps scaling while Shift is held, even once the shrinking shape leaves the pointer.
+    const continuing = !!wheel && mods === "shift";
+    if (!continuing) update();
+    const resolved = continuing ? undefined : targetAt(e.clientX, e.clientY, true);
+    const effect = pointerBinding("head", "wheel", resolved?.target ?? "shape", mods)?.effect ?? "none";
+    if (effect === "camera-zoom" && !drag && !shapeDrag) { finishWheel(); return; }
     // A scale gesture never leaks through to camera zoom, including rejected edits.
     e.preventDefault(); e.stopImmediatePropagation();
-    if (drag || shapeDrag || e.ctrlKey || e.altKey || e.metaKey) return;
-    update();
-    const layer = hooks.layer(), uv = hit(e.clientX, e.clientY), handle = handleAt(e.clientX, e.clientY);
-    if (!layer?.enabled || !uv || !(handle || shapeHit(layer, uv))) return;
-    const selected = hooks.selected(), pivot = layer.points[selected];
-    if (!pivot) return;
-    if (!wheel) wheel = { layer, snapshot: structuredClone(layer), expected: JSON.stringify(layer), selected,
-      pivot: { u: pivot.u, v: pivot.v }, mirror: handle?.mirror ?? shapeHit(layer, uv)!.mirror,
-      changed: false, factor: 1 };
-    const factor = wheel.factor * shapeWheelScaleFactor(e.deltaY, e.deltaMode);
+    if (effect !== "shape-scale" || drag || shapeDrag) return;
+    if (!wheel) {
+      const layer = resolved?.layer, painted = resolved?.painted, selected = hooks.selected(), pivot = layer?.points[selected];
+      if (!layer || !painted || !pivot) return;
+      wheel = { layer, snapshot: structuredClone(layer), expected: JSON.stringify(layer), selected,
+        pivot: { u: pivot.u, v: pivot.v }, mirror: painted.mirror, changed: false, factor: 1 };
+      publishInput();
+    }
+    const factor = wheel.factor * shapeWheelScaleFactor(shiftWheelDelta(e), e.deltaMode);
     if (applyShape(wheel, transformLayer(wheel.snapshot, { kind: "scale", pivot: wheel.pivot, factor })))
       wheel.factor = factor;
     clearTimeout(wheel.timer);
@@ -670,6 +716,7 @@ export function createSurfaceEditor(
     pointMaterial.dispose(); tangentMaterial.dispose();
     (lines.material as THREE.Material).dispose(); (tangentLines.material as THREE.Material).dispose();
   }
+  publishInput();
   return {
     resize: update, cancelInput, dispose, hitAt,
     inputCapture: () => !!drag || !!shapeDrag || !!wheel,
@@ -679,6 +726,8 @@ export function createSurfaceEditor(
       finishWheel();
       enabled = value;
       group.visible = value;
+      if (!value) { hovered = undefined; if (hoverTarget) hoverTarget = "empty"; }
+      publishInput();
     },
     diagnostics: () => ({
       enabled,

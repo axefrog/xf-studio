@@ -81,6 +81,16 @@ export function wheelScaleFactor(deltaY: number, deltaMode = 0): number {
   return Math.exp(exponent);
 }
 
+/**
+ * The notch of a Shift-wheel event. Chromium (including WebView2) on Windows and Linux turns
+ * Shift+wheel into horizontal scrolling, so a mouse notch arrives in `deltaX` with `deltaY` 0;
+ * take the dominant axis so Shift-wheel scaling works with real mice, not only synthetic events.
+ */
+export function shiftWheelDelta(event: { deltaX?: number; deltaY: number }): number {
+  const x = event.deltaX ?? 0;
+  return Math.abs(event.deltaY) >= Math.abs(x) ? event.deltaY : x;
+}
+
 /** Fine shape scaling: about 2% per conventional wheel notch. Keep fractional
  * pixel deltas from trackpads, and bound unusually large events to about 5%.
  * Browsers commonly report a notch as 120 pixels, 3 lines or one page.

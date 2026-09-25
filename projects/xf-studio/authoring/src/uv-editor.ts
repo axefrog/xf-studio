@@ -1,8 +1,10 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
 import { cancelsGesture } from "./gesture-cancel";
+import { CURSOR_FALLBACK, cursorFor, modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+  type GestureKind, type PointerTarget } from "./input-bindings";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
-import { shapeHit, shapeWheelScaleFactor, transformLayer, wheelScaleFactor } from "./shape-transform";
+import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
 import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
@@ -15,10 +17,13 @@ type Hooks = {
   select(index: number): void; selectedField(): string | undefined; selectField(id: string): void;
   begin(): void; apply(action: StudioGestureProposal): boolean; cancel(): void; finish?(): void;
   persist(): void; message(text: string): void;
+  /** Hover target, active gesture and editability for hint strips and cursors (see surface-editor). */
+  input?(state: EditorInputState): void;
 };
 type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; fieldId?: string;
   side?: "in" | "out"; mirror: boolean; uv: UV; endpoint?: UV; collapsed?: boolean };
 const isKnotHandle = (h: Handle) => h.kind === "point" || h.kind === "tangent";
+const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
 /** Canvas presentation and gestures. View state never enters portable recipes. */
 export function createUVEditor(canvas: HTMLCanvasElement, elements: {
@@ -174,6 +179,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (!wheel) return;
     const valid = validWheel(); clearTimeout(wheel.timer); wheel = undefined;
     if (cancel && valid) hooks.cancel(); else hooks.finish?.();
+    publishInput();
   }
   function stop(cancel = false) {
     if (!drag) return;
@@ -183,7 +189,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       if (old.kind === "pan") { view = old.original; hooks.persist(); }
       else hooks.cancel();
     } else if (old.changed && old.kind !== "pan") hooks.finish?.();
-    draw();
+    draw(); publishInput();
   }
   function updateView(next: UVView) {
     stop(); finishWheel(); view = next; draw(); hooks.persist();
@@ -239,39 +245,62 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" }
       : { hit: { kind: "uv-empty" }, affordance: "empty" };
   }
+  /** What is under a UV coordinate. Without a layer everything is empty space. */
+  function targetAt(p: UV) {
+    const l = hooks.layer();
+    if (!l) return { target: "empty" as PointerTarget };
+    const handle = pickHandle(p), painted = handle ? { mirror: handle.mirror } : shapeHit(l, p);
+    return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget, layer: l, handle, painted };
+  }
+  let hoverTarget: PointerTarget | undefined, hoverModifiers = modifiersOf({}), inputKey = "";
+  function publishInput() {
+    const gesture: GestureKind | undefined = drag ? drag.kind === "handle" ? "handle" : drag.kind : wheel ? "scale" : undefined;
+    const state: EditorInputState = { target: hoverTarget, gesture, editable: !!hooks.layer() };
+    if (!hooks.input) {
+      if (canvas.style) canvas.style.cursor = CURSOR_FALLBACK[cursorFor({ scope: "uv", target: hoverTarget, gesture, modifiers: hoverModifiers })];
+      return;
+    }
+    const key = JSON.stringify(state);
+    if (key !== inputKey) { inputKey = key; hooks.input(state); }
+  }
   canvas.onpointerdown = e => {
     if ((e.button !== 0 && e.button !== 2) || drag) return;
+    const p = coordinate(e), resolved = targetAt(p);
+    const binding = pointerBinding("uv", e.button === 2 ? "right-drag" : "drag", resolved.target, modifierKey(modifiersOf(e)));
+    const effect = binding?.effect ?? "none";
+    if (effect === "none") return;
     finishWheel();
-    if (e.button === 2) {
-      e.preventDefault();
-      drag = { kind: "pan", pointer: e.pointerId, changed: false, original: { ...view }, screen: { x: e.clientX, y: e.clientY } };
-      canvas.setPointerCapture(e.pointerId); return;
-    }
-    const l = hooks.layer(); if (!l) return;
-    const p = coordinate(e), closest = pickHandle(p);
-    const hit = closest ? { mirror: closest.mirror } : shapeHit(l, p);
-    if (!hit) return;
     e.preventDefault();
+    if (effect === "view-pan") {
+      drag = { kind: "pan", pointer: e.pointerId, changed: false, original: { ...view }, screen: { x: e.clientX, y: e.clientY } };
+      canvas.setPointerCapture(e.pointerId); publishInput(); return;
+    }
+    const l = resolved.layer, closest = resolved.handle, hit = resolved.painted;
+    if (!l || !hit) return;
     const pivot = l.points[hooks.selected()] ?? l.points[0];
-    if (e.shiftKey || !closest) {
+    if (effect === "shape-translate" || effect === "shape-rotate") {
       // Selection is the transform pivot; Shift never changes it by picking the
       // control beneath the pointer. Use the visible mirrored instance's space.
-      drag = { kind: e.shiftKey ? "rotate" : "translate", pointer: e.pointerId, changed: false,
+      drag = { kind: effect === "shape-rotate" ? "rotate" : "translate", pointer: e.pointerId, changed: false,
         layer: l, recipe: hooks.recipe(), original: structuredClone(l), expected: l.points,
         start: reflectUV(p, hit.mirror), pivot: { u: pivot.u, v: pivot.v }, mirror: hit.mirror,
         screen: { x: e.clientX, y: e.clientY }, limited: false };
-    } else {
+    } else if (effect === "handle-drag" && closest) {
       if (isKnotHandle(closest)) hooks.select(closest.index);
       else hooks.selectField(closest.fieldId!);
       drag = { kind: "handle", handle: closest, pointer: e.pointerId, layer: l, recipe: hooks.recipe(), changed: false,
         start: reflectUV(p, closest.mirror), endpoint: closest.endpoint ? reflectUV(closest.endpoint, closest.mirror) : undefined,
         target: isKnotHandle(closest) ? l.points[closest.index] : l.fields.find(f => f.id === closest.fieldId)! };
-    }
+    } else return;
     view.side = p.u <= .5 ? "low" : "high";
-    canvas.setPointerCapture(e.pointerId); draw(); hooks.persist();
+    canvas.setPointerCapture(e.pointerId); draw(); hooks.persist(); publishInput();
   };
   canvas.onpointermove = e => {
-    if (!drag || e.pointerId !== drag.pointer) return;
+    if (!drag) {
+      hoverTarget = targetAt(coordinate(e)).target; hoverModifiers = modifiersOf(e);
+      publishInput(); return;
+    }
+    if (e.pointerId !== drag.pointer) return;
     if (!validDrag()) { stop(); return; }
     if (drag.kind === "pan") {
       const b = bounds(), r = uvRegion(drag.original, b.width / b.height);
@@ -319,19 +348,29 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (h.kind === "point") hooks.apply({ kind: "point.replace", index: h.index, next });
     else hooks.apply({ kind: "field.replace", fieldId: h.fieldId!, next });
   };
-  canvas.onpointerup = e => { if (drag?.pointer === e.pointerId) stop(); };
+  canvas.onpointerup = e => {
+    if (drag?.pointer !== e.pointerId) return;
+    stop();
+    // The geometry under a still pointer changed during the gesture; resolve it again.
+    hoverTarget = targetAt(coordinate(e)).target; hoverModifiers = modifiersOf(e); publishInput();
+  };
   canvas.onpointercancel = e => { if (drag?.pointer === e.pointerId) stop(true); };
   canvas.onlostpointercapture = e => { if (drag?.pointer === e.pointerId) stop(true); };
   canvas.addEventListener("wheel", e => {
     e.preventDefault();
     // Captured gestures own their coordinate frame and Undo entry until release.
     if (drag) return;
-    if (!e.shiftKey) { finishWheel(); updateView(zoomUVView(view, coordinate(e), wheelScaleFactor(e.deltaY, e.deltaMode))); return; }
-    const l = hooks.layer(); if (!l) { finishWheel(); return; }
     if (wheel && !validWheel()) finishWheel();
+    const mods = modifierKey(modifiersOf(e)), p = coordinate(e);
+    // An open burst keeps scaling while Shift is held, even once the shrinking shape leaves the pointer.
+    const target = wheel && mods === "shift" ? "shape" : targetAt(p).target;
+    const effect = pointerBinding("uv", "wheel", target, mods)?.effect ?? "none";
+    if (effect === "view-zoom") { finishWheel(); updateView(zoomUVView(view, p, wheelScaleFactor(e.deltaY, e.deltaMode))); return; }
+    const l = hooks.layer();
+    if (effect !== "shape-scale" || !l) { finishWheel(); return; }
     if (wheel) { clearTimeout(wheel.timer); wheel.timer = setTimeout(() => finishWheel(), 250); }
     const pivot = l.points[hooks.selected()] ?? l.points[0];
-    const factor = shapeWheelScaleFactor(e.deltaY, e.deltaMode);
+    const factor = shapeWheelScaleFactor(shiftWheelDelta(e), e.deltaMode);
     if (factor === 1) return;
     const next = transformLayer(l, { kind: "scale", pivot: { u: pivot.u, v: pivot.v }, factor });
     if (!next) { hooks.message("This scale reaches the layer's limits. Scroll back to continue."); return; }
@@ -339,12 +378,14 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (!wheel) {
       hooks.begin();
       wheel = { layer: l, recipe: hooks.recipe(), expected: l.points, state: "", selected: hooks.selected() };
+      publishInput();
     } else clearTimeout(wheel.timer);
     if (hooks.apply({ kind: "shape.replace", next })) {
       wheel.expected = l.points; wheel.state = JSON.stringify(hooks.recipe());
     }
     wheel.timer = setTimeout(() => finishWheel(), 250);
   }, { passive: false, signal: listeners.signal });
+  canvas.addEventListener("pointerleave", () => { hoverTarget = undefined; publishInput(); }, { signal: listeners.signal });
   canvas.oncontextmenu = e => e.preventDefault();
   window.addEventListener("pointerdown", e => { if (e.target !== canvas) finishWheel(); },
     { capture: true, signal: listeners.signal });
@@ -359,9 +400,9 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   }, { capture: true, signal: listeners.signal });
   canvas.ondblclick = e => {
     stop(); finishWheel();
-    if (e.shiftKey || e.button !== 0) return;
-    const l = hooks.layer(); if (!l) return;
+    const l = hooks.layer(); if (!l || e.button !== 0) return;
     const p = coordinate(e), b = bounds(), r = region(), scale = { u: b.width / r.w, v: b.height / r.h };
+    if (pointerBinding("uv", "double-click", targetAt(p).target, modifierKey(modifiersOf(e)))?.effect !== "insert-point") return;
     // Compare both displayed instances, not a hardcoded u<.5 folding rule.
     const candidates = (l.symmetry ? [false, true] : [false]).map(mirror => ({ mirror,
       click: reflectUV(p, mirror), section: nearestPathSection(l.points, reflectUV(p, mirror), scale) }));
@@ -394,6 +435,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     canvas.onlostpointercapture = canvas.oncontextmenu = canvas.ondblclick = null;
     if (elements) elements.both.onclick = elements.single.onclick = elements.other.onclick = elements.fit.onclick = null;
   }
+  publishInput();
   return { draw, resize: draw, cancelInput, dispose, hitAt, viewCommand, navigate,
     inputCapture: () => !!drag || !!wheel,
     snapshot: () => ({ ...view }),
