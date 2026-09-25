@@ -31,7 +31,8 @@ def main():
         added, removed, path = (line.split('\t') + ['', '', ''])[:3]
         if SOURCE.match(path) and not EXCLUDED.search(path) and added.isdigit():
             changed += int(added) + int(removed)
-    new_subsystems = text.split('## New subsystems since last review', 1)[1].strip().startswith('-')
+    listed = text.split('## New subsystems since last review', 1)[1].split('\n## ', 1)[0].strip()
+    new_subsystems = listed.startswith('-') and listed.lower() not in ('- none', '- none.')
     due = len(merges) >= MERGES or changed >= LINES or new_subsystems
     print(f'Since {base[:10]}: {len(merges)} merges, {changed} changed source lines, '
           f'new subsystems listed: {"yes" if new_subsystems else "no"}.')
