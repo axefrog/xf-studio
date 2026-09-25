@@ -7,6 +7,7 @@ import type { EyeMakeupFacade, StudioPresentationPort } from "../studio-presenta
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
 import { AnchorRegistry } from "./guidance/anchors";
+import { activitySource } from "./views";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
@@ -42,13 +43,8 @@ export class Frame {
 }
 export type FrameState = Frame;
 
-const sources: [RegExp, string][] = [
-  [/^history\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
-  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
-  [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
-  [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^previewSetup\./, "3D preview"],
-];
-export const sourceLabel = (kind: string) => sources.find(([pattern]) => pattern.test(kind))?.[1] ?? "Studio";
+/** The activity-log source an action kind reports under, from the view contributions (`views/`). */
+export const sourceLabel = (kind: string) => activitySource(kind);
 
 /** Shared presentation services. Holds no authored state of its own. */
 export class StudioRuntime {

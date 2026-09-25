@@ -14,18 +14,14 @@ import { Feedback } from "./feedback";
 import { icon } from "./icons";
 import { defaultCompact, defaultWide, sizeClassFor } from "./layout-defaults";
 import { closeMenus, openMenu, type MenuItem } from "./menu";
-import { activityPanel, characterPanel, lightingPanel, motionPanel, qualityPanel } from "./panels/preview";
-import { importCollection, libraryPanel, libraryState, packagePanel, presetsPanel, type PanelController } from "./panels/collection";
-import { edgePanel, finishPanel, shapePanel, warpPanel } from "./panels/inspector";
-import { layersPanel } from "./panels/layers";
-import { historyPanel } from "./panels/history";
+import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { historyCommandLabel, historyCommandTitle } from "./history-model";
-import { headPanel, uvPanel } from "./panels/viewports";
 import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
-import { helpPanel } from "./guidance/help-panel";
-import { CLOSED_PANEL_HOMES, type StudioPanelId } from "./layout-defaults";
+import { CLOSED_PANEL_HOMES, PANEL_IDS, type StudioPanelId } from "./layout-defaults";
+import { STUDIO_CATALOGUE } from "./views";
+import { PANEL_FACTORIES, type ViewContext } from "./views/panels";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
@@ -39,11 +35,11 @@ export function mountStudio(port: Port, root: HTMLElement) {
   const view = viewPreferences(port, feedback);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
   let guidance!: GuidanceController;
-  const help = helpPanel(rt, { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) });
-  const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), historyPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
-    finishPanel(rt), shapePanel(rt), edgePanel(rt), warpPanel(rt), characterPanel(rt), lightingPanel(rt), motionPanel(rt), qualityPanel(rt),
-    activityPanel(rt), help];
+  const context: ViewContext = { guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) } };
+  // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order.
+  const panels: PanelController[] = PANEL_IDS.map(id => PANEL_FACTORIES[id](rt, context));
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
+  const help = byId.get("help") as PanelController & { focusSearch?(): void };
   for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id as StudioPanelId), panel.spec.element);
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) });
@@ -66,7 +62,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     homes: CLOSED_PANEL_HOMES,
   });
   rt.dock = dock;
-  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch()); };
+  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, openHelp);
   const status = statusBar(rt);
@@ -110,7 +106,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
   // at most every 400 ms unless the library's busy/progress state changes.
-  const heavy = new Set<PanelId>(["library", "package"]);
+  const heavy = new Set<PanelId>(STUDIO_CATALOGUE.heavy);
   let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
   const heavyDue = (frame: Frame) => {
     const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);
@@ -216,9 +212,10 @@ function themeItems(theme: Theme): MenuItem[] {
 
 function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
   const port = rt.port;
-  // Eye makeup is the only authoring category so far; with nothing to choose, it is a label, not a menu.
-  const category = h("span", { class: "category", title: "Authoring category: eye makeup" },
-    icon("category"), h("span", { text: "Eye makeup" }));
+  // The registered features are the authoring categories; with only one there is nothing to choose, so it is a label, not a menu.
+  const features = port.features(), categoryLabel = features.length === 1 ? features[0].label : `${features.length} features`;
+  const category = h("span", { class: "category", title: `Authoring category: ${categoryLabel.toLowerCase()}` },
+    icon("category"), h("span", { text: categoryLabel }));
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };

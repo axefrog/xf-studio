@@ -355,7 +355,8 @@ export function recoverWindows(tree: DockTree, area: Rect): DockTree {
  */
 export function parseTree(value: unknown, known: readonly PanelId[], fallback: DockTree): DockTree | undefined {
   const seen = new Set<string>(), ids = new Set<string>();
-  const validId = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= 80 && /^[a-z0-9-]+$/i.test(id);
+  // Panel IDs of feature views are `<feature>.<panel>`, so a dot is allowed (feature-module platform §4).
+  const validId = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= 80 && /^[a-z0-9.-]+$/i.test(id);
   const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
   const node = (input: unknown, depth: number): DockNode | null | undefined => {
     if (!input || typeof input !== "object" || depth > 12) return undefined;
