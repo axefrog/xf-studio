@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `88b5379` | 2026-09-26 | Prepare speed (installation registry, route fingerprint, one-launch WolvenKit, prefetch) and the layered cleanup's fixes | 0 High, 8 Medium, 22 Low (PIPE-52..67, PREV-73..79, CORE-63..64). PIPE-41/42/43, PREV-63/65/66/67, UI-48/49/51 confirmed fixed; PIPE-40 and PREV-62 partly. Fixes in claude/cleanup-hosts3 and claude/cc-panel |
 | `2ce9987`+ | 2026-09-26 | Creator catalogue and character context (CC controls slice 1) | 0 High, 7 Medium, 14 Low (CORE-50..62, PIPE-46..51, UI-59..60). Fixes fold into CC controls slice 2 |
 | `fc36eae` | 2026-09-26 | Studio light rig (rendering, presentation) | 0 High, 0 Medium, 7 Low (PREV-69..72, UI-56..58). Default reproduces the old look exactly; persistence and render-on-demand pass |
 | `4afea26` | 2026-09-26 | Platform step 5: facades, live features, `app.transaction`, view contributions, renames, locked looks, spec limits | 0 High, 2 Medium, 9 Low (CORE-45..49, PIPE-44..45, UI-52..55). No performance regression. Fixes in claude/cleanup-platform3 |
@@ -107,6 +108,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-59 | Med | Presentation (design) | The catalogue has no compact projection: 131,856 choices each carry provenance, label and swatch objects (55 MB compact JSON) before reaching a browser (`cc-catalogue.ts:96-109,260-272`) | Open (CC controls slice 2) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
 | PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | **Fixed** (claude/cleanup-render3, 26 Sep) |
+| PIPE-52 | Med | Resolver | Evicting a route's installation doesn't bump its generation, so after a mod change inside an MO2 mod folder the old ready record is served under an unchanged key (`installation-registry.ts:176-180,99-101`, `character-detail-host.ts:123`) | Open (claude/cleanup-hosts3) |
+| PIPE-53 | Med | Resolver | A transient failure sticks: the host reuses a ready state however it was built and the try cache keeps nulls and texture-less components from a WolvenKit timeout (`character-detail-host.ts:123`, `character-detail-service.ts:321-680`) | Open (claude/cc-panel) |
+| PIPE-54 | Med | Resolver | A resource WolvenKit writes nothing for counts as transient every time, with no marker: each prepare relaunches WolvenKit and the graph (and its merged-CCO memo) is thrown away (`resolver-host.ts:377-387`, `installation-registry.ts:166-170`) | Open (claude/cleanup-hosts3) |
+| PIPE-55 | Med | Resolver | The kept graph is bounded by resource count (6,000, above anything the reference setup reads) per view and route, not bytes: the heap grows with every V and style (`installation-registry.ts:35,168`) | Open (claude/cleanup-hosts3) |
+| PIPE-56 | Med | Resolver | Slot labels (≥200) and messages (≥512) built from mod names still make the whole record fail to parse (the PIPE-40 symptom) (`render-detail.ts:541-542`, `character-detail-plan.ts:272,302-303`) | Open (claude/cc-panel) |
+| PREV-73 | Med | Rendering | A bake during WebGL context loss is marked failed permanently; restore re-arms only baked handles (`layered-material.ts:567-577`, `scene.ts:517-520`) | Open (claude/cleanup-hosts3) |
+| CORE-63 | Med | Core | A failed try's message is overwritten when it reverts to the V's own, and hidden for saves: the style snaps back unexplained (`character-detail-actions.ts:168-174,212`, `panels/preview.ts:123`) | Open (claude/cc-panel) |
 | PIPE-41 | Med | Resolver | `LAYERED_SLOTS` (only piercings and eyes draw layered chunks) guesses where each chunk's `renderMask` answers: shadow-only chunks carry `MCF_RenderInShadows` alone; a visible layered chunk on CCXL hair or an accessory is dropped with no limit code (`character-detail-plan.ts:166,178`) | **Fixed** (claude/cleanup-layered, 26 Sep; see below) |
 | PIPE-42 | Med | Resolver | `applyChoiceOverride` re-implements creator selection outside the shared R5 rules: a switcher choice naming several options, or a linked colour follower, loses its other targets (`character-detail-plan.ts:355-366`) | **Fixed** (claude/cleanup-layered, 26 Sep; see below) |
 | PREV-62 | Med | Rendering | A WebGL context restore never re-bakes layered materials: handles stay `baked`, so piercings and layered eye designs draw black after a GPU reset (`scene.ts:231`, `layered-material.ts:394`) | **Fixed** (claude/cleanup-layered, 26 Sep; see below) |
@@ -200,6 +208,25 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PIPE-57..67, PREV-74..79, CORE-64** (prepare speed review at `88b5379`), Open (claude/cleanup-hosts3, except PIPE-65 and CORE-64 in claude/cc-panel):
+  - **PIPE-57:** open-time problems (an unread index, an unreadable folder) leave the stamps unchanged, so a one-off failure persists until a mod change or restart; Build now shares that installation.
+  - **PIPE-58 (hypothesis):** added/removed files are noticed through folder timestamps, reliable on NTFS but not necessarily on exFAT/FAT32 or network shares.
+  - **PIPE-59:** the LUT host never revalidates, and reads the global generation even with a private registry.
+  - **PIPE-60:** `uncook -s` output lacks `Header.ArchiveFileName` (harmless, unread); parity rests on one manual WolvenKit 9.0.1 comparison.
+  - **PIPE-61:** `regexChunks` under-budgets escaping and ignores the archive list against the 32,767-character command line.
+  - **PIPE-62:** each POST checks every stamp twice; a reopen blocks the event loop for 1–1.4 s.
+  - **PIPE-63:** prefetched reads add to a V's precedence ambiguities, which then differ between cold and warm caches.
+  - **PIPE-64:** prefetch fan-out is uncapped (31 part `.ent`s where 1–3 are needed); patch sources are read before the target is known to exist.
+  - **PIPE-65:** `applyChoiceOverride` takes the first same-named choice even when it drives nothing; a linked follower outside the switcher's reach may keep the old colour (hypothesis).
+  - **PIPE-66:** a custom creator file that failed extraction is reported as not provided by any archive.
+  - **PIPE-67:** `chunkInScene` treats an empty render mask string as drawn.
+  - **CORE-64:** a try during the first preparation is refused as `unavailable` rather than `not_ready`.
+  - **PREV-74:** bake limits from showing a hidden slot or a re-bake after restore never reach the panel; eye visibility isn't recomputed after restore.
+  - **PREV-75:** `getError`/`checkFramebufferStatus` after every layer draw (100–200 stalls per V).
+  - **PREV-76:** global-normal scalars unclamped; an unreadable bottom layer bakes black at zero roughness with only a note.
+  - **PREV-77 (hypothesis):** bake sizing sums overlapping/mirrored UV area; multi-tile domains get square targets.
+  - **PREV-78:** the previous V is disposed before the new one bakes, so a try can't share the bake it replaces; shared bytes are credited to the first sharer only.
+  - **PREV-79:** the texture ledger key ignores `isGamma`.
 - **CORE-53..57, CORE-59..62, PIPE-47, PIPE-49..51, UI-60** (creator catalogue review), Open (CC controls slice 2):
   - **CORE-53:** `toPreset` doesn't apply the codec's rules, so a legal mod CName with `/` or over 256 characters produces a preset the Studio refuses whole.
   - **CORE-54:** unknown preset fields are copied by assignment, so a `__proto__` key is silently dropped (no global pollution).
