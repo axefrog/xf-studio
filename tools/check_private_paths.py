@@ -17,11 +17,11 @@ PATTERNS = [
     ('user folder', re.compile(r'[A-Za-z]:' + SEP + r'Users' + SEP + r'(?![<%{$]|(?:Public|Default|name|user|USERNAME|someone|example|WDAGUtilityAccount|runneradmin)\b)[^\\/\s"\'`<>]+', re.I)),
     ('personal media folder', re.compile(r'Media' + SEP + r'Other' + SEP, re.I)),
     # A real address: letter-led domain with an alphabetic TLD not followed by a call or index, so `pkg@1.2.3`,
-    # `A@b.x` and Python's matrix `@` (`a@np.eye(4)`) don't match.
-    ('e-mail address', re.compile(r'\b[A-Za-z][\w.+-]*@(?!example\.(?:com|org|net)\b|users\.noreply\.github\.com\b|anthropic\.com\b)[A-Za-z][\w-]*(?:\.[\w-]+)*\.[A-Za-z]{2,24}\b(?![(\[.])')),
+    # `A@b.x`, Python's matrix `@` (`a@np.eye(4)`) and ArchiveXL references (`ash_brown@long.mi`) don't match.
+    ('e-mail address', re.compile(r'\b[A-Za-z][\w.+-]*@(?!example\.(?:com|org|net)\b|users\.noreply\.github\.com\b|anthropic\.com\b)[A-Za-z][\w-]*(?:\.[\w-]+)*\.(?!(?:mi|mt|mesh|app|ent|xbm|morphtarget|anims|inkcc)\b)[A-Za-z]{2,24}\b(?![(\[.])')),
 ]
 # Third-party licence texts and lockfiles carry maintainers' addresses by design.
-EXEMPT = re.compile(r'(^|/)(LICENSE[^/]*|THIRD_PARTY_NOTICES[^/]*|NOTICE[^/]*|[^/]*\.lock|bun\.lockb?|package-lock\.json|package-content-scan\.test\.ts|check_private_paths\.py)$', re.I)
+EXEMPT = re.compile(r'(^|/)(LICENSE[^/]*|THIRD_PARTY_NOTICES[^/]*|NOTICE[^/]*|[^/]*\.lock|bun\.lockb?|package-lock\.json|package-content-scan\.test\.ts|knowledge\.test\.ts|privacy\.ts|check_private_paths\.py)$', re.I)
 TEXT = re.compile(r'\.(md|json|ts|js|mjs|py|ps1|txt|html|css|yml|yaml|toml|ini|xl|lua|reds|cpp|hpp|h|cmake|svg)$|(^|/)CMakeLists\.txt$', re.I)
 
 
