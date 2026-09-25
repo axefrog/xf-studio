@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixes in claude/release-prep |
 | `524a575` | 2026-09-25 | Pre-alpha review of presentation, startup, preview card and desktop host at `7e02636` (completes the `19bf84c` deep review after the legacy-shell removal); the core and pipeline cleanups merged since fix reviewed findings | 0 High, 7 Medium, 6 Low (UI-21..33); UI-05 fixed, UI-06 mostly fixed. Alpha blockers UI-19/20/21/22/23/24/25/27 assigned to claude/alpha-polish |
 | `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
@@ -57,6 +58,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-25 | Med | Pipeline/hosts | Every Build runs the full head-source resolver (source discovery, archive indexes, `.xl` files, head-archive hash) synchronously on the host, even when the plate is cached; extends PIPE-20 | Partly fixed (claude/cleanup-pipeline2): unchanged plate inputs skip extraction and hashing and archive hashes are memoised (about 7 s to 2 s on the reference route); route resolution itself still runs synchronously on the host each Build |
 | RES-01 | Med | Resolver | When a creator switcher picks a non-default choice, the default choice's target stays active too (skin types 01 and 03 both active in test states); see [head CC render evidence](../character-customization/head-cc-render-evidence.md) | **Fixed** (claude/resolver-choices, 25 Sep): switcher targets take activation only from switchers, checked against all six vanilla UI presets |
 | RES-02 | Med | Resolver | A "None" choice (e.g. no scar) yields an empty entry and a missing-appearance warning instead of nothing | **Fixed** (claude/resolver-choices, 25 Sep): a definition named `None` emits no descriptor |
+| PREV-20 | Med | Presentation/startup | A head-load failure after the scene loads leaves head-bound wiring attached (theme binding, app attach, preview device, surface editor, controls listener) and `createScene` late errors leave an extra canvas; Try again then doubles them | Open (before alpha tag) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -140,10 +142,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **UI-28, UI-29, UI-30, UI-31, UI-32:** Fixed in claude/alpha-polish (see below).
 - **UI-33:** Partly fixed in claude/alpha-polish: one `PolledHostState` serves both polling ports. Open: `uv-editor` calls `getComputedStyle` on every draw.
 - **UI-04/UI-10/UI-11/UI-12 (extended):** `bootstrap.js` grew (Start fresh); Satin alias and glitter ID mapping remain in the UI and the shift slider hard-codes 0–1; `scene.ts` 925 lines, renders every frame, allocates per frame; no behavioural tests for the preview card or startup failure paths.
+- **PREV-21:** `host-state-poller.ts` applies host replies in arrival order with no sequencing; an older idle reply can stop polling while the host prepares.
+- **PREV-22:** a poll in flight at `dispose()` restarts the timer.
+- **PREV-23:** game detection and `maybeStart()` aren't gated on `started` (`preview-setup.ts:294,301-302`).
+- **PREV-24:** a failed head stays failed after the host leaves `ready` (e.g. game folder changed).
+- **PREV-25:** tests missing for the rendered card/dialog, startup head wiring, out-of-order replies, and several setup actions.
+- **UI-34:** the setup card steals focus whenever running work re-opens it, not only on a user request.
+- **UI-35:** the head pane's next-step button ignores its capability (busy state).
+- **REL-01:** the package inventory guard checks file names, not bundle contents: an absolute user path inside an allowed bundle would ship.
 
 ## New subsystems since last review
 
-- **3D preview setup service** (claude/alpha-polish): `src/preview-setup.ts`, the shared `src/host-state-poller.ts` and the presentation's `src/studio-ui/preview-setup-card.ts` replace the standalone device card, and the port gained `previewSetup`. Include them in the next presentation review.
+None. (The 3D preview setup service was reviewed at `ecb4b33`.)
 
 ## Fixed in claude/wolvenkit-fetch
 
