@@ -35,18 +35,18 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
-  "recipe.undo": desc("workspace", "content", "none"),
-  "recipe.redo": desc("workspace", "content", "none"),
+  "history.undo": desc("workspace", "content", "none"),
+  "history.redo": desc("workspace", "content", "none"),
   "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
-  "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),
-  "path.edit": desc(["layer", "point"], "content", "recipe", { layerId: target("string"), command: input("object") }, {
+  "point.remove": desc("point", "content", "part", { layerId: target("string"), index: target("integer") }),
+  "path.edit": desc(["layer", "point"], "content", "part", { layerId: target("string"), command: input("object") }, {
     "enable-bezier": {}, "point-mode": { index: target("integer"), mode: enumerated(["aligned", "symmetric", "corner"]) } }),
   "field.select": desc("field", "selection", "none", { layerId: target("string"), fieldId: target("string") }),
-  "field.add": desc("layer", "content", "recipe", { layerId: target("string") }),
-  "field.remove": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string") }),
-  "field.clear": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string") }),
+  "field.add": desc("layer", "content", "part", { layerId: target("string") }),
+  "field.remove": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
+  "field.clear": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
   "field.setReach": desc("field", "content", "transaction", { layerId: target("string"), fieldId: target("string"), radius: input("number", .005, .2) }),
   "pigment.edit": desc(["point", "layer"], "content", "transaction", { layerId: target("string"), command: input("object") }, {
     "point-strength": { index: target("integer"), value: input("number", 0, 1) },
@@ -58,12 +58,12 @@ export const ACTION_DESCRIPTORS = {
     "uniform-softness": { value: input("number", .0005, .06) } }),
   "layer.setColor": desc("layer", "content", "transaction", { layerId: target("string"), color: input("string") }),
   "layer.setOpacity": desc("layer", "content", "transaction", { layerId: target("string"), opacity: input("number", 0, 1) }),
-  "layer.setSymmetry": desc("layer", "content", "recipe", { layerId: target("string"), symmetry: input("boolean") }),
-  "layer.setFinish": desc("layer", "content", "recipe", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
-  "layer.useGameOptics": desc("layer", "content", "recipe", { layerId: target("string") }),
+  "layer.setSymmetry": desc("layer", "content", "part", { layerId: target("string"), symmetry: input("boolean") }),
+  "layer.setFinish": desc("layer", "content", "part", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
+  "layer.useGameOptics": desc("layer", "content", "part", { layerId: target("string") }),
   "layer.setShift": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["color", "strength"]), value: input("number|string") }, {
     color: { value: inputText(7, 7) }, strength: { value: input("number", 0, 1) } }),
-  "glitter.selectModel": desc("layer", "content", "recipe", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
+  "glitter.selectModel": desc("layer", "content", "part", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
   "glitter.setClassic": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["cells", "density", "tilt"]), value: input("number") }, {
     cells: { value: input("integer", 32, 256) }, density: { value: input("number", 0, 1) },
     tilt: { value: input("number", 0, 1) } }),
@@ -74,21 +74,21 @@ export const ACTION_DESCRIPTORS = {
   "glitter.setDirect": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["density", "fineShare", "strength", "color"]), value: input("number|string") }, {
     density: { value: input("number", 0, 1) }, fineShare: { value: input("number", 0, 1) },
     strength: { value: input("number", 0, 32) }, color: { value: inputText(7, 7) } }),
-  "point.move": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.insert": desc("layer", "content", "recipe", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.setTangent": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"),
+  "point.move": desc("point", "content", "part", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.insert": desc("layer", "content", "part", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.setTangent": desc("point", "content", "part", { layerId: target("string"), index: target("integer"),
     side: enumerated(["in", "out"]), du: input("number", -1, 1), dv: input("number", -1, 1) }),
-  "shape.transform": desc("layer", "content", "recipe", { layerId: target("string"), command: input("object"),
+  "shape.transform": desc("layer", "content", "part", { layerId: target("string"), command: input("object"),
     pivotIndex: { type: "integer", required: false, from: "state", min: 0 } }, {
     translate: { du: input("number", -1, 1), dv: input("number", -1, 1) }, rotate: { radians: input("number") },
     scale: { factor: input("number", .01, 100) } }),
-  "field.setOrigin": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "field.setVector": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
-  "layer.edit": desc(["layer", "collection"], "content", "recipe", { command: input("object") }, {
+  "field.setOrigin": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "field.setVector": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
+  "layer.edit": desc(["layer", "collection"], "content", "part", { command: input("object") }, {
     add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
     reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
     move: { id: target("string"), to: input("integer", 0) } }),
-  "layer.setEnabled": desc("layer", "content", "recipe", { id: target("string"), enabled: input("boolean") }),
+  "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),
   "preset.edit": desc(["preset", "collection"], "library", "none", { command: input("object") }, {
     add: {}, copy: { id: target("string") }, remove: { id: target("string") },
     restore: {}, rename: { id: target("string"), name: inputText(1, 120) },

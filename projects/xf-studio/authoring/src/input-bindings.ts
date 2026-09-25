@@ -195,8 +195,8 @@ const k = (key: string, mods: Partial<Omit<KeyChord, "key">> = {}): KeyChord => 
 export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },
   { id: "shell.save", scope: "global", chords: [k("s", { ctrl: true })], action: { kind: "request", id: "save" }, label: "Save the collection to the local library", inText: true },
-  { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("recipe.undo"), label: "Undo the last recipe change (outside text fields)" },
-  { id: "shell.redo", scope: "global", chords: [k("z", { ctrl: true, shift: true }), k("y", { ctrl: true })], action: act("recipe.redo"), label: "Redo the change you just undid" },
+  { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("history.undo"), label: "Undo the last recipe change (outside text fields)" },
+  { id: "shell.redo", scope: "global", chords: [k("z", { ctrl: true, shift: true }), k("y", { ctrl: true })], action: act("history.redo"), label: "Redo the change you just undid" },
   { id: "shell.regions", scope: "global", chords: [k("F6")], action: shell("regions"), label: "Move focus to the next region (header, panel groups, status bar)", inText: true },
   { id: "shell.regions-back", scope: "global", chords: [k("F6", { shift: true })], action: shell("regions-back"), label: "Move focus to the previous region", inText: true },
   { id: "shell.shortcuts", scope: "global", chords: [k("?")], action: shell("shortcuts"), label: "Keyboard & mouse reference", short: "all shortcuts", notInDialogs: true },

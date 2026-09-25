@@ -49,7 +49,7 @@ test("a presentation mounts from trusted services without any page controls", as
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(4);
   expect(shell.authoring.dispatch({ kind: "layer.edit", command: { kind: "add" } }).ok).toBe(true);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(5);
-  expect(shell.authoring.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(shell.authoring.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(resets).toBe(2);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(4);
   expect((await shell.files.execute({ kind: "recipe.export" })).ok).toBe(true);

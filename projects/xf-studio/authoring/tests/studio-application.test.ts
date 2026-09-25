@@ -38,16 +38,16 @@ test("facade discovers target-specific commands, validates at invocation and det
 
 test("recipe Undo is a current workspace action with live capability and one atomic restore", () => {
   const { app, document } = fixture();
-  expect(app.capability({ kind: "recipe.undo" })).toMatchObject({ available: false });
+  expect(app.capability({ kind: "history.undo" })).toMatchObject({ available: false });
   const firstId = document.recipe.layers[0].id;
   expect(app.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: firstId } }).ok).toBe(true);
   expect(document.recipe.layers).toHaveLength(5);
   expect(app.actionsFor({ kind: "workspace" })).toMatchObject([{
-    action: { kind: "recipe.undo" }, capability: { available: true }, undo: "none" }]);
-  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: true, result: true });
+    action: { kind: "history.undo" }, capability: { available: true }, undo: "none" }]);
+  expect(app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true, result: true });
   expect(document.recipe.layers).toHaveLength(4);
   expect(document.active).toBeLessThan(document.recipe.layers.length);
-  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: false });
+  expect(app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: false });
 });
 
 test("unavailable 3D device leaves authoring and Undo available with explicit reasons", () => {
@@ -62,8 +62,8 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
   expect(app.canBeginGesture("uv", layer.id).available).toBe(true);
   expect(app.dispatch({ kind: "layer.setColor", layerId: layer.id, color: "#123456" })).toMatchObject({ ok: true });
   expect(document.recipe.layers[0].color).toBe("#123456");
-  expect(app.capability({ kind: "recipe.undo" }).available).toBe(true);
-  expect(app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: true });
+  expect(app.capability({ kind: "history.undo" }).available).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(document.recipe.layers[0].color).toBe(originalColor);
 });
 

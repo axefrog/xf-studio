@@ -135,7 +135,7 @@ test("Colour-shift settings are remembered when switching away and back, like Gl
     .toEqual({ color: "#ff2040", strength: .35 });
   expect(parseGlitterChoices({ "preset-a/x": { shift: { color: "red", strength: 2 } } })).toEqual({});
   // Undo restores the recipe; the memory is unaffected.
-  expect(f.app.dispatch({ kind: "recipe.undo" })).toMatchObject({ ok: true });
+  expect(f.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(f.layer(0).finish).toBe("glossy");
 });
 

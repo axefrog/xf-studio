@@ -268,15 +268,15 @@ test("a gesture moved and back, then an opacity edit, then an Escape-cancelled g
   app.dispatch({ kind: "layer.setOpacity", layerId, opacity: 0.42 });
   expect(steps()).toEqual(["Opacity:done"]);
   expect(app.history().undo?.label).toBe("Opacity");
-  app.dispatch({ kind: "recipe.undo" });
+  app.dispatch({ kind: "history.undo" });
   expect(JSON.stringify(document.recipe)).toBe(start);
   expect(steps()).toEqual(["Opacity:undone"]);
   // An Escape-cancelled gesture after the Undo restores the start and leaves Redo available.
   gesture([u0 + 0.02], true);
   expect(document.recipe.layers[0].points[0].u).toBe(u0);
   expect(steps()).toEqual(["Opacity:undone"]);
-  expect(app.capability({ kind: "recipe.redo" }).available).toBe(true);
-  app.dispatch({ kind: "recipe.redo" });
+  expect(app.capability({ kind: "history.redo" }).available).toBe(true);
+  app.dispatch({ kind: "history.redo" });
   expect(document.recipe.layers[0].opacity).toBe(0.42);
 });
 
@@ -396,7 +396,7 @@ test("a reload under budget pressure keeps at least 10 Undo steps of the selecte
   expect(timeline.steps.length).toBeGreaterThanOrEqual(MIN_SELECTED_HISTORY);
   expect(timeline.trimmed).toBe(true);
   let undone = 0;
-  while (app.capability({ kind: "recipe.undo" }).available) { app.dispatch({ kind: "recipe.undo" }); undone++; }
+  while (app.capability({ kind: "history.undo" }).available) { app.dispatch({ kind: "history.undo" }); undone++; }
   expect(undone).toBe(timeline.steps.length);
 });
 

@@ -41,7 +41,7 @@ export class Frame {
 export type FrameState = Frame;
 
 const sources: [RegExp, string][] = [
-  [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
+  [/^history\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
   [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
   [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^previewSetup\./, "3D preview"],
@@ -116,7 +116,7 @@ export class StudioRuntime {
         this.feedback.toast("warning", "Undo", `Other edits happened since. Use Undo (${shortcutLabel("shell.undo")}) to step back through them in order.`);
         return;
       }
-      this.dispatch({ kind: "recipe.undo" });
+      this.dispatch({ kind: "history.undo" });
     } };
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }

@@ -15,7 +15,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }).available).toBe(true);
   expect(shell.authoring.dispatch({ kind: "layer.edit", command: { kind: "add" } }).ok).toBe(true);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(5);
-  expect(shell.authoring.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(shell.authoring.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(4);
   expect(shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "copy",
     id: shell.library.view().draft!.selected! } }).ok).toBe(true);

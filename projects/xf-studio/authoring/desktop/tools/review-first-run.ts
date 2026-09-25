@@ -44,7 +44,7 @@ try {
     const before = layer.color;
     const changed = port.authoring.dispatch({ kind: 'layer.setColor', layerId: layer.id, color: '#123456' });
     const color = port.editor.layer().color;
-    const undo = port.authoring.dispatch({ kind: 'recipe.undo' });
+    const undo = port.authoring.dispatch({ kind: 'history.undo' });
     return { uv: port.viewport.snapshot().uv.phase, head: port.viewport.snapshot().head,
       readiness: port.previewReadiness.snapshot().phase,
       camera: port.authoring.capability({ kind: 'camera.front' }),

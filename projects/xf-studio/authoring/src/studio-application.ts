@@ -20,7 +20,7 @@ import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceStat
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";
 import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
-  type Capability, type FeatureModule, type ReasonCode, type ValidationIssue } from "./platform/api";
+  type Capability, type FeatureModule, type ReasonCode, type UndoPolicy, type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
@@ -67,7 +67,7 @@ export type StudioCapability = Capability;
 /** Every synchronous action entry point (dispatch, context dispatch, form control edits) returns this. */
 export type StudioDispatchResult = { ok: true; result?: unknown } | { ok: false; code: string; message: string };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
-  undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
+  undo: UndoPolicy; async: false };
 export type StudioGestureProposal =
   | { kind: "shape.replace"; next: Layer }
   | { kind: "point.replace"; index: number; next: Partial<Point> }
@@ -415,7 +415,7 @@ export class StudioApplication {
               !plan ? refusal("missing_target", "That history step no longer exists.") :
               plan.direction === "none" ? refusal("invalid_value", "This is already the current step.") : { available: true };
           }
-          if (action.kind === "recipe.undo") return s.document.canUndo ? { available: true } :
+          if (action.kind === "history.undo") return s.document.canUndo ? { available: true } :
             refusal("invalid_value", "There is no recipe change to undo.");
           return !s.history ? refusal("invalid_value", "Redo is not available in this host.") :
             s.history.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone change to redo.");
@@ -423,7 +423,7 @@ export class StudioApplication {
         dispatch: action => {
           const s = app.services;
           return action.kind === "history.jumpTo" ? s.history!.jumpTo(action.entryId) :
-            action.kind === "recipe.undo" ? s.undo() : s.history!.redo();
+            action.kind === "history.undo" ? s.undo() : s.history!.redo();
         },
       },
       "eye-makeup": {
@@ -485,7 +485,7 @@ export class StudioApplication {
   actionsFor(target: StudioTarget): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
     let actions: StudioAction[] = [];
-    if (target.kind === "workspace") actions = [{ kind: "recipe.undo" }];
+    if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
     if (target.kind === "collection") actions = [
       { kind: "preset.edit", command: { kind: "add" } }, { kind: "preset.edit", command: { kind: "restore" } },
       { kind: "collection.undoOpen" }];

@@ -149,7 +149,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
       const state = port.authoring.previewState();
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
-      rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
+      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo" });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
@@ -222,8 +222,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
-  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
-  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
+  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "history.undo" }) });
+  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
   const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: "History: every recent change to this preset",
     onClick: () => rt.dock.reveal("history") });
   const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
@@ -261,7 +261,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       setText(preset, draft?.presets.find(item => item.id === draft.selected)?.name ?? "No preset");
       const state = libraryState(frame);
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
-      const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
+      const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const history = port.authoring.history();
       // Name what each would change, and keep the shortcut visible even while unavailable.
       undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
@@ -337,9 +337,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history();
   return [
-    act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "recipe.undo" }), history.undo?.label), "Edit", { kind: "recipe.undo" },
+    act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "history.undo" }), history.undo?.label), "Edit", { kind: "history.undo" },
       { icon: "undo", shortcut: shortcutLabel("shell.undo"), keywords: "undo back" }),
-    act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "recipe.redo" }), history.redo?.label), "Edit", { kind: "recipe.redo" },
+    act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "history.redo" }), history.redo?.label), "Edit", { kind: "history.redo" },
       { icon: "redo", shortcut: shortcutLabel("shell.redo"), keywords: "redo ctrl+y forward" }),
     { id: "history.open", title: "Show History (every recent change)", group: "Edit", icon: "history", keywords: "undo redo steps changes go back",
       ...always, run: () => rt.dock.reveal("history") },

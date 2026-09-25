@@ -19,8 +19,8 @@ export function reference(panels: PanelInfo[]) {
     ["Preview quality", "quality.set, quality.rebuild", "previewState().quality, previewReadiness"],
     ["Library", "requests save/saveCopy/refresh/open, files collection.import/export/plan/recover, recipe.import/export, mask.export", "library.summary(), files.snapshot()"],
     ["Mod package", "files package.check/package.build", "files.snapshot().package (freshness), library.summary().progress"],
-    ["History", "history.jumpTo {entryId}, recipe.undo, recipe.redo", "historyTimeline(), history()"],
-    ["Header / status", "recipe.undo, recipe.redo, save, theme.set, layout.set", "history(), status.snapshot(), preferences"],
+    ["History", "history.jumpTo {entryId}, history.undo, history.redo", "historyTimeline(), history()"],
+    ["Header / status", "history.undo, history.redo, save, theme.set, layout.set", "history(), status.snapshot(), preferences"],
   ];
   const keys = bindingReference();
   const terms: [string, string][] = [

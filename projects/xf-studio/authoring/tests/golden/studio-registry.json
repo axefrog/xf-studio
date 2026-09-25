@@ -1,7 +1,7 @@
 {
  "actionKinds": [
-  "recipe.undo",
-  "recipe.redo",
+  "history.undo",
+  "history.redo",
   "history.jumpTo",
   "layer.select",
   "point.select",
@@ -68,7 +68,7 @@
   "savedV.restore"
  ],
  "actionDescriptors": {
-  "recipe.undo": {
+  "history.undo": {
    "scope": [
     "workspace"
    ],
@@ -76,7 +76,7 @@
    "undo": "none",
    "payload": {}
   },
-  "recipe.redo": {
+  "history.redo": {
    "scope": [
     "workspace"
    ],
@@ -136,7 +136,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -156,7 +156,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -172,7 +172,7 @@
    "variants": {
     "enable-bezier": {
      "payload": {},
-     "undo": "recipe"
+     "undo": "part"
     },
     "point-mode": {
      "payload": {
@@ -192,7 +192,7 @@
        ]
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -220,7 +220,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -234,7 +234,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -253,7 +253,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -460,7 +460,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -479,7 +479,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -508,7 +508,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -576,7 +576,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -842,7 +842,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -875,7 +875,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -903,7 +903,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -945,7 +945,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -982,7 +982,7 @@
        "max": 1
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "rotate": {
      "payload": {
@@ -992,7 +992,7 @@
        "from": "input"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "scale": {
      "payload": {
@@ -1004,7 +1004,7 @@
        "max": 100
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -1013,7 +1013,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -1046,7 +1046,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -1080,7 +1080,7 @@
     "collection"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "command": {
      "type": "object",
@@ -1091,7 +1091,7 @@
    "variants": {
     "add": {
      "payload": {},
-     "undo": "recipe"
+     "undo": "part"
     },
     "duplicate": {
      "payload": {
@@ -1101,7 +1101,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "remove": {
      "payload": {
@@ -1111,7 +1111,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "reset": {
      "payload": {
@@ -1121,7 +1121,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "rename": {
      "payload": {
@@ -1138,7 +1138,7 @@
        "maxLength": 80
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "move": {
      "payload": {
@@ -1154,7 +1154,7 @@
        "min": 0
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -1163,7 +1163,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "id": {
      "type": "string",
@@ -1851,7 +1851,7 @@
  },
  "registry": [
   {
-   "id": "recipe.undo",
+   "id": "history.undo",
    "family": "action",
    "scope": [
     "workspace"
@@ -1860,7 +1860,7 @@
    "async": false
   },
   {
-   "id": "recipe.redo",
+   "id": "history.redo",
    "family": "action",
    "scope": [
     "workspace"
@@ -1901,7 +1901,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1911,7 +1911,7 @@
     "layer",
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1929,7 +1929,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1938,7 +1938,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1947,7 +1947,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2003,7 +2003,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2012,7 +2012,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2021,7 +2021,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2039,7 +2039,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2075,7 +2075,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2084,7 +2084,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2093,7 +2093,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2102,7 +2102,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2111,7 +2111,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2120,7 +2120,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2130,7 +2130,7 @@
     "layer",
     "collection"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2139,7 +2139,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {

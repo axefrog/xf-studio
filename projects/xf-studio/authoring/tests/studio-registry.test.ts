@@ -37,7 +37,7 @@ test("every action is owned by exactly one registered owner", () => {
     if (route.ok) expect(route.qualified).toBe(`${route.owner.id}/${kind}`);
   }
   expect(STUDIO_REGISTRY.route("layer.setColor")).toMatchObject({ ok: true, qualified: "eye-makeup/layer.setColor" });
-  expect(STUDIO_REGISTRY.route("recipe.undo")).toMatchObject({ ok: true, qualified: "history/recipe.undo" });
+  expect(STUDIO_REGISTRY.route("history.undo")).toMatchObject({ ok: true, qualified: "history/history.undo" });
   expect(STUDIO_REGISTRY.route("hair.setColor")).toEqual({ ok: false, code: "unknown_action", kind: "hair.setColor" });
   expect(EYE_MAKEUP).toMatchObject({ owner: "feature", id: "eye-makeup", api: 1, stage: "stable" });
   expect(STUDIO_REGISTRY.entries().filter(entry => entry.ownerKind === "feature").map(entry => entry.owner))
@@ -53,7 +53,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.open", "collection.rename",
     "collection.undoOpen", "preset.edit", "preset.select"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
-  expect(kinds("history")).toEqual(["history.jumpTo", "recipe.redo", "recipe.undo"]);
+  expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());
   expect(kinds("motion")).toEqual(all.filter(kind => kind.startsWith("motion.")).sort());
   expect(kinds("quality")).toEqual(all.filter(kind => kind.startsWith("quality.")).sort());

@@ -16,7 +16,7 @@ export type Consequence = {
   writes?: "library-revision" | "private-files";
   /** Recoverable state that this action pushes out of reach. */
   discards: { kind: "recovery-draft" | "removed-preset" | "undo-entry" | "redo"; label: string }[];
-  recoverableBy: "recipe.undo" | "recipe.redo" | "preset.restore" | "collection.undoOpen" | "none";
+  recoverableBy: "history.undo" | "history.redo" | "preset.restore" | "collection.undoOpen" | "none";
   /** True only when something recoverable would be lost for good. */
   confirm: boolean;
 };
@@ -59,12 +59,12 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
     return done({ replaces: "preset", recoverableBy: "preset.restore",
       discards: removed.length >= state.removedLimit && removed[0] ? [{ kind: "removed-preset", label: removed[0].name }] : [] });
   }
-  if (action.kind === "recipe.undo") return done({ replaces: "layer-content", discards: [],
-    recoverableBy: state.history.undo ? "recipe.redo" : "none" });
-  if (action.kind === "recipe.redo") return done({ replaces: "layer-content", discards: [], recoverableBy: "recipe.undo" });
+  if (action.kind === "history.undo") return done({ replaces: "layer-content", discards: [],
+    recoverableBy: state.history.undo ? "history.redo" : "none" });
+  if (action.kind === "history.redo") return done({ replaces: "layer-content", discards: [], recoverableBy: "history.undo" });
   // A jump is a run of Undo or Redo steps: nothing is discarded, and the steps stay reachable.
   if (action.kind === "history.jumpTo") return done({ replaces: "layer-content", discards: [],
-    recoverableBy: state.jump?.direction === "redo" ? "recipe.undo" : state.jump?.direction === "undo" ? "recipe.redo" : "none" });
+    recoverableBy: state.jump?.direction === "redo" ? "history.undo" : state.jump?.direction === "undo" ? "history.redo" : "none" });
   if (ACTION_DESCRIPTORS[action.kind].effect !== "content") return none;
   // Every other content edit records one Undo entry; it drops Redo and, at the bound, the oldest Undo.
   const discards: Consequence["discards"] = [];
@@ -72,5 +72,5 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
   if (state.history.depth >= state.undoLimit) discards.push({ kind: "undo-entry", label: "Oldest Undo step" });
   const destructive = action.kind === "point.remove" || action.kind === "field.remove" ||
     action.kind === "layer.edit" && (action.command.kind === "remove" || action.command.kind === "reset");
-  return done({ ...(destructive ? { replaces: "layer-content" as const } : {}), recoverableBy: "recipe.undo", discards });
+  return done({ ...(destructive ? { replaces: "layer-content" as const } : {}), recoverableBy: "history.undo", discards });
 }

@@ -159,7 +159,7 @@ export function createStudioPresentation<Slot>(sources: {
     active: () => fallback().active, selected: () => fallback().selected,
     selectedField: () => { const d = fallback(), layer = d.recipe.layers[d.active];
       return layer?.fields.find(field => field.id === d.fieldSelection[layer.id]) ?? layer?.fields[0]; },
-    revision: () => -1, canUndo: () => a.capability({ kind: "recipe.undo" }).available,
+    revision: () => -1, canUndo: () => a.capability({ kind: "history.undo" }).available,
   };
   const library: CollectionViewPort = {
     view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),

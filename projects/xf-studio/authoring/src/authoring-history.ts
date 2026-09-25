@@ -4,7 +4,7 @@ import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 import type { Recipe } from "./recipe";
 
 /** The history family's actions (registered by the composition as the `history` system family). */
-export type HistoryAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string };
+export type HistoryAction = { kind: "history.undo" | "history.redo" } | { kind: "history.jumpTo"; entryId: string };
 
 export type HistoryState = {
   /** The change the next Undo reverts. */

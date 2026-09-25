@@ -3,9 +3,13 @@
  * registers (feature-module platform §1, §4). Types and small pure helpers only.
  */
 
-/** Undo policy. `recipe` is today's per-preset content entry; it becomes the look history's
- * part entry when the look model lands (feature-module platform §3, migration step 4). */
-export type UndoPolicy = "none" | "recipe" | "transaction" | "recovery";
+/**
+ * Undo policy: `part` records one step of the look history for the owning feature's part (feature-module
+ * platform §3); `transaction` belongs to a continuous edit (a gesture or a form control) that records one
+ * step for the whole run; `recovery` is undone through the collection's recovery queue (removed presets,
+ * earlier drafts), not the look history; `none` records nothing.
+ */
+export type UndoPolicy = "none" | "part" | "transaction" | "recovery";
 export type ValueSchema = { type: "string" | "number" | "number|string" | "integer" | "boolean" | "enum" | "object" | "bytes";
   required: boolean; from: "target" | "state" | "input"; min?: number; max?: number;
   minLength?: number; maxLength?: number;
