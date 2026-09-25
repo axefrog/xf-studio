@@ -3,8 +3,7 @@
 // The localhost server serves it whenever public/assets has no prepared head.
 //   bun tools/prepare-preview.ts
 import { join, resolve } from "node:path";
-import { createGameAssetExporter } from "../src/game-asset-export";
-import { createWolvenKitUncook } from "../src/game-asset-export-wolvenkit";
+import { createWolvenKitGameAssetExporter } from "../src/game-asset-export-wolvenkit";
 import { packageToolPaths } from "../src/local-settings-readiness";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { ensurePreviewCore, PreviewCoreError } from "../src/preview-core-service";
@@ -18,7 +17,7 @@ if (!tools.gamepath || !tools.wolvenkit) {
 const started = Date.now();
 try {
   const result = await ensurePreviewCore({ gameRoot: tools.gamepath, cacheRoot,
-    exporter: createGameAssetExporter(join(cacheRoot, "exports"), createWolvenKitUncook(tools.wolvenkit)),
+    exporter: createWolvenKitGameAssetExporter(join(cacheRoot, "exports"), tools.wolvenkit),
     progress: (_step, index, total, label) => console.log(`[${index + 1}/${total}] ${label}`) });
   console.log(`${result.reused ? "Reused" : "Prepared"} in ${((Date.now() - started) / 1000).toFixed(1)} s: ${result.directory}`);
   console.log(JSON.stringify(result.manifest.geometry));

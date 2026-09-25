@@ -41,13 +41,13 @@ test("the host runs one preparation at a time, reports progress and records fail
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
-    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await gate; }) });
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await gate; }, { contains: () => new Set() }) });
   const started = host.prepare();
   expect(started).toMatchObject({ phase: "preparing", canCancel: true, progress: { index: 0, total: 5 } });
   expect(host.prepare().phase).toBe("preparing");
   release();
   await host.settled();
-  // The fake export wrote nothing, so the real head check reports a missing head.
+  // The fake export wrote nothing and the stand-in archive index lacks the head, so it is reported missing.
   const failed = host.snapshot();
   expect(failed).toMatchObject({ phase: "blocked", code: "preview_source_missing", canPrepare: true });
 });

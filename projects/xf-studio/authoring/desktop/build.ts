@@ -10,6 +10,7 @@ import type { LocalSettings } from "../src/local-settings";
 import { EyePlateError, ensureEyePlate, type EyePlateResult } from "../src/eye-plate-service";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { runProcessTree } from "../src/process-tree";
+import { probeWolvenKitCli } from "../src/wolvenkit-cli";
 
 export const buildDeadlineMs = 40 * 60_000;
 /** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
@@ -33,7 +34,6 @@ const inside = (path: string, root: string) => {
   return target === base || target.startsWith(base + sep);
 };
 export type WolvenKitProbe = (path: string) => string | null;
-const wolvenKitCache = new Map<string, { issue: string | null; until: number }>();
 const bunCache = new Map<string, { issue: string | null; until: number }>();
 /** Execute code, rather than trusting a filename or the Electrobun main path. */
 export function probeBun(path: string): string | null {
@@ -50,24 +50,10 @@ export function probeBun(path: string): string | null {
     return issue;
   } catch { return "The selected Bun executable could not be checked."; }
 }
+/** Run the CLI's version and command checks through the shared WolvenKit runner; a failure is retried after a short interval. */
 export const probeWolvenKit: WolvenKitProbe = path => {
-  const stamp = statSync(path);
-  const key = `${path}|${stamp.size}|${stamp.mtimeMs}`;
-  const cached = wolvenKitCache.get(key);
-  if (cached && Date.now() < cached.until) return cached.issue;
-  const version = spawnSync(path, ["--version"], { encoding: "utf8", timeout: 15_000, windowsHide: true });
-  let issue: string | null = null;
-  if (version.error || version.status !== 0 || !/\b(?:8\.17\.4|9\.0\.1)\b/.test(version.stdout + version.stderr))
-    issue = "WolvenKit CLI must be a validated 8.17.4 or 9.0.1 installation.";
-  else {
-    const help = spawnSync(path, ["--help"], { encoding: "utf8", timeout: 15_000, windowsHide: true });
-    const commands = help.stdout + help.stderr;
-    if (help.error || help.status !== 0 ||
-        !["import", "export", "convert", "pack", "extract"].every(name => new RegExp(`\\b${name}\\b`, "i").test(commands)))
-      issue = "WolvenKit CLI does not expose the required build and verification commands.";
-  }
-  wolvenKitCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
-  return issue;
+  const probe = probeWolvenKitCli(path);
+  return probe.ok ? null : probe.issue;
 };
 function privatePath(root: string, target: string): void {
   const base = resolve(root), path = resolve(target);

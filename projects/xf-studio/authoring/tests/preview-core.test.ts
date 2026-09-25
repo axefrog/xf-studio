@@ -9,7 +9,7 @@ import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTe
 import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview-core-assemble";
 import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview-core-service";
 import { uncookArguments } from "../src/game-asset-export-wolvenkit";
-import { createGameAssetExporter, gameContentSource } from "../src/game-asset-export";
+import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import {
   eyeGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
@@ -208,6 +208,15 @@ test("an unsupported or missing head is reported plainly and blocks until the ga
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "head" })) }))
     .rejects.toMatchObject({ code: "preview_source_missing" });
+  expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toMatchObject({ state: "blocked", code: "preview_source_missing" });
+  // A head the archives contain but the tool did not export is a retryable tool failure, never a block.
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "head-export" })) }))
+    .rejects.toMatchObject({ code: "preview_tool_failed" });
+  expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
+  // So is a missing head when the archive index can't be read.
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate,
+    exporter: fresh(fakeUncook(plate, recipe, { omit: "head", index: false })) })).rejects.toMatchObject({ code: "preview_tool_failed" });
+  expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "eye-glb" })) }))
     .rejects.toMatchObject({ code: "preview_tool_failed" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "material" })) }))
@@ -230,9 +239,75 @@ test("cancellation stops the derivation, records it and leaves no partial entry"
   await expect(run).rejects.toMatchObject({ code: "preview_cancelled" });
   expect(new PreviewCoreCache(cacheRoot).readStatus()).toMatchObject({ state: "failed", code: "preview_cancelled" });
   expect(require("node:fs").readdirSync(cacheRoot).filter((name: string) => name !== "status.json")).toEqual([]);
-  // A missing tool surfaces as its own code.
-  const missing = createGameAssetExporter(temporary("exports"), async () => { throw Object.assign(Error("XF Studio needs WolvenKit CLI"), { code: "preview_tool_missing" }); });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: missing })).rejects.toMatchObject({ code: "preview_tool_missing" });
+});
+
+test("failures are routed by their type: tool, runtime, storage and anything else", async () => {
+  const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
+  const cacheRoot = temporary("cache"), game = gameFolder();
+  const failing = (error: unknown) => createGameAssetExporter(temporary("exports"), async () => { throw error; });
+  const run = (error: unknown) => ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: failing(error) });
+  await expect(run(new GameAssetExportError("tool_missing", "no CLI"))).rejects.toMatchObject({ code: "preview_tool_missing" });
+  await expect(run(new GameAssetExportError("runtime_missing", "no .NET", "You must install .NET")))
+    .rejects.toMatchObject({ code: "preview_runtime_missing", message: expect.stringContaining(".NET runtime") });
+  await expect(run(new GameAssetExportError("tool_failed", "exit 1"))).rejects.toMatchObject({ code: "preview_tool_failed" });
+  await expect(run(new GameAssetExportError("cancelled", "stopped"))).rejects.toMatchObject({ code: "preview_cancelled" });
+  // Storage failures are the data folder's, not WolvenKit's, and say so plainly.
+  const full = run(Object.assign(Error("no space left on device"), { code: "ENOSPC" }));
+  await expect(full).rejects.toMatchObject({ code: "preview_cache_unavailable", message: expect.stringContaining("free disk space") });
+  await expect(run(Object.assign(Error("permission denied"), { code: "EACCES" }))).rejects.toMatchObject({ code: "preview_cache_unavailable" });
+  const other = run(new TypeError("undefined is not a function"));
+  await expect(other).rejects.toMatchObject({ code: "preview_failed" });
+  await expect(other).rejects.not.toThrow(/WolvenKit/);
+  expect(new PreviewCoreCache(cacheRoot).readStatus()).toMatchObject({ state: "failed", code: "preview_failed" });
+});
+
+test("an incomplete export is never cached, so the next attempt runs the tool again on the same export cache", async () => {
+  const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
+  const cacheRoot = temporary("cache"), game = gameFolder(), exports = temporary("exports");
+  // WolvenKit exits 0 but drops the eye GLB: the raw eye mesh must not be published as a complete entry.
+  const partial = fakeUncook(plate, recipe, { omit: "eye-glb" });
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: partial.exporter(exports) }))
+    .rejects.toMatchObject({ code: "preview_tool_failed" });
+  const session = partial.exporter(exports).open(gameContentSource(game));
+  const again = await session.geometry([recipe.eye.meshDepotPath]);
+  expect(again.get(recipe.eye.meshDepotPath)).toMatchObject({ complete: false, cached: false });
+  session.close();
+  expect(partial.calls).toHaveLength(2);
+  // A repaired tool on the same cache succeeds; complete entries are then reused.
+  const complete = fakeUncook(plate, recipe);
+  const result = await ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: complete.exporter(exports) });
+  expect(complete.calls.length).toBeGreaterThan(0);
+  const reused = complete.exporter(exports).open(gameContentSource(game));
+  const cached = await reused.geometry([plate.source.meshDepotPath, plate.source.morphDepotPath, recipe.eye.meshDepotPath]);
+  expect([...cached.values()].every(entry => entry.cached && entry.complete)).toBe(true);
+  reused.close();
+  expect(result.manifest.source).toMatchObject({ eyeGlbSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    headMaterialsSha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
+  // A partial mesh export (no mesh GLB) is likewise not cached.
+  const noMeshGlb = fakeUncook(plate, recipe, { omit: "head-mesh-glb" }), meshCache = temporary("exports");
+  const first = noMeshGlb.exporter(meshCache).open(gameContentSource(game));
+  expect((await first.geometry([plate.source.meshDepotPath])).get(plate.source.meshDepotPath)).toMatchObject({ complete: false });
+  first.close();
+  const second = noMeshGlb.exporter(meshCache).open(gameContentSource(game));
+  await second.geometry([plate.source.meshDepotPath]);
+  second.close();
+  expect(noMeshGlb.calls).toHaveLength(2);
+});
+
+test("export and preview caches are keyed by the exporting tool, which the manifest and render record name", async () => {
+  const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
+  const cacheRoot = temporary("cache"), game = gameFolder(), exports = temporary("exports");
+  const older = fakeUncook(plate, recipe, { tool: { key: "wolvenkit:8.17.4:aaaa", label: "WolvenKit CLI 8.17.4" } });
+  const first = await ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: older.exporter(exports) });
+  expect(first.manifest.source.tool).toEqual({ key: "wolvenkit:8.17.4:aaaa", label: "WolvenKit CLI 8.17.4" });
+  const record = JSON.parse(readFileSync(join(first.directory, "preview-core.json"), "utf8"));
+  expect(record.provenance.tool).toBe("WolvenKit CLI 8.17.4");
+  // Upgrading WolvenKit re-exports everything on the same export cache and gives the preview a new identity.
+  const newer = fakeUncook(plate, recipe, { tool: { key: "wolvenkit:9.0.1:bbbb", label: "WolvenKit CLI 9.0.1" } });
+  const second = await ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: newer.exporter(exports) });
+  expect(newer.calls).toHaveLength(1);
+  expect(second.manifest.cacheKey).not.toBe(first.manifest.cacheKey);
+  expect(second.manifest.source.tool.label).toBe("WolvenKit CLI 9.0.1");
 });
 
 test("the derived cache carries a render record that names, hashes and sources every core file", async () => {
