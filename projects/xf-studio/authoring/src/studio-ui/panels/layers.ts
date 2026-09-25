@@ -1,3 +1,4 @@
+import { chordsLabel, keyBindingById, shortcutLabel } from "../../input-bindings";
 import { applyCapability, button, emptyState, note } from "../controls";
 import { h, pct, setAttr, setText } from "../dom";
 import { icon } from "../icons";
@@ -77,7 +78,7 @@ export function layersPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
     noPreset, empty, list.element,
-    note("Top = front. Drag the grip or use Alt+↑/↓ to reorder · F2 renames · Del removes (Ctrl+Z undoes)."));
+    note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
   return {
     spec: { id: "layers", ...PANEL_META["layers"], element },
     update(frame) {

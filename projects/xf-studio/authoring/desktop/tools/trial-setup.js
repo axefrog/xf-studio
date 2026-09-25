@@ -11,9 +11,9 @@
   const details = [...document.querySelectorAll('details')].find(node => node.querySelector('summary')?.textContent === 'Local setup');
   details.open = true;
   const labels = { gameRoot: 'Cyberpunk 2077 folder',
-    wolvenKitCli: 'WolvenKit CLI executable', pythonExecutable: 'Python executable (optional)',
+    wolvenKitCli: 'WolvenKit CLI executable',
     bunExecutable: 'Bun executable (optional)' };
-  for (const key of ['gameRoot', 'wolvenKitCli', 'pythonExecutable', 'bunExecutable']) {
+  for (const key of ['gameRoot', 'wolvenKitCli', 'bunExecutable']) {
     const input = details.querySelector(`input[aria-label="${labels[key]}"]`);
     if (!input || typeof values[key] !== 'string') throw Error(`Missing setup field ${key}`);
     input.value = values[key];

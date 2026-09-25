@@ -20,7 +20,6 @@ try {
   const inputs = {
     gameRoot: process.env.XFS_BUILD_TRIAL_GAME_ROOT,
     wolvenKitCli: process.env.XFS_BUILD_TRIAL_WOLVENKIT,
-    pythonExecutable: process.env.XFS_BUILD_TRIAL_PYTHON,
     bunExecutable: process.env.XFS_BUILD_TRIAL_BUN,
     collection: process.env.XFS_BUILD_TRIAL_COLLECTION,
   };
@@ -29,7 +28,7 @@ try {
   if (store.load().source !== "new" || existsSync(resolve(dataRoot, "library.sqlite")))
     throw Error("Build trial user data is not fresh; refusing to overwrite it.");
   store.save({ ...defaultLocalSettings(), gameRoot: inputs.gameRoot!,
-    wolvenKitCli: inputs.wolvenKitCli!, pythonExecutable: inputs.pythonExecutable!,
+    wolvenKitCli: inputs.wolvenKitCli!,
     bunExecutable: inputs.bunExecutable! }, 0);
   const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");
   app = createDesktopServer(viewRoot, dataRoot, version, resolve(viewRoot, "check-worker.js"),

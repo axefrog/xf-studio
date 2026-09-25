@@ -6,7 +6,8 @@ import { createPackageHandler, localPackageTools, localPlateCache } from "./src/
 import { eyePlateReadiness } from "./src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
-import { createInstallDetectionHandler } from "./src/install-detection-server";
+import { createInstallDetectionHandler, hostFrameworkCheck } from "./src/install-detection-server";
+import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import { buildBrowser } from "./browser-build";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
@@ -17,8 +18,11 @@ const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
 const localSettings = new LocalSettingsStore();
 const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: false,
-  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE) }));
-const detectionRequest = createInstallDetectionHandler();
+  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }));
+const detectionRequest = createInstallDetectionHandler(undefined, { settings: () => {
+  const settings = localSettings.load().settings;
+  return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
+} });
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
 const root = resolve(import.meta.dir, "public");
@@ -34,6 +38,8 @@ const server = Bun.serve({
   maxRequestBodySize: 16_000_000,
   async fetch(request) {
     const url = new URL(request.url);
+    // The API accepts only the 127.0.0.1 origin; send `localhost` visitors there so the library and settings work.
+    if (url.hostname === "localhost") { url.hostname = "127.0.0.1"; return Response.redirect(url.toString(), 308); }
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);

@@ -54,6 +54,22 @@ test("a saved private plate folder from earlier versions is ignored without erro
   expect(next.revision).toBe(4);
 }));
 
+test("a saved Python executable from earlier versions is ignored: Build no longer needs Python", () => withDirectory(dir => {
+  expect("pythonExecutable" in defaultLocalSettings()).toBe(false);
+  const saved = { ...defaultLocalSettings(), revision: 2, wolvenKitCli: join(dir, "cli.exe"), pythonExecutable: join(dir, "python.exe") };
+  const loaded = migrateLocalSettings(saved);
+  expect(loaded.migrated).toBe(true);
+  expect(loaded.settings.wolvenKitCli).toBe(join(dir, "cli.exe"));
+  expect("pythonExecutable" in loaded.settings).toBe(false);
+  // A missing or broken Python path never affects Build readiness.
+  expect(evaluateLocalReadiness(loaded.settings).build.issues.map(issue => issue.code)).not.toContain("python_missing");
+  const store = new LocalSettingsStore(dir);
+  writeFileSync(store.file, JSON.stringify(saved));
+  expect(store.load()).toMatchObject({ source: "primary", migrated: true });
+  store.save(store.load().settings, 2);
+  expect(JSON.parse(readFileSync(store.file, "utf8"))).not.toHaveProperty("pythonExecutable");
+}));
+
 test("atomic save retains previous-good settings and rejects a stale revision", () => withDirectory(dir => {
   const store = new LocalSettingsStore(dir);
   expect(store.load().source).toBe("new");

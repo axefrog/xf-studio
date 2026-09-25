@@ -4,7 +4,8 @@ import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, m
   readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { inspectLocalPackageCandidate } from "./mod-install-transport";
-import { diagnosticModlist, legacyModFolder, type RuntimeDiagnosticOptions,
+import { frameworkModNames } from "./framework-versions";
+import { diagnosticModlist, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
   type RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
 import { EYE_MAKEUP_MOD, eyeMakeupModFolders, isEyeMakeupModFolder } from "./mod-branding";
 
@@ -87,7 +88,7 @@ function validate(options: PromotionOptions) {
   const stagePlanFile = join(stage, "diagnostic-plan.json"); file(stagePlanFile);
   const saved = JSON.parse(readFileSync(stagePlanFile, "utf8")) as RuntimeDiagnosticPlan & { stageReceipt?: {
     schema: string; route: string; target: string; candidateId: string; namespace: string; files: Entry[] } };
-  requireValue(saved.schema === "xfs/runtime-diagnostic-plan-1" && saved.stagingRoot === stage &&
+  requireValue(saved.schema === "xfs/runtime-diagnostic-plan-2" && saved.stagingRoot === stage &&
     saved.candidateId === options.candidateId && saved.stageReceipt?.schema === "xfs/install-receipt-1" &&
     saved.stageReceipt.route === "mo2" && saved.stageReceipt.candidateId === options.candidateId,
   "Stage plan or receipt does not match these inputs.");
@@ -118,10 +119,11 @@ function validate(options: PromotionOptions) {
   const present = metadata.filter(name => existsSync(join(sourceProfile, name)));
   requireValue(present.includes("modlist.txt"), "Source modlist missing.");
   const stageProfileFiles = inventory(stageProfile, present);
+  const frameworkMods = frameworkModNames(profileFrameworks(resolve(options.gameRoot), mo2, options.profileId));
   for (const name of present) {
     const source = join(sourceProfile, name); file(source);
     if (name === "modlist.txt") requireValue(readFileSync(join(stageProfile, name), "utf8") ===
-      diagnosticModlist(readFileSync(source, "utf8")), "Staged modlist differs from expected isolated changes.");
+      diagnosticModlist(readFileSync(source, "utf8"), frameworkMods), "Staged modlist differs from expected isolated changes.");
     else requireValue(sha(source) === sha(join(stageProfile, name)), `Source profile metadata changed: ${name}`);
   }
   const expectedPayloadNames = candidate.manifest.files.map(entry => basename(entry.path));

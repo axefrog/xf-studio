@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
@@ -24,8 +24,10 @@ function fixture() {
   writeFileSync(join(profile, "plugins.txt"), "*fixture.esm\n");
   writeFileSync(join(profile, "loadorder.txt"), "fixture.esm\n");
   writeFileSync(join(profile, "settings.ini"), "selected=true\n");
-  mkdirSync(join(mo2Root, "mods", "ArchiveXL"));
-  writeFileSync(join(mo2Root, "mods", "ArchiveXL", "meta.ini"), "version=1.26.3.0\n");
+  // An older ArchiveXL whose DLL has no readable version resource, so its MO2 metadata names the version.
+  mkdirSync(join(mo2Root, "mods", "ArchiveXL", "red4ext", "plugins", "ArchiveXL"), { recursive: true });
+  writeFileSync(join(mo2Root, "mods", "ArchiveXL", "red4ext", "plugins", "ArchiveXL", "ArchiveXL.dll"), "fixture");
+  writeFileSync(join(mo2Root, "mods", "ArchiveXL", "meta.ini"), "[General]\nversion=1.26.3.0\n");
   mkdirSync(payload, { recursive: true });
   const files = ["xfs_fixture.archive", "xfs_fixture.archive.xl"].map((name, index) => {
     const content = `candidate-${index}`;
@@ -48,7 +50,12 @@ test("dry-run verifies the candidate and profile without creating a stage or cha
     expect(plan.presetCount).toBe(2);
     expect(plan.verifiedUnpackedFiles).toBe(5);
     expect(plan.sourceProfileLegacyEnabled).toBe(true);
-    expect(plan.frameworkMetadataVersions.ArchiveXL).toBe("1.26.3.0");
+    const archiveXl = plan.frameworks.frameworks.find(row => row.framework === "archivexl")!;
+    expect(archiveXl).toMatchObject({ installed: true, version: "1.26.3", versionSource: "mod-manager",
+      provider: { kind: "mo2-mod", name: "ArchiveXL" } });
+    expect(plan.cautions).toContain("XF Eye Artistry needs ArchiveXL 1.27.3 or newer; you have 1.26.3. " +
+      "Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub.");
+    expect(plan.placement).toMatchObject({ rule: "beside-related", anchor: "XF Eye Artistry CCXL - Dev", row: 2 });
     expect(plan.exactFilenameConflicts).toEqual([]);
     expect(existsSync(f.options.stagingRoot)).toBe(false);
     expect(readFileSync(join(f.options.mo2Root, "profiles", f.options.profileId, "modlist.txt"), "utf8"))
@@ -62,9 +69,10 @@ test("explicit staging copies profile metadata and uses the trusted transport on
     const options = { ...f.options, stagingRoot: join(f.root, "private", "scratch", "stage") };
     const result = stageRuntimeDiagnostic(options);
     const stagedList = readFileSync(join(result.stagedProfile, "modlist.txt"), "utf8");
-    expect(stagedList).toContain("-XF Eye Artistry CCXL - Dev\r\n");
-    expect(stagedList).toContain(`+${EYE_MAKEUP_MOD.modName}\r\n`);
-    expect(stagedList).not.toContain("XF Studio");
+    // Exactly one row is added, directly below the predecessor in MO2's pane; frameworks are untouched.
+    expect(stagedList).toBe(`+Other Mod\r\n+ArchiveXL\r\n+${EYE_MAKEUP_MOD.modName}\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n`);
+    expect(readdirSync(join(result.stagedMo2, "mods"))).toEqual([EYE_MAKEUP_MOD.modName]);
+    expect(readdirSync(join(f.options.mo2Root, "mods"))).toEqual(["ArchiveXL"]);
     expect(result.receipt.target).toBe(join(result.stagedMo2, "mods", EYE_MAKEUP_MOD.modName, "archive", "pc", "mod"));
     expect(readFileSync(join(result.stagedProfile, "settings.ini"), "utf8")).toBe("selected=true\n");
     expect(readFileSync(join(result.stagedProfile, "plugins.txt"), "utf8")).toBe("*fixture.esm\n");
@@ -95,6 +103,26 @@ test("tampering, source filename conflicts, and unsafe staging destinations stop
     writeFileSync(join(f.options.candidateStore, f.options.candidateId, "archive", "pc", "mod", name), "tampered");
     expect(() => planRuntimeDiagnostic(f.options)).toThrow("Candidate payload differs");
     expect(existsSync(f.options.stagingRoot)).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("an existing entry keeps its place, and a sectioned list never gains a row in a framework section", () => {
+  const f = fixture();
+  try {
+    const modlist = join(f.options.mo2Root, "profiles", f.options.profileId, "modlist.txt");
+    const listed = "# header\r\n+Other Mod\r\n-XF Eye Artistry\r\n-MISC_separator\r\n+ArchiveXL\r\n-CORE, LIBS, FRAMEWORKS_separator\r\n";
+    writeFileSync(modlist, listed);
+    const kept = stageRuntimeDiagnostic(f.options);
+    expect(kept.plan.placement.rule).toBe("existing");
+    expect(readFileSync(join(kept.stagedProfile, "modlist.txt"), "utf8")).toBe(listed.replace("-XF Eye Artistry", "+XF Eye Artistry"));
+    rmSync(f.options.stagingRoot, { recursive: true });
+    // The bottom section holds ArchiveXL (a framework provider), so the section above it is used.
+    const sectioned = "+ArchiveXL\r\n-SUPPORT_separator\r\n+Other Mod\r\n-LOOKS_separator\r\n";
+    writeFileSync(modlist, sectioned);
+    const staged = stageRuntimeDiagnostic(f.options);
+    expect(staged.plan.placement).toMatchObject({ rule: "section", section: "LOOKS", row: 2 });
+    expect(readFileSync(join(staged.stagedProfile, "modlist.txt"), "utf8"))
+      .toBe(`+ArchiveXL\r\n-SUPPORT_separator\r\n+${EYE_MAKEUP_MOD.modName}\r\n+Other Mod\r\n-LOOKS_separator\r\n`);
   } finally { f.cleanup(); }
 });
 

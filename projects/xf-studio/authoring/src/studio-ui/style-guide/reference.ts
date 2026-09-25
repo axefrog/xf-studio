@@ -1,3 +1,4 @@
+import { bindingReference } from "../../input-bindings";
 import { PANEL_IDS } from "../layout-defaults";
 import { code, esc, pattern, section } from "./kit";
 
@@ -20,13 +21,7 @@ export function reference(panels: PanelInfo[]) {
     ["Mod package", "files package.check/package.build", "files.snapshot().package (freshness), library.summary().progress"],
     ["Header / status", "recipe.undo, save, theme.set, layout.set", "status.snapshot(), preferences"],
   ];
-  const keys: [string, string][] = [
-    ["Ctrl+K · Ctrl+Shift+P", "Command palette"], ["Ctrl+Z", "Undo (outside text fields; cancels an active gesture first)"], ["Ctrl+S", "Save to library"],
-    ["F6 / Shift+F6", "Next / previous region"], ["? ", "Keyboard shortcuts"], ["Shift+F10 · Menu", "Context or layout menu for the focused item"],
-    ["← → Home End", "Tabs"], ["Alt+Shift+← →", "Reorder tab"], ["Delete", "Close tab / remove row"], ["↑ ↓ · Alt+↑ ↓", "Rows / reorder rows"],
-    ["F2 · Ctrl+D", "Rename / duplicate row"], ["Esc", "Cancel drag, gesture, slider, menu, popover or dialog"], ["Ctrl (while dragging a panel)", "Float without snapping"],
-    ["F · 1 · 2 · O", "Viewport: front/fit · both eyes · single eye · other eye"],
-  ];
+  const keys = bindingReference();
   const terms: [string, string][] = [
     ["Preset", "One complete look; one choice in the single in-game eye-makeup selector (plus Off)."],
     ["Layer", "One shape with colour, opacity and finish inside a preset. Top of the list = front."],
@@ -49,8 +44,10 @@ export function reference(panels: PanelInfo[]) {
       what: "Which application calls each surface uses. The authoritative contract is research/authoring/ui-action-catalogue.md and StudioPresentationPort.",
       when: "Designing a control: find its action first; if none exists, propose one (see rules)." }),
     pattern({ id: "r-keys", title: "Keyboard map", status: "implemented",
-      specimen: `<dl class="shortcut-list wide">${keys.map(([k, v]) => `<dt><kbd>${k}</kbd></dt><dd>${v}</dd>`).join("")}</dl>`,
-      what: "Global and contextual shortcuts. Every pointer-only operation has a keyboard path.", when: "Keep the ? sheet and this list identical." }),
+      specimen: keys.map(group => `<section class="reference-section"><h3>${esc(group.title)}</h3>${group.detail ? `<p class="muted small">${esc(group.detail)}</p>` : ""}<dl class="shortcut-list wide">${group.rows.map(row =>
+        `<dt><kbd>${esc(row.input)}</kbd></dt><dd>${esc(row.label)}${row.where ? `<span class="reference-where"> · ${esc(row.where)}</span>` : ""}</dd>`).join("")}</dl></section>`).join(""),
+      what: "Every keyboard and mouse binding, grouped by context, generated from the input binding catalogue (src/input-bindings.ts). Menus, sliders, popovers and dialogs also close with Esc. Every pointer-only operation has a keyboard path.",
+      when: "The ? Keyboard & mouse dialog renders the same list; a test fails if any binding lacks a label or any hint names a missing binding." }),
     pattern({ id: "r-terms", title: "Terminology", status: "rule",
       specimen: `<dl class="facts">${terms.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join("")}</dl>`,
       what: "User-facing words. Internal identifiers (regular, iridescent, xfas/…) never appear in the UI.", when: "All labels, messages and docs." }),

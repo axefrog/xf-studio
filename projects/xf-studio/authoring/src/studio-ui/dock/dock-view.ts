@@ -1,3 +1,4 @@
+import { keyBinding, panelModifiersHeld } from "../../input-bindings";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
@@ -286,22 +287,23 @@ export class DockView {
   private tabKey(event: KeyboardEvent, group: GroupNode, id: PanelId) {
     const index = group.panels.indexOf(id);
     const focusTab = (panel: PanelId) => this.element.querySelector<HTMLElement>(`#dock-tab-${panel}`)?.focus();
-    if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && event.altKey && event.shiftKey) {
+    const command = keyBinding("tabs", event)?.id;
+    if (command === "tabs.reorder") {
       event.preventDefault();
       const to = clamp(index + (event.key === "ArrowRight" ? 2 : -1), 0, group.panels.length);
       const moved = applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "tab", groupId: group.id, index: to });
       this.update(moved, `${this.title(id)} moved to position ${(locate(moved, id)?.index ?? 0) + 1} of ${group.panels.length}`);
       focusTab(id);
-    } else if (event.key === "ArrowRight" || event.key === "ArrowLeft" || event.key === "Home" || event.key === "End") {
+    } else if (command === "tabs.switch") {
       event.preventDefault();
       const next = event.key === "Home" ? 0 : event.key === "End" ? group.panels.length - 1 :
         (index + (event.key === "ArrowRight" ? 1 : -1) + group.panels.length) % group.panels.length;
       this.update(activate(this.tree, group.panels[next]));
       focusTab(group.panels[next]);
-    } else if (event.key === "Delete") { event.preventDefault(); this.close(id); }
-    else if (event.key === "Enter" || event.key === "ArrowDown") {
+    } else if (command === "tabs.close") { event.preventDefault(); this.close(id); }
+    else if (command === "tabs.content") {
       event.preventDefault(); this.focusContent(id);
-    } else if (event.key === "F10" && event.shiftKey || event.key === "ContextMenu") {
+    } else if (command === "tabs.menu") {
       event.preventDefault(); this.openPanelMenu(id, event.currentTarget as Element, event.currentTarget as Element);
     }
   }
@@ -560,10 +562,10 @@ export class DockView {
       }
       preview.dataset.label = resolution.active?.label ?? (target.kind === "float" ? (source.kind === "window" ? "" : "Float here") : "");
     };
-    const move = (e: PointerEvent) => paint({ x: e.clientX - base.left, y: e.clientY - base.top }, e.ctrlKey);
+    const move = (e: PointerEvent) => paint({ x: e.clientX - base.left, y: e.clientY - base.top }, panelModifiersHeld("tabs.float", e));
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(true); }
-      else if (e.key === "Control") paint(latestCursor, e.type === "keydown");
+      else if (e.key === "Control" || e.key === "Meta") paint(latestCursor, panelModifiersHeld("tabs.float", e));
     };
     const up = () => finish(false);
     const finish = (cancel: boolean) => {
@@ -593,7 +595,7 @@ export class DockView {
     window_.addEventListener("pointercancel", cancelDrag, true);
     window_.addEventListener("keydown", key, true);
     window_.addEventListener("keyup", key, true);
-    paint(latestCursor, event.ctrlKey);
+    paint(latestCursor, panelModifiersHeld("tabs.float", event));
   }
   private paintGuides(resolution: DropResolution) {
     for (const old of this.overlay.querySelectorAll(".dock-guide")) old.remove();

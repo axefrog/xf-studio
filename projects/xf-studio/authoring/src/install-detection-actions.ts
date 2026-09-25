@@ -1,25 +1,32 @@
-/** Read-only application actions that find Cyberpunk 2077 installs and MO2 instances on this host.
- * They never change settings: a setup view can offer "We found Cyberpunk 2077 at … [Use this]" and
- * then save the chosen path through the separate local setup actions. */
+/** Read-only application actions that find Cyberpunk 2077 installs and MO2 instances on this host,
+ * and check the installed frameworks the eye-makeup mod depends on. They never change settings, files
+ * or mod lists: a setup view can offer "We found Cyberpunk 2077 at … [Use this]" and then save the
+ * chosen path through the separate local setup actions, or show framework update guidance. */
+import type { FrameworkVersionCheck } from "./framework-versions";
 import type { GameInstallDetection, Mo2Detection } from "./install-detection";
 import { DETECTION_DESCRIPTORS } from "./studio-action-descriptors";
 
-export type InstallDetectionAction = { kind: "detect.gameInstalls" } | { kind: "detect.mo2Instances" };
-export type InstallDetectionTarget = "games" | "mo2";
+export type InstallDetectionAction = { kind: "detect.gameInstalls" } | { kind: "detect.mo2Instances" } |
+  { kind: "detect.frameworkVersions" };
+export type InstallDetectionTarget = "games" | "mo2" | "frameworks";
 export type InstallDetectionState = {
   busy: InstallDetectionTarget | null;
   games?: GameInstallDetection;
   mo2?: Mo2Detection;
+  /** Frameworks for the configured game folder and MO2 profile (host-owned settings, never browser paths). */
+  frameworks?: FrameworkVersionCheck;
   error?: string;
 };
 export type InstallDetectionOutcome = { ok: true } | { ok: false; code: string; message: string };
 export type InstallDetectionTransport = (target: InstallDetectionTarget) => Promise<{
-  ok: boolean; status: number; data: GameInstallDetection | Mo2Detection | { code: string; error: string };
+  ok: boolean; status: number; data: GameInstallDetection | Mo2Detection | FrameworkVersionCheck | { code: string; error: string };
 }>;
 
-const targetOf = (action: InstallDetectionAction): InstallDetectionTarget =>
-  action.kind === "detect.gameInstalls" ? "games" : "mo2";
-const schemaOf = { games: "xfs/game-install-detection-1", mo2: "xfs/mo2-instance-detection-1" } as const;
+const targets = { "detect.gameInstalls": "games", "detect.mo2Instances": "mo2",
+  "detect.frameworkVersions": "frameworks" } as const satisfies Record<InstallDetectionAction["kind"], InstallDetectionTarget>;
+const targetOf = (action: InstallDetectionAction): InstallDetectionTarget => targets[action.kind];
+const schemaOf = { games: "xfs/game-install-detection-1", mo2: "xfs/mo2-instance-detection-1",
+  frameworks: "xfs/framework-version-check-1" } as const;
 
 export class InstallDetectionActions {
   private state: InstallDetectionState = { busy: null };

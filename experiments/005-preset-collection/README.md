@@ -32,7 +32,7 @@ python experiments/005-preset-collection/build.py --collection experiments/005-p
 python experiments/005-preset-collection/verify.py
 ```
 
-The Studio app has TypeScript ports of `mip_maps.py`, `archive_inventory.py` and an independent port of `verify.py`, which reproduce these programs' output (see [Build pipeline port](../../research/authoring/studio-to-mod-pipeline.md#build-pipeline-port)). The product Build still runs the Python programs until the orchestration is ported. These Python programs remain the research oracle.
+The Studio's product Build no longer runs these programs. It uses TypeScript ports of all four (`build.py`, `mip_maps.py`, `archive_inventory.py` and an independent port of `verify.py`), which reproduce their output byte for byte (see [Build pipeline port](../../research/authoring/studio-to-mod-pipeline.md#build-pipeline-port)). These Python programs remain the research oracle; the Studio's `tools/compare-build-port.ts` compares them with the TypeScript build.
 
 `build.py --collection <collection.json>` accepts another validated `xfas/collection-1` collection. Each build gets a new output directory, preserving prior outputs. The independent verifier follows the latest successfully completed build. No runtime install action is part of either command.
 

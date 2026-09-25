@@ -7,6 +7,7 @@ import { WEBVIEW2_BOOTSTRAPPER, verifyMicrosoftSignature, webView2Folder } from 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
+import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
 
 // A private packaging gate. The checked files are the actual installer/update
 // artifacts, not the source `static` tree that Electrobun consumes.
@@ -74,11 +75,9 @@ if (issues.length) throw Error(`THIRD_PARTY_NOTICES.md is out of date:\n${issues
 const toolPrefix = `${bundle}/Resources/app/build-tools/`;
 const toolFiles = members.filter(name => name.startsWith(toolPrefix) && !name.endsWith("/"))
   .map(name => name.slice(toolPrefix.length));
-sameMembers(toolFiles, ["manifest.json", "build_collection_package.py", "study/build.py", "study/verify.py",
-  "study/mip_maps.py", "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"],
-"Packaged build tools");
+sameMembers(toolFiles, ["manifest.json", builderEntry], "Packaged build tools");
 const toolManifest = JSON.parse(tar(["-xOf", archive, toolPrefix + "manifest.json"]));
-if (toolManifest.schema !== "xfs/desktop-build-tools-1" ||
+if (toolManifest.schema !== BUILD_TOOLS_SCHEMA ||
     JSON.stringify(Object.keys(toolManifest.files).sort()) !== JSON.stringify(toolFiles.filter(name => name !== "manifest.json").sort()))
   throw Error("Packaged build tool manifest is incomplete.");
 for (const name of toolFiles.filter(name => name !== "manifest.json")) {
@@ -113,4 +112,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Nine allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and seven hashed asset-free build tools; no private preview assets or update feed.");
+console.log("Nine allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");

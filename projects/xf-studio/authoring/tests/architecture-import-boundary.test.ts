@@ -25,7 +25,8 @@ test("the independent browser entry does not depend on legacy main or control mo
 });
 
 test("install detection keeps parsing pure and host access in its adapter", () => {
-  for (const name of ["install-detection", "mo2-instance", "install-detection-actions"]) {
+  for (const name of ["install-detection", "mo2-instance", "install-detection-actions", "framework-versions",
+    "mo2-placement", "pe-version"]) {
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
         /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|main$|scene|studio-ui))/);
@@ -53,4 +54,15 @@ test("core modules never import presentation modules or browser entry points", (
     .filter(path => presentation(path) || entries.has(path.replace(/^\.\//, "")))
     .map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
+});
+
+test("the package builder keeps resource definitions pure and external processes in its adapters", () => {
+  // Pure definitions: no file, process or compiler access.
+  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake"]);
+  // Orchestration reaches WolvenKit only through the PackageResourceTools port.
+  for (const name of ["package-resource-builder", "package-build-service", "package-bake"])
+    for (const dependency of imports(source(name)))
+      expect(dependency, `${name} imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree)$/);
+  for (const name of ["package-build-wolvenkit", "eye-plate-wolvenkit"])
+    expect(imports(source(name))).toContain("./process-tree");
 });

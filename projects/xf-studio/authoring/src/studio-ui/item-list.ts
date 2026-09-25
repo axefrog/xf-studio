@@ -1,3 +1,4 @@
+import { chordsLabel, keyBinding, keyBindingById } from "../input-bindings";
 import { h, setAttr, setText } from "./dom";
 import { icon } from "./icons";
 
@@ -57,7 +58,7 @@ export class ItemList<T extends ListItem> {
   private createRow(id: string): ListRow {
     const label = h("span", { class: "item-name" }), meta = h("span", { class: "item-meta" });
     const main = h("button", { class: "item-main", type: "button" }, label, meta);
-    const grip = h("span", { class: "item-grip", "aria-hidden": "true", title: `Drag to reorder · Alt+↑/↓ with the keyboard` }, icon("grip"));
+    const grip = h("span", { class: "item-grip", "aria-hidden": "true", title: `Drag to reorder · ${chordsLabel(keyBindingById("rows.reorder"))} with the keyboard` }, icon("grip"));
     const lead = h("span", { class: "item-lead" });
     const trailing = h("span", { class: "item-trailing" });
     const element = h("li", { class: "item-row", "data-id": id }, grip, lead, main, trailing);
@@ -72,21 +73,21 @@ export class ItemList<T extends ListItem> {
     return { element, trailing, lead, main, label, meta };
   }
   private key(event: KeyboardEvent, id: string) {
-    const index = this.order.indexOf(id);
-    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    const index = this.order.indexOf(id), command = keyBinding("rows", event)?.id;
+    if (command === "rows.reorder") {
       event.preventDefault();
       const to = index + (event.key === "ArrowUp" ? -1 : 1);
       if (to >= 0 && to < this.order.length) { this.options.onMove(id, to); requestAnimationFrame(() => this.focusRow(id)); }
-    } else if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Home" || event.key === "End") {
+    } else if (command === "rows.focus") {
       event.preventDefault();
       const next = event.key === "Home" ? 0 : event.key === "End" ? this.order.length - 1 :
         Math.max(0, Math.min(this.order.length - 1, index + (event.key === "ArrowUp" ? -1 : 1)));
       this.rows.get(this.order[next])?.main.focus();
-    } else if (event.key === "F2") { event.preventDefault(); this.rename(id); }
-    else if (event.key === "Delete" && this.options.onDelete) { event.preventDefault(); this.options.onDelete(id); }
-    else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && this.options.onDuplicate) {
+    } else if (command === "rows.rename") { event.preventDefault(); this.rename(id); }
+    else if (command === "rows.remove" && this.options.onDelete) { event.preventDefault(); this.options.onDelete(id); }
+    else if (command === "rows.duplicate" && this.options.onDuplicate) {
       event.preventDefault(); this.options.onDuplicate(id);
-    } else if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+    } else if (command === "rows.menu") {
       event.preventDefault(); const row = this.rows.get(id)!; this.options.onMenu(id, row.main, row.main);
     }
   }

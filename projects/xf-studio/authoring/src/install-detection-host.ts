@@ -6,12 +6,13 @@ import { execFile } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DetectionHostPort } from "./install-detection";
+import type { FrameworkHostPort } from "./framework-versions";
 import { describeMo2Instance, type Mo2InstanceDescription } from "./mo2-instance";
 
 const registryKey = /^HK(?:LM|CU)\\[A-Za-z0-9_.\\ -]{1,200}$/;
 
 export function createWindowsDetectionHost(env: NodeJS.ProcessEnv = process.env,
-  platform: string = process.platform, timeoutMs = 5_000): DetectionHostPort {
+  platform: string = process.platform, timeoutMs = 5_000): DetectionHostPort & FrameworkHostPort {
   const regular = (path: string) => {
     try { const stat = lstatSync(path); return stat.isFile() && !stat.isSymbolicLink() ? stat : null; }
     catch { return null; }
@@ -46,6 +47,25 @@ export function createWindowsDetectionHost(env: NodeJS.ProcessEnv = process.env,
           read += bytes;
         }
         return buffer.subarray(0, read).toString("utf8");
+      } catch { return null; }
+      finally { if (fd !== undefined) closeSync(fd); }
+    },
+    /** Bounded window of a regular file (the framework check reads PE headers and `.rsrc` only). */
+    readBytes(path, offset, length) {
+      const stat = regular(path);
+      if (!stat || !Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 ||
+        length > 16 * 1024 * 1024 || offset + length > stat.size) return null;
+      let fd: number | undefined;
+      try {
+        fd = openSync(path, "r");
+        const buffer = Buffer.alloc(length);
+        let read = 0;
+        while (read < length) {
+          const bytes = readSync(fd, buffer, read, length - read, offset + read);
+          if (bytes === 0) break;
+          read += bytes;
+        }
+        return read === length ? new Uint8Array(buffer.buffer, buffer.byteOffset, read) : null;
       } catch { return null; }
       finally { if (fd !== undefined) closeSync(fd); }
     },

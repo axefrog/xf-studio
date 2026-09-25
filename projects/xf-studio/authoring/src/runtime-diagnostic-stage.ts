@@ -1,17 +1,22 @@
-/** A private MO2 diagnostic clone. This never writes to the source MO2 or game. */
+/** A private MO2 diagnostic clone. This never writes to the source MO2 or game, and never installs,
+ * replaces, disables or duplicates a framework: it only reports framework versions and adds the one
+ * eye-makeup mod entry to the copied profile, placed by the MO2 placement rule. */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { defaultLocalSettings } from "./local-settings";
+import { checkFrameworkVersions, frameworkModNames, type FrameworkRouteReport } from "./framework-versions";
+import { createWindowsDetectionHost } from "./install-detection-host";
+import { applyMo2Placement, planMo2Placement, type Mo2Placement } from "./mo2-placement";
 import { createModInstallTransport, inspectLocalPackageCandidate } from "./mod-install-transport";
-import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "./mod-branding";
+import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries, isEyeMakeupModFolder } from "./mod-branding";
 
 export type RuntimeDiagnosticOptions = {
   candidateStore: string; candidateId: string; gameRoot: string; mo2Root: string;
   profileId: string; stagingRoot: string;
 };
 export type RuntimeDiagnosticPlan = {
-  schema: "xfs/runtime-diagnostic-plan-1"; candidateId: string; namespace: string;
+  schema: "xfs/runtime-diagnostic-plan-2"; candidateId: string; namespace: string;
   candidateFiles: { path: string; sha256: string; bytes: number }[];
   verifiedUnpackedFiles: number; presetCount: number; omissions: number;
   sourceProfileModlistSha256: string; sourceProfileEnabledMods: number;
@@ -23,22 +28,32 @@ export type RuntimeDiagnosticPlan = {
   sourceDedicatedModExists: boolean;
   /** An existing MO2 folder holding an earlier install of this mod under a legacy name. */
   sourceLegacyModFolder: string | null;
-  frameworkMetadataVersions: Record<string, string | null>;
+  /** Read-only framework versions the source profile would load, with update guidance. */
+  frameworks: FrameworkRouteReport;
+  /** Where the copied modlist gets the eye-makeup mod entry. */
+  placement: Mo2Placement;
   exactFilenameConflicts: string[]; stagingRoot: string;
   actions: string[]; cautions: string[];
 };
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
-/** The legacy development selector that a diagnostic clone disables. */
-const legacyDevelopmentMod = "XF Eye Artistry CCXL - Dev";
-/** The isolated modlist a diagnostic clone uses; shared with promotion so both agree exactly. */
-export function diagnosticModlist(source: string): string {
-  const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  let lines = source.split(/\r?\n/).filter((line, index, all) => index < all.length - 1 || line);
-  lines = lines.map(line => line === `+${legacyDevelopmentMod}` ? `-${legacyDevelopmentMod}` : line);
-  lines = lines.filter(line => line !== `-${EYE_MAKEUP_MOD.modName}`);
-  lines.push(`+${EYE_MAKEUP_MOD.modName}`);
-  return lines.join(newline) + newline;
+/** Frameworks the profile would load, read-only; its mod folders mark framework sections for placement. */
+export function profileFrameworks(gameRoot: string, mo2Root: string, profileId: string): FrameworkRouteReport {
+  const report = checkFrameworkVersions(createWindowsDetectionHost(), { gameRoot, launchRoute: "mo2", mo2Root,
+    mo2ProfileId: profileId }).routes.find(route => route.route === "mo2");
+  requireValue(report, "MO2 framework report is missing.");
+  return report;
+}
+export function diagnosticPlacement(source: string, frameworkMods: Iterable<string> = []): Mo2Placement {
+  return planMo2Placement(source, EYE_MAKEUP_MOD.modName, { related: eyeMakeupRelatedEntries, frameworkMods });
+}
+/** The isolated modlist a diagnostic clone uses; shared with promotion so both agree exactly. It adds
+ * (or enables) only the eye-makeup mod row and switches off an enabled predecessor of the same mod. */
+export function diagnosticModlist(source: string, frameworkMods: Iterable<string> = []): string {
+  const placed = applyMo2Placement(source, diagnosticPlacement(source, frameworkMods), true);
+  const newline = placed.includes("\r\n") ? "\r\n" : "\n";
+  const predecessors = EYE_MAKEUP_MOD.predecessorMods.map(name => `+${name}`);
+  return placed.split(newline).map(line => predecessors.includes(line) ? `-${line.slice(1)}` : line).join(newline);
 }
 /** An existing MO2 mod folder that holds an earlier install of this mod under a legacy name. */
 export function legacyModFolder(modsRoot: string): string | null {
@@ -107,13 +122,8 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   const enabledMod = names.find(isEyeMakeupModFolder);
   requireValue(!enabledMod, `Source profile already enables ${EYE_MAKEUP_MOD.modName}` +
     (enabledMod?.toLowerCase() === EYE_MAKEUP_MOD.modName.toLowerCase() ? "" :` under its earlier name "${enabledMod}"`) + "; inspect it before staging.");
-  const frameworkMetadataVersions: Record<string, string | null> = {};
-  for (const name of ["ArchiveXL", "TweakXL", "Codeware", "redscript"]) {
-    const meta = join(paths.mo2, "mods", name, "meta.ini");
-    if (names.includes(name) && existsSync(meta)) regular(meta);
-    frameworkMetadataVersions[name] = names.includes(name) && existsSync(meta)
-      ? (/^version=(.*)$/m.exec(readFileSync(meta, "utf8"))?.[1]?.trim() || null) : null;
-  }
+  const frameworks = profileFrameworks(paths.game, paths.mo2, options.profileId);
+  const placement = diagnosticPlacement(text, frameworkModNames(frameworks));
   const exactFilenameConflicts: string[] = [];
   for (const entry of paths.candidate.manifest.files) {
     const file = basename(entry.path);
@@ -129,7 +139,7 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   };
   requireValue(Number.isSafeInteger(manifest.verifiedPresetCount) && manifest.verifiedPresetCount! > 0,
     "Diagnostic candidate has no recorded presets.");
-  const legacy = names.includes(legacyDevelopmentMod);
+  const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
   const dedicatedModExists = existsSync(join(paths.mo2, "mods", EYE_MAKEUP_MOD.modName));
   const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
   const listed = (name: string) => lines.some(line => /^[+-]/.test(line) && line.slice(1).toLowerCase() === name.toLowerCase());
@@ -140,11 +150,14 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     "No plate clearance correction has passed every release gate; watch eyelids and idle poses.",
   ];
   if (legacy) cautions.push("The legacy Eye Artistry selector is enabled in the source profile and will be disabled only in the diagnostic clone.");
+  for (const verdict of frameworks.verdicts) if (verdict.message) cautions.push(verdict.message);
+  if (!frameworks.available && frameworks.problem) cautions.push(frameworks.problem);
+  cautions.push(...frameworks.frameworks.flatMap(row => row.notes));
   if (dedicatedModExists) cautions.push(`The source MO2 instance already has an ${EYE_MAKEUP_MOD.modName} mod folder; inspect its ownership before promoting a diagnostic clone.`);
   if (legacyFolder) cautions.push(`The source MO2 instance already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy folder "${legacyFolder}". Promotion refuses to create a second copy until that install is rolled back or removed.`);
   if (exactFilenameConflicts.length) cautions.push("Exact archive filename conflicts require resolution before a diagnostic launch.");
   return {
-    schema: "xfs/runtime-diagnostic-plan-1", candidateId: options.candidateId,
+    schema: "xfs/runtime-diagnostic-plan-2", candidateId: options.candidateId,
     namespace: manifest.namespace, candidateFiles: manifest.files,
     verifiedUnpackedFiles: manifest.verifiedUnpackedFiles,
     presetCount: manifest.verifiedPresetCount!, omissions: Array.isArray(manifest.omissions) ? manifest.omissions.length : 0,
@@ -152,11 +165,13 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     sourceProfileLegacyEnabled: legacy, sourceProfileModEntryPresent: listed(EYE_MAKEUP_MOD.modName),
     sourceProfileLegacyModEntryPresent: EYE_MAKEUP_MOD.legacyModFolders.some(listed),
     sourceDedicatedModExists: dedicatedModExists, sourceLegacyModFolder: legacyFolder,
-    frameworkMetadataVersions,
+    frameworks, placement,
     exactFilenameConflicts, stagingRoot: paths.stage,
     actions: ["Copy selected profile metadata into a new isolated MO2 root.",
       ...(legacy ? ["Disable the legacy Eye Artistry mod only in that copied modlist."] : []),
-      `Enable a dedicated ${EYE_MAKEUP_MOD.modName} entry only in that copied modlist.`,
+      placement.rule === "existing" ? `Enable the listed ${EYE_MAKEUP_MOD.modName} entry only in that copied modlist.`
+        : `Add one ${EYE_MAKEUP_MOD.modName} entry only to that copied modlist: ${placement.description}`,
+      "Leave every framework and every other mod entry as it is; report framework versions only.",
       "Use the trusted transport to copy the verified candidate pair into that isolated MO2 root."],
     cautions,
   };
@@ -183,7 +198,8 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   }
   requireValue(sha(join(stagedProfile, "modlist.txt")) === plan.sourceProfileModlistSha256,
     "Copied MO2 profile changed during diagnostic staging.");
-  writeFileSync(join(stagedProfile, "modlist.txt"), diagnosticModlist(readFileSync(paths.modlist, "utf8")));
+  writeFileSync(join(stagedProfile, "modlist.txt"), diagnosticModlist(readFileSync(paths.modlist, "utf8"),
+    frameworkModNames(plan.frameworks)));
   const settings = defaultLocalSettings();
   settings.gameRoot = paths.game; settings.mo2Root = stagedMo2; settings.mo2ProfileId = options.profileId;
   settings.launchRoute = "mo2"; settings.installMode = "mo2";

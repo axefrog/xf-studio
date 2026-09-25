@@ -68,7 +68,7 @@ test("explicit promotion creates only new owned paths and rollback removes only 
   try {
     const preview = promoteRuntimeDiagnostic(f.options);
     expect(readFileSync(join(preview.newProfile, "modlist.txt"), "utf8"))
-      .toBe(`+Other Mod\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n+${EYE_MAKEUP_MOD.modName}\r\n`);
+      .toBe(`+Other Mod\r\n+${EYE_MAKEUP_MOD.modName}\r\n-XF Eye Artistry CCXL - Dev\r\n-Unused Mod\r\n`);
     expect(preview.dedicatedMod).toBe(join(f.options.mo2Root, "mods", EYE_MAKEUP_MOD.modName));
     expect(readFileSync(join(f.sourceProfile, "modlist.txt"), "utf8")).toBe(f.sourceList);
     expect(readFileSync(join(preview.newProfile, "plugins.txt"), "utf8")).toBe("*fixture.esm\n");

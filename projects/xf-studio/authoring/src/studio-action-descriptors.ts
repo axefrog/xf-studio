@@ -142,6 +142,7 @@ export const REQUEST_DESCRIPTORS = {
 export const DETECTION_DESCRIPTORS = {
   "detect.gameInstalls": request("host", "read"),
   "detect.mo2Instances": request("host", "read"),
+  "detect.frameworkVersions": request("host", "read"),
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands. */

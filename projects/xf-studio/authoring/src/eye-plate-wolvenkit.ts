@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { EyePlateTools } from "./eye-plate-service";
+import { runProcessTree } from "./process-tree";
 
 /** Process adapter: the only place the eye-plate derivation starts external tools. */
 const defaultTimeoutMs = 5 * 60_000;
@@ -12,38 +12,15 @@ export class ToolRunError extends Error {
 }
 
 /** Run one command; abort or timeout kills the whole process tree. */
-export function runTool(command: string, args: string[], signal?: AbortSignal, timeoutMs = defaultTimeoutMs): Promise<string> {
-  return new Promise((done, reject) => {
-    if (signal?.aborted) { reject(new ToolRunError("plate_cancelled", "Eye plate preparation was cancelled.")); return; }
-    const child = spawn(command, args, { windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
-    let output = "", stopped: string | null = null, settled = false;
-    const keep = (chunk: Buffer) => { output = (output + chunk.toString("utf8")).slice(-64_000); };
-    child.stdout.on("data", keep);
-    child.stderr.on("data", keep);
-    const stop = (reason: string) => {
-      if (settled || stopped) return;
-      stopped = reason;
-      if (!child.pid) { child.kill(); return; }
-      if (process.platform === "win32") {
-        const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-        killer.on("error", () => child.kill());
-      } else { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
-    };
-    const abort = () => stop("cancelled");
-    const timer = setTimeout(() => stop("timeout"), timeoutMs);
-    signal?.addEventListener("abort", abort, { once: true });
-    const finish = (code: number | null, error?: Error) => {
-      if (settled) return;
-      settled = true; clearTimeout(timer); signal?.removeEventListener("abort", abort);
-      if (stopped === "cancelled") reject(new ToolRunError("plate_cancelled", "Eye plate preparation was cancelled.", tail(output)));
-      else if (stopped === "timeout") reject(new ToolRunError("plate_tool_failed", `${basename(command)} exceeded its time limit.`, tail(output)));
-      else if (error || code !== 0 || /Unhandled exception/i.test(output))
-        reject(new ToolRunError("plate_tool_failed", `${basename(command)} ${args[0]} failed${code === null ? "" : ` (exit ${code})`}.`, tail(output)));
-      else done(output);
-    };
-    child.on("error", error => finish(null, error));
-    child.on("close", code => finish(code));
-  });
+export async function runTool(command: string, args: string[], signal?: AbortSignal, timeoutMs = defaultTimeoutMs): Promise<string> {
+  if (signal?.aborted) throw new ToolRunError("plate_cancelled", "Eye plate preparation was cancelled.");
+  const result = await runProcessTree(command, args, { signal, timeoutMs, keep: 64_000 });
+  const output = result.stdout + result.stderr;
+  if (result.stopped === "cancelled") throw new ToolRunError("plate_cancelled", "Eye plate preparation was cancelled.", tail(output));
+  if (result.stopped === "timeout") throw new ToolRunError("plate_tool_failed", `${basename(command)} exceeded its time limit.`, tail(output));
+  if (result.error || result.exitCode !== 0 || /Unhandled exception/i.test(output))
+    throw new ToolRunError("plate_tool_failed", `${basename(command)} ${args[0]} failed${result.exitCode === null ? "" : ` (exit ${result.exitCode})`}.`, tail(output));
+  return output;
 }
 
 /** WolvenKit's regex engine is .NET; depot paths use backslashes, matched literally. */

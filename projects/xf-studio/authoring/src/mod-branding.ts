@@ -25,7 +25,17 @@ export const EYE_MAKEUP_MOD = Object.freeze({
    * roll back or recover a promotion that created one.
    */
   legacyModFolders: Object.freeze(["XF Studio"] as const),
+  /**
+   * Older, separately built mods with the same purpose (not installs of this mod). MO2 placement
+   * puts XF Eye Artistry directly beside one, and a diagnostic profile copy switches it off so two
+   * eye-makeup selectors don't compete.
+   */
+  predecessorMods: Object.freeze(["XF Eye Artistry CCXL - Dev"] as const),
 });
+
+/** Mod-list entries XF Eye Artistry is placed beside, in order of preference. */
+export const eyeMakeupRelatedEntries: readonly string[] =
+  Object.freeze([...EYE_MAKEUP_MOD.legacyModFolders, ...EYE_MAKEUP_MOD.predecessorMods]);
 
 /** Every MO2 folder name that denotes this mod, current name first. */
 export const eyeMakeupModFolders: readonly string[] =

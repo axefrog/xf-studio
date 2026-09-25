@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
-import { createInstallDetectionHandler } from "../src/install-detection-server";
+import { createInstallDetectionHandler, hostFrameworkCheck } from "../src/install-detection-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
@@ -50,8 +50,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => ({ updater: false, installer: false, packageCheck: true,
       packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe) === null,
-      eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE) }));
-  const installDetection = createInstallDetectionHandler();
+      eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
+      frameworks: hostFrameworkCheck(settings) }));
+  const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);

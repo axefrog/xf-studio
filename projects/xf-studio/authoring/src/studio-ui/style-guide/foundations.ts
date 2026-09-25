@@ -24,7 +24,7 @@ export function foundations(css: string) {
       specimen: `<ol class="principles">
         <li><strong>Truth before polish.</strong> Never show stale, partial, unverified or preview-only results as ready, packaged or game-tested. Status words come from the application, not from the control.</li>
         <li><strong>One accent, one meaning.</strong> Yellow marks commitment and focus (primary action, active tab, keyboard focus). Cyan marks what is live or selected. Everything else is graphite.</li>
-        <li><strong>The stage is neutral.</strong> The 3D head and UV map sit on the same neutral surround in both themes so colour judgement never shifts with the chrome.</li>
+        <li><strong>The stage is neutral.</strong> The 3D head and UV map sit on a near-achromatic grey surround, light in the light theme and dark in the dark theme, so colour judgement isn't skewed by coloured chrome.</li>
         <li><strong>Every affordance is an action.</strong> Buttons, menus, shortcuts, drags and the command palette call the same typed application action and show the same disabled reason.</li>
         <li><strong>Panels are tools, not places.</strong> Any panel can dock, float, tab or join a magnetic composite; nothing depends on a fixed sidebar.</li>
         <li><strong>Density with air.</strong> Compact 28 px controls and 32 px rows, but generous section spacing and one idea per section.</li>
@@ -43,7 +43,7 @@ export function foundations(css: string) {
       what: "WCAG contrast ratios computed from the tokens in studio.css each time this guide is generated. Text needs 4.5:1; control boundaries, selection and focus need 3:1.",
       when: "Check this table after any token change; the guide build fails the style-guide test if a pair drops below its minimum.",
       combine: "State colours are always paired with words or icons, so contrast is never the only carrier of meaning.",
-      adapt: "Both themes are listed; the stage keeps its own fixed palette for overlays.",
+      adapt: "Both themes are listed; stage overlays use the theme-aware --stage-* tokens.",
       drives: "Parsed light-dark(oklch…) token values; the conversion is OKLCH → linear sRGB → relative luminance." }),
     pattern({ id: "f-type", title: "Typography", status: "implemented",
       specimen: `<div class="type-specimen">
@@ -134,9 +134,9 @@ export function shell() {
       drives: `${code("authoring.capability(action)")}, ${code("files.capability")}, ${code("authoring.requestCapability")}, ${code("viewport.uvCommandCapability")}.`,
       a11y: "Combobox + listbox with aria-activedescendant; disabled options expose their reason as text." }),
     pattern({ id: "s-sheet", title: "Reference sheet (dialog)", status: "implemented",
-      specimen: `<div class="sheet static-sheet"><div class="sheet-head"><h2>Keyboard shortcuts</h2>${btn("Close", { icon: "close", iconOnly: true, variant: "ghost" })}</div><dl class="shortcut-list wide"><dt><kbd>Ctrl+K</kbd></dt><dd>Command palette</dd><dt><kbd>F6</kbd></dt><dd>Move between regions</dd></dl></div>`,
-      what: "A modal dialog for reference content (keyboard shortcuts). Modal dialogs are reserved for reading or a single decision.",
-      when: "Press ? outside text fields, or Panels › Keyboard shortcuts.",
+      specimen: `<div class="sheet static-sheet"><div class="sheet-head"><h2>Keyboard &amp; mouse</h2>${btn("Close", { icon: "close", iconOnly: true, variant: "ghost" })}</div><section class="reference-section"><h3>Head viewport</h3><dl class="shortcut-list wide"><dt><kbd>Shift-drag</kbd></dt><dd>Rotate shape<span class="reference-where"> · over makeup</span></dd><dt><kbd>Wheel / Ctrl-wheel</kbd></dt><dd>Zoom view</dd></dl></section></div>`,
+      what: "A modal dialog for reference content. The Keyboard & mouse dialog lists every binding grouped by context (anywhere, head, UV map, during a gesture, panel tabs, rows), generated from the input binding catalogue, with the viewport-hints switch at the top. Modal dialogs are reserved for reading or a single decision.",
+      when: "Press ? outside text fields, View preferences or Panels › Keyboard & mouse, or the palette.",
       a11y: "Native <dialog> with showModal: focus is trapped, Escape closes and focus returns to the invoker." }),
   ]);
 }

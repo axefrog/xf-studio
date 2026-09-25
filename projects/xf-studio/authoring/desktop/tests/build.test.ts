@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -8,14 +7,12 @@ import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { parseCollection } from "../../src/preset-collection";
 import { preparePackageCollection } from "../../src/package-filter";
-import { desktopBuildIssue, probeBun, runDesktopBuild, type DesktopPlatePreparer } from "../build";
+import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDesktopBuild, type DesktopPlatePreparer } from "../build";
 import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
-const python = spawnSync("python", ["-c", "import sys; print(sys.executable)"],
-  { encoding: "utf8" }).stdout.trim();
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const fixtureWolvenKit = () => null;
@@ -36,7 +33,8 @@ const fixturePlate = (seen: string[] = []): DesktopPlatePreparer => async (_sett
     manifestFile, manifest: plateManifest, reused: false };
 };
 
-function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling" | "installed" | "work" = "sibling") {
+/** The packaged builder is one Bun script; each test supplies a small stand-in for it. */
+function host(builder = "await Bun.sleep(30_000);\n", toolPlacement: "sibling" | "installed" | "work" = "sibling") {
   const data = resolve(root, `data-${crypto.randomUUID()}`);
   const tools = toolPlacement === "installed" ? resolve(data, "app/Resources/app/build-tools") :
     toolPlacement === "work" ? resolve(data, "package-work/build-tools") :
@@ -47,18 +45,12 @@ function host(wrapper = "import time; time.sleep(30)\n", toolPlacement: "sibling
     mkdirSync(path, { recursive: true });
   writeFileSync(resolve(game, "bin/x64/Cyberpunk2077.exe"), "MZ fixture");
   writeFileSync(wk, "MZ fixture");
-  const files = ["build_collection_package.py", "study/build.py", "study/verify.py", "study/mip_maps.py",
-    "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"];
-  const hashes: Record<string, string> = {};
-  for (const name of files) {
-    const path = resolve(tools, name);
-    mkdirSync(resolve(path, ".."), { recursive: true });
-    writeFileSync(path, name === files[0] ? wrapper : "# fixture\n");
-    hashes[name] = createHash("sha256").update(readFileSync(path)).digest("hex");
-  }
-  writeFileSync(resolve(tools, "manifest.json"), JSON.stringify({ schema: "xfs/desktop-build-tools-1", files: hashes }));
-  const settings = { ...defaultLocalSettings(), gameRoot: game,
-    wolvenKitCli: wk, pythonExecutable: python };
+  const path = resolve(tools, builderEntry);
+  mkdirSync(resolve(path, ".."), { recursive: true });
+  writeFileSync(path, builder);
+  const hashes = { [builderEntry]: createHash("sha256").update(readFileSync(path)).digest("hex") };
+  writeFileSync(resolve(tools, "manifest.json"), JSON.stringify({ schema: BUILD_TOOLS_SCHEMA, files: hashes }));
+  const settings = { ...defaultLocalSettings(), gameRoot: game, wolvenKitCli: wk };
   return { data, tools, settings, game };
 }
 
@@ -81,14 +73,24 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
   } catch (error) {
     if (!String(error).includes("EPERM")) throw error;
   }
-  writeFileSync(resolve(h.tools, "study/verify.py"), "tampered");
+  writeFileSync(resolve(h.tools, builderEntry), "tampered");
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
+  // The earlier Python tool bundle is no longer accepted.
+  writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: "xfs/desktop-build-tools-1", files: {} }));
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
+});
+
+test("Build readiness needs no Python: a saved Python path is neither required nor checked", () => {
+  const h = host();
+  expect("pythonExecutable" in h.settings).toBe(false);
+  const legacy = { ...h.settings, pythonExecutable: resolve(root, "missing", "python.exe") };
+  expect(desktopBuildIssue(legacy, h.data, h.tools, fixtureWolvenKit)).toBeNull();
 });
 
 test("installed Electrobun tools may share userData while writable package roots stay separate", () => {
-  const installed = host("# fixture\n", "installed");
+  const installed = host("// fixture\n", "installed");
   expect(desktopBuildIssue(installed.settings, installed.data, installed.tools, fixtureWolvenKit)).toBeNull();
-  const overlap = host("# fixture\n", "work");
+  const overlap = host("// fixture\n", "work");
   expect(desktopBuildIssue(overlap.settings, overlap.data, overlap.tools, fixtureWolvenKit)).toContain("overlaps");
 });
 
@@ -108,7 +110,7 @@ test("desktop capabilities and Local setup enable Build only for validated host 
       .toBe(true);
     expect((await (await fetch(base + "/api/local-settings", { headers: { Cookie: cookie } })).json()).readiness.build.ready)
       .toBe(true);
-    writeFileSync(resolve(h.tools, "study/verify.py"), "tampered");
+    writeFileSync(resolve(h.tools, builderEntry), "tampered");
     expect((await (await fetch(base + "/api/desktop/capabilities", { headers: { Cookie: cookie } })).json()).packageBuild)
       .toBe(false);
   } finally { app.stop(); }
@@ -116,9 +118,9 @@ test("desktop capabilities and Local setup enable Build only for validated host 
 
 test("a desktop Build deadline stops the process tree and publishes no candidate", async () => {
   const marker = resolve(root, `survived-${crypto.randomUUID()}`);
-  const childCode = `import time,pathlib; time.sleep(1); pathlib.Path(${JSON.stringify(marker)}).write_text('survived')`;
-  const wrapper = `import subprocess,sys,time\nsubprocess.Popen([sys.executable,'-c',${JSON.stringify(childCode)}])\ntime.sleep(30)\n`;
-  const h = host(wrapper);
+  // The builder starts a grandchild (as it starts WolvenKit); stopping the tree must stop both.
+  const childCode = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "survived"), 1000);`;
+  const h = host(`Bun.spawn([process.execPath, "-e", ${JSON.stringify(childCode)}]);\nawait Bun.sleep(30_000);\n`);
   const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit, fixturePlate());
   expect(result).toMatchObject({ kind: "failure", code: "package_build_timeout" });
   await Bun.sleep(1200);
@@ -137,7 +139,7 @@ test("an invalid collection is refused before starting the builder", async () =>
 
 test("an unsupported game head stops Build with its explanation before the builder starts", async () => {
   const marker = resolve(root, `wrapper-${crypto.randomUUID()}`);
-  const h = host(`import pathlib\npathlib.Path(${JSON.stringify(marker)}).write_text('ran')\n`);
+  const h = host(`require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
   const unsupported: DesktopPlatePreparer = async () => {
     throw new EyePlateError("plate_source_unsupported", "Update XF Studio to a version that supports your game.");
   };
@@ -175,20 +177,31 @@ test("a matching staged result is promoted with partial-export identities and no
       sourceRevision: plateManifest.source.revisionId, cacheKey: plateManifest.cacheKey,
       meshSha256: plateManifest.files.mesh.sha256, morphSha256: plateManifest.files.morph.sha256 },
     installed: false, gameRenderingVerified: false };
-  const wrapper = `import argparse,hashlib,json,pathlib\n` +
-    `p=argparse.ArgumentParser();p.add_argument('--collection');p.add_argument('--dist-root');p.add_argument('--build-root');p.add_argument('--plate');p.add_argument('--plate-manifest');a,_=p.parse_known_args()\n` +
-    `assert json.loads(pathlib.Path(a.plate_manifest).read_text())['cacheKey']=='${"2".repeat(64)}' and pathlib.Path(a.plate).is_dir()\n` +
-    `work=pathlib.Path(a.build_root);work.mkdir(parents=True);(work/'private-intermediate').write_text('fixture')\n` +
-    `final=pathlib.Path(a.dist_root)/'candidate-fixture';payload=final/'archive/pc/mod';payload.mkdir(parents=True)\n` +
-    `m=json.loads(${JSON.stringify(JSON.stringify(manifest))});m['collectionSha256']=hashlib.sha256(pathlib.Path(a.collection).read_bytes()).hexdigest()\n` +
-    files.map(([name, bytes]) => `(payload/${JSON.stringify(name)}).write_bytes(bytes.fromhex(${JSON.stringify(bytes.toString("hex"))}))\n`).join("") +
-    `(final/'manifest.json').write_text(json.dumps(m))\n` +
-    `print('XFS_PACKAGE_RESULT='+json.dumps({'package':str(final),'manifest':str(final/'manifest.json'),` +
-    `'modName':m['modName'],'selectorLabel':m['selectorLabel'],` +
-    `'archiveSha256':m['files'][0]['sha256'],'presetCount':m['verifiedPresetCount'],` +
-    `'originalPresetCount':m['originalPresetCount'],'omissions':m['omissions'],` +
-    `'packagedCollectionSha256':m['packagedCollectionSha256'],'plate':m['plate'],'installed':False,'gameRenderingVerified':False}))\n`;
-  const h = host(wrapper);
+  // A stand-in builder that writes a matching staged candidate, as the real one does after verification.
+  const builder = [
+    `const fs = require("node:fs"), path = require("node:path"), { createHash } = require("node:crypto");`,
+    `const arg = name => process.argv[process.argv.indexOf(name) + 1];`,
+    `if (JSON.parse(fs.readFileSync(arg("--plate-manifest"), "utf8")).cacheKey !== ${JSON.stringify("2".repeat(64))} ||`,
+    `  !fs.statSync(arg("--plate")).isDirectory() || arg("--app-root") !== ${JSON.stringify("TOOLS")}) process.exit(3);`,
+    `fs.mkdirSync(arg("--build-root"), { recursive: true });`,
+    `fs.writeFileSync(path.join(arg("--build-root"), "private-intermediate"), "fixture");`,
+    `const final = path.join(arg("--dist-root"), "candidate-fixture"), payload = path.join(final, "archive", "pc", "mod");`,
+    `fs.mkdirSync(payload, { recursive: true });`,
+    `const m = ${JSON.stringify(manifest)};`,
+    `m.collectionSha256 = createHash("sha256").update(fs.readFileSync(arg("--collection"))).digest("hex");`,
+    ...files.map(([name, bytes]) => `fs.writeFileSync(path.join(payload, ${JSON.stringify(name)}), Buffer.from(${JSON.stringify(bytes.toString("hex"))}, "hex"));`),
+    `fs.writeFileSync(path.join(final, "manifest.json"), JSON.stringify(m));`,
+    `console.log("XFS_PACKAGE_RESULT=" + JSON.stringify({ package: final, manifest: path.join(final, "manifest.json"),`,
+    `  modName: m.modName, selectorLabel: m.selectorLabel, archiveSha256: m.files[0].sha256, presetCount: m.verifiedPresetCount,`,
+    `  originalPresetCount: m.originalPresetCount, omissions: m.omissions, packagedCollectionSha256: m.packagedCollectionSha256,`,
+    `  plate: m.plate, installed: false, gameRenderingVerified: false }));`,
+  ].join("\n");
+  // The tools root is only known once the host exists; substitute it into the builder afterwards.
+  const h = host("// placeholder\n");
+  const entry = resolve(h.tools, builderEntry);
+  writeFileSync(entry, builder.replace(JSON.stringify("TOOLS"), JSON.stringify(h.tools)));
+  writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: BUILD_TOOLS_SCHEMA,
+    files: { [builderEntry]: createHash("sha256").update(readFileSync(entry)).digest("hex") } }));
   const seen: string[] = [];
   const result = await runDesktopBuild(collection, h.settings, h.data, h.tools, 3000,
     undefined, fixtureWolvenKit, fixturePlate(seen));

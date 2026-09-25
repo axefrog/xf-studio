@@ -1,4 +1,25 @@
+import { cursorFor, targetTip, viewportHints, type CursorKind, type ViewportInputContext } from "../../input-bindings";
+import { hintStripMarkup, targetTipMarkup } from "../input-hints";
 import { badge, btn, chip, code, empty, eyebrow, i, menu, menuHeading, menuItem, menuSep, note, pattern, row, section, segmented, slider, toast, toggle } from "./kit";
+
+// Specimens are rendered by the app's own renderer from the input binding catalogue.
+const none = { ctrl: false, alt: false, shift: false }, shift = { ctrl: false, alt: false, shift: true };
+const strip = (context: ViewportInputContext) => { const hints = viewportHints(context);
+  return `<div class="input-hints" data-scope="${context.scope}" data-tone="${hints.tone}">${hintStripMarkup(hints)}</div>`; };
+const stageStrip = (context: ViewportInputContext) => `<div class="viewport-panel demo-hints"><div class="viewport-bottom">${strip(context)}</div></div>`;
+const tip = (context: ViewportInputContext) => `<div class="target-tip static-tip" role="tooltip">${targetTipMarkup(targetTip(context)!)}</div>`;
+const cursorKinds: [CursorKind, string, ViewportInputContext][] = [
+  ["grab", "Point or handle", { scope: "head", target: "point", modifiers: none }],
+  ["grabbing", "Dragging a handle", { scope: "head", target: "point", modifiers: none, gesture: "handle" }],
+  ["move", "Shape", { scope: "head", target: "shape", modifiers: none }],
+  ["rotate", "Shift over makeup", { scope: "head", target: "shape", modifiers: shift }],
+  ["scale", "Shift-wheel burst", { scope: "head", target: "shape", modifiers: shift, gesture: "scale" }],
+  ["pan", "Ctrl held", { scope: "uv", target: "empty", modifiers: { ctrl: true, alt: false, shift: false } }],
+];
+const cursorSwatches = `<div class="cursor-swatches">${cursorKinds.flatMap(([kind, label, context]) => {
+  if (cursorFor(context) !== kind) throw Error(`Cursor specimen ${kind} no longer matches the catalogue.`);
+  return [false, true].map(stage => `<div class="cursor-swatch${stage ? " on-stage" : ""}"><div class="viewport-slot" data-cursor="${kind}"><span><code>${kind}</code><br>${label}</span></div></div>`);
+}).join("")}</div>`;
 
 const finishes: [string, string, boolean][] = [["matte", "Matte", true], ["regular", "Satin", true], ["metallic", "Metallic / foil", true],
   ["shimmer", "Shimmer / pearl", false], ["glitter", "Glitter", false], ["glossy", "Glossy / wet look", false], ["iridescent", "Colour-shifting", false]];
@@ -117,12 +138,27 @@ export function components() {
       when: "Top of every layer inspector (Colour & finish, Shape, Pigment & edge, Warp) so a floating inspector is never ambiguous." }),
     pattern({ id: "c-viewport", title: "Viewport overlays", status: "implemented", wide: true,
       specimen: `<div class="viewport-panel demo-viewport"><div class="viewport-top"><span class="viewport-context">Chrome dusk › Petal wash</span><div class="viewport-tools">${btn("Front view", { icon: "front", iconOnly: true, small: true, variant: "ghost" })}${btn("Surface controls", { icon: "handles", iconOnly: true, small: true, variant: "ghost", pressed: true })}${btn("Plate wireframe", { icon: "wire", iconOnly: true, small: true, variant: "ghost" })}${btn("Play idle", { icon: "play", iconOnly: true, small: true, variant: "ghost" })}</div></div>
-        <div class="viewport-bottom"><div class="viewport-hint">Drag background: orbit · Right-drag: pan · Wheel: zoom · Drag makeup: move · Esc: cancel</div><span class="ready-badge" data-phase="ready">Preview 1K · ready</span></div></div>
-        <div class="viewport-panel uv demo-uv"><div class="uv-toolbar"><div class="segmented" role="group" aria-label="UV view"><button type="button" class="segment" aria-pressed="true"><span>Both eyes</span></button><button type="button" class="segment" aria-pressed="false"><span>Single eye</span></button></div>${btn("Other eye", { small: true, variant: "ghost", disabled: true })}${btn("Fit shape", { icon: "target", small: true, variant: "ghost" })}</div><div class="uv-well"></div><div class="uv-hint">Wheel: zoom · Right-drag: pan · Double-click outline: add point</div></div>`,
-      what: "On the stage: a context chip (preset › layer), a tool cluster (front view, surface controls, wireframe, idle), a gesture hint and the readiness badge. The UV map has a toolbar for view modes and fit. Loading and error states replace the stage with a message; editing elsewhere keeps working.",
+        <div class="viewport-bottom">${strip({ scope: "head", target: "empty", modifiers: none })}<span class="ready-badge" data-phase="ready">Preview 1K · ready</span></div></div>
+        <div class="viewport-panel uv demo-uv"><div class="uv-toolbar"><div class="segmented" role="group" aria-label="UV view"><button type="button" class="segment" aria-pressed="true"><span>Both eyes</span></button><button type="button" class="segment" aria-pressed="false"><span>Single eye</span></button></div>${btn("Other eye", { small: true, variant: "ghost", disabled: true })}${btn("Fit shape", { icon: "target", small: true, variant: "ghost" })}</div><div class="uv-well"></div>${strip({ scope: "uv", target: "shape", modifiers: none })}</div>`,
+      what: "On the stage: a context chip (preset › layer), a tool cluster (front view, surface controls, wireframe, idle), the input hint strip (see Input hints) and the readiness badge. The UV map has a toolbar for view modes and fit. Loading and error states replace the stage with a message; editing elsewhere keeps working.",
       when: "Head and UV map panels. Overlays never cover the centre of the stage.",
       drives: `${code("viewport.attach/rehost/resize")}, ${code("viewport.snapshot()")} (phase, capture, view), ${code("viewport.uvCommand")}, preview actions.`,
-      a11y: "Viewports are focusable regions with keys (F front/fit; 1/2/O UV modes; Shift+F10 commands for the selected point)." }),
+      a11y: "Viewports are focusable regions with keys (F front/fit; 1/2/O UV modes; Shift+F10 commands for the selected point); their accessible names are generated from the key bindings." }),
+    pattern({ id: "c-input-hints", title: "Input hints, target tooltips and gesture cursors", status: "implemented", wide: true,
+      specimen: `<div class="stack">${stageStrip({ scope: "head", target: "point", modifiers: none })}
+        ${stageStrip({ scope: "head", target: "shape", modifiers: shift })}
+        ${stageStrip({ scope: "head", target: "empty", modifiers: shift })}
+        ${stageStrip({ scope: "head", target: "shape", modifiers: shift, gesture: "rotate" })}
+        <div class="viewport-panel uv demo-hints-uv">${strip({ scope: "uv", target: "point", modifiers: none })}</div>
+        <div class="row wrap gap-m align-end"><div class="stage-sample demo-tip-stage">${tip({ scope: "head", target: "point", modifiers: none })}</div>
+        <div class="stage-sample demo-tip-stage">${tip({ scope: "head", target: "shape", modifiers: shift })}</div></div>
+        ${cursorSwatches}</div>`,
+      what: `Blender-style help that follows the pointer and the held keys. Each viewport has a fixed corner strip: what drag, wheel, double-click and right-drag do on the target under the pointer, the viewport keys, and "Hold Shift / Ctrl / Alt" discovery. Holding a modifier switches the strip at once (the held key leads, accent-edged); an active drag or wheel burst shows its gesture with Release/Pause and Esc. Resting on makeup shows a tooltip naming the target and its bindings for the held keys. The cursor comes from the same binding: grab on handles, move on a shape, a rotate glyph with Shift over makeup, a scale glyph during a Shift-wheel burst, all-scroll while Ctrl pans, and the plain cursor where Shift does nothing. Hover a swatch to try each cursor on the stage and a light surface.`,
+      when: "Head and UV map panels, on by default. View preferences › Show input hints (also in the Keyboard & mouse dialog and the palette) hides the strip and tooltips; cursors stay because they describe the gesture itself.",
+      combine: "Never interactive (pointer-events: none) and never covering the stage centre: the strip sits in the bottom-left corner beside the readiness badge on the head, under the canvas in the UV map. Its last item points to the ? Keyboard & mouse dialog.",
+      adapt: "The strip wraps within 72% of the stage; below 720 px the Hold/? discovery group hides and only what the pointer does now remains. The tooltip flips to stay inside the panel.",
+      drives: `Derived only from ${code("src/input-bindings.ts")}: ${code("viewportHints()")}, ${code("targetTip()")} and ${code("cursorFor()")} over the read-only ${code("viewport.input()")} snapshot (held modifiers plus each adapter's hover target and gesture), on its own ${code("viewport.subscribeInput")} channel; ${code("preferences.inputHints")}. The gesture adapters resolve the same bindings, so hint, cursor and behaviour cannot disagree.`,
+      a11y: "Not a live region (it changes with every hover); the same bindings are in each viewport's accessible name and the Keyboard & mouse dialog. Stage colours are fixed in both themes; the UV strip uses theme tokens. Custom cursors are white glyphs with a dark halo and fall back to grab / nwse-resize keywords; blur or a hidden page clears held modifiers. Reduced motion removes the tooltip fade." }),
     pattern({ id: "c-handles", title: "Selection and editing handles", status: "implemented",
       specimen: `<svg class="handle-legend" viewBox="0 0 440 120" role="img" aria-label="Handle legend"><rect width="440" height="120" fill="#253132"/>
         <path d="M40 80 C 90 20, 170 20, 210 80" stroke="#f1dbee" stroke-width="1.5" fill="none"/>
@@ -131,7 +167,7 @@ export function components() {
         <circle cx="290" cy="70" r="4" fill="none" stroke="#b1ebc9"/><line x1="290" y1="70" x2="320" y2="45" stroke="#b1ebc9"/><rect x="316" y="41" width="8" height="8" fill="#c9ffe2" stroke="#2b2a34"/><circle cx="290" cy="70" r="34" fill="none" stroke="#b1ebc966" stroke-dasharray="4 4"/>
         <text x="20" y="108" fill="#c7ccd2" font-size="10" font-family="system-ui">point · selected · Bézier handles (diamonds) · warp origin ○ · pull ▪ · reach ring</text></svg>`,
       what: "Drawn by the UV and on-head editor adapters, not the dock: contour points (selected is larger and white), gold tangent diamonds (guides that may cross the eye opening), warp origin circle, pull square and dashed reach ring. Guides show the contour before warp; the painted makeup shows the result after warp.",
-      when: "Drag to edit (one Undo per gesture), Shift-drag to rotate, Shift+wheel to scale, double-click the outline to insert, Escape to cancel. Right-drag pans and wheel zooms — view changes are never edits.",
+      when: "Drag to edit (one Undo per gesture), Shift-drag to rotate, Shift+wheel to scale, double-click the outline to insert, Escape to cancel. Shift always means a shape tool: off makeup it does nothing. Right-drag (or Ctrl-drag) pans and wheel zooms — view changes are never edits.",
       drives: "Opaque gesture sessions (beginGesture/applyGesture/endGesture) inside the device adapters; the presentation only hosts them." }),
   ]);
 }
