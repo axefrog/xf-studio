@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `4bf688a` | 2026-09-26 | Authored plate blend and skin light (rendering) | 0 High, 1 Medium, 4 Low (PREV-57..61). Matches the export plan and the game model otherwise; idle draws nothing. Fixes in claude/cleanup-render3 |
 | `4bf688a` | 2026-09-26 | Platform steps 3–4 and the platform cleanup (core); plate blend and skin light reviewed separately | Core: 0 High, 2 Medium, 5 Low (CORE-38..44). Fixes in claude/cleanup-platform2 |
 | `bb2cc22` | 2026-09-26 | Deep review since `84cb39d`: platform steps 1-2 (core) and eye rendering + face decals (rendering) | 0 High, 4 Medium, 14 Low. Fixes in claude/cleanup-platform and claude/cleanup-render2 |
 | `84cb39d` | 2026-09-26 | Deep review since `f1b732f`: guidance v1, host cleanup, render-on-demand cleanup, UV-window cleanup (four reviewers) | 0 High, 5 Medium, 12 Low. Fixes in claude/cleanup-hosts2 and claude/cleanup-polish |
@@ -91,6 +92,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-38 | Med | Core | Export and Build plan save to the library first, which the CORE-30 guard refuses for any collection needing `xfs/collection-2`, so the export fails too and its message says to export to a file (`collection-service.ts:324-325`). Every multi-feature collection will hit this | Open (claude/cleanup-platform2) |
 | CORE-39 | Med | Core (data) | A one-feature history is always stored as whole parts (12–17× the `xfs/look-history-1` form), so `fitWorkspace` drops steps instead of switching form: a heavy 32-layer look keeps 4 of 80 steps, below the floor of 10 (`document.ts:380`, `workspace-budget.ts:98-144`) | Open (claude/cleanup-platform2) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
+| PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | Open (claude/cleanup-render3) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Partly fixed: the resolver fetcher now has one lane per cache folder with single-flight and unique batch folders (claude/cleanup-hosts); the game-asset exporter is still per-caller, and there is no cross-process single-flight (unique folders and atomic cache writes keep processes from corrupting each other) |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Mostly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures, hair and skin profiles; character details load with cancellation, supersede and dispose (claude/render-resolver); the head's skin moved onto it with a `skin` slot and the `skin.mt` adapter (claude/skin-material). Open: the core head record (plate, eyes and the fixed default skin shown until the character record arrives) is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -178,6 +180,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PREV-58..61** (plate blend review at `4bf688a`), Open (claude/cleanup-render3):
+  - **PREV-58:** a restored WebGL context redraws but doesn't mark the blend dirty, so the composite comes back empty until the next edit.
+  - **PREV-59:** without `EXT_color_buffer_float` the Creator preset still renders into a half-float multisampled target: the head goes black while the action reports ok; the studio stage also darkens (`linear-display.ts:140-145`).
+  - **PREV-60:** each skin or V change swaps in three new underlay buffers; Three.js never frees the old ones (`makeup-stack.ts:227-234`).
+  - **PREV-61:** the composite target regenerates all three attachments' mips after every layer draw (37 generations per edit frame with 12 layers); generate once after the loop.
+- **UI-11 (extended):** `scene.ts` is 808 lines.
 - **CORE-40..44** (platform steps 3–4 review at `4bf688a`), Open (claude/cleanup-platform2):
   - **CORE-40:** `LookHistory.fromData` hashes every chunk reference instead of each distinct chunk (2,640 hashes where 112 would do; 25 ms restore, 36 ms preset switch on a heavy look).
   - **CORE-41:** over budget, every autosave re-runs the budget search with a full serialization per probe (28–58 ms on the main thread); the desktop store parses the old file twice and the new one once per save (170 ms on the 32-layer fixture).
@@ -188,7 +196,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Authored plate blend and light** (claude/plate-blend, claude/plate-skin-light): `src/plate-blend.ts` (the export plan's layers composited in UV space into one target, and one plate that forms the blended G-buffer surface and lights it once with the skin light, lighting the skin under it a second time for the residual), wired through `makeup-stack.ts` (plan, composite, per-layer fallback) and `scene.ts` (skin light, normals). `tools/plate-light-look.ts` measures Board 1 in the app. Review with the next rendering review; worth a look: the doubled light evaluation in the plate's fragment program and the composite's undoing of the per-layer maps' mode-1 fade.
+- None.
 
 ## Fixed in claude/platform-step4
 
