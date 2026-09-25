@@ -7,7 +7,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
 import type { LightingStatus } from "../../preview-actions";
-import type { DetailLimit } from "../../detail-limits";
+import type { DetailLimit, DetailNotice } from "../../detail-limits";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
@@ -17,9 +17,14 @@ export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",
   "skin-glow": "Glowing skin details from your installed mods aren't shown yet.",
   "eye-design": "Your V's eye design couldn't be drawn, so the default eye is shown in its place.",
-  "layered-material": "Some of your V's piercings couldn't be drawn, so they aren't shown.",
+  "layered-material": "Some of your V's piercings or other layered parts couldn't be drawn, so they aren't shown.",
   "layered-mask": "Part of the pattern on your V's piercings or eye design couldn't be read, so those parts show their base colour only.",
   "decal-template": "Some of your V's face details use materials the preview can't draw yet, so those parts aren't shown.",
+  "rigid-part": "A piercing part stays in place while your V's head moves in the idle, because its shape carries no skinning.",
+};
+/** Why none of the V's details are shown, when a code says so (detail-limits.ts). */
+export const DETAIL_NOTICE_TEXT: Readonly<Record<DetailNotice, string>> = {
+  "version-skew": "XF Studio was updated while it was running. Restart it to see your V's skin, face details, eyes, brows, lashes, hair and piercings.",
 };
 
 /** One plain line about the shown V's skin, face details, eyes, brows, lashes, hair and piercings, from the resolved-detail status. */
@@ -27,7 +32,7 @@ export function characterDetailLine(details: DetailStatus | undefined): { done: 
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
   if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, face details, eyes, brows, lashes, hair and piercings from your game files…` };
-  if (details.phase === "failed") return { done: true, text: details.message };
+  if (details.phase === "failed") return { done: true, text: details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message };
   const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
   const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);
   return { done: true, text: [`${parts.join(" · ")}.`, details.message, ...limits, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
@@ -44,14 +49,14 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const lashes = new Toggle({ label: "Eyelashes", onChange: enabled => rt.dispatch({ kind: "preview.setDetail", detail: "lashes", enabled }) });
   const hair = new Toggle({ label: "Hair", onChange: enabled => rt.dispatch({ kind: "preview.setHair", enabled }) });
   const piercings = new Toggle({ label: "Piercings", onChange: enabled => rt.dispatch({ kind: "preview.setPiercings", enabled }) });
+  const piercingChoices = () => port.authoring.previewState().character?.choices.find(entry => entry.slot === "piercings")?.options ?? [];
   const style = new SelectField<string>({ label: "Try a piercing style", onChange: value => {
-    const options = port.authoring.previewState().previewOptions ?? [];
-    const entry = options.find(option => option.id === value);
-    rt.dispatch({ kind: "preview.setPiercingPreview", style: entry?.id ?? "", definition: entry?.choices[0]?.definition ?? "" });
+    const entry = piercingChoices().find(option => option.choice === value);
+    rt.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: entry?.choice ?? "", definition: entry?.definitions[0]?.name ?? "" });
   } });
   const colour = new SelectField<string>({ label: "Piercing colour", onChange: value => {
-    const state = port.authoring.previewState().preview;
-    rt.dispatch({ kind: "preview.setPiercingPreview", style: state?.piercingStyle ?? "", definition: value });
+    const tried = port.authoring.previewState().character?.tried;
+    rt.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: tried?.choice ?? "", definition: value });
   } });
   const detailNote = note("");
   const element = h("div", { class: "panel-content" },
@@ -98,20 +103,23 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const hairAllowed = enableReason(rt, { kind: "preview.setHair", enabled: true });
       hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? "Preview is still loading.",
         note: "Hair physics is not simulated." });
-      const options = state.previewOptions ?? [];
+      const options = state.character?.choices.find(entry => entry.slot === "piercings")?.options ?? [];
+      const tried = state.character?.tried, trying = state.character?.trying;
       const piercingAllowed = enableReason(rt, { kind: "preview.setPiercings", enabled: true });
       piercings.update(!!preview?.piercings, { disabled: !preview || (!preview.piercings && !piercingAllowed.available),
         reason: piercingAllowed.reason ?? "Preview is still loading." });
       // The styles on offer are the creator's own on this installation, vanilla and modded alike; they arrive with the V's details.
-      const chosen = options.find(option => option.id === preview?.piercingStyle);
-      style.update([{ value: "", label: "Your V's own" }, ...options.map(option => ({ value: option.id, label: option.label }))], chosen ? chosen.id : "", !options.length,
+      const chosen = options.find(option => option.choice === tried?.choice);
+      // A try keeps the V on screen; the control says which style is on its way instead of covering the view.
+      const tryingLabel = trying ? options.find(option => option.choice === trying.choice)?.label : undefined;
+      style.update([{ value: "", label: "Your V's own" }, ...options.map(option => ({ value: option.choice, label: option.label }))], chosen ? chosen.choice : "", !options.length,
         options.length ? undefined : !preview ? ((frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading.") :
           "Piercing styles appear once your V's details are ready.");
-      colour.update((chosen?.choices ?? []).map(choice => ({ value: choice.definition, label: `${choice.index}. ${choice.label}` })), preview?.piercingDefinition, !chosen,
+      colour.update((chosen?.definitions ?? []).map((definition, index) => ({ value: definition.name, label: `${index + 1}. ${definition.label}` })), tried?.definition, !chosen,
         "Choose a preview style first.");
       colour.element.hidden = !chosen;
       // The shown V's resolved details, read from your own installed game and mods.
-      setText(detailNote, saved.loaded ? "" : detailLine.text);
+      setText(detailNote, tryingLabel ? `Trying ${tryingLabel}…` : saved.loaded ? "" : detailLine.text);
       detailNote.hidden = !detailNote.textContent;
     },
   };

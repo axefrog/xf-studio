@@ -116,11 +116,20 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(layered.error).toBeUndefined();
     expect(layered.state).toBe("baked");
     expect(layered.drawn).toEqual([2, 1, 0]);
-    // Half-float maps: agree to about three decimals.
-    expect(gap(layered.gpu.colour, layered.cpu.colour)).toBeLessThanOrEqual(0.004);
-    expect(gap(layered.gpu.normal, layered.cpu.normal)).toBeLessThanOrEqual(0.004);
-    expect(gap(layered.gpu.surface, layered.cpu.surface)).toBeLessThanOrEqual(0.004);
+    // Packed 8-bit maps (PREV-63): within one byte of the reference, after half-float accumulation.
+    expect(gap(layered.gpu.colour, layered.cpu.colour)).toBeLessThanOrEqual(1);
+    expect(gap(layered.gpu.normal, layered.cpu.normal)).toBeLessThanOrEqual(1);
+    // Two packed 8-bit maps with mips at 8 texels square: 8 bytes a texel and a third more for the mips.
+    expect(layered.bytes).toBe(Math.round(8 * 8 * 8 * 4 / 3));
     expect(probe.errors).toEqual([]);
+  });
+
+  test("with non-constant maps the bake reads them where the game does: tiling, offset, the mask orientation, sRGB colour", () => {
+    const { parity } = probe.layered!;
+    expect(parity.error).toBeUndefined();
+    expect(parity.texels).toBe(256);
+    expect(parity.colour).toBeLessThanOrEqual(1);
+    expect(parity.normal).toBeLessThanOrEqual(1);
   });
 
   test("opaque surfaces and the stage backdrop keep the pixels they had when drawn straight to the canvas", () => {

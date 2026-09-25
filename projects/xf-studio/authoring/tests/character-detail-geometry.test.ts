@@ -20,7 +20,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
  * NORMAL, TANGENT, UV, joints and float weights, and two facial targets with POSITION/NORMAL/TANGENT deltas that move
  * only the chunk's first vertex (dense, as WolvenKit writes them).
  */
-function morphMesh(chunks = 3): Uint8Array {
+function morphMesh(chunks = 3, rigid = false): Uint8Array {
   const writer = new GlbWriter();
   const meshes = [], nodes: object[] = [{ name: "Root" }];
   for (let c = 0; c < chunks; c++) {
@@ -36,9 +36,9 @@ function morphMesh(chunks = 3): Uint8Array {
     const targets = [0.001 * (c + 1), 0].map(value => ({ POSITION: writer.add(delta(value), "VEC3", { bounds: true }),
       NORMAL: writer.add(delta(value / 2), "VEC3"), TANGENT: writer.add(delta(value / 4), "VEC3") }));
     meshes.push({ name: `submesh_${String(c).padStart(2, "0")}_LOD_1`, extras: { targetNames: ["h001_eyes", "h002_nose"] },
-      primitives: [{ attributes: { POSITION: position, NORMAL: normal, TANGENT: tangent, TEXCOORD_0: uv, JOINTS_0: joints, WEIGHTS_0: weights },
+      primitives: [{ attributes: { POSITION: position, NORMAL: normal, TANGENT: tangent, TEXCOORD_0: uv, ...(rigid ? {} : { JOINTS_0: joints, WEIGHTS_0: weights }) },
         indices, material: 0, targets }] });
-    nodes.push({ name: `submesh_${String(c).padStart(2, "0")}_LOD_1`, mesh: c, skin: 0 });
+    nodes.push({ name: `submesh_${String(c).padStart(2, "0")}_LOD_1`, mesh: c, ...(rigid ? {} : { skin: 0 }) });
   }
   const inverse = writer.add(Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), "MAT4");
   (nodes[0] as { children?: number[] }).children = [];
@@ -144,6 +144,69 @@ describe("the loader parses each geometry file once", () => {
       expect(disposed).toBeGreaterThan(0);
       expect(a!.root.parent).toBeNull();
     } finally { GLTFLoader.prototype.parse = parse; }
+  });
+});
+
+describe("a tried choice loads only what changed (PREV-68)", () => {
+  const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+  const part = (slot: "face" | "piercings", option: string, file: string, hash: string, chunks: number[]): RenderComponent => ({
+    id: `${slot}:${option}:hx_shared:1`, slot, option, definition: option, component: "hx_shared",
+    geometry: { file, sha256: hash, depotPath: "base\\fixture\\hx_shared.mesh", depotHash: "1", morphTargets: true, sources: [] },
+    renderChunks: 3, chunks, materials: chunks.map(chunk => ({ chunk, name: "m", template: "base\\materials\\mesh_decal_emissive.mt", templateName: null,
+      materialPriority: "EMP_Normal", scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} })) });
+  const record = (components: RenderComponent[]): CharacterDetail => ({ schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: "a".repeat(64),
+    origin: "game-files", character: { source: "save", bodyGender: "female" }, provenance: { label: "fixture", notes: [] }, components,
+    slots: [{ slot: "face", state: "shown", label: "fixture" }, { slot: "piercings", state: "shown", label: "fixture" }], choices: [] });
+
+  test("components whose content is unchanged are taken over, not fetched or built again; ownership moves only when the scene adopts them", async () => {
+    const face = morphMesh(3), faceFile = `${sha(face)}.glb`, before = morphMesh(2), beforeFile = `${sha(before)}.glb`, after = morphMesh(1), afterFile = `${sha(after)}.glb`;
+    const files = new Map([[faceFile, face], [beforeFile, before], [afterFile, after]]);
+    const fetched: string[] = [];
+    const options = { anisotropy: 1, context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }),
+      fetcher: async (url: string) => { const name = url.split("/").pop()!; fetched.push(name); return new Response(files.get(name)!.slice()); } };
+    const own = await loadCharacterDetails(record([part("face", "makeupCheeks_05", faceFile, sha(face), [0, 1]), part("piercings", "a", beforeFile, sha(before), [0])]), options);
+    own.adopt();
+    expect(fetched).toEqual([faceFile, beforeFile]);
+    fetched.length = 0;
+    const tried = await loadCharacterDetails(record([part("face", "makeupCheeks_05", faceFile, sha(face), [0, 1]), part("piercings", "b", afterFile, sha(after), [0])]),
+      { ...options, reuse: own });
+    // The face part is the same loaded object; only the new piercing was fetched and built.
+    expect(fetched).toEqual([afterFile]);
+    expect(tried.reused).toBe(1);
+    expect(tried.components[0]).toBe(own.components[0]);
+    expect(tried.components[1]).not.toBe(own.components[1]);
+    let faceReleased = 0, oldPiercingReleased = 0;
+    own.components[0]!.meshes[0]!.geometry.addEventListener("dispose", () => faceReleased++);
+    own.components[1]!.meshes[0]!.geometry.addEventListener("dispose", () => oldPiercingReleased++);
+    // A superseded load gives nothing back that it borrowed.
+    const superseded = await loadCharacterDetails(record([part("face", "makeupCheeks_05", faceFile, sha(face), [0, 1])]), { ...options, reuse: own });
+    superseded.dispose();
+    expect(faceReleased).toBe(0);
+    // The scene swaps the try in: it adopts the reused part, and the previous details release only what the new ones did not take.
+    tried.adopt();
+    own.dispose(new Set(tried.components));
+    expect([faceReleased, oldPiercingReleased]).toEqual([0, 1]);
+    expect(own.disposed).toBe(true);
+    // A disposed set of details lends nothing.
+    fetched.length = 0;
+    const fresh = await loadCharacterDetails(record([part("piercings", "a", beforeFile, sha(before), [0])]), { ...options, reuse: own });
+    expect(fetched).toEqual([beforeFile]);
+    expect(fresh.reused).toBe(0);
+    tried.dispose();
+    expect(faceReleased).toBe(1);
+    fresh.dispose();
+  });
+
+  test("a part whose exported mesh has no skin is drawn bound to one bone, and says so with the rigid-part limit (PREV-64)", async () => {
+    const rigid = morphMesh(1, true), file = `${sha(rigid)}.glb`;
+    const loaded = await loadCharacterDetails(record([part("piercings", "a", file, sha(rigid), [0])]), { anisotropy: 1,
+      context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }), fetcher: async () => new Response(rigid.slice()) });
+    expect(loaded.problems).toEqual([]);
+    // (The fixture chunk draws a decal template the preview does not draw yet, which has its own code.)
+    expect(loaded.limits).toContainEqual({ slot: "piercings", limit: "rigid-part" });
+    expect(loaded.components[0]!.limits).toContain("rigid-part");
+    expect(loaded.components[0]!.meshes[0]).toBeInstanceOf(THREE.SkinnedMesh);
+    loaded.dispose();
   });
 });
 

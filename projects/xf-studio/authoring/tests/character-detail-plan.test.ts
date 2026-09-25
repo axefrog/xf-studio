@@ -51,6 +51,22 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(lashes.morphTargets).toBe(true);
   });
 
+  test("a chunk draws when its render mask draws it in the scene, on any slot: shadow-only chunks stay out, an in-scene layered chunk draws (PIPE-41)", async () => {
+    // The fixture's hair shadow proxy casts shadows only (as every vanilla hair shadow mesh): neither of its chunks is planned.
+    const { plan: shadowOnly, resolved } = await plan(REQUEST_A);
+    const proxy = resolved.appearances.flatMap(entry => entry.components).find(component => component.name === "hair_shadow")!;
+    expect(proxy.geometry!.chunkInScene).toEqual([false, false]);
+    expect(shadowOnly.components.filter(c => c.component === "hair_shadow")).toEqual([]);
+    // The same proxy with chunks the scene draws (a CCXL hair's one-triangle proxy is like that): its layered chunk now draws on the
+    // hair slot, and its glass chunk still has no adapter. The slot stays shown, with the hair itself first.
+    const { plan: inScene } = await plan(REQUEST_A, detailFixture({ shadowsInScene: true }));
+    const drawn = inScene.components.filter(c => c.slot === "hair");
+    expect(drawn.map(c => [c.component, c.chunks])).toEqual([["hair", [0, 1]], ["hair_shadow", [1]]]);
+    expect(drawn[1]!.materials[0]!.layered?.setup).toBeDefined();
+    expect(drawn[1]!.skippedChunks).toBe(1);
+    expect(inScene.slots.find(s => s.slot === "hair")).toMatchObject({ state: "shown" });
+  });
+
   test("chunk inputs are the instance chain first, then the template's defaults, limited to what the adapter reads", async () => {
     const { plan: result } = await plan(REQUEST_A);
     const lash = result.components.find(c => c.slot === "lashes")!.materials[0]!;

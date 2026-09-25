@@ -49,7 +49,6 @@
   "preview.setExposure",
   "preview.setKeyAngle",
   "preview.setEyeShape",
-  "preview.setPiercingPreview",
   "preview.setPiercings",
   "preview.setSurfaceControls",
   "preview.setWire",
@@ -65,7 +64,8 @@
   "quality.set",
   "quality.rebuild",
   "savedV.load",
-  "savedV.restore"
+  "savedV.restore",
+  "character.tryChoice"
  ],
  "actionDescriptors": {
   "recipe.undo": {
@@ -1587,25 +1587,6 @@
     }
    }
   },
-  "preview.setPiercingPreview": {
-   "scope": [
-    "viewport"
-   ],
-   "effect": "workspace",
-   "undo": "none",
-   "payload": {
-    "style": {
-     "type": "string",
-     "required": true,
-     "from": "input"
-    },
-    "definition": {
-     "type": "string",
-     "required": true,
-     "from": "input"
-    }
-   }
-  },
   "preview.setPiercings": {
    "scope": [
     "viewport"
@@ -1845,6 +1826,37 @@
      "type": "object",
      "required": true,
      "from": "input"
+    }
+   }
+  },
+  "character.tryChoice": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "slot": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "piercings"
+     ]
+    },
+    "choice": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 0,
+     "maxLength": 127
+    },
+    "definition": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 0,
+     "maxLength": 127
     }
    }
   }
@@ -2297,15 +2309,6 @@
    "async": false
   },
   {
-   "id": "preview.setPiercingPreview",
-   "family": "action",
-   "scope": [
-    "viewport"
-   ],
-   "undo": "none",
-   "async": false
-  },
-  {
    "id": "preview.setPiercings",
    "family": "action",
    "scope": [
@@ -2445,6 +2448,15 @@
    "family": "action",
    "scope": [
     "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.tryChoice",
+   "family": "action",
+   "scope": [
+    "viewport"
    ],
    "undo": "none",
    "async": false

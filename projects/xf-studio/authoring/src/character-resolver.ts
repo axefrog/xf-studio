@@ -57,6 +57,8 @@ export interface ResolvedComponent {
     readonly renderChunks: number | null;
     /** Each render chunk's LOD mask (bit 0 = highest detail), when known. */
     readonly chunkLods: readonly number[] | null;
+    /** Whether each render chunk draws in the scene (its `renderMask` has `MCF_RenderInScene`), when known. */
+    readonly chunkInScene: readonly boolean[] | null;
     readonly visibleChunks: readonly number[] | null;
     readonly drawsNothing: boolean;
     readonly patchedFrom: readonly string[];
@@ -345,7 +347,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
     chunkMask: component.chunkMask, overriddenBy, morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, materials: [] };
   if (!isRenderable(component.type)) return { ...base, geometry: null, notes };
   let morph = null, meshRef: DepotRef | null = component.mesh, renderChunks: number | null = null;
-  let chunkLods: readonly number[] | null = null;
+  let chunkLods: readonly number[] | null = null, chunkScene: readonly boolean[] | null = null;
   const patchedFrom: string[] = [];
   let morphProvenance: Provenance | null = null;
   let blobFrom: DepotRef | null = null;
@@ -355,7 +357,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
     morph = await ctx.graph.morph(component.morphResource);
     morphProvenance = ctx.graph.provenance(component.morphResource, morph?.loaded.provenance.extractedSha256 ?? null);
     if (morph) {
-      meshRef = morph.baseMesh; renderChunks = morph.renderChunks; chunkLods = morph.renderChunkLods; notes.push(...morph.notes);
+      meshRef = morph.baseMesh; renderChunks = morph.renderChunks; chunkLods = morph.renderChunkLods; chunkScene = morph.renderChunkScene; notes.push(...morph.notes);
       if (morph.blobFrom) { patchedFrom.push(refLabel(morph.blobFrom)); blobFrom = morph.blobFrom; }
       morphTexture = { texture: morph.baseTexture ? ctx.graph.provenance(morph.baseTexture) : null, parameter: morph.baseTextureParam };
       for (const target of morph.targets) morphRegions[target.region] = (morphRegions[target.region] ?? 0) + 1;
@@ -363,7 +365,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   }
   const mesh = meshRef ? await ctx.graph.mesh(meshRef) : null;
   if (meshRef && !mesh) ctx.gaps.push({ code: "mesh-missing", subject: refLabel(ctx.graph.named(meshRef)), detail: `Component ${component.name}: mesh not provided by any mounted archive.` });
-  if (mesh) { notes.push(...mesh.notes); if (!component.morphResource) { renderChunks = mesh.renderChunks; chunkLods = mesh.renderChunkLods; } if (mesh.renderBlobFrom) patchedFrom.push(refLabel(mesh.renderBlobFrom)); }
+  if (mesh) { notes.push(...mesh.notes); if (!component.morphResource) { renderChunks = mesh.renderChunks; chunkLods = mesh.renderChunkLods; chunkScene = mesh.renderChunkScene; } if (mesh.renderBlobFrom) patchedFrom.push(refLabel(mesh.renderBlobFrom)); }
   // Morph components draw their morph target's blob; plain mesh components draw the mesh's render blob.
   const drawnRef = component.morphResource ? (morph ? blobFrom ?? component.morphResource : null)
     : mesh ? mesh.renderBlobFrom ?? meshRef : null;
@@ -394,7 +396,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   }
   return { ...base, morphRegions, appliedMorphs, meshAppearanceResolved, materials,
     geometry: { morphTarget: morphProvenance, mesh: meshRef ? ctx.graph.provenance(meshRef, mesh?.loaded.provenance.extractedSha256 ?? null) : null,
-      renderChunks, chunkLods, visibleChunks: visible, drawsNothing, patchedFrom,
+      renderChunks, chunkLods, chunkInScene: chunkScene, visibleChunks: visible, drawsNothing, patchedFrom,
       drawnFrom: drawnRef ? ctx.graph.provenance(drawnRef) : null, morphTexture }, notes };
 }
 

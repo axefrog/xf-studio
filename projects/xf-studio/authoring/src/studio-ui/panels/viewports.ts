@@ -8,6 +8,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { viewportMenu } from "../target-menus";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
+import { DETAIL_NOTICE_TEXT } from "./preview";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
 function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
@@ -143,7 +144,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
       const detailText = state.phase !== "ready" || !details ? ""
         : details.phase === "preparing" ? "Preparing your V's skin, face details, eyes, brows, lashes, hair and piercings…"
-        : details.phase === "failed" ? details.message
+        : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
         : unavailable?.message ?? "";
       detailStatus.hidden = !detailText;
       detailStatus.dataset.tone = details?.phase === "preparing" ? "progress" : "notice";

@@ -24,7 +24,7 @@ type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
 type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
-export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions };
+export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; character?: CharacterDetailActions };
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
@@ -54,6 +54,12 @@ export type AttachedHead = {
   dispose(): void;
 };
 
+/** The workspace's persisted tried style as the character service reads it (it validates the value itself). */
+export function triedChoiceOf(workspace: WorkspaceState): unknown {
+  const { piercingStyle: choice, piercingDefinition: definition } = workspace.preview;
+  return choice ? { slot: "piercings", choice, definition } : null;
+}
+
 export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<AttachedHead> {
   const releases: (() => void)[] = [];
   const dispose = () => {
@@ -72,11 +78,12 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     let savedAppearance: SavedAppearanceActions | undefined;
     // Skin, face details, eyes, brows, lashes, hair and piercings follow the shown V: the restored or newly loaded save, else the default V.
     // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V); a piercing style tried in the
-    // preview is resolved on the same V. It starts following once the preview services have restored the workspace.
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
+    // preview (`character.tryChoice`, owned by that service) is resolved on the same V, starting from the workspace's tried style.
+    // It starts following once the preview services have restored the workspace.
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene), triedChoiceOf(ports.workspace));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
-      setSurfaceControls: enabled => surface?.setEnabled(enabled), piercings: characterDetails,
+      setSurfaceControls: enabled => surface?.setEnabled(enabled),
     }));
     savedAppearance = services.savedAppearance;
     ports.attach({ savedV: savedAppearance });
@@ -90,7 +97,9 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
     ports.preview.presentInitialLayers();
-    releases.push(characterDetails.subscribe(ports.changed));
+    ports.attach({ character: characterDetails });
+    releases.push(() => ports.attach({ character: undefined }));
+    releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
     releases.push(followShownCharacter(characterDetails, savedAppearance));
     const cameraMoved = () => ports.persist();
     scene.controls.addEventListener("change", cameraMoved);

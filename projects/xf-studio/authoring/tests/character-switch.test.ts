@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailActions, followShownCharacter, type CharacterDetailPort, type HostCharacterState } from "../src/character-detail-actions";
-import { characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character-detail-request";
+import { CHARACTER_REQUEST_SCHEMA, characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character-detail-request";
 import { prepareCharacterDetails } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
 import { encodePng } from "../src/png";
-import type { CharacterDetail } from "../src/render-detail";
+import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/render-detail";
 import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved-appearance-actions";
 import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
@@ -182,30 +182,114 @@ test("a failed preparation clears the previous V's details and says so in one li
   expect(cleared).toBe(4);
 });
 
-test("trying a piercing style keeps the V on screen until its record swaps in; another V still clears first", async () => {
-  const events: string[] = [];
+const OFFERED = [{ slot: "piercings" as const, options: [{ choice: "12", label: "Style 12", definitions: [{ name: "gold", label: "Gold" }] },
+  { choice: "09", label: "Style 09", definitions: [{ name: "black", label: "Black" }] }] }];
+/** A port whose host resolves the tried choice when the installation offers it (and ignores it otherwise), as the real host does. */
+function tryPort(events: string[], choices = OFFERED) {
   const port: CharacterDetailPort = {
     request: async request => ({ key: JSON.stringify(request), phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }),
     poll: async () => { throw Error("unused"); },
-    show: async () => { events.push("show"); return { slots: [{ slot: "piercings", state: "shown", label: "style 12, gold" }],
-      choices: [{ slot: "piercings", options: [{ option: "piercings_12", index: 12, definitions: [{ name: "gold", index: 1 }] }] }],
-      override: details.override() }; },
+    show: async () => {
+      events.push("show");
+      const tried = last?.override;
+      const offered = !!tried && choices.some(entry => entry.options.some(option => option.choice === tried.choice &&
+        option.definitions.some(definition => definition.name === tried.definition)));
+      return { slots: [{ slot: "piercings", state: "shown", label: "style 12, gold" }], choices, override: offered ? tried : null };
+    },
     clear: () => { events.push("clear"); }, wait: async () => {},
   };
-  const details = new CharacterDetailActions(port);
+  let last: CharacterRequest | undefined;
+  const request = port.request;
+  port.request = async (value, signal) => { last = value; events.push(value.override ? `request:${value.override.choice}` : "request"); return request(value, signal); };
+  return port;
+}
+
+test("trying a piercing style keeps the V on screen and interactive until its record swaps in; another V still clears first", async () => {
+  const events: string[] = [];
+  const details = new CharacterDetailActions(tryPort(events));
   await details.setCharacter(REQUEST_A);
-  expect(events).toEqual(["clear", "show"]);
-  // The tried style is resolved on the same V: no clear, the previous details stay until the new record is shown.
-  await details.setOverride({ slot: "piercings", option: "piercings_12", definition: "gold" });
-  expect(events).toEqual(["clear", "show", "show"]);
-  expect(details.snapshot()).toMatchObject({ phase: "ready", override: { option: "piercings_12" }, choices: [{ slot: "piercings" }] });
-  // The same request again is a no-op; a new V (with the tried style kept) clears first.
-  await details.setOverride({ slot: "piercings", option: "piercings_12", definition: "gold" });
-  expect(events.length).toBe(3);
+  expect(events).toEqual(["clear", "request", "show"]);
+  // The tried style is resolved on the same V: no clear and no "preparing" phase (no overlay); the control says what is on its way.
+  const phases: string[] = [];
+  const stop = details.subscribe(() => { const s = details.snapshot(); phases.push(`${s.phase}${s.trying ? `:trying ${s.trying.choice}` : ""}`); });
+  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "12", definition: "gold" });
+  expect(details.snapshot()).toMatchObject({ phase: "ready", trying: { choice: "12" }, tried: { choice: "12" } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  stop();
+  expect(phases).toEqual(["ready:trying 12", "ready"]);
+  expect(events).toEqual(["clear", "request", "show", "request:12", "show"]);
+  expect(details.snapshot()).toMatchObject({ phase: "ready", override: { choice: "12" }, trying: null, choices: [{ slot: "piercings" }] });
+  // A choice the V's record doesn't offer is refused with a code before it reaches the host.
+  expect(details.check({ kind: "character.tryChoice", slot: "piercings", choice: "77", definition: "gold" })).toMatchObject({ available: false, code: "unavailable" });
+  expect(details.check({ kind: "character.tryChoice", slot: "piercings", choice: "12", definition: "x".repeat(200) })).toMatchObject({ available: false, code: "invalid_value" });
+  // The same request again is a no-op; a new V clears first, and the style tried on the previous V does not follow it (UI-51).
+  await details.setOverride({ slot: "piercings", choice: "12", definition: "gold" });
+  expect(events.length).toBe(5);
   await details.setCharacter(REQUEST_B);
-  expect(events.slice(3)).toEqual(["clear", "show"]);
-  // Back to the V's own piercings: again without clearing.
-  await details.setOverride(null);
-  expect(events.slice(5)).toEqual(["show"]);
+  expect(events.slice(5)).toEqual(["clear", "request", "show"]);
+  expect(details.snapshot().tried).toBeNull();
+  // Back to the V's own piercings from a try: again without clearing.
+  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "09", definition: "black" });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "", definition: "" });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(events.slice(8)).toEqual(["request:09", "show", "request", "show"]);
   details.dispose();
+});
+
+test("the persisted tried style is read with the host's rules, re-checked when the choices arrive, and cleared when stale (UI-51)", async () => {
+  // Over-long, wrongly shaped or foreign values are dropped on read: they never reach (and never make the host refuse) a request.
+  for (const stored of [{ slot: "piercings", choice: "x".repeat(200), definition: "gold" }, { slot: "hair", choice: "12", definition: "gold" },
+    { slot: "piercings", choice: "12" }, "12", null])
+    expect(new CharacterDetailActions(tryPort([]), stored).snapshot().tried).toBeNull();
+  // A well-formed style the installation still offers is sent with the V and kept.
+  const kept: string[] = [];
+  const offered = new CharacterDetailActions(tryPort(kept), { slot: "piercings", choice: "12", definition: "gold" });
+  await offered.setCharacter(REQUEST_A);
+  expect(kept).toEqual(["clear", "request:12", "show"]);
+  expect(offered.snapshot()).toMatchObject({ tried: { choice: "12" }, override: { choice: "12" } });
+  // One it no longer offers is cleared once the V's choices arrive, and never sent again.
+  const events: string[] = [];
+  const stale = new CharacterDetailActions(tryPort(events), { slot: "piercings", choice: "99", definition: "gone" });
+  await stale.setCharacter(REQUEST_A);
+  expect(stale.snapshot()).toMatchObject({ phase: "ready", tried: null, override: null });
+  expect(events).toEqual(["clear", "request:99", "show"]);
+  await stale.setCharacter(REQUEST_A);
+  expect(events).toEqual(["clear", "request:99", "show"]);
+  // The workspace keeps what the service holds: the composer persists the tried style from its snapshot.
+  const workspace = freshWorkspace();
+  expect(workspace.preview).toMatchObject({ piercingStyle: "", piercingDefinition: "" });
+  offered.dispose(); stale.dispose();
+});
+
+test("a host of another version is reported with the version-skew code, not as silence (the app updated while it ran)", async () => {
+  const { createBrowserCharacterDetailDevice } = await import("../src/browser-character-detail-device");
+  const scene = { setCharacterDetails: () => ({ limits: [] }), detailContext: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }),
+    renderer: { capabilities: { getMaxAnisotropy: () => 1 } } } as never;
+  const run = async (answer: (url: string, init?: RequestInit) => Response) => {
+    const details = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, async (url, init) => answer(url, init)));
+    await details.setCharacter(REQUEST_A);
+    const status = details.snapshot();
+    details.dispose();
+    return status;
+  };
+  const state = (extra: Record<string, unknown>) => Response.json({ key: "k", phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json`, ...extra });
+  // An older host: its state names no record schema (and it refuses this page's newer requests as invalid).
+  expect(await run(() => state({}))).toMatchObject({ phase: "failed", notice: "version-skew", message: "" });
+  expect(await run(() => Response.json({ code: "invalid", error: "Invalid character request." }, { status: 400 }))).toMatchObject({ notice: "version-skew" });
+  // A newer host: it refuses the request's version, or writes a record schema this page doesn't read.
+  expect(await run(() => Response.json({ code: "unsupported_version" }, { status: 409 }))).toMatchObject({ notice: "version-skew" });
+  expect(await run(() => state({ recordSchema: "xfs/render-detail-99" }))).toMatchObject({ notice: "version-skew" });
+  // A host of this version whose record is of a newer version.
+  expect(await run((url) => url.endsWith(".json") ? Response.json({ schema: "xfs/render-detail-99", detail: "character" })
+    : state({ recordSchema: CHARACTER_DETAIL_SCHEMA }))).toMatchObject({ notice: "version-skew" });
+  // An ordinary failure keeps its plain message and no notice.
+  expect(await run(() => new Response("boom", { status: 500 }))).toMatchObject({ phase: "failed", notice: null });
+  // The host answers an unknown request version with `unsupported_version`, naming the versions it reads.
+  const { createCharacterDetailHandler } = await import("../src/character-detail-server");
+  const handler = createCharacterDetailHandler({ request: () => { throw Error("unused"); }, state: () => { throw Error("unused"); } } as never);
+  const refused = await handler(new Request("http://127.0.0.1/api/preview-character", { method: "POST", headers: { "Content-Type": "application/json",
+    Origin: "http://127.0.0.1" }, body: JSON.stringify({ schema: "xfs/character-request-9", source: "default", bodyGender: "female" }) }));
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: "unsupported_version", request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA });
 });

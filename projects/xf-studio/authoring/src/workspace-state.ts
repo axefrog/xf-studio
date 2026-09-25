@@ -12,6 +12,7 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
+import { isChoiceName } from "./render-detail";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 
@@ -22,6 +23,10 @@ export type PreviewState = {
   camera?: CameraState;
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
+  /**
+   * The creator choice tried on the shown V: a piercing switcher choice (`localizedName`) and a colour, "" for the V's own. Owned by the
+   * character-detail service (`character.tryChoice`); cleared when another V is loaded or the installation no longer offers it.
+   */
   piercingStyle: string; piercingDefinition: string;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
   /** Viewport lighting preset; the studio stage is the default. `exposure` and `lightAngle` belong to it. */
@@ -123,8 +128,11 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
-    if (typeof p.piercingStyle === "string" && p.piercingStyle.length <= 128) state.preview.piercingStyle = p.piercingStyle;
-    if (typeof p.piercingDefinition === "string" && p.piercingDefinition.length <= 128) state.preview.piercingDefinition = p.piercingDefinition;
+    // The tried piercing style (a creator switcher choice and a colour), read with the record's own name rule so a stale or foreign
+    // value never reaches the host (UI-51); the pair is kept only whole.
+    if (isChoiceName(p.piercingStyle) && isChoiceName(p.piercingDefinition)) {
+      state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
+    }
     for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", .5, 2], ["lightAngle", 0, 360],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];

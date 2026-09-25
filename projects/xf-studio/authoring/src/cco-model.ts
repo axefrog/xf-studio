@@ -240,12 +240,61 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
 } {
   const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
   for (const part of CCO_PARTS) {
-    const { options, groups } = cco.parts[part];
-    const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
+    const { options } = cco.parts[part];
     // Every name a switcher choice can activate. These options take their activation from switchers alone.
     const switcherTargets = new Set<string>();
     for (const option of options) if (option.type === "switcher")
       for (const choice of option.options) for (const name of choice.names) switcherTargets.add(name);
+    const roots = options.filter(option => option.name && option.enabled && !switcherTargets.has(option.name));
+    const found = partDescriptors(cco, part, state, roots);
+    appearances.push(...found.appearances); morphs.push(...found.morphs); ambiguities.push(...found.ambiguities);
+  }
+  return { appearances, morphs, ambiguities, rules: R5_RULES() };
+}
+
+const R5_RULES = () => [
+  note("R5-switcher-targets", "resource", "Only the targets named by an active switcher's current choice are active, whatever their enabled flag; options no switcher names follow enabled. Matches every switcher in the six vanilla UI presets; native state code unread."),
+  note("R5-off-choice", "resource", "A definition with an empty (None) name selects no appearance and emits no descriptor; vanilla Off choices have that shape and the reference save stores no such entry."),
+  note("R5-links", "hypothesis", "Link-index propagation from appearance controllers to followers and group listing inferred from vanilla CCO resources and UI presets."),
+];
+
+/**
+ * Rule R5 rooted at one switcher: the descriptors its current choice (`state[switcher]`, a choice `localizedName`) emits, with its
+ * targets' definitions from `state`, nested switchers and linked followers followed exactly as `descriptorsFromUiState` does. A viewer's
+ * tried creator choice (character-detail-plan.ts) goes through this, so a choice naming several options, or a colour its linked
+ * followers take, resolves like the creator itself.
+ */
+export function descriptorsFromSwitcher(cco: CcoResource, part: CcoPart, switcher: string, state: UiOptionState): {
+  appearances: AppearanceDescriptor[]; ambiguities: Ambiguity[]; rules: RuleNote[] } {
+  const root = cco.parts[part].options.find(option => option.name === switcher && option.type === "switcher");
+  if (!root) return { appearances: [], ambiguities: [], rules: R5_RULES() };
+  const found = partDescriptors(cco, part, state, [root]);
+  return { appearances: found.appearances, ambiguities: found.ambiguities, rules: R5_RULES() };
+}
+
+/** Every option name a switcher can activate, through any of its choices and nested switchers (the switcher's own reach). */
+export function switcherReach(cco: CcoResource, part: CcoPart, switcher: string): Set<string> {
+  const byName = new Map(cco.parts[part].options.filter(option => option.name).map(option => [option.name, option]));
+  const reach = new Set<string>();
+  const walk = (name: string, depth: number) => {
+    const option = byName.get(name);
+    if (!option || option.type !== "switcher" || depth > 16) return;
+    for (const choice of option.options) for (const target of choice.names) {
+      if (reach.has(target)) continue;
+      reach.add(target);
+      walk(target, depth + 1);
+    }
+  };
+  walk(switcher, 0);
+  return reach;
+}
+
+/** R5 for one part from the given roots: activation through switchers, link indices, definitions, then each group's listing. */
+function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[]) {
+  const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
+  {
+    const { options, groups } = cco.parts[part];
+    const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
     const active = new Set<string>();
     const activate = (option: CcoOption, depth = 0) => {
       if (depth > 16 || active.has(option.name)) return;
@@ -255,7 +304,7 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
       const choice = option.options.find(item => item.localizedName === wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
       for (const name of choice?.names ?? []) { const target = byName.get(name); if (target) activate(target, depth + 1); }
     };
-    for (const option of options) if (option.name && option.enabled && !switcherTargets.has(option.name)) activate(option);
+    for (const option of roots) activate(option);
     const linkIndex = new Map<string, number>();
     for (const option of options) {
       if (option.type !== "appearance" || !option.linkController || !option.link || !active.has(option.name)) continue;
@@ -293,9 +342,5 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
       else if ("morph" in pick) morphs.push({ part, group: group.name, region: name, target: pick.morph });
     }
   }
-  return { appearances, morphs, ambiguities, rules: [
-    note("R5-switcher-targets", "resource", "Only the targets named by an active switcher's current choice are active, whatever their enabled flag; options no switcher names follow enabled. Matches every switcher in the six vanilla UI presets; native state code unread."),
-    note("R5-off-choice", "resource", "A definition with an empty (None) name selects no appearance and emits no descriptor; vanilla Off choices have that shape and the reference save stores no such entry."),
-    note("R5-links", "hypothesis", "Link-index propagation from appearance controllers to followers and group listing inferred from vanilla CCO resources and UI presets."),
-  ] };
+  return { appearances, morphs, ambiguities };
 }

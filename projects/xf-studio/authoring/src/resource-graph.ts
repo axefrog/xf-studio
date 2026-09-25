@@ -93,6 +93,8 @@ export interface MeshModel {
   readonly renderChunks: number | null;
   /** Each render chunk's LOD mask (bit 0 = the highest-detail level), when the blob lists them. */
   readonly renderChunkLods: readonly number[] | null;
+  /** Whether each render chunk draws in the scene (`chunkInScene`), when the blob lists them. */
+  readonly renderChunkScene: readonly boolean[] | null;
   /** snake_case context attributes from the `@context` local material and `resource.fix context`. */
   readonly contextAttrs: Map<string, string>;
   /** Raw `@context` params, which override same-named params of instantiated templates. */
@@ -107,6 +109,8 @@ export interface MorphModel {
   readonly renderChunks: number | null;
   /** Each render chunk's LOD mask (bit 0 = the highest-detail level), when the blob lists them. */
   readonly renderChunkLods: readonly number[] | null;
+  /** Whether each render chunk draws in the scene (`chunkInScene`), when the blob lists them. */
+  readonly renderChunkScene: readonly boolean[] | null;
   readonly targets: { name: string; region: string }[];
   readonly blobFrom: DepotRef | null;
   /**
@@ -169,6 +173,22 @@ const chunkLodMasks = (blob: unknown, scope: HandleScope): number[] | null => {
     const mask = isObject(info) ? Number(info.lodMask) : NaN;
     return Number.isInteger(mask) && mask > 0 ? mask : 1;
   });
+};
+/**
+ * Whether each render chunk draws in the scene: its `renderMask` (`EMeshChunkFlags`) has `MCF_RenderInScene`. A chunk with only
+ * `MCF_RenderInShadows` (the vanilla hair `*_shadow` meshes, a body's seam-fix proxy) only casts shadows [resource]. A mask that is
+ * absent or unreadable counts as drawn, as before this was read.
+ */
+export function chunkInScene(mask: unknown): boolean {
+  if (typeof mask === "string" && mask.trim()) return mask.split(/[,|\s]+/).includes("MCF_RenderInScene");
+  if (typeof mask === "number" && Number.isInteger(mask)) return (mask & 1) === 1;
+  return true;
+}
+const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null => {
+  const data = scope.data(blob);
+  const header = data && isObject(data.header) ? data.header : null;
+  if (!header) return null;
+  return asArray(header.renderChunkInfos).map(info => chunkInScene(isObject(info) ? info.renderMask : undefined));
 };
 
 export const snakeCase = (value: string) => {
@@ -351,7 +371,7 @@ export class ResourceGraph {
         externalMaterials: (asArray(root.externalMaterials).length ? asArray(root.externalMaterials) : asArray(root.preloadExternalMaterials))
           .map(item => ({ ref: depotRef(item), text: depotText(item) })),
         renderChunks: renderChunkCount(root.renderResourceBlob, scope),
-        renderChunkLods: chunkLodMasks(root.renderResourceBlob, scope),
+        renderChunkLods: chunkLodMasks(root.renderResourceBlob, scope), renderChunkScene: chunkSceneFlags(root.renderResourceBlob, scope),
       };
     };
     const base = read(loaded.root);
@@ -364,7 +384,7 @@ export class ResourceGraph {
     }
     const appearances: MeshAppearanceModel[] = base.appearances.map(a => ({ name: a.name, chunkMaterials: a.chunkMaterials,
       expansionTag: a.tags.length === 1 ? a.tags[0]! : null, patchSource: null, patchedFrom: null }));
-    let renderChunks = base.renderChunks, renderChunkLods = base.renderChunkLods, renderBlobFrom: DepotRef | null = null;
+    let renderChunks = base.renderChunks, renderChunkLods = base.renderChunkLods, renderChunkScene = base.renderChunkScene, renderBlobFrom: DepotRef | null = null;
     for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "mesh");
       if (!source) continue;
@@ -383,7 +403,7 @@ export class ResourceGraph {
         notes.push(note("R3-mesh-patch-appearances", "source", `${patch.sourcePath} adds/replaces mesh appearances (${patch.declaredBy}).`));
       }
       if (patchMesh.renderChunks !== null && patchModifies(patch, "renderResourceBlob", base.renderChunks !== null)) {
-        renderChunks = patchMesh.renderChunks; renderChunkLods = patchMesh.renderChunkLods; renderBlobFrom = source.ref;
+        renderChunks = patchMesh.renderChunks; renderChunkLods = patchMesh.renderChunkLods; renderChunkScene = patchMesh.renderChunkScene; renderBlobFrom = source.ref;
         notes.push(note("R3-mesh-patch-blob", "source", `${patch.sourcePath} replaces the render blob (${patch.declaredBy}).`));
       }
     }
@@ -400,7 +420,7 @@ export class ResourceGraph {
     }
     if (fix) for (const [name, value] of fix.context) contextAttrs.set(snakeCase(name), value);
     return { loaded, appearances, entries: base.entries, localMaterials: base.localMaterials, externalMaterials: base.externalMaterials,
-      renderChunks, renderChunkLods, contextAttrs, contextParams, renderBlobFrom, notes };
+      renderChunks, renderChunkLods, renderChunkScene, contextAttrs, contextParams, renderBlobFrom, notes };
   }
 
   morph(ref: DepotRef): Promise<MorphModel | null> {
@@ -419,13 +439,13 @@ export class ResourceGraph {
         baseMesh: depotRef(root.baseMesh), baseMeshAppearance: cname(root.baseMeshAppearance),
         baseTexture: depotRef(root.baseTexture), baseTextureParam: cname(root.baseTextureParamName),
         blob, renderChunks: blob ? renderChunkCount(blob.baseBlob, scope) : null,
-        renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null,
+        renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null, renderChunkScene: blob ? chunkSceneFlags(blob.baseBlob, scope) : null,
         targets: asArray(root.targets).filter(isObject).map(target => ({ name: cname(target.name), region: cname(target.regionName) })),
       };
     };
     const base = read(loaded.root);
     const notes: RuleNote[] = [];
-    let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, baseTexture, baseTextureParam } = base;
+    let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, renderChunkScene, baseTexture, baseTextureParam } = base;
     const targets = [...base.targets];
     let blobFrom: DepotRef | null = null;
     // A patch source is never itself patched (OnMorphTargetResourceLoad returns early).
@@ -438,13 +458,13 @@ export class ResourceGraph {
       // OnMorphTargetResourceLoad: an empty source value overwrites only when the patch names the property.
       if (patchModifies(patch, "baseTexture", !patchMorph.baseTexture)) baseTexture = patchMorph.baseTexture;
       if (patchModifies(patch, "baseTextureParamName", !patchMorph.baseTextureParam)) baseTextureParam = patchMorph.baseTextureParam;
-      if (patchMorph.blob && patchModifies(patch, "blob", !!base.blob)) { renderChunks = patchMorph.renderChunks; renderChunkLods = patchMorph.renderChunkLods; blobFrom = source.ref; }
+      if (patchMorph.blob && patchModifies(patch, "blob", !!base.blob)) { renderChunks = patchMorph.renderChunks; renderChunkLods = patchMorph.renderChunkLods; renderChunkScene = patchMorph.renderChunkScene; blobFrom = source.ref; }
       if (patchModifies(patch, "targets")) for (const target of patchMorph.targets) {
         const index = targets.findIndex(existing => existing.name === target.name);
         if (index >= 0) targets[index] = target; else targets.push(target);
       }
       notes.push(note("R3-morph-patch", "source", `${patch.sourcePath} patches this morph target (${[...patch.props].join(", ") || "all props"}; ${patch.declaredBy}).`));
     }
-    return { loaded, baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, targets, blobFrom, baseTexture, baseTextureParam, notes };
+    return { loaded, baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, renderChunkScene, targets, blobFrom, baseTexture, baseTextureParam, notes };
   }
 }

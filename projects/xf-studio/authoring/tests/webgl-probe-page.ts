@@ -28,16 +28,19 @@ import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters }
 import { stageBackdropPixels } from "../src/stage-backdrop";
 import { createStudioEnvironment } from "../src/studio-environment";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
-import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, resolveSurface, type LayerAccumulator } from "../src/layered-material";
+import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type LayerAccumulator } from "../src/layered-material";
 import type { RenderLayer } from "../src/render-detail";
 
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[];
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
   opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; failure?: string;
   plate?: PlateProbe; display?: { path: string; creatorTarget: string }; environment?: string; layered?: LayeredProbe };
-/** The layered bake (section 5): the GPU's baked maps at one texel against the CPU reference of the same stack. */
-export type LayeredProbe = { state: string; error?: string; gpu: { colour: number[]; normal: number[]; surface: number[] };
-  cpu: { colour: number[]; normal: number[]; surface: number[] }; drawn: number[] };
+/**
+ * The layered bake (section 5): the GPU's packed maps (bytes: sRGB colour + roughness, normal + metalness) at one texel against the CPU
+ * reference of the same constant stack, and the largest byte gap over every texel of a stack of non-constant maps.
+ */
+export type LayeredProbe = { state: string; error?: string; gpu: { colour: number[]; normal: number[] }; cpu: { colour: number[]; normal: number[] };
+  drawn: number[]; bytes: number; parity: { texels: number; colour: number; normal: number; error?: string } };
 /** The authored plate's measurements (section 4). */
 export type PlateProbe = { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
   routes: string[]; once: { name: string; preview: number[]; truth: number[]; metalness: number; skinLight: boolean }[];
@@ -357,7 +360,9 @@ try {
     target.dispose();
   }
   // 5. The layered bake (layered-material.ts): a three-layer stack of constant maps, baked on the GPU, read back, and compared with the
-  // CPU reference of the same arithmetic; then the lit material drawn once.
+  // CPU reference of the same arithmetic; then a stack of non-constant maps (tiling, offset, the mask's orientation, an sRGB colour map)
+  // compared texel by texel; then the lit material drawn once. The kept maps are packed 8-bit (PREV-63): colour sRGB-encoded with
+  // roughness in alpha, the normal with metalness in alpha; comparisons are in those bytes.
   {
     const byte = (value: number) => Math.round(value * 255);
     const data = (rgba: number[]) => { const t = new THREE.DataTexture(new Uint8Array(rgba.map(byte)), 1, 1); t.needsUpdate = true; return t; };
@@ -391,15 +396,67 @@ try {
         roughness: entry.rough, metalness: entry.metal, microblend: entry.micro as [number, number, number, number], mask: entry.mask }, order === layers.length - 1);
     });
     const cpu = resolveSurface(acc, globalNormal(globalXy, 0.5));
-    // Half-float maps read back as half floats.
-    const readTexel = (index: number) => {
-      const pixel = new Uint16Array(4);
-      renderer.readRenderTargetPixels(made.handle.target!, 3, 3, 1, 1, pixel, undefined, index);
-      return [...pixel].map(value => THREE.DataUtils.fromHalfFloat(value));
+    // The packed maps read back as bytes.
+    const readBytes = (target: THREE.WebGLRenderTarget, x: number, y: number, index: number) => {
+      const pixel = new Uint8Array(4);
+      renderer.readRenderTargetPixels(target, x, y, 1, 1, pixel, undefined, index);
+      return [...pixel];
     };
+    const srgbByte = (linear: number) => byte(linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055);
+    const expectedBytes = (surface: ReturnType<typeof resolveSurface>) => ({ colour: [...surface.colour.map(value => srgbByte(Math.min(1, Math.max(0, value)))), byte(surface.roughness)],
+      normal: [...surface.normal.map(value => byte(value * 0.5 + 0.5)), byte(surface.metalness)] });
+    const expected = expectedBytes(cpu);
     probe.layered = { state: made.handle.state, ...(made.handle.evidence().error ? { error: made.handle.evidence().error } : {}), drawn: made.handle.evidence().layers,
-      gpu: baked ? { colour: readTexel(0).slice(0, 3), normal: readTexel(1).slice(0, 3), surface: readTexel(2).slice(1, 3) } : { colour: [], normal: [], surface: [] },
-      cpu: { colour: cpu.colour, normal: cpu.normal.map(value => value * 0.5 + 0.5), surface: [cpu.roughness, cpu.metalness] } };
+      gpu: baked ? { colour: readBytes(made.handle.target!, 3, 3, 0), normal: readBytes(made.handle.target!, 3, 3, 1) } : { colour: [], normal: [] },
+      cpu: expected, parity: { texels: 0, colour: 0, normal: 0 }, bytes: made.handle.evidence().bytes };
+    // Non-constant maps: an 8×8 sRGB colour map, a 4×4 roughness map, tile 2 with an offset, and a mask that differs by row and column
+    // (its orientation), baked at 16² over the unit domain with nearest sampling, compared at every texel.
+    {
+      const N = 8, M = 4, SIZE = 16;
+      const colourBytes = new Uint8Array(N * N * 4), roughBytes = new Uint8Array(M * M * 4), maskBytes = new Uint8Array(M * M * 4);
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) colourBytes.set([x * 32 + 16, y * 32 + 8, (x + y) * 15 + 5, 255], (y * N + x) * 4);
+      for (let y = 0; y < M; y++) for (let x = 0; x < M; x++) { const r = 40 + x * 50 + y * 5; roughBytes.set([r, r, r, 255], (y * M + x) * 4); }
+      // The mask's rows are its V: row 0 (V ≈ 0) is clear, the top row full, with a ramp across U.
+      for (let y = 0; y < M; y++) for (let x = 0; x < M; x++) { const m = y === 0 ? 0 : y === M - 1 ? 255 : 60 + x * 40; maskBytes.set([m, m, m, 255], (y * M + x) * 4); }
+      const texture = (bytes: Uint8Array, size: number, srgb: boolean) => {
+        const t = new THREE.DataTexture(bytes, size, size);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
+        if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+        t.needsUpdate = true;
+        return t;
+      };
+      const colourMap = texture(colourBytes, N, true), roughMap = texture(roughBytes, M, false), maskMap = texture(maskBytes, M, false);
+      const flat = data([q(0.25), q(0.25), q(0.25), 1]);
+      const upper = stackLayer({ matTile: 2, offsetU: 0.25, offsetV: 0.125, colorScale: [0.9, 0.7, 0.5], roughLevelsOut: [0.5, 0.25] });
+      const base = stackLayer({ colorScale: [1, 1, 1] });
+      const stack = [{ parameters: layerBakeParameters(upper, 1), textures: { color: colourMap, roughness: roughMap, mask: maskMap } },
+        { parameters: layerBakeParameters(base, 0), textures: { color: flat } }];
+      const tiled = createLayeredMaterial({ layers: stack, domain: { min: [0, 0], max: [1, 1] }, size: SIZE,
+        globals: { ratio: 1, normalIntensity: 1, normalUvScale: [1, 1], normalUvBias: [0, 0] } });
+      const ok = tiled.handle.bake(renderer);
+      const frac = (value: number) => value - Math.floor(value);
+      const at = (bytes: Uint8Array, size: number, u: number, v: number, channel: number) =>
+        bytes[(Math.floor(frac(v) * size) * size + Math.floor(frac(u) * size)) * 4 + channel]! / 255;
+      const srgbLinear = (value: number) => value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+      let texels = 0, colourGap = 0, normalGap = 0;
+      for (let y = 0; y < SIZE && ok; y++) for (let x = 0; x < SIZE; x++) {
+        const uv: [number, number] = [(x + 0.5) / SIZE, (y + 0.5) / SIZE];
+        const p = stack[0]!.parameters;
+        const [mu, mv] = layerMapUv(uv, p.tile, p.offset, 1);
+        const upperSamples = { colour: [0, 1, 2].map(k => srgbLinear(at(colourBytes, N, mu, mv, k))) as [number, number, number], normal: [0, 0] as [number, number],
+          roughness: at(roughBytes, M, mu, mv, 0), metalness: 0, microblend: [0.5, 0.5, 1, 1] as [number, number, number, number], mask: at(maskBytes, M, uv[0], uv[1], 0) };
+        let local = accumulateLayer(EMPTY_ACCUMULATOR, p, upperSamples, false);
+        local = accumulateLayer(local, stack[1]!.parameters, { colour: [q(0.25), q(0.25), q(0.25)], normal: [0, 0], roughness: 1, metalness: 0,
+          microblend: [0.5, 0.5, 1, 1], mask: 1 }, true);
+        const want = expectedBytes(resolveSurface(local));
+        const got = { colour: readBytes(tiled.handle.target!, x, y, 0), normal: readBytes(tiled.handle.target!, x, y, 1) };
+        colourGap = Math.max(colourGap, ...want.colour.map((value, k) => Math.abs(value - got.colour[k]!)));
+        normalGap = Math.max(normalGap, ...want.normal.map((value, k) => Math.abs(value - got.normal[k]!)));
+        texels++;
+      }
+      probe.layered.parity = { texels, colour: colourGap, normal: normalGap, ...(ok ? {} : { error: tiled.handle.evidence().error ?? "not baked" }) };
+      tiled.material.dispose();
+    }
     // The lit material compiles and draws (standard light, environment, key light).
     const litScene = new THREE.Scene();
     litScene.environment = scene.environment;

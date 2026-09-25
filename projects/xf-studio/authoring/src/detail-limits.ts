@@ -8,10 +8,28 @@
  * - `skin-glow`: the skin has a glowing (emissive) part the preview does not draw yet.
  * - `eye-design`: the eye colour is a layered (`multilayered.mt`) design the preview could not draw (its layer setup was unreadable, or
  *   its layers could not be baked on this GPU); the default eye is shown in its place, with the chosen eye's wetness.
- * - `layered-material`: another part made of layered materials (a piercing) could not be drawn, for the same reasons; it is left out.
+ * - `layered-material`: another part made of layered materials (a piercing, or a layered part of hair or another detail) could not be
+ *   drawn, for the same reasons; it is left out.
  * - `layered-mask`: a layered part's mask could not be read, so only its bottom layer is drawn (its colour and finish only).
  * - `decal-template`: a face detail uses a decal material (a `mesh_decal` family member such as the emissive or parallax
  *   decal) the preview does not draw yet; that part is left out.
+ * - `rigid-part`: a part whose exported mesh has no skin (a framework's linked ring) is drawn where the export placed it and does not
+ *   follow the head's idle movement. The component binds to the entity's `root`, not to a head bone, so the data names no bone to
+ *   follow [resource]; how the engine moves such a part is unread [hypothesis] (knowledge/head-cc-rendering.md).
  */
-export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "decal-template"] as const;
+export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "decal-template", "rigid-part"] as const;
 export type DetailLimit = typeof DETAIL_LIMITS[number];
+
+/**
+ * Why the V's details are not shown at all, as a code the presentation words (beside the plain `message` a host sends).
+ * - `version-skew`: the page and the preview host are different builds (XF Studio was updated while it ran), so the host's records or
+ *   answers are of a version the page doesn't read, or the reverse. A restart fixes it.
+ */
+export const DETAIL_NOTICES = ["version-skew"] as const;
+export type DetailNotice = typeof DETAIL_NOTICES[number];
+
+/** Thrown by the character-detail device when the host and the page disagree on a version (`version-skew`). */
+export class DetailVersionSkewError extends Error {
+  readonly notice: DetailNotice = "version-skew";
+  constructor(detail: string) { super(`The preview host and this page are different versions: ${detail}`); }
+}

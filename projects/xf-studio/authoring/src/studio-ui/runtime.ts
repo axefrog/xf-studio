@@ -44,7 +44,7 @@ const sources: [RegExp, string][] = [
   [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
   [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
-  [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^previewSetup\./, "3D preview"],
+  [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^character\./, "Character"], [/^previewSetup\./, "3D preview"],
 ];
 export const sourceLabel = (kind: string) => sources.find(([pattern]) => pattern.test(kind))?.[1] ?? "Studio";
 

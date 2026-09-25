@@ -63,9 +63,11 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
     .toEqual(["field.select", "layer.select", "point.select"]);
   // Scene gating and thrown-error codes replace the old prefix checks.
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.needsScene).map(owner => owner.id as string))
-    .toEqual(["preview", "motion", "savedV"]);
+    .toEqual(["preview", "motion", "savedV", "character"]);
+  // The creator choice tried on the shown V has one owner, the character-detail service (UI-48).
+  expect(kinds("character")).toEqual(["character.tryChoice"]);
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.thrown === "unavailable").map(owner => owner.id as string))
-    .toEqual(["preview", "motion", "quality"]);
+    .toEqual(["preview", "motion", "quality", "character"]);
 });
 
 test("the registry refuses duplicate owners and doubly owned kinds", () => {

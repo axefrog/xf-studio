@@ -128,3 +128,26 @@ test("releasing a detail object disposes geometry and every skeleton's bone text
   expect(boneTextureDisposed).toBe(true);
   expect(skeleton.boneTexture).toBeNull();
 });
+
+test("the layered adapter says `layered-mask` only for a mask the host could not read, and notes layers left out for their template (PREV-67)", () => {
+  const layer = (overrides: Record<string, unknown> = {}) => ({ template: null, opacity: 1, matTile: 1, tilingMultiplier: 1, offsetU: 0, offsetV: 0, mbTile: 1,
+    microblendContrast: 1, microblendNormalStrength: 0, microblendOffsetU: 0, microblendOffsetV: 0, colorScale: [1, 1, 1] as [number, number, number],
+    normalStrength: 0, roughLevelsIn: [1, 0] as [number, number], roughLevelsOut: [1, 0] as [number, number], metalLevelsIn: [1, 0] as [number, number],
+    metalLevelsOut: [1, 0] as [number, number], colorMaskLevelsIn: [0, 1] as [number, number], colorMaskLevelsOut: [0, 1] as [number, number],
+    names: { colorScale: "a", normalStrength: "a", roughLevelsIn: "a", roughLevelsOut: "a", metalLevelsIn: "a", metalLevelsOut: "a" }, textures: {}, ...overrides });
+  const quad = () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004)); return m; };
+  const adapt = (layers: ReturnType<typeof layer>[], masked: number | null) => MATERIAL_ADAPTERS.layered.create(chunk("engine\materials\multilayered.mt", [], {
+    layered: { setup: { depotPath: "s", archive: null, sha256: null }, mask: masked === null ? null : { depotPath: "m", archive: "a", sha256: null, layers: masked },
+      ratio: 1, useNormal: true, layers } }), textures, quad(), context({ slot: "piercings" }));
+  // A two-layer mask under a three-layer setup: the third layer covers nothing, as in game. No limit.
+  expect(adapt([layer(), layer({ textures: { mask: texture("m") } }), layer()], 2).limits).toEqual([]);
+  // The mask could not be read: only the bottom layer draws, and the limit says so.
+  expect(adapt([layer(), layer()], 0).limits).toEqual(["layered-mask"]);
+  // A layer whose template could not be read is left out with a note, not drawn as opaque white.
+  const skipped = adapt([layer(), layer({ templateUnreadable: true, textures: { mask: texture("m") } })], 2);
+  expect(skipped.limits).toEqual([]);
+  expect(skipped.notes.join(" ")).toContain("1 layer(s) whose template could not be read are left out");
+  expect(skipped.layered!.evidence().layers).toEqual([0]);
+  // A 4 mm part is baked at the smallest size, not at 1024 (PREV-63).
+  expect(skipped.layered!.evidence().size).toBe(256);
+});

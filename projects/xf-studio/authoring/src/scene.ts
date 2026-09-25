@@ -16,6 +16,7 @@ import type { DetailSlot } from "./render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type DecalSurfaceUnderlay, type HeadSkinPlacement } from "./head-skin-placement";
 import { priorityRank } from "./render-templates";
 import type { DetailLimit } from "./detail-limits";
+import { layeredContextRestored } from "./layered-material";
 import type { ResolvedSkinSurface } from "./character-material-adapters";
 import { characterDetailsEvidence, coreSceneEvidence } from "./scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "./render-scheduler";
@@ -215,6 +216,8 @@ async function assembleScene(
    * resolved head itself with the core head hidden. Null while the fixed default skin shows.
    */
   let resolvedSkin: { item: LoadedCharacterComponent; placement: HeadSkinPlacement } | null = null;
+  /** The last skin placed, so a skin component kept across a swap is not compared with the core head again. */
+  let placedSkin: { item: LoadedCharacterComponent; placement: HeadSkinPlacement } | null = null;
   let normalsEnabled = true;
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
@@ -228,7 +231,13 @@ async function assembleScene(
   }
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
-  const restored = () => { environment.restore(); makeup.contextRestored(); };
+  // The shown V's layered parts are baked again from their stacks (PREV-62): their kept maps died with the context.
+  const restored = () => {
+    environment.restore(); makeup.contextRestored();
+    layeredContextRestored(renderer);
+    for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
+    bakeLayered();
+  };
   renderer.domElement.addEventListener("webglcontextrestored", restored);
   releases.push(() => renderer.domElement.removeEventListener("webglcontextrestored", restored));
   const { plates, materials, updateLayer } = makeup;
@@ -429,17 +438,23 @@ async function assembleScene(
   }
   function refreshDetailVisibility() {
     for (const item of drawnDetails()) item.root.visible = detailVisible[item.component.slot];
+    // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63).
+    if (characterDetails) bakeLayered();
   }
   function setHair(enabled: boolean) { detailVisible.hair = enabled; refreshDetailVisibility(); }
   /**
-   * Swap in a character's resolved details, replacing the previous ones completely (null removes them).
-   * The new meshes follow the head's current facial shapes and join the idle rig.
+   * Swap in a character's resolved details, replacing the previous ones completely (null removes them). Components the new details
+   * took over unchanged from the previous ones (a tried piercing style keeps the rest of the V; PREV-68) stay as they are: their
+   * objects, materials and bakes are kept, only released parts are disposed. The new meshes follow the head's current facial shapes
+   * and join the idle rig.
    */
   function setCharacterDetails(next: LoadedCharacterDetails | null): { limits: { slot: DetailSlot; limit: DetailLimit }[] } {
-    if (characterDetails === next) return { limits: skinLimits() };
+    if (characterDetails === next) return { limits: [...skinLimits(), ...bakeLayered()] };
     const previous = characterDetails;
     const drawnBefore = drawnDetails();
     characterDetails = null;
+    next?.adopt();
+    const kept = new Set(next?.components ?? []);
     if (previous) {
       idle?.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
@@ -450,17 +465,21 @@ async function assembleScene(
       head.visible = true;
       eyes.visible = true;
       resolvedSkin = null;
-      previous.dispose();
+      previous.dispose(kept);
     }
     refreshPlateUnderlay();
     if (!next) return { limits: [] };
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
-      const placement = skinPlacement.place(skinItem.meshes);
+      // A skin kept from the previous details keeps its placement (comparing it with the core head again would decide the same).
+      const placement = placedSkin?.item === skinItem ? placedSkin.placement : skinPlacement.place(skinItem.meshes);
+      placedSkin = { item: skinItem, placement };
       if (placement.mode === "core-head") {
         head.material = skinItem.meshes[0]!.material;
-        extendSkin(head, head.material as THREE.MeshStandardMaterial);
+        // A skin kept from the previous details already drew on the core head with this material's extension.
+        const material = head.material as THREE.MeshStandardMaterial;
+        if (!material.userData.xfsHeadExtended) { extendSkin(head, material); material.userData.xfsHeadExtended = true; }
       } else head.visible = false;
       resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
@@ -476,7 +495,8 @@ async function assembleScene(
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
-        extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial);
+        // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
+        if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
         // Facial shapes: the same (target, region) names as the head's.
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
           mesh.morphTargetInfluences![index] = head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
@@ -496,12 +516,13 @@ async function assembleScene(
   }
   /**
    * Bake every layered stack of the shown V that is not baked yet (layered-material.ts). A failed bake leaves that chunk hidden and is
-   * reported with the slot's code: the eye design (the core eye then shows) or a layered part.
+   * reported with the slot's code: the eye design (the core eye then shows) or a layered part. A slot the viewer hides (piercings,
+   * hair) is baked when it is first shown, so a hidden part costs no GPU memory (PREV-63).
    */
   function bakeLayered(): { slot: DetailSlot; limit: DetailLimit }[] {
     const limits: { slot: DetailSlot; limit: DetailLimit }[] = [];
     for (const item of characterDetails?.components ?? []) for (const { mesh, handle } of item.layered ?? []) {
-      if (handle.state === "pending") handle.bake(renderer);
+      if (handle.state === "pending" && detailVisible[item.component.slot]) handle.bake(renderer);
       if (handle.state !== "failed") continue;
       mesh.visible = false;
       const limit: DetailLimit = item.component.slot === "eyes" ? "eye-design" : "layered-material";

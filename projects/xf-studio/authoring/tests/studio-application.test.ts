@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { CollectionService } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { PreviewActions } from "../src/preview-actions";
+import { CharacterDetailActions } from "../src/character-detail-actions";
+import { DEFAULT_CHARACTER } from "../src/character-detail-request";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
@@ -67,28 +69,39 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
   expect(document.recipe.layers[0].color).toBe(originalColor);
 });
 
-test("saved-V eye suggestion updates application state without applying the morph a second time", () => {
+test("saved-V eye suggestion updates application state without applying the morph a second time", async () => {
   const { app } = fixture(), calls: number[] = [];
   const preview = new PreviewActions(freshWorkspace().preview, {
     cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }),
     front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
     setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {},
-    setEyeShape: index => calls.push(index), setPiercings: () => {}, setPiercingPreview: () => {},
-    setDetail: () => {}, piercingOptions: () => [{ id: "ring", label: "Nose ring",
-      choices: [{ index: 1, definition: "gold", label: "Gold" }] }],
+    setEyeShape: index => calls.push(index), setPiercings: () => {},
+    setDetail: () => {},
   });
   app.attach({ preview });
+  // The tried piercing style is the character service's: one typed action, validated against the V's own choices (UI-48).
+  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "", definition: "" })).toMatchObject({ available: false, code: "not_ready" });
+  const character = new CharacterDetailActions({
+    request: async () => ({ key: "k", phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }),
+    poll: async () => { throw Error("unused"); }, clear: () => {}, wait: async () => {},
+    show: async () => ({ slots: [], override: null, choices: [{ slot: "piercings", options: [{ choice: "01", label: "Style 01",
+      definitions: [{ name: "gold", label: "Gold" }] }] }] }),
+  });
+  await character.setCharacter(DEFAULT_CHARACTER);
+  app.attach({ character });
   app.recordAppliedSavedAppearance({ suggestedEyeShape: 9 });
   const snapshot = app.snapshot();
   expect(snapshot.preview?.eyeShape).toBe(9);
   expect(calls).toEqual([]);
-  expect(snapshot.previewOptions).toEqual([{ id: "ring", label: "Nose ring",
-    choices: [{ index: 1, definition: "gold", label: "Gold" }] }]);
-  snapshot.previewOptions![0].choices[0].label = "Forged";
-  expect(app.snapshot().previewOptions?.[0].choices[0].label).toBe("Gold");
-  expect(app.capability({ kind: "preview.setPiercingPreview", style: "ring", definition: "silver" }).available).toBe(false);
-  expect(app.capability({ kind: "preview.setPiercingPreview", style: "ring", definition: "gold" }).available).toBe(true);
+  expect(snapshot.character?.choices).toEqual([{ slot: "piercings", options: [{ choice: "01", label: "Style 01", definitions: [{ name: "gold", label: "Gold" }] }] }]);
+  snapshot.character!.choices[0]!.options[0]!.label = "Forged";
+  expect(app.snapshot().character?.choices[0]?.options[0]?.label).toBe("Style 01");
+  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "silver" })).toMatchObject({ available: false, code: "unavailable" });
+  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "gold" }).available).toBe(true);
+  expect(app.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "gold" }).ok).toBe(true);
+  expect(app.previewState().character?.tried).toEqual({ slot: "piercings", choice: "01", definition: "gold" });
+  character.dispose();
 });
 
 test("facade groups form changes and hides live gesture targets", () => {

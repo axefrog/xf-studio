@@ -12,6 +12,8 @@ export type WorkspaceCapturePorts = {
   quality(): WorkspaceState["preview"]["textureSize"];
   preview(): ReturnType<PreviewActions["snapshot"]> | undefined;
   motion(): ReturnType<MotionActions["snapshot"]> | undefined;
+  /** The creator choice tried on the shown V (the character-detail service's), persisted as the preview's piercing style. */
+  triedChoice?(): { choice: string; definition: string } | null | undefined;
   uiPreferences?(): WorkspaceState["uiPreferences"];
   previewSetup?(): WorkspaceState["previewSetup"];
 };
@@ -36,6 +38,8 @@ export class WorkspaceComposer {
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
+    const tried = this.ports.triedChoice?.();
+    if (tried !== undefined) { preview.piercingStyle = tried?.choice ?? ""; preview.piercingDefinition = tried?.definition ?? ""; }
     return structuredClone({ ...this.initial, ...editing, preview });
   }
 }

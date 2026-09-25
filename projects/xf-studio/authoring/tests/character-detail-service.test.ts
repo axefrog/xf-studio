@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
@@ -62,7 +62,7 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-5");
+    expect(record.schema).toBe("xfs/render-detail-6");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
@@ -276,6 +276,44 @@ describe("exporter cache keys", () => {
     }, { contains: (_source, hashes) => new Set(hashes) });
     await expect(failing.open(archiveExportSource(join(root, "nameless-failing.archive"), route.gameRoot)).textures(wanted)).rejects.toMatchObject({ code: "tool_failed" });
     expect(running).toBe(0);
+  });
+});
+
+describe("layer masks through the real exporter", () => {
+  test("masks(): one PNG per mask layer from WolvenKit's layer folder, cached, and by hash for a nameless archive", async () => {
+    const runs: string[] = [];
+    // Like WolvenKit uncooking an .mlmask: `<name>_layers/<name>_<i>.png` beside where the mask would be, one per layer.
+    const layers = (stem: string, count: number) => {
+      const name = stem.split(/[\\/]/).pop()!;
+      mkdirSync(`${stem}_layers`, { recursive: true });
+      for (let index = 0; index < count; index++) writeFileSync(join(`${stem}_layers`, `${name}_${index}.png`), png);
+    };
+    const exporter = createGameAssetExporter(join(root, "masks"), async ({ depotPaths, outDir, byHash }) => {
+      runs.push(`${byHash ? "hash" : "path"} ${depotPaths.join(",")}`);
+      if (byHash) { layers(join(outDir, depotHash(depotPaths[0]!)), 2); return; }
+      for (const path of depotPaths) if (path === P.earringMask) layers(join(outDir, ...path.replace(/\.mlmask$/i, "").split("\\")), 3);
+    }, { contains: (_source, hashes) => new Set(hashes) });
+    const source = archiveExportSource(join(root, "masks.archive"), route.gameRoot);
+    const nameless = "base\\fixture\\nameless.mlmask";
+    const got = await exporter.open(source).masks([P.earringMask, nameless]);
+    expect(got.get(P.earringMask)!.layers.map(file => file.split(/[\\/]/).pop())).toEqual(["layer-0.png", "layer-1.png", "layer-2.png"]);
+    expect(got.get(nameless)!.layers).toHaveLength(2);
+    expect(got.get(P.earringMask)!.cached).toBe(false);
+    expect(runs).toEqual([`path ${P.earringMask},${nameless}`, `hash ${nameless}`]);
+    // Cached per layer, in order.
+    const again = await exporter.open(source).masks([P.earringMask]);
+    expect(again.get(P.earringMask)).toMatchObject({ cached: true });
+    expect(again.get(P.earringMask)!.layers).toHaveLength(3);
+    expect(runs).toHaveLength(2);
+  });
+});
+
+describe("what the host writes is what the page reads (PIPE-40)", () => {
+  test("the written record is the browser reader's own output: parsing it again changes nothing", async () => {
+    const { record, recordFile } = await prepare(REQUEST_A);
+    const written = JSON.parse(readFileSync(join(root, "store", "records", recordFile), "utf8"));
+    expect(written).toEqual(record);
+    expect(parseCharacterDetail(written)).toEqual(record);
   });
 });
 

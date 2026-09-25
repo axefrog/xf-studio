@@ -7,7 +7,7 @@ import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "./platform/api";
 
 export type PreviewConfig = Pick<PreviewState,
-  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "piercingStyle" | "piercingDefinition" |
+  "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" |
   "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting">;
 export type PreviewAction =
   | { kind: "camera.front" }
@@ -23,14 +23,11 @@ export type PreviewAction =
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
   | { kind: "preview.setEyeShape"; index: number }
-  | { kind: "preview.setPiercingPreview"; style: string; definition: string }
   | { kind: "preview.setPiercings"; enabled: boolean }
   | { kind: "preview.setSurfaceControls" | "preview.setWire" | "preview.setNormals" | "preview.setEyeOptics" | "preview.setHair"; enabled: boolean }
   | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean };
 export type PreviewActionResult = { limited?: boolean };
 export type PreviewCapability = { available: boolean; reason?: string };
-export type PiercingPreviewOption = { id: string; label: string;
-  choices: { index: number; definition: string; label: string }[] };
 /** Eye-shape choices as the loaded head carries them, and whether the eyeballs follow them. */
 export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean; eyeSource: string | null };
 /** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
@@ -45,8 +42,6 @@ export type PreviewPort = {
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
-  setPiercingPreview(style: string, definition: string): void;
-  piercingOptions?(): PiercingPreviewOption[];
   eyeShapeOptions?(): EyeShapeOptions;
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
@@ -67,15 +62,11 @@ export class PreviewActions {
   constructor(initial: PreviewState, private port: PreviewPort) {
     this.state = { surface: initial.surface, wire: initial.wire, brows: initial.brows,
       lashes: initial.lashes, hair: initial.hair, normals: initial.normals, eyeOptics: initial.eyeOptics,
-      eyeShape: initial.eyeShape, piercings: initial.piercings, piercingStyle: initial.piercingStyle,
-      piercingDefinition: initial.piercingDefinition,
+      eyeShape: initial.eyeShape, piercings: initial.piercings,
       exposure: initial.exposure, lightAngle: initial.lightAngle,
       lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting } };
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
     port.onLightingStatus?.(() => { for (const listener of this.listeners) listener(); });
-  }
-  piercingOptions(): Readonly<PiercingPreviewOption[]> {
-    return structuredClone(this.port.piercingOptions?.() ?? []);
   }
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
     return structuredClone(this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null });
@@ -130,11 +121,6 @@ export class PreviewActions {
     }
     if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index))
       return refusal("invalid_value", "That eye shape is not offered by this head.");
-    if (action.kind === "preview.setPiercingPreview" && action.style) {
-      const option = this.port.piercingOptions?.().find(item => item.id === action.style);
-      if (!option || !option.choices.some(choice => choice.definition === action.definition))
-        return refusal("unavailable", "That piercing style or colour is unavailable.");
-    }
     const target = action.kind === "preview.setDetail" ? action.detail : action.kind === "preview.setHair" ? "hair" : undefined;
     const requested = action.kind === "preview.setDetail" || action.kind === "preview.setHair" ? action.enabled : false;
     const unavailable = target && requested && this.port.availability?.(target);
@@ -162,8 +148,6 @@ export class PreviewActions {
       case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
       case "preview.setPiercings": this.port.setPiercings(action.enabled); this.state.piercings = action.enabled; break;
-      case "preview.setPiercingPreview": this.port.setPiercingPreview(action.style, action.definition);
-        this.state.piercingStyle = action.style; this.state.piercingDefinition = action.definition; break;
       case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
       case "preview.setWire": this.port.setWire(action.enabled); this.state.wire = action.enabled; break;
       case "preview.setNormals": this.port.setNormals(action.enabled); this.state.normals = action.enabled; break;

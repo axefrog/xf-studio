@@ -205,9 +205,6 @@ test("preview commands keep camera and lighting state readable without DOM and e
     setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {},
     setHair: () => {}, setDetail: () => {}, setEyeShape: index => calls.push(`eye:${index}`),
     setPiercings: enabled => calls.push(`piercings:${enabled}`),
-    setPiercingPreview: (style, definition) => calls.push(`piercing:${style}:${definition}`),
-    piercingOptions: () => [{ id: "stud", label: "Stud", choices: [
-      { index: 1, definition: "silver", label: "Silver" }] }],
     availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
   };
   const actions = new PreviewActions(freshWorkspace().preview, port);
@@ -220,15 +217,12 @@ test("preview commands keep camera and lighting state readable without DOM and e
   const detached = actions.snapshot();
   expect(detached.camera.fov).toBe(10);
   expect(detached.exposure).toBe(1.5);
-  const choices = actions.piercingOptions();
-  choices[0].choices[0].label = "Forged";
-  expect(actions.piercingOptions()[0].choices[0].label).toBe("Silver");
   expect(notifications).toBe(3);
   expect(calls).toEqual(["exposure:1.5", "angle:120"]);
-  expect(actions.capability({ kind: "preview.setPiercingPreview", style: "stud", definition: "gold" }).available).toBe(false);
   actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
-  actions.dispatch({ kind: "preview.setPiercingPreview", style: "stud", definition: "silver" });
-  expect(actions.snapshot()).toMatchObject({ eyeShape: 12, piercingStyle: "stud", piercingDefinition: "silver" });
+  expect(actions.snapshot()).toMatchObject({ eyeShape: 12 });
+  // The tried piercing style is the character service's (character.tryChoice), not a preview preference.
+  expect("piercingStyle" in actions.snapshot()).toBe(false);
   actions.rememberEyeShape(9); // A saved morph was already applied by the renderer.
   expect(actions.snapshot().eyeShape).toBe(9);
   expect(calls.filter(call => call.startsWith("eye:"))).toEqual(["eye:12"]);
@@ -240,7 +234,7 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
   const port = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
     endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {},
-    setEyeShape: (index: number) => calls.push(index), setPiercings: () => {}, setPiercingPreview: () => {},
+    setEyeShape: (index: number) => calls.push(index), setPiercings: () => {},
     eyeShapeOptions: () => ({ choices, eyesFollow: true, eyeSource: "base\he_morphs.morphtarget" }) } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);
   expect(actions.eyeShapeOptions().choices.map(choice => choice.target)).toEqual([null, "h011", "h021"]);

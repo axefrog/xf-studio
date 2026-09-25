@@ -123,6 +123,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       collections: () => bootstrap?.collection.workspaceSnapshot() ?? workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
       preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
+      triedChoice: () => head?.characterDetails.snapshot().tried,
       uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart }),
     },

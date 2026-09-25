@@ -17,15 +17,8 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   for (const detail of ["brows", "lashes"] as const) {
     if (ports.preview.availability?.(detail)) initial[detail] = false;
   }
-  // Keep a requested hair or piercing toggle, and a tried piercing style, while the V's details are still on their way: the styles on
-  // offer come with the V's record, and the host shows the V's own piercings for a style this installation doesn't offer.
-  const options = ports.preview.piercingOptions?.() ?? [];
-  if (options.length) {
-    const chosen = options.find(option => option.id === initial.piercingStyle);
-    initial.piercingStyle = chosen?.id ?? "";
-    initial.piercingDefinition = chosen?.choices.some(choice => choice.definition === initial.piercingDefinition)
-      ? initial.piercingDefinition : chosen?.choices[0]?.definition ?? "";
-  } else if (!initial.piercingStyle) initial.piercingDefinition = "";
+  // A requested hair or piercing toggle is kept while the V's details are still on their way. The piercing style tried on the V is the
+  // character-detail service's (it validates the persisted one itself; character-detail-actions.ts).
 
   // A restored eye shape the loaded head does not offer falls back to its base shape.
   const eyeChoices = ports.preview.eyeShapeOptions?.().choices;
@@ -54,7 +47,6 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
       const motion = new MotionActions(initial, ports.motion);
       motion.restore();
       const preview = new PreviewActions(initial, ports.preview);
-      ports.preview.setPiercingPreview(initial.piercingStyle, initial.piercingDefinition);
       ports.preview.setPiercings(initial.piercings);
       if (initial.camera) preview.dispatch({ kind: "camera.restore", camera: initial.camera });
       return { preview, motion };

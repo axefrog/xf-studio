@@ -1,6 +1,8 @@
 import type { CharacterDetailPort, HostCharacterState } from "./character-detail-actions";
-import { loadCharacterDetails, readCharacterRecord, type CharacterDetailFetch } from "./character-detail-loader";
-import type { DetailSlot } from "./render-detail";
+import { loadCharacterDetails, readCharacterRecord, type CharacterDetailFetch, type LoadedCharacterDetails } from "./character-detail-loader";
+import { parseCharacterRequest } from "./character-detail-request";
+import { DetailVersionSkewError } from "./detail-limits";
+import { CHARACTER_DETAIL_SCHEMA, RenderDetailVersionError, type DetailSlot } from "./render-detail";
 import type { createScene } from "./scene";
 
 type Scene = Pick<Awaited<ReturnType<typeof createScene>>, "setCharacterDetails" | "detailContext" | "renderer">;
@@ -8,14 +10,22 @@ type Scene = Pick<Awaited<ReturnType<typeof createScene>>, "setCharacterDetails"
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
  * and the renderer side (load a record, then swap it into the scene in one step). A load that is
- * cancelled or superseded is disposed and never reaches the scene.
+ * cancelled or superseded is disposed and never reaches the scene. Each load reuses the parts of the shown
+ * details whose content is unchanged (PREV-68), so a tried piercing style loads only the piercings.
+ *
+ * A host of another version (the app was updated while it ran, so the page and the host were built apart) is reported as
+ * `DetailVersionSkewError`, never as a silent failure: a state that names another record schema (or none: an older host), a request
+ * the host refuses as `unsupported_version`, a request the host calls invalid although this page's own reader accepts it, and a
+ * record of a version this page doesn't read.
  */
 export const CHARACTER_ENDPOINT = "/api/preview-character";
 
 function hostState(value: unknown): HostCharacterState {
-  const state = value as HostCharacterState;
+  const state = value as HostCharacterState & { recordSchema?: unknown };
   if (!state || typeof state.key !== "string" || !["preparing", "ready", "failed", "unknown"].includes(state.phase))
     throw Error("The preview host sent an unexpected answer.");
+  if (state.recordSchema !== CHARACTER_DETAIL_SCHEMA)
+    throw new DetailVersionSkewError(`the host writes ${typeof state.recordSchema === "string" ? state.recordSchema.slice(0, 40) : "an older record"}, this page reads ${CHARACTER_DETAIL_SCHEMA}.`);
   return { key: state.key, phase: state.phase, message: typeof state.message === "string" ? state.message : "",
     progress: state.progress && Number.isInteger(state.progress.index) && Number.isInteger(state.progress.total) && typeof state.progress.label === "string"
       ? { index: state.progress.index, total: state.progress.total, label: state.progress.label } : null,
@@ -23,20 +33,38 @@ function hostState(value: unknown): HostCharacterState {
 }
 
 export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {
-  const answer = async (response: Response) => {
-    if (!response.ok) throw Error(`The preview host refused the request (${response.status}).`);
+  /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
+  let shown: LoadedCharacterDetails | null = null;
+  const answer = async (response: Response, sent?: unknown) => {
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { code?: unknown } | null;
+      if (body?.code === "unsupported_version") throw new DetailVersionSkewError("the host doesn't read this page's requests.");
+      // This page only sends requests its own reader accepts; a host that refuses one reads another version.
+      if (sent !== undefined && body?.code === "invalid") {
+        let valid = true;
+        try { parseCharacterRequest(JSON.parse(JSON.stringify(sent))); } catch { valid = false; }
+        if (valid) throw new DetailVersionSkewError("the host refused a request this page reads as valid.");
+      }
+      throw Error(`The preview host refused the request (${response.status}).`);
+    }
     return hostState(await response.json());
   };
   return {
     request: async (request, signal) => answer(await fetcher(CHARACTER_ENDPOINT, { method: "POST", signal,
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) })),
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }), request),
     poll: async (key, signal) => answer(await fetcher(`${CHARACTER_ENDPOINT}?key=${encodeURIComponent(key)}`, { signal })),
     async show(file, signal) {
-      const record = await readCharacterRecord(file, fetcher, signal);
+      let record;
+      try { record = await readCharacterRecord(file, fetcher, signal); }
+      catch (error) {
+        if (error instanceof RenderDetailVersionError) throw new DetailVersionSkewError(`the record is ${error.direction} than this page reads.`);
+        throw error;
+      }
       const loaded = await loadCharacterDetails(record, { fetcher, signal, anisotropy: Math.min(8, scene.renderer.capabilities.getMaxAnisotropy()),
-        context: (slot: DetailSlot) => scene.detailContext(slot) });
+        context: (slot: DetailSlot) => scene.detailContext(slot), reuse: shown });
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       const placed = scene.setCharacterDetails(loaded);
+      shown = loaded;
       const limits = [...loaded.limits, ...(placed?.limits ?? [])];
       // Record outcomes, overridden by anything that failed to load in this browser; a shown slot with a part
       // the preview can't draw yet keeps its state and carries the limit codes (the presentation words them).
@@ -48,7 +76,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         return codes.length ? { ...slot, limits: codes } : slot;
       }) };
     },
-    clear() { scene.setCharacterDetails(null); },
+    clear() { scene.setCharacterDetails(null); shown = null; },
     wait: (ms, signal) => new Promise(resolve => {
       const timer = setTimeout(resolve, ms);
       signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });

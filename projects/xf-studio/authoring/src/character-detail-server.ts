@@ -1,9 +1,12 @@
 import type { CharacterDetailHost } from "./character-detail-host";
-import { parseCharacterRequest } from "./character-detail-request";
+import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
+import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 
 /**
  * Host endpoint for the preview's resolved character details, shared by localhost and the desktop.
- * POST takes one character request (`xfs/character-request-2`, or a v1 request) and returns the preparation state;
+ * POST takes one character request (`xfs/character-request-3`, or an earlier one without a tried choice) and returns the preparation state;
+ * a request of a version this host doesn't read is refused with `unsupported_version` and the versions it does read, so a page built
+ * apart from the host (the app updated while it ran) can say so instead of failing silently;
  * GET `?key=` polls it. The launch route and tools come from the host's own settings, never the
  * browser. Callers mount it behind their own session checks (the desktop adds a token cookie).
  * `serveCharacterAsset` answers `/assets/character/<content-addressed name>`.
@@ -33,7 +36,11 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
       const text = await request.text();
       if (text.length > MAX_BODY) return json({ code: "too_large", error: "Request is too large." }, 413);
       body = parseCharacterRequest(JSON.parse(text));
-    } catch { return json({ code: "invalid", error: "Invalid character request." }, 400); }
+    } catch (error) {
+      if (error instanceof CharacterRequestVersionError) return json({ code: "unsupported_version", error: "This page and the preview host are different versions.",
+        request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA }, 409);
+      return json({ code: "invalid", error: "Invalid character request." }, 400);
+    }
     return json(host.request(body as ReturnType<typeof parseCharacterRequest>));
   };
 }

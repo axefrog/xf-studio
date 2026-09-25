@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, parseCharacterDetail, parseCoreDetail, parseRenderDetail, RENDER_DETAIL_SCHEMA, type CharacterDetail } from "../src/render-detail";
+import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, parseCharacterDetail, parseCoreDetail, parseRenderDetail, RECORD_LIMITS, RENDER_DETAIL_SCHEMA, RenderDetailVersionError,
+  type CharacterDetail } from "../src/render-detail";
 
 const sha = (c: string) => c.repeat(64);
 const resource = (file: string, c = "a") => ({ file, sha256: sha(c), sources: [{ depotPath: "base\\x.mesh", archive: "basegame.archive", provider: "Installed game" }] });
@@ -59,51 +60,96 @@ const character = (): CharacterDetail => ({
               normalStrength: "None?", roughLevelsIn: "None?", roughLevelsOut: "None?", metalLevelsIn: "None?", metalLevelsOut: "None?" }, textures: {} }] } })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
     { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" }],
-  choices: [{ slot: "piercings", options: [{ option: "piercings_01", index: 1, definitions: [{ name: "i0_000_pwa__earring__01_silver", index: 0 }] },
-    { option: "piercings_09", index: 9, definitions: [{ name: "i0_000_pwa__earring__01_silver", index: 0 }, { name: "i0_000_pwa__earring__03_black", index: 2 }] }] }],
+  choices: [{ slot: "piercings", options: [{ choice: "01", label: "Style 01", definitions: [{ name: "i0_000_pwa__earring__01_silver", label: "Silver" }] },
+    { choice: "09", label: "Style 09", definitions: [{ name: "i0_000_pwa__earring__01_silver", label: "Silver" }, { name: "i0_000_pwa__earring__03_black", label: "Black" }] }] }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
   geometry: { ...resource("head.glb"), nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" }, morphs: [] },
   textures: Object.fromEntries(["head.albedo", "head.normal", "head.roughness", "eyes.albedo"].map(slot => [slot, resource("head-color.png")])) });
 
 describe("render record versions", () => {
-  test("v5 carries the character record with its piercings, layered stacks and creator choices; parsing is strict and lossless", () => {
+  test("v6 carries the character record with its piercings, layered stacks and creator choices; parsing is lossless and idempotent", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-5");
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-6");
     expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
     // A tried choice the host applied travels with the record.
-    const tried = { ...record, character: { ...record.character, override: { slot: "piercings" as const, option: "piercings_01", definition: "i0_000_pwa__earring__01_silver" } } };
+    const tried = { ...record, character: { ...record.character, override: { slot: "piercings" as const, choice: "01", definition: "i0_000_pwa__earring__01_silver" } } };
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(tried)))).toEqual(tried);
+    // The host writes this reader's output, so parsing it again changes nothing (PIPE-40).
+    const once = parseCharacterDetail(JSON.parse(JSON.stringify(record)));
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(once)))).toEqual(once);
   });
 
-  test("a layered stack, the creator choices and a tried choice are parsed strictly", () => {
-    const bad = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return () => parseCharacterDetail(record); };
+  test("one oddly named creator choice, an over-long definition or CName, or too many parts never blanks the V (PIPE-40)", () => {
+    const parse = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return parseCharacterDetail(JSON.parse(JSON.stringify(record))); };
+    const shown = (r: CharacterDetail) => r.slots.filter(slot => slot.state === "shown").map(slot => slot.slot);
+    // A CCXL pack's style named with parentheses and a CName with spaces are ordinary names: they parse.
+    const odd = parse(r => { r.choices[0]!.options[0]!.choice = "piercings_(ccxl)"; r.choices[0]!.options[1]!.definitions[0]!.name = "a name with spaces"; });
+    expect(odd.choices[0]!.options.map(option => option.choice)).toEqual(["piercings_(ccxl)", "09"]);
+    // An over-long definition name is left out with a note; the rest of the style, and the whole V, stay.
+    const long = parse(r => { r.choices[0]!.options[1]!.definitions[0]!.name = "x".repeat(200); });
+    expect(long.choices[0]!.options[1]!.definitions.map(definition => definition.label)).toEqual(["Black"]);
+    expect(long.provenance.notes.at(-1)).toContain("Left out of the prepared details");
+    expect(shown(long)).toEqual(shown(character()));
+    // A choice with nothing left, a control character, a repeated choice: each left out alone.
+    const bad = parse(r => { r.choices[0]!.options[0]!.definitions[0]!.name = "x".repeat(200);
+      r.choices[0]!.options.push({ choice: "bad\u0001", label: "B", definitions: [{ name: "n", label: "N" }] }, { ...r.choices[0]!.options[1]! }); });
+    expect(bad.choices[0]!.options.map(option => option.choice)).toEqual(["09"]);
+    // An over-long layer CName breaks only its piercing part: the part is left out, the slot says so, and the V is shown.
+    const cname = parse(r => { (r.components[4]!.materials[0]!.layered!.layers[0]!.names as { colorScale: string }).colorScale = "c".repeat(130); });
+    expect(cname.components.map(item => item.slot)).toEqual(["skin", "face", "hair", "eyes"]);
+    expect(cname.slots.find(slot => slot.slot === "piercings")).toMatchObject({ state: "unavailable" });
+    expect(shown(cname)).toEqual(["skin", "face", "hair", "eyes"]);
+    // More parts than a record carries: the first ones are kept, and the note says the rest were left out.
+    const many = parse(r => { const part = r.components[4]!; r.components.push(...Array.from({ length: 100 }, (_, i) => ({ ...part, id: `${part.id}:${i}` }))); });
+    expect(many.components.length).toBe(RECORD_LIMITS.components);
+    expect(many.provenance.notes.at(-1)).toMatch(/beyond the first 96 \(9\)/);
+    // A tried choice that breaks the rule is dropped, not the record.
+    const override = parse(r => { (r.character as { override: unknown }).override = { slot: "piercings", choice: "x".repeat(300), definition: "b" }; });
+    expect(override.character.override).toBeUndefined();
+  });
+
+  test("a layered stack, the creator choices and a tried choice are checked; what breaks a rule is left out alone", () => {
+    // A broken stack leaves its part out (the loader never sees it); the record and the rest of the V stay.
+    const dropsPart = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record);
+      const parsed = parseCharacterDetail(record);
+      return parsed.components.some(item => item.slot === "piercings") ? "kept" : parsed.slots.find(slot => slot.slot === "piercings")!.state; };
     const layers = (r: CharacterDetail) => r.components[4]!.materials[0]!.layered!;
-    expect(bad(r => { layers(r).layers = []; })).toThrow("layers are invalid");
-    expect(bad(r => { layers(r).layers = Array.from({ length: 21 }, () => layers(r).layers[1]!); })).toThrow("layers are invalid");
-    expect(bad(r => { (layers(r).layers[0] as { colorScale: number[] }).colorScale = [1, 1]; })).toThrow("not RGB");
-    expect(bad(r => { (layers(r).layers[0] as { roughLevelsOut: number[] }).roughLevelsOut = [1]; })).toThrow("not a pair");
-    expect(bad(r => { (layers(r).layers[0]!.textures as Record<string, unknown>).albedo = layers(r).layers[0]!.textures.color; })).toThrow("unknown");
-    expect(bad(r => { (layers(r).layers[0]!.textures.mask as { isGamma?: boolean }).isGamma = undefined; })).toThrow("colour flag");
-    expect(bad(r => { (layers(r) as { useNormal: unknown }).useNormal = 1; })).toThrow("normal flag");
-    expect(bad(r => { (layers(r).layers[0]!.names as { colorScale: unknown }).colorScale = 5; })).toThrow("name");
-    expect(bad(r => { delete (r as { choices?: unknown }).choices; })).toThrow("choices are invalid");
-    expect(bad(r => { (r.choices[0] as { slot: string }).slot = "hair"; })).toThrow("choice slot");
-    expect(bad(r => { r.choices[0]!.options[1]!.option = "piercings_01"; })).toThrow("repeats");
-    expect(bad(r => { r.choices[0]!.options[0]!.definitions = []; })).toThrow("no definitions");
-    expect(bad(r => { (r.character as { override: unknown }).override = { slot: "hair", option: "a", definition: "b" }; })).toThrow("override");
-    expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
+    for (const mutate of [(r: CharacterDetail) => { layers(r).layers = []; }, (r: CharacterDetail) => { layers(r).layers = Array.from({ length: 21 }, () => layers(r).layers[1]!); },
+      (r: CharacterDetail) => { (layers(r).layers[0] as { colorScale: number[] }).colorScale = [1, 1]; },
+      (r: CharacterDetail) => { (layers(r).layers[0] as { roughLevelsOut: number[] }).roughLevelsOut = [1]; },
+      (r: CharacterDetail) => { (layers(r).layers[0]!.textures as Record<string, unknown>).albedo = layers(r).layers[0]!.textures.color; },
+      (r: CharacterDetail) => { (layers(r).layers[0]!.textures.mask as { isGamma?: boolean }).isGamma = undefined; },
+      (r: CharacterDetail) => { (layers(r) as { useNormal: unknown }).useNormal = 1; },
+      (r: CharacterDetail) => { (layers(r).layers[0]!.names as { colorScale: unknown }).colorScale = 5; },
+      (r: CharacterDetail) => { (layers(r).layers[0] as { templateUnreadable: unknown }).templateUnreadable = "yes"; }])
+      expect(dropsPart(mutate)).toBe("unavailable");
+    // Choices and the tried choice: a broken entry is left out; a missing or foreign list is empty.
+    const parse = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return parseCharacterDetail(record); };
+    expect(parse(r => { delete (r as { choices?: unknown }).choices; }).choices).toEqual([]);
+    expect(parse(r => { (r.choices[0] as { slot: string }).slot = "hair"; }).choices).toEqual([]);
+    expect(parse(r => { r.choices[0]!.options[1]!.choice = "01"; }).choices[0]!.options.length).toBe(1);
+    expect(parse(r => { r.choices[0]!.options[0]!.definitions = []; }).choices[0]!.options.map(option => option.choice)).toEqual(["09"]);
+    expect(parse(r => { (r.character as { override: unknown }).override = { slot: "hair", choice: "a", definition: "b" }; }).character.override).toBeUndefined();
+    // The record's frame stays strict: without every slot's outcome it is refused.
+    expect(() => parse(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
   });
 
-  test("v1 stays the core head, and a v5 reader accepts it under every version; v2 to v4 characters are refused plainly", () => {
+  test("v1 stays the core head, and a v6 reader accepts it under every version; v2 to v5 characters are refused plainly, as a version error", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-3" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-6" })).toThrow("unsupported record version");
+    expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-5" })).toMatchObject({ detail: "core-head" });
+    // A newer record (a host updated while the page ran) is a version error the page words, not a silent failure.
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-7" })).toThrow(RenderDetailVersionError);
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/elsewhere" })).toThrow("unsupported record version");
+    // A v5 character record (choices named by option) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-5" })).toThrow(RenderDetailVersionError);
     // A v4 character record (no piercings, no layered stacks) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-4" })).toThrow("retired");
     // A v3 character record (no face details, no template identities) is prepared again, never read.
@@ -114,39 +160,45 @@ describe("render record versions", () => {
     expect(() => parseCharacterDetail({ ...character(), schema: RENDER_DETAIL_SCHEMA })).toThrow();
   });
 
-  test("shapes the loader must never see are refused", () => {
-    const bad = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return () => parseCharacterDetail(record); };
+  test("shapes the loader must never see are refused: a broken part is left out, a broken frame refuses the record", () => {
+    // A part that breaks a rule never reaches the loader: it is left out alone (its slot then says it is unavailable).
+    const bad = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record);
+      const before = record.components.map(item => item.id);
+      return () => { const parsed = parseCharacterDetail(record);
+        if (parsed.components.length < before.length) throw Error(`part left out: ${parsed.provenance.notes.at(-1)}`); }; };
     const hair = (r: CharacterDetail) => r.components[2]!;
-    expect(bad(r => { hair(r).materials[0]!.chunk = 2; })).toThrow("hidden chunk");
-    expect(bad(r => { hair(r).chunks = [0, 0]; })).toThrow("twice");
-    expect(bad(r => { hair(r).chunks = [5]; })).toThrow();
-    expect(bad(r => { hair(r).geometry.file = "../x.glb"; })).toThrow("plain asset file name");
-    expect(bad(r => { (hair(r).materials[0]!.textures.Strand_Alpha as { isGamma?: boolean }).isGamma = undefined; })).toThrow("colour flag");
-    expect(bad(r => { hair(r).materials[1]!.colours.DiffuseColor = [256, 0, 0, 0]; })).toThrow();
-    expect(bad(r => { hair(r).materials[0]!.profiles.HairProfile!.sampleCount = 1; })).toThrow();
+    expect(bad(r => { hair(r).materials[0]!.chunk = 2; })).toThrow("part left out");
+    expect(bad(r => { hair(r).chunks = [0, 0]; })).toThrow("part left out");
+    expect(bad(r => { hair(r).chunks = [5]; })).toThrow("part left out");
+    expect(bad(r => { hair(r).geometry.file = "../x.glb"; })).toThrow("part left out");
+    expect(bad(r => { (hair(r).materials[0]!.textures.Strand_Alpha as { isGamma?: boolean }).isGamma = undefined; })).toThrow("part left out");
+    expect(bad(r => { hair(r).materials[1]!.colours.DiffuseColor = [256, 0, 0, 0]; })).toThrow("part left out");
+    expect(bad(r => { hair(r).materials[0]!.profiles.HairProfile!.sampleCount = 1; })).toThrow("part left out");
     expect(bad(r => { r.slots = r.slots.slice(1); })).toThrow("slot outcomes");
-    expect(bad(r => { r.slots[2] = { slot: "brows", state: "shown", label: "x" }; })).toThrow("shown without components");
+    // A slot said to be shown without any part is shown as unavailable, with one plain line.
+    const brows = character(); brows.slots[2] = { slot: "brows", state: "shown", label: "x" };
+    expect(parseCharacterDetail(brows).slots[2]).toMatchObject({ slot: "brows", state: "unavailable" });
     // Skin profiles: every chunk carries the map (possibly empty); values stay in range and colours are RGB bytes.
-    expect(bad(r => { delete (hair(r).materials[0] as { skinProfiles?: unknown }).skinProfiles; })).toThrow("skin profiles is missing");
-    expect(bad(r => { r.components[0]!.materials[0]!.skinProfiles.SkinProfile!.lobeMix = -1; })).toThrow("lobe mix");
-    expect(bad(r => { (r.components[0]!.materials[0]!.skinProfiles.SkinProfile as { falloff: number[] }).falloff = [255, 0]; })).toThrow("RGB");
+    expect(bad(r => { delete (hair(r).materials[0] as { skinProfiles?: unknown }).skinProfiles; })).toThrow("part left out");
+    expect(bad(r => { r.components[0]!.materials[0]!.skinProfiles.SkinProfile!.lobeMix = -1; })).toThrow("part left out");
+    expect(bad(r => { (r.components[0]!.materials[0]!.skinProfiles.SkinProfile as { falloff: number[] }).falloff = [255, 0]; })).toThrow("part left out");
     // A v2 record written before the skin slot joined has no skin outcome and is refused (it is prepared again).
     expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "skin"); })).toThrow("slot outcomes");
     expect(bad(r => { (r.character as { source: string }).source = "ui"; })).toThrow();
     // Gradients: sorted RGBA stops in range; every chunk carries the map; the morph texture rule is well formed.
     const eyes = (r: CharacterDetail) => r.components[3]!;
-    expect(bad(r => { eyes(r).materials[0]!.gradients.IrisColorGradient!.stops.reverse(); })).toThrow("not sorted");
-    expect(bad(r => { (eyes(r).materials[0]!.gradients.IrisColorGradient!.stops[0] as { color: number[] }).color = [1, 2, 3]; })).toThrow();
-    expect(bad(r => { eyes(r).materials[0]!.gradients.IrisColorGradient!.stops[0]!.value = 2; })).toThrow();
-    expect(bad(r => { delete (eyes(r).materials[1] as { gradients?: unknown }).gradients; })).toThrow("gradients is missing");
-    expect(bad(r => { (eyes(r) as { morphTexture: unknown }).morphTexture = "normal"; })).toThrow("morph texture rule");
+    expect(bad(r => { eyes(r).materials[0]!.gradients.IrisColorGradient!.stops.reverse(); })).toThrow("part left out");
+    expect(bad(r => { (eyes(r).materials[0]!.gradients.IrisColorGradient!.stops[0] as { color: number[] }).color = [1, 2, 3]; })).toThrow("part left out");
+    expect(bad(r => { eyes(r).materials[0]!.gradients.IrisColorGradient!.stops[0]!.value = 2; })).toThrow("part left out");
+    expect(bad(r => { delete (eyes(r).materials[1] as { gradients?: unknown }).gradients; })).toThrow("part left out");
+    expect(bad(r => { (eyes(r) as { morphTexture: unknown }).morphTexture = "normal"; })).toThrow("part left out");
     expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "eyes"); })).toThrow("slot outcomes");
     // Face details: every chunk names its template's own name and priority (null when unread), in the engine's enum form.
     const face = (r: CharacterDetail) => r.components[1]!;
     expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "face"); })).toThrow("slot outcomes");
-    expect(bad(r => { (face(r).materials[0] as { materialPriority: string }).materialPriority = "front"; })).toThrow("priority");
-    expect(bad(r => { delete (face(r).materials[0] as { templateName?: unknown }).templateName; })).toThrow("template name");
-    expect(bad(r => { (face(r).materials[0] as { templateName: string }).templateName = "mesh_decal/x"; })).toThrow("template name");
+    expect(bad(r => { (face(r).materials[0] as { materialPriority: string }).materialPriority = "front"; })).toThrow("part left out");
+    expect(bad(r => { delete (face(r).materials[0] as { templateName?: unknown }).templateName; })).toThrow("part left out");
+    expect(bad(r => { (face(r).materials[0] as { templateName: string }).templateName = "mesh_decal/x"; })).toThrow("part left out");
   });
 });
 
@@ -168,12 +220,16 @@ describe("rendering boundary", () => {
     // CCXL pack (the legacy XF selectors included). Creator slot names (`makeupLips_color`) are the game's slot rules.
     String.raw`makeup(?:Eyes|Lips|Cheeks|Pimples)_(?:\d|none|glossy|matte)|facial_tattoo_\d|cyberware_\d|beard_color\d|hx_000|` +
     String.raw`makeup_(?:lips|eyes|freckles|cheeks)_\d|pimples_\d|personal_slot|scars_\d|tattoo_\d|\bxfea|axefrog|eye.artistry.ccxl|_emp_front|` +
-    String.raw`red_08|cheeks_red|frecles|freckles_brown|lips_color__|makeup_color__`, "i");
+    String.raw`red_08|cheeks_red|frecles|freckles_brown|lips_color__|makeup_color__|` +
+    // Piercings: no particular style, part or colour (the creator slot `piercings_color` and switcher `piercings` are the game's rules).
+    String.raw`piercings_\d\d|earring__\d\d|earring_\d\d|i0_000_pwa|i1_000_pwa`, "i");
   test("the face-detail identifiers the boundary looks for: particular choices and packs, never the game's slots or templates", () => {
     for (const offending of ["xfea_layer1_e04", "base\\axefrog\\xf-eye-artistry-ccxl\\xfea.mesh", "makeupLips_glossy_08", "makeupCheeks_09",
-      "hx_000_pwa__basehead_makeup_lips_01", "mesh_decal__emp_front.mt", "cyberware_03", "facial_tattoo_02", "lips_color__06_red_02.mi"])
+      "hx_000_pwa__basehead_makeup_lips_01", "mesh_decal__emp_front.mt", "cyberware_03", "facial_tattoo_02", "lips_color__06_red_02.mi",
+      "piercings_09", "piercings_12", "i0_000_pwa__earring__03_black", "i0_000__earring_14.app", "i1_000_pwa_earring__basehead_01.ent"])
       expect(PER_MOD.test(offending)).toBe(true);
-    for (const allowed of ["makeupLips_color", "makeupEyes_color", "cyberware", "facial_tattoo", "mesh_decal", "mesh_decal_double_diffuse", "EMP_Front", "face", "TPP"])
+    for (const allowed of ["makeupLips_color", "makeupEyes_color", "cyberware", "facial_tattoo", "mesh_decal", "mesh_decal_double_diffuse", "EMP_Front", "face", "TPP",
+      "piercings_color", "piercings", "multilayered.mt"])
       expect(PER_MOD.test(allowed)).toBe(false);
   });
 

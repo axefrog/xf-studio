@@ -8,6 +8,7 @@ import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 import type { StudioFileAction } from "./studio-file-operations";
+import { CHOICE_NAME_MAX, CHOICE_SLOTS } from "./render-detail";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -113,7 +114,6 @@ export const ACTION_DESCRIPTORS = {
   "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
   "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
-  "preview.setPiercingPreview": desc("viewport", "workspace", "none", { style: input("string"), definition: input("string") }),
   "preview.setPiercings": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setSurfaceControls": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setWire": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
@@ -130,6 +130,8 @@ export const ACTION_DESCRIPTORS = {
   "quality.rebuild": desc("viewport", "workspace", "none"),
   "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),
   "savedV.restore": desc("file", "workspace", "none", { value: input("object") }),
+  "character.tryChoice": desc("viewport", "workspace", "none", { slot: enumerated(CHOICE_SLOTS), choice: inputText(0, CHOICE_NAME_MAX),
+    definition: inputText(0, CHOICE_NAME_MAX) }),
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],

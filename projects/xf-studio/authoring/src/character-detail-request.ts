@@ -4,18 +4,24 @@
  * definition per consumer group, plus the chosen morphs). Pure and shared by both sides; the host parses
  * every request strictly, so only these small fields ever cross the boundary (never a path or a file).
  *
- * Versions: `xfs/character-request-1` is the V alone; `xfs/character-request-2` may add an `override`, a creator choice the
- * viewer tries in the viewport in place of the V's own on one choice slot (a piercing style and colour). The host resolves the
- * override from the creator resource, so it names an option and a definition only, never a resource. A v1 request still parses.
+ * Versions: `xfs/character-request-1` is the V alone; `xfs/character-request-2` added an `override` naming an option;
+ * `xfs/character-request-3` names the override as the creator does: a switcher `choice` (its `localizedName`) and a `definition` of the
+ * option it drives, on one choice slot (a piercing style and colour). The host resolves the override from the creator resource, so it
+ * never names a resource. A v1 or v2 request without an override still parses. Names follow the record's one rule (`isChoiceName`).
  */
 import type { AppearanceDescriptor, MorphDescriptor } from "./cco-model";
 import type { BodyGender, CharacterInput } from "./character-resolver";
 import { refFromHash } from "./depot-path";
-import { CHOICE_SLOTS, type RenderOverride } from "./render-detail";
+import { CHOICE_SLOTS, isChoiceName, type RenderOverride } from "./render-detail";
 import type { SavedV } from "./save-reader";
 
-export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-2" as const;
-const EARLIER_REQUEST_SCHEMAS: readonly string[] = ["xfs/character-request-1"];
+export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-3" as const;
+const EARLIER_REQUEST_SCHEMAS: readonly string[] = ["xfs/character-request-1", "xfs/character-request-2"];
+
+/** A request whose version this host doesn't read (the page and the host were built apart). */
+export class CharacterRequestVersionError extends Error {
+  constructor(readonly schema: string) { super(`Character request: version ${schema} is not one this host reads.`); }
+}
 export type SavedHeadAppearance = { group: string; option: string; app: string; definition: string };
 export type SavedHeadMorph = { group: string; region: string; target: string };
 /** A viewer's tried choice on one choice slot (render-detail.ts `CHOICE_SLOTS`). */
@@ -44,20 +50,27 @@ const hash = (value: unknown) => typeof value === "string" && /^[1-9][0-9]{0,19}
   ? value : fail("an appearance resource hash is invalid.");
 const exactKeys = (value: object, keys: string[]) => Object.keys(value).sort().join() === [...keys].sort().join();
 
-function parseOverride(value: unknown): CharacterOverride {
+/** A tried choice by the record's own rules, or null (the host, the page and the workspace all read it with this). */
+export function validOverride(value: unknown): CharacterOverride | null {
   const item = value as Record<string, unknown>;
-  if (!item || typeof item !== "object" || Array.isArray(item) || !exactKeys(item, ["slot", "option", "definition"]) ||
-      !CHOICE_SLOTS.includes(item.slot as CharacterOverride["slot"])) return fail("the tried choice is invalid.");
-  const name = (v: unknown, what: string) => typeof v === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(v) ? v : fail(`the tried ${what} is invalid.`);
-  return { slot: item.slot as CharacterOverride["slot"], option: name(item.option, "option"), definition: name(item.definition, "definition") };
+  return item && typeof item === "object" && !Array.isArray(item) && exactKeys(item, ["slot", "choice", "definition"]) &&
+    CHOICE_SLOTS.includes(item.slot as CharacterOverride["slot"]) && isChoiceName(item.choice) && isChoiceName(item.definition)
+    ? { slot: item.slot as CharacterOverride["slot"], choice: item.choice, definition: item.definition } : null;
+}
+function parseOverride(value: unknown): CharacterOverride {
+  return validOverride(value) ?? fail("the tried choice is invalid.");
 }
 
 /** Strict parse: anything else than the documented fields is refused. */
 export function parseCharacterRequest(value: unknown): CharacterRequest {
   const doc = value as Record<string, unknown>;
-  if (!doc || typeof doc !== "object" || Array.isArray(doc) || (doc.schema !== CHARACTER_REQUEST_SCHEMA && !EARLIER_REQUEST_SCHEMAS.includes(String(doc.schema))))
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) fail("unsupported request.");
+  if (doc.schema !== CHARACTER_REQUEST_SCHEMA && !EARLIER_REQUEST_SCHEMAS.includes(String(doc.schema))) {
+    // A character request of another version is a page built apart from this host; anything else is simply not a request.
+    if (typeof doc.schema === "string" && /^xfs\/character-request-[0-9]{1,4}$/.test(doc.schema)) throw new CharacterRequestVersionError(doc.schema);
     fail("unsupported request.");
-  // Only a v2 request may carry a tried choice.
+  }
+  // Only a current request may carry a tried choice (a v2 override named an option, which is not the creator's choice identity).
   const withOverride = doc.schema === CHARACTER_REQUEST_SCHEMA && doc.override !== undefined;
   const override = withOverride ? { override: parseOverride(doc.override) } : {};
   const keys = (base: string[]) => withOverride ? [...base, "override"] : base;

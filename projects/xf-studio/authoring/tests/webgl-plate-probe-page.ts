@@ -7,7 +7,7 @@
  * 3. The studio environment: the light-probe fallback's harmonics recomputed from the room, and its diffuse light against the
  *    prefiltered environment's on a white matte quad.
  * 4. A lost and restored context (PREV-58), last: the plate and an environment-lit surface before, after without the restore hooks,
- *    and after them.
+ *    and after them; and a baked layered part (PREV-62) the same way, re-baked by the scene's restore path.
  * Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
@@ -20,6 +20,8 @@ import { createPlateComposite, type CompositeTextures } from "../src/plate-compo
 import { initialRecipe, type Layer } from "../src/recipe";
 import { facetedMipChain } from "../src/route-mip-chains";
 import { createStudioEnvironment, ROOM_ENVIRONMENT_SH } from "../src/studio-environment";
+import { createLayeredMaterial, layerBakeParameters, layeredContextRestored } from "../src/layered-material";
+import type { RenderLayer } from "../src/render-detail";
 import { readTextureLevel } from "./webgl-harness-page";
 
 export type ChainComparison = { level: number; roughnessMaxError: number; normalMaxError: number; coverageMaxError: number; texels: number };
@@ -32,11 +34,14 @@ export type PlateCompositeProbe = {
   mips: { layers: number; perUpdate: number; draws: { layerDraws: number; resolves: number; levelDraws: number } };
   environment: { shMaxError: number; probe: number[]; pmrem: number[] };
   restore: { before: { plate: number[]; skin: number[] }; unhooked: { plate: number[]; skin: number[] }; hooked: { plate: number[]; skin: number[] } };
+  /** A baked layered part lit on a quad: before the loss, after it without the restore path, after the scene's restore path. */
+  layered: { before: number[]; unhooked: number[]; hooked: number[]; states: string[] };
 };
 const probe: PlateCompositeProbe = { ok: false, errors: [], renderer: "", halfFloat: false, chains: [],
   facet: { exportLevel0: 0, previewLevel0: 0, exportLevel2: 0, previewLevel2: 0, earlierLevel0: 0 }, mips: { layers: 0, perUpdate: 0, draws: { layerDraws: 0, resolves: 0, levelDraws: 0 } },
   environment: { shMaxError: 0, probe: [], pmrem: [] },
-  restore: { before: { plate: [], skin: [] }, unhooked: { plate: [], skin: [] }, hooked: { plate: [], skin: [] } } };
+  restore: { before: { plate: [], skin: [] }, unhooked: { plate: [], skin: [] }, hooked: { plate: [], skin: [] } },
+  layered: { before: [], unhooked: [], hooked: [], states: [] } };
 
 const SIZE = 16;
 /** The finding's case: Shimmer at 50 % over Glossy at 50 %. */
@@ -229,6 +234,22 @@ try {
   const measure = () => { plate.prepareBlend(renderer); return { plate: renderLinear(lit, 16), skin: renderLinear(lit, 48) }; };
   probe.restore.before = measure();
   check("the lit plate");
+  // A layered part: a one-layer gold-ish stack of constant maps, baked, lit by one light on its own quad.
+  const constant = (rgba: number[]) => { const t = new THREE.DataTexture(new Uint8Array(rgba), 1, 1); t.needsUpdate = true; return t; };
+  const goldLayer: RenderLayer = { template: null, opacity: 1, matTile: 1, tilingMultiplier: 1, offsetU: 0, offsetV: 0, mbTile: 1, microblendContrast: 1,
+    microblendNormalStrength: 0, microblendOffsetU: 0, microblendOffsetV: 0, colorScale: [1, 0.8, 0.4], normalStrength: 0, roughLevelsIn: [1, 0], roughLevelsOut: [1, 0],
+    metalLevelsIn: [1, 0], metalLevelsOut: [1, 0], colorMaskLevelsIn: [1, 0], colorMaskLevelsOut: [0, 0],
+    names: { colorScale: "", normalStrength: "", roughLevelsIn: "", roughLevelsOut: "", metalLevelsIn: "", metalLevelsOut: "" }, textures: {} };
+  const part = createLayeredMaterial({ layers: [{ parameters: layerBakeParameters(goldLayer, 0), textures: { color: constant([230, 230, 230, 255]),
+    roughness: constant([140, 140, 140, 255]), metalness: constant([0, 0, 0, 255]) } }], domain: { min: [0, 0], max: [1, 1] }, size: 8,
+    globals: { ratio: 1, normalIntensity: 1, normalUvScale: [1, 1], normalUvBias: [0, 0] } });
+  const partScene = new THREE.Scene();
+  partScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), part.material));
+  const key = new THREE.DirectionalLight(0xffffff, 3); key.position.set(0, 0, 1); partScene.add(key);
+  part.handle.bake(renderer);
+  probe.layered.states.push(part.handle.state);
+  probe.layered.before = renderLinear(partScene, 32);
+  check("the baked layered part");
   const lose = gl.getExtension("WEBGL_lose_context")!;
   // Resolved a task after the event, once its dispatch (and the browser's bookkeeping after it) has finished.
   const event = (name: string) => new Promise<void>(resolve => canvas.addEventListener(name, () => setTimeout(resolve, 0), { once: true }));
@@ -241,6 +262,18 @@ try {
   gl.getError(); // Clears CONTEXT_LOST_WEBGL, which the loss itself reports once.
   probe.restore.unhooked = measure();
   check("drawing without the restore hooks");
+  // The layered part still says baked, but its maps died with the context.
+  probe.layered.states.push(part.handle.state);
+  probe.layered.unhooked = renderLinear(partScene, 32);
+  check("drawing the layered part without the restore path");
+  // The scene's restore path (scene.ts `restored`): forget the renderer's shared bakes, reset each handle, bake again.
+  layeredContextRestored(renderer);
+  part.handle.contextRestored();
+  probe.layered.states.push(part.handle.state);
+  part.handle.bake(renderer);
+  probe.layered.states.push(part.handle.state);
+  probe.layered.hooked = renderLinear(partScene, 32);
+  check("the re-baked layered part");
   environment.restore();
   check("the environment's restore");
   plate.contextRestored();

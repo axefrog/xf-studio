@@ -19,7 +19,7 @@ function port(options: { creator?: boolean } = {}) {
     restoreCamera: value => { camera = structuredClone(value); calls.push(`camera:${value.fov}`); },
     setExposure: value => calls.push(`exposure:${value}`), setLightAngle: value => calls.push(`angle:${value}`),
     setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {},
-    setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {}, setPiercingPreview: () => {},
+    setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
   };
   const creator: Partial<PreviewPort> = options.creator === false ? {} : {
     setLightingPreset: preset => { calls.push(`preset:${preset}`); status = { ...status, preset }; },

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
-import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
+import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture } from "./render-detail";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
@@ -15,7 +15,8 @@ import type { LayeredHandle } from "./layered-material";
  * content-addressed character record, fetches and hash-checks each GLB and texture, keeps only the
  * chunks the record says are visible and drawable, and builds each chunk's material through the
  * adapter for its game template. It returns ready Three objects plus plain per-slot problems; on
- * failure or cancellation it disposes what it created. It never names a mod or a choice.
+ * failure or cancellation it disposes what it created. It never names a mod or a choice. A load may reuse the shown details'
+ * unchanged components (`reuse`, PREV-68).
  */
 export type CharacterDetailFetch = (url: string, init?: RequestInit) => Promise<Response>;
 export type LoadedCharacterComponent = {
@@ -35,6 +36,8 @@ export type LoadedCharacterComponent = {
   decals?: { mesh: THREE.SkinnedMesh; chunk: RenderComponent["materials"][number]; handle: FaceDecalHandle; surface: AdaptedMaterial["decalSurface"] | null }[];
   /** Layered chunks: their meshes and bake handles (the scene bakes each stack once, with its renderer). */
   layered?: { mesh: THREE.SkinnedMesh; handle: LayeredHandle }[];
+  /** Why this component is drawn only in part, as codes (kept with it, so a reused component still reports them). */
+  limits?: DetailLimit[];
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -44,13 +47,21 @@ export type LoadedCharacterDetails = {
   /** Shown slots with a part the preview can't draw yet, as codes the presentation words. */
   limits: { slot: DetailSlot; limit: DetailLimit }[];
   notes: string[];
-  dispose(): void;
+  /** How many components were taken over from `reuse` unchanged. */
+  reused: number;
+  readonly disposed: boolean;
+  /** The scene shows these details now: the components taken over from `reuse` become theirs to release. */
+  adopt(): void;
+  /** Release what these details own, except `keep` (the components the next shown details took over). Safe to call twice. */
+  dispose(keep?: ReadonlySet<LoadedCharacterComponent>): void;
 };
 export type CharacterDetailLoadOptions = {
   fetcher?: CharacterDetailFetch;
   anisotropy: number;
   signal?: AbortSignal;
   context(slot: DetailSlot): Omit<AdapterContext, "slot">;
+  /** The details the scene shows now: components whose content is unchanged are taken over instead of loaded again. */
+  reuse?: LoadedCharacterDetails | null;
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
@@ -86,8 +97,10 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 
 /**
  * Bind an unskinned chunk whole to one bone at the root, as a skinned mesh (so it draws, morphs and is released like every other
- * chunk). It stays where the export placed it: the idle rig never moves that bone [hypothesis: how the engine places a rigid mesh in
- * a skinned component is unread].
+ * chunk). It stays where the export placed it: the idle rig never moves that bone, and the loader reports the part with the limit
+ * `rigid-part`. The component's `parentTransform` and `skinning` bindings both name the entity's `root` animated component, not a head
+ * bone (every vanilla and framework piercing `.app` on the reference installation) [resource], so the data gives no bone to follow;
+ * how the engine moves an unskinned mesh in a skinned component is unread [hypothesis] (PREV-64).
  */
 export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D): THREE.SkinnedMesh {
   const geometry = mesh.geometry, count = geometry.getAttribute("position").count;
@@ -113,15 +126,57 @@ export async function readCharacterRecord(file: string, fetcher: CharacterDetail
   return parseCharacterDetail(await response.json());
 }
 
+/** What one loaded component owns on the GPU, released with it. */
+type PartResources = { materials: THREE.Material[]; owned: THREE.Texture[]; textureKeys: string[] };
+/**
+ * Textures shared between loads (PREV-68): a load that reuses the shown details' components also takes over their ledger, so a map
+ * several parts (or two records) use is uploaded once and disposed when its last user is released.
+ */
+class DetailLedger {
+  readonly textures = new Map<string, { texture: THREE.Texture; refs: number; file: string }>();
+  readonly images = new Map<string, HTMLImageElement>();
+  readonly parts = new WeakMap<LoadedCharacterComponent, PartResources>();
+  release(part: PartResources | undefined) {
+    if (!part) return;
+    for (const material of part.materials) material.dispose();
+    for (const texture of part.owned) texture.dispose();
+    for (const key of part.textureKeys) {
+      const entry = this.textures.get(key);
+      if (!entry || --entry.refs > 0) continue;
+      entry.texture.dispose();
+      this.textures.delete(key);
+      if (![...this.textures.values()].some(other => other.file === entry.file)) this.images.delete(entry.file);
+    }
+    part.materials.length = 0; part.owned.length = 0; part.textureKeys.length = 0;
+  }
+}
+const ledgers = new WeakMap<LoadedCharacterDetails, DetailLedger>();
+/** A component's content identity: its whole record entry (geometry file hash, chunks and every material input). */
+const contentKey = (component: RenderComponent) => JSON.stringify(component);
+/** Slots whose adapters read the resolved skin under them (the face decals' and brows' underlay): reused only with an unchanged skin. */
+const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
+
+/**
+ * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
+ * it is (its objects, materials, bake and textures), so a tried piercing style loads only the piercings; a part that reads the skin under
+ * it is reused only while the skin is unchanged. Ownership of reused parts moves to the new details when the scene swaps them in
+ * (`adopt`); until then disposing the new details (a superseded load) leaves them with `reuse`.
+ */
 export async function loadCharacterDetails(record: CharacterDetail, options: CharacterDetailLoadOptions): Promise<LoadedCharacterDetails> {
   const fetcher = options.fetcher ?? fetch, signal = options.signal;
-  let bytesUsed = 0, verticesUsed = 0;
-  const textures: THREE.Texture[] = [], owned: THREE.Texture[] = [], materials: THREE.Material[] = [], roots: THREE.Object3D[] = [];
-  const dispose = () => {
-    for (const root of roots) releaseDetailObject(root);
-    roots.length = 0;
-    for (const material of materials) material.dispose();
-    for (const texture of [...textures, ...owned]) texture.dispose();
+  const previous = options.reuse && !options.reuse.disposed ? options.reuse : null;
+  const ledger = (previous && ledgers.get(previous)) ?? new DetailLedger();
+  let bytesUsed = 0, verticesUsed = 0, texelsUsed = 0;
+  const components: LoadedCharacterComponent[] = [];
+  /** Components taken over from `reuse`: not this load's to release until the scene adopts it. */
+  const borrowed = new Set<LoadedCharacterComponent>();
+  const released = new Set<LoadedCharacterComponent>();
+  let disposed = false;
+  const releaseAll = (keep?: ReadonlySet<LoadedCharacterComponent>) => {
+    const leaving = components.filter(item => !borrowed.has(item) && !keep?.has(item) && !released.has(item));
+    const staying = [...components.filter(item => !leaving.includes(item)), ...(keep ?? [])];
+    const kept = geometriesOf(staying.map(item => item.root));
+    for (const item of leaving) { releaseDetailObject(item.root, kept); ledger.release(ledger.parts.get(item)); released.add(item); }
   };
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
@@ -141,17 +196,16 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     }
     return pending;
   };
-  const images = new Map<string, Promise<HTMLImageElement>>();
-  const imageOf = (texture: RenderTexture) => {
-    let pending = images.get(texture.file);
-    if (!pending) {
-      pending = fetchBytes(texture).then(async bytes => {
-        const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
-        try { return await new THREE.ImageLoader().loadAsync(url); } finally { URL.revokeObjectURL(url); }
-      });
-      images.set(texture.file, pending);
-    }
-    return pending;
+  const imageOf = (texture: RenderTexture): Promise<HTMLImageElement> => {
+    const known = ledger.images.get(texture.file);
+    if (known) return Promise.resolve(known);
+    return fetchBytes(texture).then(async bytes => {
+      const again = ledger.images.get(texture.file);
+      if (again) return again;
+      const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+      try { const image = await new THREE.ImageLoader().loadAsync(url); ledger.images.set(texture.file, image); return image; }
+      finally { URL.revokeObjectURL(url); }
+    });
   };
   // One parse per geometry file (PREV-53): components that draw the same file (face cyberware on the freckle mesh) each get
   // their own objects and skeleton, cloned from one parsed scene that shares the geometry; a file one component uses is
@@ -177,17 +231,50 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     }
     return pending;
   };
-  const made = new Map<string, THREE.Texture>();
   const problems: LoadedCharacterDetails["problems"] = [], limits: LoadedCharacterDetails["limits"] = [], notes: string[] = [];
-  const components: LoadedCharacterComponent[] = [];
+  const addLimit = (slot: DetailSlot, limit: DetailLimit) => { if (!limits.some(item => item.slot === slot && item.limit === limit)) limits.push({ slot, limit }); };
+  // What the shown details can lend: their components by content, and whether the skin under decals stays the same.
+  const lendable = new Map<string, LoadedCharacterComponent>();
+  for (const item of previous?.components ?? []) lendable.set(contentKey(item.component), item);
+  const skinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "skin").map(contentKey).join("\n");
+  const sameSkin = !!previous && skinKey(previous.record.components) === skinKey(record.components);
   // The skin loads first, so decals over it (brows) can blend against the resolved skin colour, read on the
   // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
   let resolvedSkin: AdapterContext["skin"];
+  /** Decoded texels of the distinct textures this record draws, against the record's budget (PIPE-43). */
+  const texels = new Map<string, number>();
+  const texelsOf = (component: RenderComponent) => {
+    let added = 0;
+    for (const material of component.materials) for (const texture of chunkTextureFiles(material))
+      if (!texels.has(texture.file)) added += texture.width * texture.height;
+    return added;
+  };
+  const spendTexels = (component: RenderComponent) => {
+    for (const material of component.materials) for (const texture of chunkTextureFiles(material))
+      if (!texels.has(texture.file)) { texels.set(texture.file, texture.width * texture.height); texelsUsed += texture.width * texture.height; }
+  };
   try {
     for (const component of ordered) {
       aborted();
+      const [noun, isnt] = SLOT_NOUN[component.slot];
+      if (texelsUsed + texelsOf(component) > RECORD_LIMITS.decodedPixels) {
+        problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
+        notes.push(`${component.slot} ${component.component}: over the preview's texture budget for one V.`);
+        continue;
+      }
+      const lent = lendable.get(contentKey(component));
+      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && !components.includes(lent)) {
+        spendTexels(component);
+        components.push(lent); borrowed.add(lent);
+        for (const limit of lent.limits ?? []) addLimit(component.slot, limit);
+        verticesUsed += lent.meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute("position").count, 0);
+        if (lent.skin && !resolvedSkin) resolvedSkin = { base: lent.skin.base, chunks: lent.meshes, roughness: lent.skin.roughness, parameters: lent.skin.handle.parameters };
+        continue;
+      }
+      spendTexels(component);
       const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(resolvedSkin ? { skin: resolvedSkin } : {}) };
+      const part: PartResources = { materials: [], owned: [], textureKeys: [] };
       // Two components may share a name (two face choices drawing one mesh); a failure releases this one's root only.
       let componentRoot: THREE.Object3D | undefined;
       try {
@@ -200,7 +287,6 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         aborted();
         const shared = (uses.get(component.geometry.file) ?? 0) > 1;
         const root = shared ? cloneSkinned(source.scene) as THREE.Group : source.scene;
-        roots.push(root);
         componentRoot = root;
         root.name = `detail_${component.slot}_${component.component}`;
         const meshes: THREE.SkinnedMesh[] = [], unwanted: THREE.Object3D[] = [], bones: THREE.Bone[] = [];
@@ -208,7 +294,9 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         const eyes: NonNullable<LoadedCharacterComponent["eyes"]> = { eyeballs: [], shells: [] };
         const decals: NonNullable<LoadedCharacterComponent["decals"]> = [];
         const layered: NonNullable<LoadedCharacterComponent["layered"]> = [];
-        // A drawn chunk whose exported geometry has no skin (a framework's linked mesh can be rigid) is bound whole to one root bone.
+        const partLimits: DetailLimit[] = [];
+        // A drawn chunk whose exported geometry has no skin (a framework's linked mesh can be rigid) is bound whole to one root bone;
+        // it does not follow the head (limit `rigid-part`).
         const rigid: THREE.Mesh[] = [];
         root.traverse(object => { if (object instanceof THREE.Mesh && !(object instanceof THREE.SkinnedMesh) && chunkOfMesh(object.name) !== null) rigid.push(object); });
         for (const mesh of rigid) bindRigid(mesh, root);
@@ -223,14 +311,15 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const raw = source.weights.get(object.name);
           if (!raw && !rigidNames.has(object.name)) throw Error(`missing skin weights for ${object.name}`);
           if (raw) object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+          if (rigidNames.has(object.name) && !partLimits.includes("rigid-part")) partLimits.push("rigid-part");
           object.frustumCulled = false;
           const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
             const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
             if (!source) return undefined;
             const key = `${source.file}|${use}|${wrap}`;
-            let texture = made.get(key);
-            if (!texture) {
-              texture = new THREE.Texture(loadedImages.get(source.file));
+            let entry = ledger.textures.get(key);
+            if (!entry) {
+              const texture = new THREE.Texture(loadedImages.get(source.file));
               texture.flipY = false;
               // Adapters choose colour or data; only a colour input honours the resource's own isGamma flag.
               texture.colorSpace = textureColourSpace(use, source.isGamma);
@@ -238,17 +327,17 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
               texture.anisotropy = options.anisotropy;
               texture.name = source.depotPath;
               texture.needsUpdate = true;
-              made.set(key, texture);
-              textures.push(texture);
+              entry = { texture, refs: 0, file: source.file };
+              ledger.textures.set(key, entry);
             }
-            return texture;
+            if (!part.textureKeys.includes(key)) { part.textureKeys.push(key); entry.refs++; }
+            return entry.texture;
           };
           const adapted = adapter.create(material, chunkTextures, object, adapterContext);
-          materials.push(adapted.material);
-          owned.push(...adapted.owned);
+          part.materials.push(adapted.material);
+          part.owned.push(...adapted.owned);
           notes.push(...adapted.notes.map(note => `${component.slot} ${object.name}: ${note}`));
-          for (const limit of adapted.limits ?? []) if (!limits.some(item => item.slot === component.slot && item.limit === limit))
-            limits.push({ slot: component.slot, limit });
+          for (const limit of adapted.limits ?? []) if (!partLimits.includes(limit)) partLimits.push(limit);
           if (adapted.skin) skin ??= adapted.skin;
           if (adapted.eye?.role === "eyeball") eyes.eyeballs.push({ mesh: object, handle: adapted.eye });
           if (adapted.eye?.role === "shell") eyes.shells.push({ mesh: object, handle: adapted.eye });
@@ -266,24 +355,36 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         for (const object of unwanted) object.removeFromParent();
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
-        components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}),
-          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}) });
+        const item: LoadedCharacterComponent = { component, root, meshes, bones, ...(skin ? { skin } : {}),
+          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),
+          ...(partLimits.length ? { limits: partLimits } : {}) };
+        ledger.parts.set(item, part);
+        components.push(item);
+        for (const limit of partLimits) addLimit(component.slot, limit);
         if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
       } catch (error) {
+        ledger.release(part);
         if (signal?.aborted) throw error;
-        const [noun, isnt] = SLOT_NOUN[component.slot];
         problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
         notes.push(`${component.slot} ${component.component}: ${(error as Error).message}`);
-        const index = componentRoot ? roots.indexOf(componentRoot) : -1;
-        if (index >= 0) {
-          const [failed] = roots.splice(index, 1);
-          releaseDetailObject(failed!, geometriesOf(roots));
-        }
+        if (componentRoot) releaseDetailObject(componentRoot, geometriesOf(components.map(item => item.root)));
       }
     }
-  } catch (error) { dispose(); throw error; }
+  } catch (error) { releaseAll(); throw error; }
   // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
   const shown = new Set(components.map(item => item.component.slot));
-  return { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
-    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, dispose };
+  const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
+    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes,
+    reused: borrowed.size,
+    get disposed() { return disposed; },
+    // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on
+    // (their resources are already in the shared ledger).
+    adopt() { borrowed.clear(); },
+    dispose(keep) {
+      if (disposed) return;
+      releaseAll(keep);
+      disposed = true;
+    } };
+  ledgers.set(loaded, ledger);
+  return loaded;
 }

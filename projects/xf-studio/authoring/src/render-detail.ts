@@ -29,11 +29,43 @@
  *   with their `.mltemplate` values and textures, the `.mlmask` layers as raw channels), the creator's `choices` for the slots a
  *   viewer may try out (the piercing styles and colours), and the `override` the host applied for such a choice. A v5 reader
  *   refuses v2 to v4 character records and still accepts a core head under any schema.
+ * - `xfs/render-detail-6`: a viewer's choice is the creator's **switcher choice** (its `localizedName`, the creator's own choice identity)
+ *   plus a definition of the option that choice drives, so every target of the choice and its linked followers resolve by the shared R5
+ *   rules (cco-model.ts); the record's `override` names `choice`, not an option. Each choice and definition carries the one plain `label`
+ *   the host words (no index sentinel). A reader drops one bad component, choice or override, with a note, instead of refusing the whole
+ *   record, and the host runs this reader over its own output before writing it, so what it writes always parses. A v6 reader refuses v2
+ *   to v5 character records.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-5" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-6" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
-export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4"];
+export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4", "xfs/render-detail-5"];
+
+/**
+ * A record from a host of another version: older (a retired schema) or newer (a schema this reader doesn't know yet). It means the host
+ * and the page were built apart (the app was updated while it ran), so the presentation asks for a restart instead of saying nothing.
+ */
+export class RenderDetailVersionError extends Error {
+  constructor(readonly direction: "older" | "newer", readonly schema: string) {
+    super(`Render detail: the record version ${schema} is ${direction === "older" ? "retired; prepare it again" : "newer than this page reads"}.`);
+  }
+}
+/** Whether a schema string names a render-detail version newer than this reader's. */
+const newerSchema = (schema: unknown) => {
+  const match = /^xfs\/render-detail-([0-9]{1,4})$/.exec(String(schema));
+  return !!match && Number(match[1]) > Number(CHARACTER_DETAIL_SCHEMA.split("-").pop());
+};
+
+/**
+ * The one rule for a creator name that a record, a request and the workspace carry (an option, a definition, a switcher choice): 1 to 127
+ * characters, no control characters and none of `\ / < > "`. The host filters with it before writing and the browser parses with it, so the
+ * two never disagree (PIPE-40). CNames themselves are unbounded; a longer one can't be tried and is left out with a note.
+ */
+export const CHOICE_NAME_MAX = 127;
+export const isChoiceName = (value: unknown): value is string =>
+  typeof value === "string" && /^[^\u0000-\u001f\u007f\\/<>"]{1,127}$/.test(value);
+/** A plain label the host words for the presentation: 1 to 127 characters, no control characters. */
+export const isChoiceLabel = (value: unknown): value is string => typeof value === "string" && /^[^\u0000-\u001f\u007f]{1,127}$/.test(value);
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
 /** Where character records and their files are served; file names are content-addressed. */
 export const CHARACTER_DETAIL_ASSETS = "/assets/character/";
@@ -160,8 +192,10 @@ export type LayerTextureRole = typeof LAYER_TEXTURES[number];
  * `names` keeps the CNames the values came from, for provenance.
  */
 export type RenderLayer = {
-  /** The layer template's depot path and where it was read, or null when the layer names none or it was unreadable. */
+  /** The layer template's depot path and where it was read, or null when the layer names none. */
   template: RenderSourceRef | null;
+  /** The layer names a template the host could not read: its values are neutral, and the bake leaves the layer out (PREV-67). */
+  templateUnreadable?: true;
   opacity: number;
   matTile: number;
   /** The template's `tilingMultiplier` (1 when unset). */
@@ -181,11 +215,16 @@ export type RenderLayer = {
 /** A `multilayered.mt` chunk's layer stack: the `.mlsetup` (in stored order, bottom first) and the `.mlmask` it is masked by. */
 export type RenderLayered = { setup: RenderSourceRef; mask: (RenderSourceRef & { layers: number }) | null; ratio: number; useNormal: boolean;
   layers: RenderLayer[] };
-/** One creator choice a viewer may try: an option (a style) and its definitions (colours), in the creator's order. */
-export type RenderChoiceOption = { option: string; index: number; definitions: { name: string; index: number }[] };
+/** One definition (a colour) of the option a choice drives, with its plain label. */
+export type RenderChoiceDefinition = { name: string; label: string };
+/**
+ * One creator choice a viewer may try: a switcher choice (a style), identified by its `localizedName` as the creator merges it, its plain
+ * label, and the definitions (colours) of the option it drives, in the creator's order.
+ */
+export type RenderChoiceOption = { choice: string; label: string; definitions: RenderChoiceDefinition[] };
 export type RenderChoices = { slot: ChoiceSlot; options: RenderChoiceOption[] };
-/** A viewer's choice the host applied in place of the V's own for one slot. */
-export type RenderOverride = { slot: ChoiceSlot; option: string; definition: string };
+/** A viewer's choice the host applied in place of the V's own for one slot: a switcher choice and a definition of the option it drives. */
+export type RenderOverride = { slot: ChoiceSlot; choice: string; definition: string };
 export type RenderChunkMaterial = {
   chunk: number;
   /** The mesh appearance's material name for this chunk. */
@@ -257,7 +296,31 @@ export type CharacterDetail = {
 };
 
 /** A framework that fills slots with inline components (one per filled slot) can bring many parts to one piercing choice. */
-const LIMITS = { components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, options: 64, definitions: 64 };
+export const RECORD_LIMITS = Object.freeze({ components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, options: 64,
+  definitions: 64, notes: 64,
+  /**
+   * Decoded texels one record may serve, over every distinct texture (PIPE-43): about four times what the reference save's skin, hair,
+   * face details, eyes and piercings take together. The host leaves textures beyond it out with a note; the loader refuses a record
+   * over it before decoding anything.
+   */
+  decodedPixels: 256 * 1024 * 1024 });
+const LIMITS = RECORD_LIMITS;
+/**
+ * Plausible ranges for a layer's stored numbers (PIPE-43). Vanilla setups and templates stay far inside them; a hostile or broken
+ * value (a tile of 1e38 makes the sampling coordinate NaN) is clamped by the host's readers and again by the bake.
+ */
+export const LAYER_RANGES = Object.freeze({ opacity: [0, 1], tile: [-256, 256], offset: [-256, 256], contrast: [0, 16], normal: [-16, 16],
+  colour: [0, 16], levels: [-64, 64], ratio: [1 / 64, 64], tableEntries: [0, 256] } as const);
+/** A finite number clamped to one of `LAYER_RANGES`, or the fallback when it is not a finite number. */
+export function clampLayer(value: unknown, range: keyof typeof LAYER_RANGES, fallback: number): number {
+  const [low, high] = LAYER_RANGES[range];
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback;
+}
+/** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
+export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
+  skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
+  hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
+  piercings: { noun: "piercings", not: "aren't", pronoun: "they" } });
 const paramName = (value: unknown, what: string) => typeof value === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(value) ? value : fail(`${what} is invalid.`);
 const int = (value: unknown, what: string, min: number, max: number) =>
   Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? value as number : fail(`${what} is out of range.`);
@@ -357,7 +420,9 @@ function layer(value: unknown, what: string): RenderLayer {
   const textures = item.textures;
   if (!textures || typeof textures !== "object" || Array.isArray(textures)) fail(`${what} textures are missing.`);
   for (const role of Object.keys(textures)) if (!(LAYER_TEXTURES as readonly string[]).includes(role)) fail(`${what} texture role ${role} is unknown.`);
+  if (item.templateUnreadable !== undefined && item.templateUnreadable !== true) fail(`${what} template flag is invalid.`);
   return { template: item.template === null ? null : sourceRef(item.template, `${what} template`),
+    ...(item.templateUnreadable ? { templateUnreadable: true as const } : {}),
     opacity: finite(item.opacity, `${what} opacity`), matTile: finite(item.matTile, `${what} tile`), tilingMultiplier: finite(item.tilingMultiplier, `${what} tiling`),
     offsetU: finite(item.offsetU, `${what} offset`), offsetV: finite(item.offsetV, `${what} offset`), mbTile: finite(item.mbTile, `${what} microblend tile`),
     microblendContrast: finite(item.microblendContrast, `${what} microblend contrast`),
@@ -381,29 +446,41 @@ function layered(value: unknown, what: string): RenderLayered {
     ratio: finite(item.ratio, `${what} ratio`), useNormal: item.useNormal, layers: item.layers.map((entry, index) => layer(entry, `${what} ${index}`)) };
 }
 
-function choices(value: unknown): RenderChoices[] {
-  if (!Array.isArray(value) || value.length > CHOICE_SLOTS.length) return fail("choices are invalid.");
-  const seen = new Set<string>();
-  return value.map((entry: RenderChoices, index) => {
-    if (!CHOICE_SLOTS.includes(entry?.slot) || seen.has(entry.slot)) fail(`choice slot ${index} is invalid.`);
+/**
+ * The choices a viewer may try. Tolerant (PIPE-40): an entry that breaks a rule is left out and counted, never the record; one oddly
+ * named creator option must not hide the V. A slot listed twice keeps its first entry.
+ */
+function choices(value: unknown, dropped: (what: string) => void): RenderChoices[] {
+  if (!Array.isArray(value)) { if (value !== undefined) dropped("the list of choices to try"); return []; }
+  const seen = new Set<string>(), out: RenderChoices[] = [];
+  for (const entry of value.slice(0, CHOICE_SLOTS.length * 2) as RenderChoices[]) {
+    if (!entry || !CHOICE_SLOTS.includes(entry.slot) || seen.has(entry.slot) || !Array.isArray(entry.options)) { dropped("a list of choices to try"); continue; }
     seen.add(entry.slot);
-    if (!Array.isArray(entry.options) || entry.options.length > LIMITS.options) fail(`${entry.slot} choices are invalid.`);
-    const options = new Set<string>();
-    return { slot: entry.slot, options: entry.options.map((option, k) => {
-      const name = paramName(option?.option, `${entry.slot} choice ${k}`);
-      if (options.has(name)) fail(`${entry.slot} choice ${name} repeats.`);
-      options.add(name);
-      if (!Array.isArray(option.definitions) || !option.definitions.length || option.definitions.length > LIMITS.definitions) fail(`${entry.slot} choice ${name} has no definitions.`);
-      return { option: name, index: int(option.index, `${entry.slot} choice ${name} index`, 0, 1024),
-        definitions: option.definitions.map((definition, d) => ({ name: paramName(definition?.name, `${entry.slot} choice ${name} definition ${d}`),
-          index: int(definition?.index, `${entry.slot} choice ${name} definition ${d} index`, 0, 1024) })) };
-    }) };
-  });
+    const names = new Set<string>(), options: RenderChoiceOption[] = [];
+    for (const option of entry.options as RenderChoiceOption[]) {
+      if (options.length >= LIMITS.options) { dropped(`a ${entry.slot} choice beyond the first ${LIMITS.options}`); continue; }
+      if (!option || !isChoiceName(option.choice) || names.has(option.choice) || !isChoiceLabel(option.label) || !Array.isArray(option.definitions)) {
+        dropped(`a ${entry.slot} choice`); continue;
+      }
+      const definitions: RenderChoiceDefinition[] = [], known = new Set<string>();
+      for (const definition of option.definitions.slice(0, LIMITS.definitions) as RenderChoiceDefinition[]) {
+        if (definition && isChoiceName(definition.name) && !known.has(definition.name) && isChoiceLabel(definition.label)) {
+          known.add(definition.name); definitions.push({ name: definition.name, label: definition.label });
+        } else dropped(`a ${entry.slot} colour`);
+      }
+      if (option.definitions.length > LIMITS.definitions) dropped(`${entry.slot} colours beyond the first ${LIMITS.definitions}`);
+      if (!definitions.length) { dropped(`a ${entry.slot} choice without colours`); continue; }
+      names.add(option.choice);
+      options.push({ choice: option.choice, label: option.label, definitions });
+    }
+    out.push({ slot: entry.slot, options });
+  }
+  return out;
 }
-function override(value: unknown): RenderOverride {
+function override(value: unknown): RenderOverride | null {
   const item = value as RenderOverride;
-  if (!item || !CHOICE_SLOTS.includes(item.slot)) return fail("override is invalid.");
-  return { slot: item.slot, option: paramName(item.option, "override option"), definition: paramName(item.definition, "override definition") };
+  return item && CHOICE_SLOTS.includes(item.slot) && isChoiceName(item.choice) && isChoiceName(item.definition)
+    ? { slot: item.slot, choice: item.choice, definition: item.definition } : null;
 }
 
 function component(value: unknown, index: number): RenderComponent {
@@ -429,32 +506,58 @@ function component(value: unknown, index: number): RenderComponent {
       parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}) };
 }
 
-/** Strict parse of a character record: an unexpected field shape never reaches the loader. */
+/**
+ * Parse of a character record: an unexpected field shape never reaches the loader. The record's frame (schema, origin, character, slot
+ * outcomes) is strict; its parts are not all-or-nothing (PIPE-40): a component, a choice or the applied override that breaks a rule is
+ * left out with a note, and a slot left with nothing to show becomes unavailable with one plain line. Components beyond
+ * `RECORD_LIMITS.components` are left out the same way. A record of another version throws `RenderDetailVersionError`. Parsing its own
+ * output again changes nothing, which the host relies on (it writes this parser's output).
+ */
 export function parseCharacterDetail(value: unknown): CharacterDetail {
   const doc = value as CharacterDetail;
-  if (RETIRED_CHARACTER_SCHEMAS.includes(String(doc?.schema)) && doc?.detail === "character") fail(`the record version ${doc.schema} is retired; prepare it again.`);
+  if (RETIRED_CHARACTER_SCHEMAS.includes(String(doc?.schema)) && doc?.detail === "character") throw new RenderDetailVersionError("older", String(doc.schema));
+  if (doc?.detail === "character" && newerSchema(doc.schema)) throw new RenderDetailVersionError("newer", String(doc.schema));
   if (!doc || doc.schema !== CHARACTER_DETAIL_SCHEMA || doc.detail !== "character") fail("not a character record.");
   if (doc.origin !== "game-files") fail("origin is invalid.");
   if (doc.character?.source !== "default" && doc.character?.source !== "save") fail("character source is invalid.");
   if (doc.character.bodyGender !== "female" && doc.character.bodyGender !== "male") fail("body gender is invalid.");
-  const applied = doc.character.override === undefined ? undefined : override(doc.character.override);
-  if (!Array.isArray(doc.components) || doc.components.length > LIMITS.components) fail("components are invalid.");
-  const components = doc.components.map(component);
-  if (new Set(components.map(item => item.id)).size !== components.length) fail("component ids repeat.");
+  const left: string[] = [];
+  const dropped = (what: string) => { left.push(what); };
+  const applied = doc.character.override === undefined ? null : override(doc.character.override);
+  if (doc.character.override !== undefined && !applied) dropped("the tried choice");
+  if (!Array.isArray(doc.components)) fail("components are invalid.");
+  const components: RenderComponent[] = [], ids = new Set<string>();
+  doc.components.forEach((item, index) => {
+    if (components.length >= LIMITS.components) { dropped(`a part beyond the first ${LIMITS.components}`); return; }
+    let parsed: RenderComponent;
+    try { parsed = component(item, index); } catch { dropped(`${DETAIL_SLOTS.includes((item as RenderComponent)?.slot) ? `a ${(item as RenderComponent).slot}` : "a"} part`); return; }
+    if (ids.has(parsed.id)) { dropped(`a repeated ${parsed.slot} part`); return; }
+    ids.add(parsed.id); components.push(parsed);
+  });
   if (!Array.isArray(doc.slots) || doc.slots.length !== DETAIL_SLOTS.length) fail("slot outcomes are invalid.");
   const slots = DETAIL_SLOTS.map((slot): DetailSlotState => {
     const entry = doc.slots.find(item => item?.slot === slot);
     if (!entry || !["shown", "none", "unavailable"].includes(entry.state)) return fail(`${slot} outcome is invalid.`);
-    if (entry.state === "shown" && !components.some(item => item.slot === slot)) fail(`${slot} is shown without components.`);
-    return { slot, state: entry.state, label: typeof entry.label === "string" && entry.label.length < 200 ? entry.label : fail(`${slot} label is invalid.`),
-      ...(entry.message === undefined ? {} : { message: text(entry.message, `${slot} message`) }) };
+    const label = typeof entry.label === "string" && entry.label.length < 200 ? entry.label : fail(`${slot} label is invalid.`);
+    const message = entry.message === undefined ? undefined : text(entry.message, `${slot} message`);
+    if (entry.state === "shown" && !components.some(item => item.slot === slot)) {
+      const { noun, not, pronoun } = SLOT_WORDS[slot];
+      return { slot, state: "unavailable", label, message: `XF Studio couldn't read your V's ${noun} from the prepared details, so ${pronoun} ${not} shown.` };
+    }
+    return { slot, state: entry.state, label, ...(message === undefined ? {} : { message }) };
   });
+  const listed = choices(doc.choices, dropped);
+  const notes = Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(entry => text(entry, "note")) : [];
+  if (left.length) {
+    const counts = new Map<string, number>();
+    for (const what of left) counts.set(what, (counts.get(what) ?? 0) + 1);
+    notes.push(`Left out of the prepared details: ${[...counts].slice(0, 6).map(([what, n]) => n > 1 ? `${what} (${n})` : what).join(", ")}${counts.size > 6 ? " and more" : ""}.`.slice(0, 500));
+  }
   return { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: text(doc.identity, "identity"), origin: "game-files",
     character: { source: doc.character.source, bodyGender: doc.character.bodyGender, ...(applied ? { override: applied } : {}) },
-    provenance: { label: text(doc.provenance?.label, "provenance label"),
-      notes: Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(entry => text(entry, "note")) : [],
+    provenance: { label: text(doc.provenance?.label, "provenance label"), notes: notes.slice(-LIMITS.notes),
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    components, slots, choices: choices(doc.choices) };
+    components, slots, choices: listed };
 }
 
 /** Version dispatch: a v1 record is a core head; a v2 to v5 record is a core head, and a v5 record may be a character. */
@@ -463,5 +566,6 @@ export function parseRenderDetail(value: unknown): CoreDetail | CharacterDetail 
   if (doc?.detail === "character") return parseCharacterDetail(value);
   if (doc?.schema === RENDER_DETAIL_SCHEMA || doc?.schema === CHARACTER_DETAIL_SCHEMA || RETIRED_CHARACTER_SCHEMAS.includes(String(doc?.schema)))
     return parseCoreDetail(value);
+  if (newerSchema(doc?.schema)) throw new RenderDetailVersionError("newer", String(doc?.schema));
   return fail(`unsupported record version ${String(doc?.schema)}.`);
 }

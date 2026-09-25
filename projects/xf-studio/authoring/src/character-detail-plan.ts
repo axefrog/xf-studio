@@ -15,12 +15,13 @@
  *   third-person puppet (the FPP hair twins sit in `FPP_hairs`) [resource; consumer wiring hypothesis].
  * - **Level of detail**: the preview draws the highest-detail level (chunks whose LOD mask has bit 0), as a
  *   creator close-up would; lower levels are the same parts again [resource: render chunk `lodMask`].
+ * - **Scene chunks**: a chunk draws only when its `renderMask` has `MCF_RenderInScene`; a shadow-only chunk (`MCF_RenderInShadows`
+ *   alone: every vanilla hair `*_shadow` mesh) casts shadows and is never drawn [resource: the render blob's chunk flags]. This is
+ *   what used to be guessed per slot; a layered chunk now draws on whichever slot brings it (knowledge/head-cc-rendering.md §4).
  * - **Drawable chunks** are those whose material template the renderer has an adapter for
- *   (render-templates.ts). A component with none (a hair shadow mesh on `glass.mt` or `metal_base.remt`) is
- *   left out; which components are shadow-only is still an open question (knowledge/head-cc-rendering.md).
- *   Layered chunks (`multilayered.mt`) draw only on `LAYERED_SLOTS` (piercings and eyes), so a hair's layered shadow proxy stays
- *   out too. A placeholder template (a decal the preview can't draw yet) is recorded beside drawn chunks, so the renderer can
- *   say plainly that part is not shown, but never makes a component drawable on its own.
+ *   (render-templates.ts). A chunk with none (`glass.mt`, `metal_base.remt`) is left out. A placeholder template (a decal the
+ *   preview can't draw yet) is recorded beside drawn chunks, so the renderer can say plainly that part is not shown, but never
+ *   makes a component drawable on its own.
  * - **Morph texture rule**: a morph target's `baseTexture` replaces its named parameter's texture (the vanilla eye
  *   morph binds a flat `normal.xbm` to `Normal`; ArchiveXL's eye fix clears it) [hypothesis, eye-rendering.md §1.3].
  * - **Template identity**: a chunk's adapter is chosen by its template's own name (the name the engine finds compiled
@@ -38,14 +39,18 @@
  *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
  *   nothing) and a CCXL option on the slot all resolve through the same rules (knowledge/cc-file-chain.md §6). Their chunks are layered
  *   (`multilayered.mt`): each carries its `.mlsetup` and `.mlmask` references for the host to read into the chunk's layer stack.
- * - **Viewer choices**: a slot a viewer may try out (`CHOICE_SLOTS`) lists the creator's options for it (`slotChoices`), and a tried
- *   choice replaces the V's own on that slot before resolution (`applyChoiceOverride`), in every group the creator lists it in.
+ * - **Viewer choices**: a slot a viewer may try out (`CHOICE_SLOTS`) lists its creator switchers' choices (`slotChoices`): each
+ *   choice with the definitions of the option it drives, and one plain label for each. A tried choice (a switcher choice and a
+ *   definition) replaces everything the slot's switchers can activate, and its descriptors come from the shared R5 rules rooted at
+ *   that switcher (`descriptorsFromSwitcher`), so a choice naming several options and a colour its linked followers take resolve as
+ *   the creator does (`applyChoiceOverride`). An option a slot's switcher activates belongs to that slot even when its own `uiSlot`
+ *   is another (`detailSlotOf`).
  */
-import type { AppearanceDescriptor, CcoResource } from "./cco-model";
+import { descriptorsFromSwitcher, switcherReach, type AppearanceDescriptor, type CcoOption, type CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
-import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoices, RenderMorphTexture, RenderOverride, RenderRgba } from "./render-detail";
-import { CHOICE_SLOTS, DETAIL_SLOTS } from "./render-detail";
+import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoiceOption, RenderChoices, RenderMorphTexture, RenderOverride, RenderRgba } from "./render-detail";
+import { CHOICE_SLOTS, DETAIL_SLOTS, isChoiceLabel, isChoiceName, RECORD_LIMITS, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
@@ -92,17 +97,16 @@ export type PlannedComponent = {
   /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
 };
-export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[]; choices: RenderChoices[] };
+export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[]; choices: RenderChoices[];
+  /** Creator choices left out because a name breaks the record's rule (`isChoiceName`), one plain line each. */
+  choiceNotes: string[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateIdentities = ReadonlyMap<string, { name: string | null; priority: string | null }>;
 
-/** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
-export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
-  skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
-  hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
-  piercings: { noun: "piercings", not: "aren't", pronoun: "they" } });
+/** Plain words per slot (render-detail.ts, where the record reader uses them too). */
+export { SLOT_WORDS };
 
 /** A plain colour or style label from a definition name (`female__05_brown_liquorice` → `brown liquorice`). */
 export function choiceLabel(definition: string): string {
@@ -158,24 +162,14 @@ const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIden
   return renderTemplate(template, template ? identities.get(template.toLowerCase())?.name : null);
 };
 
-/**
- * The slots whose layered (`multilayered.mt`) chunks draw: piercings and the eye designs. Elsewhere a layered chunk stays out as before:
- * a hair's shadow proxy mixes layered and glass chunks, and which components are shadow-only is still open
- * (knowledge/head-cc-rendering.md §4), so drawing it would add a visible shell the game may not show.
- */
-export const LAYERED_SLOTS: readonly DetailSlot[] = ["piercings", "eyes"];
-
-/**
- * Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs; layered
- * templates draw only on `LAYERED_SLOTS`.
- */
+/** Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs. */
 function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
   identities: TemplateIdentities, slot: DetailSlot): PlannedChunk {
   const faceDetail = slot === "face";
   const template = material.template ? refLabel(material.template.ref) : null;
   const identity = template ? identities.get(template.toLowerCase()) : undefined;
   const found = renderTemplate(template, identity?.name);
-  const inputs = found && (!faceDetail || isDecal(found)) && (!found.layered || LAYERED_SLOTS.includes(slot)) ? found : undefined;
+  const inputs = found && (!faceDetail || isDecal(found)) ? found : undefined;
   const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, templateName: identity?.name ?? null,
     materialPriority: identity?.priority ?? null, drawn: !!inputs, placeholder: !!inputs?.placeholder,
     scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {}, layered: null };
@@ -211,10 +205,11 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const geometry = component.geometry;
   if (!geometry || geometry.drawsNothing || !geometry.drawnFrom || geometry.drawnFrom.status !== "archive" || !geometry.visibleChunks?.length ||
       !geometry.renderChunks) return null;
-  const lods = geometry.chunkLods;
+  const lods = geometry.chunkLods, scene = geometry.chunkInScene;
   const morphTexture = geometry.morphTexture && geometry.morphTarget
     ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
-  const materials = component.materials.filter(material => !lods || ((lods[material.chunk] ?? 1) & 1) === 1)
+  // The highest level of detail, and only chunks the scene draws (a shadow-only chunk is neither drawn nor "skipped").
+  const materials = component.materials.filter(material => (!lods || ((lods[material.chunk] ?? 1) & 1) === 1) && scene?.[material.chunk] !== false)
     .map(material => planChunk(material, defaults, morphTexture, identities, slot));
   const drawn = materials.filter(material => material.drawn);
   // A face detail made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
@@ -239,7 +234,8 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   skinDecals: readonly { entry: ResolvedAppearance; component: ResolvedComponent }[]): { components: PlannedComponent[]; state: DetailSlotState } {
   const options = new Map(cco.parts.head.options.map((option, index) => [option.name, { option, index }]));
   const toneLinks = new Set(cco.parts.head.options.filter(option => option.uiSlot === "skin_type" && option.link).map(option => option.link));
-  const entries = resolved.appearances.filter(entry => entry.part === "head" && !DETAIL_UI_SLOTS[options.get(entry.option)?.option.uiSlot ?? ""] &&
+  const claimed = detailSlotOf(cco);
+  const entries = resolved.appearances.filter(entry => entry.part === "head" && !claimed.has(entry.option) &&
     entry.groups.some(group => FACE_GROUPS.includes(group)));
   const planned: { component: PlannedComponent; order: number; label: string }[] = [];
   const unshown: string[] = [];
@@ -283,7 +279,7 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
   identities: TemplateIdentities = new Map()): CharacterPlan {
-  const slotOf = new Map(cco.parts.head.options.map(option => [option.name, DETAIL_UI_SLOTS[option.uiSlot]]));
+  const slotOf = detailSlotOf(cco);
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
   const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
@@ -316,7 +312,13 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     components.push(...planned);
     slots.push({ slot, state: "shown", label });
   }
-  return { components, slots, choices: CHOICE_SLOTS.map(slot => ({ slot, options: slotChoices(cco, slot) })) };
+  const choiceNotes: string[] = [];
+  const choices = CHOICE_SLOTS.map(slot => {
+    const listed = slotChoices(cco, slot);
+    choiceNotes.push(...listed.notes);
+    return { slot, options: listed.options };
+  });
+  return { components, slots, choices, choiceNotes };
 }
 
 /** Creator slot names (`uiSlot`) that feed one detail slot. */
@@ -328,49 +330,111 @@ function slotSwitchers(cco: CcoResource, slot: DetailSlot) {
 }
 
 /**
- * The options a viewer may try on a choice slot, as the creator offers them: every appearance option on the slot's creator slot that has
- * an appearance resource and at least one named definition (so "Off" is not a choice to try; the V's own is), in the order of the slot's
- * switcher (its choice index), then the resource's option order. Vanilla and CCXL options alike; never a mod name.
+ * The detail slot of every head option that feeds one: by its own creator slot (`uiSlot`), else by the slot of a switcher that can
+ * activate it (a piercing style's linked part on a creator slot of its own belongs to the piercings, as the style switcher turns it on).
+ * Whether the option draws on the third-person head is still decided by its groups.
  */
-export function slotChoices(cco: CcoResource, slot: ChoiceSlot): RenderChoices["options"] {
-  const names = creatorSlots(slot);
-  const switchIndex = new Map<string, number>();
-  for (const switcher of slotSwitchers(cco, slot)) for (const choice of switcher.options) for (const name of choice.names)
-    if (!switchIndex.has(name)) switchIndex.set(name, choice.index);
-  const seen = new Set<string>();
-  return cco.parts.head.options.flatMap((option, order) => {
-    if (option.type !== "appearance" || !names.has(option.uiSlot) || !option.resource || !option.name || seen.has(option.name)) return [];
-    seen.add(option.name);
-    const definitions = option.definitions.filter(definition => definition.name).slice(0, 64)
-      .map(definition => ({ name: definition.name, index: Math.min(definition.index, 1024) }));
-    return definitions.length ? [{ option: option.name, index: Math.min(switchIndex.get(option.name) ?? 1024, 1024), order, definitions }] : [];
-  }).sort((a, b) => a.index - b.index || a.order - b.order).slice(0, 64).map(({ option, index, definitions }) => ({ option, index, definitions }));
+export function detailSlotOf(cco: CcoResource): Map<string, DetailSlot> {
+  const out = new Map<string, DetailSlot>();
+  for (const option of cco.parts.head.options) { const slot = DETAIL_UI_SLOTS[option.uiSlot]; if (option.name && slot) out.set(option.name, slot); }
+  for (const slot of DETAIL_SLOTS) for (const switcher of slotSwitchers(cco, slot))
+    for (const name of switcherReach(cco, "head", switcher.name)) if (!out.has(name)) out.set(name, slot);
+  return out;
+}
+
+type AppearanceOption = Extract<CcoOption, { type: "appearance" }>;
+/** A switcher choice's targets as options, in the choice's order. */
+const choiceTargets = (cco: CcoResource, names: readonly string[]) => names.flatMap(name => {
+  const option = cco.parts.head.options.find(entry => entry.name === name);
+  return option ? [option] : [];
+});
+/**
+ * The option a switcher choice's colours come from: its link controller (the one the creator's colour control drives), else its first
+ * appearance target with a resource and a named definition. Null for a choice that turns the slot off.
+ */
+function choiceController(cco: CcoResource, names: readonly string[]): AppearanceOption | null {
+  const targets = choiceTargets(cco, names).filter((option): option is AppearanceOption =>
+    option.type === "appearance" && !!option.resource && option.definitions.some(definition => definition.name));
+  return targets.find(option => option.linkController) ?? targets[0] ?? null;
+}
+
+const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+/**
+ * The one plain label of a switcher choice (UI-49), lower case: `style 09` for the creator's numbered styles; a readable name the
+ * creator gives (not a localisation key), with underscores as spaces; otherwise the words of the option it drives.
+ */
+export function styleLabel(localizedName: string, controller: string): string {
+  if (/^[0-9]{1,3}$/.test(localizedName)) return `style ${localizedName.padStart(2, "0")}`;
+  const words = localizedName.replace(/_+/g, " ").trim();
+  if (words && !/^LocKey#/i.test(localizedName) && isChoiceLabel(words)) return words;
+  return choiceLabel(controller);
+}
+
+/** The switcher choice of a slot that activates `option`, and its switcher. */
+function switcherChoiceOf(cco: CcoResource, slot: DetailSlot, option: string) {
+  for (const switcher of slotSwitchers(cco, slot)) for (const choice of switcher.options)
+    if (choice.names.includes(option)) return { switcher, choice };
+  return null;
 }
 
 /**
- * A viewer's tried choice in place of the V's own on one slot: every descriptor of an option on that slot is dropped, and the chosen
- * option's definition is listed in each group the creator lists the option in. Returns null when the creator doesn't offer that choice
- * (a stale or foreign request), so the V is shown as saved.
+ * The choices a viewer may try on a choice slot, as the creator offers them: every choice of the slot's switchers (in switcher and choice
+ * order) that drives an option with named colours, identified by the choice's `localizedName` (ArchiveXL merges switcher choices by it,
+ * so it is unique within a switcher; the first switcher offering a name keeps it), with its plain label and the colours of the option it
+ * drives. "Off" (no named colour) is not a choice to try; the V's own is. Vanilla and CCXL choices alike; never a mod name. A name that
+ * breaks the record's rule (`isChoiceName`) is left out with a note, so the record the browser reads always parses.
+ */
+export function slotChoices(cco: CcoResource, slot: ChoiceSlot): { options: RenderChoiceOption[]; notes: string[] } {
+  const options: RenderChoiceOption[] = [], notes: string[] = [], seen = new Set<string>();
+  let unnamed = 0, unreadable = 0, colours = 0;
+  for (const switcher of slotSwitchers(cco, slot)) for (const choice of switcher.options) {
+    const controller = choiceController(cco, choice.names);
+    if (!controller) continue;
+    if (!isChoiceName(choice.localizedName)) { if (choice.localizedName) unreadable++; else unnamed++; continue; }
+    if (seen.has(choice.localizedName)) continue;
+    seen.add(choice.localizedName);
+    if (options.length >= RECORD_LIMITS.options) { notes.push(`Only the first ${RECORD_LIMITS.options} ${slot} styles can be tried.`); break; }
+    const named = controller.definitions.filter(definition => definition.name);
+    const valid = named.filter(definition => isChoiceName(definition.name)).slice(0, RECORD_LIMITS.definitions);
+    colours += named.length - valid.length;
+    if (!valid.length) { unreadable++; continue; }
+    options.push({ choice: choice.localizedName, label: capitalise(styleLabel(choice.localizedName, controller.name)),
+      definitions: valid.map(definition => ({ name: definition.name, label: capitalise(choiceLabel(definition.name)) })) });
+  }
+  if (unreadable) notes.push(`${unreadable} ${slot} style(s) have names XF Studio can't offer to try, so they're left out of the list.`);
+  if (unnamed) notes.push(`${unnamed} ${slot} style(s) have no creator name, so they're left out of the list.`);
+  if (colours) notes.push(`${colours} ${slot} colour(s) have names XF Studio can't offer to try, or come after the first ${RECORD_LIMITS.definitions}, so they're left out of the list.`);
+  return { options, notes: [...new Set(notes)] };
+}
+
+/**
+ * A viewer's tried choice in place of the V's own on one slot: every descriptor of an option the slot's switchers can activate, or of an
+ * option on the slot's creator slots, is dropped, and the tried choice's descriptors come from the shared R5 rules rooted at its switcher
+ * (the choice's targets with the tried colour, and each linked follower with the colour index its controller gives it), in every group
+ * the creator lists them in. Returns null when the creator doesn't offer that choice or colour (a stale or foreign request), so the V is
+ * shown as saved.
  */
 export function applyChoiceOverride(appearances: readonly AppearanceDescriptor[], cco: CcoResource, override: RenderOverride): AppearanceDescriptor[] | null {
-  const offered = slotChoices(cco, override.slot).find(entry => entry.option === override.option);
-  const option = cco.parts.head.options.find(entry => entry.name === override.option);
-  if (!offered || !offered.definitions.some(entry => entry.name === override.definition) || option?.type !== "appearance" || !option.resource) return null;
-  const names = creatorSlots(override.slot);
-  const onSlot = new Set(cco.parts.head.options.filter(entry => names.has(entry.uiSlot)).map(entry => entry.name));
-  const groups = cco.parts.head.groups.filter(group => group.options.includes(option.name)).map(group => group.name);
-  if (!groups.length) return null;
-  return [...appearances.filter(entry => entry.part !== "head" || !onSlot.has(entry.option)),
-    ...groups.map(group => ({ part: "head" as const, group, option: option.name, app: option.resource!, definition: override.definition }))];
+  const found = slotSwitchers(cco, override.slot).flatMap(switcher => switcher.options.map(choice => ({ switcher, choice })))
+    .find(entry => entry.choice.localizedName === override.choice);
+  const controller = found ? choiceController(cco, found.choice.names) : null;
+  if (!found || !controller || !controller.definitions.some(definition => definition.name === override.definition)) return null;
+  const derived = descriptorsFromSwitcher(cco, "head", found.switcher.name,
+    { [found.switcher.name]: found.choice.localizedName, [controller.name]: override.definition }).appearances;
+  if (!derived.length) return null;
+  const onSlot = new Set(cco.parts.head.options.filter(option => creatorSlots(override.slot).has(option.uiSlot)).map(option => option.name));
+  for (const switcher of slotSwitchers(cco, override.slot)) for (const name of switcherReach(cco, "head", switcher.name)) onSlot.add(name);
+  return [...appearances.filter(entry => entry.part !== "head" || !onSlot.has(entry.option)), ...derived];
 }
 
 /**
- * A plain piercing label: the style's number as the creator's switcher shows it, and the colour (`piercings_09`,
- * `i0_000_pwa__earring__03_black` → `style 09, black`). A choice outside a numbered switcher reads as its colour only.
+ * A plain piercing label from the same rule as the choices on offer (`styleLabel`): the style as the creator's switcher names it, and the
+ * colour (`piercings_09`, `i0_000_pwa__earring__03_black` → `style 09, black`). An option no switcher offers reads as its colour only.
  */
 export function piercingLabel(cco: CcoResource, option: string, definition: string): string {
-  const style = slotSwitchers(cco, "piercings").flatMap(switcher => switcher.options).find(choice => choice.names.includes(option))?.localizedName ?? "";
   const colour = choiceLabel(definition);
-  return /^[0-9]{1,3}$/.test(style) ? `style ${style}, ${colour}` : colour;
+  const found = switcherChoiceOf(cco, "piercings", option);
+  if (!found) return colour;
+  const controller = choiceController(cco, found.choice.names);
+  return `${styleLabel(found.choice.localizedName, controller?.name ?? option)}, ${colour}`;
 }
-

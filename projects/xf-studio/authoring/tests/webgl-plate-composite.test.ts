@@ -70,4 +70,13 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(relative(hooked.plate, before.plate)).toBeLessThanOrEqual(0.002);
     expect(relative(hooked.skin, before.skin)).toBeLessThanOrEqual(0.002);
   });
+
+  test("after a lost and restored context a baked layered part is baked again by the scene's restore path (PREV-62)", () => {
+    const { before, unhooked, hooked, states } = probe.layered;
+    expect(states).toEqual(["baked", "baked", "pending", "baked"]);
+    expect(Math.max(...before)).toBeGreaterThan(0.05);
+    // Without the restore path its maps are gone (a handle that still says "baked" draws empty maps).
+    expect(gap(unhooked, before)).toBeGreaterThan(0.01);
+    expect(relative(hooked, before)).toBeLessThanOrEqual(0.002);
+  });
 });

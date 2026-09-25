@@ -9,6 +9,7 @@ import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
 import type { CollectionStudioAction } from "./collection-actions";
+import type { CharacterAction, CharacterDetailActions } from "./character-detail-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
@@ -41,6 +42,7 @@ export type StudioOwnerActions = {
   motion: MotionAction;
   quality: QualityAction;
   savedV: SavedAppearanceAction;
+  character: CharacterAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
 /**
@@ -86,7 +88,9 @@ type Services = { document: AuthoringDocument;
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
-  quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
+  quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
+  /** The shown V's resolved details and the creator choice tried on it (character-detail-actions.ts). */
+  character?: CharacterDetailActions };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -132,7 +136,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV])
+    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.character])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -307,7 +311,7 @@ export class StudioApplication {
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
-      preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
+      preview: s.preview?.snapshot(), character: characterView(s.character),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null, motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
@@ -318,7 +322,7 @@ export class StudioApplication {
    */
   previewState() {
     const s = this.services, saved = s.savedV?.snapshot();
-    return structuredClone({ preview: s.preview?.snapshot(), previewOptions: s.preview?.piercingOptions(),
+    return structuredClone({ preview: s.preview?.snapshot(), character: characterView(s.character),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
       motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
@@ -454,6 +458,10 @@ export class StudioApplication {
       savedV: {
         capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
         dispatch: action => app.services.savedV!.dispatch(action),
+      },
+      character: {
+        capability: action => app.services.character?.check(action) ?? missing("Your V's details are still loading."),
+        dispatch: action => app.services.character!.dispatch(action),
       },
     };
   }
@@ -682,3 +690,9 @@ const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }
+/** What the presentation reads about the creator choices on the shown V (UI-48): those on offer, the one tried, and one still preparing. */
+function characterView(character: CharacterDetailActions | undefined) {
+  if (!character) return undefined;
+  const { choices, tried, trying, override } = character.snapshot();
+  return { choices, tried, trying, override };
+}

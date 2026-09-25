@@ -4,7 +4,7 @@ import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-mod
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
 import type { DetailSlot, RenderChunkMaterial, RenderTexture } from "./render-detail";
-import { bakeOrder, createLayeredMaterial, layeredBakeSize, layeredGlobals, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
+import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeSize, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
   type SkinTexels } from "./skin-material";
@@ -326,9 +326,11 @@ const layered: MaterialAdapter = {
     const order = bakeOrder(stack);
     if (!order.length) return hidden("no visible layer");
     const notes: string[] = [], limits: DetailLimit[] = [];
-    // A setup whose mask could not be read shows only its bottom layer (as the game does with a one-layer default mask).
-    const masked = stack.layers.slice(1).filter(layer => layer.opacity > 0);
-    if (masked.length && masked.every(layer => !layer.textures.mask)) { limits.push("layered-mask"); notes.push("no readable mask layers; only the bottom layer is drawn"); }
+    // Only a mask the host could not read limits the drawing (PREV-67): a mask with fewer layers than the setup leaves the upper layers
+    // uncovered, as in game. Without its mask a stack shows its bottom layer (as the game does with a one-layer default mask).
+    const problems = stackProblems(stack);
+    if (problems.mask) { limits.push("layered-mask"); notes.push("its layer mask could not be read; the layers it masks are not drawn"); }
+    if (problems.templates) notes.push(`${problems.templates} layer(s) whose template could not be read are left out`);
     const layers = order.map(parameters => {
       const source = stack.layers[parameters.index]!.textures;
       const read = (role: keyof LayerTextures, use: TextureUse, wrap: TextureWrap) => source[role] ? textures(source[role]!, use, wrap) : undefined;
@@ -337,7 +339,7 @@ const layered: MaterialAdapter = {
         microblend: read("microblend", "data", "repeat"), mask: read("mask", "data", "repeat") } satisfies LayerTextures };
     });
     const domain = uvDomain(mesh.geometry.getAttribute("uv") as THREE.BufferAttribute | undefined);
-    const made = createLayeredMaterial({ layers, domain, size: layeredBakeSize(stack, domain),
+    const made = createLayeredMaterial({ layers, domain, size: layeredBakeSize(stack, domain, bakeSurface(mesh)),
       globals: { ...layeredGlobals(chunk, stack), normal: textures("GlobalNormal", "data", "repeat") } });
     return { material: made.material, owned: [], notes, limits, layered: made.handle };
   },

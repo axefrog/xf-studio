@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
-import { CharacterDetailError, CHARACTER_DETAIL_STEPS, prepareCharacterDetails, STORE_FILE,
+import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, STORE_FILE,
   type CharacterRoute, type PrepareCharacterOptions } from "./character-detail-service";
+import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
@@ -22,11 +23,18 @@ import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
  * so a changed profile, a newly installed mod or another WolvenKit prepares again instead of reusing an
  * answer for a different mod set. Preparations share one on-disk cache, so they run one at a time: a new
  * one starts only after a cancelled one has stopped.
+ *
+ * It also keeps one in-memory `CharacterPreparationCache` per installation fingerprint (PREV-68): the opened installation, the resolved
+ * appearances, templates and exports, and the served components. A tried choice on the same V then resolves and exports only what the
+ * choice changes. A changed fingerprint (a mod installed, another profile) starts a new cache. Each state names the record schema
+ * this host writes, so a page of another version can say so instead of failing silently.
  */
 export const CHARACTER_DETAIL_STATE_SCHEMA = "xfs/character-detail-state-1" as const;
 export type CharacterDetailPhase = "preparing" | "ready" | "failed" | "unknown";
 export type CharacterDetailState = {
   schema: typeof CHARACTER_DETAIL_STATE_SCHEMA;
+  /** The character record version this host writes (the page refuses to follow a host of another version). */
+  recordSchema: typeof CHARACTER_DETAIL_SCHEMA;
   /** Identity of the request this state answers. */
   key: string;
   phase: CharacterDetailPhase;
@@ -82,6 +90,8 @@ export function installationFingerprint(settings: CharacterDetailSettings): stri
 export class CharacterDetailHost {
   private running: { key: string; controller: AbortController; promise: Promise<void> } | null = null;
   private readonly states = new Map<string, CharacterDetailState>();
+  /** What preparations on the current installation share, and the fingerprint it belongs to. */
+  private shared: { fingerprint: string; cache: CharacterPreparationCache } | null = null;
   constructor(private readonly options: CharacterDetailHostOptions) {}
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }
@@ -93,8 +103,8 @@ export class CharacterDetailHost {
       manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli };
   }
 
-  private set(state: Omit<CharacterDetailState, "schema">): CharacterDetailState {
-    const full = { schema: CHARACTER_DETAIL_STATE_SCHEMA, ...state };
+  private set(state: Omit<CharacterDetailState, "schema" | "recordSchema">): CharacterDetailState {
+    const full = { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, ...state };
     this.states.set(state.key, full);
     // Keep only the recent answers; a page polls one key at a time.
     for (const key of [...this.states.keys()].slice(0, Math.max(0, this.states.size - 8))) this.states.delete(key);
@@ -107,7 +117,8 @@ export class CharacterDetailHost {
    */
   request(request: CharacterRequest): CharacterDetailState {
     const settings = this.options.settings();
-    const key = characterRequestKey(request, installationFingerprint(settings));
+    const fingerprint = installationFingerprint(settings);
+    const key = characterRequestKey(request, fingerprint);
     const known = this.states.get(key);
     const active = this.running && !this.running.controller.signal.aborted ? this.running : null;
     if (known?.phase === "ready" || (known?.phase === "preparing" && active?.key === key)) return known;
@@ -117,6 +128,8 @@ export class CharacterDetailHost {
     const route = this.route();
     if (!route) return this.set({ key, phase: "failed", message: NEEDS_SETUP, progress: null, record: null });
     const controller = new AbortController();
+    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
+    const cache = this.shared.cache;
     const exporter = this.options.exporter?.(settings.wolvenKitCli) ??
       createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), settings.wolvenKitCli);
     const first = CHARACTER_DETAIL_STEPS[0]!;
@@ -127,7 +140,7 @@ export class CharacterDetailHost {
     const run = () => {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
       started = Date.now();
-      return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot,
+      return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
         resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
@@ -154,7 +167,7 @@ export class CharacterDetailHost {
 
   /** The state for a request key; `unknown` when this host has not seen it (the page asks again). */
   state(key: string): CharacterDetailState {
-    return this.states.get(key) ?? { schema: CHARACTER_DETAIL_STATE_SCHEMA, key, phase: "unknown", message: "", progress: null, record: null };
+    return this.states.get(key) ?? { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, key, phase: "unknown", message: "", progress: null, record: null };
   }
 
   cancel(): void { this.running?.controller.abort(); }
