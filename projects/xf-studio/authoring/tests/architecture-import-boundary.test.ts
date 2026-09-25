@@ -66,3 +66,15 @@ test("the package builder keeps resource definitions pure and external processes
   for (const name of ["package-build-wolvenkit", "eye-plate-wolvenkit"])
     expect(imports(source(name))).toContain("./process-tree");
 });
+
+test("the character resolver keeps its rules pure and all host access in resolver-host", () => {
+  const pure = ["depot-path", "red-json", "resolution-evidence", "archive-precedence", "archivexl-config", "cco-model",
+    "rdar-index", "resource-graph", "character-resolver"];
+  for (const name of pure) {
+    const code = source(name);
+    for (const dependency of imports(code))
+      expect(dependency, `${name} imports ${dependency}`).not.toMatch(
+        /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|install-detection-host|browser-|main$|scene|studio-ui))/);
+    expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
+  }
+});

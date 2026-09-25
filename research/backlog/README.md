@@ -18,11 +18,23 @@
 
 Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
+## Standing direction (set 25 September 2026)
+
+1. **First goal: a fully working XF Eye Artistry export.** Prove the supported finishes (Matte, Satin, Metallic) in game, then design and prove game materials for every finish the editor offers (Shimmer, Glitter, Glossy, Colour-shifting). Shader decompilation and R&D are approved where they're needed to do this properly.
+2. **Rendering grows outward from the head:**
+   1. Face and head as the seed.
+   2. All face/head character-creator options.
+   3. Correct rendering and shading.
+   4. The vanilla body, since many options are body-related.
+   5. The character's full in-game appearance, including worn clothing read from the save.
+
+   Every step goes through the generic resolver, and independent work runs in parallel.
+
 ## Queued R&D and background work
 
 - **Runtime access baseline** (early mod R&D, start when a research slot frees, ideally after the first in-game test): minimal, heavily logged base mods per type (RED4ext C++, redscript, CET Lua, ArchiveXL/TweakXL) plus a loopback bridge so agents can read and change live game state while the maintainer plays. See [runtime access baseline](runtime-access-baseline.md).
 - **Shader decompile annotator** (R&D tooling, in progress): rename decompiled material constants and bindless textures from template register maps. See [shader-system tooling](../materials/shader-system/README.md).
-- **Generic game-file resolver** (architecture, feeds tracks 2–3): support for installed mods and frameworks such as PRC and CCXL packs must come from interpreting files as the game does, not per-mod adapters. The existing PRC-specific preview code is migration debt. Specified by the [CC file chain](cc-file-chain.md) research.
+- **Generic game-file resolver** (architecture, feeds tracks 2–3): support for installed mods and frameworks such as PRC and CCXL packs must come from interpreting files as the game does, not per-mod adapters. Phase 1 is implemented and validated ([mod loading](../../knowledge/mod-loading.md), [validation](../character-customization/resolver-validation.md)); next are a geometry/texture export adapter and wiring it into the preview, after which the PRC-specific preview code (migration debt) can be removed. Specified by the [CC file chain](cc-file-chain.md) research.
 - **Python-free Build: done.** Build needs only the game folder and WolvenKit; the TypeScript builder reproduces the Python outputs byte for byte ([Build pipeline port](../authoring/studio-to-mod-pipeline.md#build-pipeline-port)). Remaining: repeat the Build in an installed desktop canary.
 - **Native archive and resource reader** (later R&D, approved): a TypeScript reader for the game's `.archive` and CR2W resource formats, decompressing through the user's installed game DLL via `bun:ffi` rather than redistributing it. It removes WolvenKit from the user path and underpins the generic resolver. Respect licences and credit the format research it builds on (WolvenKit, RED4ext SDK, wiki).
 - **Framework handling in tooling: done 25 September.** The tools never install frameworks, add only XF Eye Artistry by a documented [placement rule](../authoring/framework-version-check.md), and a read-only version check gives friendly update guidance. Remaining: remove the diagnostic MO2 profile after the first in-game test.

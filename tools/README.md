@@ -12,6 +12,7 @@ Use the installed Python runtime named in `docs/toolchain.md`. Scripts have no d
 | `inventory/inspect_blend.py` | Run using Blender background/factory startup/disable-autoexec; inspects the identified legacy scene, writes a report and never saves the scene. |
 | `inventory/inspect_resources.py` | Summarizes converted consumer resources, measures the old generator output, and hashes selected intake assets. Run after the isolated consumer exports exist. |
 | `check_links.py` | Checks every relative Markdown link and `#anchor` in tracked files (GitHub slug rules). Links into sibling reference clones are skipped unless `--external-clones` is passed. Run before committing documentation; CI runs it too. |
+| `review_due.py` | Reports whether a threshold-triggered code/architecture review is due (merges, changed source lines or new subsystems since the last reviewed commit in `research/authoring/code-health.md`). Exit 1 when due. |
 | `capture_session.py` | Copies existing game/MO2 logs and profile list to a unique timestamped evidence folder. Never launches/deploys/changes the game. |
 | `../experiments/001-dynamic-material-contract/check_contract.py` | Validates a fresh proposed material contract and CR2W round-trip. Does not prove runtime behavior. |
 

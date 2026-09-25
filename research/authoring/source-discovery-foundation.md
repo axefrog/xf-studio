@@ -99,15 +99,13 @@ Game/manual collisions remain ambiguous, and `runtimeObservedWinner` is always n
 
 ## Next stages
 
-- archive-index/hash inspection;
-- route-specific archive order and interpretation of the game's `archive/pc/mod/modlist.txt`;
-- base-versus-mod resolution;
-- ArchiveXL registration, patch, scope, fix and merge processing;
-- REDmod and other deployment transforms;
-- cache fingerprints and invalidation;
+The character resolver builds on this inventory: `archive-precedence.ts` collapses virtual archive paths, orders mount groups and reads the game's `archive/pc/mod/modlist.txt`; `resolver-host.ts` reads RDAR indexes, adds the game-folder ArchiveXL bundle (outside the `archive/pc` scan) and applies ArchiveXL registrations, scopes, fixes, patches, copies and links. See [mod loading](../../knowledge/mod-loading.md). Still open:
+
+- REDmod and other deployment transforms, and Vortex deployment state;
+- content fingerprints (the resolver's cache keys archives by path, size and modification time);
 - independent runtime traces.
 
-Do not infer any of these from the inventory.
+Do not infer these from the inventory.
 
 Known gaps:
 
