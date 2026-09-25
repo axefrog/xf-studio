@@ -112,7 +112,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       // The styles on offer are the creator's own on this installation, vanilla and modded alike; they arrive with the V's details.
       const chosen = options.find(option => option.choice === tried?.choice);
       // A try keeps the V on screen; the control says which style is on its way instead of covering the view.
-      const tryingLabel = trying ? options.find(option => option.choice === trying.choice)?.label : undefined;
+      const tryingLabel = !trying ? undefined : trying.choice ? options.find(option => option.choice === trying.choice)?.label : "your V's own piercings";
       style.update([{ value: "", label: "Your V's own" }, ...options.map(option => ({ value: option.choice, label: option.label }))], chosen ? chosen.choice : "", !options.length,
         options.length ? undefined : !preview ? ((frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading.") :
           "Piercing styles appear once your V's details are ready.");
@@ -120,7 +120,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         "Choose a preview style first.");
       colour.element.hidden = !chosen;
       // The shown V's resolved details, read from your own installed game and mods.
-      setText(detailNote, tryingLabel ? `Trying ${tryingLabel}…` : saved.loaded ? "" : detailLine.text);
+      setText(detailNote, tryingLabel ? (trying?.choice ? `Trying ${tryingLabel}…` : `Going back to ${tryingLabel}…`) : saved.loaded ? "" : detailLine.text);
       detailNote.hidden = !detailNote.textContent;
     },
   };

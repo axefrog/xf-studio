@@ -232,7 +232,10 @@ test("trying a piercing style keeps the V on screen and interactive until its re
   details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "09", definition: "black" });
   await new Promise(resolve => setTimeout(resolve, 0));
   details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "", definition: "" });
+  // Going back to the V's own is shown as on its way too, without leaving "ready".
+  expect(details.snapshot()).toMatchObject({ phase: "ready", trying: { choice: "" } });
   await new Promise(resolve => setTimeout(resolve, 0));
+  expect(details.snapshot().trying).toBeNull();
   expect(events.slice(8)).toEqual(["request:09", "show", "request", "show"]);
   details.dispose();
 });

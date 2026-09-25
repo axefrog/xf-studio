@@ -276,7 +276,7 @@ type BuiltComponent = { component: RenderComponent; notes: string[]; textures: M
  * leaves nothing half-made.
  */
 export class CharacterPreparationCache {
-  /** The registry's installation this cache was derived from (identity only; the registry owns it). */
+  /** The registry's installation this cache was derived from (its `depot` identifies it; the registry owns it). */
   installation: Installation | null = null;
   /** Resolved appearances by descriptor (part, option, app, definition) and the V's morphs. */
   readonly appearances = new Map<string, ResolvedAppearance>();
@@ -350,7 +350,9 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   let installation: Installation;
   try { installation = await open({ ...options.route, cacheDir: options.resolverCache, log }); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
-  if (cache.installation && cache.installation !== installation) cache.reset();
+  // The registry hands out a fresh view object per acquire (its own graph over the shared archives); the opened archives (`depot`)
+  // are what identify one installation, and a reopened one has new ones.
+  if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph, summary } = installation;
   time("open");

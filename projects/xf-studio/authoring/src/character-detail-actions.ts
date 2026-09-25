@@ -61,7 +61,7 @@ export type CharacterDetailStatus = {
   override: CharacterOverride | null;
   /** The choice the viewer is trying (persisted with the workspace), whether or not its record is shown yet. */
   tried: CharacterOverride | null;
-  /** A tried choice whose record is still being prepared, while the V stays on screen. */
+  /** A tried choice whose record is still being prepared, while the V stays on screen (`choice` "": going back to the V's own). */
   trying: CharacterOverride | null;
 };
 /** Try a creator choice on the shown V: `choice` is a switcher choice's `localizedName` from the V's choices, or "" for the V's own. */
@@ -153,7 +153,9 @@ export class CharacterDetailActions {
     this.current?.controller.abort();
     const controller = new AbortController();
     this.current = { key, request, controller };
-    if (sameV) this.publish({ ...this.status, trying: request.override ? { ...request.override } : null });
+    // Going back to the V's own is a try too (choice ""), so the presentation can say what is on its way either way.
+    if (sameV) this.publish({ ...this.status, trying: request.override ? { ...request.override }
+      : { slot: this.status.override?.slot ?? CHOICE_SLOTS[0]!, choice: "", definition: "" } });
     else {
       // Nothing of the previous V may linger while the new one prepares.
       this.port.clear();

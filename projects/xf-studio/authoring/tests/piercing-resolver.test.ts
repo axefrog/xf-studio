@@ -212,7 +212,7 @@ describe("creator choices a viewer may try", () => {
     let acquired = 0;
     const installation = detailFixture().installation();
     const run = (request: CharacterRequest) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
-      exporter: counting(calls), open: () => { acquired++; return installation; }, cache, log: line => logs.push(line) }).then(result => result.record);
+      exporter: counting(calls), open: () => { acquired++; return { ...installation }; }, cache, log: line => logs.push(line) }).then(result => result.record);
     const own = await run(REQUEST_A);
     const firstExports = calls.length;
     expect(firstExports).toBeGreaterThan(0);
@@ -220,7 +220,7 @@ describe("creator choices a viewer may try", () => {
     const tried = await run({ ...REQUEST_A, override: { slot: "piercings", choice: "12", definition: PIERCING.black } });
     // The tried style's part is the only thing exported, and the rest of the V is served as it was.
     expect(acquired).toBe(2);
-    expect(cache.installation).toBe(installation);
+    expect(cache.installation?.depot).toBe(installation.depot);
     expect(calls.every(call => /earring|black|plastic|mask|mltemplate|mlsetup|xbm/i.test(call))).toBe(true);
     expect(tried.components.filter(item => item.slot !== "piercings")).toEqual(own.components.filter(item => item.slot !== "piercings"));
     expect(logs.at(-1)).toMatch(/Prepared a tried choice in [0-9.]+ s: .*; \d+ appearance\(s\) and 7 of 8 part\(s\) reused\./);
@@ -233,7 +233,7 @@ describe("creator choices a viewer may try", () => {
     const changed = detailFixture().installation();
     await prepareCharacterDetails({ request: REQUEST_A, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
       exporter: counting(calls), open: () => changed, cache });
-    expect(cache.installation).toBe(changed);
+    expect(cache.installation?.depot).toBe(changed.depot);
     expect(calls.length).toBeGreaterThan(0);
   });
 });
