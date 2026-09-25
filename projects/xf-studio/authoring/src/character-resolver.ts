@@ -126,8 +126,29 @@ export function inputFromSave(saved: { isMale: boolean; groups: Record<CcoPart, 
   return { bodyGender: saved.isMale ? "male" : "female", origin: "save", appearances, morphs };
 }
 
+type LoadedCco = { merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"] };
+/**
+ * The merged CCO of each graph and body gender, made once: merging a few hundred custom resources is the costliest step of
+ * resolving a V, and a graph (one installation's resources) always merges them the same way. A merge that met a resource
+ * the fetch port could not read is not kept, so it is tried again. Callers treat the result as read-only.
+ */
+const mergedCcos = new WeakMap<ResourceGraph, Map<BodyGender, Promise<LoadedCco>>>();
+
 /** Load the effective CCO: the installed base resource merged with every `.xl`-registered custom resource (R2–R4). */
-export async function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender): Promise<{ merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"] }> {
+export function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender): Promise<LoadedCco> {
+  let byGender = mergedCcos.get(graph);
+  if (!byGender) { byGender = new Map(); mergedCcos.set(graph, byGender); }
+  const known = byGender.get(bodyGender);
+  if (known) return known;
+  const errors = graph.loadErrors.size;
+  const pending = mergeCco(graph, bodyGender);
+  byGender.set(bodyGender, pending);
+  const forget = () => { if (byGender!.get(bodyGender) === pending) byGender!.delete(bodyGender); };
+  pending.then(() => { if (graph.loadErrors.size !== errors) forget(); }, forget);
+  return pending;
+}
+
+async function mergeCco(graph: ResourceGraph, bodyGender: BodyGender): Promise<LoadedCco> {
   const gaps: { code: string; subject: string; detail: string }[] = [];
   const path = ccoPath(bodyGender, graph.depot.plan.ep1Installed);
   const baseRef = refFromPath(path);

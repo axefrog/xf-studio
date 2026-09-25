@@ -184,6 +184,12 @@ function contains(sorted: BigUint64Array, value: bigint): boolean {
 export class DepotIndex {
   constructor(readonly plan: MountPlan, private readonly indexes: ReadonlyMap<string, BigUint64Array>) {}
 
+  /** Does this mounted archive's own index list the hash? False when its index was not read. */
+  archiveContains(archiveId: string, hash: string): boolean {
+    const index = this.indexes.get(archiveId);
+    return !!index && contains(index, BigInt(hash));
+  }
+
   lookup(hash: string): DepotLookup {
     const value = BigInt(hash);
     const candidates = this.plan.archives.filter(archive => {

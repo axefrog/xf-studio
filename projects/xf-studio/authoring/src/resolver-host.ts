@@ -17,11 +17,12 @@ import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
 import { depotHash, type DepotRef } from "./depot-path";
+import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { writeFileAtomic } from "./derived-cache";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
-import { discoverSources, type SourceCandidate } from "./source-discovery";
+import { discoverSources, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
 import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 export interface InstallationOptions {
@@ -57,6 +58,13 @@ export interface Installation {
     readonly ep1Installed: boolean;
     readonly modOrder: MountPlan["modOrder"];
   };
+  /**
+   * Everything the opened answer depends on, stamped when it was read (source-discovery.ts `WatchedPath`): the scanned
+   * folders and candidate files, the MO2 settings and mod list, the game's ArchiveXL bundle and executable. When every
+   * stamp still matches, opening again would give the same answer (installation-registry.ts). Absent for synthetic
+   * installations, which are never re-checked.
+   */
+  readonly watch?: readonly WatchedPath[];
 }
 
 export interface UnreadIndex { readonly id: string; readonly name: string; readonly providerName: string; readonly rank: number; readonly error: string }
@@ -64,13 +72,16 @@ export interface UnreadIndex { readonly id: string; readonly name: string; reado
 const lower = (value: string) => value.toLowerCase();
 const XL_LOCATIONS = [/^red4ext\/plugins\/archivexl\/bundle\/.+\.xl$/, /^archive\/pc\/mod\/.+\.xl$/];
 
-/** The game-folder ArchiveXL bundle is outside source discovery's `archive/pc` scan. */
-function gameBundleFiles(gameRoot: string): SourceCandidate[] {
+/** The game-folder ArchiveXL bundle is outside source discovery's `archive/pc` scan. Its folder and files are watched too. */
+function gameBundleFiles(gameRoot: string, watched: WatchedPath[]): SourceCandidate[] {
   const bundle = join(gameRoot, "red4ext", "plugins", "ArchiveXL", "Bundle");
+  const stamp = (path: string) => { try { return pathStamp(lstatSync(path)); } catch { return pathStamp(null); } };
+  watched.push({ path: bundle, stamp: stamp(bundle) });
   if (!existsSync(bundle) || lstatSync(bundle).isSymbolicLink()) return [];
   const now = new Date().toISOString();
   return readdirSync(bundle).filter(name => /\.(archive|xl)$/i.test(name)).map(name => {
     const physicalPath = join(bundle, name), stat = statSync(physicalPath);
+    watched.push({ path: physicalPath, stamp: stamp(physicalPath) });
     return { id: `game:bundle:${lower(name)}`, provider: "game", providerName: "Installed game", route: "direct", profileId: null,
       virtualPath: `red4ext/plugins/ArchiveXL/Bundle/${name}`, physicalPath, kind: /\.xl$/i.test(name) ? "archive-xl" : "archive",
       active: true, priority: null, priorityEvidence: null, sizeBytes: stat.size, modifiedMs: stat.mtimeMs, sha256: null,
@@ -99,6 +110,15 @@ function fingerprint(path: string): string {
   const stat = statSync(path);
   return createHash("sha256").update(`${path}|${stat.size}|${stat.mtimeMs}`).digest("hex").slice(0, 24);
 }
+
+/**
+ * Parsed archive indexes and `.xl` files kept in memory by their file's identity (path, size and modification time), so
+ * opening a route again after a mod change reads only what changed. Each open keeps only the entries it used.
+ */
+let indexMemo = new Map<string, BigUint64Array>();
+type XlRead = { document?: unknown; error?: string; excludes: boolean };
+let xlMemo = new Map<string, XlRead>();
+const identity = (path: string, size: number, mtimeMs: number) => `${path}|${size}|${mtimeMs}`;
 
 /**
  * Sorted depot hashes of an archive's index, cached per archive fingerprint. A cache file is written atomically
@@ -160,6 +180,21 @@ function laneFor(cacheDir: string): CacheLane {
   return lane;
 }
 
+/** A depot path WolvenKit can select by pattern: plain path text, no ArchiveXL markers. */
+const plainPath = (path: string | null): path is string => !!path && path.length <= 512 && !/[*{}<>|"?\0]/.test(path);
+/** Most characters of one selection pattern, so a launch's command line stays well inside Windows' limit. */
+export const MAX_PATTERN_CHARS = 12_000;
+function regexChunks(paths: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  let current: string[] = [], size = 0;
+  for (const path of paths) {
+    if (current.length && size + path.length + 8 > MAX_PATTERN_CHARS) { chunks.push(current); current = []; size = 0; }
+    current.push(path); size += path.length + 8;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
 /** Batched WolvenKit CLI extraction with a persistent JSON cache, shared safely by every fetcher on one cache folder. */
 export class WolvenKitFetcher implements ResourceFetchPort {
   private readonly pending = new Map<string, Queue>();
@@ -168,7 +203,11 @@ export class WolvenKitFetcher implements ResourceFetchPort {
   /** The WolvenKit identity (`wolvenKitIdentityKey`) whose output this fetcher caches, and its short form in file names. */
   readonly tool: string;
   private readonly toolTag: string;
-  readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, failures: [] as string[] };
+  /**
+   * `transient` counts resources answered null for a reason that may not repeat (no lasting `.failed` marker: the tool
+   * did not run cleanly, or its output was missing). A graph that saw one should not be kept for later preparations.
+   */
+  readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, transient: 0, failures: [] as string[] };
 
   constructor(private readonly cli: string, private readonly cacheDir: string, private readonly contains: (archiveId: string, hash: string) => boolean,
     private readonly log: (message: string) => void = () => {}) {
@@ -237,7 +276,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const batch of batches) await this.extract(batch);
     } catch (error) {
       this.stats.failures.push(String(error));
-      for (const queue of queues) for (const item of queue.items.values()) item.resolve(null);
+      for (const queue of queues) for (const item of queue.items.values()) { this.stats.transient++; item.resolve(null); }
     }
     if (this.pending.size) await this.flush();
   }
@@ -256,40 +295,62 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     const answered = new Set<Pending>();
     const answer = (item: Pending, value: FetchedResource | null) => { answered.add(item); item.resolve(value); };
     try {
-      mkdirSync(raw, { recursive: true });
       const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
-      writeFileSync(join(dir, "hashes.txt"), hashes.join("\n") + "\n");
+      const archives = batch.map(queue => queue.archive.id);
       this.log(`WolvenKit: extracting ${hashes.length} resource(s) from ${batch.length} archive(s)`);
-      // Missing hashes are judged per file below, so any exit is accepted; a crash, time limit or missing .NET throws.
-      await this.run(["unbundle", ...batch.map(queue => queue.archive.id), "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true });
-      const found = new Map<string, { file: string; path: string | null; bytes: number }>();
-      const walk = (folder: string) => {
+      // Each output file by depot hash, with the folder it was written to and whether that step finished cleanly.
+      const found = new Map<string, { file: string; path: string | null; bytes: number; clean: boolean }>();
+      const walk = (root: string, folder: string, clean: boolean) => {
         for (const name of readdirSync(folder)) {
           const full = join(folder, name);
-          if (lstatSync(full).isDirectory()) { walk(full); continue; }
+          if (lstatSync(full).isDirectory()) { walk(root, full, clean); continue; }
           if (name.endsWith(".json")) continue;
-          const rel = relative(raw, full).split(sep).join("\\");
+          const rel = relative(root, full).split(sep).join("\\");
           const numeric = /^(\d+)\.[^.\\]+$/.exec(rel);
-          if (numeric) found.set(BigInt(numeric[1]!).toString(), { file: full, path: null, bytes: 0 });
-          else found.set(depotHash(rel), { file: full, path: rel, bytes: 0 });
+          const hash = numeric ? BigInt(numeric[1]!).toString() : depotHash(rel);
+          if (!found.has(hash)) found.set(hash, { file: full, path: numeric ? null : rel, bytes: statSync(full).size, clean });
         }
       };
-      walk(raw);
-      // Unnamed outputs get the expected extension so WolvenKit's converter recognises them.
-      for (const queue of batch) for (const [hash, item] of queue.items) {
-        const hit = found.get(hash);
-        if (hit && !hit.path && item.extension && !hit.file.endsWith(`.${item.extension}`)) {
-          const renamed = `${hit.file.replace(/\.[^.\\/]+$/, "")}.${item.extension}`;
-          renameSync(hit.file, renamed); hit.file = renamed;
-        }
+      const finished = (run: WolvenKitRun, step: string) => {
+        const clean = run.exitCode === 0 && !/Unhandled exception/i.test(run.output);
+        if (!clean) this.stats.failures.push(`WolvenKit ${step} did not finish cleanly (exit ${run.exitCode}); unconverted resources are retried next time.`);
+        return clean;
+      };
+      // Step 1, one launch: resources with a known depot path are extracted and serialized together (`uncook -u -s`, whose
+      // JSON is the converter's). Missing ones are judged per file below, so any exit is accepted; a crash, time limit or
+      // missing .NET throws.
+      const named = [...new Set(batch.flatMap(queue => [...queue.items].filter(([hash, item]) => plainPath(item.ref.path) && depotHash(item.ref.path!) === hash)
+        .map(([, item]) => item.ref.path!.replaceAll("/", "\\"))))];
+      const serialized = join(dir, "serialized");
+      for (const chunk of regexChunks(named)) {
+        mkdirSync(serialized, { recursive: true });
+        const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", `(?i)${depotPathRegex(chunk)}`, "-u", "-s", "-v", "Minimal"],
+          { accept: () => true, failure: /(?!)/ });
+        walk(serialized, serialized, finished(run, "uncook"));
       }
-      for (const hit of found.values()) hit.bytes = statSync(hit.file).size;
-      // The converter's own exit and log decide only whether a missing JSON may be recorded as a lasting failure.
-      let clean = true;
-      if (found.size) {
-        const converted = await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/ });
-        clean = converted.exitCode === 0 && !/Unhandled exception/i.test(converted.output);
-        if (!clean) this.stats.failures.push(`WolvenKit convert did not finish cleanly (exit ${converted.exitCode}); unconverted resources are retried next time.`);
+      // Step 2, only for what step 1 did not serialize (a reference without a path, an archive that lists hashes only, or
+      // a resource step 1 wrote without JSON): extract by hash, then convert, as before step 1 existed.
+      for (const [hash, hit] of found) if (!existsSync(`${hit.file}.json`)) found.delete(hash);
+      const rest = hashes.filter(hash => !found.has(hash));
+      if (rest.length) {
+        mkdirSync(raw, { recursive: true });
+        writeFileSync(join(dir, "hashes.txt"), rest.join("\n") + "\n");
+        await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true });
+        const before = new Set(found.keys());
+        walk(raw, raw, true);
+        // Unnamed outputs get the expected extension so WolvenKit's converter recognises them.
+        for (const queue of batch) for (const [hash, item] of queue.items) {
+          const hit = found.get(hash);
+          if (hit && !before.has(hash) && !hit.path && item.extension && !hit.file.endsWith(`.${item.extension}`)) {
+            const renamed = `${hit.file.replace(/\.[^.\\/]+$/, "")}.${item.extension}`;
+            renameSync(hit.file, renamed); hit.file = renamed;
+          }
+        }
+        // The converter's own exit and log decide only whether a missing JSON may be recorded as a lasting failure.
+        if (found.size > before.size) {
+          const clean = finished(await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/ }), "convert");
+          for (const [hash, hit] of found) if (!before.has(hash)) hit.clean = clean;
+        }
       }
       const store = (path: string, text: string) => { mkdirSync(join(this.cacheDir, "json"), { recursive: true }); writeFileAtomic(path, text); };
       for (const queue of batch) for (const [hash, item] of queue.items) {
@@ -307,27 +368,41 @@ export class WolvenKitFetcher implements ResourceFetchPort {
               group: queue.archive.group, wolvenKit: this.tool, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document }));
           } catch (error) { this.stats.failures.push(`${queue.archive.name}: ${path ?? hash}: not cached: ${(error as Error).message}`); }
           this.stats.extracted++;
-          answer(item, { document, extractedSha256, path });
+          answer(item, { document, extractedSha256, path, fresh: true });
           continue;
         }
         this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash} was not extracted or converted.`);
         // Lasting only when the tool genuinely failed on this resource: a clean run, in this batch's own
         // folder, with the extracted file still there as unbundle wrote it.
         const intact = hit && existsSync(hit.file) && statSync(hit.file).size === hit.bytes;
-        if (hit && clean && intact) {
+        let lasting = false;
+        if (hit && hit.clean && intact) {
           try {
             store(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION,
               wolvenKit: this.tool, hash, path: hit.path ?? item.ref.path, archive: queue.archive.name,
               reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
+            lasting = true;
           } catch { /* Advisory: without the marker the resource is tried again next time. */ }
         }
+        if (!lasting) this.stats.transient++;
         answer(item, null);
       }
     } catch (error) {
       this.stats.failures.push(error instanceof WolvenKitRunError ? `${error.code}: ${error.message}` : String(error));
-      for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) item.resolve(null);
+      for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) { this.stats.transient++; item.resolve(null); }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
+}
+
+/**
+ * A resource graph and fetcher over an opened route's archives, caching extracted resources in `cacheDir`. Every view
+ * on one cache folder shares that folder's extraction lane, so views never extract the same resource twice.
+ */
+export function installationView(core: { depot: DepotIndex; xl: ArchiveXlConfig },
+  options: Pick<InstallationOptions, "wolvenKitCli" | "cacheDir" | "log">): { graph: ResourceGraph; fetcher: WolvenKitFetcher } {
+  const fetcher = new WolvenKitFetcher(options.wolvenKitCli, options.cacheDir, (archiveId, hash) => core.depot.archiveContains(archiveId, hash),
+    options.log ?? (() => {}));
+  return { graph: new ResourceGraph(core.depot, core.xl, fetcher), fetcher };
 }
 
 /** Discover the route's sources, mount archives, read indexes and `.xl` files, and open a resource graph. */
@@ -336,7 +411,15 @@ export function openInstallation(options: InstallationOptions): Installation {
   const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: options.gameRoot, launchRoute: options.launchRoute,
     mo2Root: options.mo2Root ?? null, mo2ProfileId: options.mo2ProfileId ?? null, manualModRoot: options.manualModRoot ?? null };
   const discovery = discoverSources(settings, { maxEntries: 1_000_000, maxDepth: 24 });
-  const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot)];
+  const watch: WatchedPath[] = [...discovery.watched];
+  const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot, watch)];
+  // The game's own version: an update replaces the executable (and usually its archives).
+  const executable = join(options.gameRoot, "bin", "x64", "Cyberpunk2077.exe");
+  let executableStat = null;
+  try { executableStat = lstatSync(executable); } catch { /* Stamped as missing. */ }
+  watch.push({ path: executable, stamp: pathStamp(executableStat) });
+  const stamped = new Map(candidates.map(candidate => [candidate.physicalPath, candidate]));
+  const nextIndexes = new Map<string, BigUint64Array>(), nextXl = new Map<string, XlRead>();
   const archives = candidates.filter(c => c.kind === "archive").map(toArchiveFile);
   const modlist = visibleLoose(candidates.filter(c => c.kind === "archive-modlist"))[0];
   const plan = buildMountPlan(archives, modlist ? readFileSync(modlist.physicalPath, "utf8") : null);
@@ -344,7 +427,14 @@ export function openInstallation(options: InstallationOptions): Installation {
   const indexes = new Map<string, BigUint64Array>();
   const indexErrors: string[] = [], unreadIndexes: UnreadIndex[] = [];
   for (const archive of plan.archives) {
-    try { indexes.set(archive.id, readArchiveIndex(archive.id, options.cacheDir)); }
+    const known = stamped.get(archive.id), key = known ? identity(archive.id, known.sizeBytes, known.modifiedMs) : null;
+    const memo = key ? indexMemo.get(key) : undefined;
+    if (memo) { indexes.set(archive.id, memo); nextIndexes.set(key!, memo); continue; }
+    try {
+      const hashes = readArchiveIndex(archive.id, options.cacheDir);
+      indexes.set(archive.id, hashes);
+      if (key) nextIndexes.set(key, hashes);
+    }
     catch (error) {
       indexErrors.push(`${archive.name}: ${(error as Error).message}`);
       unreadIndexes.push({ id: archive.id, name: archive.name, providerName: archive.providerName, rank: archive.rank, error: (error as Error).message });
@@ -360,22 +450,24 @@ export function openInstallation(options: InstallationOptions): Installation {
   const xlIssues: string[] = [];
   const documents: XlDocument[] = [];
   for (const file of xlFiles) {
-    try {
-      const text = readFileSync(file.physicalPath, "utf8");
-      if (/!exclude\b/.test(text)) xlIssues.push(`${file.virtualPath}: uses !exclude; the YAML reader drops tags, so exclusions are treated as targets.`);
-      documents.push({ id: file.virtualPath, document: Bun.YAML.parse(text) });
-    } catch (error) { xlIssues.push(`${file.virtualPath}: ${(error as Error).message}`); }
+    const key = identity(file.physicalPath, file.sizeBytes, file.modifiedMs);
+    let read = xlMemo.get(key);
+    if (!read) {
+      try {
+        const text = readFileSync(file.physicalPath, "utf8");
+        read = { document: Bun.YAML.parse(text), excludes: /!exclude\b/.test(text) };
+      } catch (error) { read = { error: (error as Error).message, excludes: false }; }
+    }
+    nextXl.set(key, read);
+    if (read.excludes) xlIssues.push(`${file.virtualPath}: uses !exclude; the YAML reader drops tags, so exclusions are treated as targets.`);
+    // Each open gets its own copy of a remembered document.
+    if (read.error === undefined) documents.push({ id: file.virtualPath, document: structuredClone(read.document) });
+    else xlIssues.push(`${file.virtualPath}: ${read.error}`);
   }
+  indexMemo = nextIndexes; xlMemo = nextXl;
   const xl = readArchiveXlConfig(documents);
-  const contains = (archiveId: string, hash: string) => {
-    const index = indexes.get(archiveId); if (!index) return false;
-    const value = BigInt(hash); let low = 0, high = index.length - 1;
-    while (low <= high) { const mid = (low + high) >>> 1; if (index[mid] === value) return true; if (index[mid]! < value) low = mid + 1; else high = mid - 1; }
-    return false;
-  };
-  const fetcher = new WolvenKitFetcher(options.wolvenKitCli, options.cacheDir, contains, log);
-  const graph = new ResourceGraph(depot, xl, fetcher);
-  return { plan, depot, xl, graph, fetcher, summary: { route: options.launchRoute, scanComplete: discovery.complete,
+  const { graph, fetcher } = installationView({ depot, xl }, options);
+  return { plan, depot, xl, graph, fetcher, watch, summary: { route: options.launchRoute, scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
     scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
     mountedArchives: plan.archives.length, unmountedArchives: plan.unmounted.length, indexErrors, unreadIndexes,

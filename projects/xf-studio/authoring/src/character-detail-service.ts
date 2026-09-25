@@ -52,8 +52,8 @@ export type PrepareCharacterOptions = {
   /** Resolver JSON and archive-index cache. */
   resolverCache: string;
   exporter: GameAssetExporter;
-  /** Test seam: open an installation (defaults to the resolver host). */
-  open?: (options: InstallationOptions) => Installation;
+  /** The installation to prepare from (defaults to the host's shared, long-lived one: installation-registry.ts). */
+  open?: (options: InstallationOptions) => Installation | Promise<Installation>;
   signal?: AbortSignal;
   progress?: (step: CharacterDetailStep, index: number, total: number, label: string) => void;
   log?: (message: string) => void;
@@ -246,9 +246,9 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   const cancelled = () => { if (signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled."); };
 
   progress("reading");
-  const open = options.open ?? (await import("./resolver-host")).openInstallation;
+  const open = options.open ?? (await import("./installation-registry")).acquireInstallation;
   let installation: Installation;
-  try { installation = open({ ...options.route, cacheDir: options.resolverCache, log }); }
+  try { installation = await open({ ...options.route, cacheDir: options.resolverCache, log }); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
   const { graph, summary } = installation;
   cancelled();
