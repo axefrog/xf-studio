@@ -356,6 +356,17 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       capability: () => port.viewport.uvCommandCapability(command), run: () => { port.viewport.uvCommand(command); } })),
     act("surface", preview.preview?.surface ? "Hide surface controls" : "Show surface controls", "View", { kind: "preview.setSurfaceControls", enabled: !preview.preview?.surface }, { icon: "handles" }),
     act("wire", preview.preview?.wire ? "Hide plate wireframe" : "Show plate wireframe", "View", { kind: "preview.setWire", enabled: !preview.preview?.wire }, { icon: "wire" }),
+    act("lighting.preset", preview.preview?.lightingPreset === "creator" ? "Lighting: studio" : "Lighting: character creator (game)", "View",
+      { kind: "preview.setLightingPreset", preset: preview.preview?.lightingPreset === "creator" ? "studio" : "creator" },
+      { icon: "lighting", keywords: "creator mirror game lights lut grade compare calibration" }),
+    act("camera.creatorFace", "Camera: character-creator face page", "View", { kind: "camera.creatorFraming", page: "face" }, { icon: "front", keywords: "creator 15 fov eyes brows lashes" }),
+    act("camera.creatorHair", "Camera: character-creator hair page", "View", { kind: "camera.creatorFraming", page: "hair" }, { icon: "front", keywords: "creator 15 fov hair skin" }),
+    ...([["isotropic", "lumens ÷ 4π"], ["cone", "spread over the cone"]] as const).map(([value, label]) =>
+      act(`lighting.creator.intensity.${value}`, `Creator lighting diagnostic: intensity ${label}`, "Diagnostics",
+        { kind: "preview.setCreatorLighting", key: "intensity", value }, { icon: "lighting", keywords: "creator calibration lumen candela" })),
+    ...([["full", "full cone angles"], ["half", "half cone angles"]] as const).map(([value, label]) =>
+      act(`lighting.creator.cone.${value}`, `Creator lighting diagnostic: ${label}`, "Diagnostics",
+        { kind: "preview.setCreatorLighting", key: "cone", value }, { icon: "lighting", keywords: "creator calibration spot angle" })),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop character-creator idle" : "Play character-creator idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),

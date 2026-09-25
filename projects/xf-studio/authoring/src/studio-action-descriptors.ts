@@ -1,5 +1,6 @@
 import type { CollectionRequest } from "./collection-service";
 import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
+import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
@@ -109,6 +110,11 @@ export const ACTION_DESCRIPTORS = {
   "camera.navigate": desc("viewport", "workspace", "none", { command: input("object") }, {
     orbit: { yaw: input("number"), pitch: input("number") }, dolly: { factor: input("number", .01, 100) },
     pan: { dx: input("number", -10, 10), dy: input("number", -10, 10) } }),
+  "camera.creatorFraming": desc("viewport", "workspace", "none", { page: enumerated(Object.keys(CREATOR_PAGE_DISTANCE)) }),
+  "preview.setLightingPreset": desc("viewport", "workspace", "none", { preset: enumerated(LIGHTING_PRESETS) }),
+  "preview.setCreatorLighting": desc("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
+    intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
+    exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
   "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
   "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),

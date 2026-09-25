@@ -8,6 +8,8 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
+import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
+  type LightingPreset } from "./creator-lighting";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -18,6 +20,10 @@ export type PreviewState = {
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   piercingStyle: string; piercingDefinition: string;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
+  /** Viewport lighting preset; the studio stage is the default. `exposure` and `lightAngle` belong to it. */
+  lightingPreset: LightingPreset;
+  /** The creator preset's diagnostic switches and its exposure scalar. */
+  creatorLighting: CreatorLightingOptions;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
 };
 export type WorkspaceState = {
@@ -46,7 +52,8 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
     uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
-      normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false, idle: false, idleTime: 0,
+      normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false,
+      lightingPreset: DEFAULT_LIGHTING_PRESET, creatorLighting: { ...DEFAULT_CREATOR_LIGHTING }, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
     uiPreferences: defaultUIPreferences(),
@@ -87,6 +94,9 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
+    if (LIGHTING_PRESETS.includes(p.lightingPreset)) state.preview.lightingPreset = p.lightingPreset;
+    if (validCreatorLighting(p.creatorLighting)) state.preview.creatorLighting = { intensity: p.creatorLighting.intensity,
+      cone: p.creatorLighting.cone, exposure: p.creatorLighting.exposure };
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }
     else state.preview.idlePaused = false;
     const c = p.camera, vector = (x: unknown): x is number[] =>

@@ -26,6 +26,9 @@ function fakeScene(host: { canvases: number }, log: string[]) {
       removeEventListener: (_type: string, listener: Listener) => controls.delete(listener),
     },
     dispose: () => { host.canvases--; log.push("scene:dispose"); },
+    lighting: { setPreset: noop, setCreatorOptions: noop, setBodySex: noop, subscribe: () => noop,
+      camera: () => ({ position: [0, 1.62, -1.2], target: [0, 1.62, 0], fov: 15 }),
+      status: () => ({ preset: "studio", sex: "female", defaultExposure: 1, lut: { phase: "idle", source: null } }) },
   };
   // Every other scene method is a no-op; `then` stays undefined so the scene isn't mistaken for a promise.
   const scene = new Proxy(known, { get: (target, key) => key in target ? target[key as string] : key === "then" ? undefined : noop });

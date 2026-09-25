@@ -1,16 +1,24 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { FaceMorphChoice } from "./face-morphs";
+import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
+  type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
+import type { GradingLutSource } from "./grading-lut";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "piercingStyle" | "piercingDefinition" |
-  "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle">;
+  "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting">;
 export type PreviewAction =
   | { kind: "camera.front" }
   | { kind: "camera.setFov"; degrees: number }
   | { kind: "camera.endFovGesture" }
   | { kind: "camera.restore"; camera: CameraState }
   | { kind: "camera.navigate"; command: CameraNavigation }
+  | { kind: "camera.creatorFraming"; page: CreatorCameraPage }
+  | { kind: "preview.setLightingPreset"; preset: LightingPreset }
+  | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
+  | { kind: "preview.setCreatorLighting"; key: "cone"; value: ConeReading }
+  | { kind: "preview.setCreatorLighting"; key: "exposure"; value: number }
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
   | { kind: "preview.setEyeShape"; index: number }
@@ -24,6 +32,9 @@ export type PiercingPreviewOption = { id: string; label: string;
   choices: { index: number; definition: string; label: string }[] };
 /** Eye-shape choices as the loaded head carries them, and whether the eyeballs follow them. */
 export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean; eyeSource: string | null };
+/** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
+export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExposure: number;
+  lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null } };
 /** Persisted workspace bounds before a head is loaded (the female creator's 22 choices). */
 export const MAX_EYE_SHAPE_INDEX = 21;
 export type PreviewPort = {
@@ -38,7 +49,15 @@ export type PreviewPort = {
   eyeShapeOptions?(): EyeShapeOptions;
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
+  /** Lighting presets (creator-lighting.ts). Absent on a preview without the creator rig. */
+  setLightingPreset?(preset: LightingPreset): void;
+  setCreatorLighting?(options: CreatorLightingOptions): void;
+  creatorCamera?(page: CreatorCameraPage): CameraState;
+  lightingStatus?(): LightingStatus;
+  onLightingStatus?(listener: () => void): () => void;
 };
+const NO_CREATOR = "Creator lighting is unavailable in this preview.";
+const CREATOR_FIXED = "Creator lighting uses the game's own lights and fixed exposure. Switch to Studio lighting to adjust this.";
 
 /** Preview preferences and camera commands are independent of the DOM and the Three scene type. */
 export class PreviewActions {
@@ -49,7 +68,10 @@ export class PreviewActions {
       lashes: initial.lashes, hair: initial.hair, normals: initial.normals, eyeOptics: initial.eyeOptics,
       eyeShape: initial.eyeShape, piercings: initial.piercings, piercingStyle: initial.piercingStyle,
       piercingDefinition: initial.piercingDefinition,
-      exposure: initial.exposure, lightAngle: initial.lightAngle };
+      exposure: initial.exposure, lightAngle: initial.lightAngle,
+      lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting } };
+    // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
+    port.onLightingStatus?.(() => { for (const listener of this.listeners) listener(); });
   }
   piercingOptions(): Readonly<PiercingPreviewOption[]> {
     return structuredClone(this.port.piercingOptions?.() ?? []);
@@ -64,6 +86,11 @@ export class PreviewActions {
   snapshot(): Readonly<PreviewConfig & { camera: CameraState }> {
     return structuredClone({ ...this.state, camera: this.port.cameraState() });
   }
+  /** What the lighting device shows now (null on a preview without the creator rig). Not persisted. */
+  lightingStatus(): Readonly<LightingStatus> | null {
+    const status = this.port.lightingStatus?.();
+    return status ? structuredClone(status) : null;
+  }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   capability(action: PreviewAction): PreviewCapability {
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
@@ -76,6 +103,24 @@ export class PreviewActions {
       return { available: false, reason: "Exposure must be between 0.5 and 2." };
     if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
       return { available: false, reason: "Key light angle must be between 0° and 360°." };
+    if ((action.kind === "preview.setExposure" || action.kind === "preview.setKeyAngle") && this.state.lightingPreset === "creator")
+      return { available: false, reason: CREATOR_FIXED };
+    if (action.kind === "preview.setLightingPreset") {
+      if (!LIGHTING_PRESETS.includes(action.preset)) return { available: false, reason: "That lighting preset does not exist." };
+      if (action.preset === "creator" && !this.port.setLightingPreset) return { available: false, reason: NO_CREATOR };
+    }
+    if (action.kind === "preview.setCreatorLighting") {
+      if (!this.port.setCreatorLighting) return { available: false, reason: NO_CREATOR };
+      const valid = action.key === "intensity" ? INTENSITY_FORMS.includes(action.value)
+        : action.key === "cone" ? CONE_READINGS.includes(action.value)
+          : action.key === "exposure" && Number.isFinite(action.value) && action.value >= CREATOR_EXPOSURE_RANGE.min && action.value <= CREATOR_EXPOSURE_RANGE.max;
+      if (!valid) return { available: false, reason: action.key === "exposure"
+        ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist." };
+    }
+    if (action.kind === "camera.creatorFraming") {
+      if (!this.port.creatorCamera) return { available: false, reason: NO_CREATOR };
+      if (action.page !== "face" && action.page !== "hair") return { available: false, reason: "That creator page does not exist." };
+    }
     if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index))
       return { available: false, reason: "That eye shape is not offered by this head." };
     if (action.kind === "preview.setPiercingPreview" && action.style) {
@@ -101,6 +146,13 @@ export class PreviewActions {
       case "camera.endFovGesture": this.port.endFovGesture(); break;
       case "camera.restore": this.port.restoreCamera(action.camera); break;
       case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); break;
+      case "camera.creatorFraming": this.port.restoreCamera(this.port.creatorCamera!(action.page)); break;
+      case "preview.setLightingPreset":
+        this.port.setLightingPreset?.(action.preset);
+        this.state.lightingPreset = action.preset; break;
+      case "preview.setCreatorLighting":
+        this.state.creatorLighting = { ...this.state.creatorLighting, [action.key]: action.value };
+        this.port.setCreatorLighting!(this.state.creatorLighting); break;
       case "preview.setExposure": this.port.setExposure(action.value); this.state.exposure = action.value; break;
       case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
