@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `f1b732f` | 2026-09-25 | Deep review since `ac251d8`: plate-local UV window and verifier, store coverage, grading-LUT host, skin chain (pipeline/hosts); skin adapter, creator lighting, scene growth (rendering) | 1 High (PREV-29), 6 Medium, 11 Low. Open Highs 3 (at budget). Fixes in claude/cleanup-hosts, claude/cleanup-window, claude/cleanup-render |
 | `ac251d8` | 2026-09-25 | Deep review since `ecb4b33`: plate lift and diagnostics, head camera input, release prep, package gate, site knowledge generator, private-path check, P0 character details; plus a separate security review of the runtime bridge | 2 High (PIPE-28, RB-01), 8 Medium, 15 Low. Open Highs now 4, over budget: feature merges pause until PIPE-28 and RB-01 are fixed |
 | `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixed in claude/release-prep (PREV-20..24, UI-34/35, REL-01; PREV-25 partly; changelog and site corrected); the workflow's first run failed on a test timeout, fixed there, rerun pending |
 | `524a575` | 2026-09-25 | Pre-alpha review of presentation, startup, preview card and desktop host at `7e02636` (completes the `19bf84c` deep review after the legacy-shell removal); the core and pipeline cleanups merged since fix reviewed findings | 0 High, 7 Medium, 6 Low (UI-21..33); UI-05 fixed, UI-06 mostly fixed. Alpha blockers UI-19/20/21/22/23/24/25/27 assigned to claude/alpha-polish |
@@ -69,6 +70,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PREV-26 | Med | Character details | Detail request key ignores launch route, profile, mod set and WolvenKit identity; `ready` is kept for the host's lifetime, so a new hair mod or profile switch isn't picked up until restart (`character-detail-host.ts:173,199-201`) | **Fixed** (claude/cleanup-verifier, 25 Sep); in-place updates inside an existing MO2 mod folder are not detected until restart |
 | REL-02 | Med | Packaging | Package content scan misses lower-case, WSL, percent-encoded, escaped and POSIX user paths; false positives on `git@` remotes (`package-content-scan.ts:18,22`) | **Fixed** (claude/cleanup-hygiene, 25 Sep) |
 | REL-03 | Med | Repo hygiene | `check_private_paths.py` misses an address before a full stop and digit-led local parts; placeholder names match as prefixes; exemptions are by file name anywhere and switch off every pattern; some file types unscanned | **Fixed** (claude/cleanup-hygiene, 25 Sep) |
+| PREV-40 | Med | Lighting | Creator LUT requested once per scene and never re-requested: a profile/LUT-mod/route change or a first activation before WolvenKit leaves the old or neutral grade until restart (`lighting-preset-stage.ts:49-50`) | Open |
+| UI-38 | Med | Rendering | `scene.ts` grew to 838 lines with skin-placement policy and user wording; still renders every frame and allocates per frame; Creator mode adds a 4x MSAA half-float pass every idle frame (extends UI-11) | Open |
+| PREV-41 | Med | Rendering | Brow underlay always projects onto the core head's UVs, even when the resolved head is drawn (`scene.ts:225-243`) | Open |
+| PREV-29 | High | Hosts/cache | Grading-LUT host and character-detail host share the resolver cache and both name batch folders `tmp/batch-<pid>-<n>` from 1: concurrent preparations delete each other's output and can write a lasting `.failed` marker (`resolver-host.ts:132,184,239`) | Open (cleanup-hosts) |
+| PIPE-32 | Med | Verifier | UV-window mapping gate isn't independent: the head-UV coverage reference comes from the same `rasterWindow` it checks (a mirrored raster passes) (`package-bake.ts:79`, `verify-build.ts:185-192`) | Open (cleanup-window) |
+| PIPE-33 | Med | Pipeline | Check doesn't know the UV window: a preset entirely off the plate passes Check, then fails Build with a raw verifier error for the whole collection | Open (cleanup-window) |
+| PREV-30 | Med | Hosts | Grading-LUT host runs WolvenKit directly: no timeout, exit code ignored, no cancel, no .NET-missing guidance (extends PIPE-04/07) | Open (cleanup-hosts) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Mostly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures, hair and skin profiles; character details load with cancellation, supersede and dispose (claude/render-resolver); the head's skin moved onto it with a `skin` slot and the `skin.mt` adapter (claude/skin-material). Open: the core head record (plate, eyes and the fixed default skin shown until the character record arrives) is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -158,9 +166,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Lighting presets and the grading-LUT host** (claude/creator-lighting). Domain: `creator-lighting.ts` (rig tables, falloff, intensity, camera pages), `grading-lut.ts` (display transform, LUT decode, selection by archive precedence), `creator-calibration.ts`. Three adapters: `creator-lighting-rig.ts`, `creator-display.ts` (render-target pass that replaces the studio stage's tone mapping while the preset shows), `lighting-preset-stage.ts` (hooked into `scene.ts`'s render loop). Host: `grading-lut-host.ts` (new `/api/preview-grading-lut` endpoint and `/assets/grading-lut/` files on both hosts; runs WolvenKit outside the resolver's trimmed JSON cache). Browser device: `browser-grading-lut-device.ts`. Actions: `preview.setLightingPreset`, `preview.setCreatorLighting`, `camera.creatorFraming`. (Last reviewed at `ac251d8`.)
-- **Skin material adapter** (claude/skin-material): `src/skin-material.ts` (the `skin.mt` surface arithmetic, the approximate skin light and the shader patch over Three's physical chunks) and `src/head-surface.ts` (resolved head versus core head). Extends the P0 character-detail family; the shader patch fails loudly when a Three.js upgrade changes the chunks it replaces.
-- **Plate-local UV window** (claude/plate-uv-window): `src/plate-uv-window.ts` (window rule and `mesh_decal` UV constants from the plate's UVs), `rasterWindow` in `recipe.ts`, the Shimmer facet sampler in `finish.ts`, texture spaces in the compiler and bake, non-square mip chains, and the verifier's own restatement in `src/mod-verifier/uv-window.ts` (window re-derivation, BC4 stored-row decode, plate-sample mapping gate). The builder now serializes the plate before baking. See [experiment 019](../../experiments/019-uv-window/README.md).
+None. (Reviewed at `f1b732f`; the guidance system will be listed when it lands.)
 
 ## Fixed in claude/cleanup-hygiene
 
@@ -228,6 +234,17 @@ Runtime bridge security review (`projects/xf-runtime-bridge`). Evidence: `bun to
 - **PIPE-31:** the package result gate lost its lexical containment check; a path outside dist that reaches in through a junction is accepted. Fixed in claude/cleanup-verifier.
 - **SITE-01, SITE-02, UI-36, UI-37:** Fixed in claude/cleanup-hygiene (see below).
 - **PIPE-25 (extended):** each V switch opens the installation synchronously on the host.
+- **PREV-42:** a skin component with more than one mesh isn't placed and is drawn beside the core head (z-fight), with no limit line (`scene.ts:581`).
+- **PREV-43:** the toned brow base image is computed over a full 1024² image per V load (~300 ms synchronous); only ~390 vertices are sampled.
+- **UI-39:** production device logs ~5 KB of detail evidence (archive names) to `console.debug` on every V load.
+- **CORE-25:** the creator rig's body sex is a side effect in the saved-appearance port; `trusted-preview-services.ts` mutates the caller's `initial` workspace.
+- **PREV-44:** grading-LUT host runs WolvenKit without timeout or exit-code checks and races the shared resolver cache (extends PREV-07).
+- **UI-40:** calibration tool guesses box units (≤ 1 means fractions) and silently assumes the default exposure.
+- **PREV-31:** LUT failures stored as ready-neutral with no retry; decoded-LUT cache key lacks decoder/WolvenKit identity.
+- **PREV-32:** Xbox detection probes stale `MountedDevices` letters that a mapped network drive may reuse (can block on an offline share).
+- **PREV-33:** the setup card shows only the first unsupported message; unfinished-Epic and unreadable-registry issues never reach the user.
+- **PIPE-34:** the oracle bake with no window writes a plan claiming the plate window while its maps are head-UV.
+- **PIPE-35:** the mapping gate misses sub-millimetre shifts (about 6 texels pass); add a signed-offset bound.
 - **CI (release blocker):** the first Desktop release run failed on a 5.1 s exhaustive flake test under Bun's 5 s default. Tests taking about a second or more locally now carry explicit, commented timeouts (flake-field, glint oracle, mod-verifier resource failures, workspace storage budget, desktop Build deadline).
 
 ## Fixed in claude/wolvenkit-fetch
