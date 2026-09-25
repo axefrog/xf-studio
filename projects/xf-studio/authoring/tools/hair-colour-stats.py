@@ -1,6 +1,7 @@
 """Measure the colours that tools/hair-colour-look.ts captures change.
 
   python tools/hair-colour-stats.py <capture dir> [<capture dir> ...]
+  python tools/hair-colour-stats.py --themes <light capture dir> <dark capture dir>
 
 For each view (face, eye, hair) it compares the all-details frame with the frames
 that hide one detail. Pixels inside the 3D viewport that change by more than 12
@@ -9,6 +10,11 @@ colour (averaged in linear light, re-encoded to sRGB). For the face view it also
 prints the mean of three fixed skin boxes (forehead and both cheeks) and the
 detail-to-skin luminance ratios, which can be compared with the same ratios in an
 in-game frame. Raster measures of private renders, not material values.
+
+With --themes, the two directories must be the same captures in the light and dark UI
+themes. Hair edges over the stage legitimately differ between themes, so it also reports
+"hair@subject": hair pixels whose no-hair frame is identical in both themes (hair in
+front of the character rather than the stage), and its ratio to skin.
 """
 import sys
 from pathlib import Path
@@ -34,8 +40,12 @@ def lum(c):
     return float(np.dot(c, [0.2126, 0.7152, 0.0722]))
 
 
-def view_stats(directory: Path, view: str) -> dict:
-    frame = lambda variant: np.asarray(Image.open(directory / f"{view}-{variant}.png").convert("RGB")).astype(float)
+def load(directory: Path, view: str, variant: str):
+    return np.asarray(Image.open(directory / f"{view}-{variant}.png").convert("RGB")).astype(float)
+
+
+def view_stats(directory: Path, view: str, other: Path | None = None) -> dict:
+    frame = lambda variant: load(directory, view, variant)
     full = frame("all")
     inside = np.zeros(full.shape[:2], bool)
     inside[VIEWPORT] = True
@@ -43,6 +53,9 @@ def view_stats(directory: Path, view: str) -> dict:
     for detail, variant in (("hair", "no-hair"), ("lashes", "no-lashes"), ("brows", "no-brows")):
         mask = (np.abs(full - frame(variant)).sum(-1) > 12) & inside
         out[detail] = dec(full[mask]).mean(0) if mask.any() else np.zeros(3)
+        if detail == "hair" and other is not None:
+            subject = np.abs(frame("no-hair") - load(other, view, "no-hair")).sum(-1) <= 12
+            out["hair@subject"] = dec(full[mask & subject]).mean(0) if (mask & subject).any() else np.zeros(3)
     if view in SKIN_BOXES:
         out["skin"] = np.mean([dec(full[y0:y1, x0:x1].reshape(-1, 3)).mean(0)
                                for x0, y0, x1, y1 in SKIN_BOXES[view]], 0)
@@ -50,14 +63,21 @@ def view_stats(directory: Path, view: str) -> dict:
 
 
 def main():
-    for arg in sys.argv[1:]:
+    args = sys.argv[1:]
+    pairs = {}
+    if args and args[0] == "--themes":
+        if len(args) != 3:
+            raise SystemExit("--themes takes exactly two capture directories")
+        args = args[1:]
+        pairs = {args[0]: Path(args[1]), args[1]: Path(args[0])}
+    for arg in args:
         directory = Path(arg)
         for view in ("face", "eye", "hair"):
-            stats = view_stats(directory, view)
+            stats = view_stats(directory, view, pairs.get(arg))
             line = f"{directory.name:10s} {view:5s} " + " ".join(
                 f"{k}=({','.join(str(int(round(v))) for v in enc(c))})" for k, c in stats.items())
             if "skin" in stats:
-                line += "  " + " ".join(f"{k}/skin={lum(stats[k]) / lum(stats['skin']):.3f}" for k in ("hair", "lashes", "brows"))
+                line += "  " + " ".join(f"{k}/skin={lum(stats[k]) / lum(stats['skin']):.3f}" for k in ("hair", "hair@subject", "lashes", "brows") if k in stats)
             print(line)
 
 

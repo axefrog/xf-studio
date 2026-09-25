@@ -25,11 +25,20 @@ Template defaults [resource]: `AlphaCutoff` 0.33, `RoughnessScale` 1, `Roughness
 
 | Pass | What it does | Grade |
 |---|---|---|
-| `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds a per-pixel, per-frame dither (≈ probability `a`). Inserts `depth \| round(a·63)` into a 3-deep k-buffer (atomic max, reverse-Z). The colour target keeps transmittance `Π(1−a)`. | [source] |
+| `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds the dither threshold below. Inserts `depth \| round(saturate(Strand_Alpha.r)·63)` into a 3-deep k-buffer (atomic max, reverse-Z). The colour target keeps transmittance `Π(1−Strand_Alpha.r)`. | [source] |
 | `hair_basecolor_blend` | For fragments in the k-buffer, adds `(|colour|·w, w)` with `w = stored alpha/63` (additive blend). | [source] |
-| `hair_gbuffer_solid` | Writes the G-buffer for the most opaque of the two front layers, with the same dithered test. GBuffer0 = `sqrt(Σwc/Σw)`. GBuffer1 = packed strand tangent frame. GBuffer2 = `(0, roughness, 1/3 + 2/3·transmittance·thickness/Scattering, Strand_ID)`. | [source] |
+| `hair_gbuffer_solid` | Writes the G-buffer for the most opaque of the two front k-buffer layers, with the same dithered test. GBuffer0 = `sqrt(Σwc/Σw)`. GBuffer1 = packed strand tangent frame. GBuffer2 = `(0, roughness, 1/3 + 2/3·transmittance·thickness/Scattering, Strand_ID)`. | [source] |
 
-Hair is therefore opaque in the G-buffer, with stochastic coverage that TAA/DLSS averages. Its base colour is the alpha-weighted average of the three nearest layers. It is lit once by the deferred light.
+**The dither.** Both passes compute, from the pixel centre `(x, y)` and a per-frame counter `f` (a camera-constant register; its meaning as a frame counter is [hypothesis]):
+
+```
+t = 0.16535948 · (5·frac(0.2·(x + 2y − 1.5 + f)) + frac(2.4084506·x + 3.2535212·y)) + offset
+offset = 2/255 (alpha_accum), 0.0088431 (gbuffer_solid)
+```
+
+A fragment survives when `a > t` [source]. The threshold does not depend on the fragment, so **every layer in a pixel meets the same threshold**. Their coverage is nested rather than independent: the pixel is covered when its most opaque layer survives, not with probability `1 − Π(1−a)`. `t` is close to uniform on [0.0088, 0.8356), and the coarse term cycles every five frames. After TAA/DLSS, a pixel is therefore covered in the fraction `saturate((max a − 0.0088)/0.8268)`, and any layer with `a` above about 0.84 is opaque. This makes hair denser than its alpha values suggest [source arithmetic] ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
+
+Hair is therefore opaque in the G-buffer, with dithered coverage that TAA/DLSS averages. Its base colour is the alpha-weighted average of the three nearest surviving layers. It is lit once by the deferred light.
 
 ## 3. Base colour
 
@@ -102,14 +111,26 @@ For the saved hair, `38_ash_brown` resolves to island_dancer's `ash_brown.hp` th
 
 ## 8. Browser preview mapping
 
-Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/brow-material.ts` (Three adapters).
+Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/brow-material.ts` (Three adapters), `src/stage-backdrop.ts` and `src/viewport-backdrop.ts` (the opaque stage).
 
 | Game step | Preview | Status |
 |---|---|---|
 | Profile bake, truncated lookup, overlay, shadow term, `|c|` | Float profile texture (ID row, root-to-tip row), `texelFetch` | Faithful to §3; bake grade [hypothesis] |
-| Coverage | Remapped `Strand_Alpha.r`; strands use MSAA alpha-to-coverage with no alpha test (≈ dithered coverage) | Approximate (no 3-layer k-buffer) |
+| Coverage | Remapped `Strand_Alpha.r`, stretched over the dither range (`hairResolvedCoverage`); strands and saved lashes are unblended, depth-writing, MSAA alpha-to-coverage with no alpha test (lashes still draw after the makeup layers) | Coverage fraction and its nesting faithful to §2 (see below); colour mixing within a pixel approximate (no 3-layer k-buffer) |
+| Hair cap (`mesh_decal_gradientmap_recolor.mt`) | Mask-blended decal over the scalp (no depth write, no alpha test); gradient indexed by the mask | Linear "over" blend, lighter at partial coverage than the engine's sqrt-space blend |
 | Lighting | Hair-class direct light (§5, gates and per-strand shift included) for key and fill lights on the skinned bitangent; card specular off; Three's ambient diffuse scaled by `EnvProbe/MultiScatter` | Structure [source], constants [community]; environment path approximated, no environment R/TRT |
 | Brow decal | Per-vertex skin albedo under each brow vertex; solves an equivalent linear "over" blend | Faithful where the sampled skin albedo is right |
+
+### Preview coverage
+
+The engine's coverage (§2) is a shared per-pixel threshold, resolved over frames. The preview reproduces its two properties that matter for how dense hair looks:
+
+- **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
+- **Range.** The fragment alpha is `hairResolvedCoverage(remapped alpha)`, which stretches coverage over the dither range, so strands above about 0.84 are solid.
+
+Alpha-to-coverage is deterministic, so there is no grain to accumulate over frames and render-on-demand needs nothing extra. Its limits: four MSAA samples quantise coverage (the driver dithers the masks); colour within a pixel comes from whichever layer owns each sample, not from the alpha-weighted average of the three nearest layers; and TAA's temporal smoothing is not reproduced.
+
+**The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
 
 ## Open questions
 
@@ -117,7 +138,7 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 2. Profile bake: colour space, sample positions and interpolation. A character-editor ladder of colours from one pack, shot in one frame, would separate the curve from lighting ([request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request)).
 3. Which `brown_liquorice.hp` the game binds for the saved lashes.
 4. The hair local-light and environment-probe paths, and the Scattering/thickness term.
-5. The global flag that multiplies coverage by 1.33.
+5. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter.
 6. Sign of the strand direction (root→tip) as stored in GBuffer1, which sets the direction of the R/TRT shifts.
 7. How much self-shadowing, contact shadows, rain wetness and tone mapping darken hair in typical scenes. The base-colour pass alone scales colour by down to 0.25 when the character is wet.
 
