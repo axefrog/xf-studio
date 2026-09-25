@@ -316,8 +316,8 @@ Parameters and registers below are from the serialized 2.31 templates [resource]
 | `Normal` (4), `DetailNormal` (5), `DetailNormalInfluence` (6) | RG-packed tangent normals with Z reconstructed as `sqrt(1−x²−y²)`, blended by influence | [source] |
 | `Roughness` (8) | **R** = base roughness. **B** gates a spatially varying bias between `DetailRoughnessBiasMin/Max` (9/10), giving `saturate(R·(1+B·(bias−1)))`, which is written to GBuffer2.y. **G** is written to GBuffer2.x, the slot the light reads as metalness. Vanilla head G is zero. | [source] [saved-skin trace](../research/eye-artistry/saved-skin-shader-and-winner.md) |
 | `MicroDetail` (11), `MicroDetailUVScale01/02` (12/13), `MicroDetailInfluence` (14) | Tiling micro-normal at two frequencies, derivative-guided; B of Roughness weights it | [source] |
-| `TintColorMask` (15), `TintColor` (16), `TintScale` (17) | Character-creator tone tint | [wiki] `hair-and-skin-material-properties.md` L28-38; mask channel semantics [hypothesis] |
-| `SecondaryAlbedo` (1), `…Influence` (2), `…TintColorInfluence` (3) | Alpha-blended overlay, used for freckles and tattoo frameworks | [wiki] |
+| `TintColorMask` (15), `TintColor` (16), `TintScale` (17) | Character-creator tone tint. Weight `abs(TintScale)·Mask.R`; a positive scale **multiplies** albedo by `TintColor`, a negative one **overlays** it. Mask **G** and **B** are microdetail selectors (tile blend and UV frequency), not tint. Per-tone values: [head CC rendering §2](head-cc-rendering.md#2-skin-type-tone-and-the-complexion-texture-set) | [source] decompiled `12806642364631437234`; [wiki] `hair-and-skin-material-properties.md` L28-38 (multiply only) |
+| `SecondaryAlbedo` (1), `…Influence` (2), `…TintColorInfluence` (3) | Overlay composited by `Influence · SecondaryAlbedo.A`, tinted toward the tone by `TintColorInfluence`; used by freckle and tattoo frameworks | [source] [wiki] |
 | `SkinProfile` (24) | Bound as a **slot index 0–7** into a runtime table. The index is packed into GBuffer1.w and GBuffer2.w. The table holds `CSkinProfile` colours and blur. | [source] |
 | `EmissiveMask` (18), `EmissiveEV` (19) | Mask **R** × EV. If this exceeds 0.001, GBuffer2.w gets an emissive flag plus 6-bit intensity. | [source] |
 | `CavityIntensity` (7), `Detailmap_Stretch/Squash` (20/21), `Bloodflow` (22), `BloodColor` (23) | Wrinkle maps (RG normals); the other roles are unmapped | [source] (wrinkle RG) / [hypothesis] |
@@ -373,7 +373,7 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 | `WetnessRoughness` (5), `WetnessStrength` (6) | Forward-lit specular added on top of already-lit pixels | [source] |
 | `AdditiveAlphaBlend` (0), `SubsurfaceBlur` (7) | Not read by this program | [source] |
 
-**Naming gotcha.** This template's name refers to the ocular occlusion/tear film. The Blender add-on reads Mask R as alpha and A as coat, which does not match the program. That the vanilla eye-shadow mesh uses this template is [hypothesis].
+**Naming gotcha.** This template's name refers to the ocular occlusion/tear film. The Blender add-on reads Mask R as alpha and A as coat, which does not match the program. The vanilla user is the player eye mesh's wetness chunk `eyeWetness_MAT` (`eyeshadow_base.mi`: `ShadowColor` 125,58,58, `Intensity` 0.7, `Exponent` 0.8; female chunk 2, male chunk 1) [resource] ([head CC rendering](head-cc-rendering.md#4-eyes-lashes-brows-hair-and-beard)).
 
 ### 4.5 `mesh_decal` family (`post_gbuffer`, all Standard class, MeshSkinned available)
 
@@ -499,7 +499,7 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 3. **Skin-profile table.** The table holds 8 slots per frame. What happens with more than 8 distinct `.sp` on screen? How are `blurSize`, `diffuse`, `falloff`, `roughness0/1` and `lobeMix` used? `lobeMix` suggests a dual-lobe skin specular that the global light program did not show; trace the SSS combine and local-light variants.
 4. **Metal ≥ 0.1 threshold.** The flag controlling the Subsurface class's albedo = 1 path is unknown. Does metallic makeup over skin break SSS continuity at soft edges?
 5. **Eye second vector.** What exactly is the octahedral vector the Eye class stores, and how does the light use it? What consumes `Blick`, `SubsurfaceFactor` and `AntiLightbleed*`?
-6. **`eye_shadow` as a gloss shell.** Is it usable as a glossy-makeup shell (sorting, `transparent_back_face` stage semantics, blink, cost)? Which vanilla mesh uses it?
+6. **`eye_shadow` as a gloss shell.** Is it usable as a glossy-makeup shell (sorting, `transparent_back_face` stage semantics, blink, cost)? (Its vanilla user is the eye mesh's wetness chunk.)
 7. **Runtime gradient atlases.** Recover the atlas construction for `.gradient` and `.hp` (row assignment, colour space, filtering). This affects eyes, brows, lashes and hair.
 8. **Unmapped debris.** Recover the G-buffer render-target formats (8-bit vs 10-bit precision affects the sqrt encoding) and the meaning of the low 5 stencil bits.
 9. **Ray-tracing libraries.** Parse the ray-tracing libraries in `staticshader_final.cache`. Their names survive (`ShadeSurfaceWithLightSample*`, `GBuffer0..2`), which could confirm the BRDF and G-buffer semantics independently.
