@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { parseCollection } from "../src/preset-collection";
@@ -9,10 +9,13 @@ import type { PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
 import { EyePlateError, ensureEyePlate, type EyePlateResult } from "../src/eye-plate-service";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
+import { runProcessTree } from "../src/process-tree";
 
 export const buildDeadlineMs = 40 * 60_000;
-const toolNames = ["build_collection_package.py", "study/build.py", "study/verify.py",
-  "study/mip_maps.py", "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"];
+/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
+export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
+export const builderEntry = "app/tools/build.js";
+const toolNames = [builderEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 const directory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 const signature = (path: string, expected: string) => {
@@ -89,7 +92,7 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   wolvenKitProbe: WolvenKitProbe = probeWolvenKit): string | null {
   try {
     const manifest = JSON.parse(readFileSync(resolve(toolsRoot, "manifest.json"), "utf8"));
-    if (manifest.schema !== "xfs/desktop-build-tools-1" || !manifest.files ||
+    if (manifest.schema !== BUILD_TOOLS_SCHEMA || !manifest.files ||
       JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...toolNames].sort()))
       return "The packaged build tools are incomplete.";
     const actualTools = realpathSync(toolsRoot);
@@ -100,7 +103,6 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
         return "The packaged build tools failed integrity checks.";
     }
   } catch { return "The packaged build tools are unavailable."; }
-  if (!settings.pythonExecutable || !file(settings.pythonExecutable)) return "Select a Python executable for Build.";
   if (!settings.wolvenKitCli || !file(settings.wolvenKitCli)) return "Select a WolvenKit CLI executable for Build.";
   if (!signature(settings.wolvenKitCli, "MZ")) return "The selected WolvenKit CLI is not a Windows executable.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
@@ -118,20 +120,17 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   } catch { return "Private build storage uses a linked path."; }
   // Electrobun installs app resources below userData. Its read-only tool bundle
   // may share that parent, but none of the writable package roots may overlap
-  // an input (including an MO2 root unknown to the Python wrapper).
+  // an input (including an MO2 root unknown to the package builder).
   try {
     const output = realpathSync(dataRoot);
     const writable = privateRoots.map(name => resolve(output, name));
     for (const input of [toolsRoot, settings.gameRoot,
-      settings.wolvenKitCli, settings.pythonExecutable, bun, settings.mo2Root].filter((v): v is string => !!v)) {
+      settings.wolvenKitCli, bun, settings.mo2Root].filter((v): v is string => !!v)) {
       const source = realpathSync(input);
       if (writable.some(path => inside(path, source) || inside(source, path)))
         return "Private build data overlaps a configured input.";
     }
   } catch { return "A configured build path is unavailable."; }
-  const probe = spawnSync(settings.pythonExecutable, ["-c", "import numpy; from PIL import Image"],
-    { timeout: 5000, windowsHide: true, stdio: "ignore" });
-  if (probe.error || probe.status !== 0) return "Python needs NumPy and Pillow for the independent verifier.";
   return null;
 }
 
@@ -143,7 +142,7 @@ export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, 
 export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
   gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal });
 
-/** Prepare the built-in eye plate, then run the wrapper as one bounded process tree; publish only the shared verified result. */
+/** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
   timeoutMs = buildDeadlineMs, signal?: AbortSignal, wolvenKitProbe: WolvenKitProbe = probeWolvenKit,
   preparePlate: DesktopPlatePreparer = prepareDesktopPlate): Promise<BuildOutcome> {
@@ -183,53 +182,20 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
   mkdirSync(work, { recursive: true, mode: 0o700 });
   const snapshot = resolve(work, "collection.json");
   writeFileSync(snapshot, source, { mode: 0o600, flag: "wx" });
-  const python = settings.pythonExecutable!;
-  const args = [resolve(toolsRoot, "build_collection_package.py"), "--collection", snapshot,
-    "--bun", settings.bunExecutable || process.execPath, "--plate", plate.directory, "--plate-manifest", plate.manifestFile,
+  const args = [resolve(toolsRoot, builderEntry), "--collection", snapshot,
+    "--plate", plate.directory, "--plate-manifest", plate.manifestFile,
     "--wolvenkit", settings.wolvenKitCli!, "--gamepath", settings.gameRoot!,
-    "--app-root", resolve(toolsRoot, "app"), "--study-root", resolve(toolsRoot, "study"),
-    "--work-root", work, "--build-root", buildRoot, "--dist-root", stageRoot,
-    "--preflight-script", resolve(toolsRoot, "app/tools/preflight.js"),
-    "--bake-script", resolve(toolsRoot, "app/tools/bake.js"), "--machine-result"];
+    "--app-root", toolsRoot, "--build-root", buildRoot, "--dist-root", stageRoot, "--machine-result"];
   try {
-    const processResult = await new Promise<{ code: number | null; stdout: string; stderr: string; stopped: string | null }>(done => {
-      const child = spawn(python, args, { cwd: work, windowsHide: true, detached: process.platform !== "win32",
-        stdio: ["ignore", "pipe", "pipe"] });
-      let stdout = "", stderr = "", stopped: string | null = null, settled = false;
-      const keep = (old: string, chunk: Buffer) => (old + chunk.toString("utf8")).slice(-128_000);
-      child.stdout.on("data", chunk => { stdout = keep(stdout, chunk); });
-      child.stderr.on("data", chunk => { stderr = keep(stderr, chunk); });
-      const stopTree = (reason: string) => {
-        if (settled || stopped) return;
-        stopped = reason;
-        if (child.pid) {
-          if (process.platform === "win32") {
-            const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-            killer.on("error", () => child.kill());
-            killer.on("close", code => { if (code !== 0) child.kill(); });
-          } else { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
-        } else child.kill();
-      };
-      const abort = () => stopTree("package_build_cancelled");
-      const timer = setTimeout(() => stopTree("package_build_timeout"), remainingMs);
-      if (signal?.aborted) abort();
-      else signal?.addEventListener("abort", abort, { once: true });
-      const finish = (code: number | null) => {
-        if (settled) return;
-        settled = true; clearTimeout(timer); signal?.removeEventListener("abort", abort);
-        done({ code, stdout, stderr, stopped });
-      };
-      child.on("error", () => finish(null));
-      child.on("close", code => finish(code));
-    });
-    if (processResult.stopped) return { kind: "failure", code: processResult.stopped,
-      message: processResult.stopped === "package_build_timeout" ? "Package Build exceeded its time limit and was stopped." :
-        "Package Build was cancelled." };
-    if (processResult.code !== 0) {
-      console.error("Desktop package tool failed:", processResult.stderr.slice(-3000));
+    const run = await runProcessTree(settings.bunExecutable || process.execPath, args, { cwd: work, signal, timeoutMs: remainingMs });
+    if (run.stopped === "timeout")
+      return { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
+    if (run.stopped === "cancelled") return { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." };
+    if (run.exitCode !== 0) {
+      console.error("Desktop package tool failed:", (run.error?.message ?? run.stderr).slice(-3000));
       return { kind: "failure", code: "package_build_failed", message: "Package Build failed. No candidate was published." };
     }
-    const line = processResult.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
+    const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
     if (!line) throw Error("Package tool completed without a result.");
     const built = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageBuild;
     verifyPackageBuildResult(built, collection, prepared, source, stageRoot, plate.manifest);

@@ -1,0 +1,162 @@
+// Compile one filtered collection snapshot into an intermediate build: baked maps, full
+// mip chains, converted XBM/mesh/morph/app/customization resources, the pre-pack path
+// gate, the packed archive and its ArchiveXL declaration, and build.json. Never installs.
+//
+// TypeScript port of experiments/005-preset-collection/build.py, which remains a research
+// oracle. Differences, all deliberate: the bake runs in-process; the builder no longer
+// writes PNG copies of the maps or asks WolvenKit for a PNG export, because only the old
+// Python verifier read them (the TypeScript verifier reads the raw maps and the DDS export).
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { archiveInventory } from "./archive-inventory-fs";
+import { bakeCollection, BAKED_CHANNELS, type BakedRecord, type CollectionPlan } from "./package-bake";
+import { encodeFlatDds, flatMipChain } from "./flat-mip-chain";
+import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
+import {
+  appearanceResource, archiveXlDeclaration, assertBrandedPlan, customizationResource, HandleCounter,
+  resourceJson, rewritePlateMesh, rewritePlateMorph,
+} from "./package-resources";
+
+/** Accepted plate stems: the host-derived built-in plate, then the historical Experiment 004 override name. */
+export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
+
+export interface ResourceBuildOptions {
+  /** Filtered, package-only collection value (already validated by the preflight). */
+  readonly collection: unknown;
+  /** Fresh intermediate directory; must not exist. */
+  readonly output: string;
+  /** Directory holding exactly one plate mesh/morphtarget pair. */
+  readonly plate: string;
+  readonly gameRoot: string;
+  readonly tools: PackageResourceTools;
+  readonly signal?: AbortSignal;
+  readonly log?: (line: string) => void;
+}
+
+export interface BuildRecord {
+  plan: CollectionPlan; compiled: BakedRecord[]; steps: { name: string; exitCode: number }[];
+  plateStem: string; plateInputs: { path: string; sha256: string }[];
+  artifacts: ReturnType<typeof archiveInventory>; archiveSha256: string;
+  installed: false; gameRenderingVerified: false;
+}
+
+const TEXTURE_GROUPS: readonly (readonly [string, TextureImportSettings])[] = [
+  ["dds-colour", { IsGamma: true, TextureGroup: "TEXG_Generic_Color", RawFormat: "TRF_TrueColor", Compression: "TCM_QualityColor",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+  ["dds-scalar", { IsGamma: false, TextureGroup: "TEXG_Generic_Grayscale", RawFormat: "TRF_Grayscale", Compression: "TCM_QualityR",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+];
+const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json", "roundtrip", "export-dds",
+  "input/dds-colour", "input/dds-scalar", "archive", "package/archive/pc/mod"];
+
+const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
+const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
+const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+
+/** The one plate stem present as a complete mesh/morphtarget pair in `plate`, or an error. */
+export function plateStem(plate: string): string {
+  const stems = PLATE_STEMS.filter(stem => isFile(join(plate, stem + ".mesh")) && isFile(join(plate, stem + ".morphtarget")));
+  if (stems.length !== 1) throw Error(`Plate directory must contain exactly one mesh/morphtarget pair: ${plate}`);
+  return stems[0];
+}
+
+function checkCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) throw new PackageToolError("package_build_cancelled", "Package Build was cancelled.");
+}
+
+export async function buildPackageResources(options: ResourceBuildOptions): Promise<BuildRecord> {
+  const out = resolve(options.output), plate = resolve(options.plate), game = resolve(options.gameRoot);
+  const log = options.log ?? (() => {});
+  if (existsSync(out)) throw Error(`Output already exists: ${out}`);
+  const stem = plateStem(plate);
+  for (const folder of FOLDERS) mkdirSync(join(out, ...folder.split("/")), { recursive: true });
+  const steps: BuildRecord["steps"] = [];
+  const step = async (name: string, run: () => Promise<ToolStep>) => {
+    checkCancelled(options.signal);
+    try {
+      const result = await run();
+      writeFileSync(join(out, "logs", `${name}.log`), result.log, "utf8");
+      steps.push({ name, exitCode: result.exitCode });
+      log(`${name} complete`);
+    } catch (error) {
+      if (error instanceof PackageToolError) writeFileSync(join(out, "logs", `${name}.log`), error.log, "utf8");
+      throw error;
+    }
+  };
+
+  // 1. Compile each preset's three maps in-process, yielding between presets so a cancel is seen.
+  const baked = join(out, "baked");
+  const { records } = await bakeCollection(options.collection, baked, async () => {
+    await new Promise(done => setImmediate(done));
+    checkCancelled(options.signal);
+  });
+  writeFileSync(join(out, "logs", "bake.log"),
+    `Compiled ${records.length} authored presets; ${records.length * 3} map inputs. No installation.\n`, "utf8");
+  steps.push({ name: "bake", exitCode: 0 });
+  log("bake complete");
+  // The build record keeps the plan exactly as written to plan.json.
+  const plan: CollectionPlan = readJson(join(baked, "plan.json"));
+  const compiled: BakedRecord[] = readJson(join(baked, "compiled.json"));
+  assertBrandedPlan(plan);
+  const archive = join(out, "archive");
+  const modelDir = join(archive, ...dirname(plan.mesh).split("/"));
+  const appDir = join(archive, ...dirname(plan.app).split("/"));
+  const textureDir = join(archive, ...plan.depot.split("/"), "textures");
+  for (const path of [modelDir, appDir, textureDir]) mkdirSync(path, { recursive: true });
+
+  // 2. Full coverage-space mip chains, written as the DDS inputs WolvenKit imports without regenerating mips.
+  plan.presets.forEach((preset, i) => {
+    const record = compiled[i];
+    if (record.id !== preset.id) throw Error(`Compiled record ${i} does not match preset ${preset.id}`);
+    const raw = {} as Record<typeof BAKED_CHANNELS[number], Uint8Array>;
+    for (const map of record.maps) {
+      const data = new Uint8Array(readFileSync(join(baked, map.file)));
+      if (sha256(data) !== map.sha256) throw Error(`Baked ${map.channel} map changed after compiling: ${map.file}`);
+      raw[map.channel] = data;
+    }
+    const chain = flatMipChain(raw.diffuse, raw.roughness, raw.metalness, record.size);
+    for (const channel of BAKED_CHANNELS) {
+      const group = channel === "diffuse" ? "dds-colour" : "dds-scalar";
+      writeFileSync(join(out, "input", group, `${preset.appearance}_${channel}.dds`), encodeFlatDds(chain[channel], record.size, channel));
+    }
+  });
+  for (const [group, settings] of TEXTURE_GROUPS)
+    await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
+
+  // 3. Rewrite the plate's appearances/material and the morph's base mesh; geometry is not touched.
+  await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
+  const handles = new HandleCounter();
+  const mesh = rewritePlateMesh(readJson(join(out, "source-json", stem + ".mesh.json")), plan, handles);
+  writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
+  const morph = rewritePlateMorph(readJson(join(out, "source-json", stem + ".morphtarget.json")), plan);
+  writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
+  await step("deserialize-models", () => options.tools.deserialize(join(out, "models-json"), modelDir));
+
+  // 4. The .app template and the character-customization selector.
+  const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+  writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
+  writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
+  await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
+  await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
+  await step("roundtrip", () => options.tools.serialize(archive, join(out, "roundtrip")));
+  await step("export-texture-mips", () => options.tools.exportTextures(textureDir, join(out, "export-dds"), "dds", game));
+
+  // 5. Pre-pack gate: the physical tree must equal the planned canonical resource paths exactly.
+  checkCancelled(options.signal);
+  const artifacts = archiveInventory(archive, plan);
+  const packageDir = join(out, "package", "archive", "pc", "mod");
+  await step("pack", () => options.tools.pack(archive, packageDir));
+  const packed = join(packageDir, "archive.archive");
+  if (!isFile(packed) || readdirSync(packageDir).length !== 1) throw Error("WolvenKit did not produce exactly one packed archive.");
+  const archiveFile = join(packageDir, plan.namespace + ".archive");
+  renameSync(packed, archiveFile);
+  writeFileSync(join(packageDir, plan.namespace + ".archive.xl"), archiveXlDeclaration(plan), "utf8");
+  const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
+    .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
+  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, artifacts,
+    archiveSha256: sha256(readFileSync(archiveFile)), installed: false, gameRenderingVerified: false };
+  writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
+  log(`BUILD ${out}`);
+  return record;
+}

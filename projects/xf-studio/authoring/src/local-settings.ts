@@ -15,7 +15,6 @@ export interface LocalSettings {
   mo2ProfileId: string | null;
   manualModRoot: string | null;
   wolvenKitCli: string | null;
-  pythonExecutable: string | null;
   bunExecutable: string | null;
   sourceCache: { directory: string | null; maxBytes: number };
   preview: { cacheDirectory: string | null; outputDirectory: string | null };
@@ -33,7 +32,6 @@ export const defaultLocalSettings = (): LocalSettings => ({
   mo2ProfileId: null,
   manualModRoot: null,
   wolvenKitCli: null,
-  pythonExecutable: null,
   bunExecutable: null,
   sourceCache: { directory: null, maxBytes: 2 * 1024 ** 3 },
   preview: { cacheDirectory: null, outputDirectory: null },
@@ -70,14 +68,15 @@ const profile = (value: unknown): string | null => {
 /**
  * Fields that earlier Studio versions saved and that are now intentionally ignored.
  * `plateInput` pointed at a private plate folder; the expanded eye plate is now built in.
+ * `pythonExecutable` ran the old Python package builder; Build now runs entirely in TypeScript.
  */
-const RETIRED_FIELDS = ["plateInput"] as const;
+const RETIRED_FIELDS = ["plateInput", "pythonExecutable"] as const;
 
 /** Strict parsing is intentional: unknown fields could accidentally persist secrets. */
 export function parseLocalSettings(value: unknown): LocalSettings {
   const root = object(value, "Settings");
   keys(root, ["schema", "revision", "gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-    "wolvenKitCli", "pythonExecutable", "bunExecutable", "sourceCache", "preview", "installMode", "updates"], "Settings");
+    "wolvenKitCli", "bunExecutable", "sourceCache", "preview", "installMode", "updates"], "Settings");
   if (root.schema !== LOCAL_SETTINGS_SCHEMA) throw Error("Unsupported local settings version.");
   if (!Number.isSafeInteger(root.revision) || (root.revision as number) < 0) throw Error("Settings revision is invalid.");
   const cache = object(root.sourceCache, "Source cache");
@@ -98,7 +97,6 @@ export function parseLocalSettings(value: unknown): LocalSettings {
     mo2ProfileId: profile(root.mo2ProfileId),
     manualModRoot: path(root.manualModRoot, "Manual mod root"),
     wolvenKitCli: path(root.wolvenKitCli, "WolvenKit CLI"),
-    pythonExecutable: path(root.pythonExecutable, "Python executable"),
     bunExecutable: path(root.bunExecutable, "Bun executable"),
     sourceCache: { directory: path(cache.directory, "Source cache directory"), maxBytes: cache.maxBytes as number },
     preview: { cacheDirectory: path(preview.cacheDirectory, "Preview cache directory"),

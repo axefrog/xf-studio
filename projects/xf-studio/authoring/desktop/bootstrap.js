@@ -127,7 +127,6 @@ const descriptors = [
   ["mo2Root", "Mod Organizer 2 instance folder"],
   ["mo2ProfileId", "Mod Organizer 2 profile"],
   ["wolvenKitCli", "WolvenKit CLI executable"],
-  ["pythonExecutable", "Optional Python executable"],
   ["bunExecutable", "Optional Bun executable"],
 ];
 const fieldsRoot = setup.querySelector("#desktop-setup-fields");

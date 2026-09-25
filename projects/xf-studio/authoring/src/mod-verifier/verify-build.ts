@@ -35,7 +35,7 @@ export interface VerifyBuildOptions {
   readonly wolvenkit: string;
   /** Empty or absent directory for the unpacked archive; defaults to <build>/unpacked. */
   readonly unpackDir?: string;
-  /** Serialized source plate, relative to the build; defaults to the Experiment 004 names. */
+  /** Serialized source plate, relative to the build; defaults to the build record's `plateStem`. */
   readonly sourcePlate?: { readonly mesh: string; readonly morph: string };
   /** Test seam; defaults to `wolvenkit unbundle <archive> -o <dir>`. */
   readonly unbundle?: (archive: string, output: string) => UnbundleResult;
@@ -184,7 +184,10 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const archive = join(out, "archive"), roundtrip = join(out, "roundtrip");
   ensure(sameJson(resourceRecords(listFiles(archive), plan), build.artifacts), "Generated resource inventory changed after pack");
   const root = (file: string) => readJson(join(roundtrip, file)).Data.RootChunk;
-  const plate = options.sourcePlate ?? { mesh: "source-json/xfas_eye_plate.mesh.json", morph: "source-json/xfas_eye_plate.morphtarget.json" };
+  // As verify.py: the build record names the plate stem; builds that predate it used the Experiment 004 name.
+  const stem = build.plateStem ?? "xfas_eye_plate";
+  ensure(typeof stem === "string" && /^[a-z0-9_]+$/.test(stem), "Build record has an invalid plate stem");
+  const plate = options.sourcePlate ?? { mesh: `source-json/${stem}.mesh.json`, morph: `source-json/${stem}.morphtarget.json` };
   const records: Node[] = build.compiled;
   ensure(Array.isArray(records) && records.length === plan.presets.length, "Build record does not list one compiled record per preset");
   records.forEach((record, i) => ensure(record.id === plan.presets[i].id, `Compiled record ${i} does not match preset ${plan.presets[i].id}`));

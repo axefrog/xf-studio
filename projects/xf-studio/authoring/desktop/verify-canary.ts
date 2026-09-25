@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "./electrobun.config";
+import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
 
 // A private packaging gate. The checked files are the actual installer/update
 // artifacts, not the source `static` tree that Electrobun consumes.
@@ -61,11 +62,9 @@ sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootst
 const toolPrefix = `${bundle}/Resources/app/build-tools/`;
 const toolFiles = members.filter(name => name.startsWith(toolPrefix) && !name.endsWith("/"))
   .map(name => name.slice(toolPrefix.length));
-sameMembers(toolFiles, ["manifest.json", "build_collection_package.py", "study/build.py", "study/verify.py",
-  "study/mip_maps.py", "study/archive_inventory.py", "app/tools/preflight.js", "app/tools/bake.js"],
-"Packaged build tools");
+sameMembers(toolFiles, ["manifest.json", builderEntry], "Packaged build tools");
 const toolManifest = JSON.parse(tar(["-xOf", archive, toolPrefix + "manifest.json"]));
-if (toolManifest.schema !== "xfs/desktop-build-tools-1" ||
+if (toolManifest.schema !== BUILD_TOOLS_SCHEMA ||
     JSON.stringify(Object.keys(toolManifest.files).sort()) !== JSON.stringify(toolFiles.filter(name => name !== "manifest.json").sort()))
   throw Error("Packaged build tool manifest is incomplete.");
 for (const name of toolFiles.filter(name => name !== "manifest.json")) {
@@ -90,4 +89,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Seven allowlisted Studio view files and seven hashed asset-free build tools; no private preview assets or update feed.");
+console.log("Seven allowlisted Studio view files and one hashed asset-free build tool; no private preview assets or update feed.");
