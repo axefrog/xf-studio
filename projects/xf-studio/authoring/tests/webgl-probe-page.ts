@@ -6,6 +6,9 @@
  * 2. Measures the studio display against the linear solve (PREV-50): a decal drawn with the forward "over" colour and
  *    alpha that `forwardDecal` solves over a known skin must show the colour of the game's square-root-space blend,
  *    drawn as one opaque surface through the same display. Also records the old direct path for comparison.
+ * 3. The authored makeup plate (plate-blend.ts), through the makeup stack itself: experiment 016's Board 5 (black Matte at 25, 50
+ *    and 75 % over skin) and two overlapping layers, measured scene-linear in a half-float target under a flat ambient light, against
+ *    the square-root-space predictions and the export's merged decal.
  * Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
@@ -15,12 +18,17 @@ import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTextu
 import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forwardDecal, gbufferColour, type Rgb } from "../src/face-decal-material";
 import type { DecalKind } from "../src/render-templates";
 import { createLinearDisplay, linearTargetSupported } from "../src/linear-display";
+import { createMakeupStack } from "../src/makeup-stack";
+import { mergeFlatSample, type MergedSample } from "../src/preset-compiler";
+import { initialRecipe, type Layer } from "../src/recipe";
 import { createSkinMaterial, skinParameters } from "../src/skin-material";
 import { stageBackdropPixels } from "../src/stage-backdrop";
 
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[];
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
-  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; failure?: string };
+  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; failure?: string;
+  plate?: { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
+    variants: boolean[] } };
 const probe: Probe = { ok: false, linear: false, renderer: "", errors: [], programs: [], blends: [], opaque: { studio: [], direct: [] }, backdrop: { studio: [], direct: [] } };
 (window as unknown as { probe?: Probe }).probe = undefined;
 
@@ -146,6 +154,82 @@ try {
   probe.opaque = { studio: draw("studio"), direct: draw("direct") };
   under.visible = false;
   probe.backdrop = { studio: draw("studio"), direct: draw("direct") };
+
+  // 4. The authored plate. A flat ambient light and no environment make every surface's light proportional to its colour, and every
+  // surface (skin, layers, reference) is Matte, so ratios of scene-linear pixels are ratios of colours.
+  if (probe.linear) {
+    const plateScene = new THREE.Scene();
+    plateScene.add(new THREE.AmbientLight(0xffffff, 1));
+    const matte = (rgb: Rgb) => { const m = new THREE.MeshPhysicalMaterial({ roughness: 0.88, metalness: 0 }); m.color.setRGB(...rgb, THREE.LinearSRGBColorSpace); return m; };
+    const skinColour = decalColourUnits([214, 170, 150]);
+    const skinQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matte(skinColour));
+    plateScene.add(skinQuad);
+    // The plate: a skinned quad in front of the skin, bound to one bone at rest.
+    const plateGeometry = new THREE.PlaneGeometry(2, 2);
+    plateGeometry.translate(0, 0, 0.01);
+    const count = plateGeometry.getAttribute("position").count;
+    plateGeometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+    plateGeometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Array.from({ length: count * 4 }, (_, i) => i % 4 ? 0 : 1), 4));
+    const bone = new THREE.Bone(), anchor = new THREE.SkinnedMesh(plateGeometry);
+    plateScene.add(bone, anchor);
+    anchor.bind(new THREE.Skeleton([bone]));
+    const stack = createMakeupStack(anchor, 1);
+    const fill = (value: number, size: number) => new THREE.BufferAttribute(new Float32Array(count * size).fill(value), size);
+    const underlay = () => ({ colour: new THREE.BufferAttribute(Float32Array.from({ length: count * 3 }, (_, i) => skinColour[i % 3]!), 3),
+      roughness: fill(0.88, 1), metalness: fill(0, 1) });
+    const mask = (alpha: number) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 4;
+      const pixels = new Uint8ClampedArray(4 * 4 * 4).fill(255);
+      for (let i = 3; i < pixels.length; i += 4) pixels[i] = alpha;
+      canvas.getContext("2d")!.putImageData(new ImageData(pixels, 4, 4), 0, 0);
+      return canvas;
+    };
+    const target = new THREE.WebGLRenderTarget(64, 64, { type: THREE.HalfFloatType, depthBuffer: true });
+    const renderLinear = () => {
+      stack.prepareBlend(renderer);
+      renderer.setRenderTarget(target);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      renderer.render(plateScene, camera);
+      const pixel = new Float32Array(4);
+      gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.FLOAT, pixel);
+      renderer.setRenderTarget(null);
+      return [...pixel.slice(0, 3)];
+    };
+    const base = initialRecipe().layers[0]!;
+    const layer = (color: string, alpha: number): Layer => ({ ...base, enabled: true, color, finish: "matte", opacity: alpha / 255 });
+    const show = (stackLayers: { color: string; alpha: number }[], squareRoot: boolean) => {
+      stack.setUnderlaySource(squareRoot ? underlay : () => null);
+      stack.setCanvases(stackLayers.map(item => mask(item.alpha)));
+      stackLayers.forEach((item, i) => stack.updateLayer(i, layer(item.color, item.alpha)));
+      return renderLinear();
+    };
+    stack.setCanvases([]);
+    const bare = renderLinear();
+    const ratio = (pixel: number[]) => pixel.map((value, k) => value / bare[k]!);
+    const steps = [64, 128, 191].map(alpha => ({ coverage: alpha / 255, sqrt: ratio(show([{ color: "#000000", alpha }], true)),
+      linear: ratio(show([{ color: "#000000", alpha }], false)) }));
+    // Plum at 60 % under a pale gold at 50 %: the export's merged decal over the same skin, drawn as one opaque Matte surface.
+    const pair = [{ color: "#6d4a7e", alpha: 153 }, { color: "#e8c872", alpha: 128 }];
+    const previewPixel = show(pair, true), linearPixel = show(pair, false);
+    // Every plate variant compiles and draws with the blend: game-matched Shimmer's maps and a Colour-shifting tint over the pair.
+    stack.setUnderlaySource(underlay);
+    stack.setCanvases([mask(153), mask(128), mask(200)]);
+    const optics = { size: 4, normal: new Uint8Array(64).fill(128), surface: new Uint8Array(64).fill(200) };
+    stack.updateLayer(0, layer("#6d4a7e", 153));
+    stack.updateLayer(1, { ...layer("#e8c872", 128), finish: "shimmer", optics: { model: "game-matched-1" } }, optics);
+    stack.updateLayer(2, { ...layer("#3a2350", 200), finish: "iridescent", optics: { model: "game-matched-1", shift: { color: "#3fd4c2", strength: 0.8 } } });
+    renderLinear();
+    const variants = stack.blendDiagnostics().layers.map(item => item.squareRoot);
+    let merged: MergedSample = { color: [0, 0, 0], roughness: 0, metalness: 0, coverage: 0 };
+    for (const item of pair) merged = mergeFlatSample(merged, { color: decalColourUnits([1, 3, 5].map(i => parseInt(item.color.slice(i, i + 2), 16))), roughness: 0.88, metalness: 0 }, item.alpha / 255);
+    stack.setCanvases([]);
+    (skinQuad.material as THREE.MeshPhysicalMaterial).color.setRGB(...gbufferColour(merged.color, merged.coverage, skinColour), THREE.LinearSRGBColorSpace);
+    const targetPixel = renderLinear();
+    probe.plate = { steps, stack: { preview: previewPixel, target: targetPixel, linear: linearPixel }, variants };
+    target.dispose();
+  }
   probe.ok = true;
 } catch (error) {
   probe.failure = (error as Error).stack ?? String(error);

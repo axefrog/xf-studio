@@ -500,7 +500,7 @@ The Studio exports each preset as **one decal draw**, so per-texel inputs can va
 
 **Cross-cutting guidance for the browser preview:**
 
-1. Blend decal colour in **sqrt space**, and apply the decal's **squared** coverage curve.
+1. Blend decal colour in **sqrt space**, and apply the decal's **squared** coverage curve. The preview does, for the V's own face decals and for the authored plate, whose layers blend as the export's one merged decal ([head CC rendering §3](head-cc-rendering.md#3-the-head-decal-family)).
 2. Use F0 = 0.04 for non-metals, and treat roughness as perceptual (α = r²).
 3. Consider Burley diffuse for skin and makeup.
 4. Present Glossy as the one lobe the game can draw (the game-matched model does); a clear coat would need a second, forward pass.

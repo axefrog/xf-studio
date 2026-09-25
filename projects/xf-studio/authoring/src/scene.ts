@@ -15,7 +15,7 @@ import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, 
 import type { AdapterContext } from "./character-material-adapters";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
-import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type HeadSkinPlacement } from "./head-skin-placement";
+import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type DecalSurfaceUnderlay, type HeadSkinPlacement } from "./head-skin-placement";
 import { priorityRank } from "./render-templates";
 import type { DetailLimit } from "./detail-limits";
 import type { ResolvedSkinSurface } from "./character-material-adapters";
@@ -306,6 +306,22 @@ async function assembleScene(
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
+  // The skin under the authored plate, for its square-root blend (plate-blend.ts): read on the drawn head, like the face decals'
+  // underlay, once per skin change and only when a layer first needs it. A plate not over the drawn head blends linearly.
+  let plateUnderlay: { evidence?: DecalSurfaceUnderlay["evidence"]; error?: string } = {};
+  function refreshPlateUnderlay() {
+    const item = resolvedSkin?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
+      ? { base: item.skin.base, roughness: item.skin.roughness, chunks: item.meshes } : null;
+    plateUnderlay = {};
+    makeup.setUnderlaySource(() => {
+      try {
+        const result = skinPlacement.surfaceUnderlay(plate, skinSurface);
+        plateUnderlay = { evidence: result.evidence };
+        return result;
+      } catch (error) { plateUnderlay = { error: (error as Error).message }; return null; }
+    });
+  }
+  refreshPlateUnderlay();
   const bones: {
     bone: THREE.Bone;
     base: THREE.Vector3;
@@ -538,6 +554,7 @@ async function assembleScene(
       resolvedSkin = null;
       previous.dispose();
     }
+    refreshPlateUnderlay();
     if (!next) return { limits: [] };
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
@@ -549,6 +566,7 @@ async function assembleScene(
       } else head.visible = false;
       resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
+      refreshPlateUnderlay();
     }
     for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);
     characterDetails = next;
@@ -629,6 +647,8 @@ async function assembleScene(
         scene.updateMatrixWorld(true);
         for (const update of frameListeners) update();
       }
+      // The plate's layers-below targets, only after a layer or the skin changed (plate-blend.ts).
+      makeup.prepareBlend(renderer);
       lighting.render(camera);
     },
   });
@@ -682,6 +702,8 @@ async function assembleScene(
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
+    /** How the authored plate blends: square-root space per layer, the skin underlay's source and the layers-below targets. */
+    plateBlendEvidence: () => ({ ...makeup.blendDiagnostics(), source: plateUnderlay }),
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
     maxTextureSize: renderer.capabilities.maxTextureSize,

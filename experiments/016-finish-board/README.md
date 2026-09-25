@@ -17,7 +17,7 @@ Patches on the lids are three abutting stripes per eye, overlapping by half thei
 | Board 5 · blend steps | flat | Black Matte at 25 % / 50 % / 75 % opacity, under the eye | (mirrored) | Does decal colour blend in square-root space? Measured coverage 0.252 / 0.504 / 0.751. |
 | Board 6 · metal ramp | flat | Satin base + Metallic ramp: metalness 0.02 → 0.29 across the lid | Satin base + five steps: metalness 0.051, 0.098, 0.149, 0.200, 0.302 | Is there a visible seam where metalness crosses 0.1 on skin (the Subsurface class leaves its SSS albedo path)? Roughness drifts only from 0.38 to 0.33 across the ramp. |
 
-Predictions for Board 5 on flat-lit skin of linear luminance L: square-root-space blending gives L·(1 − a)² = 0.56 L, 0.25 L, 0.06 L; linear blending would give 0.75 L, 0.5 L, 0.25 L. The Matte patch also replaces skin roughness (0.88), so measure under soft, frontal light.
+Predictions for Board 5 on flat-lit skin of linear luminance L: square-root-space blending gives L·(1 − a)² = 0.56 L, 0.25 L, 0.06 L; linear blending would give 0.75 L, 0.5 L, 0.25 L. The Matte patch also replaces skin roughness (0.88), so measure under soft, frontal light. The Studio preview now draws these steps with the square-root blend (0.561, 0.248, 0.064 of the skin, measured on a GPU; [head CC rendering §3](../../knowledge/head-cc-rendering.md#3-the-head-decal-family)), so a preview render and the in-game screenshot can be compared step for step.
 
 ## Offline evidence (25 September 2026)
 

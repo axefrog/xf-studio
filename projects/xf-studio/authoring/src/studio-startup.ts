@@ -198,7 +198,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming() }) : null });
+      frames: scene.frameTiming(), plateBlend: scene.plateBlendEvidence() }) : null });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);

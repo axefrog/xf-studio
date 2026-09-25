@@ -30,14 +30,16 @@ uniform vec3 xfsShiftColor;
 uniform float xfsShiftIntensity;
 uniform float xfsShiftExponent;
 `);
-    shader.fragmentShader = replace(shader.fragmentShader, "#include <lights_physical_fragment>", `
+    // After the shading normal is final and before the plate's square-root blend (plate-blend.ts), which runs just before the
+    // lighting: the game adds the tint to the decal colour before its square root, so the blend must see the tinted colour.
+    shader.fragmentShader = replace(shader.fragmentShader, "#include <emissivemap_fragment>", `
 // Game route: added to the base colour before the G-buffer (and so before metalness splits it).
 diffuseColor.rgb += xfsShiftColor * xfsShiftIntensity *
   clamp( pow( abs( 1.0 - dot( normal, normalize( vViewPosition ) ) ), xfsShiftExponent ), 0.0, 1.0 );
-#include <lights_physical_fragment>
+#include <emissivemap_fragment>
 `);
   };
-  const cacheKey = function(this: THREE.MeshPhysicalMaterial) { return `${priorKey.call(this)}|xfs-fresnel-tint-r186-1`; };
+  const cacheKey = function(this: THREE.MeshPhysicalMaterial) { return `${priorKey.call(this)}|xfs-fresnel-tint-r186-2`; };
   material.onBeforeCompile = compile;
   material.customProgramCacheKey = cacheKey;
   material.needsUpdate = true;
