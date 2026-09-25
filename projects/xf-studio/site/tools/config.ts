@@ -26,7 +26,8 @@ export type SiteConfig = {
   /** The published GitHub release, e.g. { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }. */
   release: { tag: string; title: string } | null;
   nav: NavItem[];
-  budgets: { totalBytes: number; fileBytes: number; styleGuideBytes: number };
+  /** Byte budgets. Generated knowledge pages (knowledge/*.html) have their own per-file budget: they render long reference documents. */
+  budgets: { totalBytes: number; fileBytes: number; styleGuideBytes: number; knowledgeFileBytes: number };
 };
 
 export function normalizeBaseUrl(value: string): string {

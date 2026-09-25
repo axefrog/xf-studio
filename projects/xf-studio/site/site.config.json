@@ -13,7 +13,8 @@
     { "id": "status", "label": "Status", "href": "./#status" },
     { "id": "download", "label": "Download", "href": "./#download" },
     { "id": "roadmap", "label": "Directions", "href": "./#directions" },
+    { "id": "knowledge", "label": "Knowledge", "href": "knowledge/" },
     { "id": "credits", "label": "Credits", "href": "credits.html" }
   ],
-  "budgets": { "totalBytes": 524288, "fileBytes": 98304, "styleGuideBytes": 393216 }
+  "budgets": { "totalBytes": 1572864, "fileBytes": 98304, "styleGuideBytes": 393216, "knowledgeFileBytes": 262144 }
 }

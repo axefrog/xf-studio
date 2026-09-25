@@ -1,0 +1,41 @@
+<!--page {
+  "title": "{{pageTitle}} · Knowledge · XF Studio",
+  "description": "{{pageDescription}}",
+  "nav": "knowledge"
+} -->
+<header class="page-head kb-head">
+  <div class="wrap">
+    <p class="eyebrow"><a class="crumb" href="./">Knowledge base</a></p>
+    <h1>{{pageTitleHtml}}</h1>
+    <ul class="kb-meta">
+      <li>{{maturityTag}}</li>
+      <li data-knowledge-updated>{{updated}}</li>
+      <li><a href="{{sourceUrl}}" data-knowledge-source>Source on GitHub</a></li>
+      <li><a href="{{issueUrl}}" data-knowledge-improve>Improve this page</a></li>
+    </ul>
+    {{caveat}}
+    {{legend}}
+  </div>
+</header>
+
+<div class="wrap kb-body">
+  <nav class="kb-toc" aria-labelledby="toc-title">
+    <details class="kb-toc-box" open>
+      <summary id="toc-title">On this page</summary>
+      <ol>
+{{toc}}
+      </ol>
+    </details>
+  </nav>
+  <article class="prose kb-article">
+{{article}}
+  </article>
+</div>
+
+<section class="section alt kb-foot" aria-labelledby="improve-title">
+  <div class="wrap">
+    <h2 id="improve-title">Corrections and credit</h2>
+    <p>This page is generated from <a href="{{sourceUrl}}"><code>knowledge/{{file}}</code></a> in the repository. If something here is wrong or missing, please <a href="{{issueUrl}}">open an issue</a> or <a href="{{editUrl}}">suggest an edit</a>; links to sources, captures or tests help most.</p>
+    <p>It builds on the Cyberpunk 2077 modding community’s work. The inline citations link to the wiki pages, mods, tools and repositories each finding came from, and the <a href="{{root}}credits.html">credits</a> acknowledge everyone we learned from. Citing a source does not mean its authors endorse these notes.</p>
+  </div>
+</section>

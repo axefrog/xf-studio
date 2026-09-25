@@ -1,6 +1,6 @@
 # Public knowledge pages (background)
 
-**Status (25 September 2026): queued, low priority.** Run occasionally in the background when enough of the [knowledge base](../../knowledge/README.md) has matured to be worth publishing.
+**Status: implemented; publishing is automatic.** The site's Knowledge section is generated from `knowledge/*.md` on every site build and redeploys when a knowledge page changes on `main`; Draft and Solid pages are published, Seed topics are listed as not yet published. How it works and its guards: [site README, Knowledge section](../../projects/xf-studio/site/README.md#knowledge-section). What remains is editorial: keep pages public-quality, and review mature pages for the rules below before promoting them.
 
 ## Goal
 
@@ -13,7 +13,7 @@ Share what the R&D lab learns with the Cyberpunk modding community. Every so oft
 - **Caveat.** Each page says plainly that some information may be incomplete or wrong, shows how it was established (the knowledge base's evidence grades, simplified for readers), and invites corrections through an issue or pull request on [axefrog/xf-studio](https://github.com/axefrog/xf-studio).
 - **Mature content only.** Publish only Draft-or-better knowledge pages whose key claims have been cross-checked. Mark unverified claims as hypotheses.
 - **Public-safe.** No game or mod assets, no large decompiled shader dumps, no personal paths or names; short illustrative excerpts only. Follow the site's existing content and release-claim guards, and run `bun run verify` in the site project.
-- **Date and version stamp each page** with the game and framework versions it describes.
+- **Date and version stamp each page** with the game and framework versions it describes. The site adds the last-commit date automatically; the versions come from each page's own opening Maturity paragraph.
 
 ## When to do it
 

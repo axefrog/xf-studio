@@ -1,5 +1,5 @@
 # Public XF Studio site: test, build, check and deploy projects/xf-studio/site to GitHub Pages.
-# Site or style-guide design changes (or a manual run) trigger it; the Studio app is not built.
+# Site, knowledge-base or style-guide design changes (or a manual run) trigger it; the Studio app is not built.
 # Required repository settings and maintenance: projects/xf-studio/site/README.md
 name: Pages site
 
@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "projects/xf-studio/site/**"
+      - "knowledge/**"
       - "projects/xf-studio/authoring/public/style-guide.html"
       - "projects/xf-studio/authoring/public/studio.css"
       - "projects/xf-studio/authoring/tools/build-style-guide.ts"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - "projects/xf-studio/site/**"
+      - "knowledge/**"
       - "projects/xf-studio/authoring/public/style-guide.html"
       - "projects/xf-studio/authoring/public/studio.css"
       - "projects/xf-studio/authoring/tools/build-style-guide.ts"
@@ -44,6 +46,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Full history: knowledge pages show each source file's last-commit date, which a shallow clone would get wrong.
+          fetch-depth: 0
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
