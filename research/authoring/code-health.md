@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `e1219fd` | 2026-09-26 | Game blink (solved clip, per-eye-shape seats, lash and brow binding) | 0 High, 1 Medium, 7 Low (PREV-80..85, UI-61..62, CORE-65). No drift over 5,000 scrubs; no GPL code copied |
 | `368f70b` | 2026-09-26 | Diagnostic Glitter route and verifier; `volume-info.ts` | 0 High, 2 Medium, 8 Low (PIPE-68..77). Production guard holds; builds deterministic; verifier misses flake contents. Fixes in claude/cleanup-glitter |
 | `88b5379` | 2026-09-26 | Prepare speed (installation registry, route fingerprint, one-launch WolvenKit, prefetch) and the layered cleanup's fixes | 0 High, 8 Medium, 22 Low (PIPE-52..67, PREV-73..79, CORE-63..64). PIPE-41/42/43, PREV-63/65/66/67, UI-48/49/51 confirmed fixed; PIPE-40 and PREV-62 partly. Fixes in claude/cleanup-hosts3 and claude/cc-panel |
 | `2ce9987`+ | 2026-09-26 | Creator catalogue and character context (CC controls slice 1) | 0 High, 7 Medium, 14 Low (CORE-50..62, PIPE-46..51, UI-59..60). Fixes fold into CC controls slice 2 |
@@ -109,6 +110,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-59 | Med | Presentation (design) | The catalogue has no compact projection: 131,856 choices each carry provenance, label and swatch objects (55 MB compact JSON) before reaching a browser (`cc-catalogue.ts:96-109,260-272`) | **Fixed** (claude/cc-panel, 26 Sep; see below) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
 | PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | **Fixed** (claude/cleanup-render3, 26 Sep) |
+| PREV-80 | Med | Rendering | `setShape` re-applies the blink even at Closure 0, writing the blink's neutral pose onto ~442 bones the idle owns: with the idle paused, an eye-shape change snaps the face back to the editing pose while neck and body stay posed (`game-blink.ts:183-206,242-243`, `scene.ts:366-367,428`) | Open (claude/cleanup-blink) |
 | PIPE-68 | Med | Pipeline (verifier) | The glitter checks never look at the flakes' contents: all-flat normals, flake roughness/metalness reset to the base, negated normal Y and a grey pigment all verify (`mod-verifier/glitter-checks.ts:111-242`, `verify-build.ts:299-381`) | Open (claude/cleanup-glitter) |
 | PIPE-69 | Med | Pipeline | Flake counts are unclipped and uncapped: a knob inside `GLITTER_RANGES` yields ~5 M flakes (303 MB) over the window or ~71 M (4.3 GB) over the head, and `Math.min(...)` throws past ~500 k items (`glitter-route.ts:80-85,246,269`) | Open (claude/cleanup-glitter) |
 | PIPE-52 | Med | Resolver | Evicting a route's installation doesn't bump its generation, so after a mod change inside an MO2 mod folder the old ready record is served under an unchanged key (`installation-registry.ts:176-180,99-101`, `character-detail-host.ts:123`) | Fixed in claude/cleanup-hosts3 (see below) |
@@ -211,6 +213,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PREV-81..85, UI-61..62, CORE-65** (game blink review at `e1219fd`), Open (claude/cleanup-blink):
+  - **PREV-81:** during Play blink `animating` stays true for the whole 2.45 s cycle though the clip lasts 0.5 s, so ~80 % of frames redraw a held pose.
+  - **PREV-82 (latent):** bones are bound by name only; nothing checks a target's bind against the driver's rest, so a male or modded skeleton with the same names would turn lids about the wrong centres.
+  - **PREV-83 (latent):** `setFaceMorphs` re-seats the blink only through `applyFaceMorph` when an eye shape is shown.
+  - **PREV-84:** `bake_game_blink.py --setup` without `--output`/`--evidence` overwrites the Studio's blink and tracked evidence, and the evidence names the female setup regardless.
+  - **PREV-85:** the knowledge page and CHANGELOG state the per-eye-shape seat and an unmeasured `h111` figure as fact, and omit the `h011` regression.
+  - **UI-61:** raw parser errors from a damaged or non-GLB blink asset reach the UI; "not prepared" is shown when no bones matched.
+  - **UI-62:** the missing-asset note points to a developer-only guide with no link, and the hard-coded "2.45 s" isn't labelled as a Studio choice.
+  - **CORE-65:** idle/blink composition is tested by source-text matches; no tests for damaged assets, drift or restoring a saved Closure.
 - **PIPE-70..77** (Glitter route review at `368f70b`), Open (claude/cleanup-glitter):
   - **PIPE-70:** the guard holds only because both hosts' `parseCollection` drops `diagnostics`; no test pins it, and the bundled CLI accepts the knob from any file.
   - **PIPE-71:** the symmetry refusal runs at bake time only, so Check reports ready and Build throws.
