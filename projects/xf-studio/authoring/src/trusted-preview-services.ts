@@ -35,6 +35,9 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   ports.preview.setNormals(initial.normals);
   ports.preview.setExposure(initial.exposure);
   ports.preview.setLightAngle(initial.lightAngle);
+  ports.preview.setCreatorLighting?.(initial.creatorLighting);
+  if (!ports.preview.setLightingPreset) initial.lightingPreset = "studio";
+  else ports.preview.setLightingPreset(initial.lightingPreset);
   for (const detail of ["brows", "lashes"] as const)
     ports.preview.setDetail(detail, initial[detail]);
   ports.preview.setHair(initial.hair);

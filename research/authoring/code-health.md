@@ -158,7 +158,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None. (Reviewed at `ac251d8`.)
+- **Lighting presets and the grading-LUT host** (claude/creator-lighting). Domain: `creator-lighting.ts` (rig tables, falloff, intensity, camera pages), `grading-lut.ts` (display transform, LUT decode, selection by archive precedence), `creator-calibration.ts`. Three adapters: `creator-lighting-rig.ts`, `creator-display.ts` (render-target pass that replaces the studio stage's tone mapping while the preset shows), `lighting-preset-stage.ts` (hooked into `scene.ts`'s render loop). Host: `grading-lut-host.ts` (new `/api/preview-grading-lut` endpoint and `/assets/grading-lut/` files on both hosts; runs WolvenKit outside the resolver's trimmed JSON cache). Browser device: `browser-grading-lut-device.ts`. Actions: `preview.setLightingPreset`, `preview.setCreatorLighting`, `camera.creatorFraming`. (Last reviewed at `ac251d8`.)
 
 ## Fixed in claude/cleanup-hygiene
 
