@@ -1,5 +1,5 @@
 import type { DocumentModel } from "./collection-workspace";
-import { encodeWorkspaceAt, WORKSPACE_LEVELS, WORKSPACE_STORAGE_BUDGET } from "./workspace-budget";
+import { fitWorkspace, WORKSPACE_STORAGE_BUDGET } from "./workspace-budget";
 import type { WorkspaceState } from "./workspace-state";
 
 /**
@@ -59,22 +59,24 @@ export class WorkspacePersistence {
     let state: WorkspaceState;
     try { state = this.options.capture(); }
     catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
-    // Write the least-trimmed form that fits the budget. If the browser still refuses it
-    // (other keys share the quota), keep trimming before reporting that autosave stopped.
-    let quota = false;
-    for (let level = 0; level < WORKSPACE_LEVELS; level++) {
-      const candidate = encodeWorkspaceAt(state, level, this.options.model, this.options.budget ?? WORKSPACE_STORAGE_BUDGET);
-      if (candidate.overBudget && level < WORKSPACE_LEVELS - 1) continue;
+    // Write the least-trimmed form that fits the budget (`fitWorkspace`). If the browser still refuses
+    // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
+    let quota = false, budget = this.options.budget ?? WORKSPACE_STORAGE_BUDGET;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const fitted = fitWorkspace(state, this.options.model, budget);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
-      if (candidate.encoded === this.written) return;
+      if (fitted.encoded === this.written) return;
       try {
-        this.options.storage.setItem(this.options.key, candidate.encoded);
+        this.options.storage.setItem(this.options.key, fitted.encoded);
       } catch (error) {
         if (!isQuotaError(error)) { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
-        quota = true; continue;
+        quota = true;
+        if (fitted.minimal) break;
+        budget = Math.min(budget, Math.floor(fitted.size * 0.75));
+        continue;
       }
-      this.written = candidate.encoded; this.lastSize = candidate.size;
-      this.publish(candidate.level > 0 || candidate.overBudget
+      this.written = fitted.encoded; this.lastSize = fitted.size;
+      this.publish(fitted.trimmed || fitted.overBudget
         ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
         : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
         : { kind: "saved", message: SAVE_MESSAGES.saved });

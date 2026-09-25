@@ -14,7 +14,7 @@ import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../pl
 import { parseFieldSelection, type FieldSelection } from "../../field-selection";
 import { parseGlitterChoices, type GlitterChoices } from "../../glitter-model";
 import { LAYER_MODELS, type LayerModelRegistry } from "../../layer-models";
-import { emptyRecipe, starterRecipe, type Recipe } from "../../recipe";
+import { emptyRecipe, joinRecipe, recipeChunks, starterRecipe, type Recipe } from "../../recipe";
 import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, parseEyeMakeupPart, readPortableRecipe, recipeFile,
   RECIPE_SCHEMAS } from "../../recipe-schema";
 
@@ -37,6 +37,9 @@ export function eyeMakeupPartCodec(models: LayerModelRegistry = LAYER_MODELS): P
     empty: emptyRecipe,
     starter: starterRecipe,
     summary: (recipe: Recipe) => ({ layers: recipe.layers.length }),
+    // The look history stores a recipe as its header and one chunk per layer.
+    chunks: recipeChunks,
+    join: joinRecipe,
     // A recipe holds at most 32 layers of 24 points and 8 warp fields: far below this.
     maxBytes: 2_000_000,
     legacy: { presetField: "recipe", schema: EYE_MAKEUP_PART_1 },

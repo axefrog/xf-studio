@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { HistoryEntryId } from "./editor-actions";
 import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
-import { parseRecipe, type Recipe } from "./recipe";
+import type { Recipe } from "./recipe";
 
 /** The history family's actions (registered by the composition as the `history` system family). */
 export type HistoryAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string };
@@ -45,7 +45,6 @@ export const HISTORY_START_ID = "start";
 
 export type HistoryJumpPlan = { direction: "undo" | "redo" | "none"; count: number };
 
-type RedoEntry = { encoded: string; label: HistoryLabel; id: HistoryEntryId; at?: number };
 const stepId = (id: HistoryEntryId) => `step-${id}`;
 
 /**
@@ -53,7 +52,7 @@ const stepId = (id: HistoryEntryId) => `step-${id}`;
  * A host without `AuthoringHistory` has no Redo and passes none.
  */
 export function historyTimeline(document: Pick<AuthoringDocument, "historyEntries" | "historyTrimmed">,
-  redo: readonly Pick<RedoEntry, "label" | "id" | "at">[] = []): HistorySnapshot {
+  redo: readonly { label: HistoryLabel; id: HistoryEntryId; at?: number }[] = []): HistorySnapshot {
   const done: HistoryStep[] = document.historyEntries().map(entry => ({
     ...(entry.label ?? UNKNOWN_HISTORY_LABEL), id: stepId(entry.id),
     ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" }));
@@ -64,19 +63,19 @@ export function historyTimeline(document: Pick<AuthoringDocument, "historyEntrie
 }
 
 /**
- * User-level recipe Undo/Redo over the document's bounded Undo history.
+ * User-level Undo/Redo over the live document's look history.
  *
  * `revert` is the internal path for a cancelled gesture or form transaction and never
- * creates a Redo entry. Redo entries are session-only (not persisted) and stay valid only
- * while the recipe is exactly the one the last Undo/Redo produced: any other edit, preset
- * switch or restore discards them, as in a conventional editor. Undo and Redo keep each
+ * creates a Redo entry. Redo entries are session-only (not persisted; the look history holds them)
+ * and stay valid only while the recipe is exactly the one the last Undo/Redo produced: any other
+ * edit, preset switch or restore discards them, as in a conventional editor. Undo and Redo keep each
  * step's identity, so a history list can jump to any step (`jumpTo`) as one atomic change.
  */
 export class AuthoringHistory {
-  private redoStack: RedoEntry[] = [];
   private expected?: { revision: number; encoded: string; top?: HistoryEntryId };
   constructor(private document: AuthoringDocument, private resetStack: (previous: Recipe) => void) {
-    document.subscribe(change => { if (change === "restore") this.clearRedo(); });
+    // A restore replaces the look history, and its Redo with it.
+    document.subscribe(change => { if (change === "restore") this.expected = undefined; });
   }
   /** Restore the latest checkpoint without recording Redo (gesture/control cancellation). */
   revert(): boolean {
@@ -94,13 +93,13 @@ export class AuthoringHistory {
    */
   canRedo(): boolean { return this.redoValid(); }
   state(): HistoryState {
-    const valid = this.redoValid(), redo = valid ? this.redoStack.at(-1)?.label : undefined;
+    const valid = this.redoValid(), redo = valid ? this.document.redoList()[0]?.label : undefined;
     return { undo: this.document.canUndo ? this.document.historyLabel() : undefined,
-      redo: redo && { ...redo }, depth: this.document.undoDepth, redoDepth: valid ? this.redoStack.length : 0 };
+      redo: redo && { ...redo }, depth: this.document.undoDepth, redoDepth: valid ? this.document.redoDepth : 0 };
   }
   /** Detached timeline of kept and redo-able steps; see `HistorySnapshot`. */
   snapshot(): HistorySnapshot {
-    return historyTimeline(this.document, this.canRedo() ? [...this.redoStack].reverse() : []);
+    return historyTimeline(this.document, this.canRedo() ? this.document.redoList() : []);
   }
   /** How many Undo or Redo steps reach `id`, or undefined when it is not a jump target now. */
   plan(id: string): HistoryJumpPlan | undefined {
@@ -120,30 +119,18 @@ export class AuthoringHistory {
     return !!plan && plan.direction !== "none" && this.move(plan);
   }
   private move(plan: HistoryJumpPlan): boolean {
+    let next: Recipe | undefined;
     if (plan.direction === "undo") {
       if (this.document.undoDepth < plan.count) return false;
       if (!this.redoValid()) this.clearRedo();
-      let after = JSON.stringify(this.document.recipe), next: Recipe | undefined;
-      for (let i = 0; i < plan.count; i++) {
-        const entry = this.document.undoEntry()!;
-        this.redoStack.push({ encoded: after, label: entry.label ?? { ...UNKNOWN_HISTORY_LABEL }, id: entry.id,
-          ...(entry.at === undefined ? {} : { at: entry.at }) });
-        after = entry.encoded; next = entry.recipe;
-      }
-      if (!next) return false;
-      this.publish(next);
+      next = this.document.undoSteps(plan.count);
     } else if (plan.direction === "redo") {
       if (!this.redoValid()) { this.clearRedo(); return false; }
-      if (this.redoStack.length < plan.count) return false;
-      let before = JSON.stringify(this.document.recipe), encoded = before;
-      for (let i = 0; i < plan.count; i++) {
-        const entry = this.redoStack.pop()!;
-        this.document.reapplyHistory({ encoded: before, id: entry.id, label: entry.label,
-          ...(entry.at === undefined ? {} : { at: entry.at }) });
-        before = encoded = entry.encoded;
-      }
-      this.publish(parseRecipe(JSON.parse(encoded)));
+      if (this.document.redoDepth < plan.count) return false;
+      next = this.document.redoSteps(plan.count);
     } else return false;
+    if (!next) return false;
+    this.publish(next);
     this.expect();
     return true;
   }
@@ -160,7 +147,7 @@ export class AuthoringHistory {
   }
   private redoValid() {
     const expected = this.expected;
-    if (!this.redoStack.length || !expected) return false;
+    if (!this.document.redoDepth || !expected) return false;
     // Any entry added since (an edit, or an open transaction's checkpoint) hides Redo; a
     // cancelled transaction removes its own entry again, so Redo comes back.
     if (this.document.historyTop !== expected.top) return false;
@@ -171,5 +158,5 @@ export class AuthoringHistory {
     expected.revision = revision;
     return true;
   }
-  private clearRedo() { this.redoStack = []; this.expected = undefined; }
+  private clearRedo() { this.document.clearRedo(); this.expected = undefined; }
 }

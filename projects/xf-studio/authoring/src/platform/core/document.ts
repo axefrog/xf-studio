@@ -12,17 +12,17 @@
  *   `xfas/collection-1` whenever every look holds exactly the legacy feature's part in a form
  *   that schema holds exactly, and `xfs/collection-2` otherwise.
  */
-import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, NewerDataError, type Look, type LookCollection, type LookMemory,
-  type PartEnvelope, type PartMemory } from "../api/document";
+import { canonicalJson, COLLECTION_1, COLLECTION_2, isNewerData, LOOK_MEMORY, NewerDataError, type Look, type LookCollection,
+  type LookMemory, type PartEnvelope, type PartMemory } from "../api/document";
 import type { AnyFeatureModule } from "../api/feature";
+import { HISTORY_LIMIT, LOOK_HISTORY_1, type HistoryParts, type LookHistoryData, type StoredLookEntry } from "../api/history";
+import { emptyLookHistory, isEmptyLookHistory, LookHistory, lookHistoryBodies, pruneLookHistory } from "./look-history";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FEATURE_KEY = /^[a-z][a-zA-Z0-9]*(?:-[a-z0-9]+)*$/;
 const title = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= 120;
 export const COLLECTION_MESSAGE = "Expected a named XF Studio collection with a stable UUID and at least one preset.";
 export const PRESET_MESSAGE = "Preset identities must be unique UUIDs with a name and positive revision.";
-/** Undo entries kept per look and feature; more on restore means older ones were dropped. */
-export const HISTORY_LIMIT = 80;
 
 /** A collection-1 preset as older builds stored it. */
 export type LegacyPreset = { id: string; name: string; revision: number; [field: string]: unknown };
@@ -36,7 +36,7 @@ export type StoredPartMemory = { editor?: unknown; partSchema?: string; history?
  */
 export type NewerPolicy = "refuse" | "omit";
 
-export class PartRegistry {
+export class PartRegistry implements HistoryParts {
   private readonly byId = new Map<string, AnyFeatureModule>();
   private readonly legacyOwner?: AnyFeatureModule;
   constructor(features: readonly AnyFeatureModule[]) {
@@ -54,6 +54,19 @@ export class PartRegistry {
     this.legacyOwner = legacy;
   }
   features(): readonly string[] { return [...this.byId.keys()]; }
+  /**
+   * The look history's chunks of a parsed part (its codec's `chunks`, else the whole body as one chunk).
+   * A feature this build does not register is one chunk too.
+   */
+  chunks(feature: string, body: unknown): readonly unknown[] {
+    const chunks = this.byId.get(feature)?.part.chunks;
+    return chunks ? chunks(body) : [body];
+  }
+  /** The parsed part body the look history's chunks hold (the inverse of `chunks`, key order included). */
+  join(feature: string, chunks: readonly unknown[]): unknown {
+    const join = this.byId.get(feature)?.part.join;
+    return join ? join(chunks) : chunks[0];
+  }
   feature(id: string): AnyFeatureModule | undefined { return this.byId.get(id); }
   /** The feature whose data `xfas/collection-1` presets and `xfas/workspace-1` editors hold. */
   legacyFeature(): string | undefined { return this.legacyOwner?.id; }
@@ -221,62 +234,171 @@ export class PartRegistry {
   }
 
   /**
-   * Per-feature memory of one look, as stored in `xfs/workspace-2`; damaged history entries are
-   * skipped. Entries from a newer build are never skipped as damage: see `NewerPolicy`.
+   * A look's Undo history from its memory (`LOOK_MEMORY`). A memory built by hand in the older in-memory
+   * form (registered features' whole-part `history`) is read as that; none is an empty history.
+   */
+  lookHistory(memory: LookMemory | undefined): LookHistoryData {
+    const own = memory?.[LOOK_MEMORY]?.editor as LookHistoryData | undefined;
+    if (own) return own;
+    const legacy = Object.entries(memory ?? {}).filter(([feature, entry]) => this.byId.has(feature) && Array.isArray(entry.history));
+    const data = this.fromBodies(legacy.filter(([, entry]) => entry.history!.length).map(([feature, entry]) => [feature, entry.history!]));
+    return legacy.some(([, entry]) => entry.historyTrimmed === true) ? { ...data, trimmed: true } : data;
+  }
+  /**
+   * `memory` with its Undo history set (absent when empty and untrimmed). Registered features' older
+   * whole-part histories are dropped from it, since the look history now holds them.
+   */
+  withLookHistory(memory: LookMemory, history: LookHistoryData): LookMemory {
+    const result: LookMemory = {};
+    for (const [feature, entry] of Object.entries(memory)) {
+      if (feature === LOOK_MEMORY) continue;
+      if (this.byId.has(feature) && (entry.history || entry.historyTrimmed)) {
+        const { history: _history, historyTrimmed: _trimmed, ...rest } = entry;
+        result[feature] = rest;
+      } else result[feature] = entry;
+    }
+    if (!isEmptyLookHistory(history)) result[LOOK_MEMORY] = { editor: history };
+    return result;
+  }
+  /**
+   * The editor memory of one look, as stored in `xfs/workspace-2`, in memory form: each feature's editor
+   * state by feature, and the look's one Undo history (`LOOK_MEMORY`). The history is read from either
+   * stored form (see `writeMemory`); damaged steps are skipped. Steps from a newer build are never
+   * skipped as damage: see `NewerPolicy` (omitted ones are reported as trimmed history).
    */
   readMemory(value: unknown, look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): LookMemory {
     const memory: LookMemory = {};
     if (!value || typeof value !== "object" || Array.isArray(value)) return memory;
+    const bodies: [string, unknown[]][] = [];
+    let trimmed = false, lookLevel = false;
     for (const [feature, stored] of Object.entries(value as Record<string, StoredPartMemory>)) {
       if (!FEATURE_KEY.test(feature) || !stored || typeof stored !== "object") continue;
       const module = this.byId.get(feature);
       // A newer build's feature memory is kept verbatim, like its parts.
       if (!module) { memory[feature] = structuredClone(stored) as PartMemory; continue; }
-      memory[feature] = this.readFeatureMemory(feature, stored.editor, stored.partSchema ?? module.part.current,
-        stored.history, stored.historyTrimmed === true, look, newer);
+      memory[feature] = { editor: module.editor.parse(stored.editor, (look && this.part(look, feature)) ?? module.part.empty()) };
+      if (stored.historyTrimmed === true) trimmed = true;
+      if (stored.partSchema === LOOK_HISTORY_1) { lookLevel = true; continue; }
+      const read = this.readSteps(module, stored.partSchema ?? module.part.current, stored.history, newer);
+      if (read.trimmed) trimmed = true;
+      if (read.bodies.length) bodies.push([feature, read.bodies]);
     }
-    return memory;
+    // The look-level form: stored (its features name `xfs/look-history-1`) or in memory (a copy of a draft).
+    const own = (value as Record<string, { editor?: unknown } | undefined>)[LOOK_MEMORY];
+    const history = own && typeof own === "object" ? this.readLookLevel(own.editor, newer)
+      : lookLevel ? { ...emptyLookHistory(), trimmed: true as const } : this.fromBodies(bodies);
+    if (trimmed && !history.trimmed) history.trimmed = true;
+    return this.withLookHistory(memory, history);
   }
   /**
-   * One registered feature's memory: its editor state parsed against the look's part (or the
-   * empty part when the look lacks it) and history entries read as parts of `partSchema`.
-   * At most `HISTORY_LIMIT` entries are kept; dropping older ones sets `historyTrimmed`.
-   * A damaged entry is skipped; entries from a newer build (a `partSchema` this build does not
-   * accept, or a newer model inside one entry) follow `newer`, and omitted ones are reported as
-   * trimmed history.
+   * One registered feature's memory from its editor state and its Undo history as whole parts of
+   * `partSchema` (how `xfas/workspace-1` stored an editor), as a look's memory.
    */
   readFeatureMemory(feature: string, editor: unknown, partSchema: string, history: unknown, trimmed: boolean,
-    look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): PartMemory {
+    look: Pick<Look, "parts"> | undefined, newer: NewerPolicy = "refuse"): LookMemory {
     const module = this.byId.get(feature)!;
-    const part = (look && this.part(look, feature)) ?? module.part.empty();
-    const entries: unknown[] = [];
-    let omitted = false;
-    if (Array.isArray(history) && history.length && !module.part.accepts.includes(partSchema)) {
+    const read = this.readSteps(module, partSchema, history, newer);
+    const data = this.fromBodies(read.bodies.length ? [[feature, read.bodies]] : []);
+    if (trimmed || read.trimmed) data.trimmed = true;
+    return this.withLookHistory({ [feature]: { editor: module.editor.parse(editor, (look && this.part(look, feature)) ?? module.part.empty()) } }, data);
+  }
+  /**
+   * Whole-part Undo entries of `partSchema`, oldest first: at most `HISTORY_LIMIT` are kept (dropping
+   * older ones reports `trimmed`), a damaged one is skipped, and one from a newer build (a schema this
+   * build does not accept, or a newer model inside it) follows `newer`.
+   */
+  private readSteps(module: AnyFeatureModule, partSchema: string, history: unknown, newer: NewerPolicy): { bodies: unknown[]; trimmed: boolean } {
+    if (!Array.isArray(history) || !history.length) return { bodies: [], trimmed: false };
+    if (!module.part.accepts.includes(partSchema)) {
       if (newer === "refuse") throw this.newer(module, partSchema);
-      omitted = true;
-    } else if (Array.isArray(history)) for (const body of history.slice(-HISTORY_LIMIT)) {
-      try { entries.push(module.part.parse({ schema: partSchema, body })); }
+      return { bodies: [], trimmed: true };
+    }
+    const bodies: unknown[] = [];
+    let omitted = false;
+    for (const body of history.slice(-HISTORY_LIMIT)) {
+      try { bodies.push(module.part.parse({ schema: partSchema, body })); }
       catch (error) {
         if (!isNewerData(error)) continue; // One damaged Undo entry must not lose the draft.
         if (newer === "refuse") throw error;
         omitted = true;
       }
     }
-    return { editor: module.editor.parse(editor, part), history: omitted ? [] : entries,
-      ...(trimmed || omitted || (Array.isArray(history) && history.length > HISTORY_LIMIT) ? { historyTrimmed: true as const } : {}) };
+    return omitted ? { bodies: [], trimmed: true } : { bodies, trimmed: history.length > HISTORY_LIMIT };
+  }
+  /** A look history from whole-part entries by feature (older workspaces kept one feature's). */
+  private fromBodies(bodies: readonly [string, unknown[]][]): LookHistoryData {
+    if (!bodies.length) return emptyLookHistory();
+    // No build wrote whole-part histories for several features of one look; they are kept in feature order.
+    return LookHistory.fromSteps(this, bodies.flatMap(([feature, list]) => list.map(body => ({ feature, body })))).data();
   }
   /**
-   * The stored form of one look's memory. History entries are written in the oldest part schema
-   * that holds every entry exactly (as the collection writers do), so older builds read them.
+   * A stored look-level history (`xfs/look-history-1`): each step's parts are rebuilt and parsed by
+   * their codec, so a damaged step is skipped like a damaged whole-part entry. A step that touches a
+   * part this build cannot edit (an unregistered feature's, or a newer model) is newer data.
+   */
+  private readLookLevel(value: unknown, newer: NewerPolicy): LookHistoryData {
+    let history: LookHistory;
+    try { history = LookHistory.fromData(this, value as LookHistoryData); }
+    catch { return emptyLookHistory(); }
+    const data = history.data(), kept: StoredLookEntry[] = [];
+    let omitted = false;
+    for (const [index, entry] of data.entries.entries()) {
+      try {
+        for (const [feature, ids] of Object.entries(entry.before)) {
+          const module = this.byId.get(feature);
+          if (!module) throw new NewerDataError(`This look's Undo history changes a part this version of XF Studio does not know (${feature}).`);
+          if (ids) module.part.parse({ schema: module.part.current, body: this.join(feature, ids.map(id => data.chunks[id])) });
+        }
+        kept.push(data.entries[index]);
+      } catch (error) {
+        if (!isNewerData(error)) continue;
+        if (newer === "refuse") throw error;
+        omitted = true;
+      }
+    }
+    if (omitted) return { ...emptyLookHistory(), trimmed: true };
+    return pruneLookHistory({ ...data, entries: kept });
+  }
+  /**
+   * The stored form of one look's memory. The look history is written in the oldest form that holds
+   * it: while every step is a part step of one registered feature (all this build makes), as that
+   * feature's whole parts in the oldest part schema that holds every entry (`partSchema`, `history`),
+   * which every build since workspace-2 reads; otherwise as `xfs/look-history-1` under `LOOK_MEMORY`,
+   * with each registered feature's memory naming that schema so an older build opens the workspace
+   * read-only instead of losing the history.
    */
   writeMemory(memory: LookMemory): Record<string, StoredPartMemory> {
-    return Object.fromEntries(Object.entries(memory).map(([feature, entry]) => {
+    const history = this.lookHistory(memory), stored: Record<string, StoredPartMemory> = {};
+    const bodies = lookHistoryBodies(history, this);
+    // Whole parts hold the history only for a registered feature (no reader accepts steps of any other).
+    const single = bodies && (bodies.feature === undefined || this.byId.has(bodies.feature)) ? bodies : undefined;
+    const registered = Object.keys(memory).filter(feature => feature !== LOOK_MEMORY && this.byId.has(feature));
+    for (const [feature, entry] of Object.entries(memory)) {
+      if (feature === LOOK_MEMORY) continue;
       const module = this.byId.get(feature);
-      if (!module) return [feature, structuredClone(entry)];
-      const { schema, bodies } = this.minimalHistory(module, entry.history);
-      return [feature, { editor: module.editor.serialize(entry.editor), partSchema: schema,
-        history: bodies, ...(entry.historyTrimmed ? { historyTrimmed: true } : {}) }];
-    }));
+      if (!module) { stored[feature] = structuredClone(entry); continue; }
+      const trimmedHere = history.trimmed && (!single?.bodies.length || single.feature === feature);
+      if (single) {
+        const { schema, bodies } = this.minimalHistory(module, single.feature === feature ? single.bodies : []);
+        stored[feature] = { editor: module.editor.serialize(entry.editor), partSchema: schema, history: bodies,
+          ...(trimmedHere ? { historyTrimmed: true } : {}) };
+      } else stored[feature] = { editor: module.editor.serialize(entry.editor), partSchema: LOOK_HISTORY_1, history: [LOOK_MEMORY],
+        ...(history.trimmed ? { historyTrimmed: true } : {}) };
+    }
+    if (single?.feature !== undefined && single.bodies.length && !registered.includes(single.feature)) {
+      // The steps' feature has no editor memory in this look: give it its default one to carry them.
+      const module = this.byId.get(single.feature)!;
+      const { schema, bodies } = this.minimalHistory(module, single.bodies);
+      stored[single.feature] = { editor: module.editor.serialize(module.editor.empty()), partSchema: schema, history: bodies,
+        ...(history.trimmed ? { historyTrimmed: true } : {}) };
+    }
+    if (!single) {
+      for (const feature of new Set(history.entries.flatMap(entry => Object.keys(entry.before))))
+        if (this.byId.has(feature) && !stored[feature]) stored[feature] = { editor: this.byId.get(feature)!.editor.serialize(
+          this.byId.get(feature)!.editor.empty()), partSchema: LOOK_HISTORY_1, history: [LOOK_MEMORY] };
+      stored[LOOK_MEMORY] = { editor: history };
+    }
+    return stored;
   }
   /** The oldest part schema every entry downgrades to exactly (`accepts` is oldest first), with the bodies in it. */
   private minimalHistory(module: AnyFeatureModule, history: readonly unknown[]): { schema: string; bodies: unknown[] } {

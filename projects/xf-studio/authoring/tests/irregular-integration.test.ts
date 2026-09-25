@@ -10,7 +10,7 @@ import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
 import {UnsupportedMaterialError,compileFlatPreset} from "../src/preset-compiler";
-import { storedWorkspace } from "./fixtures/looks";
+import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("recipe-7 opt-in is strict while recipe-6 glitter preserves its legacy model",()=>{
@@ -34,7 +34,7 @@ test("new settings survive workspace, collection and SQLite while game export st
   const workspace=freshWorkspace(recipe);workspace.history=[initialRecipe()];
   const restored=parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS);
   expect(restored.recipe.layers[0].flakes).toEqual(recipe.layers[0].flakes);
-  expect(restored.history[0].layers[0].finish).toBe("matte");
+  expect(historyRecipes(restored.history)[0].layers[0].finish).toBe("matte");
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Study",
     presets:[{id:crypto.randomUUID(),name:"Gold over purple",revision:1,recipe}]});
   expect(collection.presets[0].recipe.layers[0].flakes).toEqual(recipe.layers[0].flakes);

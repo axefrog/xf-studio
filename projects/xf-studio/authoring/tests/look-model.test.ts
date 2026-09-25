@@ -33,7 +33,7 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceAt } from "../src/workspace-budget";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
-import { recipeOf, storedWorkspace } from "./fixtures/looks";
+import { historiesAsRecipes, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { digest, observeRoundTrips, restore } from "./fixtures/workspace-observable";
 import { contentDigest, recipeSchemaFixtures, withoutRecipeSchemas } from "./fixtures/part-2-parity";
 import { damagedWorkspaceV1, fixedId, glitterRecipe, largeWorkspaceV1, looseWorkspaceV1, opticsRecipe, recipe3,
@@ -78,12 +78,12 @@ test("workspace-2 stores editor memory per feature and restores the live workspa
   expect(p1.history).toHaveLength(3);
   for (const entry of p1.history) expect((entry as { schema?: string }).schema).toMatch(/^xfs\/recipe-(?:[7-9]|1[01])$/);
   expect(collections.removed[0].memory[EYE]).toMatchObject({ historyTrimmed: true });
-  // Lossless: the stored form restores the same live state, field for field.
-  expect(parseWorkspace(JSON.parse(JSON.stringify(stored)), STUDIO_DOCUMENTS)).toEqual(state);
+  // Lossless: the stored form restores the same live state, field for field (Undo histories by the recipes they restore).
+  expect(historiesAsRecipes(parseWorkspace(JSON.parse(JSON.stringify(stored)), STUDIO_DOCUMENTS))).toEqual(historiesAsRecipes(state));
   const loose = restore(looseWorkspaceV1()).state, looseStored = serializeWorkspace(loose, STUDIO_DOCUMENTS);
   expect(looseStored.look?.parts[EYE].schema).toBe("xfs/eye-makeup-part-1");
   expect(looseStored.look?.memory[EYE]).toMatchObject({ historyTrimmed: true, editor: { active: 2, selected: 3 } });
-  expect(parseWorkspace(storedWorkspace(loose), STUDIO_DOCUMENTS)).toEqual(loose);
+  expect(historiesAsRecipes(parseWorkspace(storedWorkspace(loose), STUDIO_DOCUMENTS))).toEqual(historiesAsRecipes(loose));
 });
 
 test("parts and memory of features this build does not register are carried unchanged", () => {

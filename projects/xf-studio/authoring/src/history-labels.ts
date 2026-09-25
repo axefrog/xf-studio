@@ -1,10 +1,11 @@
 import type { LayerAction } from "./editor-actions";
 import type { GestureEdit, RecipeAction } from "./recipe-actions";
 
-/** What one recipe Undo/Redo entry did, for menus and tooltips ("Undo Opacity"). Session-only. */
-export type HistoryLabel = { label: string; actionKind: string; layerId?: string };
+import type { HistoryLabel } from "./platform/api";
 
-export const UNKNOWN_HISTORY_LABEL: HistoryLabel = Object.freeze({ label: "Earlier change", actionKind: "unknown" });
+/** What one Undo/Redo step did, for menus and tooltips ("Undo Opacity"). Session-only (the look history's label). */
+export type { HistoryLabel } from "./platform/api";
+export { UNKNOWN_HISTORY_LABEL } from "./platform/api";
 
 const layerCommand: Record<string, string> = { add: "Add layer", duplicate: "Duplicate layer", remove: "Remove layer",
   reset: "Reset layer", rename: "Rename layer", move: "Move layer" };

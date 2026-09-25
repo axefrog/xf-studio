@@ -10,6 +10,7 @@ import type { EditorSnapshot } from "../../src/collection-session";
 import { encodeWorkspaceAt } from "../../src/workspace-budget";
 import { loadWorkspace, type WorkspaceState } from "../../src/workspace-state";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
+import { historyRecipes } from "./looks";
 
 /** Canonical JSON (object keys sorted): key order is not observable, so it is not compared. */
 export const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" &&
@@ -23,7 +24,8 @@ export function restore(stored: unknown) {
 
 /** Every observable fact of one restored workspace, as plain data. */
 export function observe(state: WorkspaceState) {
-  const top = { recipe: state.recipe, active: state.active, selected: state.selected, history: state.history,
+  // Undo histories are compared as the whole recipes each step restores (the look history keeps them as chunks).
+  const top = { recipe: state.recipe, active: state.active, selected: state.selected, history: historyRecipes(state.history),
     historyTrimmed: state.historyTrimmed ?? false, fieldSelection: state.fieldSelection, glitterChoices: state.glitterChoices,
     uvView: state.uvView, preview: state.preview, library: state.library, uiPreferences: state.uiPreferences,
     previewSetup: state.previewSetup ?? null, savedV: state.savedV ?? null };
@@ -34,7 +36,8 @@ export function observe(state: WorkspaceState) {
   // The restored editor is the selected preset's memory, which parseWorkspace copied to the top level.
   shown = { recipe: state.recipe, active: state.active, selected: state.selected, fieldSelection: state.fieldSelection,
     history: state.history, ...(state.historyTrimmed ? { historyTrimmed: true } : {}) };
-  const editor = () => ({ ...structuredClone(shown!), historyTrimmed: shown!.historyTrimmed ?? false });
+  const editor = () => ({ ...structuredClone(shown!), history: historyRecipes(shown!.history),
+    historyTrimmed: shown!.historyTrimmed ?? false });
   const presets = (label: string) => {
     const summary = actions.summary();
     return { label, summary, presets: summary.presets.map(preset => {

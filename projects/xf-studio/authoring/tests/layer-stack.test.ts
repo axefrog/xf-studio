@@ -4,7 +4,7 @@ import { editLayers } from "../src/layer-stack";
 import { RecipeHistory } from "../src/editor-actions";
 import { compileFlatPreset } from "../src/preset-compiler";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
-import { storedWorkspace } from "./fixtures/looks";
+import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("legacy recipes upgrade explicitly; empty and variable stacks persist without corrupting history", () => {
@@ -15,11 +15,11 @@ test("legacy recipes upgrade explicitly; empty and variable stacks persist witho
   expect(() => parseRecipe({ ...legacy, layers: [] })).toThrow();
   const empty = { ...initialRecipe(), layers: [] };
   const state = freshWorkspace(empty);
-  state.active = 12; state.selected = 17; state.history.push(initialRecipe());
+  state.active = 12; state.selected = 17; state.history = [initialRecipe()];
   const restored = parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS);
   expect(restored.recipe.layers).toHaveLength(0);
   expect(restored.active).toBe(0); expect(restored.selected).toBe(0);
-  expect(restored.history[0].layers).toHaveLength(4);
+  expect(historyRecipes(restored.history)[0].layers).toHaveLength(4);
   expect(compileFlatPreset(empty, 32).metadata.coveredTexels).toBe(0);
   expect(() => parseRecipe({ ...empty, layers: Array(MAX_LAYERS + 1).fill(initialRecipe().layers[0]) })).toThrow();
 });

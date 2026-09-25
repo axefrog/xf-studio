@@ -134,6 +134,19 @@ export const RECIPE_FILE_MESSAGE = `Expected an XF Studio recipe with up to ${MA
  * migrates on read exactly as it always has, or an in-memory recipe (an `xfs/eye-makeup-part-2`
  * body, which has no `schema`). Returns the in-memory recipe (a copy).
  */
+/**
+ * The look history's chunks of a recipe (feature-module platform §3): its header (the recipe with its
+ * layer count in place of the layers, so key order survives), then one chunk per layer. An edit of
+ * one layer then stores only that layer again. `joinRecipe(recipeChunks(r))` equals `r`, key order included.
+ */
+export function recipeChunks(recipe: Recipe): unknown[] {
+  return [{ ...recipe, layers: recipe.layers.length }, ...recipe.layers];
+}
+export function joinRecipe(chunks: readonly unknown[]): Recipe {
+  const [header, ...layers] = chunks as [Record<string, unknown> | undefined, ...Layer[]];
+  if (!header || typeof header !== "object" || header.layers !== layers.length) throw Error("A step of this look's Undo history is damaged.");
+  return { ...header, layers } as Recipe;
+}
 export function parseRecipe(value: unknown, models: LayerModelRegistry = LAYER_MODELS): Recipe {
   return withoutSchema(readRecipe(value, "any", models));
 }
