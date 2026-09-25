@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
-import { historyLabel } from "./history-labels";
+import { historyLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
 import { CONTROL_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
 
@@ -21,7 +21,9 @@ export class AuthoringControlEdits {
   private active?: Transaction;
   constructor(private document: AuthoringDocument,
     private dispatch: (action: RecipeAction) => boolean,
-    private restoreUndo: () => void) {}
+    private restoreUndo: () => void,
+    /** The Undo step's name for an edit: the trusted core passes the registered spec's `label`. */
+    private label: (action: RecipeAction) => HistoryLabel = historyLabel) {}
   begin(id: string, layerId: string | undefined) {
     if (this.active?.id === id && this.active.layer.id === layerId &&
       this.document.recipe.layers.includes(this.active.layer)) return true;
@@ -51,7 +53,7 @@ export class AuthoringControlEdits {
     }
     try {
       const changed = this.dispatch(action);
-      active.transaction!.applied(changed, () => historyLabel(action));
+      active.transaction!.applied(changed, () => this.label(action));
       const current = this.document.recipe.layers.find(layer => layer.id === layerId);
       if (current) active.layer = current;
       return changed ? "changed" : "unchanged";

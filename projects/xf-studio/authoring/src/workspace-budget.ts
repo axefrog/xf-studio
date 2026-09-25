@@ -162,6 +162,10 @@ function measure(state: WorkspaceState): WorkspacePlan {
   };
 }
 
+/** The workspace stored with one plan (for tools and tests; autosave uses `fitWorkspace`). */
+export function encodeWorkspacePlan(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): string {
+  return encodePlan(state, plan, model);
+}
 function encodePlan(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): string {
   return JSON.stringify(serializeWorkspace(compactWorkspace(state, plan, model), model));
 }

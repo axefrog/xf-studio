@@ -2,7 +2,6 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
-import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
@@ -431,7 +430,8 @@ export class StudioApplication {
         capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
         dispatch: action => {
           const s = app.services, spec = app.eyeMakeupSpec(action);
-          s.document.withHistoryLabel(historyLabel(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
+          // The step is named by the registered spec (feature-module platform §3).
+          s.document.withHistoryLabel(spec.label(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
           return undefined;
         },
       },

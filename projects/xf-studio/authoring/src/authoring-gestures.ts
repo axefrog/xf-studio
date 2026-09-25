@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { GestureEdit } from "./recipe-actions";
 import type { Layer } from "./recipe";
-import { gestureHistoryLabel } from "./history-labels";
+import { gestureHistoryLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
 import { GESTURE_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
 
@@ -16,7 +16,9 @@ export class AuthoringGestures {
   private active?: { source: GestureSource; layer: Layer; transaction: HistoryTransaction<HistoryEntryId> };
   /** `actions.applyGesture` applies one frame through the feature's registered gestures (the eye-makeup port). */
   constructor(private document: AuthoringDocument, private actions: { applyGesture(edit: GestureEdit): boolean },
-    private restoreUndo: () => void) {}
+    private restoreUndo: () => void,
+    /** The Undo step's name from a frame: the trusted core passes the registered gestures' `label`. */
+    private label: (edit: GestureEdit) => HistoryLabel = gestureHistoryLabel) {}
   begin(source: GestureSource, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;
     this.active = { source, layer, transaction: HistoryTransaction.open(this.document.transactionHost(this.restoreUndo),
@@ -28,7 +30,7 @@ export class AuthoringGestures {
     if (!active || active.source !== source || active.layer !== action.expectedLayer ||
       !this.document.recipe.layers.includes(active.layer)) return false;
     const changed = this.actions.applyGesture(action);
-    active.transaction.applied(changed, () => gestureHistoryLabel(action));
+    active.transaction.applied(changed, () => this.label(action));
     return changed;
   }
   commit(source: GestureSource) {

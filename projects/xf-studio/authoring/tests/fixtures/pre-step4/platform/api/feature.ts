@@ -2,10 +2,9 @@
  * Owners of actions: platform system families and feature modules (feature-module
  * platform §1, §4). Registration is static and happens at composition time.
  */
-import type { ActionDescriptor, ActionTable, FeatureActionTable, PayloadSchema, UndoPolicy } from "./actions";
+import type { ActionTable, FeatureActionTable } from "./actions";
 import type { Capability, ReasonCode } from "./capability";
 import type { EditorCodec, MemoryCodec, PartCodec } from "./document";
-import type { HistoryLabel } from "./history";
 
 export type FeatureId = string & { readonly __feature: unique symbol };
 export type FamilyId = string & { readonly __family: unique symbol };
@@ -42,13 +41,6 @@ export interface SystemFamily<A extends { kind: string } = { kind: string }, Sco
  */
 export interface GestureProvider<P = unknown, G = unknown, R = unknown> {
   apply(part: P, edit: G): R | undefined;
-  /** What a gesture's Undo step is called, from the first frame that changed something (the host names it otherwise). */
-  label?(edit: G): HistoryLabel;
-  /**
-   * The gesture proposals a presentation may send inside a gesture session, by kind (catalogued beside
-   * the actions; the session and its Undo transaction are the platform's).
-   */
-  readonly descriptors?: Readonly<Record<string, ActionDescriptor>>;
 }
 
 /**
@@ -79,45 +71,6 @@ export type ActionOwner<A extends { kind: string } = { kind: string }, Scope ext
 /** A feature module seen by the platform, whatever its part and editor types. */
 export type AnyFeatureModule = Pick<FeatureModule, "id" | "label"> & {
   readonly part: PartCodec<unknown>; readonly editor: EditorCodec<unknown, unknown>; readonly memory?: MemoryCodec<unknown> };
-
-/**
- * An asynchronous request's descriptor (a library request, a file workflow): where it applies, what it
- * does, and whether it can be cancelled once started. Families add their own fields (a file workflow's
- * device, for example); `undo` names a recovery path when there is one.
- */
-export type AsyncDescriptor<Scope extends string = string> = { readonly scope: readonly Scope[]; readonly effect: string;
-  readonly async: true; readonly cancellable: boolean; readonly payload?: PayloadSchema; readonly undo?: UndoPolicy };
-/** An async family's table: one descriptor per kind of its request union (compile-time exhaustive). */
-export type AsyncActionTable<A extends { kind: string }, D extends AsyncDescriptor = AsyncDescriptor> =
-  { readonly [K in A["kind"]]: { readonly descriptor: D } };
-/**
- * A platform family of asynchronous requests (feature-module platform §4, CORE-36): the library's
- * requests and the file workflows. They run to completion or failure over a device or the host, report
- * progress through their service, and never record Undo; the registry routes them by owner like every
- * other kind, through `routeAsync`, and keeps them out of the synchronous action table.
- */
-export interface AsyncSystemFamily<A extends { kind: string } = { kind: string }, D extends AsyncDescriptor = AsyncDescriptor,
-  Id extends FamilyId = FamilyId> {
-  readonly owner: "system";
-  readonly async: true;
-  readonly id: Id;
-  readonly label: string;
-  readonly actions: AsyncActionTable<A, D>;
-  /** Scene gating and thrown-error codes belong to synchronous families; an async family reports its own outcome. */
-  readonly needsScene?: undefined;
-  readonly thrown?: undefined;
-}
-/** The live behaviour an application binds to an async family: its capability check and its execution. */
-export interface AsyncActionHandler<A extends { kind: string }, R = unknown> {
-  capability(action: A): Capability;
-  execute(action: A): Promise<R>;
-}
-/** Build an async family's table from an existing descriptor record (key order is registration order). */
-export function asyncActionTable<A extends { kind: string }, D extends AsyncDescriptor>(
-  descriptors: { readonly [K in A["kind"]]: D }): AsyncActionTable<A, D> {
-  return Object.freeze(Object.fromEntries(Object.entries(descriptors).map(([kind, descriptor]) =>
-    [kind, Object.freeze({ descriptor })]))) as unknown as AsyncActionTable<A, D>;
-}
 
 /** The live behaviour an application binds to one owner: its capability check and dispatch. */
 export interface ActionHandler<A extends { kind: string }> {

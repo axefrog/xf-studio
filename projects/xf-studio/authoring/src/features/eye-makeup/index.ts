@@ -10,6 +10,7 @@ import { featureActionTable, featureId, type FeatureModule } from "../../platfor
 import type { Recipe } from "../../recipe";
 import { applyRecipeGesture, type GestureEdit } from "../../recipe-actions";
 import { EYE_MAKEUP_FEATURE } from "../../recipe-schema";
+import { gestureHistoryLabel, historyLabel } from "../../history-labels";
 import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, type ActionScope } from "../../studio-action-descriptors";
 import { applyEyeMakeup, assignEyeMakeupIds, eyeMakeupCapability, type EyeMakeupAction, type EyeMakeupEditorState,
   type EyeMakeupEffect } from "./core";
@@ -40,7 +41,8 @@ export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, ActionScope, typeof EYE_
   owner: "feature", id: EYE_MAKEUP_ID, api: 1, label: "Eye makeup", stage: "stable",
   part: eyeMakeupPart, editor: eyeMakeupEditor, memory: eyeMakeupMemory,
   // Gesture proposals are catalogued with the gestures; the platform owns the session's Undo transaction.
-  gestures: { apply: applyRecipeGesture, descriptors: GESTURE_DESCRIPTORS },
+  gestures: { apply: applyRecipeGesture, label: gestureHistoryLabel, descriptors: GESTURE_DESCRIPTORS },
   actions: featureActionTable<Recipe, EyeMakeupEditorState, EyeMakeupAction, ActionScope, EyeMakeupEffect>(
-    ACTION_DESCRIPTORS, KINDS, { capability: eyeMakeupCapability, apply: applyEyeMakeup, assignIds: assignEyeMakeupIds }),
+    ACTION_DESCRIPTORS, KINDS, { capability: eyeMakeupCapability, apply: applyEyeMakeup, assignIds: assignEyeMakeupIds,
+      label: historyLabel }),
 });

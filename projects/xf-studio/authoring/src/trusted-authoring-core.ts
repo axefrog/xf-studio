@@ -4,6 +4,7 @@ import { eyeMakeupPort, type EyeMakeupGestures, type EyeMakeupSpec } from "./aut
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
+import { gestureHistoryLabel } from "./history-labels";
 import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
 import type { AnyOwner, Registry } from "./platform/core/registry";
@@ -54,11 +55,13 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const eyeMakeup = eyeMakeupPort(document, recipe, ports.resetStack, ports.newId);
   // Gesture frames run the module's registered gestures and publish through the port (CORE-31).
   const gestures = new AuthoringGestures(document,
-    { applyGesture: edit => eyeMakeup.gesture(live.gestures as EyeMakeupGestures, edit) }, revert);
+    { applyGesture: edit => eyeMakeup.gesture(live.gestures as EyeMakeupGestures, edit) }, revert,
+    edit => (live.gestures as EyeMakeupGestures).label?.(edit) ?? gestureHistoryLabel(edit));
   // Form controls apply through the registered apply and the port too; their transaction owns the
   // Undo entry, so no checkpoint is recorded here. StudioApplication.controlEdit runs the capability
   // gate first and reports failures as typed results, so hosts wire nothing here.
-  const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert);
+  const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert,
+    action => specOf(action.kind).label(action));
   const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls }, registry);
   return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, undo, history, documents };
 }
