@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `ac251d8` | 2026-09-25 | Deep review since `ecb4b33`: plate lift and diagnostics, head camera input, release prep, package gate, site knowledge generator, private-path check, P0 character details; plus a separate security review of the runtime bridge | 2 High (PIPE-28, RB-01), 8 Medium, 15 Low. Open Highs now 4, over budget: feature merges pause until PIPE-28 and RB-01 are fixed |
 | `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixed in claude/release-prep (PREV-20..24, UI-34/35, REL-01; PREV-25 partly; changelog and site corrected); the workflow's first run failed on a test timeout, fixed there, rerun pending |
 | `524a575` | 2026-09-25 | Pre-alpha review of presentation, startup, preview card and desktop host at `7e02636` (completes the `19bf84c` deep review after the legacy-shell removal); the core and pipeline cleanups merged since fix reviewed findings | 0 High, 7 Medium, 6 Low (UI-21..33); UI-05 fixed, UI-06 mostly fixed. Alpha blockers UI-19/20/21/22/23/24/25/27 assigned to claude/alpha-polish |
 | `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
@@ -63,6 +64,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | RB-02 | Med | Runtime bridge | `FlushFileBuffers` waits for a client that never reads, so kill and game exit hang (`PipeServer.cpp:194`) | Open (fix before the bridge session) |
 | RB-03 | Med | Runtime bridge | Exceptions can escape thread entries, exported functions and natives (`dump()` on invalid UTF-8; byte-cut `Sanitize`) | Open |
 | RB-04 | Med | Runtime bridge | A request reported cancelled after a timeout can still run on the game thread (`GameThreadQueue.cpp`) | Open |
+| PIPE-28 | High | Verifier | Plate verification no longer compares the whole mesh render blob and morph blob against the input: tampered `bonePositions`, `renderLODs`, `version`, `numDiffs`, texture-diff data, morph bounding box, trailing mapping bytes and chunk `materialId` all still verify (`resource-checks.ts:251-253`, `plate-geometry.ts`) | Open (cleanup-verifier) |
+| PIPE-29 | Med | Verifier | Lift tolerances derive from the builder-chosen quantisation with no bound; the re-quantisation branch is untested (0 of the fixture's targets re-quantise; 24 of 105 on the real plate) | Open (cleanup-verifier) |
+| PREV-26 | Med | Character details | Detail request key ignores launch route, profile, mod set and WolvenKit identity; `ready` is kept for the host's lifetime, so a new hair mod or profile switch isn't picked up until restart (`character-detail-host.ts:173,199-201`) | Open (cleanup-verifier) |
+| REL-02 | Med | Packaging | Package content scan misses lower-case, WSL, percent-encoded, escaped and POSIX user paths; false positives on `git@` remotes (`package-content-scan.ts:18,22`) | Open (cleanup-hygiene) |
+| REL-03 | Med | Repo hygiene | `check_private_paths.py` misses an address before a full stop and digit-led local parts; placeholder names match as prefixes; exemptions are by file name anywhere and switch off every pattern; some file types unscanned | Open (cleanup-hygiene) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Partly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures and profiles; character details load with cancellation, supersede and dispose (claude/render-resolver). The core head record is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -151,11 +157,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Eye-plate lift and export diagnostics** (claude/plate-depth): `plate-lift.ts`, `export-diagnostics.ts`, verifier `mod-verifier/plate-geometry.ts`.
-- **Head camera input adapter** (claude/camera-bindings): `head-camera-input.ts`.
-- **XF Runtime Bridge** (claude/runtime-baseline): new project `projects/xf-runtime-bridge` (RED4ext C++ plugin with a named-pipe bridge, redscript, CET Lua, TweakXL). First code that accepts commands from outside the game.
-- **Site knowledge generator** (claude/public-knowledge): `projects/xf-studio/site/tools/knowledge.ts`, `privacy.ts`.
-- **Resolved character details** (claude/render-resolver, 25 Sep): host service and endpoint shared by both hosts (`character-detail-service/host/server.ts`, `/api/preview-character`, `/assets/character/`), the pure planner (`character-detail-plan.ts`), the render record version 2 (`render-detail.ts`), and the renderer's loader, material adapters and application service (`character-detail-loader.ts`, `character-material-adapters.ts`, `character-detail-actions.ts`). Reads the installed game and MO2 read-only; runs WolvenKit; serves content-addressed files. Not yet reviewed.
+None. (Reviewed at `ac251d8`.)
 
 ## Fixed in claude/release-prep
 
@@ -168,6 +170,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **UI-35:** the head pane's next-step button applies the setup action's capability (disabled with its reason while a step runs).
 - **REL-01:** `desktop/package-content-scan.ts` scans every packaged text member of the real archive in `verify-canary.ts` for absolute user-profile paths (`C:\Users\<name>` in any drive, slash direction or escaping) and email addresses, allowing placeholders, example domains and addresses in licence text, and redacts findings for the public log. Tested in `desktop/tests/package-content-scan.test.ts`; the three canary archives built locally on 25 September scan clean and a planted path is caught.
 - **RB-05..11** (runtime bridge security review at `ac251d8`): pre-token requests unrated and some refusals unlogged; Bun client lacks the server-PID check and impersonation limit; `XFB_RUNTIME_DIR` honoured in game; game calls check names not signatures (version gate covers today); unsynchronised drop-event handle; failed connect retried without reset; docs/packaging mismatches (`build/` not ignored, `bridge.kill` access class, test-card line, missing nlohmann notice, manifest commit).
+- **PREV-27:** quick V1→V2→V1 wastes a preparation; cancelled runs overlap new ones on the shared cache (extends PREV-07).
+- **PREV-28:** character detail `dispose()` leaks each skeleton's bone texture.
+- **PIPE-30:** diagnostic lifts/overrides are recorded only in intermediate files, not Check, the manifest or the result gate.
+- **PIPE-31:** the package result gate lost its lexical containment check; a path outside dist that reaches in through a junction is accepted.
+- **SITE-01:** knowledge index summaries skip the privacy check, and the dist check can't see paths split by `<wbr>`.
+- **SITE-02:** the site privacy check exempts real TLDs `.app`/`.mt` and misses WSL paths.
+- **UI-36:** head release unloads whichever head is current, not its own (latent).
+- **UI-37:** head-camera tests lack pointercancel, first-finger-lift and consumed-first-touch cases.
+- **PIPE-25 (extended):** each V switch opens the installation synchronously on the host.
 - **CI (release blocker):** the first Desktop release run failed on a 5.1 s exhaustive flake test under Bun's 5 s default. Tests taking about a second or more locally now carry explicit, commented timeouts (flake-field, glint oracle, mod-verifier resource failures, workspace storage budget, desktop Build deadline).
 
 ## Fixed in claude/wolvenkit-fetch
