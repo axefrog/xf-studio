@@ -7,7 +7,7 @@ import { checkSite } from "../tools/check";
 import { loadConfig, repoRoot } from "../tools/config";
 import { loadKnowledge, parseKnowledgeIndex } from "../tools/knowledge";
 import { badgeGrades, checkTables, githubSlug, mermaidOutline, renderMarkdown } from "../tools/markdown";
-import { findPersonalData } from "../tools/privacy";
+import { findPersonalData, PRIVATE_DATA } from "../tools/privacy";
 
 const temp: string[] = [];
 const tempDir = (prefix: string) => { const dir = mkdtempSync(join(tmpdir(), prefix)); temp.push(dir); return dir; };
@@ -125,8 +125,18 @@ describe("knowledge generator", () => {
   });
 
   test("fails on personal paths and e-mail addresses in a page", () => {
-    for (const secret of ["C:\\Users\\someone\\Documents\\save.dat", "C:/Users/someone/AppData", "someone@example.com"])
+    for (const secret of ["C:\\Users\\jdoe\\Documents\\save.dat", "C:/Users/jdoe/AppData", "jane@gmail.com"])
       expect(() => load({ ...base, "knowledge/alpha.md": `# Alpha\n\nFound in \`${secret}\`.\n` })).toThrow("personal data");
+  });
+
+  test("fails on personal data in the index's topic summaries (SITE-01)", () => {
+    const summary = (text: string) => ({ ...base, "knowledge/README.md": README.replace("The `.app` chain", text) });
+    expect(() => load(summary("Found in `C:\\Users\\jdoe\\AppData`"))).toThrow("knowledge/README.md: contains personal data");
+    expect(() => load(summary("Ask jane.doe@gmail.com."))).toThrow("knowledge/README.md: contains personal data");
+    // The error is redacted: build logs are public.
+    expect(() => load(summary("Found in `C:\\Users\\jdoe\\AppData`"))).toThrow(/C:\\Users\\j\*\*\*/);
+    // A placeholder passes, although the rendered summary splits it with <wbr>.
+    expect(load(summary("Found in `C:\\Users\\<name>\\AppData`")).topics[0].summaryHtml).toContain("<wbr>");
   });
 
   test("fails on table rows that GFM would split, and on images", () => {
@@ -149,8 +159,21 @@ describe("knowledge generator", () => {
 });
 
 describe("privacy guard", () => {
+  test("the shared vectors (tools/private-data.json) agree with the repository check and the packaged-app scan (SITE-02)", () => {
+    const { userPath, email, clean } = PRIVATE_DATA.vectors;
+    for (const text of userPath) expect(findPersonalData(text), text).toHaveLength(1);
+    for (const text of email) expect(findPersonalData(text).map(found => found.name), text).toEqual(["e-mail address"]);
+    for (const text of clean) expect(findPersonalData(text), text).toEqual([]);
+    // Real top-level domains are addresses; only the material-reference shape is not.
+    expect(findPersonalData("jane@gmail.app").map(found => found.name)).toEqual(["e-mail address"]);
+    expect(findPersonalData("jane@company.mt").map(found => found.name)).toEqual(["e-mail address"]);
+    expect(findPersonalData("/mnt/c/Users/jdoe/x").map(found => found.name)).toEqual(["WSL user-profile path"]);
+    // Findings are redacted.
+    expect(findPersonalData("C:\\Users\\jdoe\\x")).toEqual([{ name: "Windows user-profile path", match: "C:\\Users\\j***" }]);
+  });
+
   test("recognises personal paths and addresses, not placeholders or look-alikes", () => {
-    for (const bad of ["C:\\Users\\alice\\x", "c:/users/alice/", "D:\\\\Users\\\\bob\\\\x", "/home/carol/.config", "/Users/dave/Library", "eve@example.org", "file:///C:/Users/frank/"])
+    for (const bad of ["C:\\Users\\alice\\x", "c:/users/alice/", "D:\\\\Users\\\\bob\\\\x", "/home/carol/.config", "/Users/dave/Library", "eve@mailbox.org", "file:///C:/Users/frank/"])
       expect(findPersonalData(bad).length).toBeGreaterThan(0);
     for (const ok of ["%USERPROFILE%\\Documents", "PATH_TO_GAME\\archive\\pc\\mod", "C:\\Users\\Public", "black_carbon@long", "name@tpl", "@context",
       "https://github.com/home/x", "noreply at example dot com", "ash_brown@long.mi"])
@@ -200,11 +223,24 @@ describe("published knowledge section", () => {
     buildSite({ outDir: dir });
     const page = join(dir, "knowledge", "tooling.html");
     writeFileSync(page, read("knowledge/tooling.html").replace(" data-knowledge-caveat", "").replace(" data-knowledge-updated", "")
-      .replace("</main>", "<p>Copied from C:\\Users\\someone\\Desktop, ask someone@example.com</p></main>"));
+      .replace("</main>", "<p>Copied from C:\\Users\\jdoe\\Desktop, ask jane@mailbox.org</p></main>"));
     const issues = (await checkSite(dir, { repoFiles: null })).issues.map(issue => `${issue.file}: ${issue.message}`);
     expect(issues.some(m => m.includes("knowledge/tooling.html") && m.includes("[data-knowledge-caveat]"))).toBe(true);
     expect(issues.some(m => m.includes("[data-knowledge-updated]"))).toBe(true);
     expect(issues.some(m => m.includes("Windows user-profile path"))).toBe(true);
     expect(issues.some(m => m.includes("e-mail address"))).toBe(true);
+    // Redacted in the check's output too: CI logs are public.
+    expect(issues.some(m => /jdoe|jane@/.test(m))).toBe(false);
+  });
+
+  test("the check sees a path the renderer split with <wbr> in a code span (SITE-01)", async () => {
+    const dir = tempDir("xfs-knowledge-wbr-");
+    buildSite({ outDir: dir });
+    const code = renderMarkdown("# T\n\nSee `C:\\Users\\jdoe\\AppData`.\n", { link: href => href, fragment: true }).html;
+    expect(code).toContain("<wbr>");
+    const page = join(dir, "knowledge", "tooling.html");
+    writeFileSync(page, read("knowledge/tooling.html").replace("</main>", `${code}</main>`));
+    const issues = (await checkSite(dir, { repoFiles: null })).issues.map(issue => `${issue.file}: ${issue.message}`);
+    expect(issues.filter(m => m.includes("user-profile path"))).toEqual(["knowledge/tooling.html: contains personal data (Windows user-profile path): C:\\Users\\j***"]);
   });
 });

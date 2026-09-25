@@ -58,6 +58,13 @@ export function createBrowserViewportDevice(options: {
       if (events.document?.visibilityState === "hidden") attachment.reportModifiers(NO_MODIFIERS);
     });
   }
+  function releaseHead() {
+    editors.detach("surface");
+    surfaceEditor = undefined;
+    const loaded = viewer;
+    viewer = undefined;
+    loaded?.dispose();
+  }
   return {
     attachment,
     mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
@@ -69,17 +76,16 @@ export function createBrowserViewportDevice(options: {
       return uvEditor;
     },
     async loadHead(canvases: HTMLCanvasElement[]) {
-      this.unloadHead();
+      releaseHead();
       viewer = await (options.sceneFactory ?? createScene)(options.headHost, canvases);
       return viewer;
     },
-    /** Releases the loaded head: its surface editor, then the scene's renderer and canvas. */
-    unloadHead() {
-      editors.detach("surface");
-      surfaceEditor = undefined;
-      const loaded = viewer;
-      viewer = undefined;
-      loaded?.dispose();
+    /**
+     * Releases this head (its surface editor, then the scene's renderer and canvas) if it is still
+     * the loaded one. A stale release, for a head a later load already replaced, does nothing (UI-36).
+     */
+    unloadHead(scene: Scene) {
+      if (scene === viewer) releaseHead();
     },
     mountSurface(hooks: Parameters<typeof createSurfaceEditor>[1]) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");

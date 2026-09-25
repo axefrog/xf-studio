@@ -18,11 +18,13 @@ on:
     branches: [main]
     paths:
       - "projects/xf-studio/authoring/**"
+      - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - ".github/workflows/authoring.yml"
   pull_request:
     paths:
       - "projects/xf-studio/authoring/**"
+      - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - ".github/workflows/authoring.yml"
   workflow_dispatch:

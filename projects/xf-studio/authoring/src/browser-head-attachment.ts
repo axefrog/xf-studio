@@ -61,10 +61,12 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       try { release(); } catch (error) { console.error(error); }
     }
   };
-  // The scene (with its surface editor) is released last, after everything that uses it.
-  releases.push(() => ports.viewport.unloadHead());
   try {
+    // A load that fails releases what it made itself (createScene does), so there is nothing to
+    // unload until it returns. The scene (with its surface editor) is released last, after
+    // everything that uses it, and only if it is still the loaded head (UI-36).
     const scene = await ports.viewport.loadHead(ports.preview.emptyCanvases());
+    releases.push(() => ports.viewport.unloadHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
     let savedAppearance: SavedAppearanceActions | undefined;

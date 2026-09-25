@@ -22,5 +22,7 @@ jobs:
           persist-credentials: false
       - name: Check relative links and anchors
         run: python3 tools/check_links.py
+      - name: Self-test the personal-path check against its shared vectors
+        run: python3 tools/check_private_paths.py --self-test
       - name: Check for personal paths and e-mail addresses
         run: python3 tools/check_private_paths.py
