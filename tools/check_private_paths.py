@@ -39,6 +39,8 @@ EXEMPT = [
     ('projects/xf-studio/authoring/desktop/tests/package-content-scan.test.ts', {USER_FOLDER, EMAIL_ADDRESS}),
     ('projects/xf-studio/site/tests/knowledge.test.ts', {USER_FOLDER, EMAIL_ADDRESS}),
     ('tools/check_private_paths.py', {MEDIA_FOLDER}),  # its self-test case
+    # Licence notices must reproduce third-party copyright lines verbatim, contact addresses included.
+    ('projects/xf-runtime-bridge/native/THIRD_PARTY_NOTICES.txt', {EMAIL_ADDRESS}),
 ]
 # Binary formats are never read; everything else that decodes as UTF-8 without NUL bytes is text.
 BINARY = re.compile(r'\.(png|jpe?g|gif|webp|avif|ico|bmp|tga|dds|glb|gltf|bin|blend|zip|7z|gz|zst|tar|exe|dll|pdb|'
