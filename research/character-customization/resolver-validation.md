@@ -52,6 +52,10 @@ A UI state `{piercings: "12", piercings_12: i0_000_pwa__earring__01_silver}` res
 - the kept vanilla part `i1_000_pwa__morphs_earring_04` shows chunk 1 (mask …610), from the Facial Customisation Rig Fix's replacement morph;
 - all components use `silver`; the stud's second chunk `default__02` → `base\eagul\mat_1.mi` from `nim_piercings_recolor_silver.archive` → `multilayered.mt`, as the [PRC catalogue audit](../jewellery/prc-catalog-audit.md) found.
 
+## Head used for the built-in eye plate
+
+The Build's eye plate now asks the same resolver which head mesh and morph target the route loads ([pipeline guide](../authoring/studio-to-mod-pipeline.md#where-the-eye-plate-comes-from)). For the MO2 profiles `2025 (again)` and `XF Studio diagnostic 2026-09-25` it reproduces the skin row above: the mesh is the base-game `e877b91a…`, patched by the -KS- UV Texture Framework `.xl` with no `props` (appearances only under ArchiveXL's rules, so plate geometry is unchanged), and the morph target is the Facial Customisation Rig Fix's `16ec1fae…`. Decoding both morph copies [resource]: the Rig Fix morph has the base game's base buffer, diffs, mapping and target names byte for byte, and renames six per-target bone names (`l_/r_J_jaw_ear_0..2_JNT` to `…_unused`) in all 105 targets. That is consistent with its stated purpose of stopping eye clipping by detaching those joints from the morphs [hypothesis about the runtime effect]. With all mods disabled both resources resolve to the base game.
+
 ## Mismatches and limits
 
 - **Material chains stop at the template.** Parameters and textures are listed with providers; no `.mt` shader semantics, `.mlsetup` layers or texture pixels are interpreted.

@@ -11,11 +11,11 @@ import { descriptorsFromUiState } from "../src/cco-model";
 import { inputFromSave, loadMergedCco, resolveCharacter, type ResolvedAppearance, type ResolvedCharacter } from "../src/character-resolver";
 import { openInstallation } from "../src/resolver-host";
 import { readSavedV } from "../src/save-reader";
+import { oracleDescribe } from "./optional-oracles";
 
 const env = process.env;
 const missing = ["XFS_RESOLVER_GAME_ROOT", "XFS_WOLVENKIT_CLI", "XFS_RESOLVER_SAVE"].filter(name => !env[name] || !existsSync(env[name]!));
 const reference = env.XFS_RESOLVER_REFERENCE === "1";
-if (missing.length) console.info(`[resolver integration] skipped: set ${missing.join(", ")} to resolve a real installation (read-only).`);
 
 const open = () => openInstallation({ gameRoot: resolve(env.XFS_RESOLVER_GAME_ROOT!), wolvenKitCli: resolve(env.XFS_WOLVENKIT_CLI!),
   launchRoute: env.XFS_RESOLVER_MO2_ROOT ? "mo2" : "direct", mo2Root: env.XFS_RESOLVER_MO2_ROOT ? resolve(env.XFS_RESOLVER_MO2_ROOT) : null,
@@ -24,7 +24,7 @@ const find = (character: ResolvedCharacter, option: string) => character.appeara
 const components = (entry: ResolvedAppearance) => entry.components.filter(c => c.geometry && !c.geometry.drawsNothing);
 const params = (entry: ResolvedAppearance) => components(entry).flatMap(c => c.materials.flatMap(m => m.params));
 
-describe.skipIf(missing.length > 0)("resolver on a real installation", () => {
+oracleDescribe(missing.length === 0, `the resolver integration test needs ${missing.join(", ")} to resolve a real installation (read-only).`)("resolver on a real installation", () => {
   test("resolves every saved appearance descriptor from game data", async () => {
     const installation = open();
     expect(installation.summary.indexErrors).toEqual([]);

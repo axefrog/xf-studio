@@ -172,7 +172,7 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### xBaebsae
 
-[Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179). Its alternative head morph reinforced the need to resolve each file's effective winner. Studied only.
+[Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179). Its alternative head morph reinforced the need to resolve each file's effective winner, and showed that a head fix can keep the geometry while renaming per-target bone names, which the built-in eye plate now carries over. Studied only.
 
 ## Research papers
 

@@ -16,6 +16,7 @@ import { preflightPackageCollection } from "./package-preflight";
 import { buildPackageResources, plateStem, type BuildRecord } from "./package-resource-builder";
 import { createWolvenKitPackageTools, PackageToolError, type PackageResourceTools } from "./package-build-wolvenkit";
 import { verifyBuild, type VerificationReport, type VerifyBuildOptions } from "./mod-verifier/verify-build";
+import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "./eye-plate-service";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;
 
@@ -120,16 +121,19 @@ function guardPrivateRoots(options: PackageCommandOptions, protectedInputs: read
   return { build, dist, output };
 }
 
-/** Which eye plate is packaged: the host-derived built-in plate or a developer override. */
-function plateProvenance(manifestPath: string | undefined, mesh: string, morph: string): PackagePlate {
+/**
+ * Which eye plate is packaged: the host-derived built-in plate or a developer override, and the
+ * plate recipe's morph target count for the verifier (unknown for an override).
+ */
+function plateProvenance(manifestPath: string | undefined, mesh: string, morph: string): { plate: PackagePlate; morphTargets?: number } {
   const meshSha256 = fileHash(mesh), morphSha256 = fileHash(morph);
-  if (!manifestPath) return { source: "override", meshSha256, morphSha256 };
+  if (!manifestPath) return { plate: { source: "override", meshSha256, morphSha256 } };
   const manifest = JSON.parse(readFileSync(existing(manifestPath, "Plate manifest"), "utf8"));
   const files = manifest?.files ?? {};
-  if (manifest?.schema !== "xfs/eye-plate-cache-1" || files.mesh?.sha256 !== meshSha256 || files.morph?.sha256 !== morphSha256)
+  if (manifest?.schema !== EYE_PLATE_MANIFEST_SCHEMA || files.mesh?.sha256 !== meshSha256 || files.morph?.sha256 !== morphSha256 ||
+      !Number.isSafeInteger(manifest?.verification?.morphTargets))
     fail("package_plate_mismatch", "The eye plate manifest does not match the plate resources.");
-  return { source: "derived", recipeId: manifest.recipeId, recipeRevision: manifest.recipeRevision,
-    sourceRevision: manifest.source.revisionId, cacheKey: manifest.cacheKey, meshSha256, morphSha256 };
+  return { plate: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets };
 }
 
 /** Wall-clock nanoseconds as a decimal string, for a unique, sortable build token. */
@@ -170,7 +174,8 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     try { return plateStem(plate); }
     catch { return fail("package_plate_invalid", `Plate directory must hold exactly one mesh/morphtarget pair: ${plate}`); }
   })();
-  const plateRecord = plateProvenance(options.plateManifest, join(plate, stem + ".mesh"), join(plate, stem + ".morphtarget"));
+  const { plate: plateRecord, morphTargets: plateMorphTargets } =
+    plateProvenance(options.plateManifest, join(plate, stem + ".mesh"), join(plate, stem + ".morphtarget"));
   if (!isFile(wolvenkit) || !isDirectory(gamepath)) fail("package_input_missing", "WolvenKit must be a file and gamepath must be a directory.");
   const protectedInputs = [["game root", gamepath], ["plate source", plate], ["app source", app],
     ["WolvenKit tools", dirname(wolvenkit)], ["Bun tools", dirname(process.execPath)]] as const;
@@ -190,7 +195,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     log(`Building ${check.presets.length} preset(s) in ignored local intermediates: ${intermediate}`);
     cancelled();
     const tools = (options.tools ?? ((cli, cwd, signal) => createWolvenKitPackageTools(cli, { cwd, signal })))(wolvenkit, roots.build, options.signal);
-    record = await buildPackageResources({ collection: JSON.parse(written), output: intermediate, plate, gameRoot: gamepath,
+    record = await buildPackageResources({ collection: JSON.parse(written), output: intermediate, plate,
       tools, signal: options.signal, log });
   } catch (error) {
     if (error instanceof PackageToolError) fail(error.code, error.code === "package_tool_failed"
@@ -201,11 +206,17 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
 
   cancelled();
   let verification: VerificationReport;
-  try { verification = (options.verify ?? verifyBuild)({ build: intermediate, wolvenkit }); }
+  try {
+    verification = (options.verify ?? verifyBuild)({ build: intermediate, wolvenkit, gamepath,
+      plate: { mesh: join(plate, stem + ".mesh"), morph: join(plate, stem + ".morphtarget"),
+        meshSha256: plateRecord.meshSha256, morphSha256: plateRecord.morphSha256 },
+      morphTargets: plateMorphTargets });
+  }
   catch (error) { return fail("package_verification_failed", `Independent verifier failed: ${(error as Error).message}`); }
   writeFileSync(join(intermediate, "verification.json"), JSON.stringify(verification, null, 2) + "\n", "utf8");
   log("independent verification complete");
-  if (verification.archiveSha256 !== record.archiveSha256 || verification.presetCount !== check.presets.length)
+  if (verification.archiveSha256 !== record.archiveSha256 || verification.presetCount !== check.presets.length ||
+      verification.plateInputs?.mesh !== plateRecord.meshSha256 || verification.plateInputs?.morph !== plateRecord.morphSha256)
     fail("package_verification_failed", "Independent verification does not match the build.");
   const built = record.plan;
   if (built.collectionId !== check.collectionId || built.namespace !== check.namespace ||
@@ -240,8 +251,8 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
       installed: false, gameRenderingVerified: false,
       limits: verification.limits,
     };
-    if (manifest.files[0].sha256 !== verification.archiveSha256)
-      fail("package_verification_failed", "Promoted archive differs from the verified archive.");
+    if (manifest.files[0].sha256 !== verification.archiveSha256 || manifest.files[1].sha256 !== verification.archiveXlSha256)
+      fail("package_verification_failed", "Promoted archive or declaration differs from the verified files.");
     writeFileSync(join(staging, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");
     renameSync(staging, final);
   } finally { if (existsSync(staging)) rmSync(staging, { recursive: true, force: true }); }
