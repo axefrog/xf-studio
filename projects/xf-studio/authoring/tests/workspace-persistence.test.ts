@@ -30,9 +30,8 @@ function studioSession(storage: ReturnType<typeof memoryStorage>, options: { wat
   const session = createBrowserWorkspaceSession({ workspace, restored, verification: true, storage,
     capture: { editor: () => core.document.export(), uvView: () => workspace.uvView, savedV: () => undefined,
       collections: () => workspace.collections, quality: () => workspace.preview.textureSize,
-      preview: () => undefined, motion: () => undefined,
-      sidebar: () => ({ sidebarLeft: 260, sidebarRight: 350 }), layout: () => workspace.panels },
-    sources: [core.document], window: new EventTarget(), document: events, scrollTargets: [], toggleTargets: [],
+      preview: () => undefined, motion: () => undefined },
+    sources: [core.document], window: new EventTarget(), document: events,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); } });
   // A presentation-wide subscription also sees status changes; it must not keep saving.
   if (options.watchStatus) session.watch(statusSource);

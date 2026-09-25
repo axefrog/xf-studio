@@ -59,7 +59,7 @@ const recipeKinds = new Set<StudioAction["kind"]>([
   "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect",
   "point.move", "point.insert", "point.setTangent", "shape.transform", "field.setOrigin", "field.setVector"]);
 const collectionKinds = new Set<StudioAction["kind"]>([
-  "preset.edit", "preset.select", "preset.expand", "collection.rename", "collection.filesOpen",
+  "preset.edit", "preset.select", "collection.rename",
   "collection.open", "collection.undoOpen", "collection.importRecipe"]);
 const recovery = new Set<StudioAction["kind"]>(["collection.undoOpen"]);
 

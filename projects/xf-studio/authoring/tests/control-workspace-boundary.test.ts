@@ -52,9 +52,6 @@ test("empty and stale form transactions cannot consume an unrelated Undo entry",
 
 test("workspace composer keeps pre-preview restoration safe and later uses typed snapshots", () => {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  workspace.panels.layersScroll = 99;
-  const panels = { ...workspace.panels, layersScroll: 3, previewQuality: true, lighting: true,
-    sidebarLeft: 300, sidebarRight: 400 };
   const preview = { ...workspace.preview, wire: true,
     camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } };
   const motion = { ...workspace.preview, available: true, blink: .4, blinkPlaying: false,
@@ -63,21 +60,17 @@ test("workspace composer keeps pre-preview restoration safe and later uses typed
     editor: () => document.export(), uvView: () => workspace.uvView,
     savedV: () => workspace.savedV, collections: () => workspace.collections,
     quality: () => 512, preview: () => preview, motion: () => motion,
-    sidebar: () => ({ sidebarLeft: panels.sidebarLeft, sidebarRight: panels.sidebarRight }),
-    layout: () => panels,
   });
   const early = composer.capture();
   expect(early.preview.textureSize).toBe(512);
   expect(early.preview.wire).toBe(false);
-  expect(early.panels.layersScroll).toBe(99);
-  expect(early.panels.sidebarLeft).toBe(300);
   composer.setPreviewReady();
   const ready = composer.capture();
   expect(ready.preview.wire).toBe(true);
   expect(ready.preview.camera?.fov).toBe(42);
   expect(ready.preview.blink).toBe(.4);
   expect(ready.preview.idleFace).toBe(false);
-  expect(ready.panels.layersScroll).toBe(3);
+  expect("panels" in ready).toBe(false);
   ready.recipe.layers[0].color = "#123456";
   expect(document.recipe.layers[0].color).not.toBe("#123456");
 });
@@ -95,7 +88,6 @@ test("UV-only saves preserve stored camera and motion until a head actually load
     uvView: () => ({ ...workspace.uvView, span: .25 }),
     savedV: () => workspace.savedV, collections: () => workspace.collections,
     quality: () => 512, preview: () => undefined, motion: () => undefined,
-    sidebar: () => ({ sidebarLeft: 260, sidebarRight: 350 }), layout: () => workspace.panels,
   });
   const saved = composer.capture();
   expect(saved.preview.camera).toEqual(workspace.preview.camera);

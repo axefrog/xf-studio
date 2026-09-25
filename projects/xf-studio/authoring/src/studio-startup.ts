@@ -109,11 +109,8 @@ async function start(host: StudioHost, root: HTMLElement) {
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
       preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
       uiPreferences: () => preferences.snapshot(),
-      // The legacy shell's sidebar and scroll memory are retained untouched for it.
-      sidebar: () => ({ sidebarLeft: workspace.panels.sidebarLeft, sidebarRight: workspace.panels.sidebarRight }),
-      layout: () => workspace.panels,
     },
-    sources: [core.document, preferences], window, document, scrollTargets: [], toggleTargets: [],
+    sources: [core.document, preferences], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
   });
   host.onFlushRequest?.(() => session.flush());

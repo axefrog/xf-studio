@@ -5,18 +5,18 @@ import { parseRecipe, type Recipe } from "./recipe";
 export type Preset = PresetCollection["presets"][number];
 export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: Recipe[] };
 export type CollectionDraft = {
-  collection: PresetCollection; revision?: number; selected?: string; expanded: boolean;
+  collection: PresetCollection; revision?: number; selected?: string;
   editors: Record<string, EditorMemory>;
   removed: { preset: Preset; index: number; editor: EditorMemory }[];
 };
 /** Browser-only recovery drafts, most recent first. SQLite collections never contain these. */
 export const COLLECTION_RECOVERY_LIMIT = 4;
-export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; older?: CollectionDraft[]; filesOpen?: boolean };
+export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; older?: CollectionDraft[] };
 export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [] });
 export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
 export function collectionDraft(collection: PresetCollection, revision?: number): CollectionDraft {
   return { collection: parseCollection(collection, true), revision, selected: collection.presets[0]?.id,
-    expanded: true, editors: {}, removed: [] };
+    editors: {}, removed: [] };
 }
 export function parseEditorMemory(value: unknown, recipe: Recipe): EditorMemory {
   const input = value as EditorMemory | undefined, out = emptyMemory();
@@ -42,7 +42,7 @@ function parseDraft(value: unknown, warnings?: RestoreWarnings): CollectionDraft
     result.revision = input.revision;
   }
   if (input.selected && result.collection.presets.some(p => p.id === input.selected)) result.selected = input.selected;
-  if (typeof input.expanded === "boolean") result.expanded = input.expanded;
+  // `expanded` (and the workspace's `filesOpen`) from the retired sidebar shell are ignored.
   for (const preset of result.collection.presets) result.editors[preset.id] = parseEditorMemory(input.editors?.[preset.id], preset.recipe);
   if (Array.isArray(input.removed)) for (const entry of input.removed.slice(-REMOVED_PRESET_LIMIT)) {
     try {
@@ -74,7 +74,6 @@ export function parseCollectionWorkspace(value: unknown, warnings?: RestoreWarni
     }
   }
   if (recovery.length) { result.previous = recovery[0]; if (Array.isArray(input.older)) result.older = recovery.slice(1); }
-  if (typeof input.filesOpen === "boolean") result.filesOpen = input.filesOpen;
   return result;
 }
 
@@ -92,7 +91,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand):
       name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } :
       { id: crypto.randomUUID(), name: `Preset ${presets.length + 1}`, revision: 1, recipe: emptyRecipe() };
     presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
-    state.selected = preset.id; state.editors[preset.id] = emptyMemory(); state.expanded = true;
+    state.selected = preset.id; state.editors[preset.id] = emptyMemory();
   } else if (command.kind === "remove") {
     const [preset] = presets.splice(index, 1);
     state.removed.push({ preset, index, editor: state.editors[preset.id] ?? emptyMemory() });
@@ -103,7 +102,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand):
     if (!entry) throw Error("No removed preset to restore.");
     if (presets.some(p => p.id === entry.preset.id)) throw Error("That preset already exists.");
     presets.splice(Math.min(entry.index, presets.length), 0, entry.preset);
-    state.editors[entry.preset.id] = entry.editor; state.selected = entry.preset.id; state.expanded = true;
+    state.editors[entry.preset.id] = entry.editor; state.selected = entry.preset.id;
   } else if (command.kind === "move") {
     if (!Number.isInteger(command.to) || command.to < 0 || command.to >= presets.length) throw Error("Invalid preset position.");
     presets.splice(command.to, 0, presets.splice(index, 1)[0]);

@@ -15,17 +15,26 @@ export const privateAssetTest = process.env.XFS_PRIVATE_ASSETS === "absent"
 
 /**
  * One file of the ready derived preview core (`head.glb`, the maps or `preview-core.json`) from
- * `XFS_PREVIEW_CORE_CACHE` or the default `data/preview-cache`. Read-only.
+ * `XFS_PREVIEW_CORE_CACHE` or the default `data/preview-cache`, or null when none is prepared. Read-only.
  */
-export function derivedPreviewFile(name: string): string {
+export function derivedPreviewPath(name: string): string | null {
   const root = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "..", "data", "preview-cache"));
   let cacheName: unknown;
   try {
     const status = JSON.parse(readFileSync(resolve(root, "status.json"), "utf8"));
     if (status.state === "ready") cacheName = status.cacheName;
-  } catch { /* Reported below. */ }
+  } catch { return null; }
   const path = typeof cacheName === "string" && /^[\w.-]+$/.test(cacheName) ? resolve(root, cacheName, "assets", name) : "";
-  if (!path || !existsSync(path))
-    throw Error("Prepare the 3D preview from your game (bun tools/prepare-preview.ts) or set XFS_PREVIEW_CORE_CACHE before these tests.");
-  return path;
+  return path && existsSync(path) ? path : null;
 }
+
+/**
+ * Tests on the real head, which comes only from the 3D preview derived from a local game. Without
+ * a prepared preview they are skipped with the reason (and fail under XFS_REQUIRE_ORACLES=1).
+ */
+export const derivedPreviewTest = oracleTest(derivedPreviewPath("head.glb") !== null,
+  "no 3D preview has been prepared from a local game (run bun tools/prepare-preview.ts, or set XFS_PREVIEW_CORE_CACHE to a ready cache).");
+
+/** The prepared file's path; only call inside a `derivedPreviewTest`. */
+export const derivedPreviewFile = (name: string) => derivedPreviewPath(name) ??
+  (() => { throw Error(`The prepared 3D preview has no ${name}.`); })();

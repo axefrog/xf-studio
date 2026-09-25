@@ -1,6 +1,6 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
 import { cancelsGesture } from "./gesture-cancel";
-import { CURSOR_FALLBACK, cursorFor, modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+import { modifierKey, modifiersOf, pointerBinding, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
@@ -252,14 +252,11 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     const handle = pickHandle(p), painted = handle ? { mirror: handle.mirror } : shapeHit(l, p);
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget, layer: l, handle, painted };
   }
-  let hoverTarget: PointerTarget | undefined, hoverModifiers = modifiersOf({}), inputKey = "";
+  let hoverTarget: PointerTarget | undefined, inputKey = "";
   function publishInput() {
     const gesture: GestureKind | undefined = drag ? drag.kind === "handle" ? "handle" : drag.kind : wheel ? "scale" : undefined;
     const state: EditorInputState = { target: hoverTarget, gesture, editable: !!hooks.layer() };
-    if (!hooks.input) {
-      if (canvas.style) canvas.style.cursor = CURSOR_FALLBACK[cursorFor({ scope: "uv", target: hoverTarget, gesture, modifiers: hoverModifiers })];
-      return;
-    }
+    if (!hooks.input) return;
     const key = JSON.stringify(state);
     if (key !== inputKey) { inputKey = key; hooks.input(state); }
   }
@@ -297,7 +294,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   };
   canvas.onpointermove = e => {
     if (!drag) {
-      hoverTarget = targetAt(coordinate(e)).target; hoverModifiers = modifiersOf(e);
+      hoverTarget = targetAt(coordinate(e)).target;
       publishInput(); return;
     }
     if (e.pointerId !== drag.pointer) return;
@@ -352,7 +349,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (drag?.pointer !== e.pointerId) return;
     stop();
     // The geometry under a still pointer changed during the gesture; resolve it again.
-    hoverTarget = targetAt(coordinate(e)).target; hoverModifiers = modifiersOf(e); publishInput();
+    hoverTarget = targetAt(coordinate(e)).target; publishInput();
   };
   canvas.onpointercancel = e => { if (drag?.pointer === e.pointerId) stop(true); };
   canvas.onlostpointercapture = e => { if (drag?.pointer === e.pointerId) stop(true); };

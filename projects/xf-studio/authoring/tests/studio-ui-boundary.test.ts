@@ -46,7 +46,7 @@ test("studio-ui imports only types from the core plus a documented allowlist of 
   expect(problems).toEqual([]);
 });
 
-test("the presentation never imports trusted composition, legacy shell or live document modules", () => {
+test("the presentation never imports the composition root, trusted services or live document modules", () => {
   const banned = /from "\.\.\/(\.\.\/)?(studio-main|studio-startup|trusted-[a-z-]+|authoring-document|authoring-geometry|scene|collection-service|collection-application|studio-file-operations|browser-[a-z-]+)"/;
   for (const file of files(ui)) {
     const source = readFileSync(file, "utf8");

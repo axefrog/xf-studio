@@ -12,12 +12,10 @@ export type WorkspaceCapturePorts = {
   quality(): WorkspaceState["preview"]["textureSize"];
   preview(): ReturnType<PreviewActions["snapshot"]> | undefined;
   motion(): ReturnType<MotionActions["snapshot"]> | undefined;
-  sidebar(): Pick<WorkspaceState["panels"], "sidebarLeft" | "sidebarRight">;
-  layout(): WorkspaceState["panels"];
   uiPreferences?(): WorkspaceState["uiPreferences"];
 };
 
-/** Composes durable workspace state from typed ports; presentation supplies layout only. */
+/** Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. */
 export class WorkspaceComposer {
   private previewReady = false;
   constructor(private initial: WorkspaceState, private ports: WorkspaceCapturePorts) {}
@@ -29,15 +27,13 @@ export class WorkspaceComposer {
       uiPreferences: parseUIPreferences(this.ports.uiPreferences?.() ?? this.initial.uiPreferences) };
     const quality = this.ports.quality();
     if (!this.previewReady) return structuredClone({ ...this.initial, ...editing,
-      preview: { ...this.initial.preview, textureSize: quality },
-      panels: { ...this.initial.panels, ...this.ports.sidebar(),
-        previewQuality: this.ports.layout().previewQuality } });
+      preview: { ...this.initial.preview, textureSize: quality } });
     const config = this.ports.preview(), motion = this.ports.motion(), original = this.initial.preview;
     const preview: WorkspaceState["preview"] = { ...original, ...config, textureSize: quality,
       blink: motion?.blink ?? original.blink, blinkPlaying: motion?.blinkPlaying ?? original.blinkPlaying,
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
-    return structuredClone({ ...this.initial, ...editing, preview, panels: this.ports.layout() });
+    return structuredClone({ ...this.initial, ...editing, preview });
   }
 }

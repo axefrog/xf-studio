@@ -10,11 +10,11 @@
 | Device and renderer adapters | Canvas and Three resources, picking and coordinate conversion, worker transport, local file selection/download, browser storage and network calls | Recipe rules, SQLite revision policy, finish eligibility or undocumented edits to live authoring state |
 | Presentation | Layout, controls, docking, focus, theme, labels, menus and gesture affordances | Mutable recipes, direct database writes, package decisions inferred from labels, direct raster scheduling or hidden state outside the application/workspace contract |
 
-Dependencies point inward: presentation calls typed application actions and reads detached snapshots/capabilities; application services use typed ports for device work; adapters implement those ports. Keep pure evaluators, recipe parsing, compiler and serialization reusable without a browser. `main.ts` is currently a transitional composition root, not a place to put new behavior simply because the feature has a button.
+Dependencies point inward: presentation calls typed application actions and reads detached snapshots/capabilities; application services use typed ports for device work; adapters implement those ports. Keep pure evaluators, recipe parsing, compiler and serialization reusable without a browser. `studio-startup.ts` is the one composition root (the localhost entry `studio-main.ts` and the desktop bootstrap both start it with a typed `StudioHost`); it wires services and devices and is not a place to put new behavior simply because the feature has a button. Host differences reach it only through that typed host object, never through page globals or data attributes.
 
-The [import-boundary test](../../projects/xf-studio/authoring/tests/architecture-import-boundary.test.ts) guards direct dependencies from trusted services into browser/renderer modules and from the independent UI entry into legacy control modules. It is a regression tripwire, not a substitute for reviewing data flow or transitive dependencies when adding a new service.
+The [import-boundary test](../../projects/xf-studio/authoring/tests/architecture-import-boundary.test.ts) guards direct dependencies from trusted services into browser/renderer modules and from core modules into presentation modules or browser entries. It is a regression tripwire, not a substitute for reviewing data flow or transitive dependencies when adding a new service.
 
-The trusted authoring core and Studio bootstrap are independent of today's controls. A new presentation entry must construct device adapters, use `createTrustedAuthoringCore` and `createTrustedStudioBootstrap`, and receive only the `StudioPresentationPort` through the mount callback. Do not import `main.ts` or require its legacy element IDs to make a new shell start. Keep trusted service handles in the composition root. A view must never receive the bootstrap object, `AuthoringDocument`, raw collection service, renderer object or writable recipe. Browser viewport, file, workspace and preview-resource adapters now accept injected hosts and elements; service construction and an alternate browser entry remain tracked in the [gap assessment](ui-architecture-boundary.md).
+The trusted authoring core and Studio bootstrap are independent of today's controls. A presentation is mounted by the composition root, which constructs device adapters, uses `createTrustedAuthoringCore`, `createTrustedPreviewServices` and `createTrustedStudioBootstrap`, and hands the view only the `StudioPresentationPort` through the mount callback. A new host starts the same root with its own `StudioHost` rather than copying the wiring. Keep trusted service handles in the composition root. A view must never receive the bootstrap object, `AuthoringDocument`, raw collection service, renderer object or writable recipe. Browser viewport, file, workspace and preview-resource adapters accept injected hosts and elements; remaining gaps are tracked in the [gap assessment](ui-architecture-boundary.md).
 
 ## Rules for each feature change
 
@@ -29,7 +29,7 @@ The authoritative [interface style guide](../../projects/xf-studio/authoring/pub
 
 ## Change review questions
 
-- Can another UI invoke this capability without clicking today's DOM control or importing `main.ts`?
+- Can another UI invoke this capability through the presentation port, without clicking today's DOM control or importing the composition root?
 - Can a disabled action explain why it is unavailable for the concrete target, and does dispatch revalidate after the UI query?
 - Are Undo, cancellation, persistence and async failure visible and consistent across entry points?
 - Does this alter preview, recipe, SQLite or game-export semantics? If so, are those effects explicit and tested independently of layout?

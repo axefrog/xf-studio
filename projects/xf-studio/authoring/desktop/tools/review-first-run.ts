@@ -89,10 +89,10 @@ try {
   await browser.waitFor("document.querySelector('#desktop-licence-text').textContent.includes('JavaScriptCore')");
   await browser.screenshot(resolve(screenshots, "desktop-licences.png"));
   await browser.evaluate("document.querySelector('#desktop-licences').close()");
-  // The preview card names the missing game folder and opens Build setup.
-  await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && document.querySelector('#preview-card-primary')?.dataset.action === 'setup'");
+  // The preview card names the missing game folder: it offers a detected install, or Build setup.
+  await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['setup', 'use-game'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
-  await browser.evaluate("document.querySelector('#preview-card-primary').click()");
+  await browser.evaluate("document.querySelector('#desktop-about-open').click(); document.querySelector('#desktop-setup-open').click()");
   await browser.waitFor("document.querySelector('#desktop-setup').open && document.querySelector('#desktop-setup-status').textContent.includes('Check works')");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup.png"));
   await browser.evaluate(`document.querySelector('input[name="gameRoot"]').value = ${JSON.stringify(game)};

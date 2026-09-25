@@ -64,7 +64,7 @@ function compactWorkspace(state: WorkspaceState, level: Level): WorkspaceState {
   const current = compactDraft(collections, level, true);
   const recovery = [collections.previous, ...(collections.older ?? [])]
     .filter((draft): draft is CollectionDraft => !!draft).slice(0, level.recovery).map(draft => compactDraft(draft, level, false));
-  const compacted: CollectionWorkspace = { ...current, ...(collections.filesOpen === undefined ? {} : { filesOpen: collections.filesOpen }),
+  const compacted: CollectionWorkspace = { ...current,
     ...(recovery.length ? { previous: recovery[0], older: recovery.slice(1) } : {}) };
   // parseWorkspace restores the editor from the collection's selected preset, so the
   // top-level editor copy would only duplicate it.
@@ -77,7 +77,7 @@ function compactDraft(draft: CollectionDraft, level: Level, current: boolean): C
     const keep = !current ? 0 : id === draft.selected ? level.selected : level.background;
     editors[id] = trim(memory, keep);
   }
-  return { collection: draft.collection, revision: draft.revision, selected: draft.selected, expanded: draft.expanded,
+  return { collection: draft.collection, revision: draft.revision, selected: draft.selected,
     // Recovery drafts keep their presets but not their removed-preset lists.
     editors, removed: (current && level.removed > 0 ? draft.removed.slice(-level.removed) : [])
       .map(entry => ({ ...entry, editor: trim(entry.editor, 0) })) };

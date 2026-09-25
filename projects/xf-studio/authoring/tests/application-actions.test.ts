@@ -39,7 +39,7 @@ test("collection commands keep UI views isolated and notify only after valid tra
   expect(actions.view().collection.name).toBe("Renamed");
   expect(changes).toBe(6);
   unsubscribe();
-  actions.dispatch({ kind: "collection.filesOpen", open: true });
+  actions.dispatch({ kind: "collection.rename", name: "Unobserved" });
   expect(changes).toBe(6);
 });
 

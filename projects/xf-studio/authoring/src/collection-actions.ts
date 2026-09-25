@@ -9,9 +9,7 @@ import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./valida
 export type CollectionAction =
   | { kind: "preset.edit"; command: PresetCommand }
   | { kind: "preset.select"; id: string }
-  | { kind: "preset.expand"; expanded: boolean }
   | { kind: "collection.rename"; name: string }
-  | { kind: "collection.filesOpen"; open: boolean }
   | { kind: "collection.open"; collection: PresetCollection; revision?: number }
   | { kind: "collection.undoOpen" }
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
@@ -98,9 +96,7 @@ export class CollectionActions {
     switch (action.kind) {
       case "preset.edit": this.session.edit(action.command); break;
       case "preset.select": this.session.select(action.id); break;
-      case "preset.expand": this.session.setExpanded(action.expanded); break;
       case "collection.rename": this.session.renameCollection(action.name); break;
-      case "collection.filesOpen": this.session.setFilesOpen(action.open); break;
       case "collection.open": this.session.open(action.collection, action.revision); break;
       case "collection.undoOpen": this.session.undoOpen(); break;
       case "collection.importRecipe": this.session.importRecipe(action.recipe, action.name); break;

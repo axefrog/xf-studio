@@ -12,14 +12,3 @@ export function allowsNativeTextMenu(event: MouseEvent): boolean {
   return control instanceof HTMLTextAreaElement ||
     (control instanceof HTMLInputElement && textInputTypes.has(control.type));
 }
-
-/** Browser menus are inappropriate on editing canvases and studio controls. */
-export function setupContextMenus(root: Document): () => void {
-  const onContextMenu = (event: MouseEvent) => {
-    if (!allowsNativeTextMenu(event)) event.preventDefault();
-  };
-  // Do not intercept pointer events or stop propagation: viewport panning and a
-  // future custom-menu adapter retain their own input handling.
-  root.addEventListener("contextmenu", onContextMenu);
-  return () => root.removeEventListener("contextmenu", onContextMenu);
-}

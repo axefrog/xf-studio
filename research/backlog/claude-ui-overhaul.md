@@ -2,7 +2,7 @@
 
 ## Status (25 Sep 2026)
 
-**Delivered and merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). The Opus 5.5 redesign replaced the fixed sidebars with a dockable interface. Production entry: `public/index.html` → `src/studio-main.ts` (trusted composition root) → `src/studio-ui/` (presentation, mounted with only `StudioPresentationPort`). The legacy shell `src/main.ts` stays at `/legacy.html` until the maintainer has accepted the new UI in depth. Delivery record, audit, evidence and acceptance: [ui-overhaul-2026-09-24.md](../authoring/ui-overhaul-2026-09-24.md). Current boundary state: [ui-architecture-boundary.md](../authoring/ui-architecture-boundary.md).
+**Delivered and merged into `main` on 24 September** (merge `95516b2`; portrait-head follow-up `038054e`). The Opus 5.5 redesign replaced the fixed sidebars with a dockable interface. Production entry: `public/index.html` → `src/studio-main.ts` (trusted composition root) → `src/studio-ui/` (presentation, mounted with only `StudioPresentationPort`). The legacy shell (`src/main.ts`, `/legacy.html`) was retired on 25 September; `src/studio-startup.ts` is now the one composition root. Delivery record, audit, evidence and acceptance: [ui-overhaul-2026-09-24.md](../authoring/ui-overhaul-2026-09-24.md). Current boundary state: [ui-architecture-boundary.md](../authoring/ui-architecture-boundary.md).
 
 The maintainer has reviewed it only cursorily so far.
 
@@ -18,10 +18,10 @@ The maintainer has reviewed it only cursorily so far.
 
 ### Open
 
-1. **The maintainer's in-depth review** of the new UI; then retire `legacy.html` / `main.ts` once it is accepted.
+1. **The maintainer's in-depth review** of the new UI (the legacy shell is already retired).
 2. **Primary review** of the read-only API extension commit (`ebe6a1f`, plus the one-line file-snapshot change) versus presentation commits, confirming no unintended logic/data change.
 3. **B-17 Shift overload on the head** is resolved: the maintainer chose option (b), so Shift always means a shape gesture and does nothing off makeup. Viewport input hints, tooltips and gesture cursors now come from the same [input binding catalogue](../authoring/input-bindings.md).
-4. **Partial audit items:** A-4, A-6, A-11, A-15; A-14's disclosure move (deferred while only the legacy shell uses it). `CollectionService.capability()` still re-validates the whole workspace including Undo histories (~27 ms).
+4. **Partial audit items:** A-4, A-6, A-11, A-15; A-14's disclosure move is moot (the legacy-only actions were removed). `CollectionService.capability()` still re-validates the whole workspace including Undo histories (~27 ms).
 5. **Verify** the context-menu and command-registry claims end to end (every menu/palette/shortcut path dispatches the same validated action with the same disabled reason).
 6. **Presentation follow-ups:** arrow-key nudging (now possible with `point.move`/`shape.transform`), a Redo entry in context menus if wanted, UI for the new consequences/limits/per-layer readiness beyond the current chip, hint and Glitter limits, UV units (C-17), stable warp names (C-16), virtualised lists for large collections, screen-reader verification, shorter stage hint in narrow head cells.
 
