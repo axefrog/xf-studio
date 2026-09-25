@@ -30,9 +30,11 @@ export function verifyPackageBuildResult(
   const manifestPath = resolve(built.manifest ?? "");
   // The build service reports canonical paths (`realpathSync.native`), which expand Windows 8.3 short names
   // such as a CI runner's `RUNNER~1` temp folder; compare against the same canonical form of the root.
-  const root = realpathSync.native(resolve(distRoot));
+  const outside = () => Error("Package result is outside the local dist directory.");
+  let root: string;
+  try { root = realpathSync.native(resolve(distRoot)); } catch { throw outside(); }
   if (!final.startsWith(root + sep) || manifestPath !== resolve(final, "manifest.json") || !statSync(manifestPath).isFile())
-    throw Error("Package result is outside the local dist directory.");
+    throw outside();
   const canonicalRoot = root;
   const canonicalFinal = realpathSync.native(final);
   if (!canonicalFinal.startsWith(canonicalRoot + sep) || lstatSync(final).isSymbolicLink() ||
