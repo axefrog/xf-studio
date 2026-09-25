@@ -4,7 +4,7 @@ Last reviewed **25 September 2026** by Claude (coordinator from 25 September; pr
 
 ## Summary
 
-XF Studio's eye-makeup editor works as a local prototype. Its Build derives the expanded eye plate from the player's own game and produces a verified **XF Eye Artistry** mod. **Nothing has been seen in the game yet.** The six-board finish test package is staged in MO2 for the maintainer's first in-game test. Brow, lash and hair colours in the preview now follow the game's decoded hair shader, pending in-game calibration. The first public alpha (MIT-licensed) is in release readiness. The R&D lab has Draft knowledge pages on materials/shaders, hair shading and the character-customisation file chain, plus tooling that decompiles game shaders into named HLSL.
+XF Studio's eye-makeup editor works as a local prototype. Its Build derives the expanded eye plate from the player's own game and produces a verified **XF Eye Artistry** mod. **It has now been seen in game** (25 September, finish board): the selector (labelled "XF") appears in the character creator, and after a group fix also in gameplay and photo mode; switching, clearing and save persistence work; Colour-shifting behaves as designed. Close-up rendering breaks up (a depth fight between the makeup plate and the head) and Matte/Satin read too glossy; both are being diagnosed for a second session. Brow, lash and hair colours in the preview now follow the game's decoded hair shader, pending in-game calibration. The first public alpha (MIT-licensed) is in release readiness. The R&D lab has Draft knowledge pages on materials/shaders, hair shading and the character-customisation file chain, plus tooling that decompiles game shaders into named HLSL.
 
 ## What works (verified in code and tests)
 
@@ -21,17 +21,19 @@ XF Studio's eye-makeup editor works as a local prototype. Its Build derives the 
 
 ## Proven only offline or not at all
 
-Offline verification is not in-game proof. None of the following has runtime evidence:
+Offline verification is not in-game proof. Runtime evidence from the 25 September session is in the [finish board results](../experiments/016-finish-board/README.md#runtime-results). Still without runtime evidence, or found wrong in game:
 
-- ArchiveXL registration of the single makeup selector, preset switching and clearing, finish appearance under game lighting, and save persistence.
-- Whether the expanded plate's remaining eyelid contacts are visible in game. Many offline correction candidates were rejected; see experiments [006](../experiments/006-plate-clearance/README.md) and [012](../experiments/012-native-plate-bootstrap/README.md).
+- **Close-up rendering (found wrong):** the makeup breaks up at close range and on blinks, consistent with the plate sitting exactly on the head surface. Related offline work: experiments [006](../experiments/006-plate-clearance/README.md) and [012](../experiments/012-native-plate-bootstrap/README.md).
+- **Finish looks (partly wrong):** Matte and Satin read glossy; Shimmer reads as a soft gloss, not sparkle. Colour-shifting and the blend steps behave as designed.
 - Brow, lash and hair colour and shading parity (the preview model is decoded from compiled shaders, but light tuning and profile colour space are hypotheses), and which installed archive wins for the saved brown-lash profile.
-- Any Glossy, Shimmer or Colour-shifting game material: they export experimentally but nobody has seen them in game. The [finish board](../experiments/016-finish-board/README.md) is built for that session (not installed). Glitter export stays guarded.
+- Glitter export stays guarded; no Glitter game material exists yet.
 
 ## Waiting on the maintainer
 
-1. **First in-game test.** The [finish board](../experiments/016-finish-board/README.md) is staged in the test profile: selector, Off and board switching and clearing, flat finishes (Matte, Satin, Metallic, experimental Glossy), Shimmer, Colour-shifting against its control, blend steps and a metalness ramp, eyelid contact, save persistence, plus brow/lash/hair captures for colour calibration. See the board's test card and the [validation card](validation.md#prepared-single-session-test-card). It needs a new manual save, because the test profile doesn't isolate saves.
-2. **In-depth review of the new UI** (the legacy shell is already retired).
+1. **Hair, brow and lash calibration captures** at the mirror appearance screen (fixed lighting), with ReShade effects off or a before-effects PNG saved, since the ReShade preset grades colour.
+2. **Second in-game session** once the depth-fix and finish variants are built: one board per variant plus a control.
+3. **Go-ahead to publish** the `v0.1.0-alpha.1` draft pre-release once CI has built it.
+4. **In-depth review of the new UI** (the legacy shell is already retired).
 
 ## Active direction
 
