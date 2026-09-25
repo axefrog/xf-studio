@@ -44,7 +44,7 @@ test("binding IDs are unique and every binding performs a real catalogued action
 });
 
 test("pointer resolution is unambiguous: one binding at most per scope, input, target and modifier set", () => {
-  const inputs: PointerInput[] = ["drag", "wheel", "double-click", "right-drag", "middle-drag", "right-click"];
+  const inputs: PointerInput[] = ["drag", "wheel", "double-click", "right-drag", "middle-drag", "two-finger-drag", "right-click"];
   for (const scope of scopes) for (const input of inputs) for (const target of ALL_TARGETS) for (const mods of MODIFIER_KEYS) {
     const matches = POINTER_BINDINGS.filter(binding => binding.scope === scope && binding.input === input && binding.targets.includes(target) && binding.mods.includes(mods));
     expect(matches.length).toBeLessThanOrEqual(1);

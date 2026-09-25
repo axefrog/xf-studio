@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { cancelsGesture } from "./gesture-cancel";
-import { modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+import { modifierKey, modifiersOf, pointerBinding, pointerInputOf, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
+import { isCameraEffect } from "./head-camera-input";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer } from "./shape-transform";
@@ -510,6 +511,8 @@ export function createSurfaceEditor(
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget,
       editable, layer, handle, uv, painted };
   }
+  // The camera adapter resolves every press's binding against the same target as the editor.
+  viewer.cameraInput?.setTargetResolver((x, y) => { update(); return targetAt(x, y).target; });
   let hoverTarget: PointerTarget | undefined, inputKey = "";
   function publishInput() {
     const gesture: GestureKind | undefined = shapeDrag?.kind ?? (drag ? "handle" : wheel ? "scale" : undefined);
@@ -521,13 +524,15 @@ export function createSurfaceEditor(
   canvas.addEventListener(
     "pointerdown",
     (e) => {
-      if (drag || shapeDrag || e.button !== 0) return;
+      // Only a drag can edit. Every other press (right, middle, a second finger) is resolved by
+      // head-camera-input.ts, which sets the orbit controls to exactly its bound camera effect.
+      if (drag || shapeDrag || pointerInputOf(e) !== "drag") return;
       update();
-      // Every left-button press resolves through the input catalogue. Camera bindings are left
-      // to the orbit controls; everything else, including a consumed no-op, never reaches them.
+      // Every drag resolves through the input catalogue. Camera bindings are left to the orbit
+      // controls (configured for them); everything else, including a consumed no-op, never reaches them.
       const resolved = targetAt(e.clientX, e.clientY, e.shiftKey);
       const effect = pointerBinding("head", "drag", resolved.target, modifierKey(modifiersOf(e)))?.effect ?? "none";
-      if (effect === "camera-orbit" || effect === "camera-pan") return;
+      if (isCameraEffect(effect)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       const { layer, handle, painted } = resolved;
@@ -728,6 +733,7 @@ export function createSurfaceEditor(
   const cancelInput = () => { stop(true); stopShape(true); finishWheel(true); };
   function dispose() {
     cancelInput(); listeners.abort();
+    viewer.cameraInput?.setTargetResolver(undefined);
     if (typeof offFrame === "function") offFrame();
     scene.remove(group);
     pointGeometry.dispose(); lineGeometry.dispose(); tangentGeometry.dispose(); tangentLineGeometry.dispose();

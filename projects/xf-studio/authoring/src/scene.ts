@@ -23,6 +23,7 @@ import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
 import { HeadLoadError } from "./head-load-error";
 import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "./face-morphs";
 import { createViewportBackdrop } from "./viewport-backdrop";
+import { attachHeadCameraInput } from "./head-camera-input";
 import type { StageTheme } from "./stage-backdrop";
 
 /** A mesh's morph target names in influence order (GLTFLoader keys the dictionary by `extras.targetNames`). */
@@ -83,7 +84,9 @@ async function assembleScene(
   const backdrop = createViewportBackdrop(scene, stage);
   releases.push(() => backdrop.dispose());
   const controls = new OrbitControls(camera, renderer.domElement);
-  releases.push(() => controls.dispose());
+  // The binding catalogue, not the controls' default mouse/touch mapping, decides every press.
+  const cameraInput = attachHeadCameraInput(renderer.domElement, controls);
+  releases.push(() => { cameraInput.dispose(); controls.dispose(); });
   controls.enableDamping = true;
   controls.minDistance = MIN_CAMERA_DISTANCE;
   controls.maxDistance = MAX_CAMERA_DISTANCE;
@@ -840,6 +843,7 @@ async function assembleScene(
     },
     renderer,
     controls,
+    cameraInput,
     head,
     eyes,
     plate,

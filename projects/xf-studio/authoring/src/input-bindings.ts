@@ -61,15 +61,26 @@ export type PointerTarget = "point" | "tangent" | "warp-origin" | "warp-vector" 
 export const MAKEUP_TARGETS: readonly PointerTarget[] = ["point", "tangent", "warp-origin", "warp-vector", "shape"];
 export const HANDLE_TARGETS: readonly PointerTarget[] = ["point", "tangent", "warp-origin", "warp-vector"];
 export const ALL_TARGETS: readonly PointerTarget[] = [...MAKEUP_TARGETS, "empty"];
-export type PointerInput = "drag" | "wheel" | "double-click" | "right-drag" | "middle-drag" | "right-click";
+export type PointerInput = "drag" | "wheel" | "double-click" | "right-drag" | "middle-drag" | "two-finger-drag" | "right-click";
+/** Inputs a pointer press starts, as `pointerInputOf()` classifies them. */
+export const PRESS_INPUTS: readonly PointerInput[] = ["drag", "middle-drag", "right-drag", "two-finger-drag"];
+/**
+ * The input a pointer press starts: the left button, a pen or the first finger is `drag`; a
+ * further finger while one is down is `two-finger-drag`. Other buttons (back/forward) are no input.
+ */
+export function pointerInputOf(event: { button: number; pointerType?: string; isPrimary?: boolean }): PointerInput | undefined {
+  if (event.pointerType === "touch" && event.isPrimary === false) return "two-finger-drag";
+  return event.button === 0 ? "drag" : event.button === 1 ? "middle-drag" : event.button === 2 ? "right-drag" : undefined;
+}
 export type CursorKind = "default" | "grab" | "grabbing" | "move" | "rotate" | "scale" | "pan";
 /**
  * The handler an adapter runs. `camera-*` effects are performed by the head renderer's orbit
- * controls, whose default mapping (left orbit, Ctrl-left/right pan, wheel/middle dolly) the
- * head adapter lets through only for these bindings; `none` is consumed and does nothing.
+ * controls, which head-camera-input.ts configures per press so they do exactly this effect
+ * whatever modifiers are held (their own default mapping is never used); `none` is consumed and
+ * does nothing, as is every unbound input.
  */
 export type PointerEffect = "handle-drag" | "shape-translate" | "shape-rotate" | "shape-scale" |
-  "camera-orbit" | "camera-pan" | "camera-zoom" | "view-pan" | "view-zoom" | "insert-point" | "context-menu" | "none";
+  "camera-orbit" | "camera-pan" | "camera-zoom" | "camera-zoom-pan" | "view-pan" | "view-zoom" | "insert-point" | "context-menu" | "none";
 export type PointerBinding = Readonly<{
   id: string; scope: ViewportScope; input: PointerInput; mods: readonly ModifierKey[];
   targets: readonly PointerTarget[]; effect: PointerEffect; action: BindingAction; label: string;
@@ -104,6 +115,8 @@ export const POINTER_BINDINGS: readonly PointerBinding[] = [
   { id: "head.wheel", scope: "head", input: "wheel", mods: ["", "ctrl"], targets: ALL_TARGETS, effect: "camera-zoom", action: act("camera.navigate", "dolly"), label: "zoom view" },
   { id: "head.right-drag", scope: "head", input: "right-drag", mods: ANY, targets: ALL_TARGETS, effect: "camera-pan", action: act("camera.navigate", "pan"), label: "pan view" },
   { id: "head.middle-drag", scope: "head", input: "middle-drag", mods: ANY, targets: ALL_TARGETS, effect: "camera-zoom", action: act("camera.navigate", "dolly"), label: "zoom view", strip: false },
+  // Touch screens: one finger is `drag` above; two fingers pinch to zoom and move to pan.
+  { id: "head.two-finger-drag", scope: "head", input: "two-finger-drag", mods: ANY, targets: ALL_TARGETS, effect: "camera-zoom-pan", action: act("camera.navigate", "dolly"), label: "zoom and pan view", strip: false },
   { id: "head.right-click", scope: "head", input: "right-click", mods: ANY, targets: ALL_TARGETS, effect: "context-menu", action: shell("context-menu"), label: "commands here", strip: false },
   ...handleBindings("uv"),
   { id: "uv.ctrl-drag", scope: "uv", input: "drag", mods: ["ctrl"], targets: ALL_TARGETS, effect: "view-pan", action: view("uv.pan"), label: "pan view", cursor: "pan" },
@@ -112,6 +125,16 @@ export const POINTER_BINDINGS: readonly PointerBinding[] = [
   { id: "uv.right-drag", scope: "uv", input: "right-drag", mods: ANY, targets: ALL_TARGETS, effect: "view-pan", action: view("uv.pan"), label: "pan view" },
   { id: "uv.right-click", scope: "uv", input: "right-click", mods: ANY, targets: ALL_TARGETS, effect: "context-menu", action: shell("context-menu"), label: "commands here", strip: false },
 ];
+
+/**
+ * Inputs each viewport's adapters resolve through `pointerBinding()`: presses (classified by
+ * `pointerInputOf()`), the wheel, double-click (UV) and right-click (the context-menu gate). Every
+ * binding and every hint must use one of these; a test checks both, and that the adapters do.
+ */
+export const ADAPTER_INPUTS: Readonly<Record<ViewportScope, readonly PointerInput[]>> = {
+  head: [...PRESS_INPUTS, "wheel", "right-click"],
+  uv: [...PRESS_INPUTS, "wheel", "double-click", "right-click"],
+};
 
 /** The binding an adapter runs for this input. Unbound inputs do nothing. */
 export function pointerBinding(scope: ViewportScope, input: PointerInput, target: PointerTarget, mods: ModifierKey): PointerBinding | undefined {
@@ -259,7 +282,7 @@ export function cancelsGesture(event: KeyEvent) {
 
 // ---------- Derived hints ----------
 const INPUT_NAMES: Record<PointerInput, string> = { drag: "drag", wheel: "wheel", "double-click": "double-click",
-  "right-drag": "right-drag", "middle-drag": "middle-drag", "right-click": "right-click" };
+  "right-drag": "right-drag", "middle-drag": "middle-drag", "two-finger-drag": "two-finger drag", "right-click": "right-click" };
 /** "Shift-drag", "Wheel", "Ctrl-wheel". */
 export function pointerInputLabel(input: PointerInput, mods: ModifierKey = ""): string {
   const name = INPUT_NAMES[input];
@@ -379,7 +402,7 @@ const targetPhrase = (scope: ViewportScope, targets: readonly PointerTarget[]) =
 };
 const TARGET_NOUNS: Record<PointerTarget, string> = { point: "contour point", tangent: "Bézier handle", "warp-origin": "warp position",
   "warp-vector": "warp pull", shape: "shape", empty: "empty space" };
-const INPUT_ORDER: readonly PointerInput[] = ["drag", "wheel", "double-click", "right-drag", "middle-drag", "right-click"];
+const INPUT_ORDER: readonly PointerInput[] = ["drag", "wheel", "double-click", "right-drag", "middle-drag", "two-finger-drag", "right-click"];
 const upper = (text: string) => text[0].toUpperCase() + text.slice(1);
 function pointerRows(scope: ViewportScope): ReferenceRow[] {
   const order = (binding: PointerBinding) => INPUT_ORDER.indexOf(binding.input) * 10 + (binding.mods === ANY ? 0 : HOLD_ORDER.indexOf(binding.mods[0]) + 1);

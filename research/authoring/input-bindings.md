@@ -2,11 +2,17 @@
 
 One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/src/input-bindings.ts), defines every pointer gesture and keyboard shortcut the Studio responds to. The behaviour, the viewport hint strips, the target tooltips, the cursors, the menu and palette shortcut labels and the Keyboard & mouse dialog all come from it, so none of them can drift from the others. The module is pure data and functions: no DOM, no state and no I/O.
 
+**The table is authoritative.** Every viewport input goes through it, and nothing else decides what an input does:
+
+- Adapters route every input through `pointerBinding()` for the scope, the target under the pointer and the exact modifier set, and run only the bound effect. An unbound input does nothing.
+- No library default may act on an input the table did not bind, or act differently from how it is bound. In particular, three's `OrbitControls` never uses its own mouse or touch mapping (see [Head camera](#head-camera)).
+- Conformance tests enforce this over every input, modifier set and target, and check that every hint names a binding the adapters consult.
+
 ## Catalogue
 
 | Table | Entry | Resolved by |
 |---|---|---|
-| `POINTER_BINDINGS` | Viewport (`head`/`uv`), input (`drag`, `wheel`, `double-click`, `right-drag`, `middle-drag`, `right-click`), exact modifier sets, targets, effect, action, label, hover cursor | `pointerBinding()` in both gesture adapters and the viewport context-menu gate |
+| `POINTER_BINDINGS` | Viewport (`head`/`uv`), input (`drag`, `wheel`, `double-click`, `right-drag`, `middle-drag`, `two-finger-drag`, `right-click`), exact modifier sets, targets, effect, action, label, hover cursor | `pointerBinding()` in both gesture adapters, the head camera adapter and the viewport context-menu gate. `pointerInputOf()` classifies every press, and `ADAPTER_INPUTS` lists the inputs each viewport's adapters consult |
 | `KEY_BINDINGS` | Scope (`global`, `gesture`, `head`, `uv`, `tabs`, `rows`), chords, action, label, short hint label, text-field and dialog rules | `keyBinding()` in the shell, viewport panels, dock tabs and item rows; `cancelsGesture()` in both adapters |
 | `GESTURE_BINDINGS` | What ends an active gesture (Release, a wheel pause) | Hints during a gesture |
 | `PANEL_POINTER_BINDINGS` | Dock and row pointer modifiers (Ctrl-drag floats a panel freely) | `panelModifiersHeld()` in the dock |
@@ -15,7 +21,24 @@ One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/sr
 - **Targets.** `point`, `tangent`, `warp-origin`, `warp-vector`, `shape` (the makeup targets) and `empty` (background or skin on the head, empty space in the UV map). When editing is unavailable (no layer, a hidden layer, or Surface controls off), everything resolves as `empty`.
 - **Modifiers.** Matching is exact: Ctrl, Alt and Shift, with Cmd/Meta counted as Ctrl. An unbound input does nothing. Bindings that ignore modifiers (right-drag pan, the context menu) list every combination.
 - **Actions.** Each binding names a real action (`StudioAction` kind and variant, a collection request, a UV view command or a shell command), or `none` for a consumed no-op. A test checks every reference against the action registry.
-- **Effects.** The effect is the handler an adapter runs. On the head, `camera-*` effects are left to Three's orbit controls. Their default mapping is left orbit, Ctrl-left or right pan, and wheel or middle dolly. The adapter lets an event through only when the catalogue says so, so those controls never see a Shift gesture or an unbound combination.
+- **Inputs.** `pointerInputOf()` classifies a press the same way in both viewports: the left button, a pen or a first finger is `drag`, the middle button `middle-drag`, the right button `right-drag`, and a further finger while one is down `two-finger-drag`. Other buttons are no input.
+- **Effects.** The effect is the handler an adapter runs. On the head, `camera-*` effects (`camera-orbit`, `camera-pan`, `camera-zoom`, and `camera-zoom-pan` for two fingers) are performed by three's orbit controls, configured per press by the head camera adapter.
+
+## Head camera
+
+[`head-camera-input.ts`](../../projects/xf-studio/authoring/src/head-camera-input.ts) makes the table, not `OrbitControls`, decide what every press does to the head camera. It is attached in `scene.ts` right after the controls are created.
+
+- **Why.** In three 0.186, `OrbitControls` swaps rotate and pan while Ctrl, Meta or Shift is held (`onMouseDown`, `examples/jsm/controls/OrbitControls.js` lines 1686 to 1728). Left to its defaults, Ctrl- or Shift-right-drag orbited while the hint strip said right-drag pans.
+- **Mechanism.** On every `pointerdown`, in the capture phase before the controls see it, the adapter:
+  1. classifies the press with `pointerInputOf()`;
+  2. resolves the binding for the target under the pointer (the surface editor supplies its target resolution once mounted) and the exact modifiers;
+  3. sets the one public slot the controls will read (`mouseButtons.LEFT/MIDDLE/RIGHT` or `touches.ONE/TWO`) to the value that yields that effect with those modifiers held. `orbitMouseAction()` holds the swap rule in one place.
+
+  A press that is not a camera effect, or is unbound, gets `null`, which the controls treat as no action. Between presses every slot rests at `null` (restored once every pointer is up or cancelled), so no input can reach the library's default mapping.
+- **Editing.** The surface editor handles only `drag` presses. It consumes those that edit makeup, and Shift or unbound drags, before the controls see them.
+- **Wheel.** The surface editor resolves every wheel and consumes each one whose binding is not `camera-zoom`. The controls' wheel handling has no modifier rule that changes the effect; Ctrl only scales trackpad-pinch deltas.
+- **Touch.** One finger follows the `drag` bindings: it orbits off makeup and pans with Ctrl, as the mouse does. A second finger joins a gesture the first finger gave to the camera, and zooms and pans (`head.two-finger-drag`). While the first finger is editing makeup, or its press was consumed (Shift off makeup), a second finger does nothing.
+- **Upgrades.** `tests/head-camera-input.test.ts` pins the swap rule to the exact 0.186 source lines, so an upgrade that changes it fails there.
 
 ## Shift policy (B-17, option b)
 
@@ -69,4 +92,11 @@ The presentation reads the combined read-only snapshot through `port.viewport.in
   - Across every context, target, modifier set, gesture and block state, every hint and tooltip line names a real binding with the same label, and every binding appears in a hint or the reference.
   - Every cursor has a CSS rule with its fallback.
 - `tests/input-adapters.test.ts` drives both adapters: consumed Shift off makeup, pass-through camera modifiers, UV Ctrl-drag pan, Chromium horizontal Shift-wheel, burst continuation, the lazy-geometry regression, input reports and the attachment's deduplicated channel.
+- `tests/head-camera-input.test.ts` is the conformance suite:
+  - It pins three 0.186's `OrbitControls` swap rule to its source lines.
+  - It drives the real `OrbitControls` through the surface editor and the camera adapter for every mouse button, one and two fingers, every modifier set, and empty space, a shape and a contour point. The camera must orbit, pan, zoom or stay still exactly as the table says.
+  - It checks that every head camera binding can be expressed in the controls.
+  - It checks that the UV editor pans exactly when the table says so, for every press.
+  - It checks that every hint the strip or a tooltip can show names a binding whose input the adapters consult, and that the adapter sources resolve those inputs through the catalogue.
+- An isolated `?verify=1` session in the desktop app's browser pane drove the live head with synthetic pointer and wheel events. It covered left, middle and right drags with no modifier, Ctrl, Shift, Alt, Meta, Ctrl+Shift and Ctrl+Alt, off makeup and over a shape and a contour point. Every result matched the table. Right-drag panned with every modifier set; left orbited, Ctrl-left panned, Alt-left orbited over makeup, and Shift-left or Ctrl+Alt-left did nothing. The wheel zoomed with no modifier or Ctrl, and did nothing with Shift or Alt off makeup. The Shift and Ctrl hint strips matched. Touch was covered by the automated suite only.
 - An isolated `?verify=1` CDP session (headless Chrome, throwaway data) checked the live hints for the default state, Shift over makeup, Shift off makeup and during rotate and scale. It also checked the cursors, the blur reset, the preference and the dialog. It confirmed that a Shift-drag off makeup leaves the camera unchanged. Screenshots stay in the ignored `evidence/screenshots/input-hints/`.
