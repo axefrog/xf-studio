@@ -37,6 +37,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
     motion: {
       get idle() { return scene.idle; },
       available: scene.evidence.idle.available, error: scene.evidence.idle.error,
+      blink: { available: scene.evidence.blink?.available ?? false, error: scene.evidence.blink?.error || undefined },
       setIdle: scene.setIdle, setIdlePaused: scene.setIdlePaused,
       setIdleContributions: scene.setIdleContributions, setBlink: scene.setBlink,
       animateBlink: scene.animateBlink,

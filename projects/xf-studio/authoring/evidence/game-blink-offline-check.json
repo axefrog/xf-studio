@@ -1,0 +1,800 @@
+{
+  "headFile": "xfs-preview-core-female-average-r2-c883d866f0038996/assets/head.glb",
+  "lashComponents": [
+    "MorphTargetSkinnedMesh3637",
+    "icxrus_softnaturaleyelashes"
+  ],
+  "browComponents": [
+    "heb_000_pwa__basehead"
+  ],
+  "mappedBones": 442,
+  "unmapped": 0,
+  "margins": {
+    "l": {
+      "up": 135,
+      "dn": 103
+    },
+    "r": {
+      "up": 136,
+      "dn": 102
+    }
+  },
+  "shapes": {
+    "neutral": {
+      "openExposedCells": {
+        "l": 2161,
+        "lPlateHidden": 0,
+        "r": 2198,
+        "rPlateHidden": 0
+      },
+      "synthetic": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.8078423890544533,
+            "maxMm": 5.987580858003441,
+            "crossingMm": 3.351450847969062
+          },
+          "r": {
+            "medianMm": 1.845790011046987,
+            "maxMm": 7.010331620494857,
+            "crossingMm": 3.4430266694580602
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1014,
+            "medianMm": 6.169942422058535,
+            "maxMm": 7.700065560234803
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2058,
+            "medianMm": 6.692932577669761,
+            "maxMm": 7.700065560234803
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.05423106532095232,
+          "maxMm": 2.831136713219199
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "retired synthetic study at 100%"
+      },
+      "solved50": {
+        "exposedEyeballMm2": {
+          "l": 97.5,
+          "r": 96.625
+        },
+        "exposedFraction": {
+          "l": 0.7219,
+          "r": 0.7034
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 3.410186153082563,
+            "maxMm": 12.393553996068674,
+            "crossingMm": 0.13369820071940097
+          },
+          "r": {
+            "medianMm": 3.2112514998393498,
+            "maxMm": 13.093593659163433,
+            "crossingMm": 0.1054965656941409
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1014,
+            "medianMm": 0.14817558246074142,
+            "maxMm": 0.5953659007220957
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2058,
+            "medianMm": 0.1757775980280372,
+            "maxMm": 0.6484060337706165
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0005784467329152129,
+          "maxMm": 0.00983653386978693
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 50%"
+      },
+      "solved100": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 0.8375185551811996,
+            "maxMm": 8.240444304396226,
+            "crossingMm": 0.517338281640134
+          },
+          "r": {
+            "medianMm": 0.8613561376008123,
+            "maxMm": 8.684139542218807,
+            "crossingMm": 0.4083249209958506
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1014,
+            "medianMm": 0.5505196065297205,
+            "maxMm": 2.359191996722998
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2058,
+            "medianMm": 0.6600356016502428,
+            "maxMm": 2.5406326763310982
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0022079341255582105,
+          "maxMm": 0.03437291011623714
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%"
+      }
+    },
+    "h011_eyes": {
+      "openExposedCells": {
+        "l": 2511,
+        "lPlateHidden": 0.00005209418628881017,
+        "r": 2475,
+        "rPlateHidden": 0.0000509139045873428
+      },
+      "synthetic": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.801404813082962,
+            "maxMm": 5.070946237482558,
+            "crossingMm": 3.45753395373416
+          },
+          "r": {
+            "medianMm": 1.92747211214483,
+            "maxMm": 5.117531008906551,
+            "crossingMm": 3.3264352983797263
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 988,
+            "medianMm": 6.1699424220583134,
+            "maxMm": 7.700065560235024
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2001,
+            "medianMm": 6.169942422058534,
+            "maxMm": 7.700065560235024
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0542310653207315,
+          "maxMm": 2.831136713219199
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "retired synthetic study at 100%"
+      },
+      "solved100BaseSeat": {
+        "exposedEyeballMm2": {
+          "l": 5.625,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0.0358,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0.0001,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.1737734689292234,
+            "maxMm": 6.788231903968458,
+            "crossingMm": 1.1718524064434632
+          },
+          "r": {
+            "medianMm": 1.0990302380033412,
+            "maxMm": 6.7139004092162065,
+            "crossingMm": 1.3292523529089273
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 988,
+            "medianMm": 0.5481735263646476,
+            "maxMm": 2.1750930764936327
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2001,
+            "medianMm": 0.644687375192076,
+            "maxMm": 2.5648883564313367
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.002269706937389773,
+          "maxMm": 0.03413235198781135
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the base eye centre"
+      },
+      "solved50": {
+        "exposedEyeballMm2": {
+          "l": 119.938,
+          "r": 115
+        },
+        "exposedFraction": {
+          "l": 0.7642,
+          "r": 0.7434
+        },
+        "plateHiddenFraction": {
+          "l": 0.0001,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 3.031482387734089,
+            "maxMm": 11.254251647750733,
+            "crossingMm": 0.13120127474208765
+          },
+          "r": {
+            "medianMm": 3.168239738086801,
+            "maxMm": 11.019743877243346,
+            "crossingMm": 0.14649586083548272
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 988,
+            "medianMm": 0.13508843166181198,
+            "maxMm": 0.6896877236305877
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2001,
+            "medianMm": 0.17715694115728017,
+            "maxMm": 0.763982983296045
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0006284927219392903,
+          "maxMm": 0.009764550974267509
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 50%, rig on the shape's joint binds"
+      },
+      "solved100": {
+        "exposedEyeballMm2": {
+          "l": 16.063,
+          "r": 8.563
+        },
+        "exposedFraction": {
+          "l": 0.1023,
+          "r": 0.0554
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.1960275773300566,
+            "maxMm": 7.2217243613278,
+            "crossingMm": 1.1195406465493996
+          },
+          "r": {
+            "medianMm": 1.376295593764358,
+            "maxMm": 7.217519867649003,
+            "crossingMm": 0.7397190622706606
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 988,
+            "medianMm": 0.5132664879152536,
+            "maxMm": 2.7493476106398074
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2001,
+            "medianMm": 0.6478854614306385,
+            "maxMm": 2.9608368041972573
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0022697058406840847,
+          "maxMm": 0.034132354974589454
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the shape's joint binds"
+      }
+    },
+    "h091_eyes": {
+      "openExposedCells": {
+        "l": 2537,
+        "lPlateHidden": 0,
+        "r": 2405,
+        "rPlateHidden": 0
+      },
+      "synthetic": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.6312196625822588,
+            "maxMm": 4.886306834143327,
+            "crossingMm": 3.441274899347313
+          },
+          "r": {
+            "medianMm": 1.6637960886943381,
+            "maxMm": 4.879127936767564,
+            "crossingMm": 3.3661151926245303
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1006,
+            "medianMm": 6.017116562038624,
+            "maxMm": 7.700065560234802
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2055,
+            "medianMm": 6.1699424220583134,
+            "maxMm": 7.700065560234802
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0542310653207315,
+          "maxMm": 2.8311367132192
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "retired synthetic study at 100%"
+      },
+      "solved100BaseSeat": {
+        "exposedEyeballMm2": {
+          "l": 34.875,
+          "r": 25.188
+        },
+        "exposedFraction": {
+          "l": 0.2199,
+          "r": 0.1676
+        },
+        "plateHiddenFraction": {
+          "l": 0.002,
+          "r": 0.0004
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.9710031509148238,
+            "maxMm": 7.811808078002321,
+            "crossingMm": 0.5532923014488489
+          },
+          "r": {
+            "medianMm": 1.6498505826617513,
+            "maxMm": 7.420133220465102,
+            "crossingMm": 0.35742458698417856
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1006,
+            "medianMm": 0.5531587943766326,
+            "maxMm": 4.392518780304779
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2055,
+            "medianMm": 0.6383756459391193,
+            "maxMm": 4.113328479567326
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0021931470842478902,
+          "maxMm": 0.034429006474568265
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the base eye centre"
+      },
+      "solved50": {
+        "exposedEyeballMm2": {
+          "l": 120.75,
+          "r": 111.125
+        },
+        "exposedFraction": {
+          "l": 0.7615,
+          "r": 0.7393
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 3.1326213865613224,
+            "maxMm": 10.783757783433376,
+            "crossingMm": 0.36187050051172953
+          },
+          "r": {
+            "medianMm": 3.149307953297868,
+            "maxMm": 10.688224503744284,
+            "crossingMm": 0.3071899143205492
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1006,
+            "medianMm": 0.14171747662103518,
+            "maxMm": 1.0403422505716433
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2055,
+            "medianMm": 0.17068562762843648,
+            "maxMm": 0.9904876040216526
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0005789809700279468,
+          "maxMm": 0.009852636132074441
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 50%, rig on the shape's joint binds"
+      },
+      "solved100": {
+        "exposedEyeballMm2": {
+          "l": 11.813,
+          "r": 7.25
+        },
+        "exposedFraction": {
+          "l": 0.0745,
+          "r": 0.0482
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.047280247707094,
+            "maxMm": 7.9261895884299,
+            "crossingMm": 0.9566813498680382
+          },
+          "r": {
+            "medianMm": 1.0946278841330208,
+            "maxMm": 7.6270194947930054,
+            "crossingMm": 0.44055617712612793
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1006,
+            "medianMm": 0.5454403958033155,
+            "maxMm": 3.0554225967293682
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2055,
+            "medianMm": 0.6270937856680818,
+            "maxMm": 3.0143344960157763
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.002193147690134357,
+          "maxMm": 0.034429009749389124
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the shape's joint binds"
+      }
+    },
+    "h211_eyes": {
+      "openExposedCells": {
+        "l": 1922,
+        "lPlateHidden": 0,
+        "r": 2018,
+        "rPlateHidden": 0
+      },
+      "synthetic": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.592045968362722,
+            "maxMm": 3.910419692933891,
+            "crossingMm": 3.592827677084909
+          },
+          "r": {
+            "medianMm": 1.6080890188930073,
+            "maxMm": 3.4989909642158095,
+            "crossingMm": 3.381284906295523
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1281,
+            "medianMm": 6.017116562038844,
+            "maxMm": 7.700065560234802
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2433,
+            "medianMm": 6.169942422058534,
+            "maxMm": 7.700065560234802
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.05423106532073223,
+          "maxMm": 2.831136713219201
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "retired synthetic study at 100%"
+      },
+      "solved100BaseSeat": {
+        "exposedEyeballMm2": {
+          "l": 19.625,
+          "r": 22.813
+        },
+        "exposedFraction": {
+          "l": 0.1634,
+          "r": 0.1809
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 1.9484943712859595,
+            "maxMm": 6.191062643530298,
+            "crossingMm": 0.05271241154347628
+          },
+          "r": {
+            "medianMm": 1.9503358780837023,
+            "maxMm": 6.684498241037434,
+            "crossingMm": 0.14896806874742374
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1281,
+            "medianMm": 0.6115899816349799,
+            "maxMm": 2.619020176508353
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2433,
+            "medianMm": 0.7142014592644682,
+            "maxMm": 2.8861406413698334
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.002167651444143707,
+          "maxMm": 0.03437591924919425
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the base eye centre"
+      },
+      "solved50": {
+        "exposedEyeballMm2": {
+          "l": 84.813,
+          "r": 87.688
+        },
+        "exposedFraction": {
+          "l": 0.706,
+          "r": 0.6952
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 2.824544188037883,
+            "maxMm": 8.903078988148625,
+            "crossingMm": 0.037838568041070886
+          },
+          "r": {
+            "medianMm": 2.7636771240487845,
+            "maxMm": 9.452065549539684,
+            "crossingMm": 0.13845198999429265
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1281,
+            "medianMm": 0.16085829731592396,
+            "maxMm": 0.767467759844848
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2433,
+            "medianMm": 0.17756953301422415,
+            "maxMm": 0.8255895025983271
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0005830168514357995,
+          "maxMm": 0.00983929106209534
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 50%, rig on the shape's joint binds"
+      },
+      "solved100": {
+        "exposedEyeballMm2": {
+          "l": 0,
+          "r": 0
+        },
+        "exposedFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "plateHiddenFraction": {
+          "l": 0,
+          "r": 0
+        },
+        "lidGap": {
+          "l": {
+            "medianMm": 0.8728877613042169,
+            "maxMm": 6.538649687815274,
+            "crossingMm": 0.6832792820790079
+          },
+          "r": {
+            "medianMm": 0.8461545466204872,
+            "maxMm": 5.83923891190197,
+            "crossingMm": 0.6146577717658364
+          }
+        },
+        "upperLashRootDrift": {
+          "MorphTargetSkinnedMesh3637": {
+            "vertices": 1281,
+            "medianMm": 0.601777882805361,
+            "maxMm": 2.3281621587104713
+          },
+          "icxrus_softnaturaleyelashes": {
+            "vertices": 2433,
+            "medianMm": 0.6796954444739414,
+            "maxMm": 2.664602574892032
+          }
+        },
+        "browDrift": {
+          "vertices": 390,
+          "medianMm": 0.0021676498915018105,
+          "maxMm": 0.03437592308428914
+        },
+        "plateDrift": {
+          "vertices": 1620,
+          "medianMm": 0,
+          "maxMm": 0
+        },
+        "label": "solved game closure at 100%, rig on the shape's joint binds"
+      }
+    }
+  },
+  "nonFiniteSamples": 0,
+  "restoreError": 0,
+  "gridCellMm": 0.25,
+  "limitations": [
+    "Offline CPU skinning of local derived assets; the browser's GPU skinning uses the same bones and eight influences.",
+    "Neutral and three eye shapes only; exposed eyeball is measured along the front view only.",
+    "Detail attachment is measured against the nearest core-head vertex at rest; it is not an intersection proof.",
+    "Not in-game evidence: no game graph, timing or rendering parity."
+  ]
+}

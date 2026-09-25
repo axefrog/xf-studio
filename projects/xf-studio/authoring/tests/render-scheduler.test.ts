@@ -232,7 +232,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   // The normals toggle reaches the plate's facets; the composite is brought up to date inside the frame, before drawing.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
   expect(normals).toContain("makeup.setNormals(v);");
-  const frame = source.slice(source.indexOf("    frame(dt, now) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
+  const frame = source.slice(source.indexOf("    frame(dt) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeGreaterThan(-1);
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
   // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).

@@ -43,7 +43,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   };
   const idle = { enabled: false, time: 0, paused: false, bodyEnabled: true, faceEnabled: true,
     seek(time: number) { this.time = time; calls.push("seek"); } };
-  const motion: MotionPort = { available: true, idle,
+  const motion: MotionPort = { available: true, blink: { available: true }, idle,
     setIdle: enabled => { idle.enabled = enabled; calls.push("idle"); },
     setIdlePaused: paused => { idle.paused = paused; calls.push("pause"); },
     setIdleContributions: (body, face) => {
@@ -133,7 +133,7 @@ test("restoring the preview never changes the caller's workspace (CORE-25)", () 
     eyeShapeOptions: () => ({ choices: [], eyesFollow: false, eyeSource: null }),
     setLightingPreset: noop, setCreatorLighting: noop,
   };
-  const motion: MotionPort = { available: false, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
   const services = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion });
   const { preview: actions } = services.finish();
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 1.5 });
@@ -155,7 +155,7 @@ test("the preview services leave the tried piercing style to the character servi
     setExposure: noop, setLightAngle: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
     setHair: noop, setEyeShape: noop, setPiercings: enabled => calls.push(`piercings:${enabled}`), setDetail: noop,
   };
-  const motion: MotionPort = { available: false, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
   const { preview: actions } = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }).finish();
   expect("piercingStyle" in actions.snapshot()).toBe(false);
   // The visibility preference always reaches the device (piercings arrive later with the record and follow it).

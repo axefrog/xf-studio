@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { BrowUnderlayEvidence, HeadSkinPlacement } from "./head-skin-placement";
 import type { IdleAnimation } from "./idle-animation";
+import type { GameBlink } from "./game-blink";
 import { skinSets } from "./skin";
 
 /**
@@ -11,7 +12,7 @@ import { skinSets } from "./skin";
 export function coreSceneEvidence(input: {
   coreDetail: { identity: string; origin: string; label: string };
   meshes: readonly THREE.Mesh[];
-  blinkBones: number;
+  blink?: GameBlink; blinkError: string;
   eyeShape: { choices: number; eyesFollow: boolean; eyeMorphTargets: number };
   profileEncoding: string;
   idle?: IdleAnimation; idleError: string;
@@ -23,7 +24,10 @@ export function coreSceneEvidence(input: {
     coreDetail: input.coreDetail,
     meshes: input.meshes.map(m => ({ name: m.name, vertices: vertices(m), morphs: m.morphTargetInfluences?.length ?? 0,
       skinSets: m instanceof THREE.SkinnedMesh ? skinSets(m.geometry).length : 0 })),
-    blinkBones: input.blinkBones,
+    /** The game's blink: which clip Play blink uses and how many preview bones it drives. */
+    blink: { available: !!input.blink, error: input.blinkError, clip: input.blink?.description.clip.animation,
+      clipDuration: input.blink?.clipDuration, closureSteps: input.blink?.description.closure.steps,
+      repeatSeconds: input.blink?.repeatSeconds, mappedBones: input.blink?.bindings.length ?? 0 },
     eyeShape: input.eyeShape,
     profileEncoding: input.profileEncoding,
     idle: { available: !!idle, error: input.idleError, clip: idle?.clip.name, duration: idle?.clip.duration,

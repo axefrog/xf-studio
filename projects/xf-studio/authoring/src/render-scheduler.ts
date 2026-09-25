@@ -1,7 +1,7 @@
 /**
  * Render on demand for the 3D head (UI-38). A frame is drawn only when something visible changed (the
  * dirty flag, set through `invalidate`) or while something moves by itself (`animating`: idle playback,
- * the blink study). Orbit damping needs no special case: each damped step changes the camera, the controls
+ * Play blink). Orbit damping needs no special case: each damped step changes the camera, the controls
  * report the change, and that sets the flag for the next frame. When neither holds, the frame loop stops,
  * so an idle viewport costs no GPU work and no per-frame script time. Renderer-free and DOM-free.
  */

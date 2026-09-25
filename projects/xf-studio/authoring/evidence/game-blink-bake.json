@@ -1,0 +1,779 @@
+{
+  "solver": {
+    "repository": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on",
+    "commit": "7a4ee793c36d9615946fe87ec9d42cde7568021d",
+    "license": "GPL-3.0-or-later",
+    "use": "External unmodified numerical solver executed offline"
+  },
+  "sourceHashes": {
+    "h0_000_pwa_c__basehead_skeleton.rig.json": "454e38a25707047d1343f4a77fc1c7c89f09fe2707b01882405ed53c2176230f",
+    "h0_000_pwa_c__basehead_rigsetup.facialsetup.json": "aae907a8e308dd3261627778aa546e7e79182ef88ad0f93c946c9ac2034db458",
+    "additive__blink_normal__01.glb": "59522d6c66a7fb6d555a5abc9f05f1e5c3f65d1ad467aa50676425eafb043ef9",
+    "h0_000_pwa__morphs.morphtarget.json": "c5ad131c093d4a4a3ac15394364ef07466020a0b2cb4dc3017a21d67e88f260e",
+    "he_000_pwa__morphs.morphtarget.json": "c92ed20670ae95b3837921ad42544f67e24ea5a5e6f0ec53e49ff458e89abb5d"
+  },
+  "eyeShapes": {
+    "followers": [
+      "l_J_eye_lid_dn_root_1_JNT",
+      "l_J_eye_lid_dn_root_2_JNT",
+      "l_J_eye_lid_up_root_1_JNT",
+      "l_J_eye_lid_up_root_2_JNT",
+      "l_J_eye_wetness_root_0_JNT",
+      "r_J_eye_lid_dn_root_1_JNT",
+      "r_J_eye_lid_dn_root_2_JNT",
+      "r_J_eye_lid_up_root_1_JNT",
+      "r_J_eye_lid_up_root_2_JNT",
+      "r_J_eye_wetness_root_0_JNT"
+    ],
+    "targets": {
+      "h011": {
+        "joints": 126,
+        "maxShiftMm": 6.9767,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.753,
+          "r": 2.3266
+        }
+      },
+      "h021": {
+        "joints": 126,
+        "maxShiftMm": 6.3893,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.3618,
+          "r": 3.1275
+        }
+      },
+      "h031": {
+        "joints": 126,
+        "maxShiftMm": 7.8872,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 3.3856,
+          "r": 3.1041
+        }
+      },
+      "h041": {
+        "joints": 126,
+        "maxShiftMm": 7.1479,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.0858,
+          "r": 3.3745
+        }
+      },
+      "h051": {
+        "joints": 126,
+        "maxShiftMm": 5.1182,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.4712,
+          "r": 2.5766
+        }
+      },
+      "h061": {
+        "joints": 126,
+        "maxShiftMm": 6.0468,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.4272,
+          "r": 3.2861
+        }
+      },
+      "h071": {
+        "joints": 126,
+        "maxShiftMm": 6.3006,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.0299,
+          "r": 3.4241
+        }
+      },
+      "h081": {
+        "joints": 126,
+        "maxShiftMm": 6.1232,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.6633,
+          "r": 3.7691
+        }
+      },
+      "h091": {
+        "joints": 126,
+        "maxShiftMm": 6.513,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.9446,
+          "r": 2.6438
+        }
+      },
+      "h101": {
+        "joints": 126,
+        "maxShiftMm": 4.2252,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.6218,
+          "r": 2.0583
+        }
+      },
+      "h111": {
+        "joints": 126,
+        "maxShiftMm": 9.1549,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.7354,
+          "r": 3.219
+        }
+      },
+      "h121": {
+        "joints": 126,
+        "maxShiftMm": 6.425,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.4016,
+          "r": 2.2754
+        }
+      },
+      "h131": {
+        "joints": 126,
+        "maxShiftMm": 6.2107,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 3.2933,
+          "r": 3.1967
+        }
+      },
+      "h141": {
+        "joints": 126,
+        "maxShiftMm": 7.007,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.9292,
+          "r": 2.5474
+        }
+      },
+      "h151": {
+        "joints": 126,
+        "maxShiftMm": 9.816,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.6764,
+          "r": 1.9144
+        }
+      },
+      "h161": {
+        "joints": 126,
+        "maxShiftMm": 7.0288,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 0.8887,
+          "r": 1.6546
+        }
+      },
+      "h171": {
+        "joints": 126,
+        "maxShiftMm": 7.8874,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 3.4779,
+          "r": 3.936
+        }
+      },
+      "h181": {
+        "joints": 126,
+        "maxShiftMm": 6.863,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 1.6558,
+          "r": 1.6071
+        }
+      },
+      "h191": {
+        "joints": 126,
+        "maxShiftMm": 5.6381,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 0.9439,
+          "r": 1.0677
+        }
+      },
+      "h201": {
+        "joints": 126,
+        "maxShiftMm": 6.1268,
+        "maxTurnDegrees": 0.0,
+        "eyeJointShiftMm": {
+          "l": 2.8737,
+          "r": 2.5286
+        }
+      },
+      "h211": {
+        "joints": 126,
+        "maxShiftMm": 6.117,
+        "maxTurnDegrees": 0.0364,
+        "eyeJointShiftMm": {
+          "l": 3.5467,
+          "r": 3.4857
+        }
+      }
+    }
+  },
+  "closure": {
+    "clip": "additive__blink_normal__01",
+    "closedTime": 0.1,
+    "firstFrameFromRest": {
+      "bones": 60,
+      "maxTurnDegrees": 1.016438364982605,
+      "maxShiftMm": 0.15146252512931824
+    },
+    "tracks": [
+      "eye_l_blink",
+      "eye_r_blink"
+    ],
+    "steps": 20,
+    "activeBones": 136,
+    "correctivesFired": {
+      "eye_l_blink__Corr": 1.0,
+      "eye_r_blink__Corr": 1.0,
+      "eye_l_blink__eye_l_dir_dn__Corr": 0.08063773810863495,
+      "eye_r_blink__eye_r_dir_dn__Corr": 0.08063779771327972,
+      "eye_r_blink__eye_r_oculi_squint_outer_lower__Corr": 0.07637758553028107,
+      "eye_l_blink__eye_l_oculi_squint_outer_lower__Corr": 0.07637758553028107,
+      "eye_l_blink__eye_l_oculi_squint_outer_upper__Corr": 0.06062738969922066,
+      "eye_r_blink__eye_r_oculi_squint_outer_upper__Corr": 0.06062738969922066,
+      "eye_l_blink__eye_l_oculi_squint_outer_upper__eye_l_oculi_squint_outer_lower__Corr": 0.004630573559552431,
+      "eye_r_blink__eye_r_oculi_squint_outer_upper__eye_r_oculi_squint_outer_lower__Corr": 0.004630573559552431,
+      "eye_l_brows_lower__eye_l_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_r_brows_lower__eye_r_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_l_brows_lower__eye_l_blink__eye_l_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_r_brows_lower__eye_r_blink__eye_r_oculi_squint_outer_upper__Corr": 0.0018920713337138295
+    }
+  },
+  "clip": {
+    "name": "additive__blink_normal__01",
+    "source": "base\\animations\\facial\\generic\\interactive_scene\\generic_facial_additives.anims",
+    "duration": 0.5,
+    "sampleRate": 60,
+    "frames": 31,
+    "animationType": "AdditiveFromRefPose",
+    "varyingTracks": {
+      "eye_l_brows_lower": {
+        "keys": 8,
+        "min": 0.0,
+        "max": 0.049279068,
+        "peakTime": 0.13333334
+      },
+      "eye_r_brows_lower": {
+        "keys": 8,
+        "min": 0.0,
+        "max": 0.049279068,
+        "peakTime": 0.13333334
+      },
+      "eye_l_blink": {
+        "keys": 11,
+        "min": 0.0,
+        "max": 1.0,
+        "peakTime": 0.1
+      },
+      "eye_r_blink": {
+        "keys": 11,
+        "min": 0.0,
+        "max": 1.0,
+        "peakTime": 0.1
+      },
+      "eye_l_widen": {
+        "keys": 9,
+        "min": 0.0,
+        "max": 0.065080084,
+        "peakTime": 0.3
+      },
+      "eye_r_widen": {
+        "keys": 9,
+        "min": 0.0,
+        "max": 0.065080084,
+        "peakTime": 0.3
+      },
+      "eye_l_oculi_squint_outer_lower": {
+        "keys": 8,
+        "min": 0.0,
+        "max": 0.07637759,
+        "peakTime": 0.1
+      },
+      "eye_r_oculi_squint_outer_lower": {
+        "keys": 8,
+        "min": 0.0,
+        "max": 0.07637759,
+        "peakTime": 0.1
+      },
+      "eye_l_oculi_squint_outer_upper": {
+        "keys": 7,
+        "min": 0.0,
+        "max": 0.060627393,
+        "peakTime": 0.1
+      },
+      "eye_r_oculi_squint_outer_upper": {
+        "keys": 7,
+        "min": 0.0,
+        "max": 0.060627393,
+        "peakTime": 0.1
+      },
+      "eye_l_dir_dn": {
+        "keys": 9,
+        "min": 0.01840365,
+        "max": 0.08063774,
+        "peakTime": 0.1
+      },
+      "eye_r_dir_dn": {
+        "keys": 9,
+        "min": 0.018403709,
+        "max": 0.0806378,
+        "peakTime": 0.1
+      },
+      "eye_l_pupil_wide": {
+        "keys": 9,
+        "min": 0.0,
+        "max": 0.1606167,
+        "peakTime": 0.13333334
+      },
+      "eye_r_pupil_wide": {
+        "keys": 9,
+        "min": 0.0,
+        "max": 0.1606167,
+        "peakTime": 0.13333334
+      }
+    },
+    "correctivesFired": {
+      "eye_l_blink__Corr": 1.0,
+      "eye_r_blink__Corr": 1.0,
+      "eye_l_blink__eye_l_dir_dn__Corr": 0.08063773810863495,
+      "eye_r_blink__eye_r_dir_dn__Corr": 0.08063779771327972,
+      "eye_l_blink__eye_l_oculi_squint_outer_lower__Corr": 0.07637758553028107,
+      "eye_r_blink__eye_r_oculi_squint_outer_lower__Corr": 0.07637758553028107,
+      "eye_l_blink__eye_l_oculi_squint_outer_upper__Corr": 0.06062738969922066,
+      "eye_r_blink__eye_r_oculi_squint_outer_upper__Corr": 0.06062738969922066,
+      "eye_l_blink__eye_l_oculi_squint_outer_upper__eye_l_oculi_squint_outer_lower__Corr": 0.004630573559552431,
+      "eye_r_blink__eye_r_oculi_squint_outer_upper__eye_r_oculi_squint_outer_lower__Corr": 0.004630573559552431,
+      "eye_l_brows_lower__eye_l_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_r_brows_lower__eye_r_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_l_brows_lower__eye_l_blink__eye_l_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_r_brows_lower__eye_r_blink__eye_r_oculi_squint_outer_upper__Corr": 0.0018920713337138295,
+      "eye_l_dir_dn__eye_l_widen__Corr": 0.0012182386126369238,
+      "eye_r_dir_dn__eye_r_widen__Corr": 0.0012182423379272223
+    }
+  },
+  "poses": {
+    "eye_l_blink": {
+      "part": "face",
+      "mainPose": 8,
+      "inbetweenThresholds": [
+        1.0
+      ],
+      "envelope": [
+        {
+          "envelope": 2,
+          "lod": 1
+        }
+      ],
+      "limits": 0,
+      "influencedBy": [],
+      "influences": [
+        "eye_l_widen"
+      ],
+      "upperLowerPart": [
+        0
+      ],
+      "bones": [
+        "l_J_eye_lid_corner_inside_0_JNT",
+        "l_J_eye_lid_dn_root_1_JNT",
+        "l_J_eye_lid_dn_root_2_JNT",
+        "l_J_eye_lid_dn_rowA_0_JNT",
+        "l_J_eye_lid_dn_rowA_3_JNT",
+        "l_J_eye_lid_dn_rowB_0_JNT",
+        "l_J_eye_lid_dn_rowB_1_JNT",
+        "l_J_eye_lid_dn_rowB_2_JNT",
+        "l_J_eye_lid_up_root_1_JNT",
+        "l_J_eye_lid_up_root_2_JNT",
+        "l_J_eye_lid_up_rowA_0_JNT",
+        "l_J_eye_lid_up_rowA_3_JNT",
+        "l_J_eye_lid_up_rowB_0_JNT",
+        "l_J_eye_lid_up_rowB_1_JNT",
+        "l_J_eye_lid_up_rowB_2_JNT",
+        "l_J_eye_lid_up_rowC_0_JNT",
+        "l_J_eye_lid_up_rowC_1_JNT",
+        "l_J_eye_lid_up_rowC_2_JNT",
+        "l_J_eye_lid_up_rowC_3_JNT",
+        "l_J_eye_lid_up_rowD_1_JNT",
+        "l_J_eye_lid_up_rowD_2_JNT",
+        "l_J_eye_lid_up_rowD_3_JNT",
+        "l_J_eye_lid_up_rowD_4_JNT",
+        "l_J_eye_nose_rowA_0_JNT",
+        "l_J_eye_nose_rowA_2_JNT",
+        "l_J_eye_nose_rowA_3_JNT",
+        "l_J_eye_wetness_root_0_JNT",
+        "l_J_jaw_nosabial_rowB_0_JNT",
+        "l_J_nose_nosabial_rowC_0_JNT",
+        "l_J_nose_nosabial_rowC_1_JNT"
+      ]
+    },
+    "eye_r_blink": {
+      "part": "face",
+      "mainPose": 9,
+      "inbetweenThresholds": [
+        1.0
+      ],
+      "envelope": [
+        {
+          "envelope": 2,
+          "lod": 1
+        }
+      ],
+      "limits": 0,
+      "influencedBy": [],
+      "influences": [
+        "eye_r_widen"
+      ],
+      "upperLowerPart": [
+        0
+      ],
+      "bones": [
+        "r_J_eye_lid_corner_inside_0_JNT",
+        "r_J_eye_lid_dn_root_1_JNT",
+        "r_J_eye_lid_dn_root_2_JNT",
+        "r_J_eye_lid_dn_rowA_0_JNT",
+        "r_J_eye_lid_dn_rowA_3_JNT",
+        "r_J_eye_lid_dn_rowB_0_JNT",
+        "r_J_eye_lid_dn_rowB_1_JNT",
+        "r_J_eye_lid_dn_rowB_2_JNT",
+        "r_J_eye_lid_up_root_1_JNT",
+        "r_J_eye_lid_up_root_2_JNT",
+        "r_J_eye_lid_up_rowA_0_JNT",
+        "r_J_eye_lid_up_rowA_3_JNT",
+        "r_J_eye_lid_up_rowB_0_JNT",
+        "r_J_eye_lid_up_rowB_1_JNT",
+        "r_J_eye_lid_up_rowB_2_JNT",
+        "r_J_eye_lid_up_rowC_0_JNT",
+        "r_J_eye_lid_up_rowC_1_JNT",
+        "r_J_eye_lid_up_rowC_2_JNT",
+        "r_J_eye_lid_up_rowC_3_JNT",
+        "r_J_eye_lid_up_rowD_1_JNT",
+        "r_J_eye_lid_up_rowD_2_JNT",
+        "r_J_eye_lid_up_rowD_3_JNT",
+        "r_J_eye_lid_up_rowD_4_JNT",
+        "r_J_eye_nose_rowA_0_JNT",
+        "r_J_eye_nose_rowA_2_JNT",
+        "r_J_eye_nose_rowA_3_JNT",
+        "r_J_eye_wetness_root_0_JNT",
+        "r_J_jaw_nosabial_rowB_0_JNT",
+        "r_J_nose_nosabial_rowC_0_JNT",
+        "r_J_nose_nosabial_rowC_1_JNT"
+      ]
+    }
+  },
+  "blinkCorrectives": [
+    {
+      "name": "eye_l_blink__Corr",
+      "transforms": 0
+    },
+    {
+      "name": "eye_r_blink__Corr",
+      "transforms": 0
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_up__Corr",
+      "transforms": 29
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_up__Corr",
+      "transforms": 28
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_dn__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_dn__Corr",
+      "transforms": 28
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_in__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_in__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_out__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_out__Corr",
+      "transforms": 26
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_dn__eye_l_dir_in__Corr",
+      "transforms": 28
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_dn__eye_r_dir_in__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_dn__eye_l_dir_out__Corr",
+      "transforms": 28
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_dn__eye_r_dir_out__Corr",
+      "transforms": 26
+    },
+    {
+      "name": "eye_l_blink__eye_l_oculi_squint_inner__Corr",
+      "transforms": 40
+    },
+    {
+      "name": "eye_r_blink__eye_r_oculi_squint_inner__Corr",
+      "transforms": 39
+    },
+    {
+      "name": "eye_l_blink__eye_l_oculi_squint_outer_lower__Corr",
+      "transforms": 40
+    },
+    {
+      "name": "eye_r_blink__eye_r_oculi_squint_outer_lower__Corr",
+      "transforms": 36
+    },
+    {
+      "name": "eye_l_blink__eye_l_oculi_squint_outer_upper__Corr",
+      "transforms": 23
+    },
+    {
+      "name": "eye_r_blink__eye_r_oculi_squint_outer_upper__Corr",
+      "transforms": 25
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_up__eye_l_oculi_squint_outer_lower__Corr",
+      "transforms": 41
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_up__eye_r_oculi_squint_outer_lower__Corr",
+      "transforms": 34
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_up__eye_l_oculi_squint_outer_upper__Corr",
+      "transforms": 27
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_up__eye_r_oculi_squint_outer_upper__Corr",
+      "transforms": 29
+    },
+    {
+      "name": "eye_l_blink__eye_l_dir_out__eye_l_oculi_squint_outer_upper__Corr",
+      "transforms": 18
+    },
+    {
+      "name": "eye_r_blink__eye_r_dir_out__eye_r_oculi_squint_outer_upper__Corr",
+      "transforms": 18
+    },
+    {
+      "name": "eye_l_blink__eye_l_oculi_squint_inner__eye_l_oculi_squint_outer_lower__Corr",
+      "transforms": 39
+    },
+    {
+      "name": "eye_r_blink__eye_r_oculi_squint_inner__eye_r_oculi_squint_outer_lower__Corr",
+      "transforms": 35
+    },
+    {
+      "name": "eye_l_blink__eye_l_oculi_squint_outer_upper__eye_l_oculi_squint_outer_lower__Corr",
+      "transforms": 29
+    },
+    {
+      "name": "eye_r_blink__eye_r_oculi_squint_outer_upper__eye_r_oculi_squint_outer_lower__Corr",
+      "transforms": 29
+    },
+    {
+      "name": "eye_l_brows_raise_in__eye_l_blink__Corr",
+      "transforms": 36
+    },
+    {
+      "name": "eye_r_brows_raise_in__eye_r_blink__Corr",
+      "transforms": 35
+    },
+    {
+      "name": "eye_l_brows_raise_out__eye_l_blink__Corr",
+      "transforms": 33
+    },
+    {
+      "name": "eye_r_brows_raise_out__eye_r_blink__Corr",
+      "transforms": 36
+    },
+    {
+      "name": "eye_l_brows_raise_out__eye_l_blink__eye_l_oculi_squint_outer_upper__Corr",
+      "transforms": 38
+    },
+    {
+      "name": "eye_r_brows_raise_out__eye_r_blink__eye_r_oculi_squint_outer_upper__Corr",
+      "transforms": 40
+    },
+    {
+      "name": "eye_l_brows_lower__eye_l_blink__eye_l_oculi_squint_outer_upper__Corr",
+      "transforms": 24
+    },
+    {
+      "name": "eye_r_brows_lower__eye_r_blink__eye_r_oculi_squint_outer_upper__Corr",
+      "transforms": 25
+    }
+  ],
+  "activeBones": [
+    "l_J_eye_JNT",
+    "r_J_eye_JNT",
+    "l_J_eye_brows_rowA_1_JNT",
+    "l_J_eye_lid_up_root_1_JNT",
+    "l_J_jaw_nosabial_rowC_1_JNT",
+    "l_J_mug_mouth_rowB_3_JNT",
+    "r_J_eye_brows_rowA_1_JNT",
+    "r_J_eye_lid_up_root_1_JNT",
+    "r_J_jaw_nosabial_rowC_1_JNT",
+    "r_J_mug_mouth_rowB_3_JNT",
+    "l_J_eye_brows_rowA_0_JNT",
+    "l_J_eye_brows_rowA_0_twk_JNT",
+    "l_J_eye_brows_rowA_2_JNT",
+    "l_J_eye_brows_rowA_3_JNT",
+    "l_J_eye_brows_rowB_0_JNT",
+    "l_J_eye_brows_rowB_1_JNT",
+    "l_J_eye_brows_rowB_2_JNT",
+    "l_J_eye_brows_rowB_3_JNT",
+    "l_J_eye_brows_rowC_0_JNT",
+    "l_J_eye_brows_rowC_1_JNT",
+    "l_J_eye_brows_rowC_2_JNT",
+    "l_J_eye_check_rowA_0_JNT",
+    "l_J_eye_check_rowA_1_JNT",
+    "l_J_eye_check_rowB_0_JNT",
+    "l_J_eye_check_rowC_0_JNT",
+    "l_J_eye_check_rowC_1_JNT",
+    "l_J_eye_check_rowD_0_JNT",
+    "l_J_eye_check_rowD_1_JNT",
+    "l_J_eye_check_rowE_0_JNT",
+    "l_J_eye_lid_corner_inside_0_JNT",
+    "l_J_eye_lid_up_rowD_4_JNT",
+    "l_J_eye_lid_dn_root_1_JNT",
+    "l_J_eye_lid_dn_root_2_JNT",
+    "l_J_eye_lid_dn_rowB_0_JNT",
+    "l_J_eye_lid_dn_rowB_1_JNT",
+    "l_J_eye_lid_dn_rowB_2_JNT",
+    "l_J_eye_lid_up_root_2_JNT",
+    "l_J_eye_lid_up_rowA_0_JNT",
+    "l_J_eye_lid_up_rowA_3_JNT",
+    "l_J_eye_lid_up_rowB_0_JNT",
+    "l_J_eye_lid_up_rowB_1_JNT",
+    "l_J_eye_lid_up_rowB_2_JNT",
+    "l_J_eye_lid_up_rowC_0_JNT",
+    "l_J_eye_lid_up_rowC_1_JNT",
+    "l_J_eye_lid_up_rowC_2_JNT",
+    "l_J_eye_lid_up_rowC_3_JNT",
+    "l_J_eye_lid_up_rowD_1_JNT",
+    "l_J_eye_lid_up_rowD_2_JNT",
+    "l_J_eye_lid_up_rowD_3_JNT",
+    "l_J_eye_nose_rowA_0_JNT",
+    "l_J_eye_nose_rowA_1_JNT",
+    "l_J_eye_nose_rowA_2_JNT",
+    "l_J_eye_nose_rowA_3_JNT",
+    "l_J_eye_wetness_root_0_JNT",
+    "l_J_jaw_nosabial_rowA_0_JNT",
+    "l_J_jaw_nosabial_rowA_1_JNT",
+    "l_J_jaw_nosabial_rowB_0_JNT",
+    "l_J_jaw_nosabial_rowB_1_JNT",
+    "l_J_jaw_nosabial_rowC_0_JNT",
+    "l_J_nose_nosabial_rowB_0_JNT",
+    "l_J_nose_nosabial_rowB_1_JNT",
+    "l_J_nose_nosabial_rowC_0_JNT",
+    "l_J_nose_nosabial_rowC_1_JNT",
+    "mid_J_eye_brows_rowB_0_JNT",
+    "mid_J_eye_brows_rowC_0_JNT",
+    "mid_J_eye_nose_rowA_0_JNT",
+    "mid_J_nose_nosabial_rowB_0_JNT",
+    "r_J_eye_brows_rowA_0_JNT",
+    "r_J_eye_brows_rowA_0_twk_JNT",
+    "r_J_eye_brows_rowA_2_JNT",
+    "r_J_eye_brows_rowA_3_JNT",
+    "r_J_eye_brows_rowB_0_JNT",
+    "r_J_eye_brows_rowB_1_JNT",
+    "r_J_eye_brows_rowB_2_JNT",
+    "r_J_eye_brows_rowB_3_JNT",
+    "r_J_eye_brows_rowC_0_JNT",
+    "r_J_eye_brows_rowC_1_JNT",
+    "r_J_eye_brows_rowC_2_JNT",
+    "r_J_eye_check_rowA_0_JNT",
+    "r_J_eye_check_rowA_1_JNT",
+    "r_J_eye_check_rowB_0_JNT",
+    "r_J_eye_check_rowC_0_JNT",
+    "r_J_eye_check_rowC_1_JNT",
+    "r_J_eye_check_rowD_0_JNT",
+    "r_J_eye_check_rowD_1_JNT",
+    "r_J_eye_check_rowE_0_JNT",
+    "r_J_eye_lid_corner_inside_0_JNT",
+    "r_J_eye_lid_up_rowD_4_JNT",
+    "r_J_eye_lid_dn_root_1_JNT",
+    "r_J_eye_lid_dn_root_2_JNT",
+    "r_J_eye_lid_dn_rowB_0_JNT",
+    "r_J_eye_lid_dn_rowB_1_JNT",
+    "r_J_eye_lid_dn_rowB_2_JNT",
+    "r_J_eye_lid_up_root_2_JNT",
+    "r_J_eye_lid_up_rowA_0_JNT",
+    "r_J_eye_lid_up_rowA_3_JNT",
+    "r_J_eye_lid_up_rowB_0_JNT",
+    "r_J_eye_lid_up_rowB_1_JNT",
+    "r_J_eye_lid_up_rowB_2_JNT",
+    "r_J_eye_lid_up_rowC_0_JNT",
+    "r_J_eye_lid_up_rowC_1_JNT",
+    "r_J_eye_lid_up_rowC_2_JNT",
+    "r_J_eye_lid_up_rowC_3_JNT",
+    "r_J_eye_lid_up_rowD_1_JNT",
+    "r_J_eye_lid_up_rowD_2_JNT",
+    "r_J_eye_lid_up_rowD_3_JNT",
+    "r_J_eye_nose_rowA_0_JNT",
+    "r_J_eye_nose_rowA_1_JNT",
+    "r_J_eye_nose_rowA_2_JNT",
+    "r_J_eye_nose_rowA_3_JNT",
+    "r_J_eye_wetness_root_0_JNT",
+    "r_J_jaw_nosabial_rowA_0_JNT",
+    "r_J_jaw_nosabial_rowA_1_JNT",
+    "r_J_jaw_nosabial_rowB_0_JNT",
+    "r_J_jaw_nosabial_rowB_1_JNT",
+    "r_J_jaw_nosabial_rowC_0_JNT",
+    "r_J_nose_nosabial_rowB_0_JNT",
+    "r_J_nose_nosabial_rowB_1_JNT",
+    "r_J_nose_nosabial_rowC_0_JNT",
+    "r_J_nose_nosabial_rowC_1_JNT",
+    "l_J_eye_lid_dn_rowA_0_JNT",
+    "l_J_eye_lid_dn_rowA_3_JNT",
+    "r_J_eye_lid_dn_rowA_0_JNT",
+    "r_J_eye_lid_dn_rowA_3_JNT",
+    "l_J_eye_pupil_JNT",
+    "r_J_eye_pupil_JNT",
+    "l_J_jaw_nosabial_rowA_2_JNT",
+    "l_J_jaw_nosabial_rowB_2_JNT",
+    "l_J_jaw_nosabial_rowC_2_JNT",
+    "l_J_jaw_nosabial_rowD_0_JNT",
+    "l_J_jaw_rowA_0_JNT",
+    "r_J_jaw_nosabial_rowA_2_JNT",
+    "r_J_jaw_nosabial_rowB_2_JNT",
+    "r_J_jaw_nosabial_rowC_2_JNT",
+    "r_J_jaw_nosabial_rowD_0_JNT",
+    "r_J_jaw_rowA_0_JNT",
+    "l_J_eye_wetness_0_JNT",
+    "r_J_eye_wetness_0_JNT",
+    "l_J_eye_lid_lashes_up_rowA_2_JNT",
+    "r_J_eye_lid_lashes_up_rowA_2_JNT"
+  ],
+  "outputBytes": 725044,
+  "outputSha256": "f95ba7e7611390436e79e5dec4090c01953d26c21a760eeb83ea0620f9ca2170",
+  "trackPolicy": "AdditiveFromRefPose: decoded track values added to rig referenceTracks; the closure is the clip from 0 to closedTime",
+  "setup": {
+    "used": "h0_000_pwa_c__basehead_rigsetup.facialsetup (the female head's own setup, beside its skeleton)",
+    "alsoReferenced": "The female face-rig entity names base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup; which one the engine solves V's face with is untested"
+  },
+  "limitations": [
+    "Which clip or system blinks V during gameplay is not established; the clip is one of the game's own blink clips.",
+    "External solver applies rotations/translations, not pose scale arrays; wrinkle outputs are not rendered.",
+    "In-game visual parity is not established."
+  ]
+}

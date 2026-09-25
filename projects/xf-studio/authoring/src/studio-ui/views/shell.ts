@@ -23,7 +23,7 @@ export const SHELL_VIEW = {
     { id: "lighting", title: "Camera & light", icon: "lighting", order: 130, slot: "inspect",
       description: "Field of view, framing, exposure, key light and display studies." },
     { id: "motion", title: "Motion", icon: "motion", order: 140, slot: "inspect",
-      description: "Game close-up idle and the synthetic eyelid study." },
+      description: "Game close-up idle and the game's blink." },
     { id: "quality", title: "Preview quality", icon: "quality", order: 150, slot: "inspect",
       description: "Resolution of generated preview textures, readiness and resource use." },
     { id: "activity", title: "Activity", icon: "activity", order: 160, slot: "closed",
