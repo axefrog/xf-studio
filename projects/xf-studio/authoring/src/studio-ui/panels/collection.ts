@@ -243,8 +243,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   ] as const;
   const inputs = Object.fromEntries(setupFields.map(([key, label]) => [key,
     h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<typeof setupFields[number][0], HTMLInputElement>;
-  const route = h("select", { class: "field", "aria-label": "Mod source route", onchange: () => { dirty = true; showRoute(); } },
-    h("option", { value: "direct", text: "Game folder directly" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
+  const route = h("select", { class: "field", "aria-label": "How you install mods", onchange: () => { dirty = true; showRoute(); } },
+    h("option", { value: "direct", text: "Game folder (Vortex or manual)" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
   let dirty = false, loadedRevision = -1;
   const mo2Fields = h("div", {}, ...setupFields.filter(([key]) => key === "mo2Root" || key === "mo2ProfileId")
     .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
@@ -253,25 +253,25 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const showRoute = () => { mo2Fields.hidden = route.value !== "mo2"; directFields.hidden = route.value !== "direct"; };
   const setupState = note("Loading local setup…");
   const setupReadiness = note("");
-  const saveSetup = button({ label: "Save local setup", icon: "check", onClick: () => void (async () => {
+  const saveSetup = button({ label: "Save settings", icon: "check", onClick: () => void (async () => {
     const current = port.localSetup.snapshot().view;
     if (!current) return;
     const fields: LocalSetupFields = { ...current.fields, launchRoute: route.value as LocalSetupFields["launchRoute"] };
     for (const [key] of setupFields) (fields as unknown as Record<string, string | null>)[key] = inputs[key].value.trim() || null;
     const result = await port.localSetup.dispatch({ kind: "setup.save", fields });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Local setup", "Configuration saved on this computer."); }
-    else rt.feedback.toast("error", "Local setup", result.message);
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Configuration saved on this computer."); }
+    else rt.feedback.toast("error", "Game & tools", result.message);
   })() });
   const restoreSetup = button({ label: "Restore previous settings", onClick: () => void (async () => {
     const result = await port.localSetup.dispatch({ kind: "setup.restorePrevious" });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Local setup", "Previous configuration restored."); }
-    else rt.feedback.toast("error", "Local setup", result.message);
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Previous configuration restored."); }
+    else rt.feedback.toast("error", "Game & tools", result.message);
   })() });
   const refreshSetup = button({ label: "Reload setup", onClick: event => {
     const reload = () => void (async () => {
       const result = await port.localSetup.dispatch({ kind: "setup.refresh" });
       if (result.ok) { dirty = false; loadedRevision = -1; }
-      else rt.feedback.toast("error", "Local setup", result.message);
+      else rt.feedback.toast("error", "Game & tools", result.message);
     })();
     if (!dirty) { reload(); return; }
     const anchor = event.currentTarget as Element;
@@ -295,28 +295,22 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
   }
-  function buildCapability() {
-    const file = port.files.capability({ kind: "package.build" });
-    if (!file.available) return file;
-    const setup = port.localSetup.snapshot();
-    if (!setup.view) return { available: false, reason: setup.error ?? "Load local setup to configure build inputs." };
-    const build = setup.view.readiness.build;
-    return build.ready ? file : { available: false, reason: build.issues.map(issue => issue.reason).join(" ") };
-  }
+  // Build readiness (including the host's Build setup) is part of the file capability.
+  const buildCapability = () => port.files.capability({ kind: "package.build" });
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note(`Builds your own ${EYE_MAKEUP_MOD.modName} mod: private Cyberpunk mod files for ONE in-game eye-makeup selector, labelled “${EYE_MAKEUP_MOD.selectorLabel}” (plus Off), from the current draft, including unsaved edits. Your collection and library revisions are never changed.`),
+    section("Mod package", note(`Builds your own copy of ${EYE_MAKEUP_MOD.modName}, the eye-makeup mod, from the current draft (including unsaved edits). Each preset becomes one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
-    h("details", { class: "section" }, h("summary", { text: "Local setup" }),
-      note("These paths stay on this computer. Choose the game folder and build inputs; select MO2 or direct sources for later mod discovery."),
-      h("label", { class: "control" }, h("span", { class: "control-label", text: "Mod source route" }), route),
+    h("details", { class: "section" }, h("summary", { text: "Game & tools" }),
+      note("These locations are saved on this computer only. Choose your game folder and how you install mods."),
+      h("label", { class: "control" }, h("span", { class: "control-label", text: "How you install mods" }), route),
       ...setupFields.filter(([key]) => !["mo2Root", "mo2ProfileId", "manualModRoot"].includes(key))
         .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])),
       mo2Fields, directFields, setupState, setupReadiness,
       h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview study" : "Flat adapter", finish.exportAdapter === "none" ? "warning" : "success")))),
-    note("Active layers with preview-study finishes are omitted and named in the result; a preset left with nothing exportable is omitted whole. Check decides — this list is informational.")));
+      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : "Can be built", finish.exportAdapter === "none" ? "warning" : "success")))),
+    note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Check decides — this list is a guide.")));
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {
@@ -381,9 +375,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
       h("dt", { text: "Package" }), h("dd", {}, h("code", { text: b.package })),
       h("dt", { text: "Manifest" }), h("dd", {}, h("code", { text: b.manifest })),
       h("dt", { text: "Archive SHA-256" }), h("dd", {}, h("code", { class: "hash", text: b.archiveSha256 }))),
-    h("div", { class: "row wrap gap-s" }, badge("Not installed", "neutral"), badge("Not game-tested", "warning"), badge("Offline verified", "success")));
+    note("Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed.", "info"));
   }
-  card.append(h("p", { class: "muted small" }, "Packaged collection SHA-256 ", h("code", { class: "hash", text: r.packagedCollectionSha256 })));
+  card.append(h("p", { class: "muted small" }, "Collection fingerprint (SHA-256) ", h("code", { class: "hash", text: r.packagedCollectionSha256 })));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;

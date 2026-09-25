@@ -6,7 +6,7 @@ import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler } from "../src/install-detection-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
-import { desktopCapabilities, type DesktopVersion } from "./host";
+import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
 import { desktopBuildIssue, desktopPlateCache, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
@@ -32,6 +32,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const settingsStore = new LocalSettingsStore(dataRoot);
   const workspaceStore = new DesktopWorkspaceStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
+  // Renderer progress for the host's blank-window watchdog and close handling.
+  const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
+  let report: (message: string) => void = message => console.log(message);
   const shutdown = new AbortController();
   const activity = new DesktopWorkActivity();
   const updateGuard = updateTrial && new DesktopUpdateApplyGuard(activity,
@@ -52,6 +55,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
+  // Maintainer-only: the five prepared preview files come from a private
+  // pipeline, so the intake stays hidden and refused unless explicitly enabled.
+  const previewIntake = () => existsSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER));
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
@@ -77,7 +83,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }) : request;
       if (url.pathname === "/api/desktop/capabilities")
         return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
-          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady()),
+          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady(), previewIntake()),
           { headers: { "Cache-Control": "no-store" } });
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
@@ -94,8 +100,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
-      if (url.pathname === "/api/desktop/assets/intake") return desktopAssetIntakeRequest(routedRequest, dataRoot);
+      if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
+        desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
       if (url.pathname === "/api/desktop/workspace") {
+        if (request.method === "GET" && !renderer.bootstrapped) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
         if (request.method === "POST" && response.status === 204)
           updateGuard?.noteWorkspaceWrite(request.headers.get("X-XFS-Update-Flush"));
@@ -116,7 +124,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
         if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "uv-only", "starting", "interactive"].includes(value.state) ||
           typeof value.webgl2 !== "boolean" || typeof value.worker !== "boolean") return new Response("Bad report", { status: 400 });
-        console.log(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
+        renderer.smoke = value.state;
+        report(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
@@ -142,6 +151,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (!resolvedFile.startsWith(resolvedRoot + sep) || !statSync(resolvedFile).isFile())
           return new Response("Not found", { status: 404 });
       } catch { return new Response("Not found", { status: 404 }); }
+      if (firstVisit && !renderer.pageServed) { renderer.pageServed = true; report("WebView requested the Studio page."); }
       return new Response(request.method === "HEAD" ? null : file, { headers: {
         "Content-Type": file.type, "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
         ...(firstVisit ? { "Set-Cookie": `xfs_session=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}),
@@ -152,6 +162,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     url: `${server.url}?session=${token}`,
     port: server.port,
     onWorkspaceCloseAck(handler: (nonce: string, status: "saved" | "failed") => boolean) { closeAck = handler; },
+    /** Route host diagnostics (page served, bootstrap, smoke state) to the host log. */
+    onReport(handler: (message: string) => void) { report = handler; },
+    renderer(): Readonly<typeof renderer> { return { ...renderer }; },
     beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
     beginInstallTransaction() { return activity.begin("install"); },
     stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },

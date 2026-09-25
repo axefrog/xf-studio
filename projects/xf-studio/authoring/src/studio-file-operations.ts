@@ -1,3 +1,4 @@
+import { BUILD_NEEDS_SETUP } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
 import type { PackageBuild, PackageCheck } from "./package-action";
 import { parseRecipe, type Layer, type Recipe } from "./recipe";
@@ -47,7 +48,13 @@ type FileSources = {
   savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
   recoverCollection(): void;
+  /**
+   * Host build readiness, when the host has a Build setup. Absent means the
+   * host decides at request time (tests, hosts without local setup).
+   */
+  buildReadiness?(): "ready" | "needs-setup" | "loading" | "damaged" | undefined;
 };
+
 
 /** File and package workflow contract; DOM, worker and download mechanics are injected. */
 export class StudioFileOperations {
@@ -108,6 +115,16 @@ export class StudioFileOperations {
           "Load a saved V before exporting its appearance." };
       case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
         { available: false, reason: "Collection is still loading." };
+      case "package.build": {
+        const base = this.collection?.capability(collectionRequest(action.kind)) ??
+          { available: false, reason: "Collection is still loading." };
+        if (!base.available) return base;
+        const build = this.sources.buildReadiness?.();
+        return build === "needs-setup" ? { available: false, reason: BUILD_NEEDS_SETUP } :
+          build === "loading" ? { available: false, reason: "Build setup is still loading." } :
+          build === "damaged" ? { available: false, reason: "Your build settings file is damaged. Restore the previous copy in Build setup." } :
+          base;
+      }
       default: {
         const request = collectionRequest(action.kind);
         return this.collection?.capability(request) ??

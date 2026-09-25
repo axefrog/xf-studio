@@ -1,26 +1,114 @@
-# Runs inside Windows Sandbox (see sandbox-trial.ts). Records the environment, checks the setup
-# ZIP against its checksum, runs the installer, launches the installed app with no preview assets
-# and captures what happened. Everything written goes to the mapped results folder; the sandbox
-# and everything installed in it are discarded when its window closes.
+# Runs inside Windows Sandbox (see sandbox-trial.ts), unattended. Records the environment,
+# checks the setup ZIP against its checksum, installs quietly, launches the installed app with
+# no preview assets and captures what happened: screenshots, the app's desktop.log, WebView2
+# presence, whether the loopback server answers, and the page state through a WebView2
+# remote-debugging port (safe here: the sandbox is disposable). Everything goes to the mapped
+# results folder; with -AutoClose the sandbox shuts itself down when done.
+param([switch]$AutoClose)
 $ErrorActionPreference = "Continue"
 $in = Join-Path $env:USERPROFILE "Desktop\xfs-input"
 $out = Join-Path $env:USERPROFILE "Desktop\xfs-results"
-$report = [ordered]@{ schema = "xfs/desktop-sandbox-first-run-1"; started = (Get-Date).ToString("o") }
-function Save { $report | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $out "report.json") }
-function Shot([string]$name) {
-  Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-  $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-  $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-  $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+$hostWebView = Join-Path $env:USERPROFILE "Desktop\xfs-webview2"
+$report = [ordered]@{ schema = "xfs/desktop-sandbox-first-run-2"; started = (Get-Date).ToString("o") }
+function Save { $report | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $out "report.json") }
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class XfsWin {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hgt, uint flags);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+"@
+# Screenshots capture one window at a fixed size, never the whole (possibly huge) desktop.
+function ShotWindow([IntPtr]$hwnd, [string]$name) {
+  if ($hwnd -eq [IntPtr]::Zero) { $hwnd = [XfsWin]::GetForegroundWindow() }
+  $r = New-Object XfsWin+RECT
+  if (-not [XfsWin]::GetWindowRect($hwnd, [ref]$r)) { return }
+  $w = $r.Right - $r.Left; $h = $r.Bottom - $r.Top
+  if ($w -le 0 -or $h -le 0) { return }
+  $bmp = New-Object System.Drawing.Bitmap $w, $h
+  $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
   $bmp.Save((Join-Path $out "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
 }
+function AppWindow {
+  $app = Get-Process bun -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
+  if ($app) { [void][XfsWin]::SetWindowPos($app.MainWindowHandle, [IntPtr]::Zero, 40, 40, 1280, 800, 0x0040); Start-Sleep -Milliseconds 800 }
+  return $app
+}
+function Shot([string]$name) {
+  $app = AppWindow
+  # A message box in front of the app is what the user sees, so capture the foreground window then.
+  $front = [XfsWin]::GetForegroundWindow()
+  $r = New-Object XfsWin+RECT; [void][XfsWin]::GetWindowRect($front, [ref]$r)
+  $dialog = $app -and $front -ne $app.MainWindowHandle -and ($r.Right - $r.Left) -lt 1000
+  if ($app -and -not $dialog) { ShotWindow $app.MainWindowHandle $name } else { ShotWindow $front $name }
+}
+function Pv([string]$key) { try { (Get-ItemProperty -Path $key -ErrorAction Stop).pv } catch { $null } }
+# Evaluate one expression in the first WebView2 page through the remote-debugging port.
+function PageState([int]$port, [string]$expression) {
+  try {
+    $targets = Invoke-RestMethod "http://127.0.0.1:$port/json/list" -TimeoutSec 5
+    $page = @($targets | Where-Object { $_.type -eq "page" })[0]
+    if (-not $page) { return @{ targets = @($targets | ForEach-Object { $_.type + " " + $_.url }) } }
+    $ws = New-Object System.Net.WebSockets.ClientWebSocket
+    $ws.ConnectAsync([Uri]$page.webSocketDebuggerUrl, [Threading.CancellationToken]::None).Wait(5000) | Out-Null
+    $message = @{ id = 1; method = "Runtime.evaluate"; params = @{ expression = $expression; returnByValue = $true } } | ConvertTo-Json -Depth 5 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetBytes($message)
+    $ws.SendAsync([ArraySegment[byte]]$bytes, "Text", $true, [Threading.CancellationToken]::None).Wait(5000) | Out-Null
+    $buffer = New-Object byte[] 1048576; $text = ""
+    do {
+      $result = $ws.ReceiveAsync([ArraySegment[byte]]$buffer, [Threading.CancellationToken]::None)
+      if (-not $result.Wait(10000)) { break }
+      $text += [Text.Encoding]::UTF8.GetString($buffer, 0, $result.Result.Count)
+    } while (-not $result.Result.EndOfMessage)
+    $ws.Dispose()
+    return @{ url = $page.url; value = ($text | ConvertFrom-Json).result.result.value }
+  } catch { return @{ error = $_.Exception.Message } }
+}
+$state = "JSON.stringify({ ready: document.readyState, mounted: !!document.querySelector('#studio.studio-ready'), " +
+  "welcome: !!document.querySelector('#desktop-welcome')?.open, failed: document.querySelector('.boot-failed')?.innerText ?? null, " +
+  "head: window.xfStudioPresentation ? null : document.querySelector('.viewport-state')?.innerText?.slice(0, 200) ?? null, " +
+  "text: document.body?.innerText?.slice(0, 300) ?? null })"
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $report.os = (Get-CimInstance Win32_OperatingSystem).Caption + " " + [Environment]::OSVersion.Version
-$report.user = $identity.Name
 $report.elevated = (New-Object Security.Principal.WindowsPrincipal $identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$wv = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
-$report.webview2 = if (Test-Path $wv) { (Get-ItemProperty $wv).pv } else { "not registered" }
+$client = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+$report.webview2 = [ordered]@{
+  hklmWow64 = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client"
+  hklm = Pv "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$client"
+  hkcu = Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$client"
+  programFilesRuntime = @(Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  hostRuntimeMapped = Test-Path (Join-Path $hostWebView "msedgewebview2.exe")
+}
+# Mode C (--install-webview2, networking on): install Microsoft's Evergreen WebView2 Runtime
+# with its official bootstrapper, exactly as a user without it would.
+if (Test-Path (Join-Path $in "install-webview2.txt")) {
+  $bootstrapper = Join-Path $env:TEMP "MicrosoftEdgeWebview2Setup.exe"
+  try {
+    Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $bootstrapper -UseBasicParsing -TimeoutSec 120
+    $sig = Get-AuthenticodeSignature $bootstrapper
+    $report.webview2.bootstrapperSigner = $sig.SignerCertificate.Subject
+    if ($sig.Status -eq "Valid" -and $sig.SignerCertificate.Subject -like "*O=Microsoft Corporation*") {
+      $p = Start-Process $bootstrapper -ArgumentList "/silent", "/install" -PassThru; [void]$p.WaitForExit(600000)
+      $report.webview2.installedByTrial = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client"
+    } else { $report.webview2.bootstrapperRefused = "$($sig.Status)" }
+  } catch { $report.webview2.bootstrapperError = $_.Exception.Message }
+}
+# Mode B (--host-webview2): a host WebView2 runtime copied in as a fixed-version runtime.
+# Under Electrobun 2.0.1 this did not start WebView2 (25 September); kept for diagnosis.
+# A fixed-version runtime must live on a local drive, so copy the mapped folder first.
+if ($report.webview2.hostRuntimeMapped) {
+  $local = Join-Path $env:LOCALAPPDATA "xfs-webview2-fixed"
+  robocopy $hostWebView $local /E /NFL /NDL /NJH /NJS /NP | Out-Null
+  $report.webview2.localCopy = Test-Path (Join-Path $local "msedgewebview2.exe")
+  # Microsoft's fixed-version guidance: the sandboxed renderer needs read/execute for
+  # ALL APPLICATION PACKAGES and ALL RESTRICTED APPLICATION PACKAGES.
+  icacls $local /grant "*S-1-15-2-1:(OI)(CI)(RX)" /grant "*S-1-15-2-2:(OI)(CI)(RX)" /T /Q | Out-Null
+  $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $local
+}
 $report.bunOnPath = [bool](Get-Command bun -ErrorAction SilentlyContinue)
 
 $zip = Get-ChildItem $in -Filter *.zip | Select-Object -First 1
@@ -32,10 +120,30 @@ Expand-Archive $zip.FullName $setupDir -Force
 $setup = Get-ChildItem $setupDir -Filter "*Setup*.exe" | Select-Object -First 1
 Save
 
-# The installer may show its own window; complete it by hand if it asks.
+# Unattended install. Electrobun 2.0.1's setup has no install-time quiet flag (its --quiet
+# applies to uninstall and makes setup exit 1), so dismiss its final "Installation complete"
+# window once the launcher exists. The report records whether that happened.
 $t = Get-Date
 $proc = Start-Process $setup.FullName -PassThru
-if (-not $proc.WaitForExit(600000)) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
+$shell = New-Object -ComObject WScript.Shell
+$report.installerDismissed = $false
+while (-not $proc.HasExited -and ((Get-Date) - $t).TotalSeconds -lt 600) {
+  Start-Sleep -Seconds 5
+  $installed = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue } | Select-Object -First 1
+  $proc.Refresh()
+  if ($installed -and $proc.MainWindowHandle -ne 0) {
+    Start-Sleep -Seconds 5
+    if ($proc.HasExited) { break }
+    ShotWindow $proc.MainWindowHandle "installer-final"
+    [void]$shell.AppActivate($proc.Id); Start-Sleep -Milliseconds 500; $shell.SendKeys("{ENTER}")
+    Start-Sleep -Seconds 3
+    if (-not $proc.HasExited) { [void]$proc.CloseMainWindow() }
+    $report.installerDismissed = $true
+    [void]$proc.WaitForExit(30000)
+  }
+}
+if (-not $proc.HasExited) { $report.installer = "still running after 10 minutes" } else { $report.installer = "exit $($proc.ExitCode)" }
 $report.installSeconds = [int]((Get-Date) - $t).TotalSeconds
 $roots = Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "dev.axefrog.xf-studio*" -ErrorAction SilentlyContinue
 $report.installRoots = @($roots | ForEach-Object { $_.Name })
@@ -46,11 +154,48 @@ if ($version) { $report.packagedVersion = Get-Content $version.FullName -Raw | C
 Save
 
 if ($launcher) {
+  # The installer's Close starts the app itself; restart it here so the debugging port applies.
+  Start-Sleep -Seconds 3
+  Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
   Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
   Start-Sleep -Seconds 25
   $report.windows = @(Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): $($_.MainWindowTitle)" })
+  $bun = @(Get-Process bun -ErrorAction SilentlyContinue)
+  $ports = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $bun.Id -contains $_.OwningProcess } | ForEach-Object { $_.LocalPort })
+  $report.loopback = @($ports | ForEach-Object {
+    try { $r = Invoke-WebRequest "http://127.0.0.1:$_/" -UseBasicParsing -TimeoutSec 5; "$_ -> $($r.StatusCode)" }
+    catch { "$_ -> $($_.Exception.Response.StatusCode.value__)" } })
+  $report.webview2Processes = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count
+  $report.recentAppErrors = @(Get-WinEvent -FilterHashtable @{ LogName = "Application"; Level = 2; StartTime = $t } -MaxEvents 5 -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.Message.Substring(0, [Math]::Min(300, $_.Message.Length)) })
+  $report.pageFirstRun = PageState 9222 $state
   Shot "first-run"
+  Save
+  # The welcome's first button (Start designing) has focus, so Enter dismisses it.
+  $app = Get-Process | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
+  if ($app) {
+    [void]$shell.AppActivate($app.Id); Start-Sleep -Seconds 1; $shell.SendKeys("{ENTER}"); Start-Sleep -Seconds 4
+    $report.pageAfterWelcome = PageState 9222 $state
+    Shot "after-welcome"
+    # Close and reopen: the welcome must not return, and the draft must come back.
+    [void]$app.CloseMainWindow(); Start-Sleep -Seconds 12
+    $report.closedCleanly = -not (Get-Process -Id $app.Id -ErrorAction SilentlyContinue)
+    Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
+    Start-Sleep -Seconds 25
+    $report.pageRelaunch = PageState 9222 $state
+    Shot "relaunch"
+  }
+  $dataRoot = Join-Path $env:LOCALAPPDATA "dev.axefrog.xf-studio\canary"
+  $report.dataRoot = [ordered]@{ exists = Test-Path $dataRoot
+    files = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    webViewFolder = @(Get-ChildItem $dataRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) }
+  $log = Join-Path $dataRoot "desktop.log"
+  if (Test-Path $log) { Copy-Item $log (Join-Path $out "desktop.log") }
 }
 $report.finished = (Get-Date).ToString("o")
 Save
-Write-Host "Automatic part finished. Continue the manual checklist in the desktop README, then close the sandbox."
+Write-Host "Finished. report.json, desktop.log and screenshots are in the results folder."
+if ($AutoClose) { Start-Sleep -Seconds 3; Stop-Computer -Force }

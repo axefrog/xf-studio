@@ -8,9 +8,12 @@ export class DesktopWorkspaceClose {
     requestFlush(nonce: string): void;
     close(): void;
     report(message: string): void;
+    /** False while no Studio page has loaded a workspace: there is nothing to save, so close at once. */
+    rendererReady?(): boolean;
   }, private readonly timeoutMs = 10_000) {}
 
   request(event: { response?: { allow: boolean } }) {
+    if (this.port.rendererReady && !this.port.rendererReady()) return;
     event.response = { allow: false };
     if (this.pending) return;
     const nonce = randomUUID();

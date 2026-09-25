@@ -4,6 +4,7 @@
  * `StudioPresentationPort`. Nothing in `studio-ui/` imports this module.
  */
 import { createBrowserFileDevice } from "./browser-file-device";
+import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -153,9 +154,13 @@ async function start() {
   await port!.library.execute({ kind: "initialize" });
   const desktopAssets = document.documentElement.dataset.desktopPreviewAssets;
   if (desktopAssets === "missing" || desktopAssets === "incomplete") {
-    const reason = desktopAssets === "missing"
-      ? "3D preview assets are missing. Import the five prepared files to enable the head view."
-      : "3D preview assets are incomplete. Inspect the private preview folder and import a valid prepared set.";
+    // Community installs have no preview intake, so they get the plain alpha
+    // status; only a maintainer-enabled intake mentions the prepared files.
+    const reason = document.documentElement.dataset.desktopPreviewIntake !== "enabled"
+      ? NO_3D_PREVIEW_IN_ALPHA
+      : desktopAssets === "missing"
+        ? "3D preview files are missing. Use Enable 3D preview to import the five prepared files."
+        : "3D preview files are incomplete. Check the preview-assets folder and import a valid prepared set.";
     core.app.setPreviewUnavailable(reason);
     viewportDevice.failHead(reason);
     statusSource.changed();

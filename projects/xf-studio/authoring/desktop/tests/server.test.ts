@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createDesktopServer } from "../server";
-import { desktopVersionFromMetadata } from "../host";
+import { desktopVersionFromMetadata, PREVIEW_INTAKE_MARKER } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { createPackageHandler } from "../../src/package-server";
@@ -36,7 +36,7 @@ test("session gates static files and narrowly typed host facts", async () => {
   const response = await fetch(base + "/api/desktop/capabilities", { headers });
   expect(await response.json()).toMatchObject({ schema: "xfs/desktop-capabilities-1", library: true,
     packageCheck: true, packageBuild: false, updater: false, previewAssets: "missing", version: "0.0.1", channel: "dev",
-    buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot });
+    buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot, previewIntake: false });
   expect((await fetch(base + "/api/desktop/smoke", { method: "POST", headers: { ...headers,
     Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-smoke-1",
     state: "uv-only", webgl2: true, worker: true }) })).status).toBe(204);
@@ -154,6 +154,11 @@ test("asset intake requires the desktop session and accepts only a folder inspec
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
   const body = JSON.stringify({ action: "inspect", folder: resolve(root, "absent") });
   const endpoint = base + "/api/desktop/assets/intake";
+  // Community installs have no intake: the endpoint does not exist until the developer marker is present.
+  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
+    "Content-Type": "application/json" }, body })).status).toBe(404);
+  writeFileSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER), "");
+  expect((await (await fetch(base + "/api/desktop/capabilities", { headers: { Cookie: cookie } })).json()).previewIntake).toBe(true);
   expect((await fetch(endpoint, { method: "POST", headers: { Origin: base,
     "Content-Type": "application/json" }, body })).status).toBe(403);
   expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie,

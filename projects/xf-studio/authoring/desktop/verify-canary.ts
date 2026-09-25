@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "./electrobun.config";
+import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 
 // A private packaging gate. The checked files are the actual installer/update
 // artifacts, not the source `static` tree that Electrobun consumes.
@@ -57,7 +58,16 @@ const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
 sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
-  "build/studio-main.js", "build/raster-worker.js"], "Packaged Studio view");
+  "build/studio-main.js", "build/raster-worker.js", packagedNotices, packagedLicence], "Packaged Studio view");
+// The installed app must carry the current licence and notices, and the notices
+// must name every shipped program and the versions actually built in.
+for (const [name, source] of [[packagedNotices, noticesPath], [packagedLicence, licencePath]] as const)
+  if (!tarBytes(["-xOf", archive, views + name]).equals(readFileSync(source)))
+    throw Error(`Packaged ${name} differs from ${source}.`);
+const binaries = members.filter(name => name.startsWith(`${bundle}/bin/`) && !name.endsWith("/"))
+  .map(name => name.slice(`${bundle}/bin/`.length));
+const issues = noticeIssues(readFileSync(noticesPath, "utf8"), { binaries, ...builtVersions() });
+if (issues.length) throw Error(`THIRD_PARTY_NOTICES.md is out of date:\n${issues.join("\n")}`);
 const toolPrefix = `${bundle}/Resources/app/build-tools/`;
 const toolFiles = members.filter(name => name.startsWith(toolPrefix) && !name.endsWith("/"))
   .map(name => name.slice(toolPrefix.length));
@@ -90,4 +100,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Seven allowlisted Studio view files and seven hashed asset-free build tools; no private preview assets or update feed.");
+console.log("Nine allowlisted Studio view files (licence and third-party notices included), current notices, and seven hashed asset-free build tools; no private preview assets or update feed.");

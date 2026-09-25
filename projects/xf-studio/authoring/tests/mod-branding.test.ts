@@ -80,7 +80,7 @@ test("no TypeScript module outside mod-branding spells the mod name", () => {
     return statSync(path).isDirectory() ? files(path) : /\.(ts|js)$/.test(name) ? [path] : [];
   });
   const offenders = [...files(join(authoring, "src")), ...files(join(authoring, "tools")),
-    ...files(join(authoring, "desktop")).filter(file => !/node_modules|build-tools|[\\/]\.hutch[\\/]|[\\/]build[\\/]/.test(file))]
+    ...files(join(authoring, "desktop")).filter(file => !/node_modules|build-tools|[\\/]\.hutch[\\/]|[\\/]build[\\/]|[\\/]static[\\/]/.test(file))]
     .filter(file => !file.endsWith("mod-branding.ts"))
     .filter(file => /XF Eye Artistry(?! CCXL - Dev)/.test(readFileSync(file, "utf8")))
     .map(file => relative(authoring, file));

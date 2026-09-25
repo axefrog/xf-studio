@@ -65,7 +65,8 @@ export class StudioRuntime {
   dispatch(action: StudioAction, options: { success?: string; quiet?: boolean; failure?: string } = {}) {
     const result = this.port.authoring.dispatch(action);
     if (!result.ok) {
-      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : "error", sourceLabel(action.kind),
+      // Something not in this alpha is information, not an error.
+      if (!options.quiet) this.feedback.toast(result.code === "busy" ? "warning" : result.code === "asset_unavailable" ? "info" : "error", sourceLabel(action.kind),
         options.failure ?? result.message);
       return false;
     }

@@ -144,7 +144,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       setText(description, descriptor?.description ?? "");
       if (exportLine.dataset.finish !== current) {
         exportLine.dataset.finish = current;
-        exportLine.replaceChildren(descriptor?.exportAdapter === "none" ? badge("Preview study", "warning") : badge("Flat adapter · provisional", "success"),
+        exportLine.replaceChildren(descriptor?.exportAdapter === "none" ? badge("Preview only", "warning") : badge("Can be built", "success"),
           h("span", { class: "small", text: descriptor?.exportNote ?? "" }), openPackage);
       }
       const flakes = layer.flakes as ReadonlyDeep<LegacyFlakes | IrregularFlakes | DirectGlintFlakes> | undefined;

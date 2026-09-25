@@ -19,7 +19,7 @@
     input.value = values[key];
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  button('Save local setup').click();
+  button('Save settings').click();
   await wait(() => port.localSetup.snapshot().view?.revision >= 1, 'setup save', 60000);
   await wait(() => port.localSetup.snapshot().view?.readiness.build.ready, 'Build readiness', 60000);
   return { native: Boolean(window.__electrobunWebviewId), revision: port.localSetup.snapshot().view.revision,

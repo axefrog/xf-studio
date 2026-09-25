@@ -14,27 +14,27 @@ bun run build:dev    # prepare static view + build tools, then Electrobun dev bu
 bun run run:dev      # launch the dev build in a WebView2 window
 ```
 
-**Last verified 25 September 2026:** 45 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 468 with the private preview assets present.
+**Last verified 25 September 2026:** 48 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 476 with the private preview assets present. `tools/review-first-run.ts` and `tools/review-alpha-inventory.ts` pass against the prepared static view.
 
 **Version.** `package.json` `version` (now `0.1.0-alpha.1`) is the only place the app version is set. `electrobun.config.ts` imports it, and `release.ts` derives the tag (`v0.1.0-alpha.1`), release title, asset name and changelog section from it. Change it together with the **Unreleased** section of the [changelog](../../CHANGELOG.md) when cutting a release.
 
 **Release build.** `.github/workflows/desktop-release.yml` runs the same steps on a clean `windows-2025` runner. Pull requests build only, manual runs upload a 14-day artifact, and a matching `v*` tag creates a draft pre-release. `bun release.ts metadata|stage|notes` is the tooling it calls. Five authoring tests read ignored game-derived assets; CI skips them with `XFS_PRIVATE_ASSETS=absent` after proving the folder is absent. Never set that variable locally.
 
-For an **unsigned Windows installer**, run `bun run build:canary` after the same frozen installs. It creates `artifacts/canary-win-x64-XFStudio-Setup-canary.zip` with the setup executable and its required hidden payload. `verify-canary.ts` checks the actual installer ZIP, update archive and packaged `version.json` against the pinned `dev.axefrog.xf-studio` identity, version `0.1.0`, canary channel and build hash; checks the seven-file Studio view allowlist and the hashed build-tool manifest; and refuses game assets, saved data and any unexpected update-feed URL. The archive and update JSON are local build byproducts only: CI never publishes them, and the packaged `baseUrl` must stay empty. `verify-canary.ts` uses Windows' own `tar.exe` (bsdtar), because a GNU `tar` earlier on `PATH` cannot read `.tar.zst` or ZIP. `build:dev` remains the faster source-run trial.
+For an **unsigned Windows installer**, run `bun run build:canary` after the same frozen installs. It creates `artifacts/canary-win-x64-XFStudio-Setup-canary.zip` with the setup executable and its required hidden payload. `verify-canary.ts` checks the actual installer ZIP, update archive and packaged `version.json` against the pinned `dev.axefrog.xf-studio` identity, version `0.1.0`, canary channel and build hash; checks the nine-file Studio view allowlist (including `LICENSE.txt` and `THIRD_PARTY_NOTICES.md`, byte-compared with the repository's `LICENSE` and [third-party notices](../../THIRD_PARTY_NOTICES.md)) and the hashed build-tool manifest; requires the notices to name every shipped `bin/` program and the Bun, Electrobun and three.js versions actually built in (`notices.ts`); and refuses game assets, saved data and any unexpected update-feed URL. The archive and update JSON are local build byproducts only: CI never publishes them, and the packaged `baseUrl` must stay empty. `verify-canary.ts` uses Windows' own `tar.exe` (bsdtar), because a GNU `tar` earlier on `PATH` cannot read `.tar.zst` or ZIP. `build:dev` remains the faster source-run trial.
 
-`prepare-static.ts` copies the HTML/CSS, bundles `desktop-bootstrap.js` with the typed `LocalSetupActions` browser device, bundles `studio-main.ts` and `raster-worker.ts`, and bundles a separate Bun `check-worker.js`. Electrobun copies only those seven allowlisted files to `Resources/app/views/studio`; Bun main reads them from `PATHS.VIEWS_FOLDER`. `prepare-build-tools.ts` copies four asset-free Experiment 005 Python sources and the shared Python wrapper and bundles the shared TypeScript preflight and bake entries into an integrity-manifested host resource outside the served view. Neither step copies `public/assets`, SQLite, credentials or game/mod files. `build/dev-win-x64/`, `artifacts/` and generated `static/` are ignored. The script fails if the shared Studio script tag changes, forcing review of this bootstrap.
+`prepare-static.ts` refuses to run without the top-level `LICENSE`, copies it and the third-party notices, copies the HTML/CSS, bundles `desktop-bootstrap.js` with the typed `LocalSetupActions` browser device, bundles `studio-main.ts` and `raster-worker.ts`, and bundles a separate Bun `check-worker.js`. Electrobun copies only those nine allowlisted files to `Resources/app/views/studio`; Bun main reads them from `PATHS.VIEWS_FOLDER`. `prepare-build-tools.ts` copies four asset-free Experiment 005 Python sources and the shared Python wrapper and bundles the shared TypeScript preflight and bake entries into an integrity-manifested host resource outside the served view. Neither step copies `public/assets`, SQLite, credentials or game/mod files. `build/dev-win-x64/`, `artifacts/` and generated `static/` are ignored. The script fails if the shared Studio script tag changes, forcing review of this bootstrap.
 
 ## Current capabilities and limits
 
 | Area | Works (evidence) | Still open |
 |---|---|---|
-| First run | Opens Local setup before optional 3D intake; **Continue without paths** is a persistent, validated choice ([details](#first-run-path-choice-25-september)) | Standard-user install, uninstall choices |
+| First run | A plain welcome: no 3D head preview in this alpha, the UV editor, library and Check work fully, Build needs a developer setup. **Start designing** stores the untouched Build setup through the validated `setup.save` action, so it does not return ([details](#community-first-run-25-september)) | Standard-user install, uninstall choices |
 | Without preview assets | Full UV editor, Undo, autosave, SQLite library, mask PNG export and Check; head pane reports unavailable ([details](#uv-only-first-run-25-september)) | — |
-| 3D preview | Strict five-file private intake into user data enables the head ([details](#core-preview-intake-25-september)) | Optional hair/brow/lash/idle/piercing intake; general asset discovery and provenance |
+| 3D preview | Not offered to community users. A developer-only five-file intake (enabled by a marker file) enables the head for maintainers ([details](#core-preview-intake-25-september)) | A 3D preview built from the user's own game files; general asset discovery and provenance |
 | Check | Bounded worker, same filtered snapshot/identities as localhost ([details](#package-check-and-build)) | — |
-| Build | Host-gated build with game and WolvenKit inputs; the eye plate is derived from the installed game and cached in user data. Exercised in an installed canary with the earlier private plate ([details](#installed-build-acceptance-25-september)) | Archive-byte reproducibility; release notices |
+| Build | Host-gated build with game and WolvenKit inputs; the eye plate is derived from the installed game and cached in user data. Exercised in an installed canary with the earlier private plate ([details](#installed-build-acceptance-25-september)). Without a complete Build setup every Build entry point shows one plain reason | Archive-byte reproducibility; a Build setup a community user can complete |
 | Workspace persistence | Host-owned workspace file survives port changes, full restart ([details](#installed-webview-acceptance-and-restart-repair-25-september)) and native window close ([details](#desktop-close-flush-acceptance-25-september)) | Process kill, OS crash, power loss |
-| Release | Version source, tag/changelog gates, checksums, attestations and draft release in CI; clean-clone rehearsal passed locally | First GitHub run; licence and third-party notices; signing |
+| Release | Version source, licence/tag/changelog gates, packaged and attached third-party notices, checksums, attestations and draft release in CI; clean-clone rehearsal passed locally | First GitHub run; signing |
 | Updates | Disabled consent state machine and restart-save guard, tested with fake ports ([details](#updater-gate-25-september)) | Authenticated A→B feed, native apply, rollback |
 | Game | Nothing installed into the game or MO2 by this host | All runtime rendering |
 
@@ -46,7 +46,13 @@ Disposable Windows installs have exercised the WebView editor, Build, restart an
 
 **User data.** `Utils.paths.userData` contains `library.sqlite`, `verification.sqlite`, `settings.json`, the host-owned `workspace.json` (or `verification-workspace.json` for `?verify=1`), an optional **private** `preview-assets/` directory and the private candidate store. The desktop host owns the same versioned `LocalSettingsStore` and narrow GET/PATCH/restore contract as localhost ([local settings](../LOCAL-SETTINGS.md)), rooted in this directory, and ignores developer `XFS_PACKAGE_*` overrides. Path edits keep revision guards and previous-good recovery; the renderer cannot select a settings-file path or escape the host-owned directory. The workspace file is validated, written atomically, and an unreadable prior file is preserved rather than silently replaced; the view shows a save failure.
 
-**About.** Desktop-only. Reads the installed version, channel and build hash from `Resources/version.json` through the host capability, reports saved-path readiness, the user-data location and the `xfs/desktop-update-1` update state. Missing or invalid packaged metadata produces an explicit unavailable state, never a guessed source version.
+**About.** Desktop-only. Reads the installed version and build hash from `Resources/version.json` through the host capability, and states in plain words whether the 3D preview is available, where the library and settings live, whether Check and Build are ready, and that automatic updates are off. **Licences** shows the packaged `LICENSE.txt` and `THIRD_PARTY_NOTICES.md`; **Build setup** opens the path form. Missing or invalid packaged metadata produces an explicit "reinstall to repair" state, never a guessed source version.
+
+**Developer preview intake.** The five prepared preview files come from a maintainer pipeline that community users cannot run, so the host reports `previewIntake: false` and answers the intake endpoint with 404 unless an empty file named `developer-preview-intake` exists in the app's data folder (the path About shows). With it, **Enable 3D preview** and the intake dialog return exactly as before; `tools/review-ready-assets.ts` and `tools/review-first-run.ts` create the marker for their developer steps.
+
+**Startup failures are never a blank window.** `main.ts` writes a bounded `desktop.log` in the data folder (version, WebView2 detection, loopback port, page load, bootstrap, smoke state, failures). `webview2.ts` follows Microsoft's documented registry check for the Evergreen runtime. If the WebView never requests the Studio page (5 s when no runtime is detected, otherwise 20 s), a native message explains it: without WebView2 it offers Microsoft's download page; otherwise it offers **Copy diagnostics**. Closing a window whose page never loaded closes at once instead of waiting for a workspace save. Inside the page, `boot-watchdog.js` is inlined as a classic script ahead of the module bootstrap: an uncaught script error before mount, or no mounted Studio after 30 s, replaces "Starting…" with a plain explanation, **Try again** and **Copy diagnostics**.
+
+**Alpha wording.** User-facing reasons for things that are not in this alpha come from `src/alpha-availability.ts` (no 3D preview; Build needs a developer setup) and follow its jargon policy. Build readiness is part of the `package.build` file capability, so the command palette, header and Mod package panel all show the same reason.
 
 ### Package Check and Build
 
@@ -58,9 +64,33 @@ Build uses only the saved desktop settings for game, WolvenKit and Python (which
 
 All trials below used disposable identities, touched no game or MO2 file, imported no private asset unless stated, and did not launch the game. Screenshots stay in ignored evidence.
 
+### Community first run, 25 September
+
+A clean data root opens a welcome instead of the path form. It says the 3D head preview isn't in this alpha (a preview from the user's own game files is planned), that the UV editor, library and Check work fully, and that building mod files still needs a developer setup. **Start designing** saves the untouched settings through the same revisioned `setup.save` action, so the welcome does not return; **Build setup** opens the form. A damaged settings file with a recoverable backup still opens Build setup for recovery. `tools/review-first-run.ts` (asset-free, isolated `?verify=1`) checks the welcome, the absent intake, the UV-only head reason, About wording and both Licences documents, then enables the developer marker and repeats the intake and Build setup checks. Screenshots were checked at 900×650.
+
+### Community alpha control inventory, 25 September
+
+`tools/review-alpha-inventory.ts` walks every reachable control of the desktop build as a community user (no preview files, no Build setup): the welcome, About, the overlay buttons, every command-palette entry, every control in every dock panel, the header and status bar, and the UV-map and layer-row context menus. It fails if any control is disabled without a visible reason or shows developer jargon. `tests/alpha-capability-reasons.test.ts` enforces the same rule for every catalogued target action and every head, camera, motion and saved-V action. The latest walk found 203 controls: 157 available, 46 unavailable with a reason, none silent.
+
+| Area | Community user in this alpha | How it says so |
+|---|---|---|
+| Welcome, About, Licences, Build setup form | Works | — |
+| Presets, layers, shape, pigment and edge, warp, colour, opacity, mirroring, Undo | Works | Situational limits explain themselves (for example "This layer is already at the front", "Select a warp control first") |
+| Matte, Satin, Metallic finishes | Works and can be built | "Exports" / "Can be built" |
+| Shimmer, Glitter, Glossy, Colour-shifting | Preview only; Build leaves them out | "Preview" tags, "(preview only)" in the palette, and Check/Build name each omitted layer |
+| Library save/open/recover, collection and recipe import/export, mask export, compiler plan | Works | The compiler plan says it is "not a mod" |
+| Check mod export | Works without game files | — |
+| Build mod files (palette, header, panel) | Needs a developer setup | "Building mod files needs a developer setup in this alpha (game folder, WolvenKit and build tools). Check works without it." |
+| Head pane, Front view, surface controls, wireframe, camera and light, motion and idle, eye optics, brows, lashes, hair, piercings, saved-V import and export | Not in this alpha (no 3D preview) | "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully." Invoking one by shortcut shows the same reason as an information toast |
+| Preview quality | Works (sets the UV mask resolution) | — |
+| Automatic updates | Off | About: "Automatic updates are off in this alpha. Download new versions from the XF Studio releases page on GitHub." |
+| Installing into the game or a mod manager | Not offered | The Build result says nothing was installed |
+| Legacy editor (`legacy.html`) | Not shipped in the desktop build | — |
+
+
 ### First-run path choice, 25 September
 
-A clean data root opens Local setup before the optional 3D intake. Saving paths or choosing **Continue without paths** stores the validated settings through the same revisioned `setup.save` action; a saved or deferred setup no longer reopens the missing-assets intake on every launch, and **Enable 3D preview** stays available. A damaged primary settings file with a recoverable backup still opens recovery. An asset-free browser run verified the modal, skip, host persistence, reload, UV workflow and later intake; the first-run screenshot was checked at 900×650. The canary for this change was unsigned and uninstalled.
+Superseded by the community welcome above. A clean data root opened Local setup before the optional 3D intake. Saving paths or choosing **Continue without paths** stores the validated settings through the same revisioned `setup.save` action; a saved or deferred setup no longer reopens the missing-assets intake on every launch, and **Enable 3D preview** stays available. A damaged primary settings file with a recoverable backup still opens recovery. An asset-free browser run verified the modal, skip, host persistence, reload, UV workflow and later intake; the first-run screenshot was checked at 900×650. The canary for this change was unsigned and uninstalled.
 
 ### UV-only first run, 25 September
 
@@ -116,9 +146,23 @@ Installer trials so far ran from a sandboxed agent process whose `LOCALAPPDATA` 
 
 ## Clean-machine first run
 
-Windows Sandbox gives a disposable Windows session with no Studio data, Bun or developer paths. It is an optional Windows feature that the machine owner must enable (it is not enabled on the development machine). `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit. Opening its `.wsb` file starts an offline sandbox that runs `tools/sandbox-first-run.ps1`: it records the environment and WebView2 version, checks the ZIP checksum, runs setup, launches the app and saves `report.json` plus a screenshot to `artifacts/sandbox-trial/results/`. This automation has not yet run in a sandbox. Then check by hand:
+### Windows Sandbox results, 25 September
 
-1. Local setup opens; **Continue without paths** reaches the Studio, and the head pane says preview assets are unavailable.
+Windows Sandbox (Windows 11 Enterprise 10.0.26100, networking off, elevated sandbox account) was enabled on the development machine and the kit now runs unattended: it dismisses the setup's final **Installation complete** window (Electrobun 2.0.1's `--quiet` applies to uninstall only and makes setup exit 1), restarts the app with a WebView2 debugging port, probes the loopback server, captures only the app or dialog window, copies `desktop.log` and shuts the sandbox down. `tools/sandbox-launch.ps1` starts it at a fixed 1600×1000 window. Results and screenshots stay in the ignored `artifacts/sandbox-trial/results/`.
+
+| Run | Build | Observed |
+|---|---|---|
+| Before | `35yq1y2ht9yj1` | Checksum matched; setup needed a manual click on **Installation complete** (232 s); the app window stayed **blank white** on first run and relaunch, and closing it did not complete because the save handshake waited for a page that never loaded. |
+| After, default sandbox | `38bs774jb4nrk` | No WebView2 Runtime anywhere in the sandbox (no Evergreen registry key in any of the three documented locations, no runtime folder). Install 14 s unattended; `desktop.log` shows the loopback server and window starting; after 5 s the app shows **"XF Studio needs the Microsoft Edge WebView2 Runtime"** with **Open the Microsoft download page**; closing works. |
+| After, host runtime copied in | `15i95hcea5bi6` | A copy of the host's WebView2 153 runtime, given as a fixed-version runtime (with Microsoft's AppContainer read grants), still started no `msedgewebview2` process under Electrobun 2.0.1, and the app showed **"XF Studio couldn't show its window"** with **Copy diagnostics**. |
+
+Root cause: the Windows Sandbox image does not include the WebView2 Runtime, which Electrobun's native renderer requires; the dev machine has it, so the app works there. The UV editor has **not yet been seen rendering inside the sandbox**. `bun tools/sandbox-trial.ts --install-webview2` turns sandbox networking on and installs Microsoft's signed Evergreen runtime with its official bootstrapper before the app, which is the remaining step to see the full first run there; it downloads that installer from Microsoft, so it runs only with the maintainer's go-ahead. The same packaged view renders the welcome and UV editor in the asset-free browser reviews above.
+
+### Manual checklist
+
+Windows Sandbox gives a disposable Windows session with no Studio data, Bun, WebView2 Runtime or developer paths; it is enabled on the development machine. `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit and `tools/sandbox-launch.ps1` runs it unattended as described above. After a run with a WebView2 Runtime present, check by hand:
+
+1. The welcome opens; **Start designing** reaches the Studio, and the head pane says the 3D head preview isn't available in this alpha.
 2. Add a layer, edit its shape, Undo and Redo; save a preset to the library.
 3. Run Check; it reports the collection without needing game files.
 4. Close the window, reopen from the Start menu, and confirm that the preset and selection return and setup does not reappear.
@@ -135,4 +179,4 @@ Electrobun's [Windows distribution guide](https://framework.blackboard.sh/electr
 
 ## Next gates
 
-Licence and third-party notices before the first publication; the first GitHub workflow run; production asset provenance; clean standard-user install/reinstall and interactive uninstall choices; WebView2-missing bootstrap; GPU fallback and 4K memory/frame cadence in the packaged app; notices/licensing; signing ([options](../../../../research/authoring/desktop-release-decisions.md#signing-improvement-path)); an authenticated two-version feed proving consented check/download/apply, envelope verification, downgrade refusal, restart, rollback and library preservation before enabling updates; and a separate game session. The private plate and finish-export gates still apply. Do not treat an offline archive as game-tested.
+The first GitHub workflow run; production asset provenance; clean standard-user install/reinstall and interactive uninstall choices; WebView2-missing bootstrap; GPU fallback and 4K memory/frame cadence in the packaged app; notices/licensing; signing ([options](../../../../research/authoring/desktop-release-decisions.md#signing-improvement-path)); an authenticated two-version feed proving consented check/download/apply, envelope verification, downgrade refusal, restart, rollback and library preservation before enabling updates; and a separate game session. The private plate and finish-export gates still apply. Do not treat an offline archive as game-tested.

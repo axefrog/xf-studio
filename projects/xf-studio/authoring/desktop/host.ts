@@ -13,7 +13,15 @@ export type DesktopCapabilities = Readonly<{
   installation: false;
   updater: false;
   previewAssets: "missing" | "incomplete" | "ready";
+  /**
+   * Developer-only five-file preview intake. Community users cannot prepare
+   * those files, so it is off unless the data folder holds the marker below.
+   */
+  previewIntake: boolean;
 }>;
+
+/** An empty file with this name in the app's data folder turns on the developer preview intake. */
+export const PREVIEW_INTAKE_MARKER = "developer-preview-intake";
 
 export type DesktopVersion = Pick<DesktopCapabilities, "version" | "channel" | "buildHash" | "metadataStatus">;
 
@@ -31,7 +39,7 @@ export function desktopVersionFromMetadata(value: unknown): DesktopVersion {
 }
 
 export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewAssets"],
-  version: DesktopVersion, userDataPath: string, packageBuild = false): DesktopCapabilities => ({
+  version: DesktopVersion, userDataPath: string, packageBuild = false, previewIntake = false): DesktopCapabilities => ({
   schema: "xfs/desktop-capabilities-1",
   host: "electrobun-spike",
   renderer: "webview2",
@@ -43,4 +51,5 @@ export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewA
   installation: false,
   updater: false,
   previewAssets,
+  previewIntake,
 });

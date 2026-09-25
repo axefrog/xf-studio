@@ -263,9 +263,10 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
 
 function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, PanelController>): Command[] {
   const port = rt.port, layer = port.editor.layer(), field = port.editor.selectedField();
-  const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {}): Command => ({
+  const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {},
+    missing = "Select a layer first."): Command => ({
     id, title, group, ...extra,
-    capability: () => action ? port.authoring.capability(action) : { available: false, reason: "Select a layer first." },
+    capability: () => action ? port.authoring.capability(action) : { available: false, reason: missing },
     run: () => { if (action) rt.dispatch(action); },
   });
   const file = (id: string, title: string, group: string, action: StudioFileAction, extra: Partial<Command> = {}): Command => ({
@@ -288,9 +289,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, panels: Map<PanelId, Pan
     act("path.bezier", "Enable Bézier handles", "Shape", layer && { kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } }, { icon: "shape" }),
     act("layer.mirror", layer?.symmetry ? "Stop mirroring across the face" : "Mirror across the face", "Shape", layer && { kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }, { icon: "mirror" }),
     act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
-    act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" }),
-    ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
-      { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview study" : "exports" })),
+    act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" },
+      layer ? "Select a warp control first." : "Select a layer first."),
+    ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
+      { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: "Ctrl+S" }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),

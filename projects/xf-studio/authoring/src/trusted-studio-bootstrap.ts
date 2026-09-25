@@ -56,6 +56,12 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     savedVUnavailableReason: options.savedAppearance.unavailableReason,
     executeCollection: request => core.app.execute(request),
     recoverCollection: () => collection.recover(),
+    buildReadiness: options.localSetup && (() => {
+      const setup = options.localSetup!.snapshot();
+      if (!setup.view) return setup.error ? "needs-setup" : "loading";
+      if (setup.view.source === "backup") return "damaged";
+      return setup.view.readiness.build.ready ? "ready" : "needs-setup";
+    }),
   });
   collection = new CollectionApplication(workspace.collections, workspace.library,
     core.document, options.onEditorRestored, options.transport, core.app, files);

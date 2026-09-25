@@ -5,11 +5,12 @@ import { initialRecipe, type Recipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
+import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
 
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
 });
-function fixture() {
+function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "damaged" | undefined) {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
     id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
   let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
@@ -44,6 +45,7 @@ function fixture() {
     savedVReady: () => true,
     executeCollection: request => service.execute(request),
     recoverCollection: () => service.dispatch({ kind: "collection.undoOpen" }),
+    buildReadiness,
   });
   files.attachCollection(service);
   return { files, service, transport, recipe, collection, editor: () => editor, layer: () => layer,
@@ -208,4 +210,21 @@ test("collection import reads through file port and delegates strict parsing and
   expect(f.service.view().draft?.collection.id).toBe(imported.id);
   expect(f.files.snapshot().recovery.available).toBe(true);
   expect(f.saved()).toBe(0);
+});
+
+test("Build explains the missing developer setup everywhere Build is offered, while Check stays available", async () => {
+  let readiness: "ready" | "needs-setup" | "loading" | "damaged" = "needs-setup";
+  const f = fixture(() => readiness);
+  expect(f.files.capability({ kind: "package.check" })).toEqual({ available: true });
+  expect(f.files.capability({ kind: "package.build" })).toEqual({ available: false, reason: BUILD_NEEDS_SETUP });
+  expect(await f.files.execute({ kind: "package.build" })).toMatchObject({ ok: false, message: BUILD_NEEDS_SETUP });
+  expect(f.packageInput()).toBeUndefined();
+  readiness = "loading";
+  expect(f.files.capability({ kind: "package.build" }).reason).toBe("Build setup is still loading.");
+  readiness = "damaged";
+  expect(f.files.capability({ kind: "package.build" }).reason).toContain("Restore the previous copy");
+  readiness = "ready";
+  expect(f.files.capability({ kind: "package.build" })).toEqual({ available: true });
+  // Hosts without a Build setup keep deciding at request time.
+  expect(fixture().files.capability({ kind: "package.build" })).toEqual({ available: true });
 });
