@@ -1,6 +1,7 @@
 import type { AuthoringPresentation } from "./authoring-presentation";
 import type { CollectionViewPort } from "./collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
+import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
 import type { Layer, Recipe, WarpField } from "./recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
@@ -10,6 +11,7 @@ import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
+import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
@@ -60,6 +62,13 @@ export type StudioPresentationPort<Slot> = {
   readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<ReturnType<InstallDetectionActions["snapshot"]>>;
   };
+  /**
+   * 3D preview setup: the card, the WolvenKit consent and the head pane's next step, as a detached
+   * snapshot and typed actions (preparation, WolvenKit download, detected folders, head retry).
+   */
+  readonly previewSetup: Pick<PreviewSetupActions, "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<PreviewSetupSnapshot>;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -70,9 +79,15 @@ export type StudioPresentationPort<Slot> = {
     status: PresentationStatus;
     localSetup: ReturnType<LocalSetupActions["snapshot"]>;
     installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
+    previewSetup: PreviewSetupSnapshot;
   }>;
   subscribe(listener: () => void): () => void;
 };
+/** A fixture port has no host preview: nothing to set up, no card. */
+const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
+  card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false },
+  consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, autostart: true,
+}) as PreviewSetupSnapshot;
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
@@ -88,6 +103,8 @@ export function createStudioPresentation<Slot>(sources: {
   status?: StatusSource;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  /** Optional for fixtures; without it the port reports a head that needs no setup. */
+  previewSetup?: PreviewSetupActions;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -166,28 +183,37 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),
     dispatch: action => sources.localSetup!.dispatch(action),
   } : {
-    snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Local setup is unavailable on this host." }),
-    dispatch: async () => ({ ok: false, code: "unavailable", message: "Local setup is unavailable on this host." }),
+    snapshot: () => ({ busy: false }), capability: () => ({ available: false, reason: "Settings aren't available here." }),
+    dispatch: async () => ({ ok: false, code: "unavailable", message: "Settings aren't available here." }),
   };
   const detection = sources.installDetection ?? new InstallDetectionActions(null);
   const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
     snapshot: () => detection.snapshot(), capability: action => detection.capability(action),
     dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
   };
+  const setup = sources.previewSetup;
+  const previewSetup: StudioPresentationPort<Slot>["previewSetup"] = setup ? {
+    snapshot: () => setup.snapshot(), capability: action => setup.capability(action),
+    dispatch: action => setup.dispatch(action), descriptors: () => setup.descriptors(),
+  } : {
+    snapshot: () => NO_PREVIEW_SETUP, capability: () => ({ available: false, reason: "The 3D preview isn't set up here." }),
+    dispatch: async () => ({ ok: false, message: "The 3D preview isn't set up here." }), descriptors: () => structuredClone(PREVIEW_SETUP_DESCRIPTORS),
+  };
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
-    installDetection: Object.freeze(installDetection),
+    installDetection: Object.freeze(installDetection), previewSetup: Object.freeze(previewSetup),
     status: Object.freeze({ snapshot: () => s.snapshot() }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
-      installDetection: installDetection.snapshot() }),
+      installDetection: installDetection.snapshot(), previewSetup: previewSetup.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
-        ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : [])];
+        ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
+        ...(setup ? [setup.subscribe(listener)] : [])];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

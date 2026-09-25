@@ -21,6 +21,7 @@ import { layersPanel } from "./panels/layers";
 import { historyPanel } from "./panels/history";
 import { historyCommandLabel, historyCommandTitle } from "./history-model";
 import { headPanel, uvPanel } from "./panels/viewports";
+import { previewSetupCard } from "./preview-setup-card";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
@@ -58,8 +59,9 @@ export function mountStudio(port: Port, root: HTMLElement) {
   rt.dock = dock;
   const header = shellHeader(rt, theme, view);
   const status = statusBar(rt);
+  const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
-  root.replaceChildren(header.element, main, status.element, feedback.toasts, feedback.live, feedback.assertive);
+  root.replaceChildren(header.element, main, status.element, setupCard.element, setupCard.consent, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
   requestAnimationFrame(() => dock.recover());
@@ -67,6 +69,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     feedback.toast("warning", "Layout", "The saved panel layout could not be restored safely, so the default layout is shown.");
 
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
+  let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
     const frame = new Frame(port);
@@ -78,7 +81,13 @@ export function mountStudio(port: Port, root: HTMLElement) {
       if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
       else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
     }
-    header.update(frame); status.update(frame);
+    header.update(frame); status.update(frame); setupCard.update(frame);
+    // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
+    if (frame.previewSetup.setupRequests !== setupRequests) {
+      setupRequests = frame.previewSetup.setupRequests;
+      dock.reveal("package");
+      byId.get("package")?.showSetup?.();
+    }
     // Decide once per paint so every visible heavy panel repaints together.
     const heavyOk = [...heavy].some(id => dock.isVisible(id)) && heavyDue(frame);
     for (const panel of panels) {
@@ -194,14 +203,9 @@ function themeItems(theme: Theme): MenuItem[] {
 
 function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
   const port = rt.port;
-  const category = h("button", { class: "category", type: "button", "aria-haspopup": "menu", title: "Authoring category" },
-    icon("category"), h("span", { text: "Eye makeup" }), icon("chevronDown"));
-  category.addEventListener("click", () => openMenu([
-    { kind: "heading", label: "Authoring category" },
-    { kind: "action", label: "Eye makeup", icon: "finish", checked: true, hint: "Presets, layers, finishes and one game selector", run: () => {} },
-    { kind: "separator" },
-    { kind: "heading", label: "More categories are planned", detail: "Piercings, brows, cheeks, hair, expressions and tattoos will each be discussed before they are built. Brows, lashes, hair and piercings in the preview are context only." },
-  ], category, { label: "Authoring category", invoker: category }));
+  // Eye makeup is the only authoring category so far; with nothing to choose, it is a label, not a menu.
+  const category = h("span", { class: "category", title: "Authoring category: eye makeup" },
+    icon("category"), h("span", { text: "Eye makeup" }));
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
@@ -268,7 +272,7 @@ function statusBar(rt: StudioRuntime) {
       const save = frame.status.workspace;
       workspace.dataset.tone = save.kind;
       setText(workspace, save.kind === "saved" ? "● Draft autosaved" : save.kind === "idle" ? "○ Draft autosave starting" : `▲ ${save.message}`);
-      workspace.title = save.kind === "protected" ? save.message : "Browser autosave keeps your draft between sessions; the library holds explicit revisions.";
+      workspace.title = save.kind === "protected" ? save.message : "Your draft autosaves on this computer between sessions; the library keeps the versions you save.";
       const library = frame.library;
       const last = rt.feedback.log.at(-1);
       const message = library.busy && library.progress?.phase === "working" ? library.progress.message : last?.message ?? "Ready";
@@ -280,7 +284,7 @@ function statusBar(rt: StudioRuntime) {
       const labelPrefix = frame.viewport.head.phase === "ready" ? "Preview" : "UV masks";
       setText(ready, r.phase === "ready" ? `${labelPrefix} ${label} · ready` : r.phase === "updating"
         ? `${labelPrefix} ${label} · updating` : `${labelPrefix} blocked`);
-      ready.title = r.error ?? frame.viewport.head.error ?? "";
+      ready.title = r.error ?? (frame.viewport.head.error ?? frame.viewport.head.message) ?? "";
     },
   };
 }

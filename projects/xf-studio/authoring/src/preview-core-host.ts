@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PREVIEW_CORE_FILES } from "./preview-core-recipe";
-import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
+import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
 
@@ -112,6 +112,26 @@ export class PreviewCoreHost {
       .finally(() => { this.running = null; this.progress = null; this.forget(); });
     this.running = { controller, promise };
     return this.snapshot();
+  }
+
+  /**
+   * Prepare again from the game files: the renderer reports the prepared files are damaged (they
+   * would not load). The ready entry is set aside first so nothing of it is reused; a running
+   * preparation or missing setup leaves everything unchanged.
+   */
+  rebuild(): PreviewCoreState {
+    if (this.running) return this.snapshot();
+    const settings = this.options.settings();
+    if (isGame(settings.gameRoot) && isFile(settings.wolvenKitCli)) {
+      this.forget();
+      const readiness = previewCoreReadiness(this.options.cacheRoot, settings.gameRoot);
+      if (readiness.state === "ready") {
+        try { new PreviewCoreCache(this.options.cacheRoot).remove(dirname(readiness.directory)); }
+        catch (error) { this.options.log?.(`The damaged 3D preview could not be removed: ${(error as Error).message}`); }
+      }
+      this.forget();
+    }
+    return this.prepare();
   }
 
   cancel(): PreviewCoreState {

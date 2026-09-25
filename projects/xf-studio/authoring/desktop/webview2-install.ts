@@ -30,13 +30,21 @@ export const WEBVIEW2_FAILED = {
   buttons: ["Open the Microsoft download page", "Close"],
 };
 
+/** This copy of XF Studio lacks Microsoft's bundled installer, so nothing was downloaded: the internet isn't the cause. */
+export const WEBVIEW2_INSTALLER_MISSING = {
+  message: "XF Studio can't install WebView2 by itself.",
+  detail: "Microsoft's WebView2 installer that comes with XF Studio is missing from this copy. " +
+    "Install the Evergreen WebView2 Runtime from Microsoft's page, then open XF Studio again. Reinstalling XF Studio also brings the installer back.",
+  buttons: ["Open the Microsoft download page", "Close"],
+};
+
 export async function ensureWebView2(port: WebView2InstallPort): Promise<WebView2Outcome> {
   const initial = port.detect();
   if (initial.installed) return { ready: true, status: initial, installed: false };
   port.log("WebView2 Runtime not detected; asking to install it.");
   if (!port.bootstrapperAvailable()) {
     port.log("The bundled WebView2 bootstrapper is missing.");
-    if (await port.ask({ type: "error", ...WEBVIEW2_FAILED }) === 0) port.openDownloadPage();
+    if (await port.ask({ type: "error", ...WEBVIEW2_INSTALLER_MISSING }) === 0) port.openDownloadPage();
     return { ready: false, reason: "failed" };
   }
   if (await port.ask({ type: "question", ...WEBVIEW2_PROMPT }) !== 0) {

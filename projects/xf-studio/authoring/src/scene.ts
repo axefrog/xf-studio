@@ -20,6 +20,7 @@ import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
 import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
+import { HeadLoadError } from "./head-load-error";
 import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "./face-morphs";
 import { createViewportBackdrop } from "./viewport-backdrop";
 import type { StageTheme } from "./stage-backdrop";
@@ -44,8 +45,10 @@ export async function createScene(
   const context = canvas.getContext("webgl2", {
     alpha: false, antialias: true, depth: true, stencil: false, preserveDrawingBuffer: true,
   });
-  if (!context) throw Error("WebGL 2 is unavailable");
-  const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true, preserveDrawingBuffer: true });
+  if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
+  let renderer: THREE.WebGLRenderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true, preserveDrawingBuffer: true }); }
+  catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setClearColor(0x14181c, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { HeadLoadError } from "./head-load-error";
 import { restoreFirstWeights } from "./skin";
 import { CORE_DETAIL_URL, CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, parseCoreDetail, type CoreDetail,
   type CoreTextureSlot, type RenderResource } from "./render-detail";
@@ -30,17 +31,21 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 /** The host's record for the derived preview; there is no other source of the core head. */
 export async function readCoreDetail(fetcher: CoreDetailFetch = fetch): Promise<CoreDetail> {
   let response: Response;
-  try { response = await fetcher(CORE_DETAIL_URL); } catch { throw Error("The 3D preview record could not be read."); }
-  if (response.status === 404) throw Error("The 3D preview hasn't been prepared from your game files yet.");
-  if (!response.ok) throw Error("The 3D preview record could not be read.");
-  return parseCoreDetail(await response.json());
+  try { response = await fetcher(CORE_DETAIL_URL); }
+  catch (error) { throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.", { cause: error }); }
+  if (response.status === 404) throw new HeadLoadError("preview_unreachable", "The 3D preview hasn't been prepared from your game files yet.");
+  if (!response.ok) throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.");
+  try { return parseCoreDetail(await response.json()); }
+  catch (error) { throw new HeadLoadError("preview_damaged", "The 3D preview record is damaged.", { cause: error }); }
 }
 
 async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch): Promise<ArrayBuffer> {
-  const response = await fetcher(`/assets/${resource.file}`);
-  if (!response.ok) throw Error(`${resource.file} is unavailable.`);
+  let response: Response;
+  try { response = await fetcher(`/assets/${resource.file}`); }
+  catch (error) { throw new HeadLoadError("preview_unreachable", `${resource.file} could not be fetched.`, { cause: error }); }
+  if (!response.ok) throw new HeadLoadError("preview_unreachable", `${resource.file} is unavailable.`);
   const bytes = await response.arrayBuffer();
-  if (await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
+  if (await sha256Hex(bytes) !== resource.sha256) throw new HeadLoadError("preview_damaged", `${resource.file} does not match its record.`);
   return bytes;
 }
 
@@ -84,6 +89,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
   } catch (error) {
     for (const texture of Object.values(textures)) texture?.dispose();
     gltf?.scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
-    throw error;
+    // Anything that fails once the files arrived intact (model parse, missing parts, textures) is a damaged preview.
+    throw error instanceof HeadLoadError ? error : new HeadLoadError("preview_damaged", (error as Error)?.message ?? "The 3D preview could not be read.", { cause: error });
   }
 }

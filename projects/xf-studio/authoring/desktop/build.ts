@@ -49,10 +49,10 @@ export function probeBun(path: string): string | null {
     const run = spawnSync(path, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"],
       { encoding: "utf8", timeout: 5000, windowsHide: true, maxBuffer: 4096 });
     const issue = run.error || run.status !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(run.stdout || "")
-      ? "The selected Bun executable cannot run the packaged compiler scripts." : null;
+      ? "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it." : null;
     bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
     return issue;
-  } catch { return "The selected Bun executable could not be checked."; }
+  } catch { return "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
 }
 /** Run the CLI's version and command checks through the shared WolvenKit runner; a failure is retried after a short interval. */
 export const probeWolvenKit: WolvenKitProbe = path => {
@@ -66,12 +66,19 @@ function once(key: string, work: () => Promise<void>): Promise<void> {
   if (!pending) { pending = work().finally(() => inFlight.delete(key)); inFlight.set(key, pending); }
   return pending;
 }
+/**
+ * The Bun that runs the packaged builder: XF Studio's own runtime. Only the disposable Build trial
+ * entry points it elsewhere (`useBuilderBun`); there is no setting for it.
+ */
+let builderBunOverride: string | null = null;
+export function useBuilderBun(path: string | null) { builderBunOverride = path; }
+export const builderBun = () => builderBunOverride ?? process.execPath;
+
 /** The same checks as probeWolvenKit/probeBun without blocking the event loop; one shared run per tool. */
-export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
+export async function warmBuildProbes(settings: Pick<LocalSettings, "wolvenKitCli">, bun = builderBun()): Promise<void> {
   const jobs: Promise<void>[] = [];
   // WolvenKit is checked by the shared runner, which keeps one cache and one run per file.
   if (settings.wolvenKitCli && file(settings.wolvenKitCli)) jobs.push(probeWolvenKitCliAsync(settings.wolvenKitCli).then(() => {}));
-  const bun = settings.bunExecutable || process.execPath;
   if (file(bun)) {
     const key = stampKey(bun), cached = bunCache.get(key);
     if (!cached || Date.now() >= cached.until) jobs.push(once(`bun:${key}`, async () => {
@@ -79,8 +86,8 @@ export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
       try {
         // The shared process runner stops the whole tree when the probe overruns.
         const result = await runProcessTree(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], { timeoutMs: 5000, keep: 4096 });
-        if (result.exitCode !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "The selected Bun executable cannot run the packaged compiler scripts.";
-      } catch { issue = "The selected Bun executable could not be checked."; }
+        if (result.exitCode !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it.";
+      } catch { issue = "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
       bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
     }));
   }
@@ -96,7 +103,7 @@ export const cachedWolvenKitProbe: WolvenKitProbe = path => {
 export const cachedBunProbe: BunProbe = path => {
   const cached = bunCache.get(stampKey(path));
   if (cached && Date.now() < cached.until) return cached.issue;
-  void warmBuildProbes({ bunExecutable: path } as LocalSettings).catch(() => {});
+  void warmBuildProbes({ wolvenKitCli: null }, path).catch(() => {});
   return PROBE_PENDING;
 };
 const toolHashes = new Map<string, string>();
@@ -151,8 +158,8 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
       !directory(resolve(settings.gameRoot, "archive/pc"))) return "Select a complete Cyberpunk 2077 game directory.";
   if (!signature(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe"), "MZ"))
     return "The selected game executable is not a Windows executable.";
-  const bun = settings.bunExecutable || process.execPath;
-  if (!file(bun)) return "The Bun executable is unavailable.";
+  const bun = builderBun();
+  if (!file(bun)) return "XF Studio's own build runtime is missing. Reinstall XF Studio to repair it.";
   const bunIssue = bunProbe(bun);
   if (bunIssue) return bunIssue;
   try {
@@ -238,7 +245,7 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     "--wolvenkit", settings.wolvenKitCli!, "--gamepath", settings.gameRoot!,
     "--app-root", toolsRoot, "--build-root", buildRoot, "--dist-root", stageRoot, "--machine-result"];
   try {
-    const run = await runProcessTree(settings.bunExecutable || process.execPath, args, { cwd: work, signal, timeoutMs: remainingMs });
+    const run = await runProcessTree(builderBun(), args, { cwd: work, signal, timeoutMs: remainingMs });
     if (run.stopped === "timeout")
       return { kind: "failure", code: "package_build_timeout", message: "Package Build exceeded its time limit and was stopped." };
     if (run.stopped === "cancelled") return { kind: "failure", code: "package_build_cancelled", message: "Package Build was cancelled." };

@@ -33,6 +33,7 @@ export class Frame {
   get viewport() { return this.once("viewport", () => this.port.viewport.snapshot()); }
   get status() { return this.once("status", () => this.port.status.snapshot()); }
   get localSetup() { return this.once("localSetup", () => this.port.localSetup.snapshot()); }
+  get previewSetup() { return this.once("previewSetup", () => this.port.previewSetup.snapshot()); }
   get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
   get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
 }
@@ -42,7 +43,7 @@ const sources: [RegExp, string][] = [
   [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
   [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
-  [/^collection\./, "Library"], [/^savedV\./, "Saved V"],
+  [/^collection\./, "Library"], [/^savedV\./, "Saved V"], [/^previewSetup\./, "3D preview"],
 ];
 export const sourceLabel = (kind: string) => sources.find(([pattern]) => pattern.test(kind))?.[1] ?? "Studio";
 

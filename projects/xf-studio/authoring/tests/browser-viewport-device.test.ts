@@ -33,6 +33,16 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   });
   const attachment = device.attachment;
   expect(attachment.snapshot().head.phase).toBe("loading");
+  // Not-ready head states are typed: progress, neutral or error, each with its own words.
+  device.headPending("preparing", "Preparing the 3D preview…", .4);
+  expect(attachment.snapshot().head).toMatchObject({ phase: "preparing", message: "Preparing the 3D preview…", progress: .4 });
+  device.headPending("unavailable", "The 3D preview needs your Cyberpunk 2077 game folder.");
+  expect(attachment.snapshot().head).toMatchObject({ phase: "unavailable", progress: null });
+  expect(attachment.snapshot().head.error).toBeUndefined();
+  device.failHead("The 3D preview couldn't be loaded. Try again.");
+  expect(attachment.snapshot().head).toMatchObject({ phase: "error", error: "The 3D preview couldn't be loaded. Try again." });
+  expect(attachment.snapshot().head.message).toBeUndefined();
+  device.headPending("loading", "Loading the 3D head…");
   expect(() => device.mountSurface({} as Parameters<typeof createSurfaceEditor>[1])).toThrow();
   expect(device.mountUV({} as HTMLCanvasElement, undefined,
     {} as Parameters<typeof createUVEditor>[2], uvView)).toBe(uvEditor);
