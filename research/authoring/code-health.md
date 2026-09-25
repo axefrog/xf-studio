@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `2ce9987`+ | 2026-09-26 | Creator catalogue and character context (CC controls slice 1) | 0 High, 7 Medium, 14 Low (CORE-50..62, PIPE-46..51, UI-59..60). Fixes fold into CC controls slice 2 |
 | `fc36eae` | 2026-09-26 | Studio light rig (rendering, presentation) | 0 High, 0 Medium, 7 Low (PREV-69..72, UI-56..58). Default reproduces the old look exactly; persistence and render-on-demand pass |
 | `4afea26` | 2026-09-26 | Platform step 5: facades, live features, `app.transaction`, view contributions, renames, locked looks, spec limits | 0 High, 2 Medium, 9 Low (CORE-45..49, PIPE-44..45, UI-52..55). No performance regression. Fixes in claude/cleanup-platform3 |
 | `90b8602` | 2026-09-26 | Layered material and resolver-fed piercings (rendering, resolver, presentation) | 1 High (PIPE-40), 6 Medium, 8 Low (PIPE-40..43, PREV-62..68, UI-48..51). UI-02 and PIPE-11's piercing part confirmed fixed. All fixed in claude/cleanup-layered (PREV-64 as a documented limit), which also made host/page version skew a worded notice and a tried style a sub-second, in-place swap |
@@ -97,6 +98,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-39 | Med | Core (data) | A one-feature history is always stored as whole parts (12–17× the `xfs/look-history-1` form), so `fitWorkspace` drops steps instead of switching form: a heavy 32-layer look keeps 4 of 80 steps, below the floor of 10 (`document.ts:380`, `workspace-budget.ts:98-144`) | **Fixed** (claude/cleanup-platform2, 26 Sep): `fitWorkspace` stores every history look-level before dropping steps (whole parts kept whenever they fit); the heavy look keeps all 80; the desktop host keeps that form |
 | CORE-45 | Med | Core (data) | Reading with `keep` sends any preset with a truthy `locked` key straight to `keepLook`, skipping part validation, and import reads untrusted files that way (`platform/core/document.ts:200`, `collection-service.ts:374`): an imported file with `"locked": "x"` and a garbage body is accepted, and after autosave the workspace no longer restores | **Fixed** (claude/cleanup-platform3) |
 | CORE-46 | Med | Core | `redoValid()` trusts the eye-makeup geometry revision alone, so a feature change with Undo policy `none` leaves Redo offered and Redo then silently overwrites it (`authoring-history.ts:165`, `studio-application.ts:479`) | **Fixed** (claude/cleanup-platform3) |
+| CORE-50 | Med | Core | Resetting a link controller clears only the controller; its followers keep the copied position, so the request still draws the old skin tone, neck and body colour (`character-context.ts:219,238-248`) | Open (CC controls slice 2) |
+| CORE-51 | Med | Core (data) | Link propagation writes explicit values into every family member: one hair-colour change yields 522 user-set values and a 104 KB preset naming 118 mods, each reported missing elsewhere (`character-context.ts:244-265,357-369`) | Open (CC controls slice 2) |
+| CORE-52 | Med | Core | `loadSave` doesn't validate the save's shape and clears the state before iterating: a malformed group throws a raw TypeError after the context was wiped (`character-context.ts:277-283`) | Open (CC controls slice 2) |
+| CORE-58 | Med | Core (design) | Two owners for the shown V's creator choice: the character context (slot + definition) and `character.tryChoice` (part/option/choice key), with different persistence (`character-context.ts:409-423`) | Open: decided that the context owns creator choices and `tryChoice` becomes `setOption` (CC controls slice 2) |
+| PIPE-46 | Med | Resolver | The base creator resource's provenance is dropped, so a mod replacing the base `.inkcharcustomization` shows its options as vanilla (`cc-catalogue.ts:216-219`, `cc-catalogue-host.ts:183-186`) | Open (CC controls slice 2) |
+| PIPE-48 | Med | Resolver | The ArchiveXL text-precedence plan and `gameLanguage` live only in the host and are tested only by the opt-in oracle (`cc-catalogue-host.ts:140-160`) | Open (CC controls slice 2) |
+| UI-59 | Med | Presentation (design) | The catalogue has no compact projection: 131,856 choices each carry provenance, label and swatch objects (55 MB compact JSON) before reaching a browser (`cc-catalogue.ts:96-109,260-272`) | Open (CC controls slice 2) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
 | PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | **Fixed** (claude/cleanup-render3, 26 Sep) |
 | PIPE-41 | Med | Resolver | `LAYERED_SLOTS` (only piercings and eyes draw layered chunks) guesses where each chunk's `renderMask` answers: shadow-only chunks carry `MCF_RenderInShadows` alone; a visible layered chunk on CCXL hair or an accessory is dropped with no limit code (`character-detail-plan.ts:166,178`) | **Fixed** (claude/cleanup-layered, 26 Sep; see below) |
@@ -192,6 +200,21 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **CORE-53..57, CORE-59..62, PIPE-47, PIPE-49..51, UI-60** (creator catalogue review), Open (CC controls slice 2):
+  - **CORE-53:** `toPreset` doesn't apply the codec's rules, so a legal mod CName with `/` or over 256 characters produces a preset the Studio refuses whole.
+  - **CORE-54:** unknown preset fields are copied by assignment, so a `__proto__` key is silently dropped (no global pollution).
+  - **CORE-55:** the 1 MB preset limit counts UTF-16 units, the object path has no bound, deep nesting throws a raw stack error, and the preset is parsed twice.
+  - **CORE-56:** preset `name` and kept unknowns are never checked for paths; run the shared `tools/private-data.json` patterns on write.
+  - **CORE-57:** `activeOptions` copies R5's activation; the agreement test checks one direction for one state.
+  - **CORE-59:** `reset` without a part means head; `setSource` uses preset wording for every origin; loading a preset or save is irreversible (Undo `none`).
+  - **CORE-60:** coverage is computed from the preview plan's slot tables inside the catalogue, so a host-cached catalogue goes stale when the preview gains a slot.
+  - **CORE-61 (hypothesis):** link positions are copied between controllers with differently ordered choice lists (`hairstyle` vs `hairstyle_cyberware` differ at 20 positions); needs an in-game check.
+  - **CORE-62:** the catalogue shares arrays and refs with the per-graph cached merged CCO; copy or freeze.
+  - **PIPE-47:** text merge differs from ArchiveXL's `MergeTextResource` in key hashing and ID-only replacement (no visible difference on the reference install).
+  - **PIPE-49:** the TweakDB reader doesn't bound value counts by the remaining bytes or bounds-check the type table (a crafted count allocates 1.3 GB before failing).
+  - **PIPE-50:** the catalogue host re-implements the fetcher's batching for `.json` resources (24 WolvenKit launches cold).
+  - **PIPE-51:** a language without a text archive loads 0 entries with no gap and no en-us fallback; an unset `LOCALAPPDATA` resolves relatively.
+  - **UI-60:** a head-only CCXL option on its own slot with no `randomizeCategory` files under Body.
 - **PREV-69, UI-56** (studio light rig review at `fc36eae`): Fixed in claude/cleanup-layered (see below).
 - **PREV-70..72, UI-57..58** (studio light rig review at `fc36eae`), Open:
   - **PREV-70:** test gaps: the head-attachment fake scene answers any key, so nothing proves the real path offers the rig; the creator-preset test hides a hand-made light list, not the rig's own; the skin light's image-based term isn't covered by the room-light GPU check.
@@ -218,7 +241,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Creator catalogue and character context** (`claude/cc-controls`): `src/cc-catalogue.ts`, `src/cc-presentation.ts`, `src/cc-render-coverage.ts`, `src/game-text.ts`, `src/tweakdb-flats.ts` (pure), `src/cc-catalogue-host.ts` (host: texts extracted with WolvenKit, TweakDB and the game's language setting read from the game folder), `src/character-context.ts` (domain service and its not-yet-registered action family), `src/cc-preset.ts` (`xfs/cc-preset-1` codec), `tools/cc-catalogue.ts`. Touches shared code in two places: `loadMergedCco` takes an optional reader, and `readArchiveXlConfig` reads `localization.onscreens`. Review focus: the text extraction's batching and cache keys, catalogue size (130,000 choices on the reference installation) before it crosses to a browser, and the activation rule copied from R5 (`activeOptions`, checked against `descriptorsFromUiState` by a test).
+- None.
 
 ## Fixed in claude/cleanup-platform3
 
