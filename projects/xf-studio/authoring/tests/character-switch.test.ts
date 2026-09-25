@@ -13,7 +13,7 @@ import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved
 import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
-import { detailFixture, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.
@@ -55,7 +55,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(characterRequestFromSave(A)).toMatchObject({ appearances: REQUEST_A.source === "save" ? REQUEST_A.appearances : [] });
 
     // The scene: what is drawn for the character right now.
-    const scene = { details: [] as string[], skin: "", morphs: [] as string[], eyes: "", piercing: false };
+    const scene = { details: [] as string[], skin: "", morphs: [] as string[], eyes: "", piercing: false, face: [] as string[] };
     let holdB: (() => void) | null = null;
     const port: CharacterDetailPort = {
       async request(request, signal) {
@@ -78,9 +78,12 @@ test("switching A → B → A replaces the whole character, and the makeup draft
         const eyes = record.components.find(c => c.slot === "eyes");
         scene.eyes = eyes ? eyes.materials.map(m => `${m.template}|${m.textures.Albedo?.depotPath ?? m.textures.Mask?.depotPath}`).join(";") +
           `|${eyes.definition}` : "";
+        // The face decals the scene draws, in order: each choice and its chunks' colours and priorities.
+        scene.face = record.components.filter(c => c.slot === "face").map(c =>
+          `${c.definition}|${c.materials.map(m => `${m.colours.DiffuseColor?.join(",") ?? "-"}@${m.materialPriority ?? "-"}`).join(";")}`);
         return { slots: record.slots };
       },
-      clear() { scene.details = []; scene.skin = ""; scene.eyes = ""; },
+      clear() { scene.details = []; scene.skin = ""; scene.eyes = ""; scene.face = []; },
       async wait() {},
     };
     const saved = new SavedAppearanceActions({ apply(v): SavedAppearanceResult {
@@ -103,8 +106,10 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     const shownA = [...scene.details];
-    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "brows", "lashes", "hair", "eyes"]);
-    const skinA = scene.skin, eyesA = scene.eyes;
+    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes"]);
+    const skinA = scene.skin, eyesA = scene.eyes, faceA = [...scene.face];
+    // A's own lipstick colour and blush (two chunks), both at the vanilla priority.
+    expect(faceA).toEqual([`${FACE.lipsRed}|106,40,40,255@EMP_Normal`, `${FACE.cheeksRed}|186,20,40,255@EMP_Normal;186,20,40,255@EMP_Normal`]);
     expect(skinA).toBe(`pale|171,155,150,255|${P.skinD1}`);
     expect(eyesA).toBe(`${P.eyeGradMt}|${P.eyeD};${P.eyeShadowMt}|${P.shellMask}|gradient_blue`);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
@@ -114,9 +119,14 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(scene.details).toEqual([]);
     expect(scene.skin).toBe("");
     expect(scene.eyes).toBe("");
+    expect(scene.face).toEqual([]);
     expect(details.snapshot().phase).toBe("preparing");
     await settle();
-    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["skin:skin_type_03", "brows:eyebrows_color2", "lashes:eyelash_color", "eyes:eyes_color"]);
+    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["skin:skin_type_03", "face:skin_type_03", "face:makeupCheeks_01",
+      "face:facial_tattoo_02", "face:cyberware_01", "face:pack_liner", "brows:eyebrows_color2", "lashes:eyelash_color", "eyes:eyes_color"]);
+    // B's face: nothing of A's lipstick or blush; the pack's copied template keeps its front priority.
+    expect(scene.face.some(entry => entry.startsWith(FACE.lipsRed) || entry.startsWith(FACE.cheeksRed))).toBe(false);
+    expect(scene.face.at(-1)).toBe(`${FACE.packLiner}|20,20,20,255@EMP_Front`);
     // B's own skin type and tone, and its pack eye (texture-only): nothing of A's skin or gradient eye lingers.
     expect(scene.skin).toBe(`senna_d03|202,177,153,255|${P.skinD3}`);
     expect(scene.eyes).toBe(`${P.eyeMt}|${P.packD};${P.eyeShadowMt}|${P.shellMask}|pack_eye_01`);
@@ -130,6 +140,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(scene.details).toEqual(shownA);
     expect(scene.skin).toBe(skinA);
     expect(scene.eyes).toBe(eyesA);
+    expect(scene.face).toEqual(faceA);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
 
     // A slow B superseded by A never lands.
@@ -141,7 +152,8 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(scene.details).toEqual(shownA);
     expect(scene.skin).toBe(skinA);
     expect(scene.eyes).toBe(eyesA);
-    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "brown", "brown", "brown", "gradient blue"]);
+    expect(scene.face).toEqual(faceA);
+    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "lipstick (red), cheeks (red)", "brown", "brown", "brown", "gradient blue"]);
 
     // A reload restores the last-loaded V: the workspace keeps it, and the shown character follows it.
     expect(characterRequestFor(saved.snapshot().savedV)).toEqual(characterRequestFromSave(A));

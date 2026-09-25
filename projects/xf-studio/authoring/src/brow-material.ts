@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { decodeSrgbByte, nearestVertices, sampleAtVertices } from "./decal-underlay";
 import { imageTexels, type SkinImage, type SkinTexels } from "./skin-material";
 
 /**
@@ -136,30 +137,8 @@ export function sampleUnderlayAlbedo(targetPositions: ArrayLike<number>, sourceP
                                      sourceUvs: ArrayLike<number>,
                                      source: SkinImage | SkinTexels,
                                      maxDistance = 0.02): { underlay: Float32Array; maxMatchedDistance: number; unmatched: number } {
-  const targets = targetPositions.length / 3, sources = sourcePositions.length / 3;
-  const underlay = new Float32Array(targets * 3);
-  const decode = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const nearest = nearestVertices(targetPositions, sourcePositions, maxDistance);
   const image = "texel" in source ? source : imageTexels(source);
-  const texel = (x: number, y: number, c: number) =>
-    decode(image.texel(Math.min(image.width - 1, Math.max(0, x)), Math.min(image.height - 1, Math.max(0, y)), c));
-  let maxMatchedDistance = 0, unmatched = 0;
-  for (let t = 0; t < targets; t++) {
-    const tx = targetPositions[t * 3]!, ty = targetPositions[t * 3 + 1]!, tz = targetPositions[t * 3 + 2]!;
-    let best = -1, bestD = Infinity;
-    for (let s = 0; s < sources; s++) {
-      const dx = sourcePositions[s * 3]! - tx, dy = sourcePositions[s * 3 + 1]! - ty, dz = sourcePositions[s * 3 + 2]! - tz;
-      const d = dx * dx + dy * dy + dz * dz;
-      if (d < bestD) { bestD = d; best = s; }
-    }
-    const distance = Math.sqrt(bestD);
-    if (best < 0 || distance > maxDistance) { unmatched++; continue; }
-    maxMatchedDistance = Math.max(maxMatchedDistance, distance);
-    const u = (sourceUvs[best * 2]! % 1 + 1) % 1, v = (sourceUvs[best * 2 + 1]! % 1 + 1) % 1;
-    const fx = u * image.width - 0.5, fy = v * image.height - 0.5;
-    const x0 = Math.floor(fx), y0 = Math.floor(fy), wx = fx - x0, wy = fy - y0;
-    for (let c = 0; c < 3; c++)
-      underlay[t * 3 + c] = (texel(x0, y0, c) * (1 - wx) + texel(x0 + 1, y0, c) * wx) * (1 - wy) +
-        (texel(x0, y0 + 1, c) * (1 - wx) + texel(x0 + 1, y0 + 1, c) * wx) * wy;
-  }
-  return { underlay, maxMatchedDistance, unmatched };
+  const underlay = sampleAtVertices(nearest, sourceUvs, image, 3, decodeSrgbByte);
+  return { underlay, maxMatchedDistance: nearest.maxMatchedDistance, unmatched: nearest.unmatched };
 }

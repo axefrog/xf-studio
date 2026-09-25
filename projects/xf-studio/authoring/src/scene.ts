@@ -15,7 +15,8 @@ import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, 
 import type { AdapterContext } from "./character-material-adapters";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
-import { coreAlbedoReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type HeadSkinPlacement } from "./head-skin-placement";
+import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type HeadSkinPlacement } from "./head-skin-placement";
+import { priorityRank } from "./render-templates";
 import type { DetailLimit } from "./detail-limits";
 import type { ResolvedSkinSurface } from "./character-material-adapters";
 import { characterDetailsEvidence, coreSceneEvidence } from "./scene-evidence";
@@ -29,6 +30,17 @@ import { attachHeadCameraInput } from "./head-camera-input";
 import type { StageTheme } from "./stage-backdrop";
 import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
+
+/**
+ * Draw order of the face's decals, below the editable makeup plates (10 to 41), the eye's wetness shell (99), brows (100) and
+ * lashes (101), and above the opaque skin: the game draws every post-G-buffer decal after the skin, `EMP_Front` templates
+ * after `EMP_Normal` ones, and the order between decals of one priority is unknown (knowledge/head-cc-rendering.md section 3).
+ * The documented fallback is the creator resource's option order; the Studio's own plate, being authored, draws over the V's
+ * own decals. Each chunk gets a slot of its own, so up to 400 decal chunks per priority keep their order.
+ */
+export const FACE_DECAL_RENDER_ORDER = 2;
+export const faceDecalRenderOrder = (priority: string | null | undefined, index: number) =>
+  FACE_DECAL_RENDER_ORDER + 4 * priorityRank(priority) + Math.min(index, 399) / 100;
 
 /**
  * Creates the 3D head scene in `host`. A failure at any point after the renderer exists releases
@@ -176,13 +188,15 @@ async function assembleScene(
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
-  const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(albedo) });
+  const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(albedo), coreRoughness: coreRoughnessReader(roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
+  let decalUnderlay = new WeakMap<THREE.Mesh, object>();
   // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, brows: true, lashes: true, hair: true, eyes: true };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true };
   // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
-  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, brows: 100, lashes: 101, hair: 0, eyes: 0 };
+  // Face decals sit below the stack (faceDecalRenderOrder).
+  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, face: FACE_DECAL_RENDER_ORDER, brows: 100, lashes: 101, hair: 0, eyes: 0 };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = 99;
   let characterDetails: LoadedCharacterDetails | null = null;
@@ -196,6 +210,11 @@ async function assembleScene(
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
     return { overMakeup: slot === "lashes", profileEncoding,
+      ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
+        const result = skinPlacement.surfaceUnderlay(mesh, skin ?? null);
+        decalUnderlay.set(mesh, result.evidence);
+        return result;
+      } } : {}),
       ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
         const result = skinPlacement.underlay(mesh, skin ?? null);
         browUnderlay = result.evidence;
@@ -501,6 +520,7 @@ async function assembleScene(
     const drawnBefore = drawnDetails();
     characterDetails = null;
     if (previous) {
+      decalUnderlay = new WeakMap();
       idle?.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
@@ -524,11 +544,16 @@ async function assembleScene(
       resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
     }
+    for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);
     characterDetails = next;
+    // Face decals draw by template priority, then in the record's order (the creator option order), each chunk after the last.
+    const faceOrder = new Map<THREE.Mesh, number>();
+    for (const [index, { mesh, chunk }] of next.components.flatMap(item => item.decals ?? []).entries())
+      faceOrder.set(mesh, faceDecalRenderOrder(chunk.materialPriority, index));
     for (const item of drawnDetails()) {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
-        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : DETAIL_RENDER_ORDER[item.component.slot];
+        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
         extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial);
         // Facial shapes: the same (target, region) names as the head's.
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
@@ -660,7 +685,7 @@ async function assembleScene(
     setHair,
     setCharacterDetails,
     detailContext,
-    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
+    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay, decalUnderlay: mesh => decalUnderlay.get(mesh),
       eyes: { core: eyes, appearance: eyeAppearance() } }),
     piercingManifest,
     prcManifest,
@@ -728,6 +753,7 @@ async function assembleScene(
       normalsEnabled = v;
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
       resolvedSkin?.item.skin?.handle.setNormals(v);
+      for (const item of characterDetails?.components ?? []) for (const decal of item.decals ?? []) decal.handle.setNormals(v);
     },
     setExposure: (v: number) => (renderer.toneMappingExposure = v),
     /** Typed theme input for the stage backdrop; it never changes lighting. */

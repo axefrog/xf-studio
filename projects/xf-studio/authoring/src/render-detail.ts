@@ -19,11 +19,16 @@
  *   (`CGradient` stops, e.g. the iris colour ramp) and, per morph component, the effective morph target's
  *   `baseTexture` rule, already applied to the chunk textures it replaces. A v3 reader refuses v2 character
  *   records (the host prepares again) and still accepts a core head under any of the three schemas.
+ * - `xfs/render-detail-4`: the character record gains the `face` slot (the V's own face decals: eye makeup, lipstick,
+ *   cheeks and freckles, blemishes, scars, facial tattoos, face cyberware, stubble and the personal-link port, each a
+ *   morph-skinned decal mesh over the head, in the documented draw order), and every chunk carries its template's own
+ *   `templateName` (the name the engine finds the compiled programs by; a copied template keeps it) and
+ *   `materialPriority`. A v4 reader refuses v2 and v3 character records and still accepts a core head under any schema.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-3" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-4" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
-export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2"];
+export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3"];
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
 /** Where character records and their files are served; file names are content-addressed. */
 export const CHARACTER_DETAIL_ASSETS = "/assets/character/";
@@ -107,11 +112,11 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Version 3: the character record (the resolved head skin, brows, lashes, hair and eyes of the player's own game).
+// Version 4: the character record (the resolved head skin, face details, brows, lashes, hair and eyes of the player's own game).
 
-export type DetailSlot = "skin" | "brows" | "lashes" | "hair" | "eyes";
+export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes";
 /** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "brows", "lashes", "hair", "eyes"];
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes"];
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -142,6 +147,10 @@ export type RenderChunkMaterial = {
   name: string;
   /** Template depot path the instance chain ends at (`.mt`/`.remt`), or null when unresolved. */
   template: string | null;
+  /** The template's own name (`CMaterialTemplate.name`), which selects its programs and the renderer's adapter; null when unreadable. */
+  templateName: string | null;
+  /** The template's `materialPriority` (`EMP_Normal`, `EMP_Front`), or null when unreadable. Decals draw by it first. */
+  materialPriority: string | null;
   /** Effective values: nearest material instance first, then the template's defaults. */
   scalars: Record<string, number>;
   /** 8-bit RGBA as stored. */
@@ -253,6 +262,9 @@ function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
   return { chunk: int(item?.chunk, `${what} chunk`, 0, 63),
     name: typeof item?.name === "string" && item.name.length < 256 ? item.name : fail(`${what} name is invalid.`),
     template: item?.template === null ? null : text(item?.template, `${what} template`),
+    templateName: item?.templateName === null ? null : paramName(item?.templateName, `${what} template name`),
+    materialPriority: item?.materialPriority === null ? null
+      : /^EMP_[A-Za-z]{1,32}$/.test(String(item?.materialPriority)) ? item.materialPriority : fail(`${what} priority is invalid.`),
     scalars: entries(item?.scalars, `${what} scalars`, LIMITS.params, (v, label) => finite(v, label)),
     colours: entries(item?.colours, `${what} colours`, LIMITS.params, (v, label) => {
       if (!Array.isArray(v) || v.length !== 4) fail(`${label} is not RGBA.`);
@@ -314,7 +326,7 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     components, slots };
 }
 
-/** Version dispatch: a v1 record is a core head; a v2 or v3 record is a core head, and a v3 record may be a character. */
+/** Version dispatch: a v1 record is a core head; a v2, v3 or v4 record is a core head, and a v4 record may be a character. */
 export function parseRenderDetail(value: unknown): CoreDetail | CharacterDetail {
   const doc = value as { schema?: unknown; detail?: unknown };
   if (doc?.detail === "character") return parseCharacterDetail(value);

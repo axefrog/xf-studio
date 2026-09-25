@@ -63,6 +63,8 @@ export function characterDetailsEvidence(input: {
   browUnderlay?: BrowUnderlayEvidence;
   /** The core (fallback) eye and which eye the scene draws. */
   eyes?: { core: THREE.Mesh; appearance: object };
+  /** How the skin under each face decal was read (per decal mesh name). */
+  decalUnderlay?: (mesh: THREE.Mesh) => object | undefined;
 }) {
   const { details: loaded, skin, head } = input;
   const skinEvidence = skin ? {
@@ -84,7 +86,17 @@ export function characterDetailsEvidence(input: {
       material: (mesh.material as THREE.Material).name, gradient: handle.gradient, uv: uvRange(mesh) })) ?? [],
     shells: eyeItem?.eyes?.shells.map(({ mesh, handle }) => ({ mesh: mesh.name, visible: mesh.visible, renderOrder: mesh.renderOrder,
       material: (mesh.material as THREE.Material).name, parameters: { ...handle.parameters }, uv: uvRange(mesh) })) ?? [] } : undefined;
-  return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
+  // Face details in draw order: each decal chunk's template, priority, render order and the parameters the family read.
+  const faceEvidence = loaded?.components.filter(item => item.component.slot === "face").flatMap(item => item.meshes.map(mesh => {
+    const decal = item.decals?.find(entry => entry.mesh === mesh);
+    return { option: item.component.option, definition: item.component.definition, mesh: mesh.name, visible: mesh.visible && item.root.visible,
+      renderOrder: mesh.renderOrder, template: decal?.chunk.template ?? null, templateName: decal?.chunk.templateName ?? null,
+      priority: decal?.chunk.materialPriority ?? null, drawn: !!decal, underlay: decal?.handle.underlay ?? false, skinLight: decal?.handle.skinLight ?? false,
+      parameters: decal ? structuredClone(decal.handle.parameters) : null, surface: input.decalUnderlay?.(mesh) ?? null,
+      textures: decal ? Object.fromEntries(Object.entries(decal.chunk.textures).map(([name, texture]) => [name, { depotPath: texture.depotPath,
+        archive: texture.sources[0]?.archive ?? null, isGamma: texture.isGamma, width: texture.width, height: texture.height }])) : {} };
+  })) ?? [];
+  return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null, face: faceEvidence,
     slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
     limits: loaded?.limits.map(limit => ({ ...limit })) ?? [],
     notes: [...(loaded?.notes ?? [])], browUnderlay: input.browUnderlay, skin: skinEvidence, eyes: eyeEvidence,

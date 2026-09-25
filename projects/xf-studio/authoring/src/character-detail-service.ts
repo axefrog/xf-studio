@@ -14,13 +14,13 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedComponent } from "./character-detail-plan";
+import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedComponent, type TemplateIdentities } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { templateDefaults } from "./material-template";
-import { asArray, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
+import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderProfile, type RenderProfileStop, type RenderRgba, type RenderSkinProfile,
   type RenderTexture } from "./render-detail";
@@ -31,7 +31,7 @@ import type { Provenance, ResourceGraph } from "./resource-graph";
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, eyes, brows, lashes and hair" },
+  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes and hair" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -56,8 +56,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, eyes, brows, lashes and hair aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, eyes, brows, lashes and hair aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes and hair aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes and hair aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -132,18 +132,32 @@ export function gradientStops(root: JsonObject): RenderGradient["stops"] | null 
 const paramText = (value: MaterialParamValue) => value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "name" ? value.value
   : value.text ?? (value.ref ? refLabel(value.ref) : "");
 
-/** Template defaults as resolved params, for every drawable template the plan meets. */
-async function loadTemplateDefaults(graph: ResourceGraph, templates: Iterable<Provenance>): Promise<Map<string, ResolvedParam[]>> {
-  const out = new Map<string, ResolvedParam[]>();
+/** A material template's own identity: its `name` (which selects its compiled programs) and `materialPriority` (absent = `EMP_Normal`). */
+export function templateIdentity(root: JsonObject | null | undefined): { name: string | null; priority: string | null } {
+  if (!root || root.$type !== "CMaterialTemplate") return { name: null, priority: null };
+  const name = cname(root.name) || null;
+  const priority = typeof root.materialPriority === "string" && /^EMP_[A-Za-z]{1,32}$/.test(root.materialPriority) ? root.materialPriority : "EMP_Normal";
+  return { name, priority };
+}
+
+/**
+ * Every material template the plan meets, read once: its own name and priority (a mod's copy of a vanilla template keeps
+ * the name the engine finds programs by), and, for the templates the renderer draws, their parameter defaults.
+ */
+async function loadTemplates(graph: ResourceGraph, templates: Iterable<Provenance>): Promise<{ defaults: Map<string, ResolvedParam[]>; identities: TemplateIdentities }> {
+  const defaults = new Map<string, ResolvedParam[]>(), identities = new Map<string, { name: string | null; priority: string | null }>();
   for (const template of templates) {
     const key = refLabel(template.ref).toLowerCase();
-    if (out.has(key) || !renderTemplate(key)) continue;
+    if (identities.has(key) || !/\.mt$/i.test(key)) continue;
     const loaded = await graph.load(template.ref, "mt");
-    out.set(key, loaded ? templateDefaults(loaded.root).map(([name, value]) => ({ name, kind: value.kind, value: paramText(value),
+    const identity = templateIdentity(loaded?.root);
+    identities.set(key, identity);
+    if (!renderTemplate(key, identity.name)) continue;
+    defaults.set(key, loaded ? templateDefaults(loaded.root).map(([name, value]) => ({ name, kind: value.kind, value: paramText(value),
       setBy: `${refLabel(template.ref)} (template default)`,
       ...(value.kind === "resource" && value.ref ? { resource: graph.provenance(value.ref) } : {}) })) : []);
   }
-  return out;
+  return { defaults, identities };
 }
 
 type Located = { depotPath: string; archive: { id: string; name: string; provider: string } };
@@ -209,12 +223,19 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
     .map(material => material.template).filter((template): template is Provenance => !!template)));
-  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, await loadTemplateDefaults(graph, templates));
+  const loadedTemplates = await loadTemplates(graph, templates);
+  const plan: CharacterPlan = planCharacterDetails(resolved, cco.merged.cco, loadedTemplates.defaults, loadedTemplates.identities);
   cancelled();
 
   progress("exporting");
   const slots = new Map<DetailSlot, DetailSlotState>(plan.slots.map(slot => [slot.slot, { ...slot }]));
+  // Face details are many independent parts: one that can't be read leaves the others shown (decided after export).
+  const partial = new Map<DetailSlot, "export" | "tool">();
   const failSlot = (slot: DetailSlot, why: "export" | "tool") => {
+    if (slot === "face") { partial.set(slot, partial.get(slot) === "tool" ? "tool" : why); return; }
+    unavailable(slot, why);
+  };
+  const unavailable = (slot: DetailSlot, why: "export" | "tool") => {
     const current = slots.get(slot)!;
     const { noun, not, pronoun } = SLOT_WORDS[slot];
     slots.set(slot, { slot, state: "unavailable", label: current.label, message: why === "tool"
@@ -348,14 +369,19 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
         notes.push(`${component.component} chunk ${material.chunk}: ${unread.join(", ")} could not be read; the chunk is not drawn.`);
         continue;
       }
-      materials.push({ chunk: material.chunk, name: material.name, template: material.template, scalars: material.scalars,
+      materials.push({ chunk: material.chunk, name: material.name, template: material.template, templateName: material.templateName,
+        materialPriority: material.materialPriority, scalars: material.scalars,
         colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles, gradients: chunkGradients });
     }
-    // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws.
-    if (!materials.some(material => !renderTemplate(material.template)?.placeholder)) { failSlot(component.slot, "export"); continue; }
+    // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws. A face detail made only of
+    // decal templates the preview can't draw yet is kept, hidden, so the renderer reports it (limit `decal-template`).
+    if (!materials.length || (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder))) {
+      failSlot(component.slot, "export"); continue;
+    }
     if (component.skippedChunks) notes.push(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
     const hash = component.drawnFrom.ref.hash;
-    components.push({ id: `${component.slot}:${component.component}:${hash}`, slot: component.slot, option: component.option,
+    // Two choices can draw the same mesh (face cyberware reuses the freckle mesh), so the option is part of the identity.
+    components.push({ id: `${component.slot}:${component.option}:${component.component}:${hash}`, slot: component.slot, option: component.option,
       definition: component.definition, component: component.component,
       geometry: { file: glb.file, sha256: glb.sha256, depotPath: located.depotPath, depotHash: hash, morphTargets: component.morphTargets,
         sources: [{ depotPath: located.depotPath, archive: located.archive.name, provider: located.archive.provider,
@@ -363,8 +389,14 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
       ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}) });
   }
+  for (const [slot, why] of partial) {
+    const current = slots.get(slot)!, { noun } = SLOT_WORDS[slot];
+    if (components.some(item => item.slot === slot))
+      slots.set(slot, { ...current, message: `Some of your V's ${noun} couldn't be read from your game files, so not all of them are shown.` });
+    else unavailable(slot, why);
+  }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.
-  for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) failSlot(slot, "export");
+  for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) unavailable(slot, "export");
   if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,

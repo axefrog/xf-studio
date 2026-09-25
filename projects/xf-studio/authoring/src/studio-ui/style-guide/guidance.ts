@@ -68,7 +68,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "c-result": { combine: "Pairs with the Layers panel (warning flags) and the finish export line, which use the same wording.",
     adapt: "Lists wrap; hashes break anywhere; long paths wrap in monospace." },
   "c-facts": { combine: "Sits under the action that produced the facts (Load V from a save).",
-    adapt: "Single column in every size.", drives: "previewState().savedV.result (applied, matchedPiercing) and status.assets.characterDetails (skin, eyes, brows, lashes and hair of the shown V)." },
+    adapt: "Single column in every size.", drives: "previewState().savedV.result (applied, matchedPiercing) and status.assets.characterDetails (skin, face details, eyes, brows, lashes and hair of the shown V)." },
   "c-activity": { combine: "Receives every toast and quieter records (cancelled pickers, routine successes); the status bar shows the latest entry.",
     adapt: "Single column; the newest 80 entries are shown.", drives: "Presentation-only Feedback log (not persisted)." },
   "c-history": { combine: "A tab beside Layers. The header's Undo, Redo and History buttons and Ctrl+Z / Ctrl+Shift+Z move the same current marker one step at a time; the palette names the step (“Redo: Move point”).",

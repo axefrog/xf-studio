@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import { sampleUnderlayAlbedo } from "./brow-material";
+import { decodeSrgbByte, nearestVertices, sampleAtVertices } from "./decal-underlay";
 import type { ResolvedSkinSurface } from "./character-material-adapters";
 import type { DetailLimit } from "./detail-limits";
 import { compareHeadSurfaces, type HeadSurface } from "./head-surface";
-import { imageTexels, type SkinTexels } from "./skin-material";
+import { imageTexels, SKIN_TEMPLATE_DEFAULTS, skinRoughness, type SkinTexels } from "./skin-material";
 
 /**
  * Renderer adapter that decides where the V's resolved skin is drawn, and reads the skin colour under decals
@@ -92,6 +93,11 @@ function concatenate(parts: readonly ArrayLike<number>[]): Float32Array {
 
 export type BrowUnderlayEvidence = { maxMatchedDistance: number; unmatched: number; source: "resolved-skin" | "core-albedo";
   surface: HeadSkinPlacement["mode"] };
+/** The skin under a face decal, per vertex: linear colour (3) and roughness (1), read on the drawn head. */
+export type DecalSurfaceUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute;
+  evidence: BrowUnderlayEvidence & { roughness: "resolved-skin" | "core-roughness" | "flat" } };
+/** Roughness assumed under a decal when no skin roughness can be read (bare lid skin reads about 0.6; head-cc-rendering.md §3). */
+export const FLAT_SKIN_ROUGHNESS = 0.6;
 
 /** 8-bit sRGB pixels of a loaded image, read once through a canvas (browser only). */
 function canvasTexels(image: CanvasImageSource & { width: number; height: number }): SkinTexels {
@@ -108,8 +114,10 @@ function canvasTexels(image: CanvasImageSource & { width: number; height: number
  * the same answer to the decal loader and to the scene). `underlay` returns the linear skin colour under
  * each vertex of a decal, read on the head that will be drawn; it throws when that is not possible.
  */
-export function createHeadSkinPlacement(core: THREE.Mesh, options: { coreAlbedo(): SkinTexels }) {
-  let coreSurface: HeadSurface | undefined, coreAlbedo: SkinTexels | undefined;
+export function createHeadSkinPlacement(core: THREE.Mesh, options: { coreAlbedo(): SkinTexels;
+  /** The core head's roughness as effective roughness bytes in channel 0 (face decals); optional. */
+  coreRoughness?(): SkinTexels | null }) {
+  let coreSurface: HeadSurface | undefined, coreAlbedo: SkinTexels | undefined, coreRoughness: SkinTexels | null | undefined;
   const placements = new WeakMap<readonly THREE.Mesh[], HeadSkinPlacement>();
   function place(chunks: readonly THREE.Mesh[]): HeadSkinPlacement {
     let placement = placements.get(chunks);
@@ -134,8 +142,44 @@ export function createHeadSkinPlacement(core: THREE.Mesh, options: { coreAlbedo(
     return { attribute: new THREE.BufferAttribute(result.underlay, 3),
       evidence: { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched, source: texels ? "resolved-skin" : "core-albedo", surface } };
   }
-  return { place, underlay };
+  /**
+   * The skin colour and roughness under each vertex of a face decal, read on the head that will be drawn (one nearest-vertex
+   * search for both). Throws when the decal is not over that head.
+   */
+  function surfaceUnderlay(decal: THREE.Mesh, skin: ResolvedSkinSurface | null): DecalSurfaceUnderlay {
+    const surface = skin ? place(skin.chunks).mode : "core-head";
+    const texels = skin?.base() ?? null;
+    if (surface === "resolved-head" && !texels) throw Error("the resolved head's skin colour is unavailable");
+    const meshes = surface === "resolved-head" ? skin!.chunks : [core];
+    const uvArrays = meshes.map(mesh => mesh.geometry.getAttribute("uv")?.array);
+    if (uvArrays.some(uv => !uv)) throw Error("the drawn head has no UVs");
+    const uvs = concatenate(uvArrays as ArrayLike<number>[]);
+    const nearest = nearestVertices(worldPositions(decal), concatenate(meshes.map(worldPositions)));
+    if (nearest.unmatched) throw Error(`${nearest.unmatched} decal vertices are not over the head surface`);
+    const colour = sampleAtVertices(nearest, uvs, texels ?? (coreAlbedo ??= options.coreAlbedo()), 3, decodeSrgbByte);
+    // The resolved skin's roughness; the core head's only while no resolved skin is drawn.
+    let roughTexels = skin?.roughness?.() ?? null;
+    if (!skin) roughTexels = coreRoughness === undefined ? (coreRoughness = options.coreRoughness?.() ?? null) : coreRoughness;
+    const roughness = roughTexels ? sampleAtVertices(nearest, uvs, roughTexels, 1, byte => byte / 255)
+      : new Float32Array(nearest.index.length).fill(FLAT_SKIN_ROUGHNESS);
+    return { colour: new THREE.BufferAttribute(colour, 3), roughness: new THREE.BufferAttribute(roughness, 1),
+      evidence: { maxMatchedDistance: nearest.maxMatchedDistance, unmatched: nearest.unmatched, source: texels ? "resolved-skin" : "core-albedo", surface,
+        roughness: !roughTexels ? "flat" : skin ? "resolved-skin" : "core-roughness" } };
+  }
+  return { place, underlay, surfaceUnderlay };
 }
+
+/**
+ * The core head's roughness as effective roughness bytes (channel 0: R with the template's detail bias gated by B at a mid
+ * microdetail term), read through a canvas once, or null when it can't be read (face decals then assume a flat value).
+ */
+export const coreRoughnessReader = (roughness: THREE.Texture) => (): SkinTexels | null => {
+  try {
+    const raw = canvasTexels(roughness.image as CanvasImageSource & { width: number; height: number });
+    const bias = [SKIN_TEMPLATE_DEFAULTS.DetailRoughnessBiasMin, SKIN_TEMPLATE_DEFAULTS.DetailRoughnessBiasMax] as const;
+    return { width: raw.width, height: raw.height, texel: (x, y) => Math.round(skinRoughness(raw.texel(x, y, 0) / 255, raw.texel(x, y, 2) / 255, bias, 0.5) * 255) };
+  } catch { return null; }
+};
 
 /** The core albedo reader the scene uses: the core head's own albedo texture, read through a canvas once. */
 export const coreAlbedoReader = (albedo: THREE.Texture) => () => canvasTexels(albedo.image as CanvasImageSource & { width: number; height: number });

@@ -185,7 +185,7 @@ describe("skin adapter", () => {
   const requests: string[] = [];
   const all: ChunkTextures = (parameter, use, wrap) => { requests.push(`${parameter}:${use}:${wrap}`); return new THREE.Texture(); };
   const context: AdapterContext = { slot: "skin", overMakeup: false, profileEncoding: "srgb-decoded" };
-  const skinChunk = (textures: string[]): RenderChunkMaterial => ({ chunk: 0, name: "skin", template: "base\\materials\\skin.mt",
+  const skinChunk = (textures: string[]): RenderChunkMaterial => ({ chunk: 0, name: "skin", template: "base\\materials\\skin.mt", templateName: "skin", materialPriority: null,
     scalars: { TintScale: 0.7, EmissiveEV: 0 }, colours: { TintColor: [202, 177, 153, 255] }, profiles: {}, skinProfiles: { SkinProfile: profile() }, gradients: {},
     textures: Object.fromEntries(textures.map(name => [name, texture(`x\\${name}.xbm`, name === "Albedo")])) });
   const mesh = () => new THREE.Mesh(new THREE.BufferGeometry());

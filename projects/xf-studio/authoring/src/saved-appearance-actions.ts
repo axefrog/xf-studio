@@ -3,7 +3,7 @@ import type { BodySex } from "./creator-lighting";
 import { refusal, type Capability } from "./platform/api";
 
 /**
- * What applying a save changed at once (facial shapes, piercings). The skin, eyes, brows, lashes and hair
+ * What applying a save changed at once (facial shapes, piercings). The skin, face details, eyes, brows, lashes and hair
  * follow asynchronously from the resolved character record (character-detail-actions.ts).
  */
 export type SavedAppearanceResult = { applied: string[]; appearanceReferences: number;

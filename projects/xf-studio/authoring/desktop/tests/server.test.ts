@@ -47,14 +47,14 @@ test("session gates static files and narrowly typed host facts", async () => {
   expect((await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).previewAssets).toBe("missing");
   expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(404);
   expect((await fetch(base + "/assets/brows.glb", { headers })).status).toBe(404);
-  // Resolved skin, eyes, brows, lashes and hair: served only by content-addressed name from the host's own store.
+  // Resolved skin, face details, eyes, brows, lashes and hair: served only by content-addressed name from the host's own store.
   expect((await fetch(base + `/assets/character/${"a".repeat(64)}.json`, { headers })).status).toBe(404);
   expect((await fetch(base + "/assets/character/..%2f..%2fsettings.json", { headers })).status).toBe(404);
   expect((await fetch(base + `/api/preview-character?key=${"b".repeat(32)}`))).toHaveProperty("status", 403);
   const character = await fetch(base + "/api/preview-character", { method: "POST", headers: { ...headers, Origin: base,
     "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/character-request-1", source: "default", bodyGender: "female" }) });
   // No game folder is set up here: the host says what's needed instead of preparing.
-  expect(await character.json()).toMatchObject({ phase: "failed", message: "Your V's own skin, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+  expect(await character.json()).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
   expect((await fetch(base + "/api/preview-character", { method: "POST", headers: { ...headers, Origin: base,
     "Content-Type": "application/json" }, body: JSON.stringify({ source: "save", path: "C:\\" }) })).status).toBe(400);
   expect((await fetch(base + "/api/desktop/assets/intake", { method: "POST", headers: { ...headers, Origin: base,

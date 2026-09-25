@@ -25,3 +25,17 @@ test("renderer and device modules carry codes, not the sentences", () => {
     for (const text of Object.values(DETAIL_LIMIT_TEXT)) expect({ file, found: source.includes(text) }).toEqual({ file, found: false });
   }
 });
+
+test("face details: the slot reads as plain words, and a decal the preview can't draw is one sentence from its code", () => {
+  const line = characterDetailLine({ phase: "ready", source: "save", message: "", progress: null, slots: [
+    { slot: "skin", state: "shown", label: "senna, skin type 3" },
+    { slot: "face", state: "shown", label: "cheeks (light brown), face cyberware", limits: ["decal-template"] },
+  ] });
+  expect(line.text).toMatch(/^Skin: senna, skin type 3 · Face details: cheeks \(light brown\), face cyberware\. /);
+  expect(line.text).toContain(DETAIL_LIMIT_TEXT["decal-template"]);
+  // The decal family's modules carry codes too.
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { resolve } = require("node:path") as typeof import("node:path");
+  for (const file of ["face-decal-material.ts", "decal-underlay.ts", "render-templates.ts"])
+    expect(readFileSync(resolve(import.meta.dir, "..", "src", file), "utf8")).not.toContain(DETAIL_LIMIT_TEXT["decal-template"]);
+});

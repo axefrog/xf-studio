@@ -22,13 +22,23 @@
  *   say plainly that part is not shown, but never makes a component drawable on its own.
  * - **Morph texture rule**: a morph target's `baseTexture` replaces its named parameter's texture (the vanilla eye
  *   morph binds a flat `normal.xbm` to `Normal`; ArchiveXL's eye fix clears it) [hypothesis, eye-rendering.md §1.3].
+ * - **Template identity**: a chunk's adapter is chosen by its template's own name (the name the engine finds compiled
+ *   programs by), read by the host from the `.mt`; a copied template (e.g. a `mesh_decal` copy with `EMP_Front`) keeps it.
+ * - **Face details** (the `face` slot) are chosen by the game's own structure, never by option names: every head choice
+ *   consumed by the third-person head's face (`TPP`, `face` or `beards` groups) whose option no other detail claims, drawn
+ *   by its components' post-G-buffer decal chunks (the `mesh_decal` family). Vanilla makeup, lipstick, cheeks, blemishes,
+ *   scars, tattoos, face cyberware and stubble, and any CCXL option that adds such a decal, qualify the same way;
+ *   piercings (layered earrings), teeth (skin) and the face rig do not. The skin type's own decal parts (the personal-link
+ *   port) join the face details. Components are ordered by the creator resource's option order (merged CCO, so CCXL
+ *   options follow vanilla), the documented fallback for the unknown order between same-priority decals
+ *   (knowledge/head-cc-rendering.md §3).
  */
 import type { CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
 import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
 import { DETAIL_SLOTS } from "./render-detail";
-import { renderTemplate } from "./render-templates";
+import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
@@ -36,9 +46,24 @@ export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.free
   skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
+/**
+ * Groups whose choices the third-person head's face draws: `TPP` (tattoos, scars, blemishes), `face` (the face controller's
+ * makeup, face cyberware and piercings, where CCXL makeup lands) and `beards` (the male beard controller) [resource;
+ * consumer wiring hypothesis]. `character_customization` alone is the creator puppet; `finalSceneBruises` is quest-driven.
+ */
+export const FACE_GROUPS: readonly string[] = ["TPP", "face", "beards"];
+/**
+ * Plain words for the face details the vanilla creator slots hold, for the label only (selection never uses them);
+ * a CCXL option on a slot of its own reads "face detail".
+ */
+export const FACE_DETAIL_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  makeupEyes_color: "eye makeup", makeupLips_color: "lipstick", makeupCheeks_color: "cheeks", makeupPimples_color: "blemishes",
+  scars: "scar", facial_tattoo: "tattoo", tattoo: "tattoo", cyberware: "face cyberware", beard_color: "beard", skin_type: "personal link" });
 
 export type PlannedChunk = {
   chunk: number; name: string; template: string | null;
+  /** The template's own name and `materialPriority`, when the host could read the template. */
+  templateName: string | null; materialPriority: string | null;
   /** The renderer has an adapter for the template; `placeholder` when that adapter only reports the chunk as not drawn. */
   drawn: boolean; placeholder: boolean;
   scalars: Record<string, number>; colours: Record<string, RenderRgba>;
@@ -58,10 +83,12 @@ export type PlannedComponent = {
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
+/** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
+export type TemplateIdentities = ReadonlyMap<string, { name: string | null; priority: string | null }>;
 
 /** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
-  skin: { noun: "skin", not: "isn't", pronoun: "it" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
+  skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
   hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" } });
 
 /** A plain colour or style label from a definition name (`female__05_brown_liquorice` → `brown liquorice`). */
@@ -110,30 +137,47 @@ export function morphTextureOverride(rule: PlannedComponent["morphTexture"], tex
   return [rule.parameter, rule.texture];
 }
 
-function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"]): PlannedChunk {
+/** Whether a template belongs to the post-G-buffer decal family (drawn, or recorded as not drawn yet). */
+const isDecal = (inputs: ReturnType<typeof renderTemplate>) => !!inputs && (!!inputs.decal || inputs.adapter === "decal-placeholder");
+/** A resolved chunk's template inputs, by the template's own name when the host read it. */
+const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIdentities) => {
   const template = material.template ? refLabel(material.template.ref) : null;
-  const inputs = renderTemplate(template);
-  const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, drawn: !!inputs, placeholder: !!inputs?.placeholder,
+  return renderTemplate(template, template ? identities.get(template.toLowerCase())?.name : null);
+};
+
+/**
+ * Plan one chunk. `faceDetail`: the chunk is drawn as a face detail, so only decal-family templates draw, with the
+ * decal family's inputs.
+ */
+function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
+  identities: TemplateIdentities, faceDetail: boolean): PlannedChunk {
+  const template = material.template ? refLabel(material.template.ref) : null;
+  const identity = template ? identities.get(template.toLowerCase()) : undefined;
+  const found = renderTemplate(template, identity?.name);
+  const inputs = found && (!faceDetail || isDecal(found)) ? found : undefined;
+  const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, templateName: identity?.name ?? null,
+    materialPriority: identity?.priority ?? null, drawn: !!inputs, placeholder: !!inputs?.placeholder,
     scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} };
   if (!inputs) return chunk;
+  const textureInputs = templateTextures(inputs, faceDetail);
   for (const param of effectiveParams(material, defaults)) {
     const scalar = parseScalar(param);
     if (typeof scalar === "number") chunk.scalars[param.name] = scalar;
     else if (scalar) chunk.colours[param.name] = scalar;
     else if (param.kind === "resource" && param.resource?.ref.path) {
-      if (inputs.textures.includes(param.name) && /\.xbm$/i.test(param.resource.ref.path)) chunk.textures[param.name] = param.resource;
+      if (textureInputs.includes(param.name) && /\.xbm$/i.test(param.resource.ref.path)) chunk.textures[param.name] = param.resource;
       if (inputs.profiles.includes(param.name) && /\.hp$/i.test(param.resource.ref.path)) chunk.profiles[param.name] = param.resource;
       if (inputs.skinProfiles.includes(param.name) && /\.sp$/i.test(param.resource.ref.path)) chunk.skinProfiles[param.name] = param.resource;
       if (inputs.gradients?.includes(param.name) && /\.gradient$/i.test(param.resource.ref.path)) chunk.gradients[param.name] = param.resource;
     }
   }
-  const override = morphTextureOverride(rule, inputs.textures);
+  const override = morphTextureOverride(rule, textureInputs);
   if (override) chunk.textures[override[0]] = override[1];
   return chunk;
 }
 
 function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: ResolvedComponent,
-  defaults: TemplateDefaults): PlannedComponent | null {
+  defaults: TemplateDefaults, identities: TemplateIdentities = new Map()): PlannedComponent | null {
   const geometry = component.geometry;
   if (!geometry || geometry.drawsNothing || !geometry.drawnFrom || geometry.drawnFrom.status !== "archive" || !geometry.visibleChunks?.length ||
       !geometry.renderChunks) return null;
@@ -141,9 +185,10 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const morphTexture = geometry.morphTexture && geometry.morphTarget
     ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
   const materials = component.materials.filter(material => !lods || ((lods[material.chunk] ?? 1) & 1) === 1)
-    .map(material => planChunk(material, defaults, morphTexture));
+    .map(material => planChunk(material, defaults, morphTexture, identities, slot === "face"));
   const drawn = materials.filter(material => material.drawn);
-  if (!drawn.some(material => !material.placeholder)) return null;
+  // A face detail made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
+  if (slot === "face" ? !drawn.length : !drawn.some(material => !material.placeholder)) return null;
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture };
@@ -153,20 +198,81 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
 export const recordMorphTexture = (rule: PlannedComponent["morphTexture"]): RenderMorphTexture | undefined =>
   rule ? { morph: refLabel(rule.morph.ref), texture: rule.texture ? refLabel(rule.texture.ref) : null, parameter: rule.parameter || null } : undefined;
 
+/** Whether a planned component draws only decal-family chunks (the skin type's personal-link port, for example). */
+const decalOnly = (component: PlannedComponent) => component.materials.every(material => isDecal(renderTemplate(material.template, material.templateName)));
+
 /**
- * Select the head skin, brows, lashes, hair and eyes of a resolved character. Each slot reports one outcome: shown, none
- * (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
+ * The face details: the V's own decals over the head, in the draw-order fallback (creator option order), and one outcome.
+ * `skinDecals` are the decal parts the skin type's appearance brings.
  */
-export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map()): CharacterPlan {
+function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities,
+  skinDecals: readonly { entry: ResolvedAppearance; component: ResolvedComponent }[]): { components: PlannedComponent[]; state: DetailSlotState } {
+  const options = new Map(cco.parts.head.options.map((option, index) => [option.name, { option, index }]));
+  const toneLinks = new Set(cco.parts.head.options.filter(option => option.uiSlot === "skin_type" && option.link).map(option => option.link));
+  const entries = resolved.appearances.filter(entry => entry.part === "head" && !DETAIL_UI_SLOTS[options.get(entry.option)?.option.uiSlot ?? ""] &&
+    entry.groups.some(group => FACE_GROUPS.includes(group)));
+  const planned: { component: PlannedComponent; order: number; label: string }[] = [];
+  const unshown: string[] = [];
+  const label = (entry: ResolvedAppearance) => {
+    const option = options.get(entry.option)?.option;
+    const word = FACE_DETAIL_WORDS[option?.uiSlot ?? ""] ?? "face detail";
+    // A colour that follows the skin tone (tattoos, face cyberware) is the tone, not a choice worth repeating.
+    const colour = option && toneLinks.has(option.link) ? "" : choiceLabel(entry.definition);
+    return colour && colour !== word ? `${word} (${colour})` : word;
+  };
+  for (const { entry, component } of skinDecals) {
+    const item = planComponent("face", entry, component, defaults, identities);
+    if (item) planned.push({ component: item, order: options.get(entry.option)?.index ?? -1, label: FACE_DETAIL_WORDS.skin_type! });
+  }
+  for (const entry of entries) {
+    const items = entry.components.map(component => planComponent("face", entry, component, defaults, identities))
+      .filter((item): item is PlannedComponent => !!item);
+    const order = options.get(entry.option)?.index ?? Number.MAX_SAFE_INTEGER;
+    if (items.length) { for (const item of items) planned.push({ component: item, order, label: label(entry) }); continue; }
+    // A face decal that resolved but can't be drawn (its geometry is missing) is reported. Layered earrings, the teeth and
+    // the face rig are not decals and stay out silently.
+    if (entry.components.some(component => component.materials.some(material => isDecal(chunkTemplate(material, identities)))))
+      unshown.push(label(entry));
+  }
+  // Stable: components of one choice keep their order.
+  planned.sort((a, b) => a.order - b.order);
+  const labels = [...new Set(planned.map(item => item.label))];
+  const components = planned.map(item => item.component);
+  if (!components.length && !unshown.length) return { components, state: { slot: "face", state: "none", label: "None" } };
+  const { noun, not, pronoun } = SLOT_WORDS.face;
+  const missing = [...new Set(unshown)].join(", ");
+  if (!components.length) return { components, state: { slot: "face", state: "unavailable", label: missing,
+    message: `XF Studio can't draw your V's ${noun} (${missing}) yet, so ${pronoun} ${not} shown.` } };
+  return { components, state: { slot: "face", state: "shown", label: labels.join(", "),
+    ...(unshown.length ? { message: `Some of your V's ${noun} (${missing}) ${not} shown yet.` } : {}) } };
+}
+
+/**
+ * Select the head skin, face details, brows, lashes, hair and eyes of a resolved character. Each slot reports one outcome:
+ * shown, none (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
+ */
+export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map(),
+  identities: TemplateIdentities = new Map()): CharacterPlan {
   const slotOf = new Map(cco.parts.head.options.map(option => [option.name, DETAIL_UI_SLOTS[option.uiSlot]]));
   const components: PlannedComponent[] = [];
   const slots: DetailSlotState[] = [];
+  const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
   for (const slot of DETAIL_SLOTS) {
+    if (slot === "face") {
+      const face = planFace(resolved, cco, defaults, identities, skinDecals);
+      components.push(...face.components);
+      slots.push(face.state);
+      continue;
+    }
     const entries = resolved.appearances.filter(entry => entry.part === "head" && slotOf.get(entry.option) === slot &&
       entry.groups.some(group => THIRD_PERSON_GROUPS.includes(group)));
     if (!entries.length) { slots.push({ slot, state: "none", label: "None" }); continue; }
-    const planned = entries.flatMap(entry => entry.components.map(component => planComponent(slot, entry, component, defaults))
-      .filter((item): item is PlannedComponent => !!item));
+    const planned = entries.flatMap(entry => entry.components.map(component => {
+      const item = planComponent(slot, entry, component, defaults, identities);
+      // The skin type's decal parts (the personal-link port) are face details, not the skin.
+      if (item && slot === "skin" && decalOnly(item)) { skinDecals.push({ entry, component }); return null; }
+      return item;
+    }).filter((item): item is PlannedComponent => !!item));
     const label = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition) : choiceLabel(entry.definition)))].join(", ");
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
