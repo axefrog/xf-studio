@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `368f70b` | 2026-09-26 | Diagnostic Glitter route and verifier; `volume-info.ts` | 0 High, 2 Medium, 8 Low (PIPE-68..77). Production guard holds; builds deterministic; verifier misses flake contents. Fixes in claude/cleanup-glitter |
 | `88b5379` | 2026-09-26 | Prepare speed (installation registry, route fingerprint, one-launch WolvenKit, prefetch) and the layered cleanup's fixes | 0 High, 8 Medium, 22 Low (PIPE-52..67, PREV-73..79, CORE-63..64). PIPE-41/42/43, PREV-63/65/66/67, UI-48/49/51 confirmed fixed; PIPE-40 and PREV-62 partly. Fixes in claude/cleanup-hosts3 and claude/cc-panel |
 | `2ce9987`+ | 2026-09-26 | Creator catalogue and character context (CC controls slice 1) | 0 High, 7 Medium, 14 Low (CORE-50..62, PIPE-46..51, UI-59..60). Fixes fold into CC controls slice 2 |
 | `fc36eae` | 2026-09-26 | Studio light rig (rendering, presentation) | 0 High, 0 Medium, 7 Low (PREV-69..72, UI-56..58). Default reproduces the old look exactly; persistence and render-on-demand pass |
@@ -108,6 +109,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-59 | Med | Presentation (design) | The catalogue has no compact projection: 131,856 choices each carry provenance, label and swatch objects (55 MB compact JSON) before reaching a browser (`cc-catalogue.ts:96-109,260-272`) | Open (CC controls slice 2) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
 | PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | **Fixed** (claude/cleanup-render3, 26 Sep) |
+| PIPE-68 | Med | Pipeline (verifier) | The glitter checks never look at the flakes' contents: all-flat normals, flake roughness/metalness reset to the base, negated normal Y and a grey pigment all verify (`mod-verifier/glitter-checks.ts:111-242`, `verify-build.ts:299-381`) | Open (claude/cleanup-glitter) |
+| PIPE-69 | Med | Pipeline | Flake counts are unclipped and uncapped: a knob inside `GLITTER_RANGES` yields ~5 M flakes (303 MB) over the window or ~71 M (4.3 GB) over the head, and `Math.min(...)` throws past ~500 k items (`glitter-route.ts:80-85,246,269`) | Open (claude/cleanup-glitter) |
 | PIPE-52 | Med | Resolver | Evicting a route's installation doesn't bump its generation, so after a mod change inside an MO2 mod folder the old ready record is served under an unchanged key (`installation-registry.ts:176-180,99-101`, `character-detail-host.ts:123`) | Fixed in claude/cleanup-hosts3 (see below) |
 | PIPE-53 | Med | Resolver | A transient failure sticks: the host reuses a ready state however it was built and the try cache keeps nulls and texture-less components from a WolvenKit timeout (`character-detail-host.ts:123`, `character-detail-service.ts:321-680`) | Open (claude/cc-panel) |
 | PIPE-54 | Med | Resolver | A resource WolvenKit writes nothing for counts as transient every time, with no marker: each prepare relaunches WolvenKit and the graph (and its merged-CCO memo) is thrown away (`resolver-host.ts:377-387`, `installation-registry.ts:166-170`) | Fixed in claude/cleanup-hosts3 (see below) |
@@ -208,6 +211,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PIPE-70..77** (Glitter route review at `368f70b`), Open (claude/cleanup-glitter):
+  - **PIPE-70:** the guard holds only because both hosts' `parseCollection` drops `diagnostics`; no test pins it, and the bundled CLI accepts the knob from any file.
+  - **PIPE-71:** the symmetry refusal runs at bake time only, so Check reports ready and Build throws.
+  - **PIPE-72:** a region is the box of the layer's control points, missing handles, overshoot, softness and warp coverage (the verifier shares the box).
+  - **PIPE-73:** the verifier's copy of the knob rules drops "no `uvSpace: head`" and `tiltMaxDeg ≥ σ/4`.
+  - **PIPE-74:** the head-UV accent mask gets no stored-row-order check and no check at the plate's UVs.
+  - **PIPE-75:** ~1.05 GB peak per preset build; the verifier builds a message string per texel check.
+  - **PIPE-76:** test gaps: determinism covers one chain at 1024×256; ordinary-build identity rests on the 021 README; no negative checks for tilt, density, sheen, accent placement or flake contents; no Check/Build test for a symmetric region.
+  - **PIPE-77:** `volume-info.ts` has no tests; `GetVolumePathNameW` runs on every call.
 - **PIPE-57..64, PIPE-66..67, PREV-74..79** (prepare speed review at `88b5379`): Fixed in claude/cleanup-hosts3 (see below).
 - **PIPE-65, CORE-64** (prepare speed review at `88b5379`), Open (claude/cc-panel):
   - **PIPE-65:** `applyChoiceOverride` takes the first same-named choice even when it drives nothing; a linked follower outside the switcher's reach may keep the old colour (hypothesis).
@@ -237,15 +249,6 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-47..49, PIPE-44..45, UI-53..55** (platform step 5 review at `4afea26`): Fixed in claude/cleanup-platform3 (see below).
 - **UI-52** (platform step 5 review at `4afea26`): Partly fixed in claude/cleanup-platform3 (`featureStateOf` reads the editor document's feature). Open: views still dispatch through `port.authoring`, so facade isolation is neither used nor enforced; moving each feature view onto its own facade, with a boundary test that its dispatches go only through that facade, is deferred to the step-5 file moves (recorded in the [boundary assessment](ui-architecture-boundary.md#open-work)).
 - **PREV-65..68, PIPE-43, UI-49..51** (layered material review at `90b8602`): Fixed in claude/cleanup-layered (see below).
-- **PREV-65..68, PIPE-43, UI-49..51** (layered material review at `90b8602`), Open (claude/cleanup-layered):
-  - **PREV-65:** a failed bake is detected only by a thrown exception; three.js logs compile errors and incomplete framebuffers, so a bad GPU reports `baked` with black maps.
-  - **PREV-66:** the bake materials are created and disposed per chunk, so every bake recompiles 3 programs (15 compiles for five piercing chunks per V switch).
-  - **PREV-67:** the `layered-mask` limit fires when a mask simply has fewer layers than the setup; a layer whose `.mltemplate` is unreadable still draws opaque white.
-  - **PREV-68:** each tried colour re-prepares, reloads and re-bakes the whole V, eye design included.
-  - **PIPE-43:** setup numbers are unbounded (a tile of 1e38 gives NaN), decoded texture size has no budget, and template override tables are uncapped.
-  - **UI-49:** two labelling rules for one piercing choice (host `localizedName` versus the device port's index with a `1024` sentinel), with wording built in a device module.
-  - **UI-50:** the project README and the public site still describe piercings as manifest-based or absent from the preview.
-  - **UI-51:** the persisted tried style is validated three different ways; a stale or over-long value makes the host refuse every request and carries over to newly loaded saves.
 - **PREV-58..61** (plate blend review at `4bf688a`): Fixed in claude/cleanup-render3 (see below).
 - **UI-11 (extended):** `scene.ts` is 808 lines.
 - **CORE-40..44** (platform steps 3–4 review at `4bf688a`): Fixed in claude/cleanup-platform2 (see below).
@@ -253,7 +256,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Diagnostic Glitter export route** (claude/glitter-board): `src/glitter-route.ts` (flake catalogue, nested chains, accent mask), the `glitter` knob in `src/export-diagnostics.ts`, the `glitter` route and accent chunk through the planner, bake, resource builder and `package-resources.ts`, and the verifier's `src/mod-verifier/glitter-checks.ts`. Review focus: the knob as the only way in (the finish guard unchanged), normal builds unchanged, and whether the verifier's property checks (instead of re-drawing) are strict enough.
+- None.
 
 ## Fixed in claude/cleanup-platform3
 
