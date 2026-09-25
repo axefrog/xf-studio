@@ -105,11 +105,16 @@ describe("the decal family material", () => {
     const shader = patchFaceDecalShader(program(), { underlay: true, skinLight: true });
     expect(shader.vertexShader).toContain("attribute vec3 xfsUnderlay;");
     expect(shader.vertexShader).toContain("attribute float xfsUnderRoughness;");
+    expect(shader.vertexShader).toContain("attribute float xfsUnderMetalness;");
     const fragment = shader.fragmentShader;
     expect(fragment).toContain("tan( ( xfsDecalMisc.x + 1.0 ) * 0.78539816 )");
     expect(fragment).toContain("xfsCoverage = xfsAdjusted * xfsAdjusted * xfsMaskTerm;");
     expect(fragment).toContain("xfsColourA * sqrt( max( xfsColour, vec3( 0.0 ) ) ) + ( 1.0 - xfsColourA ) * sqrt( xfsUnder )");
     expect(fragment).toContain("clamp( 50.0 - 50.0 * xfsDecalN.z, 0.0, 1.0 )");
+    // Roughness and metalness both move from the skin's towards the decal's by the surface share, as forwardSurface does (PREV-52).
+    expect(fragment).toContain("float xfsRoughnessValue = mix( xfsUnderRough, xfsDecalRough, xfsSurfaceShare );");
+    expect(fragment).toContain("float xfsMetalnessValue = mix( xfsUnderMetal, xfsDecalMetal, xfsSurfaceShare );");
+    expect(fragment).toContain("xfsUnderMetal = vXfsUnderMetalness;");
     expect(fragment).toContain("RE_Direct_XfsSkin");
     expect(fragment).toContain("xfsSkinIBL");
     for (const gone of ["#include <map_fragment>", "#include <alphamap_fragment>", "#include <roughnessmap_fragment>", "#include <lights_fragment_maps>"])
@@ -164,15 +169,20 @@ describe("the adapters for a decal chunk", () => {
     const all: ChunkTextures = (parameter, use, wrap) => { requests.push(`${parameter}:${use}:${wrap}`); return parameter === "DiffuseTexture" ? new THREE.Texture() : undefined; };
     const target = mesh();
     const colour = new THREE.BufferAttribute(new Float32Array(6), 3), roughness = new THREE.BufferAttribute(new Float32Array(2), 1);
+    const metalness = new THREE.BufferAttribute(new Float32Array(2), 1);
+    const evidence = { maxMatchedDistance: 0.0004, unmatched: 0, source: "resolved-skin", surface: "core-head", roughness: "resolved-skin" } as const;
     const skin = { base: () => null, chunks: [], parameters: skinParameters({ scalars: {}, colours: {}, skinProfiles: {} }) };
     const adapted = materialAdapter("base\\materials\\mesh_decal.mt", null, "face")!.create(chunk("base\\materials\\mesh_decal.mt", ["DiffuseTexture"]), all, target,
-      context({ skin, surface: () => ({ colour, roughness, evidence: {} as never }) }));
+      context({ skin, surface: () => ({ colour, roughness, metalness, evidence }) }));
     expect(requests.every(request => request.includes(":colour:"))).toBe(true);
     expect(requests.map(r => r.split(":")[0]).sort()).toEqual(["DiffuseTexture", "MetalnessTexture", "NormalAlphaTex", "NormalTexture", "RoughnessTexture", "SecondaryMask"]);
     // Five neutral 1×1 textures stand in for the template's defaults (white mask, flat normal, white alpha, white roughness, black metal).
     expect(adapted.owned).toHaveLength(5);
     expect(target.geometry.getAttribute("xfsUnderlay")).toBe(colour);
     expect(target.geometry.getAttribute("xfsUnderRoughness")).toBe(roughness);
+    expect(target.geometry.getAttribute("xfsUnderMetalness")).toBe(metalness);
+    // How the skin was read stays with the adapted decal, whatever the scene does with its own state later (PREV-51).
+    expect(adapted.decalSurface).toEqual(evidence);
     expect(adapted.decal).toMatchObject({ underlay: true, skinLight: true });
     expect(adapted.decal!.parameters.diffuseAlpha).toBeCloseTo(0.4, 6);
     expect(adapted.notes).toEqual([]);
@@ -183,6 +193,7 @@ describe("the adapters for a decal chunk", () => {
     const adapted = materialAdapter("base\\materials\\mesh_decal.mt", null, "face")!.create(chunk("base\\materials\\mesh_decal.mt", ["DiffuseTexture"]), none, mesh(),
       context({ surface: () => { throw Error("not over the head"); } }));
     expect(adapted.decal).toMatchObject({ underlay: false, skinLight: false });
+    expect(adapted.decalSurface).toBeUndefined();
     expect(adapted.notes).toEqual(["linear decal blend (not over the head)", "lit as a standard surface (no resolved skin light)"]);
     expect(() => materialAdapter("base\\materials\\mesh_decal_double_diffuse.mt", null, "face")!.create(
       chunk("base\\materials\\mesh_decal_double_diffuse.mt", ["DiffuseTexture"]), none, mesh(), context())).toThrow("SecondaryDiffuseAlpha");

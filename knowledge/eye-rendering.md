@@ -180,7 +180,7 @@ Consequences [resource]: every CCXL eye is **texture-only `eye.mt`**: no gradien
 3. **Lighting**: replace `RE_Direct` with the eye BRDF of §3 (Lambert on N2, GGX on N1 with the eye visibility and the exp2 Fresnel, no N·L on specular, the `sunDir·N2` cut). Point the indirect diffuse and the environment specular at N1.
 4. **Gradient**: bake each `CGradient` to a 256×1 texture on the CPU: linear interpolation of the 8-bit stops, clamped beyond the end stops, stored as sRGB so the sampler decodes it (the hair profile model); linear filter, clamp to edge.
 
-**Wetness-shell adapter** (`eye_shadow`). Its own mesh, drawn after the eyes, the makeup plate and the skin, with `transparent`, `depthTest` on, `depthWrite` off, `side: DoubleSide`, `blending: CustomBlending`, `blendSrc: OneFactor`, `blendDst: SrcAlphaFactor`. The fragment computes §4: direct lights only, GGX with the shell's own roughness and the eye visibility, no Fresnel, no environment. Tone mapping is the catch: the blend must happen in linear light. In the Studio's HDR render target (the creator display path) the shell is exact with `toneMapped: false`; drawn straight to the canvas after in-shader tone mapping it multiplies already tone-mapped colour, which is close for the darkening and slightly off for the highlight [hypothesis about the visible error].
+**Wetness-shell adapter** (`eye_shadow`). Its own mesh, drawn after the eyes, the makeup plate and the skin, with `transparent`, `depthTest` on, `depthWrite` off, `side: DoubleSide`, `blending: CustomBlending`, `blendSrc: OneFactor`, `blendDst: SrcAlphaFactor`. The fragment computes §4: direct lights only, GGX with the shell's own roughness and the eye visibility, no Fresnel, no environment. Tone mapping is the catch: the blend must happen in linear light. Both lighting presets draw into the Studio's scene-linear render target (`src/linear-display.ts`), where the shell is exact with `toneMapped: false`. Only a GPU without a renderable half-float buffer draws the Studio stage straight to the canvas, where the shell multiplies already tone-mapped colour.
 
 **Multilayer eyes**: through the multilayer adapter when it exists (Standard class, no refraction, the shell still on top). Until then say plainly that the design is not shown and draw the vanilla default eye.
 
@@ -242,7 +242,7 @@ One generic exporter fix came out of this. Some mod archives list hashes only, w
 - `alpha = saturate(1 + shadow·(lum − 1))`, which is 0.37 at a full mask in vanilla.
 - The highlight is GGX at `clamp(WetnessRoughness·G, 0.04, 1)`, using the eye's visibility term, with no Fresnel, no N·L and no environment, scaled by `WetnessStrength·B`.
 
-It is exact only in the creator display's scene-linear target. On the Studio stage it multiplies colour that is already tone-mapped and sRGB-encoded.
+It is exact under both lighting presets, which draw into one scene-linear target and tone-map at output (PREV-50). Compared with the earlier Studio stage, which drew straight to the canvas, the corner darkening reads lighter (a multiply by 0.37 in linear light instead of on encoded values).
 
 **Checks.** Unit tests cover:
 

@@ -31,6 +31,7 @@ import type { StageTheme } from "./stage-backdrop";
 import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
 import { viewportPixelRatio, watchDevicePixelRatio } from "./device-pixel-ratio";
+import { linearTargetSupported } from "./linear-display";
 
 /**
  * Draw order of the face's decals, below the editable makeup plates (10 to 41), the eye's wetness shell (99), brows (100) and
@@ -75,13 +76,23 @@ async function assembleScene(
   // has no alpha channel, so fragments that write alpha below one (alpha-to-coverage hair, decals)
   // cannot reveal the page behind the canvas. Three always requests an alpha channel for its own
   // context (its `alpha: false` only clears alpha to one), so the context is created here.
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("webgl2", {
-    alpha: false, antialias: true, depth: true, stencil: false, preserveDrawingBuffer: true,
-  });
+  // Both lighting presets draw through a multisampled scene-linear target (linear-display.ts), so the canvas itself
+  // needs neither multisampling nor depth. Without a renderable half-float buffer the studio stage draws straight to
+  // the canvas, which then gets both back.
+  const open = (direct: boolean) => {
+    const canvas = document.createElement("canvas");
+    return { canvas, direct, context: canvas.getContext("webgl2", {
+      alpha: false, antialias: direct, depth: direct, stencil: false, preserveDrawingBuffer: true }) };
+  };
+  let opened = open(false);
+  if (opened.context && !linearTargetSupported(opened.context)) {
+    opened.context.getExtension("WEBGL_lose_context")?.loseContext();
+    opened = open(true);
+  }
+  const { canvas, context } = opened;
   if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
   let renderer: THREE.WebGLRenderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true, preserveDrawingBuffer: true }); }
+  try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
   catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
   renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
   renderer.setClearColor(0x14181c, 1);
@@ -191,7 +202,6 @@ async function assembleScene(
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(albedo), coreRoughness: coreRoughnessReader(roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
-  let decalUnderlay = new WeakMap<THREE.Mesh, object>();
   // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
   const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true };
@@ -211,11 +221,7 @@ async function assembleScene(
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
     return { overMakeup: slot === "lashes", profileEncoding,
-      ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
-        const result = skinPlacement.surfaceUnderlay(mesh, skin ?? null);
-        decalUnderlay.set(mesh, result.evidence);
-        return result;
-      } } : {}),
+      ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
       ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
         const result = skinPlacement.underlay(mesh, skin ?? null);
         browUnderlay = result.evidence;
@@ -521,7 +527,6 @@ async function assembleScene(
     const drawnBefore = drawnDetails();
     characterDetails = null;
     if (previous) {
-      decalUnderlay = new WeakMap();
       idle?.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
@@ -677,8 +682,8 @@ async function assembleScene(
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
-    /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. */
-    frameTiming: () => scheduler.stats(),
+    /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
+    frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape,
     eyeShapeOptions,
@@ -688,7 +693,7 @@ async function assembleScene(
     setHair,
     setCharacterDetails,
     detailContext,
-    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay, decalUnderlay: mesh => decalUnderlay.get(mesh),
+    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
       eyes: { core: eyes, appearance: eyeAppearance() } }),
     piercingManifest,
     prcManifest,

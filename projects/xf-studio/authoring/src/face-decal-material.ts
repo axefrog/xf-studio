@@ -21,14 +21,15 @@ import { patchSkinLight, skinLightUniforms, type SkinParameters } from "./skin-m
  * - the pixel keeps its lighting class: makeup on skin is lit as skin.
  *
  * What the preview does [approximation]: it draws the decal mesh (lifted 0.4 mm like the game's) as one blended forward
- * pass lit by the skin's own light (skin-material.ts). With the skin colour and roughness under each vertex
- * (`xfsUnderlay`, `xfsUnderRoughness`, read on the drawn head), it solves the ordinary "over" colour and alpha that give
+ * pass lit by the skin's own light (skin-material.ts). With the skin colour, roughness and metalness under each vertex
+ * (`xfsUnderlay`, `xfsUnderRoughness`, `xfsUnderMetalness`, read on the drawn head), it solves the ordinary "over" colour and alpha that give
  * the square-root-space colour blend exactly per channel, uses the largest of the three target alphas so a surface or
  * normal write shows where the colour is faint, and interpolates roughness, metalness and the normal from the skin's
  * value towards the decal's by each target's share of that alpha. Limits: the skin under the decal is known per vertex
  * only, overlapping decals each blend against the skin (not against the decal below), and where only the surface or the
  * normal changes the fine skin texture is softened by that coverage. Without the underlay the decal falls back to a
- * plain linear colour blend.
+ * plain linear colour blend. The solve is in linear light, so it holds only where the pass blends in linear light: both
+ * lighting presets draw into the display's scene-linear target (linear-display.ts; PREV-50).
  */
 export type Rgb = [number, number, number];
 /**
@@ -153,7 +154,7 @@ export type FaceDecalTextures = {
   secondaryDiffuse?: THREE.Texture; gradient?: THREE.Texture; mask?: THREE.Texture;
 };
 export type FaceDecalOptions = {
-  /** The geometry carries `xfsUnderlay` (linear skin colour) and `xfsUnderRoughness` per vertex. */
+  /** The geometry carries `xfsUnderlay` (linear skin colour), `xfsUnderRoughness` and `xfsUnderMetalness` per vertex. */
   underlay: boolean;
   /** Light with the skin's own light (its lobes and subsurface wrap); null lights the decal as a standard surface. */
   skinLight: Pick<SkinParameters, "lobes" | "wrap"> | null;
@@ -175,6 +176,7 @@ uniform vec2 xfsDecalView;
 #ifdef XFS_GBUFFER_DECAL
 varying vec3 vXfsUnderlay;
 varying float vXfsUnderRoughness;
+varying float vXfsUnderMetalness;
 #endif
 float xfsContrast( const in float a ) { return clamp( ( a - 0.5 ) * tan( ( xfsDecalMisc.x + 1.0 ) * 0.78539816 ) + 0.5, 0.0, 1.0 ); }
 vec3 xfsDecalPow2( const in vec3 v ) { return v * v; }
@@ -224,6 +226,7 @@ float xfsDecalRough = clamp( texture2D( xfsDecalRoughness, xfsDecalUv ).r * xfsD
 float xfsDecalMetal = clamp( texture2D( xfsDecalMetalness, xfsDecalUv ).r * xfsDecalMisc.w + xfsDecalNormal.w, 0.0, 1.0 );
 float xfsDrawn;
 float xfsUnderRough;
+float xfsUnderMetal;
 #ifdef XFS_GBUFFER_DECAL
 {
 	vec3 xfsUnder = max( vXfsUnderlay, vec3( 0.0 ) );
@@ -233,16 +236,18 @@ float xfsUnderRough;
 	xfsDrawn = clamp( max( max( xfsColourA, max( xfsSurfaceA, xfsNormalA ) ), max( xfsNeeded.r, max( xfsNeeded.g, xfsNeeded.b ) ) ), 0.0, 1.0 );
 	if ( xfsDrawn > 0.0 ) xfsColour = max( vec3( 0.0 ), ( xfsTarget - ( 1.0 - xfsDrawn ) * xfsUnder ) / xfsDrawn );
 	xfsUnderRough = vXfsUnderRoughness;
+	xfsUnderMetal = vXfsUnderMetalness;
 }
 #else
 	// No skin colour under the decal: a plain linear colour blend, and nothing where only the surface or normal changes.
 	xfsDrawn = xfsColourA;
 	xfsUnderRough = xfsDecalRough;
+	xfsUnderMetal = 0.0;
 #endif
 float xfsSurfaceShare = xfsDrawn > 0.0 ? clamp( xfsSurfaceA / xfsDrawn, 0.0, 1.0 ) : 0.0;
 float xfsNormalShare = xfsDrawn > 0.0 ? clamp( xfsNormalA / xfsDrawn, 0.0, 1.0 ) : 0.0;
 float xfsRoughnessValue = mix( xfsUnderRough, xfsDecalRough, xfsSurfaceShare );
-float xfsMetalnessValue = xfsDecalMetal * xfsSurfaceShare;
+float xfsMetalnessValue = mix( xfsUnderMetal, xfsDecalMetal, xfsSurfaceShare );
 vec3 xfsTangentNormal = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsDecalN.x, xfsDecalN.y * xfsDecalView.x, xfsDecalN.z ), xfsNormalShare * xfsDecalView.y ) );
 if ( xfsDrawn < 0.002 ) discard;
 diffuseColor = vec4( xfsColour, xfsDrawn );
@@ -259,11 +264,14 @@ export function patchFaceDecalShader(shader: { vertexShader: string; fragmentSha
     shader.vertexShader = replace(shader.vertexShader, "#include <common>", `#include <common>
 attribute vec3 xfsUnderlay;
 attribute float xfsUnderRoughness;
+attribute float xfsUnderMetalness;
 varying vec3 vXfsUnderlay;
-varying float vXfsUnderRoughness;`);
+varying float vXfsUnderRoughness;
+varying float vXfsUnderMetalness;`);
     shader.vertexShader = replace(shader.vertexShader, "#include <begin_vertex>", `#include <begin_vertex>
 vXfsUnderlay = xfsUnderlay;
-vXfsUnderRoughness = xfsUnderRoughness;`);
+vXfsUnderRoughness = xfsUnderRoughness;
+vXfsUnderMetalness = xfsUnderMetalness;`);
   }
   let fragment = shader.fragmentShader;
   fragment = replace(fragment, "#include <common>", `#include <common>\n${DECLARATIONS}`);
@@ -313,7 +321,7 @@ export function createFaceDecalMaterial(textures: FaceDecalTextures, parameters:
     Object.assign(shader.uniforms, uniforms);
     patchFaceDecalShader(shader, { underlay: options.underlay, skinLight: !!options.skinLight });
   };
-  material.customProgramCacheKey = () => `xfs-face-decal-1|${p.kind}|${options.underlay ? "u" : ""}|${options.skinLight ? "s" : ""}`;
+  material.customProgramCacheKey = () => `xfs-face-decal-2|${p.kind}|${options.underlay ? "u" : ""}|${options.skinLight ? "s" : ""}`;
   material.name = `xfs_face_decal_${p.kind}`;
   return { material, handle: { parameters, underlay: options.underlay, skinLight: !!options.skinLight,
     setNormals(enabled) { uniforms.xfsDecalView.value.y = enabled ? 1 : 0; } } };

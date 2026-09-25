@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
-import { CHARACTER_DETAIL_ASSETS, DETAIL_SLOTS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
+import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture } from "./render-detail";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
@@ -25,8 +26,12 @@ export type LoadedCharacterComponent = {
   skin?: NonNullable<AdaptedMaterial["skin"]>;
   /** The eye component's drawn eyeball and wetness-shell meshes, by the role their template gives them. */
   eyes?: { eyeballs: { mesh: THREE.SkinnedMesh; handle: EyeballHandle }[]; shells: { mesh: THREE.SkinnedMesh; handle: EyeShellHandle }[] };
-  /** A face detail's drawn decal chunks, with their chunk material (template priority) and handle. */
-  decals?: { mesh: THREE.SkinnedMesh; chunk: RenderComponent["materials"][number]; handle: FaceDecalHandle }[];
+  /**
+   * A face detail's drawn decal chunks, with their chunk material (template priority), handle, and how the skin under
+   * each was read (null when the decal blends without it). The evidence travels with the loaded entry, so it is right
+   * whichever order the scene swaps characters in (PREV-51).
+   */
+  decals?: { mesh: THREE.SkinnedMesh; chunk: RenderComponent["materials"][number]; handle: FaceDecalHandle; surface: AdaptedMaterial["decalSurface"] | null }[];
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -48,23 +53,25 @@ export type CharacterDetailLoadOptions = {
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
   hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"] };
-/** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
-export function chunkOfMesh(name: string): number | null {
-  const match = /^submesh_(\d+)_LOD_\d+/.exec(name);
-  return match ? Number(match[1]) : null;
-}
+export { chunkOfMesh };
 
 /**
  * Release what a loaded detail object owns on the GPU: every mesh's geometry and every skinned mesh's
  * skeleton (its bone texture). Materials and textures are shared per load and released by `dispose`.
+ * `keep` names geometries another loaded component still draws (two components parsed from one file share them).
  */
-export function releaseDetailObject(root: THREE.Object3D): void {
+export function releaseDetailObject(root: THREE.Object3D, keep?: ReadonlySet<THREE.BufferGeometry>): void {
   root.removeFromParent();
   root.traverse(object => {
-    if (object instanceof THREE.Mesh) object.geometry.dispose();
+    if (object instanceof THREE.Mesh && !keep?.has(object.geometry)) object.geometry.dispose();
     if (object instanceof THREE.SkinnedMesh) object.skeleton?.dispose();
   });
 }
+const geometriesOf = (roots: readonly THREE.Object3D[]) => {
+  const out = new Set<THREE.BufferGeometry>();
+  for (const root of roots) root.traverse(object => { if (object instanceof THREE.Mesh) out.add(object.geometry); });
+  return out;
+};
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -83,6 +90,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   const textures: THREE.Texture[] = [], owned: THREE.Texture[] = [], materials: THREE.Material[] = [], roots: THREE.Object3D[] = [];
   const dispose = () => {
     for (const root of roots) releaseDetailObject(root);
+    roots.length = 0;
     for (const material of materials) material.dispose();
     for (const texture of [...textures, ...owned]) texture.dispose();
   };
@@ -116,6 +124,30 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     }
     return pending;
   };
+  // One parse per geometry file (PREV-53): components that draw the same file (face cyberware on the freckle mesh) each get
+  // their own objects and skeleton, cloned from one parsed scene that shares the geometry; a file one component uses is
+  // taken as parsed. Skin weights are the file's own floats (restoreFirstWeights), keyed by node name for the clones.
+  const uses = new Map<string, number>();
+  for (const component of record.components) uses.set(component.geometry.file, (uses.get(component.geometry.file) ?? 0) + 1);
+  const parsed = new Map<string, Promise<{ scene: THREE.Group; weights: Map<string, Float32Array> }>>();
+  const parseOf = (resource: RenderResource) => {
+    let pending = parsed.get(resource.file);
+    if (!pending) {
+      pending = fetchBytes(resource).then(async buffer => {
+        const raw = restoreFirstWeights(buffer);
+        const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
+        const weights = new Map<string, Float32Array>();
+        gltf.scene.traverse(object => {
+          if (!(object instanceof THREE.SkinnedMesh)) return;
+          const found = raw.get(gltf.parser.json.meshes[gltf.parser.associations.get(object)?.meshes ?? -1]?.name);
+          if (found) weights.set(object.name, found);
+        });
+        return { scene: gltf.scene, weights };
+      });
+      parsed.set(resource.file, pending);
+    }
+    return pending;
+  };
   const made = new Map<string, THREE.Texture>();
   const problems: LoadedCharacterDetails["problems"] = [], limits: LoadedCharacterDetails["limits"] = [], notes: string[] = [];
   const components: LoadedCharacterComponent[] = [];
@@ -135,11 +167,10 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         for (const material of component.materials) for (const texture of Object.values(material.textures))
           loadedImages.set(texture.file, await imageOf(texture));
         aborted();
-        const buffer = await fetchBytes(component.geometry);
+        const source = await parseOf(component.geometry);
         aborted();
-        const weights = restoreFirstWeights(buffer);
-        const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
-        const root = gltf.scene;
+        const shared = (uses.get(component.geometry.file) ?? 0) > 1;
+        const root = shared ? cloneSkinned(source.scene) as THREE.Group : source.scene;
         roots.push(root);
         componentRoot = root;
         root.name = `detail_${component.slot}_${component.component}`;
@@ -154,8 +185,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const material = chunk === null ? undefined : component.materials.find(entry => entry.chunk === chunk);
           const adapter = material ? materialAdapter(material.template, material.templateName, component.slot) : undefined;
           if (!material || !adapter || !(object instanceof THREE.SkinnedMesh)) { unwanted.push(object); return; }
-          const association = gltf.parser.associations.get(object);
-          const raw = weights.get(gltf.parser.json.meshes[association?.meshes ?? -1]?.name);
+          const raw = source.weights.get(object.name);
           if (!raw) throw Error(`missing skin weights for ${object.name}`);
           object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
           object.frustumCulled = false;
@@ -187,7 +217,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           if (adapted.skin) skin ??= adapted.skin;
           if (adapted.eye?.role === "eyeball") eyes.eyeballs.push({ mesh: object, handle: adapted.eye });
           if (adapted.eye?.role === "shell") eyes.shells.push({ mesh: object, handle: adapted.eye });
-          if (adapted.decal) decals.push({ mesh: object, chunk: material, handle: adapted.decal });
+          if (adapted.decal) decals.push({ mesh: object, chunk: material, handle: adapted.decal, surface: adapted.decalSurface ?? null });
           // A placeholder chunk is recorded (so its limit is said) but never drawn.
           if (adapted.hidden) object.visible = false;
           object.material = adapted.material;
@@ -195,11 +225,9 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           verticesUsed += object.geometry.getAttribute("position").count;
           meshes.push(object);
         });
-        // Never drawn, so no bone texture exists; a kept mesh may share their skeleton.
-        for (const object of unwanted) {
-          object.removeFromParent();
-          if (object instanceof THREE.Mesh) object.geometry.dispose();
-        }
+        // Never drawn, so neither their geometry nor a bone texture reached the GPU; a kept mesh may share their skeleton, and
+        // another component parsed from the same file may draw their geometry.
+        for (const object of unwanted) object.removeFromParent();
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
         components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}),
@@ -211,7 +239,10 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
         notes.push(`${component.slot} ${component.component}: ${(error as Error).message}`);
         const index = componentRoot ? roots.indexOf(componentRoot) : -1;
-        if (index >= 0) { releaseDetailObject(roots[index]!); roots.splice(index, 1); }
+        if (index >= 0) {
+          const [failed] = roots.splice(index, 1);
+          releaseDetailObject(failed!, geometriesOf(roots));
+        }
       }
     }
   } catch (error) { dispose(); throw error; }

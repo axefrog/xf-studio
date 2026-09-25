@@ -11,7 +11,7 @@
  * patches the head mesh's appearances through ArchiveXL (the resolver follows the patch's materials).
  */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
 import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedComponent, type TemplateIdentities } from "./character-detail-plan";
@@ -19,12 +19,13 @@ import { inputFromCharacterRequest, type CharacterRequest } from "./character-de
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
+import { keepGlbMeshes } from "./glb";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
-import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
+import { CHARACTER_DETAIL_SCHEMA, chunkOfMesh, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderProfile, type RenderProfileStop, type RenderRgba, type RenderSkinProfile,
   type RenderTexture } from "./render-detail";
-import { renderTemplate } from "./render-templates";
+import { renderTemplate, templateRequired } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
 
@@ -181,15 +182,50 @@ function byArchive(items: readonly Located[]) {
 
 /** Copy an exported file into the content-addressed store; returns its served name and hash. */
 function store(storeRoot: string, file: string, extension: "glb" | "png"): { file: string; sha256: string; bytes: Uint8Array } {
-  const bytes = new Uint8Array(readFileSync(file));
+  return storeBytes(storeRoot, new Uint8Array(readFileSync(file)), extension);
+}
+function storeBytes(storeRoot: string, bytes: Uint8Array, extension: "glb" | "png"): { file: string; sha256: string; bytes: Uint8Array } {
   const hash = sha256(bytes), name = `${hash}.${extension}`, target = join(storeRoot, "files", name);
   if (!existsSync(target) || statSync(target).size !== bytes.length) {
     mkdirSync(join(storeRoot, "files"), { recursive: true, mode: 0o700 });
     const staging = `${target}.${process.pid}.tmp`;
-    copyFileSync(file, staging);
+    writeFileSync(staging, bytes, { mode: 0o600 });
     renameSync(staging, target);
   }
   return { file: name, sha256: hash, bytes };
+}
+
+/** 1: the drawn chunks' meshes, sparse POSITION/NORMAL morph deltas, no TANGENT deltas (glb.ts `keepGlbMeshes`). */
+export const CHUNK_GEOMETRY_VERSION = 1;
+/**
+ * The served geometry of a component: only the meshes of the chunks it draws (PREV-53). WolvenKit exports every render
+ * chunk with dense deltas for every facial target, so one scar chunk of 273 vertices arrived as a 45.6 MB file. The copy
+ * is keyed in the store by the export's hash, the chunk list and `CHUNK_GEOMETRY_VERSION`, so it is made once. A file
+ * the copy can't read (not a GLB, or parts it does not carry) is served whole, and the loader still keeps only the drawn
+ * chunks. Returns the stored file and whether it is the chunk copy.
+ */
+export function storeChunkGeometry(storeRoot: string, file: string, chunks: readonly number[]): { file: string; sha256: string; trimmed: boolean } {
+  const bytes = new Uint8Array(readFileSync(file)), source = sha256(bytes);
+  const wanted = [...new Set(chunks)].sort((a, b) => a - b);
+  const key = join(storeRoot, "chunks", `${source}-${wanted.join("_") || "none"}-v${CHUNK_GEOMETRY_VERSION}.json`);
+  try {
+    const known = JSON.parse(readFileSync(key, "utf8")) as { file: string; sha256: string; trimmed: boolean };
+    if (STORE_FILE.test(known.file) && existsSync(join(storeRoot, "files", known.file))) return known;
+  } catch { /* Not made yet. */ }
+  let result: { file: string; sha256: string; trimmed: boolean };
+  try {
+    const copy = keepGlbMeshes(bytes, mesh => wanted.includes(chunkOfMesh(String(mesh.name ?? "")) ?? -1));
+    const stored = storeBytes(storeRoot, copy, "glb");
+    result = { file: stored.file, sha256: stored.sha256, trimmed: true };
+  } catch {
+    const stored = storeBytes(storeRoot, bytes, "glb");
+    result = { file: stored.file, sha256: stored.sha256, trimmed: false };
+  }
+  mkdirSync(join(storeRoot, "chunks"), { recursive: true, mode: 0o700 });
+  const staging = `${key}.${process.pid}.tmp`;
+  writeFileSync(staging, JSON.stringify(result), { mode: 0o600 });
+  renameSync(staging, key);
+  return result;
 }
 
 export async function prepareCharacterDetails(options: PrepareCharacterOptions): Promise<CharacterDetailResult> {
@@ -332,17 +368,16 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       if (located && toolFailures.has(located.archive.id)) failSlot(component.slot, "tool"); else failSlot(component.slot, "export");
       continue;
     }
-    const glb = store(options.storeRoot, exported.glb, "glb");
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
-      const unread: string[] = [];
+      const unread: { param: string; why?: string }[] = [];
       for (const [param, provenance] of Object.entries(material.textures)) {
         const key = refLabel(provenance.ref).toLowerCase(), at = textureAt.get(key);
         const png = at ? textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
-        if (!at || !png) { unread.push(`${param} (${at ? "not exported" : "not in any mounted archive"})`); continue; }
+        if (!at || !png) { unread.push({ param, why: at ? "not exported" : "not in any mounted archive" }); continue; }
         const stored = store(options.storeRoot, png, "png"), size = pngSize(stored.bytes);
-        if (!size) { unread.push(`${param} (unreadable image)`); continue; }
+        if (!size) { unread.push({ param, why: "unreadable image" }); continue; }
         const gamma = gammaOf.get(key);
         if (gamma === null || gamma === undefined) notes.push(`${refLabel(provenance.ref)}: colour flag unreadable; treated as linear.`);
         chunkTextures[param] = { file: stored.file, sha256: stored.sha256, depotPath: refLabel(provenance.ref), ...size, isGamma: !!gamma,
@@ -352,23 +387,29 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       const chunkProfiles: Record<string, RenderProfile> = {};
       for (const [param, provenance] of Object.entries(material.profiles)) {
         const profile = profileOf.get(refLabel(provenance.ref).toLowerCase());
-        if (profile) chunkProfiles[param] = profile; else unread.push(param);
+        if (profile) chunkProfiles[param] = profile; else unread.push({ param });
       }
       const chunkSkinProfiles: Record<string, RenderSkinProfile> = {};
       for (const [param, provenance] of Object.entries(material.skinProfiles)) {
         const profile = skinProfileOf.get(refLabel(provenance.ref).toLowerCase());
-        if (profile) chunkSkinProfiles[param] = profile; else unread.push(param);
+        if (profile) chunkSkinProfiles[param] = profile; else unread.push({ param });
       }
       const chunkGradients: Record<string, RenderGradient> = {};
       for (const [param, provenance] of Object.entries(material.gradients)) {
         const gradient = gradientOf.get(refLabel(provenance.ref).toLowerCase());
-        if (gradient) chunkGradients[param] = gradient; else unread.push(param);
+        if (gradient) chunkGradients[param] = gradient; else unread.push({ param });
       }
-      // A chunk missing an input its adapter reads is left out rather than drawn wrongly.
-      if (unread.length) {
-        notes.push(`${component.component} chunk ${material.chunk}: ${unread.join(", ")} could not be read; the chunk is not drawn.`);
+      // A chunk missing an input its adapter can't draw without is left out rather than drawn wrongly. An optional input
+      // (the adapter falls back to the template's neutral value) or one recorded for a later adapter only earns a note.
+      const inputs = renderTemplate(material.template, material.templateName);
+      const required = new Set(inputs ? templateRequired(inputs, component.slot === "face") : unread.map(entry => entry.param));
+      const words = (entries: typeof unread) => entries.map(entry => entry.why ? `${entry.param} (${entry.why})` : entry.param).join(", ");
+      const blocking = unread.filter(entry => required.has(entry.param)), optional = unread.filter(entry => !required.has(entry.param));
+      if (blocking.length) {
+        notes.push(`${component.component} chunk ${material.chunk}: ${words(unread)} could not be read; the chunk is not drawn.`);
         continue;
       }
+      if (optional.length) notes.push(`${component.component} chunk ${material.chunk}: ${words(optional)} could not be read; drawn without ${optional.length > 1 ? "them" : "it"}.`);
       materials.push({ chunk: material.chunk, name: material.name, template: material.template, templateName: material.templateName,
         materialPriority: material.materialPriority, scalars: material.scalars,
         colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles, gradients: chunkGradients });
@@ -378,6 +419,8 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     if (!materials.length || (component.slot !== "face" && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder))) {
       failSlot(component.slot, "export"); continue;
     }
+    const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
+    if (!glb.trimmed) notes.push(`${component.component}: the exported geometry is served whole.`);
     if (component.skippedChunks) notes.push(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
     const hash = component.drawnFrom.ref.hash;
     // Two choices can draw the same mesh (face cyberware reuses the freckle mesh), so the option is part of the identity.

@@ -108,3 +108,23 @@ test("without a resolved skin the underlay reads the core albedo on the core hea
   // A decal away from the drawn head is refused rather than coloured from the wrong place.
   expect(() => placement.underlay(patch({ z: 0.2 }), null)).toThrow("not over the head surface");
 });
+
+test("a face decal's surface underlay carries the skin's roughness and metalness, so a partial surface write keeps both (PREV-52)", () => {
+  const core = patch();
+  // The resolved skin's surface bytes: roughness in channel 0, metalness (its Roughness map's G) in channel 1.
+  const surface: SkinTexels = { width: 16, height: 16, texel: (_x, _y, c) => c === 0 ? 153 : c === 1 ? 51 : 255 };
+  const placement = createHeadSkinPlacement(core, { coreAlbedo: () => flat(128), coreRoughness: () => ({ width: 16, height: 16, texel: (_x, _y, c) => c === 0 ? 102 : 0 }) });
+  const decal = patch({ z: 0.0004, rows: [1, 2] });
+  const resolved = placement.surfaceUnderlay(decal, { base: () => flat(128), chunks: [patch()], roughness: () => surface });
+  expect(resolved.evidence.roughness).toBe("resolved-skin");
+  expect(resolved.roughness.getX(0)).toBeCloseTo(0.6, 6);
+  expect(resolved.metalness.getX(0)).toBeCloseTo(0.2, 6);
+  expect(resolved.metalness.count).toBe(resolved.roughness.count);
+  // The core head has no metalness; without any surface reading the flat skin roughness and zero metalness stand in.
+  const coreOnly = placement.surfaceUnderlay(decal, null);
+  expect([coreOnly.evidence.roughness, coreOnly.metalness.getX(0)]).toEqual(["core-roughness", 0]);
+  expect(coreOnly.roughness.getX(0)).toBeCloseTo(0.4, 6);
+  const bare = createHeadSkinPlacement(core, { coreAlbedo: () => flat(128) }).surfaceUnderlay(decal, null);
+  expect([bare.evidence.roughness, bare.metalness.getX(0)]).toEqual(["flat", 0]);
+  expect(bare.roughness.getX(0)).toBeCloseTo(0.6, 6);
+});

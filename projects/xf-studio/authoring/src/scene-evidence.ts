@@ -63,8 +63,6 @@ export function characterDetailsEvidence(input: {
   browUnderlay?: BrowUnderlayEvidence;
   /** The core (fallback) eye and which eye the scene draws. */
   eyes?: { core: THREE.Mesh; appearance: object };
-  /** How the skin under each face decal was read (per decal mesh name). */
-  decalUnderlay?: (mesh: THREE.Mesh) => object | undefined;
 }) {
   const { details: loaded, skin, head } = input;
   const skinEvidence = skin ? {
@@ -92,7 +90,7 @@ export function characterDetailsEvidence(input: {
     return { option: item.component.option, definition: item.component.definition, mesh: mesh.name, visible: mesh.visible && item.root.visible,
       renderOrder: mesh.renderOrder, template: decal?.chunk.template ?? null, templateName: decal?.chunk.templateName ?? null,
       priority: decal?.chunk.materialPriority ?? null, drawn: !!decal, underlay: decal?.handle.underlay ?? false, skinLight: decal?.handle.skinLight ?? false,
-      parameters: decal ? structuredClone(decal.handle.parameters) : null, surface: input.decalUnderlay?.(mesh) ?? null,
+      parameters: decal ? structuredClone(decal.handle.parameters) : null, surface: decal?.surface ? structuredClone(decal.surface) : null,
       textures: decal ? Object.fromEntries(Object.entries(decal.chunk.textures).map(([name, texture]) => [name, { depotPath: texture.depotPath,
         archive: texture.sources[0]?.archive ?? null, isGamma: texture.isGamma, width: texture.width, height: texture.height }])) : {} };
   })) ?? [];

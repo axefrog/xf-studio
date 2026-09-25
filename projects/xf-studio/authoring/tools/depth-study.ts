@@ -16,7 +16,7 @@ run.onclick = async () => {
     v.renderer.setAnimationLoop(null); v.renderer.setPixelRatio(1); v.renderer.setSize(640, 640);
     v.camera.aspect = 1; v.controls.enableDamping = false;
     v.updateLayer(0, initialRecipe().layers[0]);
-    for (const d of Object.values(v.details)) d.root.visible = false;
+    v.setCharacterDetails(null);
     v.scene.environment = null;
     v.scene.traverse(o => { if (o instanceof THREE.Light) o.visible = false; });
     v.scene.traverse(o => { if (o instanceof THREE.Mesh && o !== v.head && o !== v.plates[0]) o.visible = false; });
@@ -28,7 +28,8 @@ run.onclick = async () => {
     const results: unknown[] = [];
     const capture = (near: number) => {
       v.camera.near = near; v.camera.updateProjectionMatrix();
-      v.renderer.render(v.scene, v.camera);
+      // Through the viewport's own display: the canvas has no depth buffer of its own (linear-display.ts).
+      v.lighting.render(v.camera);
       const pixels = new Uint8Array(640 * 640 * 4); gl.readPixels(0, 0, 640, 640, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       return pixels;
     };
