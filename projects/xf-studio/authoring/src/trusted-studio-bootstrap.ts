@@ -59,6 +59,14 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     },
     savedVReady: options.savedAppearance.ready,
     savedVUnavailableReason: options.savedAppearance.unavailableReason,
+    characterPreset: {
+      unavailable: kind => core.app.characterPresetUnavailable(kind),
+      load: value => {
+        const result = core.app.dispatch({ kind: "character.loadPreset", value });
+        if (!result.ok) throw Error(result.message);
+      },
+      save: () => core.app.characterPresetFile(),
+    },
     executeCollection: request => core.app.execute(request),
     recoverCollection: () => collection.recover(),
     buildReadiness: options.localSetup && (() => {

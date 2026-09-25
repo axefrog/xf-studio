@@ -263,3 +263,21 @@ describe("rendering boundary", () => {
       for (const study of ["brow-study-fixture", "eye-study-fixture"]) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8")).not.toContain(study);
   });
 });
+
+test("a slot label or message built from long mod names is cut with a note, never refusing the V (PIPE-56)", async () => {
+  const { clampedList, SLOT_LABEL_MAX } = await import("../src/render-detail");
+  const record = character();
+  const long = Array.from({ length: 30 }, (_, i) => `a very long mod supplied face detail name ${i}`);
+  record.slots[0] = { slot: "skin", state: "shown", label: long.join(", ") };
+  record.slots[3] = { slot: "lashes", state: "unavailable", label: "brown", message: "x".repeat(900) };
+  const parsed = parseCharacterDetail(record);
+  expect(parsed.slots[0]!.label.length).toBeLessThanOrEqual(SLOT_LABEL_MAX);
+  expect(parsed.slots[3]!.message!.length).toBeLessThan(512);
+  expect(parsed.provenance.notes.at(-1)).toContain("the end of the skin label");
+  // The host builds labels within the limit in the first place: whole names, then how many more.
+  const label = clampedList(long);
+  expect(label.length).toBeLessThanOrEqual(SLOT_LABEL_MAX);
+  expect(label).toMatch(/^a very long mod supplied face detail name 0, .* and \d+ more$/);
+  expect(clampedList(["short", "names"])).toBe("short, names");
+  expect(clampedList(["y".repeat(400)]).length).toBeLessThanOrEqual(SLOT_LABEL_MAX);
+});

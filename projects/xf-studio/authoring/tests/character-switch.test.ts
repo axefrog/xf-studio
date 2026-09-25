@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharacterDetailActions, followShownCharacter, type CharacterDetailPort, type HostCharacterState } from "../src/character-detail-actions";
+import { CharacterDetailActions, type CharacterDetailPort, type HostCharacterState } from "../src/character-detail-actions";
 import { CHARACTER_REQUEST_SCHEMA, characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character-detail-request";
 import { prepareCharacterDetails } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
@@ -100,7 +100,10 @@ test("switching A → B → A replaces the whole character, and the makeup draft
 
     const details = new CharacterDetailActions(port);
     const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setTimeout(resolve, 1)); };
-    const stop = followShownCharacter(details, saved);
+    // The composition makes the shown details follow the V (browser-head-attachment.ts, through the character context).
+    const follow = () => { void details.setCharacter(characterRequestFor(saved.snapshot().savedV)); };
+    const stop = saved.subscribe(follow);
+    follow();
     await settle();
     expect(details.snapshot().source).toBe("default");
 
@@ -182,87 +185,64 @@ test("a failed preparation clears the previous V's details and says so in one li
   expect(cleared).toBe(4);
 });
 
-const OFFERED = [{ slot: "piercings" as const, options: [{ choice: "12", label: "Style 12", definitions: [{ name: "gold", label: "Gold" }] },
-  { choice: "09", label: "Style 09", definitions: [{ name: "black", label: "Black" }] }] }];
-/** A port whose host resolves the tried choice when the installation offers it (and ignores it otherwise), as the real host does. */
-function tryPort(events: string[], choices = OFFERED) {
+/** A port whose host prepares every request at once (or fails the ones `fail` names), recording what it is asked. */
+function choicePort(events: string[], fail = (_request: CharacterRequest) => false) {
   const port: CharacterDetailPort = {
-    request: async request => ({ key: JSON.stringify(request), phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }),
-    poll: async () => { throw Error("unused"); },
-    show: async () => {
-      events.push("show");
-      const tried = last?.override;
-      const offered = !!tried && choices.some(entry => entry.options.some(option => option.choice === tried.choice &&
-        option.definitions.some(definition => definition.name === tried.definition)));
-      return { slots: [{ slot: "piercings", state: "shown", label: "style 12, gold" }], choices, override: offered ? tried : null };
+    request: async request => {
+      events.push(request.choices?.length ? `request:${request.choices.map(choice => choice.choice).join(",")}` : "request");
+      return fail(request) ? { key: "k", phase: "failed", message: "The tried part couldn't be read.", progress: null, record: null }
+        : { key: JSON.stringify(request), phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` };
     },
+    poll: async () => { throw Error("unused"); },
+    show: async () => { events.push("show"); return { slots: [{ slot: "piercings", state: "shown", label: "style 12, gold" }], drawn: ["piercings_12"] }; },
     clear: () => { events.push("clear"); }, wait: async () => {},
   };
-  let last: CharacterRequest | undefined;
-  const request = port.request;
-  port.request = async (value, signal) => { last = value; events.push(value.override ? `request:${value.override.choice}` : "request"); return request(value, signal); };
   return port;
 }
+const withChoice = (choice: string): CharacterRequest => ({ ...REQUEST_A, choices: [{ part: "head", option: "piercings", choice }] });
 
-test("trying a piercing style keeps the V on screen and interactive until its record swaps in; another V still clears first", async () => {
+test("a changed choice keeps the V on screen and interactive until its record swaps in; another V still clears first", async () => {
   const events: string[] = [];
-  const details = new CharacterDetailActions(tryPort(events));
+  const details = new CharacterDetailActions(choicePort(events));
   await details.setCharacter(REQUEST_A);
   expect(events).toEqual(["clear", "request", "show"]);
-  // The tried style is resolved on the same V: no clear and no "preparing" phase (no overlay); the control says what is on its way.
+  // A choice on the same V: no clear and no "preparing" phase (no overlay); the status says an update is on its way.
   const phases: string[] = [];
-  const stop = details.subscribe(() => { const s = details.snapshot(); phases.push(`${s.phase}${s.trying ? `:trying ${s.trying.choice}` : ""}`); });
-  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "12", definition: "gold" });
-  expect(details.snapshot()).toMatchObject({ phase: "ready", trying: { choice: "12" }, tried: { choice: "12" } });
-  await new Promise(resolve => setTimeout(resolve, 0));
+  const stop = details.subscribe(() => { const s = details.snapshot(); phases.push(`${s.phase}${s.updating ? ":updating" : ""}`); });
+  const pending = details.setCharacter(withChoice("12"));
+  expect(details.snapshot()).toMatchObject({ phase: "ready", updating: true });
+  await pending;
   stop();
-  expect(phases).toEqual(["ready:trying 12", "ready"]);
+  expect(phases).toEqual(["ready:updating", "ready"]);
   expect(events).toEqual(["clear", "request", "show", "request:12", "show"]);
-  expect(details.snapshot()).toMatchObject({ phase: "ready", override: { choice: "12" }, trying: null, choices: [{ slot: "piercings" }] });
-  // A choice the V's record doesn't offer is refused with a code before it reaches the host.
-  expect(details.check({ kind: "character.tryChoice", slot: "piercings", choice: "77", definition: "gold" })).toMatchObject({ available: false, code: "unavailable" });
-  expect(details.check({ kind: "character.tryChoice", slot: "piercings", choice: "12", definition: "x".repeat(200) })).toMatchObject({ available: false, code: "invalid_value" });
-  // The same request again is a no-op; a new V clears first, and the style tried on the previous V does not follow it (UI-51).
-  await details.setOverride({ slot: "piercings", choice: "12", definition: "gold" });
+  expect(details.snapshot()).toMatchObject({ phase: "ready", updating: false, choices: 1, drawn: ["piercings_12"] });
+  // The same request again is a no-op; a new V clears first.
+  await details.setCharacter(withChoice("12"));
   expect(events.length).toBe(5);
   await details.setCharacter(REQUEST_B);
   expect(events.slice(5)).toEqual(["clear", "request", "show"]);
-  expect(details.snapshot().tried).toBeNull();
-  // Back to the V's own piercings from a try: again without clearing.
-  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "09", definition: "black" });
-  await new Promise(resolve => setTimeout(resolve, 0));
-  details.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "", definition: "" });
-  // Going back to the V's own is shown as on its way too, without leaving "ready".
-  expect(details.snapshot()).toMatchObject({ phase: "ready", trying: { choice: "" } });
-  await new Promise(resolve => setTimeout(resolve, 0));
-  expect(details.snapshot().trying).toBeNull();
+  // Back to the V's own from a choice: again without clearing.
+  await details.setCharacter({ ...REQUEST_B, choices: [{ part: "head", option: "piercings", choice: "09" }] });
+  await details.setCharacter(REQUEST_B);
   expect(events.slice(8)).toEqual(["request:09", "show", "request", "show"]);
   details.dispose();
 });
 
-test("the persisted tried style is read with the host's rules, re-checked when the choices arrive, and cleared when stale (UI-51)", async () => {
-  // Over-long, wrongly shaped or foreign values are dropped on read: they never reach (and never make the host refuse) a request.
-  for (const stored of [{ slot: "piercings", choice: "x".repeat(200), definition: "gold" }, { slot: "hair", choice: "12", definition: "gold" },
-    { slot: "piercings", choice: "12" }, "12", null])
-    expect(new CharacterDetailActions(tryPort([]), stored).snapshot().tried).toBeNull();
-  // A well-formed style the installation still offers is sent with the V and kept.
-  const kept: string[] = [];
-  const offered = new CharacterDetailActions(tryPort(kept), { slot: "piercings", choice: "12", definition: "gold" });
-  await offered.setCharacter(REQUEST_A);
-  expect(kept).toEqual(["clear", "request:12", "show"]);
-  expect(offered.snapshot()).toMatchObject({ tried: { choice: "12" }, override: { choice: "12" } });
-  // One it no longer offers is cleared once the V's choices arrive, and never sent again.
+test("a change that can't be prepared keeps the V as it was shown and says why; asking again tries again (CORE-63)", async () => {
   const events: string[] = [];
-  const stale = new CharacterDetailActions(tryPort(events), { slot: "piercings", choice: "99", definition: "gone" });
-  await stale.setCharacter(REQUEST_A);
-  expect(stale.snapshot()).toMatchObject({ phase: "ready", tried: null, override: null });
-  expect(events).toEqual(["clear", "request:99", "show"]);
-  await stale.setCharacter(REQUEST_A);
-  expect(events).toEqual(["clear", "request:99", "show"]);
-  // The workspace keeps what the service holds: the composer persists the tried style from its snapshot.
-  const workspace = freshWorkspace();
-  expect(workspace.preview).toMatchObject({ piercingStyle: "", piercingDefinition: "" });
-  offered.dispose(); stale.dispose();
+  let failing = true;
+  const details = new CharacterDetailActions(choicePort(events, request => failing && !!request.choices?.length));
+  await details.setCharacter(REQUEST_A);
+  await details.setCharacter(withChoice("12"));
+  // The V stays (no clear), and the change is explained instead of silently reverted.
+  expect(events).toEqual(["clear", "request", "show", "request:12"]);
+  expect(details.snapshot()).toMatchObject({ phase: "ready", updating: false,
+    updateError: "That change couldn't be shown in the 3D view, so your V is shown as before it. The tried part couldn't be read." });
+  failing = false;
+  await details.setCharacter(withChoice("12"));
+  expect(events.slice(4)).toEqual(["request:12", "show"]);
+  expect(details.snapshot().updateError).toBeNull();
+  details.dispose();
 });
 
 test("a host of another version is reported with the version-skew code, not as silence (the app updated while it ran)", async () => {

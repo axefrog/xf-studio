@@ -19,6 +19,7 @@ import { createPreviewCoreHandler } from "./src/preview-core-server";
 import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
 import { CharacterDetailHost } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
+import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
@@ -61,6 +62,7 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   },
   log: message => console.log(message) });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh() });
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
 const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
@@ -94,6 +96,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
+    if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { CatalogueIndex, userFacing } from "../src/cc-catalogue";
-import { refineCoverage } from "../src/cc-render-coverage";
-import { fixtureSource, MOD_CCO, MOD_NAME } from "./cc-fixtures";
+import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/cc-catalogue";
+import type { CcoResource } from "../src/cco-model";
+import { catalogueCoverage, refineCoverage } from "../src/cc-render-coverage";
+import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
+import { loadMergedCco } from "../src/character-resolver";
+import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, vanillaCreator } from "./cc-fixtures";
+import { fixtureInstallation } from "./resolver-fixtures";
 
 describe("creator catalogue from the merged resource", () => {
   test("vanilla options: order, rows, sections, labels, Off choices and swatches", async () => {
@@ -67,10 +71,13 @@ describe("creator catalogue from the merged resource", () => {
     expect(catalogue.sections.flatMap(s => s.rows).some(r => r.options.includes("head/neck") || r.options.includes("body/body_color"))).toBe(false);
   });
 
-  test("preview coverage is decided from the data", async () => {
+  test("preview coverage is the preview side's projection of the catalogue, decided from the data (CORE-60)", async () => {
     const { catalogue } = await fixtureSource(true);
     const index = new CatalogueIndex(catalogue);
-    const status = (part: "head" | "body", name: string) => [index.option(part, name)!.render.status, index.option(part, name)!.render.detail];
+    // The catalogue carries no coverage of its own; the preview projects it when asked.
+    expect("render" in index.option("head", "eyes")!).toBe(false);
+    const coverage = catalogueCoverage(catalogue);
+    const status = (part: "head" | "body", name: string) => [coverage.get(`${part}/${name}`)!.status, coverage.get(`${part}/${name}`)!.detail];
     expect(status("head", "eyes")).toEqual(["rendered", "morph"]);
     expect(status("head", "eyes_color")).toEqual(["rendered", "eyes"]);
     expect(status("head", "skin_type_01")).toEqual(["rendered", "skin"]);
@@ -83,9 +90,87 @@ describe("creator catalogue from the merged resource", () => {
     expect(status("head", "teeth")).toEqual(["conditional", "face"]);
     expect(status("head", "scars")).toEqual(["conditional", "face"]);
     expect(status("body", "breast")).toEqual(["not-rendered", null]);
-    const teeth = index.option("head", "teeth")!.render;
+    const teeth = coverage.get("head/teeth")!;
     expect(refineCoverage(teeth, [{ drawn: false }]).status).toBe("not-rendered");
     expect(refineCoverage(teeth, [{ drawn: true }]).status).toBe("rendered");
     expect(refineCoverage(teeth, []).status).toBe("conditional");
+  });
+
+  test("a mod archive replacing the base creator resource names that mod, not vanilla (PIPE-46)", async () => {
+    const { graph } = fixtureInstallation([
+      { virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files: { [BASE_CCO]: vanillaCreator() } },
+      { virtualPath: "archive/pc/mod/replacer.archive", provider: "mo2-mod", providerName: "Creator Replacer", priority: 1, files: { [BASE_CCO]: vanillaCreator() } },
+    ], []);
+    const merged = await loadMergedCco(graph, "female", readCcoWithPresentation);
+    expect(merged.base.group).toBe("mod");
+    const catalogue = buildCatalogue({ bodyGender: "female", cco: merged.merged.cco, customs: [], text: null, presentation: PRESENTATION,
+      base: { path: BASE_CCO, mod: merged.base.provider } });
+    const option = new CatalogueIndex(catalogue).option("head", "eyes_color")!;
+    expect(option.provenance).toEqual({ kind: "mod", mod: "Creator Replacer", resource: BASE_CCO });
+    expect(option.choices.every(choice => choice.provenance.mod === "Creator Replacer")).toBe(true);
+  });
+
+  test("a head option without a category is filed beside its neighbours, not under Body (UI-60)", async () => {
+    const withLonely = creator([...(vanillaCreator() as { Data: { RootChunk: { headCustomizationOptions: object[] } } }).Data.RootChunk.headCustomizationOptions,
+      appearance("lonely", "xl\\lonely.app", ["a", "b"], { uiSlot: "lonely", index: 185 })], { TPP: ["lonely"] });
+    // Remove the category the fixture helper writes, as a resource that doesn't name one would.
+    const root = (withLonely as { Data: { RootChunk: { headCustomizationOptions: { Data: Record<string, unknown> }[] } } }).Data.RootChunk;
+    delete root.headCustomizationOptions.find(option => (option.Data.name as { $value: string }).$value === "lonely")!.Data.randomizeCategory;
+    const { graph } = fixtureInstallation([{ virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files: { [BASE_CCO]: withLonely } }], []);
+    const merged = await loadMergedCco(graph, "female", readCcoWithPresentation);
+    const catalogue = buildCatalogue({ bodyGender: "female", cco: merged.merged.cco, customs: [], text: null, presentation: PRESENTATION });
+    expect(new CatalogueIndex(catalogue).option("head", "lonely")!.categoryExplicit).toBe(false);
+    // Index 185 sits among the Eyes options (170, 180): the row goes there.
+    expect(catalogue.sections.find(section => section.rows.some(row => row.slot === "lonely"))!.id).toBe("Eyes");
+  });
+
+  test("the catalogue shares no list with the merged resource it was built from (CORE-62)", async () => {
+    const { catalogue, cco } = await fixtureSource(true);
+    const option = new CatalogueIndex(catalogue).option("head", "piercings")!;
+    const source = cco.parts.head.options.find(item => item.name === "piercings")!;
+    expect(option.editTags).not.toBe(source.editTags);
+    expect(option.uiSlots).not.toBe(source.type === "switcher" ? source.uiSlots : null);
+    expect(option.choices[1]!.activates).not.toBe(source.type === "switcher" ? source.options[1]!.names : null);
+    (option.editTags as string[]).push("changed");
+    expect(source.editTags).not.toContain("changed");
+  });
+
+  test("the panel's projection: sections, rows and options without their choices; paged choices; tables by index (UI-59)", async () => {
+    const { catalogue } = await fixtureSource(true);
+    const { panel, mods } = panelProjection(catalogue, catalogueCoverage(catalogue), "id");
+    expect(readCcPanel(JSON.parse(JSON.stringify(panel)))).toEqual(panel);
+    expect(panel.mods).toEqual([MOD_NAME]);
+    const piercings = panel.options.find(option => option.id === "head/piercings")!;
+    expect(piercings).toMatchObject({ type: "switcher", off: "Common-Off", count: 3, mod: -1, coverage: ["rendered", expect.any(Number)] });
+    // A colour-only controller's choices all add nothing themselves: no Off.
+    expect(panel.options.find(option => option.id === "head/skin_color")!.off).toBeNull();
+    expect(panel.options.find(option => option.id === "head/piercings_01")!.dependsOn).toEqual(["Piercings"]);
+    const index = new CatalogueIndex(catalogue);
+    const page = choicePage(index, mods, "head/eyes_color", 0)!;
+    expect(page.choices.map(choice => [choice.key, choice.color, choice.mod])).toEqual([["he__01_brown", "#503214", -1], ["he__02_blue", null, -1],
+      ["he__03_violet", "#7828a0", 0], ["he__04_green", null, 0]]);
+    expect(readChoicePage(JSON.parse(JSON.stringify(page)), panel.mods.length)).toEqual(page);
+    expect(choicePage(index, mods, "head/neck", 0)).toBeNull();
+    expect(choicePage(index, mods, "head/nope", 0)).toBeNull();
+  });
+
+  test("size budget: the first paint of a creator with a thousand options and 130,000 choices stays well under 1 MB (UI-59)", () => {
+    const options: CcoResource["parts"]["head"]["options"] = [];
+    for (let o = 0; o < 1000; o++) options.push({ type: "appearance", name: `option_${o}`, uiSlot: `slot_${o % 60}`, link: "", linkController: false, hidden: false,
+      enabled: o % 60 === 0, index: o, defaultIndex: 0, localizedName: `LocKey#${o}`, editTags: ["NewGame"], definedBy: o % 3 ? `mod ${o % 200}` : "base game",
+      resource: { hash: String(1000 + o), path: `base\\o${o}.app` },
+      definitions: Array.from({ length: 130 }, (_, d) => ({ name: `option_${o}__choice_with_a_long_name_${d}`, index: d, localizedName: "", tags: [], providedBy: `mod ${d % 250}` })) });
+    const cco: CcoResource = { label: "t", version: 1, parts: { head: { options, groups: [{ name: "TPP", options: options.map(o => o.name) }] },
+      body: { options: [], groups: [] }, arms: { options: [], groups: [] } } };
+    const catalogue: CcCatalogue = buildCatalogue({ bodyGender: "female", cco, text: null, presentation: null,
+      customs: Array.from({ length: 250 }, (_, i) => ({ path: `xl\\mod${i}.inkcharcustomization`, label: `mod ${i}`, mod: `A mod with a fairly long name ${i}` })) });
+    expect(catalogue.counts.choices).toBe(130_000);
+    const { panel, mods } = panelProjection(catalogue, catalogueCoverage(catalogue), "id");
+    const bytes = JSON.stringify(panel).length;
+    expect(bytes).toBeLessThan(600_000);
+    // A page is bounded too.
+    const page = choicePage(new CatalogueIndex(catalogue), mods, "head/option_0", 0)!;
+    expect(page.choices).toHaveLength(Math.min(CC_PAGE_SIZE, 130));
+    expect(JSON.stringify(page).length).toBeLessThan(40_000);
   });
 });

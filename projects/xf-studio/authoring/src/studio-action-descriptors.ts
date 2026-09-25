@@ -9,7 +9,7 @@ import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 import type { StudioFileAction } from "./studio-file-operations";
-import { CHOICE_NAME_MAX, CHOICE_SLOTS } from "./render-detail";
+import { CHARACTER_CONTEXT_DESCRIPTORS } from "./character-context";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -137,8 +137,9 @@ export const ACTION_DESCRIPTORS = {
   "quality.rebuild": desc("viewport", "workspace", "none"),
   "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),
   "savedV.restore": desc("file", "workspace", "none", { value: input("object") }),
-  "character.tryChoice": desc("viewport", "workspace", "none", { slot: enumerated(CHOICE_SLOTS), choice: inputText(0, CHOICE_NAME_MAX),
-    definition: inputText(0, CHOICE_NAME_MAX) }),
+  "savedV.clear": desc("viewport", "workspace", "none"),
+  // The character context's family (character-context.ts): creator choices record their own history, never a look's.
+  ...CHARACTER_CONTEXT_DESCRIPTORS,
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],
@@ -191,6 +192,8 @@ export const FILE_DESCRIPTORS = {
   "mask.export": file(["file", "layer"], "download", "download"),
   "savedV.import": file("file", "import", "picker"),
   "savedV.export": file("file", "download", "download"),
+  "characterPreset.import": file("file", "import", "picker"),
+  "characterPreset.export": file("file", "download", "download"),
   "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
   "collection.export": file("collection", "download", "download", { savesFirst: true }),
   "collection.plan": file("collection", "download", "download", { savesFirst: true }),

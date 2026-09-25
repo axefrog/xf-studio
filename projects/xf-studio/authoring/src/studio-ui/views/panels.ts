@@ -4,7 +4,8 @@
  * without a factory, or a factory for a panel no view contributes, does not compile.
  */
 import type { PanelController } from "../panels/collection";
-import { activityPanel, characterPanel, lightingPanel, motionPanel, qualityPanel } from "../panels/preview";
+import { activityPanel, lightingPanel, motionPanel, qualityPanel } from "../panels/preview";
+import { characterPanel } from "../panels/character";
 import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
 import { edgePanel, finishPanel, shapePanel, warpPanel } from "../panels/inspector";
 import { layersPanel } from "../panels/layers";

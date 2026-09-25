@@ -5,9 +5,11 @@
  * game and the mod manager (WolvenKit writes only into the cache folder).
  *
  * - **Language** [resource]: the game's own setting, `/language` → `OnScreen` in
- *   `%LOCALAPPDATA%\CD Projekt Red\Cyberpunk 2077\UserSettings.json`; English when it can't be read.
+ *   `%LOCALAPPDATA%\CD Projekt Red\Cyberpunk 2077\UserSettings.json` (read by `gameLanguageOf`); English when it can't be read or
+ *   `LOCALAPPDATA` is unset. When the game has no text archive for that language, the English texts are used and the catalogue says so
+ *   (gap `texts-language-missing`; PIPE-51).
  * - **Texts**: `base\` and (with Phantom Liberty) `ep1\localization\<language>\onscreens\onscreens.json` from their
- *   winning archives, then every `.xl` text declaration in ArchiveXL's load order (game-text.ts). These are CR2W `.json`
+ *   winning archives, then every `.xl` text declaration in ArchiveXL's load order (game-text.ts `textPlan`). These are CR2W `.json`
  *   resources, which the resolver's fetcher skips by name, so they are extracted here with the same WolvenKit runner into
  *   `<cache>/text/` (only the parsed entries are kept).
  * - **TweakDB**: `r6\cache\tweakdb_ep1.bin` when Phantom Liberty is mounted, else `tweakdb.bin` [hypothesis: the game loads
@@ -22,7 +24,7 @@ import type { CharacterSource } from "./character-context";
 import { customLabel, loadMergedCco } from "./character-resolver";
 import { depotHash } from "./depot-path";
 import { writeFileAtomic } from "./derived-cache";
-import { readOnscreenEntries, type TextEntry, TextTable } from "./game-text";
+import { gameLanguageOf, readOnscreenEntries, type TextEntry, TextTable, textPlan } from "./game-text";
 import type { Installation } from "./resolver-host";
 import { TweakDbBlob } from "./tweakdb-flats";
 import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
@@ -49,13 +51,14 @@ export interface CatalogueLoad {
 
 const STEP_TIMEOUT_MS = 10 * 60_000;
 
+/** The game's settings file, or null when `LOCALAPPDATA` is unset or not absolute (never a path relative to the working folder; PIPE-51). */
+export const gameSettingsPath = (localAppData: string | null | undefined = process.env.LOCALAPPDATA): string | null =>
+  localAppData && /^(?:[A-Za-z]:[\\/]|\/)/.test(localAppData) ? join(localAppData, "CD Projekt Red", "Cyberpunk 2077", "UserSettings.json") : null;
+
 /** The game's on-screen language from its own settings file, or null when it can't be read. */
-export function gameLanguage(settingsPath = join(process.env.LOCALAPPDATA ?? "", "CD Projekt Red", "Cyberpunk 2077", "UserSettings.json")): string | null {
-  try {
-    const document = JSON.parse(readFileSync(settingsPath, "utf8")) as { data?: { group_name?: string; options?: { name?: string; value?: unknown }[] }[] };
-    const value = document.data?.find(group => group.group_name === "/language")?.options?.find(option => option.name === "OnScreen")?.value;
-    return typeof value === "string" && /^[a-z]{2}-[a-z]{2}$/.test(value) ? value : null;
-  } catch { return null; }
+export function gameLanguage(settingsPath = gameSettingsPath()): string | null {
+  if (!settingsPath) return null;
+  try { return gameLanguageOf(JSON.parse(readFileSync(settingsPath, "utf8"))); } catch { return null; }
 }
 
 const fingerprint = (path: string) => {
@@ -138,16 +141,7 @@ export async function readTextResources(installation: Installation, paths: reado
 
 /** The on-screen texts the game shows in `language`, with the mods' ArchiveXL text declarations merged in load order. */
 export async function loadTextTable(installation: Installation, language: string, cli: string, cacheDir: string, log?: (message: string) => void) {
-  const game = [`base\\localization\\${language}\\onscreens\\onscreens.json`,
-    ...(installation.plan.ep1Installed ? [`ep1\\localization\\${language}\\onscreens\\onscreens.json`] : [])];
-  const plan: { path: string; kind: "game" | "mod"; replace: boolean; declaredBy: string | null }[] =
-    game.map(path => ({ path, kind: "game", replace: true, declaredBy: null }));
-  for (const unit of installation.xl.localization) {
-    const own = unit.onscreens.get(language);
-    const fallback = unit.fallback ? unit.onscreens.get(unit.fallback) ?? [] : [];
-    for (const path of own ?? fallback) plan.push({ path, kind: "mod", replace: !!own, declaredBy: unit.declaredBy });
-    if (own && unit.fallback !== language) for (const path of fallback) plan.push({ path, kind: "mod", replace: false, declaredBy: unit.declaredBy });
-  }
+  const plan = textPlan(language, installation.plan.ep1Installed, installation.xl.localization);
   const read = await readTextResources(installation, plan.map(item => item.path), cli, cacheDir, log);
   const table = new TextTable(language);
   const texts: CatalogueLoad["evidence"]["texts"][number][] = [];
@@ -173,16 +167,28 @@ export async function loadCreatorCatalogue(options: CatalogueHostOptions, bodyGe
   const { installation, cacheDir, wolvenKitCli: cli, log } = options;
   const merged = await loadMergedCco(installation.graph, bodyGender, readCcoWithPresentation);
   const settings = options.language ? null : gameLanguage();
-  const language = { code: options.language ?? settings ?? "en-us", from: options.language ? "option" as const : settings ? "game-settings" as const : "default" as const };
-  const text = await loadTextTable(installation, language.code, cli, cacheDir, log);
+  let language: { code: string; from: "option" | "game-settings" | "default" } = { code: options.language ?? settings ?? "en-us",
+    from: options.language ? "option" : settings ? "game-settings" : "default" };
+  let text = await loadTextTable(installation, language.code, cli, cacheDir, log);
+  const languageGaps: { code: string; subject: string; detail: string }[] = [];
+  // A language whose game texts aren't installed (no `lang_<code>_text.archive`) shows English, and says so (PIPE-51).
+  if (!text.texts.some(item => item.kind === "game" && item.entries > 0) && language.code !== "en-us") {
+    languageGaps.push({ code: "texts-language-missing", subject: language.code,
+      detail: `The game's ${language.code} texts aren't installed, so the creator's labels are shown in English.` });
+    language = { code: "en-us", from: "default" };
+    text = await loadTextTable(installation, "en-us", cli, cacheDir, log);
+  }
   let presentation: CreatorPresentation | null = null, tweakDb: string | null = null;
   try {
     presentation = loadPresentation(options.gameRoot, installation.plan.ep1Installed, iconRecords(merged.merged.cco));
     tweakDb = presentation?.source ?? null;
   } catch (error) { log?.(`TweakDB could not be read: ${(error as Error).message}`); }
+  // A mod archive that wins the base resource's path replaces the game's creator options: they name that mod (PIPE-46).
+  const baseFromMod = merged.base.group !== null && merged.base.group !== "content" && merged.base.group !== "ep1";
   const catalogue = buildCatalogue({ bodyGender, cco: merged.merged.cco, text: text.table, presentation,
+    base: baseFromMod ? { path: merged.base.ref.path ?? merged.base.ref.hash, mod: merged.base.provider ?? merged.base.archive ?? "a mod" } : null,
     customs: merged.customs.map(custom => ({ path: custom.path, label: customLabel(custom.path, custom.provenance), mod: custom.provenance.provider })) });
-  const gaps = [...catalogue.gaps, ...merged.gaps];
+  const gaps = [...catalogue.gaps, ...merged.gaps, ...languageGaps];
   return { source: { catalogue: { ...catalogue, gaps }, cco: merged.merged.cco }, catalogue: { ...catalogue, gaps },
     evidence: { language, texts: text.texts, tweakDb, customResources: merged.customs.length } };
 }

@@ -90,7 +90,7 @@ export type StudioPresentationPort<Slot> = {
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
     "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" |
-    "glitterModelCatalogue"> & {
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
@@ -202,6 +202,8 @@ export function createStudioPresentation<Slot>(sources: {
     historyTimeline: () => a.historyTimeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
+    characterPanel: () => a.characterPanel(), characterView: () => a.characterView(),
+    characterChoices: (option, want) => a.characterChoices(option, want),
   };
   const fallback = () => a.snapshot().document;
   const editor: EyeMakeupView = e ? {

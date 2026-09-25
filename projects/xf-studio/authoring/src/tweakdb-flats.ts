@@ -82,7 +82,8 @@ export class TweakDbBlob {
     const wanted = new Map(TWEAK_TYPES.map(type => [fnv1a64(encoder.encode(type)), type] as const));
     let pos = flats;
     const count = this.u32(pos); pos += 4;
-    if (count > 4096) throw Error("TweakDB flat type table is implausibly large.");
+    // Every count is bounded by the bytes that could hold it before anything is allocated or read (PIPE-49).
+    if (count > 4096 || pos + count * 20 > bytes.byteLength) throw Error("TweakDB flat type table is implausibly large.");
     for (let i = 0; i < count; i++, pos += 20) {
       const type = wanted.get(this.view.getBigUint64(pos, true));
       if (type) this.types.push({ type, values: this.u32(pos + 8), keys: this.u32(pos + 12), offset: this.u32(pos + 16), valueStarts: null, keyTable: -1 });
@@ -94,6 +95,7 @@ export class TweakDbBlob {
     return this.view.getUint32(pos, true);
   }
   private vlq(pos: number): [number, number] {
+    if (pos < 0 || pos >= this.bytes.byteLength) throw Error("TweakDB blob is truncated.");
     let b = this.bytes[pos++]!;
     const negative = (b & 0x80) !== 0;
     let value = b & 0x3f, shift = 6;
@@ -107,18 +109,29 @@ export class TweakDbBlob {
     }
     return [negative ? -value : value, pos];
   }
-  private id(pos: number): TweakId { return make(this.view.getUint32(pos, true), this.view.getUint8(pos + 4)); }
+  private id(pos: number): TweakId {
+    if (pos < 0 || pos + 8 > this.bytes.byteLength) throw Error("TweakDB blob is truncated.");
+    return make(this.view.getUint32(pos, true), this.view.getUint8(pos + 4));
+  }
+  /** `bytes` more bytes from `pos` lie inside the blob. */
+  private within(pos: number, bytes: number) {
+    if (pos < 0 || bytes < 0 || pos + bytes > this.bytes.byteLength) throw Error("TweakDB blob is truncated.");
+  }
 
   /** Size in bytes of one value at `pos`. */
   private skip(type: TweakType, pos: number): number {
+    let size: number;
     switch (type) {
       case "CName": case "String": {
         const [length, next] = this.vlq(pos);
-        return next - pos + (length < 0 ? -length : length * 2);
+        size = next - pos + (length < 0 ? -length : length * 2);
+        break;
       }
-      case "array:TweakDBID": { const [length, next] = this.vlq(pos); return next - pos + Math.abs(length) * 8; }
-      default: return 8;
+      case "array:TweakDBID": { const [length, next] = this.vlq(pos); size = next - pos + Math.abs(length) * 8; break; }
+      default: size = 8;
     }
+    this.within(pos, size);
+    return size;
   }
   private decode(type: TweakType, pos: number): TweakValue {
     switch (type) {
@@ -143,6 +156,9 @@ export class TweakDbBlob {
     if (flat.valueStarts) return flat.valueStarts;
     let pos = flat.offset;
     const count = this.u32(pos); pos += 4;
+    // Each value takes at least one byte (eight for fixed-size types): a larger count cannot fit, so nothing is allocated for it.
+    const least = flat.type === "CName" || flat.type === "String" || flat.type === "array:TweakDBID" ? 1 : 8;
+    if (count * least > this.bytes.byteLength - pos) throw Error("TweakDB blob is truncated.");
     const starts = new Uint32Array(count);
     for (let i = 0; i < count; i++) { starts[i] = pos; pos += this.skip(flat.type, pos); }
     flat.valueStarts = starts;
@@ -158,7 +174,7 @@ export class TweakDbBlob {
       const starts = this.starts(flat);
       let pos = flat.keyTable;
       const keys = this.u32(pos); pos += 4;
-      if (pos + keys * 12 > this.bytes.byteLength) throw Error("TweakDB blob is truncated.");
+      this.within(pos, keys * 12);
       for (let i = 0; i < keys; i++, pos += 12) {
         const id = this.id(pos);
         if (!wanted.has(id)) continue;

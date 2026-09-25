@@ -13,7 +13,6 @@ import type { MotionAction } from "../motion-actions";
 import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
-import type { CharacterAction } from "../character-detail-actions";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../studio-action-descriptors";
 
@@ -25,7 +24,6 @@ const PREVIEW_ID = familyId("preview");
 const MOTION_ID = familyId("motion");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
-const CHARACTER_DETAILS_ID = familyId("characterDetails");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
 
@@ -73,17 +71,14 @@ export const QUALITY_FAMILY: SystemFamily<QualityAction, ActionScope, typeof QUA
 
 export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, typeof SAVED_V_ID> = Object.freeze({
   owner: "system", id: SAVED_V_ID, label: "Saved V", needsScene: true,
-  actions: actionTable<SavedAppearanceAction, ActionScope>(ACTION_DESCRIPTORS, { "savedV.load": true, "savedV.restore": true }),
+  actions: actionTable<SavedAppearanceAction, ActionScope>(ACTION_DESCRIPTORS, { "savedV.load": true, "savedV.restore": true, "savedV.clear": true }),
 });
 
 /**
- * The shown V's resolved details (character-detail-actions.ts): trying a creator choice (a piercing style) on the V. Device-backed like
- * the preview: it needs the loaded head, and a failure after the gate is `unavailable` (UI-48).
+ * The character context (character-context.ts, owned by `CharacterContextActions`): which V the makeup is shown on and every creator
+ * choice set on it (CORE-58). It keeps its own Undo history (CORE-59), so its actions record nothing in a look's history.
  */
-export const CHARACTER_DETAILS_FAMILY: SystemFamily<CharacterAction, ActionScope, typeof CHARACTER_DETAILS_ID> = Object.freeze({
-  owner: "system", id: CHARACTER_DETAILS_ID, label: "Character details", needsScene: true, thrown: "unavailable",
-  actions: actionTable<CharacterAction, ActionScope>(ACTION_DESCRIPTORS, { "character.tryChoice": true }),
-});
+export { CHARACTER_CONTEXT_FAMILY } from "../character-context";
 
 /**
  * Asynchronous families (CORE-36): the collection library's requests (`CollectionService.execute`) and

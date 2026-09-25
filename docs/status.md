@@ -42,7 +42,7 @@ Offline verification is not in-game proof. Runtime evidence so far is in the [fi
 
 Product and R&D run in parallel, like a commercial team beside a research lab:
 
-- **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (later: save write-back and shareable CC presets); remaining finish adapters.
+- **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (every creator option is now in the Character panel with live preview, Off, its own Undo and portable presets; later: save write-back); remaining finish adapters.
 - **R&D lab:** the game's material and shader system, and the character-customisation file chain (mining the legacy xf-omega code and the Modding Docs screenshots). Findings are distilled into the agent-facing [knowledge base](../knowledge/README.md).
 - **Desktop app and public site (standing request):** the site is live; `v0.1.0-alpha.1` stays an unpublished draft; `v0.1.0-alpha.2` is published after session 2 (releases no longer need the maintainer's go-ahead). Signing (SignPath) and auto-update come after the first alpha.
 - **Resumed with in-game evidence:** plate clearance (the decal lift). Native eye assembly remains paused.

@@ -16,9 +16,13 @@
  *   it takes its slot's coverage so its row reads like the others.
  * - A **switcher** shows what the targets in its first slot show (its main row); other slots it also fills, such as the
  *   hairstyle a face-cyberware choice swaps, don't decide its label.
+ *
+ * Coverage is the preview's projection of a catalogue (`catalogueCoverage`), computed when it is asked for, never stored in
+ * the catalogue: a host-cached catalogue stays right when the preview learns to draw more (CORE-60).
  */
 import { DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups } from "./character-detail-plan";
 import type { CcoPart } from "./cco-model";
+import type { CcCatalogue } from "./cc-catalogue";
 import type { DetailSlot } from "./render-detail";
 
 export type RenderStatus = "rendered" | "conditional" | "not-rendered";
@@ -110,4 +114,11 @@ export function refineCoverage(coverage: RenderCoverage, planned: readonly { rea
   return planned.some(item => item.drawn)
     ? { status: "rendered", detail: coverage.detail, note: "Drawn as a face detail." }
     : { status: "not-rendered", detail: null, note: "Its parts aren't face decals, so the preview doesn't draw them yet." };
+}
+
+/** The preview's coverage of every option of a catalogue (a projection owned by the preview side; CORE-60). */
+export function catalogueCoverage(catalogue: Pick<CcCatalogue, "options" | "bodyGender">): Map<string, RenderCoverage> {
+  return renderCoverage(catalogue.options.map(option => ({ id: option.id, part: option.part, name: option.name, type: option.type,
+    uiSlot: option.uiSlot, link: option.link, hasResource: option.type === "appearance" && !!option.app, groups: option.groups,
+    targets: option.targets, uiSlots: option.uiSlots, emitsNothing: option.emitsNothing })), catalogue.bodyGender);
 }

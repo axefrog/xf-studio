@@ -148,3 +148,33 @@ test("the 3D preview's automatic start is a workspace preference that defaults o
   expect(off.previewSetup).toEqual({ autostart: false });
   expect(parseWorkspace(JSON.parse(JSON.stringify({ ...storedWorkspace(fresh), previewSetup: { autostart: "no" } })), STUDIO_DOCUMENTS).previewSetup).toBeUndefined();
 });
+
+test("the character context is stored in the preview state only once something was set; an untouched workspace keeps its bytes", async () => {
+  const { WorkspaceComposer } = await import("../src/workspace-composer");
+  const state = freshWorkspace();
+  const bytes = JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS));
+  expect(bytes).not.toContain("\"character\"");
+  const capture = (character: () => WorkspaceState["preview"]["character"] | null | undefined) => {
+    const composer = new WorkspaceComposer(state, { editor: () => ({ recipe: state.recipe, active: 0, selected: 0, history: state.history,
+      fieldSelection: {} }) as never, uvView: () => state.uvView, savedV: () => undefined, collections: () => undefined, quality: () => state.preview.textureSize,
+      preview: () => undefined, motion: () => undefined, character });
+    composer.setPreviewReady();
+    return composer.capture();
+  };
+  // Nothing set (the context says null): the stored bytes are exactly those of a workspace that never had the controls.
+  expect(JSON.stringify(serializeWorkspace(capture(() => null), STUDIO_DOCUMENTS))).toBe(bytes);
+  // Something set: stored, read back, and validated on the way in.
+  const stored = { origin: "save" as const, choices: [{ part: "head" as const, option: "makeupEyes", choice: "Common-Off" }] };
+  const withContext = capture(() => stored);
+  expect(withContext.preview.character).toEqual(stored);
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(withContext, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  expect(restored.preview.character).toEqual(stored);
+  const damaged = serializeWorkspace(withContext, STUDIO_DOCUMENTS) as { preview: Record<string, unknown> };
+  damaged.preview.character = { origin: "somewhere", choices: "x" };
+  expect(parseWorkspace(damaged, STUDIO_DOCUMENTS).preview.character).toBeUndefined();
+  // Before the preview is ready, the workspace's own context is kept as it was read.
+  const unready = new WorkspaceComposer({ ...state, preview: { ...state.preview, character: stored } }, { editor: () => ({ recipe: state.recipe, active: 0, selected: 0,
+    history: state.history, fieldSelection: {} }) as never, uvView: () => state.uvView, savedV: () => undefined, collections: () => undefined,
+    quality: () => state.preview.textureSize, preview: () => undefined, motion: () => undefined, character: () => undefined });
+  expect(unready.capture().preview.character).toEqual(stored);
+});

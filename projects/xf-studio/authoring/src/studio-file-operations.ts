@@ -6,8 +6,9 @@ import { portableRecipe, readPortableRecipe } from "./recipe-schema";
 import type { ReadonlyDeep } from "./read-only";
 import type { SavedAppearanceState } from "./saved-appearance-actions";
 import type { SavedV } from "./save-reader";
+import { CC_PRESET_LIMITS, readPresetJson } from "./cc-preset";
 
-export type StudioFileKind = "recipe" | "collection" | "savedV";
+export type StudioFileKind = "recipe" | "collection" | "savedV" | "characterPreset";
 export type StudioPickedFile = { name: string; size: number; text(): Promise<string>; bytes(): Promise<Uint8Array> };
 export type StudioFilePort = {
   pick(kind: StudioFileKind): Promise<StudioPickedFile | undefined>;
@@ -16,6 +17,8 @@ export type StudioFilePort = {
 };
 export type StudioFileAction =
   | { kind: "recipe.import" | "recipe.export" | "mask.export" | "savedV.import" | "savedV.export" }
+  /** A portable character preset (`xfs/cc-preset-1`): load it as the shown V, or save the choices set on the shown V. */
+  | { kind: "characterPreset.import" | "characterPreset.export" }
   | { kind: "collection.import" | "collection.export" | "collection.plan" |
       "package.check" | "package.build" | "collection.recover" };
 export type StudioFileOutcome = { ok: true; code: string; message: string;
@@ -50,6 +53,14 @@ type FileSources = {
   savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
   recoverCollection(): void;
+  /** The character context's preset workflows (character-context-actions.ts); absent where there is no 3D preview. */
+  characterPreset?: {
+    /** Why a preset can't be loaded or saved now, or undefined. */
+    unavailable(kind: "import" | "export"): string | undefined;
+    /** Load a decoded preset file as the shown V (the context validates it once); throws its plain reason. */
+    load(value: unknown): void;
+    save(): Promise<{ text: string; name: string; values: number; leftOut: number; personal: number }>;
+  };
   /**
    * Host build readiness, when the host has a Build setup. Absent means the
    * host decides at request time (tests, hosts without local setup).
@@ -115,6 +126,11 @@ export class StudioFileOperations {
       case "savedV.export": return this.sources.hasSavedV() ? { available: true } :
         { available: false, reason: this.sources.savedVUnavailableReason?.() ??
           "Load a saved V before exporting its appearance." };
+      case "characterPreset.import": case "characterPreset.export": {
+        const reason = this.sources.characterPreset ? this.sources.characterPreset.unavailable(action.kind === "characterPreset.import" ? "import" : "export")
+          : "Character presets need the 3D preview.";
+        return reason ? { available: false, reason } : { available: true };
+      }
       case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
         { available: false, reason: "Collection is still loading." };
       case "package.build": {
@@ -175,6 +191,21 @@ export class StudioFileOperations {
           this.port.download(new Blob([JSON.stringify(this.sources.savedV(), null, 2)],
             { type: "application/json" }), "v-appearance.json");
           outcome = { ok: true, code: "exported", message: "Saved appearance exported." }; break;
+        case "characterPreset.import": {
+          const file = await this.port.pick("characterPreset");
+          if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Character preset selection cancelled." });
+          if (file.size > CC_PRESET_LIMITS.bytes) throw new FileOperationError("too_large", "This character preset can't be read: the file is larger than 1 MB.");
+          // The JSON is read once here and the preset once by the context (CORE-55).
+          this.sources.characterPreset!.load(readPresetJson(await file.bytes()));
+          outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair and piercings follow in a moment.` }; break;
+        }
+        case "characterPreset.export": {
+          const saved = await this.sources.characterPreset!.save();
+          this.port.download(new Blob([saved.text], { type: "application/json" }), saved.name);
+          const notes = [saved.leftOut ? `${saved.leftOut} choice${saved.leftOut === 1 ? "" : "s"} couldn't be written and ${saved.leftOut === 1 ? "was" : "were"} left out.` : "",
+            saved.personal ? `${saved.personal} item${saved.personal === 1 ? "" : "s"} naming a personal folder or address ${saved.personal === 1 ? "was" : "were"} left out.` : ""].filter(Boolean);
+          outcome = { ok: true, code: "exported", message: [`Character preset saved with ${saved.values} choice${saved.values === 1 ? "" : "s"}.`, ...notes].join(" ") }; break;
+        }
         case "collection.recover":
           this.sources.recoverCollection();
           outcome = { ok: true, code: "recovered", message: "Previous collection draft restored." }; break;
@@ -202,6 +233,8 @@ export class StudioFileOperations {
       const code = error instanceof FileOperationError ? error.code : error instanceof SyntaxError ? "invalid_json" : "file_failed";
       const prefix = action.kind === "recipe.import" ? "Could not open recipe: " :
         action.kind === "savedV.import" ? "Could not apply V: " : "";
+      if (action.kind === "characterPreset.import" && error instanceof SyntaxError)
+        return this.finish(owner, action.kind, { ok: false, code: "invalid_json", message: "This character preset can't be read: it is not valid JSON." });
       return this.finish(owner, action.kind, { ok: false, code, message: prefix + (error as Error).message });
     }
   }

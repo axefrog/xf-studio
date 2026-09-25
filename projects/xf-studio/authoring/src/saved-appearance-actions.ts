@@ -12,13 +12,17 @@ export type SavedAppearanceResult = { applied: string[]; appearanceReferences: n
 export type SavedAppearanceState = { savedV?: SavedV; result?: SavedAppearanceResult; suggestedEyeShape?: number };
 export type SavedAppearancePort = {
   apply(savedV: SavedV): SavedAppearanceResult;
+  /** Put the head back to its base facial shape (no save shown). */
+  clear?(): void;
   /** The creator light rig follows V's body, as the game's preview controller does. Absent without the rig. */
   setBodySex?(sex: BodySex): void;
 };
 /** The body the shown V has: the save's, else the creator's default female V. */
 export const bodySexOf = (savedV: SavedV | undefined): BodySex => savedV?.isMale ? "male" : "female";
 export type SavedAppearanceAction = { kind: "savedV.load"; bytes: Uint8Array } |
-  { kind: "savedV.restore"; value: SavedV };
+  { kind: "savedV.restore"; value: SavedV } |
+  /** Show no save: the creator's default V (the character context's Undo back to it). */
+  { kind: "savedV.clear" };
 
 /** Save parsing and preview application without file inputs or renderer object types. */
 export class SavedAppearanceActions {
@@ -31,11 +35,20 @@ export class SavedAppearanceActions {
   capability(action: SavedAppearanceAction): Capability {
     if (action.kind === "savedV.load" && action.bytes.byteLength > 128 * 1024 * 1024)
       return refusal("limit", "Save is larger than the supported limit.");
+    if (action.kind === "savedV.clear" && !this.state.savedV) return refusal("invalid_value", "No save is shown.");
     return { available: true };
   }
   dispatch(action: SavedAppearanceAction): Readonly<SavedAppearanceState> {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
+    if (action.kind === "savedV.clear") {
+      // The head's facial shape follows the character context's view of the default V (character-context-actions.ts).
+      this.port.clear?.();
+      this.port.setBodySex?.("female");
+      this.state = {};
+      for (const listener of this.listeners) listener();
+      return this.snapshot();
+    }
     const savedV = action.kind === "savedV.load" ? readSavedV(action.bytes) : parseSavedV(action.value);
     const result = this.port.apply(savedV);
     this.port.setBodySex?.(bodySexOf(savedV));

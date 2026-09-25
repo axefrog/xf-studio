@@ -102,6 +102,24 @@ export type CoreDetail = {
 
 const fail = (message: string): never => { throw Error(`Render detail: ${message}`); };
 const text = (value: unknown, name: string) => typeof value === "string" && value.length > 0 && value.length < 512 ? value : fail(`${name} is invalid.`);
+/** The longest slot label and slot message the record carries. */
+export const SLOT_LABEL_MAX = 199, SLOT_MESSAGE_MAX = 511;
+/**
+ * A list of names as one label within `max` characters (PIPE-56): as many whole names as fit, then "and N more". Mod-supplied names
+ * are unbounded, so every label the host builds from them goes through this.
+ */
+export function clampedList(items: readonly string[], max = SLOT_LABEL_MAX): string {
+  const all = items.join(", ");
+  if (all.length <= max) return all;
+  for (let n = items.length - 1; n >= 1; n--) {
+    const shortened = `${items.slice(0, n).join(", ")} and ${items.length - n} more`;
+    if (shortened.length <= max) return shortened;
+  }
+  const more = items.length > 1 ? ` and ${items.length - 1} more` : "";
+  return clampedText(items[0] ?? "", max - more.length) + more;
+}
+/** Text cut to `max` characters with an ellipsis. */
+export const clampedText = (value: string, max: number) => value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 const file = (value: unknown, name: string) => /^[a-z0-9][a-z0-9._-]{0,95}\.(glb|png)$/.test(String(value)) ? String(value) : fail(`${name} is not a plain asset file name.`);
 const sha = (value: unknown, name: string) => /^[a-f0-9]{64}$/.test(String(value)) ? value as string : fail(`${name} hash is invalid.`);
 const optionalSha = (value: unknown, name: string) => value === null ? null : sha(value, name);
@@ -538,8 +556,12 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
   const slots = DETAIL_SLOTS.map((slot): DetailSlotState => {
     const entry = doc.slots.find(item => item?.slot === slot);
     if (!entry || !["shown", "none", "unavailable"].includes(entry.state)) return fail(`${slot} outcome is invalid.`);
-    const label = typeof entry.label === "string" && entry.label.length < 200 ? entry.label : fail(`${slot} label is invalid.`);
-    const message = entry.message === undefined ? undefined : text(entry.message, `${slot} message`);
+    // A label or message too long for the record is cut with a note rather than refusing the V (PIPE-56).
+    if (typeof entry.label !== "string") return fail(`${slot} label is invalid.`);
+    if (entry.label.length > SLOT_LABEL_MAX) dropped(`the end of the ${slot} label`);
+    const label = clampedText(entry.label, SLOT_LABEL_MAX);
+    if (typeof entry.message === "string" && entry.message.length > SLOT_MESSAGE_MAX) dropped(`the end of the ${slot} message`);
+    const message = entry.message === undefined ? undefined : text(typeof entry.message === "string" ? clampedText(entry.message, SLOT_MESSAGE_MAX) : entry.message, `${slot} message`);
     if (entry.state === "shown" && !components.some(item => item.slot === slot)) {
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       return { slot, state: "unavailable", label, message: `XF Studio couldn't read your V's ${noun} from the prepared details, so ${pronoun} ${not} shown.` };

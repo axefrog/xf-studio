@@ -39,18 +39,16 @@
  *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
  *   nothing) and a CCXL option on the slot all resolve through the same rules (knowledge/cc-file-chain.md §6). Their chunks are layered
  *   (`multilayered.mt`): each carries its `.mlsetup` and `.mlmask` references for the host to read into the chunk's layer stack.
- * - **Viewer choices**: a slot a viewer may try out (`CHOICE_SLOTS`) lists its creator switchers' choices (`slotChoices`): each
- *   choice with the definitions of the option it drives, and one plain label for each. A tried choice (a switcher choice and a
- *   definition) replaces everything the slot's switchers can activate, and its descriptors come from the shared R5 rules rooted at
- *   that switcher (`descriptorsFromSwitcher`), so a choice naming several options and a colour its linked followers take resolve as
- *   the creator does (`applyChoiceOverride`). An option a slot's switcher activates belongs to that slot even when its own `uiSlot`
- *   is another (`detailSlotOf`).
+ * - **Slot choices**: the record still lists each `CHOICE_SLOTS` slot's creator switcher choices (`slotChoices`) for readers of the
+ *   record. Choices a viewer makes are the character context's (character-context.ts): the host derives the whole V from them with the
+ *   shared R5 rules before planning, so there is no per-slot override here any more (CORE-58). An option a slot's switcher activates
+ *   belongs to that slot even when its own `uiSlot` is another (`detailSlotOf`).
  */
-import { descriptorsFromSwitcher, switcherReach, type AppearanceDescriptor, type CcoOption, type CcoResource } from "./cco-model";
+import { switcherReach, type CcoOption, type CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
-import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoiceOption, RenderChoices, RenderMorphTexture, RenderOverride, RenderRgba } from "./render-detail";
-import { CHOICE_SLOTS, DETAIL_SLOTS, isChoiceLabel, isChoiceName, RECORD_LIMITS, SLOT_WORDS } from "./render-detail";
+import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoiceOption, RenderChoices, RenderMorphTexture, RenderRgba } from "./render-detail";
+import { CHOICE_SLOTS, clampedList, DETAIL_SLOTS, isChoiceLabel, isChoiceName, RECORD_LIMITS, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
@@ -266,10 +264,11 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   const components = planned.map(item => item.component);
   if (!components.length && !unshown.length) return { components, state: { slot: "face", state: "none", label: "None" } };
   const { noun, not, pronoun } = SLOT_WORDS.face;
-  const missing = [...new Set(unshown)].join(", ");
-  if (!components.length) return { components, state: { slot: "face", state: "unavailable", label: missing,
+  // Labels come from mod-supplied names: bounded, so one long name never costs the V its record (PIPE-56).
+  const missing = clampedList([...new Set(unshown)], 160);
+  if (!components.length) return { components, state: { slot: "face", state: "unavailable", label: clampedList([...new Set(unshown)]),
     message: `XF Studio can't draw your V's ${noun} (${missing}) yet, so ${pronoun} ${not} shown.` } };
-  return { components, state: { slot: "face", state: "shown", label: labels.join(", "),
+  return { components, state: { slot: "face", state: "shown", label: clampedList(labels),
     ...(unshown.length ? { message: `Some of your V's ${noun} (${missing}) ${not} shown yet.` } : {}) } };
 }
 
@@ -299,14 +298,15 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
       if (item && slot === "skin" && decalOnly(item)) { skinDecals.push({ entry, component }); return null; }
       return item;
     }).filter((item): item is PlannedComponent => !!item));
-    const label = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
-      : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : choiceLabel(entry.definition)))].join(", ");
+    const names = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
+      : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : choiceLabel(entry.definition)))];
+    const label = clampedList(names), inMessage = clampedList(names, 160);
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       slots.push({ slot, state: "unavailable", label, message: missing
-        ? `Your V's ${noun} (${label}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
-        : `XF Studio can't draw your V's ${noun} (${label}) yet, so ${pronoun} ${not} shown.` });
+        ? `Your V's ${noun} (${inMessage}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
+        : `XF Studio can't draw your V's ${noun} (${inMessage}) yet, so ${pronoun} ${not} shown.` });
       continue;
     }
     components.push(...planned);
@@ -405,26 +405,6 @@ export function slotChoices(cco: CcoResource, slot: ChoiceSlot): { options: Rend
   if (unnamed) notes.push(`${unnamed} ${slot} style(s) have no creator name, so they're left out of the list.`);
   if (colours) notes.push(`${colours} ${slot} colour(s) have names XF Studio can't offer to try, or come after the first ${RECORD_LIMITS.definitions}, so they're left out of the list.`);
   return { options, notes: [...new Set(notes)] };
-}
-
-/**
- * A viewer's tried choice in place of the V's own on one slot: every descriptor of an option the slot's switchers can activate, or of an
- * option on the slot's creator slots, is dropped, and the tried choice's descriptors come from the shared R5 rules rooted at its switcher
- * (the choice's targets with the tried colour, and each linked follower with the colour index its controller gives it), in every group
- * the creator lists them in. Returns null when the creator doesn't offer that choice or colour (a stale or foreign request), so the V is
- * shown as saved.
- */
-export function applyChoiceOverride(appearances: readonly AppearanceDescriptor[], cco: CcoResource, override: RenderOverride): AppearanceDescriptor[] | null {
-  const found = slotSwitchers(cco, override.slot).flatMap(switcher => switcher.options.map(choice => ({ switcher, choice })))
-    .find(entry => entry.choice.localizedName === override.choice);
-  const controller = found ? choiceController(cco, found.choice.names) : null;
-  if (!found || !controller || !controller.definitions.some(definition => definition.name === override.definition)) return null;
-  const derived = descriptorsFromSwitcher(cco, "head", found.switcher.name,
-    { [found.switcher.name]: found.choice.localizedName, [controller.name]: override.definition }).appearances;
-  if (!derived.length) return null;
-  const onSlot = new Set(cco.parts.head.options.filter(option => creatorSlots(override.slot).has(option.uiSlot)).map(option => option.name));
-  for (const switcher of slotSwitchers(cco, override.slot)) for (const name of switcherReach(cco, "head", switcher.name)) onSlot.add(name);
-  return [...appearances.filter(entry => entry.part !== "head" || !onSlot.has(entry.option)), ...derived];
 }
 
 /**

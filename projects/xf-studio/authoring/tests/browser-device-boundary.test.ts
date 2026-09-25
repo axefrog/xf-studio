@@ -12,9 +12,9 @@ class Picker extends EventTarget {
 }
 
 test("browser file adapter accepts shell-provided pickers and resolves selection or cancellation", async () => {
-  const recipe = new Picker(), collection = new Picker(), savedV = new Picker();
+  const recipe = new Picker(), collection = new Picker(), savedV = new Picker(), characterPreset = new Picker();
   const device = createBrowserFileDevice({ document: {} as Document,
-    pickers: { recipe, collection, savedV } as unknown as Record<"recipe" | "collection" | "savedV", HTMLInputElement> });
+    pickers: { recipe, collection, savedV, characterPreset } as unknown as Record<"recipe" | "collection" | "savedV" | "characterPreset", HTMLInputElement> });
   const file = new File(["sample"], "custom.recipe.json");
   recipe.onClick = () => { recipe.files = [file]; recipe.dispatchEvent(new Event("change")); };
   const chosen = await device.pick("recipe");

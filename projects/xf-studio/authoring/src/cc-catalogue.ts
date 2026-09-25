@@ -16,14 +16,18 @@
  *   (cc-presentation.ts). The creator itself shows one list; the categories are the grouping its randomizer uses.
  * - **Labels**: the `localizedName` values through the game's and mods' texts (game-text.ts).
  * - **Swatches**: a choice's `color` and its `icon` record's inkatlas part (cc-presentation.ts); only references here.
- * - **Provenance**: vanilla, or the custom resource and the mod (archive provider) that supplied it.
+ * - **Provenance**: vanilla, or the custom resource and the mod (archive provider) that supplied it. The base resource is
+ *   vanilla only when the installed game supplies it; a mod archive replacing it names that mod (PIPE-46).
+ *
+ * What the preview can draw of each option is not part of the catalogue: the preview side projects it from these options
+ * (cc-render-coverage.ts `catalogueCoverage`), so a host-cached catalogue never goes stale when the preview draws more (CORE-60).
+ * The catalogue shares nothing with the merged resource it was built from: every list is copied (CORE-62).
  */
 import { asArray, cname, HandleScope, isObject, type JsonObject } from "./red-json";
 import { CCO_PARTS, type CcoOption, type CcoPart, type CcoResource, readCco } from "./cco-model";
 import type { DepotRef } from "./depot-path";
 import { displayLabel, type DisplayLabel, type TextTable } from "./game-text";
 import { type CreatorPresentation, type IconRef, iconKey } from "./cc-presentation";
-import { renderCoverage, type RenderCoverage } from "./cc-render-coverage";
 
 export const CC_CATALOGUE_SCHEMA = "xfs/cc-catalogue-1" as const;
 export type BodyGender = "female" | "male";
@@ -34,6 +38,8 @@ export type Rgba = readonly [number, number, number, number];
 
 export interface OptionPresentation {
   readonly randomizeCategory: string;
+  /** The resource names the category; otherwise it is the enum's default, `Body` (UI-60). */
+  readonly categoryExplicit: boolean;
   readonly useThumbnails: boolean;
   readonly censorFlag: string;
   readonly censorFlagAction: string;
@@ -72,7 +78,8 @@ export function readCcoWithPresentation(root: JsonObject, label: string): CcoRes
     options.forEach((option, i) => {
       const data = raw[i]!;
       // A missing category is the enum's default, `Body` (value 0 of `gamedataCharacterRandomizationCategory`) [source].
-      (option as Presented).presentation = { randomizeCategory: typeof data.randomizeCategory === "string" ? data.randomizeCategory : "Body",
+      const explicit = typeof data.randomizeCategory === "string" && !!data.randomizeCategory;
+      (option as Presented).presentation = { randomizeCategory: explicit ? data.randomizeCategory as string : "Body", categoryExplicit: explicit,
         useThumbnails: data.useThumbnails === 1 || data.useThumbnails === true, censorFlag: String(data.censorFlag ?? "0"),
         censorFlagAction: typeof data.censorFlagAction === "string" ? data.censorFlagAction : "" };
       const choices = option.type === "appearance" ? option.definitions : option.type === "morph" ? option.morphNames : option.options;
@@ -118,6 +125,8 @@ export interface CcOption {
   readonly order: number;
   /** `randomizeCategory`: the section. */
   readonly category: string;
+  /** The resource names the category (otherwise it is the default, `Body`). */
+  readonly categoryExplicit: boolean;
   readonly uiSlot: string;
   /** Switchers: the slots their choices fill. */
   readonly uiSlots: readonly string[];
@@ -138,7 +147,10 @@ export interface CcOption {
   readonly defaultChoice: string | null;
   readonly choices: readonly CcChoice[];
   readonly provenance: CcProvenance;
-  readonly render: RenderCoverage;
+  /** Switchers: every option name their choices activate (same part). */
+  readonly targets: readonly string[];
+  /** No choice adds an appearance or a morph (an Off placeholder). */
+  readonly emitsNothing: boolean;
 }
 export interface CcRow {
   /** The slot the row shows (the option's name when it has no slot). */
@@ -168,7 +180,6 @@ export interface CcCatalogue {
     readonly options: number; readonly userFacing: number; readonly choices: number;
     readonly modOptions: number; readonly modChoices: number; readonly modChoicesOnVanillaOptions: number;
     readonly perSection: Readonly<Record<string, number>>;
-    readonly render: Readonly<Record<RenderCoverage["status"], number>>;
   };
   readonly gaps: readonly CcGap[];
 }
@@ -179,6 +190,11 @@ export interface CatalogueInputs {
   readonly cco: CcoResource;
   /** Custom resources as `loadMergedCco` lists them, to name each choice's mod. */
   readonly customs: readonly { readonly path: string; readonly label: string; readonly mod: string | null }[];
+  /**
+   * The base creator resource's winner, when a mod archive supplies it (it replaces the installed game's): its options and
+   * choices then name that mod (PIPE-46). Absent or `mod: null` when the game supplies it.
+   */
+  readonly base?: { readonly path: string; readonly mod: string | null } | null;
   readonly text: TextTable | null;
   readonly presentation: CreatorPresentation | null;
   /** The editing context whose options count as user-facing (the creator's default is a new game). */
@@ -213,8 +229,10 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
   const editTag = inputs.editTag ?? "NewGame";
   const gaps: CcGap[] = [...(inputs.presentation?.gaps ?? [])];
   const byLabel = new Map(inputs.customs.map(custom => [custom.label, custom]));
+  const baseProvenance: CcProvenance = inputs.base?.mod ? Object.freeze({ kind: "mod", mod: inputs.base.mod, resource: inputs.base.path })
+    : Object.freeze({ kind: "vanilla", mod: null, resource: null });
   const provenance = (label: string): CcProvenance => {
-    if (label === "base game") return { kind: "vanilla", mod: null, resource: null };
+    if (label === "base game") return baseProvenance;
     const custom = byLabel.get(label);
     return { kind: "mod", mod: custom?.mod ?? null, resource: custom?.path ?? null };
   };
@@ -247,13 +265,6 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
     return target.morphNames.every(choice => !choice.morphName);
   });
 
-  const coverage = renderCoverage(drafts.map(({ option, part }) => ({ id: `${part}/${option.name}`, part, name: option.name, type: option.type,
-    uiSlot: option.uiSlot, link: option.link ? { key: option.link, controller: option.linkController } : null,
-    hasResource: option.type === "appearance" && !!option.resource, groups: groups.get(`${part}/${option.name}`) ?? [],
-    targets: option.type === "switcher" ? [...new Set(option.options.flatMap(choice => choice.names))] : [],
-    uiSlots: option.type === "switcher" ? option.uiSlots : [],
-    emitsNothing: option.type === "switcher" ? option.options.every(choice => emitsNothing(part, choice.names)) : emitsNothing(part, [option.name]) })), bodyGender);
-
   const options: CcOption[] = drafts.map(({ option, part }) => {
     const id = `${part}/${option.name}`;
     const presentation = (option as Presented).presentation;
@@ -261,7 +272,7 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       const key = keyOf(option, choice);
       const shown = (choice as PresentedChoice).presentation;
       const icon = shown?.icon ?? null;
-      const activates = option.type === "switcher" ? (choice as { names: string[] }).names : [];
+      const activates = option.type === "switcher" ? [...(choice as { names: string[] }).names] : [];
       const off = option.type === "switcher" ? emitsNothing(part, activates) : option.type === "appearance" ? !key || !option.resource : !key;
       // Without a text, a definition reads by its last `__` part (`he_000_pwa__basehead__12_gradient_brown` → `Gradient brown`).
       return { key, position, label: label(choice.localizedName, key.split("__").pop() || choice.localizedName || "none"), off,
@@ -272,29 +283,40 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
     });
     const defaultChoice = choices[option.defaultIndex]?.key ?? choices[0]?.key ?? null;
     return { id, part, name: option.name, type: option.type, label: label(option.localizedName, option.name), order: option.index,
-      category: presentation?.randomizeCategory ?? "Body", uiSlot: option.uiSlot, uiSlots: option.type === "switcher" ? option.uiSlots : [],
+      category: presentation?.randomizeCategory ?? "Body", categoryExplicit: presentation?.categoryExplicit ?? false,
+      uiSlot: option.uiSlot, uiSlots: option.type === "switcher" ? [...option.uiSlots] : [],
       link: option.link ? { key: option.link, controller: option.linkController } : null, hidden: option.hidden, enabled: option.enabled,
-      editTags: option.editTags, censorFlag: presentation?.censorFlag ?? "0", controlledBy: controlledBy.get(id) ?? [],
-      groups: groups.get(id) ?? [], app: option.type === "appearance" ? option.resource : null,
+      editTags: [...option.editTags], censorFlag: presentation?.censorFlag ?? "0", controlledBy: controlledBy.get(id) ?? [],
+      groups: groups.get(id) ?? [], app: option.type === "appearance" && option.resource ? { ...option.resource } : null,
       useThumbnails: presentation?.useThumbnails ?? false, defaultChoice, choices, provenance: provenance(option.definedBy),
-      render: coverage.get(id)! };
+      targets: option.type === "switcher" ? [...new Set(option.options.flatMap(choice => choice.names))] : [],
+      emitsNothing: option.type === "switcher" ? option.options.every(choice => emitsNothing(part, choice.names)) : emitsNothing(part, [option.name]) };
   });
   const position = new Map(drafts.map((draft, i) => [`${draft.part}/${draft.option.name}`, i]));
   options.sort((a, b) => a.order - b.order || PART_RANK[a.part] - PART_RANK[b.part] || position.get(a.id)! - position.get(b.id)!);
 
   // Rows: user-facing options grouped by slot within their part, placed by their first option and filed under the
   // category most of them name (a slot's Off placeholder may carry the default category).
+  // Only categories the resource names vote; a row none of whose options names one is filed beside its neighbours of the
+  // same part (a head-only CCXL option without a category would otherwise land under Body, the enum's default; UI-60).
   const rows = new Map<string, { slot: string; part: CcoPart; order: number; options: string[]; category: string; votes: Map<string, number> }>();
   for (const option of options) {
     if (!userFacing(option, editTag)) continue;
     const slot = option.uiSlot || option.name;
     const key = `${option.part}/${slot}`;
-    const row = rows.get(key) ?? { slot, part: option.part, order: option.order, options: [] as string[], category: option.category, votes: new Map<string, number>() };
+    const row = rows.get(key) ?? { slot, part: option.part, order: option.order, options: [] as string[], category: "", votes: new Map<string, number>() };
     row.options.push(option.id);
-    row.votes.set(option.category, (row.votes.get(option.category) ?? 0) + 1);
+    if (option.categoryExplicit) row.votes.set(option.category, (row.votes.get(option.category) ?? 0) + 1);
     rows.set(key, row);
   }
-  for (const row of rows.values()) row.category = [...row.votes].reduce((a, b) => b[1] > a[1] ? b : a)[0];
+  for (const row of rows.values()) if (row.votes.size) row.category = [...row.votes].reduce((a, b) => b[1] > a[1] ? b : a)[0];
+  const byOrder = [...rows.values()].sort((a, b) => a.order - b.order);
+  for (const row of byOrder) {
+    if (row.category) continue;
+    const decided = byOrder.filter(other => other.part === row.part && other.votes.size);
+    const before = decided.filter(other => other.order <= row.order).at(-1), after = decided.find(other => other.order > row.order);
+    row.category = row.part === "body" ? "Body" : before?.category ?? after?.category ?? "Body";
+  }
   // The creator uses only the first of two top-level options that share an index [wiki]; say so rather than guess.
   const topLevel = [...rows.values()].map(row => options.find(option => option.id === row.options[0])!).filter(option => !option.controlledBy.length);
   const seen = new Map<number, string>();
@@ -317,21 +339,43 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
   const all = options.flatMap(option => option.choices.map(choice => ({ option, choice })));
   const perSection: Record<string, number> = {};
   for (const section of sections) perSection[section.id] = section.rows.reduce((n, row) => n + row.options.length, 0);
-  const render = { rendered: 0, conditional: 0, "not-rendered": 0 };
-  for (const option of options) if (userFacing(option, editTag)) render[option.render.status]++;
   return { schema: CC_CATALOGUE_SCHEMA, bodyGender, language: text?.language ?? null, options, sections, gaps,
     counts: { options: options.length, userFacing: options.filter(option => userFacing(option, editTag)).length, choices: all.length,
       modOptions: options.filter(option => option.provenance.kind === "mod").length,
       modChoices: all.filter(({ choice }) => choice.provenance.kind === "mod").length,
       modChoicesOnVanillaOptions: all.filter(({ option, choice }) => option.provenance.kind === "vanilla" && choice.provenance.kind === "mod").length,
-      perSection, render } };
+      perSection } };
 }
 
 /** Index a catalogue by option ID and by `(part, name)`. */
 export class CatalogueIndex {
   private readonly byId: ReadonlyMap<string, CcOption>;
-  constructor(readonly catalogue: CcCatalogue) { this.byId = new Map(catalogue.options.map(option => [option.id, option])); }
+  private readonly keys = new WeakMap<CcOption, Map<string, CcChoice>>();
+  private readonly families = new Map<string, CcOption[]>();
+  constructor(readonly catalogue: CcCatalogue) {
+    this.byId = new Map(catalogue.options.map(option => [option.id, option]));
+    for (const option of catalogue.options) if (option.link) {
+      const members = this.families.get(option.link.key) ?? [];
+      members.push(option);
+      this.families.set(option.link.key, members);
+    }
+  }
   option(part: CcoPart, name: string): CcOption | undefined { return this.byId.get(`${part}/${name}`); }
   byOptionId(id: string): CcOption | undefined { return this.byId.get(id); }
-  choice(option: CcOption, key: string): CcChoice | undefined { return option.choices.find(choice => choice.key === key); }
+  choice(option: CcOption, key: string): CcChoice | undefined {
+    let keys = this.keys.get(option);
+    if (!keys) {
+      keys = new Map();
+      // The first choice with a key wins, as a lookup by name finds it; for a switcher, the first that turns an option on
+      // (cco-model.ts `switcherChoiceNamed`, PIPE-65).
+      for (const choice of option.choices) {
+        const known = keys.get(choice.key);
+        if (!known || (option.type === "switcher" && !known.activates.length && choice.activates.length)) keys.set(choice.key, choice);
+      }
+      this.keys.set(option, keys);
+    }
+    return keys.get(key);
+  }
+  /** Every option sharing a link key (controllers and followers, any part), in catalogue order. */
+  family(key: string): readonly CcOption[] { return this.families.get(key) ?? []; }
 }

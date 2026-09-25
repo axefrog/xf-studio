@@ -221,7 +221,7 @@ test("preview commands keep camera and lighting state readable without DOM and e
   expect(calls).toEqual(["exposure:1.5", "angle:120"]);
   actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
   expect(actions.snapshot()).toMatchObject({ eyeShape: 12 });
-  // The tried piercing style is the character service's (character.tryChoice), not a preview preference.
+  // A piercing style is a creator choice, the character context's, not a preview preference.
   expect("piercingStyle" in actions.snapshot()).toBe(false);
   actions.rememberEyeShape(9); // A saved morph was already applied by the renderer.
   expect(actions.snapshot().eyeShape).toBe(9);

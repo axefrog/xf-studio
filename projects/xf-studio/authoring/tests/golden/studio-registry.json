@@ -70,7 +70,17 @@
   "quality.rebuild",
   "savedV.load",
   "savedV.restore",
-  "character.tryChoice"
+  "savedV.clear",
+  "character.setOption",
+  "character.setOptions",
+  "character.reset",
+  "character.resetAll",
+  "character.useDefault",
+  "character.loadSave",
+  "character.loadPreset",
+  "character.keepChanges",
+  "character.undo",
+  "character.redo"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -1973,36 +1983,169 @@
     }
    }
   },
-  "character.tryChoice": {
+  "savedV.clear": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.setOption": {
    "scope": [
     "viewport"
    ],
    "effect": "workspace",
    "undo": "none",
    "payload": {
-    "slot": {
+    "part": {
      "type": "enum",
      "required": true,
      "from": "input",
      "values": [
-      "piercings"
+      "head",
+      "body",
+      "arms"
      ]
+    },
+    "option": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 1,
+     "maxLength": 127
     },
     "choice": {
      "type": "string",
      "required": true,
      "from": "input",
-     "minLength": 0,
-     "maxLength": 127
-    },
-    "definition": {
-     "type": "string",
-     "required": true,
-     "from": "input",
-     "minLength": 0,
      "maxLength": 127
     }
    }
+  },
+  "character.setOptions": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "changes": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "label": {
+     "type": "string",
+     "required": false,
+     "from": "input",
+     "maxLength": 80
+    }
+   }
+  },
+  "character.reset": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "part": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "head",
+      "body",
+      "arms"
+     ]
+    },
+    "option": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 1,
+     "maxLength": 127
+    }
+   }
+  },
+  "character.resetAll": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.useDefault": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "bodyGender": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "female",
+      "male"
+     ]
+    }
+   }
+  },
+  "character.loadSave": {
+   "scope": [
+    "file"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "character.loadPreset": {
+   "scope": [
+    "file"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "character.keepChanges": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.undo": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "character.redo": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   }
  },
  "registry": [
@@ -2642,7 +2785,97 @@
    "async": false
   },
   {
-   "id": "character.tryChoice",
+   "id": "savedV.clear",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.setOption",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.setOptions",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.reset",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.resetAll",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.useDefault",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.loadSave",
+   "family": "action",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.loadPreset",
+   "family": "action",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.keepChanges",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.undo",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "character.redo",
    "family": "action",
    "scope": [
     "viewport"
@@ -2808,6 +3041,24 @@
   },
   {
    "id": "savedV.export",
+   "family": "file",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "characterPreset.import",
+   "family": "file",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "characterPreset.export",
    "family": "file",
    "scope": [
     "file"

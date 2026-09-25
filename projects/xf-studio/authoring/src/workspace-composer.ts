@@ -12,8 +12,11 @@ export type WorkspaceCapturePorts = {
   quality(): WorkspaceState["preview"]["textureSize"];
   preview(): ReturnType<PreviewActions["snapshot"]> | undefined;
   motion(): ReturnType<MotionActions["snapshot"]> | undefined;
-  /** The creator choice tried on the shown V (the character-detail service's), persisted as the preview's piercing style. */
-  triedChoice?(): { choice: string; definition: string } | null | undefined;
+  /**
+   * The character context's stored form (character-context-actions.ts `stored`): undefined while the context isn't attached (the
+   * workspace's is kept), null when nothing needs storing.
+   */
+  character?(): WorkspaceState["preview"]["character"] | null | undefined;
   uiPreferences?(): WorkspaceState["uiPreferences"];
   previewSetup?(): WorkspaceState["previewSetup"];
 };
@@ -38,8 +41,13 @@ export class WorkspaceComposer {
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
-    const tried = this.ports.triedChoice?.();
-    if (tried !== undefined) { preview.piercingStyle = tried?.choice ?? ""; preview.piercingDefinition = tried?.definition ?? ""; }
+    // The context owns every creator choice (CORE-58): once it is attached, the retired tried piercing style is written empty, and the
+    // context is stored only when something was set.
+    const character = this.ports.character?.();
+    if (character !== undefined) {
+      preview.piercingStyle = ""; preview.piercingDefinition = "";
+      if (character) preview.character = character; else delete preview.character;
+    }
     return structuredClone({ ...this.initial, ...editing, preview });
   }
 }

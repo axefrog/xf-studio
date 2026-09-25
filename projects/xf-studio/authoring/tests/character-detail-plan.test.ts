@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
+import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
 import { choiceLabel, planCharacterDetails, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
@@ -105,7 +106,7 @@ describe("resolver selection for brows, lashes and hair", () => {
   });
 
   test("an appearance the installation lacks is unavailable with one plain line", async () => {
-    const missing = { ...REQUEST_A, appearances: [{ group: "TPP", option: "eyebrows_color1", app: refFromPath("base\\fixture\\gone.app").hash, definition: "brown" }] };
+    const missing = { ...REQUEST_A, appearances: [{ part: "head" as const, group: "TPP", option: "eyebrows_color1", app: refFromPath("base\\fixture\\gone.app").hash, definition: "brown" }] };
     const { plan: result } = await plan(missing as typeof REQUEST_A);
     const brows = result.slots.find(s => s.slot === "brows")!;
     expect(brows.state).toBe("unavailable");
@@ -131,7 +132,17 @@ describe("character requests", () => {
     expect(parseCharacterRequest(REQUEST_A)).toEqual(REQUEST_A);
     expect(parseCharacterRequest(DEFAULT_CHARACTER)).toEqual(DEFAULT_CHARACTER);
     expect(() => parseCharacterRequest({ ...REQUEST_A, path: "C:\\games" })).toThrow();
-    expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, bodyGender: "male" })).toThrow();
+    // A current request may ask for the masculine default V; an earlier one never could.
+    expect(parseCharacterRequest({ ...DEFAULT_CHARACTER, bodyGender: "male" })).toMatchObject({ bodyGender: "male" });
+    expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, schema: "xfs/character-request-1", bodyGender: "male" })).toThrow();
+    // Creator choices are the character context's identities, validated whole.
+    const choices: CharacterChoice[] = [{ part: "head", option: "eyes_color", choice: "he__02_blue" }, { part: "head", option: "piercings", choice: "07", activates: ["xl_ring"], mod: "Rings" }];
+    expect(parseCharacterRequest({ ...REQUEST_A, choices })).toEqual({ ...REQUEST_A, choices });
+    expect(() => parseCharacterRequest({ ...REQUEST_A, choices: [{ part: "head", option: "a\b", choice: "x" }] })).toThrow("creator choice");
+    expect(() => parseCharacterRequest({ ...REQUEST_A, choices: [{ part: "torso", option: "a", choice: "x" }] })).toThrow("creator choice");
+    expect(() => parseCharacterRequest({ ...REQUEST_A, schema: "xfs/character-request-3", choices })).toThrow();
+    // A v3 tried piercing is a page built apart from this host: refused.
+    expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, schema: "xfs/character-request-3", override: { slot: "piercings", choice: "01", definition: "gold" } })).toThrow();
     expect(() => parseCharacterRequest({ ...REQUEST_A, appearances: [{ group: "TPP", option: "x", app: "0x12", definition: "y" }] })).toThrow();
     expect(() => parseCharacterRequest({ ...REQUEST_A, appearances: [{ group: "TPP", option: "a\\b", app: "12", definition: "y" }] })).toThrow();
   });

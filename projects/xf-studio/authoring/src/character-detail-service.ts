@@ -15,16 +15,21 @@
  * through the resolver (layered-setup.ts), their maps and microblends exported like any texture, and the `.mlmask` exported as one
  * raw image per mask layer.
  *
- * Preparations on one installation share a `CharacterPreparationCache` (the host keeps it per installation fingerprint): a tried choice on
- * the same V re-plans from what the V's own preparation already resolved, read and exported, and resolves and exports only what the
- * choice changes (PREV-68). The written record is what the browser's own reader makes of it (`parseCharacterDetail`), so the host and
- * the page share one rule set (PIPE-40).
+ * A request's creator choices (the character context, character-context.ts) are interpreted by the host's creator catalogue
+ * (`derive`) into the V's descriptors; a request without choices is the default V or the save as stored.
+ *
+ * Preparations on one installation share a `CharacterPreparationCache` (the host keeps it per installation fingerprint): a changed
+ * choice on the same V re-plans from what earlier preparations already resolved, read and exported, and resolves and exports only what
+ * the choice changes (PREV-68). A preparation that met a failure which may not repeat (a WolvenKit run that timed out, a resource the
+ * fetcher answered null for such a reason) is **degraded**: nothing it derived from a missing input is kept, and the host prepares it
+ * again next time instead of serving it as final (PIPE-53). The written record is what the browser's own reader makes of it
+ * (`parseCharacterDetail`), so the host and the page share one rule set (PIPE-40).
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { applyChoiceOverride, planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
@@ -34,7 +39,7 @@ import { layerOverrides, readSetup, readTemplate, type SetupValues, type Templat
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
-  type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderOverride, type RenderProfile, type RenderProfileStop, type RenderRgba,
+  type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
@@ -66,8 +71,14 @@ export type PrepareCharacterOptions = {
    * resolved, read and exported afresh, and the installation is opened with `open`.
    */
   cache?: CharacterPreparationCache;
+  /**
+   * The V's descriptors for a request with creator choices, interpreted with the installed creator catalogue (the host's
+   * `CreatorCatalogueHost.inputFor`). Without it, a request's choices are ignored with a log line.
+   */
+  derive?: (request: CharacterRequest, installation: Installation) => Promise<CharacterInput>;
 };
-export type CharacterDetailResult = { record: CharacterDetail; recordFile: string };
+/** `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). */
+export type CharacterDetailResult = { record: CharacterDetail; recordFile: string; degraded: boolean };
 
 export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
@@ -296,6 +307,16 @@ export class CharacterPreparationCache {
   readonly components = new Map<string, BuiltComponent>();
   /** The export tool that read these files (the record names it even when nothing new is exported). */
   toolLabel: string | undefined;
+  private maps(): Map<string, unknown>[] {
+    return [this.appearances, this.defaults, this.identities, this.profiles, this.skinProfiles, this.gradients, this.setups,
+      this.layerTemplates, this.gamma, this.geometry, this.textures, this.masks, this.components] as Map<string, unknown>[];
+  }
+  /** The keys held now, so a degraded preparation can forget what it added (`forget`). */
+  mark(): Set<string>[] { return this.maps().map(map => new Set(map.keys())); }
+  /** Forget every entry added since `mark` (a degraded preparation's results: nulls and parts made without inputs; PIPE-53). */
+  forget(mark: readonly Set<string>[]): void {
+    this.maps().forEach((map, i) => { for (const key of [...map.keys()]) if (!mark[i]!.has(key)) map.delete(key); });
+  }
   /** Forget everything derived from an earlier installation. */
   reset(): void {
     for (const map of [this.appearances, this.defaults, this.identities, this.profiles, this.skinProfiles, this.gradients, this.setups,
@@ -304,6 +325,12 @@ export class CharacterPreparationCache {
     this.installation = null;
   }
 }
+
+/** The installation fetcher's count of null answers for a reason that may not repeat (resolver-host.ts `WolvenKitFetcher.stats`). */
+const transientFailures = (installation: Installation) => {
+  const count = (installation.fetcher as { stats?: { transient?: unknown } } | undefined)?.stats?.transient;
+  return typeof count === "number" ? count : 0;
+};
 
 /** Resolve the V through the cache: each distinct descriptor once per installation and set of morphs, in `resolveCharacter`'s order. */
 async function resolveThrough(graph: ResourceGraph, input: CharacterInput, cco: Awaited<ReturnType<typeof loadMergedCco>>,
@@ -355,6 +382,9 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
   const { graph, summary } = installation;
+  // What this preparation adds to the cache, and the fetcher's count of failures that may not repeat: if it grows, or WolvenKit fails
+  // on an archive, the preparation is degraded and what it added is forgotten (PIPE-53).
+  const mark = cache.mark(), transientBefore = transientFailures(installation);
   time("open");
   cancelled();
 
@@ -364,17 +394,16 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   try { cco = await loadMergedCco(graph, request.bodyGender); }
   catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
   let input: CharacterInput;
-  if (request.source === "default") {
+  if (request.choices?.length && options.derive) {
+    // The creator choices a person set, interpreted with the installed catalogue (rule R5; the save's own descriptors where nothing changed).
+    try { input = await options.derive(request, installation); }
+    catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
+  } else if (request.source === "default") {
+    if (request.choices?.length) log("Creator choices were sent without the creator catalogue; showing the V without them.");
     const derived = descriptorsFromUiState(cco.merged.cco, {});
     input = { bodyGender: request.bodyGender, origin: "ui-state", appearances: derived.appearances, morphs: derived.morphs };
   } else input = inputFromCharacterRequest(request);
-  // A choice the viewer tries (a piercing style) replaces the V's own on its slot; one the creator doesn't offer is ignored.
-  let override: RenderOverride | undefined;
-  if (request.override) {
-    const appearances = applyChoiceOverride(input.appearances, cco.merged.cco, request.override);
-    if (appearances) { input = { ...input, appearances }; override = { ...request.override }; }
-    else log(`The tried ${request.override.slot} choice ${request.override.choice} (${request.override.definition}) is not offered; showing the V's own.`);
-  }
+  cancelled();
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache);
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
@@ -693,7 +722,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
-    character: { source: request.source, bodyGender: request.bodyGender, ...(override ? { override } : {}) },
+    character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: [...new Set(notes)].slice(0, 32).map(line => line.slice(0, 500)), ...(toolLabel ? { tool: toolLabel } : {}) },
     components, slots: [...slots.values()], choices: plan.choices,
@@ -712,7 +741,12 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     renameSync(staging, target);
   }
   time("write");
-  log(`Prepared ${request.override ? "a tried choice" : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
+  const degraded = toolFailures.size > 0 || transientFailures(installation) > transientBefore;
+  if (degraded) {
+    cache.forget(mark);
+    log("Some files couldn't be read this time (WolvenKit or a resource failed in a way that may not repeat); the V will be prepared again next time.");
+  }
+  log(`Prepared ${request.choices?.length ? `the V with ${request.choices.length} creator choice(s)` : "the V"} in ${((performance.now() - started) / 1000).toFixed(2)} s: ${timings.join(", ")}; ` +
     `${reusedAppearances} appearance(s) and ${reusedComponents} of ${plan.components.length} part(s) reused.`);
-  return { record, recordFile: recordName };
+  return { record, recordFile: recordName, degraded };
 }

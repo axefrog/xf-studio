@@ -2,8 +2,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyChoiceOverride, detailSlotOf, piercingLabel, slotChoices } from "../src/character-detail-plan";
-import { CharacterRequestVersionError, DEFAULT_CHARACTER, parseCharacterRequest, sameCharacter, type CharacterRequest } from "../src/character-detail-request";
+import { buildCatalogue, readCcoWithPresentation } from "../src/cc-catalogue";
+import { type CcoResource } from "../src/cco-model";
+import { type CharacterChoice, type CharacterSource, deriveCharacter } from "../src/character-context";
+import { detailSlotOf, piercingLabel, slotChoices } from "../src/character-detail-plan";
+import { CharacterRequestVersionError, DEFAULT_CHARACTER, parseCharacterRequest, sameCharacter, savedOfRequest, type CharacterRequest } from "../src/character-detail-request";
 import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character-detail-service";
 import { loadMergedCco } from "../src/character-resolver";
 import { depotHash } from "../src/depot-path";
@@ -43,8 +46,19 @@ function counting(calls: string[]): GameAssetExporter {
       textures: paths => { calls.push(...paths); return session.textures(paths); }, masks: paths => { calls.push(...paths); return session.masks(paths); } };
   } };
 }
-const prepare = (request: CharacterRequest, fixture = detailFixture()) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"),
-  resolverCache: join(root, "resolver"), exporter: exporter(), open: () => fixture.installation() }).then(result => result.record);
+/** The fixture's creator catalogue, as the host's catalogue service builds it (without texts or TweakDB). */
+async function sourceOf(graph: ReturnType<ReturnType<typeof detailFixture>["installation"]>["graph"]): Promise<CharacterSource> {
+  const merged = await loadMergedCco(graph, "female", readCcoWithPresentation);
+  return { catalogue: buildCatalogue({ bodyGender: "female", cco: merged.merged.cco, customs: [], text: null, presentation: null }), cco: merged.merged.cco };
+}
+/** The host's derivation of a request's choices (cc-catalogue-service.ts `inputFor`), over a fixture source. */
+const deriver = (source?: CharacterSource) => source ? async (request: CharacterRequest) => {
+  const saved = savedOfRequest(request);
+  const { request: derived } = deriveCharacter(source, saved ? { kind: "save", saved } : { kind: "default" }, request.choices ?? []);
+  return { bodyGender: request.bodyGender, origin: "save" as const, appearances: derived.appearances.filter(a => a.part === "head"), morphs: derived.morphs.filter(m => m.part === "head") };
+} : undefined;
+const prepare = (request: CharacterRequest, fixture = detailFixture(), source?: CharacterSource) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"),
+  resolverCache: join(root, "resolver"), exporter: exporter(), open: () => fixture.installation(), derive: deriver(source) }).then(result => result.record);
 
 describe("piercings from the creator's slot, groups and chunk masks", () => {
   test("a vanilla style: its part, the chunks its mask leaves visible, and each chunk's layer stack", async () => {
@@ -120,48 +134,45 @@ describe("creator choices a viewer may try", () => {
     expect(record.choices).toEqual([{ slot: "piercings", options: choices }]);
   });
 
-  test("a tried choice replaces the V's own on its slot, in every group the creator lists it in; one not offered is ignored", async () => {
-    const cco = (await loadMergedCco(detailFixture().installation().graph, "female")).merged.cco;
-    const own = [{ part: "head" as const, group: "face", option: "piercings_01", app: { hash: depotHash(P.earringApp1), path: P.earringApp1 }, definition: PIERCING.silver },
-      { part: "head" as const, group: "TPP", option: "eyes_color", app: { hash: depotHash(P.eyeApp), path: P.eyeApp }, definition: "gradient_blue" }];
-    const tried = applyChoiceOverride(own, cco, { slot: "piercings", choice: "12", definition: PIERCING.black })!;
-    expect(tried.map(entry => [entry.group, entry.option, entry.definition])).toEqual([["TPP", "eyes_color", "gradient_blue"],
-      ["face", "piercings_12", PIERCING.black]]);
-    expect(applyChoiceOverride(own, cco, { slot: "piercings", choice: "12", definition: "no_such_colour" })).toBeNull();
-    expect(applyChoiceOverride(own, cco, { slot: "piercings", choice: "Common-Off", definition: "None" })).toBeNull();
-
-    const record = await prepare({ ...REQUEST_A, override: { slot: "piercings", choice: "12", definition: PIERCING.black } });
-    expect(record.character.override).toEqual({ slot: "piercings", choice: "12", definition: PIERCING.black });
+  test("a piercing chosen in the context replaces the V's own on its slot, in every group the creator lists it in; one not offered is reported", async () => {
+    const fixture = detailFixture(), source = await sourceOf(fixture.installation().graph);
+    const choices: CharacterChoice[] = [{ part: "head", option: "piercings", choice: "12" }, { part: "head", option: "piercings_12", choice: PIERCING.black }];
+    const record = await prepare({ ...REQUEST_A, choices }, fixture, source);
     expect(record.slots.find(slot => slot.slot === "piercings")!.label).toBe("style 12, black");
-    // The rest of the V is unchanged by the tried choice.
-    const plain = await prepare(REQUEST_A);
+    // The rest of the V is unchanged by the choice.
+    const plain = await prepare(REQUEST_A, fixture);
     expect(record.components.filter(item => item.slot !== "piercings")).toEqual(plain.components.filter(item => item.slot !== "piercings"));
-    const ignored = await prepare({ ...REQUEST_A, override: { slot: "piercings", choice: "77", definition: PIERCING.black } });
-    expect(ignored.character.override).toBeUndefined();
+    // A style the installation doesn't offer changes nothing and is reported.
+    const derived = deriveCharacter(source, { kind: "save", saved: savedOfRequest(REQUEST_A)! }, [{ part: "head", option: "piercings", choice: "77" }]);
+    expect(derived.view.missing.entries.filter(entry => entry.from === "choice")).toEqual([{ part: "head", option: "piercings", choice: "77", mod: null, reason: "choice-missing", from: "choice" }]);
+    const ignored = await prepare({ ...REQUEST_A, choices: [{ part: "head", option: "piercings", choice: "77" }] }, fixture, source);
     expect(ignored.components).toEqual(plain.components);
   });
 
-  test("a switcher choice naming several options, with a linked follower, resolves through the shared R5 rules (PIPE-42)", () => {
+  test("a switcher choice naming several options, with a linked follower, resolves through the shared R5 rules (PIPE-42, PIPE-65)", () => {
     const appearance = (name: string, uiSlot: string, link: string, linkController: boolean, resource: string, definitions: string[]) => ({ type: "appearance" as const,
-      name, uiSlot, link, linkController, hidden: false, enabled: false, index: 0, defaultIndex: 0, localizedName: "", editTags: [], definedBy: "",
-      resource: { path: resource, hash: String(depotHash(resource)) }, definitions: definitions.map((definition, index) => ({ name: definition, index, localizedName: "", tags: [], providedBy: "" })) });
-    const cco = { label: "t", version: 1, parts: { body: { options: [], groups: [] }, arms: { options: [], groups: [] }, head: {
+      name, uiSlot, link, linkController, hidden: false, enabled: false, index: 0, defaultIndex: 0, localizedName: "", editTags: ["NewGame"], definedBy: "base game",
+      resource: { path: resource, hash: String(depotHash(resource)) }, definitions: definitions.map((definition, index) => ({ name: definition, index, localizedName: "", tags: [], providedBy: "base game" })) });
+    const cco: CcoResource = { label: "t", version: 1, parts: { body: { options: [], groups: [] }, arms: { options: [], groups: [] }, head: {
       options: [
         { type: "switcher" as const, name: "piercings", uiSlot: "piercings", uiSlots: ["piercings_color"], link: "", linkController: false, hidden: false, enabled: true,
-          index: 0, defaultIndex: 0, localizedName: "", editTags: [], definedBy: "", options: [{ names: [], index: 0, localizedName: "Common-Off", providedBy: "" },
-            { names: ["piercings_01", "piercings_01_nose", "piercings_01_lip"], index: 1, localizedName: "01", providedBy: "" }] },
+          index: 0, defaultIndex: 0, localizedName: "", editTags: ["NewGame"], definedBy: "base game", options: [{ names: [], index: 0, localizedName: "Common-Off", providedBy: "base game" },
+            // A same-named choice that drives nothing comes first: a match by name alone would take it (PIPE-65).
+            { names: [], index: 1, localizedName: "01", providedBy: "base game" },
+            { names: ["piercings_01", "piercings_01_nose", "piercings_01_lip"], index: 2, localizedName: "01", providedBy: "base game" }] },
         // The controller the colour control drives, a linked follower on a creator slot of its own, and a second target it names.
         appearance("piercings_01", "piercings_color", "p", true, "a\\ear.app", ["silver", "gold"]),
         appearance("piercings_01_nose", "piercings_nose", "p", false, "a\\nose.app", ["n_silver", "n_gold"]),
         appearance("piercings_01_lip", "piercings_lip", "", false, "a\\lip.app", ["lip_default"]),
       ], groups: [{ name: "face", options: ["piercings_01", "piercings_01_nose", "piercings_01_lip"] }, { name: "TPP", options: ["piercings_01_nose"] }] } } };
-    const { options } = slotChoices(cco, "piercings");
-    expect(options).toEqual([{ choice: "01", label: "Style 01", definitions: [{ name: "silver", label: "Silver" }, { name: "gold", label: "Gold" }] }]);
-    // The V wore the nose part in an old colour: it is replaced too, since the style switcher owns it.
-    const own = [{ part: "head" as const, group: "face", option: "piercings_01_nose", app: { hash: "1", path: null }, definition: "n_silver" }];
-    const tried = applyChoiceOverride(own, cco, { slot: "piercings", choice: "01", definition: "gold" })!;
-    // Every target of the choice, the follower with its controller's colour index, in every group that lists it.
-    expect(tried.map(entry => [entry.group, entry.option, entry.definition])).toEqual([["face", "piercings_01", "gold"], ["face", "piercings_01_nose", "n_gold"],
+    const catalogue = buildCatalogue({ bodyGender: "female", cco, customs: [], text: null, presentation: null });
+    const source: CharacterSource = { catalogue, cco };
+    // The V wore the nose part in an old colour: the choice replaces it too, since the style switcher owns it.
+    const saved = { appearances: [{ part: "head" as const, group: "face", option: "piercings_01_nose", app: "1", definition: "n_silver" }], morphs: [] };
+    const { request } = deriveCharacter(source, { kind: "save", saved }, [{ part: "head", option: "piercings", choice: "01", activates: ["piercings_01", "piercings_01_nose", "piercings_01_lip"] },
+      { part: "head", option: "piercings_01", choice: "gold" }]);
+    // Every target of the choice, the follower with its controller's colour index, in every group that lists it; the saved nose part is gone.
+    expect(request.appearances.map(entry => [entry.group, entry.option, entry.definition])).toEqual([["face", "piercings_01", "gold"], ["face", "piercings_01_nose", "n_gold"],
       ["face", "piercings_01_lip", "lip_default"], ["TPP", "piercings_01_nose", "n_gold"]]);
     // The follower's own creator slot belongs to the piercings, because the style switcher turns it on.
     expect(detailSlotOf(cco).get("piercings_01_nose")).toBe("piercings");
@@ -187,43 +198,45 @@ describe("creator choices a viewer may try", () => {
     expect(notes.join(" ")).toMatch(/can't offer to try/);
   });
 
-  test("requests: a v3 request may carry a tried choice, parsed strictly with the record's rule; v1 and v2 requests still parse; the same V ignores it", () => {
-    const tried = { ...REQUEST_A, override: { slot: "piercings", choice: "12", definition: PIERCING.black } } as CharacterRequest;
-    expect(parseCharacterRequest(JSON.parse(JSON.stringify(tried)))).toEqual(tried);
-    expect(parseCharacterRequest({ ...DEFAULT_CHARACTER, override: tried.override })).toEqual({ ...DEFAULT_CHARACTER, override: tried.override });
-    expect(() => parseCharacterRequest({ ...tried, override: { ...tried.override, slot: "hair" } })).toThrow("tried choice");
-    expect(() => parseCharacterRequest({ ...tried, override: { ...tried.override, choice: "../x" } })).toThrow("tried choice");
-    expect(() => parseCharacterRequest({ ...tried, override: { ...tried.override, choice: "x".repeat(200) } })).toThrow("tried choice");
-    expect(() => parseCharacterRequest({ ...tried, override: { ...tried.override, extra: 1 } })).toThrow("tried choice");
+  test("requests: v4 carries the creator choices, parsed strictly; v1–v3 requests without a tried choice still parse; the same V ignores choices", () => {
+    const choices: CharacterChoice[] = [{ part: "head", option: "piercings", choice: "12" }, { part: "head", option: "piercings_12", choice: PIERCING.black }];
+    const chosen: CharacterRequest = { ...REQUEST_A, choices };
+    expect(parseCharacterRequest(JSON.parse(JSON.stringify(chosen)))).toEqual(chosen);
+    expect(parseCharacterRequest({ ...DEFAULT_CHARACTER, choices })).toEqual({ ...DEFAULT_CHARACTER, choices });
+    expect(() => parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], extra: 1 }] })).toThrow("creator choice");
+    expect(() => parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], option: "x".repeat(200) }] })).toThrow("creator choice");
     // A creator name with parentheses or spaces is an ordinary name.
-    expect(parseCharacterRequest({ ...tried, override: { ...tried.override, choice: "piercings_(ccxl)" } })).toMatchObject({ override: { choice: "piercings_(ccxl)" } });
+    expect(parseCharacterRequest({ ...chosen, choices: [{ ...choices[0], choice: "piercings_(ccxl) 2" }] })).toMatchObject({ choices: [{ choice: "piercings_(ccxl) 2" }] });
     expect(parseCharacterRequest({ schema: "xfs/character-request-1", source: "default", bodyGender: "female" })).toEqual(DEFAULT_CHARACTER);
-    expect(parseCharacterRequest({ schema: "xfs/character-request-2", source: "default", bodyGender: "female" })).toEqual(DEFAULT_CHARACTER);
-    expect(() => parseCharacterRequest({ ...tried, schema: "xfs/character-request-2" })).toThrow();
-    expect(() => parseCharacterRequest({ ...tried, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
-    expect(sameCharacter(REQUEST_A, tried)).toBe(true);
-    expect(sameCharacter(DEFAULT_CHARACTER, tried)).toBe(false);
+    expect(parseCharacterRequest({ schema: "xfs/character-request-3", source: "default", bodyGender: "female" })).toEqual(DEFAULT_CHARACTER);
+    // A v3 page's tried choice, or choices on an earlier version, is a page built apart from this host.
+    expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, schema: "xfs/character-request-3", override: { slot: "piercings", choice: "12", definition: PIERCING.black } })).toThrow();
+    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-2" })).toThrow();
+    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
+    expect(sameCharacter(REQUEST_A, chosen)).toBe(true);
+    expect(sameCharacter(DEFAULT_CHARACTER, chosen)).toBe(false);
   });
 
-  test("a try on the same installation re-plans from the V it already resolved: only the tried slot is resolved and exported (PREV-68)", async () => {
+  test("a changed choice on the same installation re-plans from the V it already resolved: only the changed slot is resolved and exported (PREV-68)", async () => {
     const cache = new CharacterPreparationCache();
     const calls: string[] = [], logs: string[] = [];
     // The registry hands out one long-lived installation while the mod setup is unchanged (installation-registry.ts).
     let acquired = 0;
     const installation = detailFixture().installation();
-    const run = (request: CharacterRequest) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
-      exporter: counting(calls), open: () => { acquired++; return { ...installation }; }, cache, log: line => logs.push(line) }).then(result => result.record);
+    const run = (request: CharacterRequest, source?: CharacterSource) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
+      exporter: counting(calls), open: () => { acquired++; return { ...installation }; }, cache, log: line => logs.push(line), derive: deriver(source) }).then(result => result.record);
     const own = await run(REQUEST_A);
     const firstExports = calls.length;
     expect(firstExports).toBeGreaterThan(0);
     calls.length = 0;
-    const tried = await run({ ...REQUEST_A, override: { slot: "piercings", choice: "12", definition: PIERCING.black } });
+    const source = await sourceOf(installation.graph);
+    const tried = await run({ ...REQUEST_A, choices: [{ part: "head", option: "piercings", choice: "12" }, { part: "head", option: "piercings_12", choice: PIERCING.black }] }, source);
     // The tried style's part is the only thing exported, and the rest of the V is served as it was.
     expect(acquired).toBe(2);
     expect(cache.installation?.depot).toBe(installation.depot);
     expect(calls.every(call => /earring|black|plastic|mask|mltemplate|mlsetup|xbm/i.test(call))).toBe(true);
     expect(tried.components.filter(item => item.slot !== "piercings")).toEqual(own.components.filter(item => item.slot !== "piercings"));
-    expect(logs.at(-1)).toMatch(/Prepared a tried choice in [0-9.]+ s: .*; \d+ appearance\(s\) and 7 of 8 part\(s\) reused\./);
+    expect(logs.at(-1)).toMatch(/Prepared the V with 2 creator choice\(s\) in [0-9.]+ s: .*; \d+ appearance\(s\) and 7 of 8 part\(s\) reused\./);
     // Back to the V's own: nothing to export, and the same record as before.
     calls.length = 0;
     const again = await run(REQUEST_A);

@@ -2,8 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { PreviewActions } from "../src/preview-actions";
-import { CharacterDetailActions } from "../src/character-detail-actions";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
+import { CharacterContextActions } from "../src/character-context-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
@@ -80,28 +79,30 @@ test("saved-V eye suggestion updates application state without applying the morp
     setDetail: () => {},
   });
   app.attach({ preview });
-  // The tried piercing style is the character service's: one typed action, validated against the V's own choices (UI-48).
-  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "", definition: "" })).toMatchObject({ available: false, code: "not_ready" });
-  const character = new CharacterDetailActions({
-    request: async () => ({ key: "k", phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }),
-    poll: async () => { throw Error("unused"); }, clear: () => {}, wait: async () => {},
-    show: async () => ({ slots: [], override: null, choices: [{ slot: "piercings", options: [{ choice: "01", label: "Style 01",
-      definitions: [{ name: "gold", label: "Gold" }] }] }] }),
-  });
-  await character.setCharacter(DEFAULT_CHARACTER);
-  app.attach({ characterDetails: character });
+  // Every creator choice is the character context's: before it exists (no 3D preview yet) a change is refused as not ready (CORE-64).
+  expect(app.capability({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "x" })).toMatchObject({ available: false, code: "not_ready" });
   app.recordAppliedSavedAppearance({ suggestedEyeShape: 9 });
   const snapshot = app.snapshot();
   expect(snapshot.preview?.eyeShape).toBe(9);
   expect(calls).toEqual([]);
-  expect(snapshot.character?.choices).toEqual([{ slot: "piercings", options: [{ choice: "01", label: "Style 01", definitions: [{ name: "gold", label: "Gold" }] }] }]);
-  snapshot.character!.choices[0]!.options[0]!.label = "Forged";
-  expect(app.snapshot().character?.choices[0]?.options[0]?.label).toBe("Style 01");
-  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "silver" })).toMatchObject({ available: false, code: "unavailable" });
-  expect(app.capability({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "gold" }).available).toBe(true);
-  expect(app.dispatch({ kind: "character.tryChoice", slot: "piercings", choice: "01", definition: "gold" }).ok).toBe(true);
-  expect(app.previewState().character?.tried).toEqual({ slot: "piercings", choice: "01", definition: "gold" });
-  character.dispose();
+  // With the context attached, its actions route to it; its large reads are shared and frozen, its snapshot is a copy.
+  const context = new CharacterContextActions({ showSave: () => {}, creator: {
+    panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-1", bodyGender: "female", identity: "t", language: null, mods: [], notes: [""],
+      options: [{ id: "head/eyes_color", part: "head", name: "eyes_color", label: "Eye Color", type: "appearance", grid: true, count: 2, off: null, defaultChoice: "a",
+        mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0] }], sections: [{ id: "Eyes", label: "Eyes", rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
+      counts: { options: 1, choices: 2, modChoices: 0 } } }),
+    page: async () => ({ option: "head/eyes_color", offset: 0, total: 2, choices: [] }),
+    view: async () => ({ bodyGender: "female", identity: "t", values: {}, missing: { entries: [], summary: [] }, saveCheck: null, faceMorphs: [] }),
+    preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {} } });
+  context.start();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  app.attach({ characterContext: context });
+  expect(app.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "b" }).ok).toBe(true);
+  expect(app.previewState().character).toMatchObject({ phase: "ready", set: 1, undo: "Change Eye Color" });
+  expect(Object.isFrozen(app.characterPanel())).toBe(true);
+  expect(app.dispatch({ kind: "character.undo" }).ok).toBe(true);
+  expect(app.previewState().character).toMatchObject({ set: 0, redo: "Change Eye Color" });
+  context.dispose();
 });
 
 test("facade groups form changes and hides live gesture targets", () => {

@@ -6,15 +6,15 @@ import type { createScene } from "./scene";
 type Scene = Awaited<ReturnType<typeof createScene>>;
 
 /**
- * The Three scene stays on the trusted device side of the presentation boundary. These ports are devices only: the creator choice a
- * viewer tries (a piercing style) belongs to the character-detail service (character-detail-actions.ts, `character.tryChoice`), which
- * the composition root attaches to the application beside them (UI-48).
+ * The Three scene stays on the trusted device side of the presentation boundary. These ports are devices only: every creator choice
+ * belongs to the character context (character-context-actions.ts), which the composition root attaches to the application beside them.
  */
 export function createBrowserScenePreviewPorts(scene: Scene, options: {
   setSurfaceControls(enabled: boolean): void;
 }): { savedAppearance: SavedAppearancePort; preview: PreviewPort; motion: MotionPort } {
   return {
-    savedAppearance: { apply: savedV => scene.applySavedV(savedV), setBodySex: sex => scene.lighting.setBodySex(sex) },
+    savedAppearance: { apply: savedV => scene.applySavedV(savedV), clear: () => { scene.setFaceMorphs([]); },
+      setBodySex: sex => scene.lighting.setBodySex(sex) },
     preview: {
       cameraState: scene.cameraState, front: scene.front, setFov: scene.setFov,
       endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera,

@@ -8,7 +8,9 @@ import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
 import type { CollectionStudioAction } from "./collection-actions";
-import type { CharacterAction, CharacterDetailActions } from "./character-detail-actions";
+import type { CharacterDetailActions } from "./character-detail-actions";
+import type { CharacterContextAction } from "./character-context";
+import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
@@ -43,7 +45,7 @@ export type StudioOwnerActions = {
   motion: MotionAction;
   quality: QualityAction;
   savedV: SavedAppearanceAction;
-  characterDetails: CharacterAction;
+  characterContext: CharacterContextAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
 /**
@@ -92,8 +94,10 @@ type Services = { document: AuthoringDocument;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
-  /** The shown V's resolved details and the creator choice tried on it (character-detail-actions.ts). */
-  characterDetails?: CharacterDetailActions };
+  /** The shown V's resolved details (character-detail-actions.ts). */
+  characterDetails?: CharacterDetailActions;
+  /** Which V the makeup is shown on and every creator choice set on it (character-context-actions.ts). */
+  characterContext?: CharacterContextActions };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -151,7 +155,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails])
+    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -371,7 +375,7 @@ export class StudioApplication {
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
-      preview: s.preview?.snapshot(), character: characterView(s.characterDetails),
+      preview: s.preview?.snapshot(), character: s.characterContext?.snapshot(),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
       studioSetups: s.preview?.studioSetups() ?? null, motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
@@ -383,12 +387,38 @@ export class StudioApplication {
    */
   previewState() {
     const s = this.services, saved = s.savedV?.snapshot();
-    return structuredClone({ preview: s.preview?.snapshot(), character: characterView(s.characterDetails),
+    return structuredClone({ preview: s.preview?.snapshot(), character: s.characterContext?.snapshot(),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
       studioSetups: s.preview?.studioSetups() ?? null, motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /**
+   * The Character panel's large, read-only reads (character-context-actions.ts): the installed creator options, the view of the
+   * shown V's current choices, and an option's choices loaded so far (asking starts loading more). Frozen and shared, never copied
+   * per paint; undefined until the 3D preview is ready.
+   */
+  characterPanel() { return this.services.characterContext?.panel() ?? null; }
+  characterView() { return this.services.characterContext?.view() ?? null; }
+  characterChoices(option: string, want?: number) { return this.services.characterContext?.choices(option, want) ?? null; }
+  /** Why a character preset can't be loaded (`import`) or saved (`export`) now, or undefined (the files family's check). */
+  characterPresetUnavailable(kind: "import" | "export"): string | undefined {
+    const context = this.services.characterContext;
+    if (!context) return "Character presets are available once the 3D preview is ready.";
+    const snapshot = context.snapshot();
+    if (snapshot.phase !== "ready") return snapshot.phase === "failed" ? snapshot.message || "The creator options couldn't be read." : "The creator options are still loading.";
+    if (kind === "export" && !snapshot.set) return "Change at least one creator option first; a preset holds the choices you set.";
+    return undefined;
+  }
+  /** The shown V's choices as a portable preset file (named after the preset it came from, if any). */
+  async characterPresetFile() {
+    const context = this.services.characterContext;
+    if (!context) throw Error("Character presets are available once the 3D preview is ready.");
+    const origin = context.snapshot().origin, name = origin.kind === "preset" ? origin.name : null;
+    const saved = await context.exportPreset(name);
+    const file = (name ?? "character").replace(/[^A-Za-z0-9 _-]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "character";
+    return { ...saved, name: `${file}.xfs-character.json` };
   }
   /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
   consequences(subject: ConsequenceSubject): Consequence {
@@ -611,9 +641,10 @@ export class StudioApplication {
         capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
         dispatch: action => app.services.savedV!.dispatch(action),
       },
-      characterDetails: {
-        capability: action => app.services.characterDetails?.check(action) ?? missing("Your V's details are still loading."),
-        dispatch: action => app.services.characterDetails!.dispatch(action),
+      // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).
+      characterContext: {
+        capability: action => app.services.characterContext?.capability(action) ?? missing("The creator options are still loading."),
+        dispatch: action => app.services.characterContext!.dispatch(action),
       },
     };
   }
@@ -851,13 +882,6 @@ const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }
-/** What the presentation reads about the creator choices on the shown V (UI-48): those on offer, the one tried, and one still preparing. */
-function characterView(character: CharacterDetailActions | undefined) {
-  if (!character) return undefined;
-  const { choices, tried, trying, override } = character.snapshot();
-  return { choices, tried, trying, override };
-}
-
 /** A transaction body's result: anything but a promise or other thenable (its awaited edits could not join the step). */
 export type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
 function isThenable(value: unknown): value is PromiseLike<unknown> {
