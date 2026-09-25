@@ -208,17 +208,19 @@ describe("creator choices a viewer may try", () => {
   test("a try on the same installation re-plans from the V it already resolved: only the tried slot is resolved and exported (PREV-68)", async () => {
     const cache = new CharacterPreparationCache();
     const calls: string[] = [], logs: string[] = [];
-    let opened = 0;
-    const fixture = detailFixture();
+    // The registry hands out one long-lived installation while the mod setup is unchanged (installation-registry.ts).
+    let acquired = 0;
+    const installation = detailFixture().installation();
     const run = (request: CharacterRequest) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
-      exporter: counting(calls), open: () => { opened++; return fixture.installation(); }, cache, log: line => logs.push(line) }).then(result => result.record);
+      exporter: counting(calls), open: () => { acquired++; return installation; }, cache, log: line => logs.push(line) }).then(result => result.record);
     const own = await run(REQUEST_A);
     const firstExports = calls.length;
     expect(firstExports).toBeGreaterThan(0);
     calls.length = 0;
     const tried = await run({ ...REQUEST_A, override: { slot: "piercings", choice: "12", definition: PIERCING.black } });
-    // The installation is opened once; the tried style's part is the only thing exported, and the rest of the V is served as it was.
-    expect(opened).toBe(1);
+    // The tried style's part is the only thing exported, and the rest of the V is served as it was.
+    expect(acquired).toBe(2);
+    expect(cache.installation).toBe(installation);
     expect(calls.every(call => /earring|black|plastic|mask|mltemplate|mlsetup|xbm/i.test(call))).toBe(true);
     expect(tried.components.filter(item => item.slot !== "piercings")).toEqual(own.components.filter(item => item.slot !== "piercings"));
     expect(logs.at(-1)).toMatch(/Prepared a tried choice in [0-9.]+ s: .*; \d+ appearance\(s\) and 7 of 8 part\(s\) reused\./);
@@ -227,5 +229,11 @@ describe("creator choices a viewer may try", () => {
     const again = await run(REQUEST_A);
     expect(calls).toEqual([]);
     expect(again).toEqual(own);
+    // Another installation (the mod setup changed, so the registry opened it again) starts the derived cache afresh.
+    const changed = detailFixture().installation();
+    await prepareCharacterDetails({ request: REQUEST_A, route, storeRoot: join(root, "store"), resolverCache: join(root, "resolver"),
+      exporter: counting(calls), open: () => changed, cache });
+    expect(cache.installation).toBe(changed);
+    expect(calls.length).toBeGreaterThan(0);
   });
 });

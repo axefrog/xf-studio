@@ -14,7 +14,7 @@
  */
 import { type DepotLookup, type DepotIndex, type MountGroup, type MountedArchive } from "./archive-precedence";
 import { type ArchiveXlConfig, type DepotAdditions, type XlPatch, patchModifies, settleDepotAdditions } from "./archivexl-config";
-import { refFromHash, type DepotRef, refLabel } from "./depot-path";
+import { refFromHash, refFromPath, type DepotRef, refLabel } from "./depot-path";
 import { asArray, cname, cr2wRoot, depotRef, depotText, HandleScope, isObject, materialParams, packageChunks,
   type JsonObject, type MaterialParamValue } from "./red-json";
 import { type Ambiguity, type RuleNote, note } from "./resolution-evidence";
@@ -30,6 +30,8 @@ export interface FetchedResource {
   readonly extractedSha256: string | null;
   /** Depot path learned from the archive's own file listing, if the reference had none. */
   readonly path?: string | null;
+  /** The adapter extracted it just now (not from its cache): the resources it names are likely not cached either. */
+  readonly fresh?: boolean;
 }
 
 /** Where a resource came from and why that source won. Contains no physical paths. */
@@ -193,6 +195,25 @@ const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null =>
   return asArray(header.renderChunkInfos).map(info => chunkInScene(isObject(info) ? info.renderMask : undefined));
 };
 
+/**
+ * Prefetch: when a resource is read, the resources of these kinds that it names are requested at once, in the same
+ * extraction batch as whatever else is being read, instead of one batch each when a consumer later asks for them one at
+ * a time (an `.app`'s part entities, and the templates, profiles, gradients and layer setups a mesh or material names,
+ * which the character details read one by one). Only a resource that a consumer asked for and that the fetch port had
+ * to extract just now (`FetchedResource.fresh`: its neighbours are likely not cached either) is expanded, one step deep,
+ * except that a fresh layer setup's templates are always requested with it. A cached resource is never expanded, so a V
+ * whose resources are cached starts no extraction it does not need. Prefetch changes when a resource is read, never what
+ * is read for it: the same archive precedence and fetch port answer, and a consumer later gets the same promise.
+ */
+export const PREFETCH: Readonly<Record<string, readonly string[]>> = {
+  app: ["ent"],
+  mesh: ["mt", "hp", "sp", "gradient", "mlsetup"],
+  mi: ["mt", "hp", "sp", "gradient", "mlsetup"],
+  mlsetup: ["mltemplate"],
+};
+const CASCADE = new Set(["mlsetup"]);
+const extensionOf = (path: string | null | undefined) => path ? /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase() ?? null : null;
+
 export const snakeCase = (value: string) => {
   let out = "", split = false;
   for (const ch of value) {
@@ -216,7 +237,12 @@ export class ResourceGraph {
   /** Precedence ambiguities met while resolving provenance, keyed by code and subject. */
   readonly observedAmbiguities = new Map<string, Ambiguity>();
 
-  constructor(readonly depot: DepotIndex, readonly xl: ArchiveXlConfig, private readonly port: ResourceFetchPort) {
+  /** Named references (by kind) each loaded resource makes, kept until it is expanded (`PREFETCH`). */
+  private readonly children = new Map<string, string[]>();
+  /** Resources a consumer asked for, as opposed to prefetched ones. */
+  private readonly requested = new Set<string>();
+
+  constructor(readonly depot: DepotIndex, readonly xl: ArchiveXlConfig, readonly port: ResourceFetchPort, private readonly prefetch = true) {
     for (const [hash, path] of xl.paths) this.paths.set(hash, path);
     this.additions = settleDepotAdditions(xl, hash => this.lookup(hash).winner !== null);
   }
@@ -268,7 +294,31 @@ export class ResourceGraph {
       via, extractedSha256, ambiguities: lookup.ambiguities.map(a => `${a.code}: ${a.detail}`) };
   }
 
+  /** How many resources this graph has read or is reading. */
+  get size(): number { return this.loads.size; }
+
   load(ref: DepotRef, extension: string | null = null): Promise<LoadedResource | null> {
+    const pending = this.read(ref, extension);
+    const hash = this.named(ref).hash;
+    if (this.prefetch && !this.requested.has(hash)) { this.requested.add(hash); pending.then(() => this.expand(hash), () => {}); }
+    return pending;
+  }
+
+  /** Request the prefetchable resources a loaded resource names (see `PREFETCH`), once. */
+  private expand(hash: string): void {
+    const children = this.children.get(hash);
+    if (!children) return;
+    this.children.delete(hash);
+    for (const path of children) {
+      const child = refFromPath(path);
+      if (this.loads.has(child.hash) || !this.exists(child.hash)) continue;
+      // A prefetch that fails is not this caller's failure; a consumer that asks for the resource gets the same answer.
+      const loaded = this.read(child, extensionOf(path));
+      loaded.then(() => { if (CASCADE.has(extensionOf(path)!)) this.expand(child.hash); }, () => {});
+    }
+  }
+
+  private read(ref: DepotRef, extension: string | null): Promise<LoadedResource | null> {
     const named = this.named(ref);
     let pending = this.loads.get(named.hash);
     if (!pending) {
@@ -280,7 +330,13 @@ export class ResourceGraph {
         if (fetched.path && !entry.path) this.paths.set(entry.hash, fetched.path);
         if (fetched.path && !named.path && entry.hash === named.hash) this.paths.set(named.hash, fetched.path);
         const { root } = cr2wRoot(fetched.document);
-        this.learnPaths(root);
+        const found: string[] = [];
+        this.learnPaths(root, 0, found);
+        const kinds = this.prefetch && fetched.fresh ? PREFETCH[extensionOf(this.named(named).path) ?? extension ?? ""] : undefined;
+        if (kinds) {
+          const wanted = [...new Set(found.filter(path => !/[*{]/.test(path) && kinds.includes(extensionOf(path) ?? "")))];
+          if (wanted.length) this.children.set(named.hash, wanted);
+        }
         return { ref: this.named(named), root, provenance: this.provenance(named, fetched.extractedSha256) };
       })();
       this.loads.set(named.hash, pending);
@@ -288,15 +344,15 @@ export class ResourceGraph {
     return pending;
   }
 
-  private learnPaths(value: unknown, depth = 0): void {
+  private learnPaths(value: unknown, depth = 0, found?: string[]): void {
     if (depth > 64) return;
-    if (Array.isArray(value)) { for (const item of value) this.learnPaths(item, depth + 1); return; }
+    if (Array.isArray(value)) { for (const item of value) this.learnPaths(item, depth + 1, found); return; }
     if (!isObject(value)) return;
     if (value.$type === "ResourcePath" && value.$storage === "string" && typeof value.$value === "string" && value.$value) {
-      const ref = depotRef(value); if (ref) this.paths.set(ref.hash, value.$value);
+      const ref = depotRef(value); if (ref) { this.paths.set(ref.hash, value.$value); found?.push(value.$value); }
       return;
     }
-    for (const [key, item] of Object.entries(value)) if (key !== "Bytes") this.learnPaths(item, depth + 1);
+    for (const [key, item] of Object.entries(value)) if (key !== "Bytes") this.learnPaths(item, depth + 1, found);
   }
 
   patchesFor(hash: string): readonly XlPatch[] { return this.additions.patchesByTarget.get(hash) ?? []; }
@@ -307,7 +363,17 @@ export class ResourceGraph {
     return pending;
   }
 
+  /**
+   * Start reading a resource's ArchiveXL patch sources together with it: they are applied in order afterwards, but read
+   * in one extraction batch instead of one batch per patch (a vanilla mesh several mods patch has many).
+   */
+  private readPatchSources(ref: DepotRef, extension: string, applies: (patch: XlPatch) => boolean = () => true): void {
+    for (const patch of this.patchesFor(ref.hash))
+      if (applies(patch)) this.load(refFromHash(patch.source, patch.sourcePath), extension).catch(() => {});
+  }
+
   private async buildApp(ref: DepotRef): Promise<AppModel | null> {
+    this.readPatchSources(ref, "app", patch => patchModifies(patch, "appearances"));
     const loaded = await this.load(ref, "app");
     if (!loaded) return null;
     const scope = new HandleScope(loaded.root);
@@ -355,6 +421,7 @@ export class ResourceGraph {
   }
 
   private async buildMesh(ref: DepotRef): Promise<MeshModel | null> {
+    this.readPatchSources(ref, "mesh");
     const loaded = await this.load(ref, "mesh");
     if (!loaded) return null;
     const read = (root: JsonObject) => {
@@ -432,6 +499,7 @@ export class ResourceGraph {
   }
 
   private async buildMorph(ref: DepotRef): Promise<MorphModel | null> {
+    if (!this.additions.patchSources.has(ref.hash)) this.readPatchSources(ref, "morphtarget");
     const loaded = await this.load(ref, "morphtarget");
     if (!loaded) return null;
     const read = (root: JsonObject) => {

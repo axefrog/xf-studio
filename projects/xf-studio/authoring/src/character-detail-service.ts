@@ -56,8 +56,8 @@ export type PrepareCharacterOptions = {
   /** Resolver JSON and archive-index cache. */
   resolverCache: string;
   exporter: GameAssetExporter;
-  /** Test seam: open an installation (defaults to the resolver host). */
-  open?: (options: InstallationOptions) => Installation;
+  /** The installation to prepare from (defaults to the host's shared, long-lived one: installation-registry.ts). */
+  open?: (options: InstallationOptions) => Installation | Promise<Installation>;
   signal?: AbortSignal;
   progress?: (step: CharacterDetailStep, index: number, total: number, label: string) => void;
   log?: (message: string) => void;
@@ -265,18 +265,19 @@ export function storeChunkGeometry(storeRoot: string, file: string, chunks: read
 /** A served component as the writing step made it, with the notes it earned and the texels its distinct textures take. */
 type BuiltComponent = { component: RenderComponent; notes: string[]; textures: Map<string, number> };
 /**
- * What preparations on one installation share (PREV-68). A host keeps one per installation fingerprint (the launch route, the mod lists'
- * stamps and WolvenKit's identity; character-detail-host.ts) and passes it to every preparation on that installation, so a tried choice
- * on the same V re-plans from the V it already resolved: the installation is opened once, each appearance descriptor is resolved once,
- * templates, setups, profiles and gradients are read once, each archive file is exported once, and a component whose plan is unchanged
- * is served exactly as before. Only what the tried choice changes is resolved and exported. Nothing here is written to disk; the
+ * What preparations on one installation derive and share (PREV-68), layered on the registry's long-lived `Installation`
+ * (installation-registry.ts), which already keeps the opened archives, the resource graph and the merged creator resource. A host keeps
+ * one per installation fingerprint (the route, its stamps, WolvenKit's identity and the registry's generation; character-detail-host.ts)
+ * and passes it to every preparation, so a tried choice on the same V re-plans from the V it already resolved: each appearance descriptor
+ * is resolved once, templates, setups, profiles and gradients are interpreted once, each archive file is exported once, and a component
+ * whose plan is unchanged is served exactly as before. When the registry hands out another installation (the mod setup changed), the
+ * cache starts afresh (`reset`). Only what the tried choice changes is resolved and exported. Nothing here is written to disk; the
  * exporter's own cache and the content-addressed store already are. Entries are only added once complete, so a cancelled preparation
  * leaves nothing half-made.
  */
 export class CharacterPreparationCache {
-  /** The opened installation (resolver-host.ts), reused while the fingerprint holds. */
+  /** The registry's installation this cache was derived from (identity only; the registry owns it). */
   installation: Installation | null = null;
-  readonly cco = new Map<string, Awaited<ReturnType<typeof loadMergedCco>>>();
   /** Resolved appearances by descriptor (part, option, app, definition) and the V's morphs. */
   readonly appearances = new Map<string, ResolvedAppearance>();
   readonly defaults = new Map<string, ResolvedParam[]>();
@@ -295,6 +296,13 @@ export class CharacterPreparationCache {
   readonly components = new Map<string, BuiltComponent>();
   /** The export tool that read these files (the record names it even when nothing new is exported). */
   toolLabel: string | undefined;
+  /** Forget everything derived from an earlier installation. */
+  reset(): void {
+    for (const map of [this.appearances, this.defaults, this.identities, this.profiles, this.skinProfiles, this.gradients, this.setups,
+      this.layerTemplates, this.gamma, this.geometry, this.textures, this.masks, this.components] as Map<string, unknown>[]) map.clear();
+    this.toolLabel = undefined;
+    this.installation = null;
+  }
 }
 
 /** Resolve the V through the cache: each distinct descriptor once per installation and set of morphs, in `resolveCharacter`'s order. */
@@ -336,22 +344,23 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   const cancelled = () => { if (signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled."); };
 
   progress("reading");
-  if (!cache.installation) {
-    const open = options.open ?? (await import("./resolver-host")).openInstallation;
-    try { cache.installation = open({ ...options.route, cacheDir: options.resolverCache, log }); }
-    catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
-  }
-  const { graph, summary } = cache.installation;
+  // The shared, long-lived installation (installation-registry.ts), checked against the mod setup on every acquire. Everything the
+  // cache holds came from one installation: another one (the setup changed) starts the cache afresh.
+  const open = options.open ?? (await import("./installation-registry")).acquireInstallation;
+  let installation: Installation;
+  try { installation = await open({ ...options.route, cacheDir: options.resolverCache, log }); }
+  catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).stack ?? String(error)); }
+  if (cache.installation && cache.installation !== installation) cache.reset();
+  cache.installation = installation;
+  const { graph, summary } = installation;
   time("open");
   cancelled();
 
   progress("resolving");
-  let cco = cache.cco.get(request.bodyGender);
-  if (!cco) {
-    try { cco = await loadMergedCco(graph, request.bodyGender); }
-    catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
-    cache.cco.set(request.bodyGender, cco);
-  }
+  // The merged creator resource is memoised by the resolver per graph (character-resolver.ts `loadMergedCco`).
+  let cco: Awaited<ReturnType<typeof loadMergedCco>>;
+  try { cco = await loadMergedCco(graph, request.bodyGender); }
+  catch (error) { throw new CharacterDetailError("character_unreadable", UNREADABLE, (error as Error).message); }
   let input: CharacterInput;
   if (request.source === "default") {
     const derived = descriptorsFromUiState(cco.merged.cco, {});

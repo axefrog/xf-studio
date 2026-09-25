@@ -126,7 +126,7 @@ Game/manual collisions remain ambiguous, and `runtimeObservedWinner` is always n
 
 ## Next stages
 
-The character resolver builds on this inventory: `archive-precedence.ts` collapses virtual archive paths, orders mount groups and reads the game's `archive/pc/mod/modlist.txt`; `resolver-host.ts` reads RDAR indexes, adds the game-folder ArchiveXL bundle (outside the `archive/pc` scan) and applies ArchiveXL registrations, scopes, fixes, patches, copies and links. See [mod loading](../../knowledge/mod-loading.md). Still open:
+Each scan also returns `watched`: every folder it walked (stamped before its entries were read), every candidate file, and the MO2 settings and profile list it read, with their stamps, so a host can tell cheaply whether a fresh scan would find the same sources (`installation-registry.ts`). Entry types come from the folder listing; only folders and candidate files are inspected further. The character resolver builds on this inventory: `archive-precedence.ts` collapses virtual archive paths, orders mount groups and reads the game's `archive/pc/mod/modlist.txt`; `resolver-host.ts` reads RDAR indexes, adds the game-folder ArchiveXL bundle (outside the `archive/pc` scan) and applies ArchiveXL registrations, scopes, fixes, patches, copies and links. See [mod loading](../../knowledge/mod-loading.md). Still open:
 
 - REDmod and other deployment transforms, and Vortex deployment state;
 - content fingerprints (the resolver's cache keys archives by path, size and modification time);

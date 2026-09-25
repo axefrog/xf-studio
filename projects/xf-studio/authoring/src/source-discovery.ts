@@ -1,5 +1,5 @@
-import { lstatSync, opendirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstatSync, opendirSync, readFileSync, statSync, type Stats } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
 import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
 
@@ -54,7 +54,29 @@ export interface SourceDiscovery {
   readonly looseFiles: readonly LooseFileAssessment[];
   readonly issues: readonly SourceIssue[];
   readonly limitations: readonly string[];
+  /**
+   * Everything this scan's answer depends on, with its stamp when it was read (`pathStamp`): every directory walked
+   * (stamped before its entries were read), every candidate file, the MO2 settings file and profile mod list, and the
+   * configured roots that were missing. When none of these stamps changed, a fresh scan finds the same sources: adding,
+   * removing or renaming an entry changes its directory's stamp, and a candidate edited in place changes its own.
+   * Private host metadata (physical paths); never serialize it into a portable document.
+   */
+  readonly watched: readonly WatchedPath[];
 }
+/** A path a scan read and its stamp at the time. */
+export interface WatchedPath { readonly path: string; readonly stamp: string }
+
+/**
+ * A path's identity for change detection, from its `lstat` (null when it is missing): a directory by its modification
+ * time (which changes when an entry is added, removed or renamed in it), a file by size and modification time.
+ */
+export function pathStamp(stat: { isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean; size: number; mtimeMs: number } | null): string {
+  if (!stat) return "missing";
+  if (stat.isSymbolicLink()) return `link|${stat.mtimeMs}`;
+  if (stat.isDirectory()) return `dir|${stat.mtimeMs}`;
+  return stat.isFile() ? `file|${stat.size}|${stat.mtimeMs}` : `other|${stat.mtimeMs}`;
+}
+const lstatOrNull = (path: string) => { try { return lstatSync(path); } catch { return null; } };
 export interface ScanLimits {
   /** Total filesystem entries across every configured root. */
   readonly maxEntries?: number;
@@ -71,11 +93,6 @@ const safeName = (name: string) => name !== "." && name !== ".." && name.trim() 
   !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length <= 255;
 const iniBytes = 4 * 1024 * 1024;
 const key = (path: string) => path.replaceAll("\\", "/").toLowerCase();
-const portable = (path: string) => path.split(sep).join("/");
-const inside = (root: string, path: string) => {
-  const rel = relative(root, path);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-};
 const linkedAncestor = (path: string): boolean => {
   let current = resolve(path);
   while (true) {
@@ -104,6 +121,8 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
   const discoveredAt = new Date().toISOString();
   const candidates: SourceCandidate[] = [];
   const issues: SourceIssue[] = [];
+  const watched: WatchedPath[] = [];
+  const watch = (path: string, stat = lstatOrNull(path)) => { watched.push({ path, stamp: pathStamp(stat) }); };
   let entries = 0;
   let complete = true;
   const issue = (code: string, detail: string) => { issues.push({ code, detail, blocking: true }); complete = false; };
@@ -115,12 +134,17 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
     const absoluteRoot = resolve(root);
     let rootStat;
     try { rootStat = lstatSync(absoluteRoot); }
-    catch { issue("source_root_missing", `${provider} source root is unavailable.`); return; }
+    catch { watch(absoluteRoot, null); issue("source_root_missing", `${provider} source root is unavailable.`); return; }
     if (!rootStat.isDirectory() || linkedAncestor(absoluteRoot)) {
+      watch(absoluteRoot, rootStat);
       issue("source_root_invalid", `${provider} source root must be a real directory.`); return;
     }
-    const walk = (dir: string, depth: number) => {
+    // `rel` is the directory's portable path below the root. Entry types come from the directory listing; only
+    // directories (for their stamp) and candidate files (for size and time) are inspected further.
+    const walk = (dir: string, depth: number, rel: string) => {
       if (depth > limits.maxDepth) { issue("scan_depth_exceeded", `${provider} scan depth limit reached.`); return; }
+      // Stamped before its entries are read, so a change made while scanning shows as a changed stamp later.
+      watch(dir);
       let handle;
       try { handle = opendirSync(dir); }
       catch { issue("directory_unreadable", `${provider} directory could not be read.`); return; }
@@ -129,29 +153,38 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
         if (!entry) break;
         const name = entry.name;
         if (++entries > limits.maxEntries) { issue("scan_entries_exceeded", "Source scan entry limit reached."); return; }
-        const path = join(dir, name);
-        if (!inside(absoluteRoot, path)) { issue("path_escape", "A source entry escaped its configured root."); continue; }
-        let stat;
-        try { stat = lstatSync(path); }
-        catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
-        if (stat.isSymbolicLink()) {
+        if (!name || name === "." || name === ".." || /[\\/]/.test(name)) { issue("path_escape", "A source entry escaped its configured root."); continue; }
+        const path = join(dir, name), virtualPath = prefix + (rel ? `${rel}/${name}` : name);
+        let type: "link" | "directory" | "file" | "other" = entry.isSymbolicLink() ? "link" : entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other";
+        let stat: Stats | undefined;
+        if (type === "other") {
+          // The listing did not say what this is: ask the file system.
+          try { stat = lstatSync(path); }
+          catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
+          type = stat.isSymbolicLink() ? "link" : stat.isDirectory() ? "directory" : stat.isFile() ? "file" : "other";
+        }
+        if (type === "link") {
           // Links are never followed; only the target's type is read, to tell whether it could hold sources.
           let directory = true;
           try { directory = statSync(path).isDirectory(); } catch { /* A broken link is judged by its name. */ }
-          const sourceLike = directory || kindOf(prefix + portable(relative(absoluteRoot, path))) !== null;
+          const sourceLike = directory || kindOf(virtualPath) !== null;
           issues.push({ code: "symlink_skipped", detail: `${provider} symbolic link was skipped.`, blocking: true, mayHideSources: sourceLike });
           complete = false;
           continue;
         }
-        if (stat.isDirectory()) {
+        if (type === "directory") {
           // MO2's virtual filesystem hides configured directory names (e.g. `.git`) inside mods and overwrite.
           if (provider.startsWith("mo2-") && skipDirectories.includes(name.toLowerCase())) continue;
-          walk(path, depth + 1); if (entries > limits.maxEntries) return; continue;
+          walk(path, depth + 1, rel ? `${rel}/${name}` : name); if (entries > limits.maxEntries) return; continue;
         }
-        if (!stat.isFile()) continue;
-        const virtualPath = prefix + portable(relative(absoluteRoot, path));
+        if (type !== "file") continue;
         const kind = kindOf(virtualPath);
         if (!kind) continue;
+        try { stat ??= lstatSync(path); }
+        catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
+        // Replaced by a link or a folder since the listing: judged again by the next scan (its directory's stamp changed).
+        if (!stat.isFile()) { watch(path, stat); issue("entry_unreadable", `${provider} entry changed while it was scanned.`); continue; }
+        watch(path, stat);
         candidates.push({ id: `${provider}:${providerName}:${key(virtualPath)}:${path}`,
           provider, providerName, route, profileId: profile, virtualPath, physicalPath: path, kind, active,
           priority, priorityEvidence: evidence,
@@ -161,7 +194,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       } } catch { issue("directory_unreadable", `${provider} directory could not be read.`); }
       finally { handle.closeSync(); }
     };
-    walk(absoluteRoot, 0);
+    walk(absoluteRoot, 0, "");
   };
 
   if (!settings.gameRoot) issue("game_root_unset", "Select a game root.");
@@ -177,6 +210,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       // ModOrganizer.ini uses MO2's defaults (<root>/mods, profiles, overwrite).
       const iniPath = join(settings.mo2Root, "ModOrganizer.ini");
       let iniText: string | null = null;
+      watch(iniPath);
       try {
         const stat = lstatSync(iniPath);
         if (stat.isFile() && !linkedAncestor(iniPath) && stat.size <= iniBytes) iniText = readFileSync(iniPath, "utf8");
@@ -186,6 +220,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       skipDirectories = instance.skipDirectories;
       const listing = join(instance.paths.profiles, profileId, "modlist.txt");
       let text = "";
+      watch(listing);
       try {
         const stat = lstatSync(listing);
         if (!stat.isFile() || linkedAncestor(listing) || stat.size > limits.maxProfileBytes)
@@ -204,7 +239,9 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
           `MO2 modlist.txt row ${entry.line}; MO2 writes the list highest priority first, so earlier rows win`);
       }
       // A missing overwrite directory is valid for an otherwise healthy instance.
-      try { if (lstatSync(instance.paths.overwrite).isDirectory()) scan(instance.paths.overwrite, "mo2-overwrite",
+      const overwrite = lstatOrNull(instance.paths.overwrite);
+      if (!overwrite?.isDirectory()) watch(instance.paths.overwrite, overwrite);
+      try { if (overwrite?.isDirectory()) scan(instance.paths.overwrite, "mo2-overwrite",
         "MO2 overwrite", true, modlist.overwritePriority, "", profileId, "MO2 overwrite ranks above every profile mod"); }
       catch { /* optional */ }
     }
@@ -236,7 +273,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       runtimeObservedWinner: null, confidence: selected ? "source-derived" : active.length > 1 && complete
         ? "ambiguous" : "unknown", reason };
   });
-  return { route, profileId, discoveredAt, complete, candidates, looseFiles, issues,
+  return { route, profileId, discoveredAt, complete, candidates, looseFiles, issues, watched,
     limitations: [archiveLimit, "MO2 '+' is activation intent, not a loaded-file or archive-resource winner.",
       "The selected route is a configuration choice, not evidence of a particular game launch.",
       "No content hashes or archive indexes are read by this bounded inventory."],

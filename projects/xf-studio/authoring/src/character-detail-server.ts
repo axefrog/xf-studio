@@ -41,6 +41,8 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
         request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA }, 409);
       return json({ code: "invalid", error: "Invalid character request." }, 400);
     }
+    // An answer prepared earlier is reused only while the mod setup it came from is unchanged.
+    await host.refresh();
     return json(host.request(body as ReturnType<typeof parseCharacterRequest>));
   };
 }

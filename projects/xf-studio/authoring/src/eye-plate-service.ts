@@ -15,6 +15,7 @@ import {
 import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
+import { routeIdentity, routeStamps } from "./route-fingerprint";
 import type { PackagePlate } from "./package-action";
 import { plateUvFootprint, plateUvWindow } from "./plate-uv-window";
 import { PLATE_UV_FILE, plateUvManifestRecord, readManifestPlateReach, type PlateUvManifestRecord } from "./plate-uv-footprint-io";
@@ -203,25 +204,15 @@ function contentPlan(recipe: EyePlateRecipe, gameRoot: string): HeadSourcePlan {
 /** The launch route settings that decide which head the plate is cut from. */
 export type EyePlateRoute = { gameRoot: string; launchRoute: "direct" | "mo2"; mo2Root?: string | null; mo2ProfileId?: string | null;
   manualModRoot?: string | null };
-const stamp = (path: string | null) => {
-  if (!path) return "-";
-  try { const s = statSync(path); return `${s.size}|${s.mtimeMs}`; } catch { return "missing"; }
-};
 /**
  * Identity of what decides which head a route loads, cheap enough for every Check (no route resolution): the route
- * settings, the head choice, and the size and time of the game's mod folder and its `modlist.txt`, the MO2 profile's
- * `modlist.txt`, MO2's overwrite folder and the manual mod folder. Installing, enabling, disabling or reordering mods
- * changes it; editing files inside an existing MO2 mod folder does not (the next Build resolves the head anyway).
+ * settings, the head choice, and the shared route stamps (route-fingerprint.ts: the game's mod folder and its
+ * `modlist.txt`, the MO2 profile's `modlist.txt`, MO2's overwrite folder and the manual mod folder). Installing, enabling,
+ * disabling or reordering mods changes it; editing files inside an existing MO2 mod folder does not (the next Build
+ * resolves the head anyway, through the installation registry's deeper check).
  */
 export function eyePlateRouteKey(route: EyePlateRoute, headOverride?: "base-game"): string {
-  const mods = join(route.gameRoot, "archive", "pc", "mod");
-  const profile = route.mo2Root && route.mo2ProfileId ? join(route.mo2Root, "profiles", route.mo2ProfileId) : null;
-  return createHash("sha256").update(canonicalJson({
-    route: [resolve(route.gameRoot), route.launchRoute, route.mo2Root ?? null, route.mo2ProfileId ?? null, route.manualModRoot ?? null],
-    head: headOverride ?? "installed",
-    stamps: [stamp(mods), stamp(join(mods, "modlist.txt")), stamp(profile && join(profile, "modlist.txt")),
-      stamp(route.mo2Root ? join(route.mo2Root, "overwrite") : null), stamp(route.manualModRoot ?? null)],
-  })).digest("hex");
+  return createHash("sha256").update(canonicalJson({ route: routeIdentity(route), head: headOverride ?? "installed", stamps: routeStamps(route) })).digest("hex");
 }
 
 /**
