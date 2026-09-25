@@ -285,16 +285,22 @@ export function compilePreset(value: unknown, space: number | TextureSpace = 102
  * `grid` × `grid` head atlas (bytes of linear coverage, row-major): the authored content the package
  * verifier compares a window map against at the plate's own UVs. Every route's included layers merge
  * coverage the same way (a + c·(1 − a)).
+ *
+ * Deliberately a crop of the head-atlas `raster` (the editor's and preview's path), never `rasterWindow`, which
+ * the window maps come from: a fault in the window code (a mirror, offset or scale) then moves the maps but not
+ * their reference, and the verifier's mapping gate fails (PIPE-32).
  */
 export function presetCoverage(value: unknown, crop: { grid: number; x0: number; y0: number; width: number; height: number }): Uint8Array {
   const recipe = parseRecipe(value), plan = strictPlan(recipe), { grid, x0, y0, width, height } = crop;
   if (![grid, x0, y0, width, height].every(Number.isInteger) || x0 < 0 || y0 < 0 || width < 1 || height < 1 || x0 + width > grid || y0 + height > grid)
     throw Error("Invalid coverage crop.");
-  const window = { u0: x0 / grid, u1: (x0 + width) / grid, v0: y0 / grid, v1: (y0 + height) / grid };
-  const count = width * height, coverage = new Float64Array(count);
+  const coverage = new Float64Array(width * height);
   for (const layer of plan.included) {
-    const mask = rasterWindow(layer, width, height, window);
-    for (let p = 0; p < count; p++) { const a = mask[p * 4 + 3] / 255; if (a) coverage[p] = a + coverage[p] * (1 - a); }
+    const mask = raster(layer, grid);
+    for (let y = 0; y < height; y++) for (let x = 0, row = ((y0 + y) * grid + x0) * 4 + 3, p = y * width; x < width; x++, p++) {
+      const a = mask[row + x * 4] / 255;
+      if (a) coverage[p] = a + coverage[p] * (1 - a);
+    }
   }
   return Uint8Array.from(coverage, byte);
 }

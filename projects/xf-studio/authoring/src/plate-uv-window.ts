@@ -79,6 +79,79 @@ export function plateUvBounds(meshRoot: Json): StoredUvBounds {
   return { uMin, uMax, vMin, vMax };
 }
 
+/**
+ * Where the plate is in UV: its stored UV0 bounds, the export window, and every vertex UV and triangle, so that
+ * Check can tell which presets reach the plate before any Build (PIPE-33). The eye plate cache records it
+ * beside each derived plate; Build recomputes it from the plate it packages and requires the same bytes.
+ */
+export const PLATE_UV_FOOTPRINT_SCHEMA = "xfs/plate-uv-footprint-1" as const;
+export interface PlateUvFootprint {
+  readonly schema: typeof PLATE_UV_FOOTPRINT_SCHEMA;
+  readonly bounds: StoredUvBounds;
+  readonly window: UvWindow;
+  /** Stored UV0 (U, V pairs, V not flipped) of every vertex of every render chunk, in chunk order. */
+  readonly uv: readonly number[];
+  /** Three indices into `uv` per triangle, over all chunks (chunk vertices numbered consecutively). */
+  readonly triangles: readonly number[];
+}
+
+/** The plate's UV footprint from a mesh's render blob (WolvenKit JSON RootChunk). */
+export function plateUvFootprint(meshRoot: Json): PlateUvFootprint {
+  const bounds = plateUvBounds(meshRoot), window = plateUvWindow(bounds);
+  const blob = meshRoot.renderResourceBlob.Data, raw = Buffer.from(String(blob.renderBuffer?.Bytes ?? ""), "base64");
+  const uv: number[] = [], triangles: number[] = [];
+  for (const chunk of blob.header.renderChunkInfos) {
+    const layout = chunk.chunkVertices.vertexLayout, cursor = new Map<number, number>();
+    let found = { stream: -1, offset: 0 };
+    for (const e of layout.elements.Elements) {
+      if (e.streamType !== "ST_PerVertex") continue;
+      const offset = cursor.get(e.streamIndex) ?? 0;
+      if (e.usage === "PS_TexCoord" && e.usageIndex === 0) found = { stream: e.streamIndex, offset };
+      cursor.set(e.streamIndex, offset + ELEMENT_BYTES[e.type]);
+    }
+    const stride: number = layout.slotStrides.Elements[found.stream], base: number = chunk.chunkVertices.byteOffsets.Elements[found.stream];
+    const first = uv.length / 2;
+    for (let v = 0; v < chunk.numVertices; v++) {
+      const at = base + v * stride + found.offset;
+      uv.push(halfToNumber(raw.readUInt16LE(at)), halfToNumber(raw.readUInt16LE(at + 2)));
+    }
+    if (chunk.chunkIndices?.pe !== "IBCT_IndexUShort") throw Error("The plate mesh does not use 16-bit indices.");
+    const start = blob.header.indexBufferOffset + chunk.chunkIndices.teOffset;
+    for (let i = 0; i + 2 < chunk.numIndices; i += 3) for (let k = 0; k < 3; k++) {
+      const index = raw.readUInt16LE(start + (i + k) * 2);
+      if (index >= chunk.numVertices) throw Error("The plate mesh has a triangle index outside its chunk.");
+      triangles.push(first + index);
+    }
+  }
+  return { schema: PLATE_UV_FOOTPRINT_SCHEMA, bounds, window, uv, triangles };
+}
+
+/** A recorded footprint, checked for shape (the cache stores it as JSON). */
+export function parsePlateUvFootprint(value: unknown): PlateUvFootprint {
+  const f = value as PlateUvFootprint, finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+  const box = (o: object | undefined, keys: string[]) => !!o && keys.every(k => finite((o as Record<string, unknown>)[k]));
+  if (!f || f.schema !== PLATE_UV_FOOTPRINT_SCHEMA || !box(f.bounds, ["uMin", "uMax", "vMin", "vMax"]) || !box(f.window, ["u0", "u1", "v0", "v1"]) ||
+      !Array.isArray(f.uv) || f.uv.length < 6 || f.uv.length % 2 || !f.uv.every(finite) ||
+      !Array.isArray(f.triangles) || !f.triangles.length || f.triangles.length % 3 ||
+      !f.triangles.every(i => Number.isInteger(i) && i >= 0 && i < f.uv.length / 2))
+    throw Error("The recorded plate UV footprint is damaged.");
+  return f;
+}
+
+/** Barycentric points taken inside each triangle, besides its vertices (the verifier restates the same set). */
+const INSIDE = [[1 / 3, 1 / 3], [2 / 3, 1 / 6], [1 / 6, 2 / 3], [1 / 6, 1 / 6], [.5, .25], [.25, .5]] as const;
+/** Authored (glTF) UV of the plate's sample points: every vertex, then six points inside every triangle. */
+export function plateSamplePoints(footprint: PlateUvFootprint): Float64Array {
+  const { uv, triangles } = footprint, out = new Float64Array(uv.length + triangles.length / 3 * INSIDE.length * 2);
+  let o = 0;
+  for (let i = 0; i < uv.length; i += 2) { out[o++] = uv[i]; out[o++] = 1 - uv[i + 1]; }
+  for (let t = 0; t < triangles.length; t += 3) {
+    const [a, b, c] = [triangles[t], triangles[t + 1], triangles[t + 2]].map(i => [uv[i * 2], uv[i * 2 + 1]]);
+    for (const [s, r] of INSIDE) { out[o++] = a[0] + s * (b[0] - a[0]) + r * (c[0] - a[0]); out[o++] = 1 - (a[1] + s * (b[1] - a[1]) + r * (c[1] - a[1])); }
+  }
+  return out;
+}
+
 /** The export window for plate UV bounds: each axis widened by PLATE_UV_MARGIN of its window span per side and
  * clamped to the atlas, returned in the authored convention (v = 1 − stored V). */
 export function plateUvWindow(bounds: StoredUvBounds): UvWindow {

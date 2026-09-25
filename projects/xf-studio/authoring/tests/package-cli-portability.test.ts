@@ -68,14 +68,14 @@ test("Build refuses a game destination before writing and accepts separate priva
     expect(text(wrongManifest.stderr)).toContain("does not match the plate resources");
     expect(existsSync(build)).toBe(false);
     const privateAttempt = Bun.spawnSync([...base, "--dist-root", dist], { cwd: work, stdout: "pipe", stderr: "pipe" });
-    // The fake WolvenKit cannot convert anything; reaching the resource builder (its first step serializes the plate,
-    // whose UVs decide the texture window, in the intermediate it created) proves the root gate accepted private paths.
+    // The fake WolvenKit cannot convert anything. Reaching the first WolvenKit step, which reads the plate's UV
+    // footprint (which presets reach the plate) inside the private build root, proves the root gate accepted
+    // private paths; its work folder is removed again.
     expect(privateAttempt.exitCode).not.toBe(0);
     expect(text(privateAttempt.stderr)).toContain("No package was installed or promoted");
-    const intermediate = readdirSync(build).find(name => !name.startsWith("source-"));
-    expect(intermediate).toBeDefined();
-    expect(existsSync(join(build, intermediate!, "logs"))).toBe(true);
-    expect(text(privateAttempt.stderr)).toContain("Resource build failed");
+    expect(text(privateAttempt.stderr)).toContain("WolvenKit failed while reading the eye plate");
+    expect(existsSync(build)).toBe(true);
+    expect(readdirSync(build)).toEqual([]);
     // The filtered snapshot is removed after use, and nothing reached dist.
     expect(readdirSync(build).filter(name => name.startsWith("source-"))).toEqual([]);
     expect(existsSync(dist)).toBe(false);

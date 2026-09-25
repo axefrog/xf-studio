@@ -10,18 +10,25 @@ import { packagePresetIdentities, preparePackageCollection } from "../../src/pac
 import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDesktopBuild, useBuilderBun, type DesktopPlatePreparer } from "../build";
 import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
+import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { plateUvFootprint } from "../../src/plate-uv-window";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 
 const root = realpathSync.native(mkdtempSync(resolve(tmpdir(), "xfs-desktop-build-test-"))); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const fixtureWolvenKit = () => null;
+/** A synthetic plate's UV footprint over the fixture's lids; the stand-in plate records it as a derived plate does. */
+const FOOTPRINT = plateUvFootprint(withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(),
+  "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv).mesh.Data.RootChunk);
 const plateManifest = { schema: "xfs/eye-plate-cache-1", recipeId: "xfs-expanded-eye-plate", recipeRevision: 1,
   recipeSha256: "1".repeat(64), deriverVersion: 1, cacheKey: "2".repeat(64),
   source: { revisionId: "cp2077-2.31", label: "Cyberpunk 2077 2.31", meshDepotPath: "base\\head.mesh", morphDepotPath: "base\\head.morphtarget",
     meshSha256: "3".repeat(64), morphSha256: "4".repeat(64) },
   files: { mesh: { name: "xfs_eye_plate.mesh", sha256: "5".repeat(64), bytes: 1 }, morph: { name: "xfs_eye_plate.morphtarget", sha256: "6".repeat(64), bytes: 1 } },
-  verification: {}, limits: [] } as unknown as EyePlateManifest;
+  uv: plateUvManifestRecord(FOOTPRINT), verification: {}, limits: [] } as unknown as EyePlateManifest;
 /** Stands in for WolvenKit derivation; records the cache root the host chose. */
 const fixturePlate = (seen: string[] = []): DesktopPlatePreparer => async (_settings, cacheRoot) => {
   seen.push(cacheRoot);
@@ -29,6 +36,7 @@ const fixturePlate = (seen: string[] = []): DesktopPlatePreparer => async (_sett
   mkdirSync(directory, { recursive: true });
   const manifestFile = resolve(cacheRoot, "fixture", "plate-manifest.json");
   writeFileSync(manifestFile, JSON.stringify(plateManifest));
+  writeFileSync(resolve(cacheRoot, "fixture", PLATE_UV_FILE), JSON.stringify(FOOTPRINT));
   return { directory, meshFile: resolve(directory, "xfs_eye_plate.mesh"), morphFile: resolve(directory, "xfs_eye_plate.morphtarget"),
     manifestFile, manifest: plateManifest, reused: false };
 };
@@ -162,7 +170,7 @@ test("a matching staged result is promoted with partial-export identities and no
   const collection = structuredClone(fixture);
   collection.presets[0].recipe.layers[0].finish = "glitter";
   const parsed = parseCollection(collection);
-  const prepared = preparePackageCollection(parsed);
+  const prepared = preparePackageCollection(parsed, plateReachInput(FOOTPRINT));
   const namespace = prepared.plan.namespace;
   const archive = Buffer.from("archive fixture");
   const xl = Buffer.from("xl fixture");
@@ -171,7 +179,7 @@ test("a matching staged result is promoted with partial-export identities and no
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex"),
     originalPresetCount: parsed.presets.length, omissions: prepared.omissions, namespace,
     modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
-    presets: packagePresetIdentities(prepared.plan), plateLiftsMm: prepared.plan.plate.liftsMm,
+    presets: packagePresetIdentities(prepared.plan), plateLiftsMm: prepared.plan.plate.liftsMm, plateUv: prepared.plateUv,
     verifiedPresetCount: prepared.packaged.presets.length,
     files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex") })),
@@ -196,7 +204,7 @@ test("a matching staged result is promoted with partial-export identities and no
     `console.log("XFS_PACKAGE_RESULT=" + JSON.stringify({ package: final, manifest: path.join(final, "manifest.json"),`,
     `  modName: m.modName, selectorLabel: m.selectorLabel, archiveSha256: m.files[0].sha256, presetCount: m.verifiedPresetCount,`,
     `  originalPresetCount: m.originalPresetCount, omissions: m.omissions, packagedCollectionSha256: m.packagedCollectionSha256,`,
-    `  plate: m.plate, plateLiftsMm: m.plateLiftsMm, installed: false, gameRenderingVerified: false }));`,
+    `  plate: m.plate, plateLiftsMm: m.plateLiftsMm, plateUv: m.plateUv, installed: false, gameRenderingVerified: false }));`,
   ].join("\n");
   // The tools root is only known once the host exists; substitute it into the builder afterwards.
   const h = host("// placeholder\n");

@@ -1,13 +1,16 @@
 import type { PackageCheck } from "../src/package-action";
+import type { PlateReachInput } from "../src/plate-reach";
 
 export const checkDeadlineMs = 15_000;
 export type CheckResult = { kind: "success"; result: PackageCheck } |
   { kind: "invalid"; message: string } |
   { kind: "failure"; message: string; code?: string };
 
+/** Worker request: the collection, and the prepared plate's UV footprint when the host has one. */
+export type CheckRequest = { collection: unknown; plate: PlateReachInput | null };
 /** Fresh worker per Check prevents a stalled compiler from blocking the desktop host. */
 export function runDesktopCheck(collection: unknown, workerPath: string, timeoutMs = checkDeadlineMs,
-  signal?: AbortSignal): Promise<CheckResult> {
+  signal?: AbortSignal, plate: PlateReachInput | null = null): Promise<CheckResult> {
   return new Promise(resolve => {
     let worker: Worker;
     try { worker = new Worker(workerPath); }
@@ -38,7 +41,7 @@ export function runDesktopCheck(collection: unknown, workerPath: string, timeout
       message: "Package Check worker failed. No result was published." });
     if (signal?.aborted) { abort(); return; }
     signal?.addEventListener("abort", abort, { once: true });
-    try { worker.postMessage(collection); }
+    try { worker.postMessage({ collection, plate } satisfies CheckRequest); }
     catch { finish({ kind: "failure", code: "package_check_worker_failed",
       message: "Package Check could not send the collection to its worker." }); }
   });

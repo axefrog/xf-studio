@@ -4,8 +4,10 @@
 //
 // Texture space. With a plate UV window (the package builder derives it from the plate it packages),
 // flat and faceted presets compile into that window at 2048 × 512 and also write a head-UV coverage
-// reference that the independent verifier maps back through the plate's UVs. Without one (the
-// Experiment 005 oracle's bake adapter) every preset keeps the historical 1024 head-UV layout.
+// reference that the independent verifier maps back through the plate's UVs. The reference is cropped
+// from the head-atlas raster, not the window rasterizer, so the two never share a fault (PIPE-32).
+// Without a window (the Experiment 005 oracle's bake adapter) every preset keeps the historical 1024
+// head-UV layout, and the written plan says so: each preset's `uvSpace` is "head" (PIPE-34).
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -58,7 +60,10 @@ export interface BakeOptions {
  */
 export async function bakeCollection(value: unknown, outDir: string,
   beforePreset: (index: number) => void | Promise<void> = () => {}, options: BakeOptions = {}): Promise<{ plan: CollectionPlan; records: BakedRecord[] }> {
-  const plan = planCollection(value), out = resolve(outDir);
+  const planned = planCollection(value), out = resolve(outDir);
+  // The oracle layout: every map on head UV, so the plan may not claim the plate window for any preset.
+  const plan: CollectionPlan = options.window ? planned
+    : { ...planned, presets: planned.presets.map(preset => ({ ...preset, uvSpace: "head" as const })) };
   mkdirSync(out, { recursive: true });
   const records: BakedRecord[] = [];
   for (const [index, preset] of plan.presets.entries()) {

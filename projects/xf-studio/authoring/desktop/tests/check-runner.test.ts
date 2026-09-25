@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { runDesktopCheck } from "../check-runner";
 import { desktopPackageRequest } from "../package";
+import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { OFF_PLATE_REASON } from "../../src/package-filter";
+import { plateReachInput } from "../../src/plate-uv-footprint-io";
+import { plateUvFootprint } from "../../src/plate-uv-window";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 
 const directory = mkdtempSync(resolve(tmpdir(), "xfs-check-worker-"));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -61,3 +66,20 @@ test("the standalone packaged Bun worker runs the shared preflight", async () =>
     expect(await response.json()).toMatchObject({ ready: true, originalPresetCount: 4 });
   } finally { rmSync(output, { recursive: true, force: true }); }
 });
+
+test("PIPE-33: the worker plans on the prepared plate the host passes, and omits a preset that misses it", async () => {
+  const collection = JSON.parse(readFileSync(resolve(import.meta.dir,
+    "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
+  for (const layer of collection.presets[1].recipe.layers) layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
+  const plate = plateReachInput(plateUvFootprint(withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(),
+    "a\b.mesh"), plateLikeUv).mesh.Data.RootChunk));
+  const worker = resolve(import.meta.dir, "../check-worker.ts");
+  const planned = await runDesktopCheck(collection, worker, 15_000, undefined, plate);
+  expect(planned.kind).toBe("success");
+  if (planned.kind !== "success") return;
+  expect(planned.result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+    reason: OFF_PLATE_REASON }]);
+  expect(planned.result.plateUv?.footprintSha256).toBe(plate.sha256);
+  const unplanned = await runDesktopCheck(collection, worker, 15_000);
+  expect(unplanned.kind === "success" && unplanned.result.omissions).toEqual([]);
+}, 30_000);

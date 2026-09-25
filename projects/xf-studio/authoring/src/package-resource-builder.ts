@@ -15,7 +15,8 @@ import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package
 import { encodeDds, flatMipChain } from "./flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./route-mip-chains";
 import { liftPlate, type PlateLiftReport } from "./plate-lift";
-import { plateUvBounds, plateUvWindow, uvTransformConstants, type StoredUvBounds, type UvTransformConstants, type UvWindow } from "./plate-uv-window";
+import { plateUvFootprint, uvTransformConstants, type PlateUvFootprint, type StoredUvBounds, type UvTransformConstants,
+  type UvWindow } from "./plate-uv-window";
 import type { TextureChannel } from "./finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
@@ -34,6 +35,11 @@ export interface ResourceBuildOptions {
   /** Directory holding exactly one plate mesh/morphtarget pair. */
   readonly plate: string;
   readonly tools: PackageResourceTools;
+  /**
+   * The plate UV footprint the preflight planned on (which presets reach the plate). The plate this build
+   * serializes must give exactly this footprint; absent only for callers that plan on no plate.
+   */
+  readonly plateUv?: PlateUvFootprint;
   readonly signal?: AbortSignal;
   readonly log?: (line: string) => void;
 }
@@ -43,8 +49,11 @@ export interface BuildRecord {
   plateStem: string; plateInputs: { path: string; sha256: string }[];
   /** The decal lift applied to the plate geometry (one render chunk per lift). */
   plateLift: PlateLiftReport;
-  /** The plate's stored UV0 bounds, the plate-local texture window derived from them and its material constants. */
-  plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants };
+  /**
+   * The plate's stored UV0 bounds, the plate-local texture window derived from them and its material constants,
+   * and the SHA-256 of the plate's whole UV footprint (bounds, window, vertex UVs and triangles).
+   */
+  plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string };
   artifacts: ReturnType<typeof archiveInventory>; archiveSha256: string;
   installed: false; gameRenderingVerified: false;
 }
@@ -104,8 +113,12 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   await new Promise(done => setImmediate(done));
   await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
   const sourceMesh = readJson(join(out, "source-json", stem + ".mesh.json"));
-  const bounds = plateUvBounds(sourceMesh.Data.RootChunk), window = plateUvWindow(bounds);
-  const plateUv = { bounds, window, transform: uvTransformConstants(window) };
+  const footprint = plateUvFootprint(sourceMesh.Data.RootChunk), { bounds, window } = footprint;
+  const footprintSha256 = sha256(JSON.stringify(footprint));
+  // The collection was filtered against a plate footprint (presets that never reach the plate were omitted); it must be this plate's.
+  if (options.plateUv && sha256(JSON.stringify(options.plateUv)) !== footprintSha256)
+    throw Error("The eye plate changed while this Build was planning on it. Build again.");
+  const plateUv = { bounds, window, transform: uvTransformConstants(window), footprintSha256 };
   writeFileSync(join(out, "logs", "plate-uv.log"), JSON.stringify(plateUv) + "\n", "utf8");
 
   // 2. Compile each preset's route maps in-process, yielding between presets so a cancel is seen.

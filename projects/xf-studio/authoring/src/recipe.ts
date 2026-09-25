@@ -479,6 +479,15 @@ export function createRasterJob(l: Layer, size: number) {
   };
 }
 
+/** One layer's coverage at authored (u, v), with the raster's own per-sample arithmetic, prepared once for
+ * point queries (the package filter's plate-reach test). 0 for a disabled layer. */
+export function layerCoverageSampler(l: Layer): (u: number, v: number) => number {
+  if (!l.enabled) return () => 0;
+  l = structuredClone(l);
+  const polygon = curve(l.points);
+  return prepareRasterCoverage(l, polygon, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon));
+}
+
 // Synchronous compiler/export callers retain the same exact pixel arithmetic.
 export function raster(l: Layer, size: number): Uint8ClampedArray<ArrayBuffer> {
   const job = createRasterJob(l, size);

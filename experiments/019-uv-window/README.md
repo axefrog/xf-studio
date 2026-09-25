@@ -20,17 +20,19 @@ The eye plate keeps the head's UV0, so a 1024 head-atlas texture spends only the
 | XBM row order | WolvenKit CLI 9.0.1 **stores imported image rows bottom to top** and its export flips them back. [`probe_xbm.py`](probe_xbm.py) imports a 64 × 16 chain with a marker in its top rows; the serialized XBM's first stored BC4 block row holds background and the last holds the marker, while the exported DDS has the marker on top again ([`probe-result.json`](probe-result.json)). | [resource] |
 | Consequence | Both flips together are why head-UV exports already land in place: the compiler writes row y at authored v = (y + ½)/1024, which is stored at t = 1 − v = V. For a window [u0, u1] × [v0, v1] (authored) with rows in natural authored order, t must map stored V ∈ [1 − v1, 1 − v0] onto [0, 1]: `UVScaleY` = 1/(v1 − v0) and `UVOffsetY` = `UVScaleY`·((v0 + v1)/2 − ½), which is **negative** (−1.66). This is the sign experiment 018 proposed. | [offline] |
 
-**Per-build check.** The verifier decodes a stored BC4 level of every preset (roughness, or the Fresnel mask) itself and requires it to equal the exported level with its rows reversed (to within one byte step, the rounding difference between two BC4 decoders; on the builds below the unreversed rows differ by up to 255). It then maps 19,680 plate sample points (every vertex and six points inside each triangle, from the packaged plate's own UVs) through the restated shader transform and row flip, and compares the decoded window coverage with the authored head-UV coverage at the same points. [`tools/uv-window-probe.ts`](../../projects/xf-studio/authoring/tools/uv-window-probe.ts) shows that this separates the right mapping from plausible mistakes on the finish board build [offline]:
+**Per-build check.** The verifier decodes a stored BC4 level of every preset (roughness, or the Fresnel mask) itself and requires it to equal the exported level with its rows reversed (to within one byte step, the rounding difference between two BC4 decoders; on the builds below the unreversed rows differ by up to 255). It then maps 19,680 plate sample points (every vertex and six points inside each triangle, from the packaged plate's own UVs) through the restated shader transform and row flip, and compares the decoded window coverage with the authored head-UV coverage at the same points. The authored reference is cropped from the builder's **head-atlas raster**, not the window rasterizer that made the maps, so a fault in the window code cannot move both together (a test bakes with the window rasterizer mirrored and requires the gate to fail). [`tools/uv-window-probe.ts`](../../projects/xf-studio/authoring/tools/uv-window-probe.ts) shows that this separates the right mapping from plausible mistakes on the finish board build (rebuilt 25 September with the head-raster reference) [offline]:
 
-| Mapping (Board 1) | Mean coverage error | Samples off by more than 0.5 |
-|---|---:|---:|
-| As packaged | 0.004 | 0 % |
-| `UVOffsetY` sign flipped | 0.873 | 87 % |
-| V mirrored inside the window | 0.869 | 87 % |
-| Rows not reversed (no import flip) | 0.869 | 87 % |
-| U shifted by 8 texels (1 mm) | 0.019 | 1.4 % |
+| Mapping (Board 1) | Mean coverage error | Samples off by more than 0.5 | Offset estimate (u, v texels) |
+|---|---:|---:|---|
+| As packaged | 0.0008 | 0 % | 0, 0 |
+| `UVOffsetY` sign flipped | 0.891 | 89 % | at the search limit |
+| V mirrored inside the window | 0.885 | 89 % | at the search limit |
+| Rows not reversed (no import flip) | 0.885 | 89 % | at the search limit |
+| Lookup shifted 2 texels in U | 0.005 | 0 % | −2, 0 |
+| Lookup shifted 2 texels in V | 0.028 | 0 % | 0, 2 |
+| Lookup shifted 8 texels in U (1 mm) | 0.017 | 1.5 % | −8, 0 |
 
-The gate is mean < 0.03 and fewer than 1 % of samples off by more than 0.5, so each wrong alternative fails.
+The gate is mean < 0.03, fewer than 1 % of samples off by more than 0.5, and a signed offset estimate within one window texel on each axis. The first two limits alone let shifts of a few texels through (both 2-texel rows pass them); the offset estimate is a joint search over shifts of the map lookup up to ±8 texels, refined to 1/16 texel, for the least total difference from the reference, and reports the content's displacement with its sign. Every wrong alternative above fails. On the rebuilt finish board and session-2 collection every window preset's estimate is 0 on both axes, except the sharpest line pattern at 0.06 texel in V.
 
 ### 2. The window rule
 
@@ -153,7 +155,7 @@ python experiments/019-uv-window/probe_xbm.py --wolvenkit <WolvenKit.CLI.exe> --
 ## Limits
 
 - Offline only. The game's own sampling of the window (its derivatives, anisotropy and any upscaler mip bias) is untested; the test card's first step is the runtime check.
-- The mapping gate compares against the recipe evaluator's own head-UV coverage at 4096 texels across. It proves where the window's texels land, not that the evaluator is right.
+- The mapping gate compares against the recipe evaluator's own head-UV coverage, cropped from its 4096-texel head-atlas raster. It proves where the window's texels land, not that the evaluator is right.
 - The stored-row check decodes BC4 only. Colour (BC7) and normal (BC5) maps are imported by the same WolvenKit path and are assumed to share the row order.
 - Framings and mip levels follow experiment 018's estimates.
 

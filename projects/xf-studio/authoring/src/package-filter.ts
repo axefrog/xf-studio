@@ -3,6 +3,11 @@ import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import { layerExport, planPresetExport, type ExportAdapterId } from "./finish-export";
 import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { PackagePresetIdentity } from "./package-action";
+import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate-reach";
+
+/** Why a whole preset is omitted: nothing exportable is left, or its makeup never reaches the eye plate. */
+export const NO_EXPORTABLE_LAYERS_REASON = "No active exportable layers remain.";
+export const OFF_PLATE_REASON = "Its makeup doesn't reach the eye plate, so it wouldn't show in game.";
 
 export type PackageOmission =
   | { kind: "layer"; presetId: string; presetName: string; layerId: string; layerName: string;
@@ -19,6 +24,7 @@ export function describePackageOmissions(omissions: PackageOmission[]): string {
   if (!omissions.length) return "";
   return ` Partial export: ${omissions.map(item => item.kind === "layer"
     ? `omitted layer “${item.layerName}” (${label(item.finish)}) from preset “${item.presetName}”`
+    : item.reason === OFF_PLATE_REASON ? `omitted whole preset “${item.presetName}” because its makeup doesn't reach the eye plate`
     : `omitted whole preset “${item.presetName}” because no exportable active layers remain`).join("; ")}. The authored collection is unchanged.`;
 }
 
@@ -36,8 +42,14 @@ export function describePackageExperimental(experimental: readonly PackageExperi
 export const packagePresetIdentities = (plan: Pick<ReturnType<typeof planCollection>, "presets">): PackagePresetIdentity[] => plan.presets.map(p =>
   ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route, ...(p.diagnostics ? { diagnostics: p.diagnostics } : {}) }));
 
-/** A package-specific copy. Never changes the authored collection or its stable identities. */
-export function preparePackageCollection(value: unknown) {
+/**
+ * A package-specific copy. Never changes the authored collection or its stable identities.
+ *
+ * With `plate` (the eye plate this Check or Build plans on), a preset whose exportable layers never reach the
+ * plate is omitted too, as a reported omission; the result then records that plate (`plateUv`). Without it
+ * (Check before any plate has been prepared) nothing is judged against the plate and `plateUv` is null.
+ */
+export function preparePackageCollection(value: unknown, plate: PlateReachInput | null = null) {
   const source = parseCollection(value);
   const omissions: PackageOmission[] = [];
   const experimental: PackageExperimental[] = [];
@@ -52,8 +64,11 @@ export function preparePackageCollection(value: unknown) {
       return false;
     });
     if (!layers.some(layer => layer.enabled && layer.opacity > 0)) {
-      omissions.push({ kind: "preset", presetId: preset.id, presetName: preset.name,
-        reason: "No active exportable layers remain." });
+      omissions.push({ kind: "preset", presetId: preset.id, presetName: preset.name, reason: NO_EXPORTABLE_LAYERS_REASON });
+      continue;
+    }
+    if (plate && !presetReachesPlate({ layers }, plate.footprint)) {
+      omissions.push({ kind: "preset", presetId: preset.id, presetName: preset.name, reason: OFF_PLATE_REASON });
       continue;
     }
     for (const layer of plan.included) {
@@ -64,10 +79,12 @@ export function preparePackageCollection(value: unknown) {
     }
     presets.push({ ...preset, recipe: { ...preset.recipe, layers } });
   }
+  if (!presets.length && plate && omissions.some(item => item.kind === "preset" && item.reason === OFF_PLATE_REASON))
+    throw Error("No mod files can be made: none of the presets' makeup reaches the eye plate around the eyes, so nothing would show in game. Move the shapes onto the eyelids in the UV view and try again. Your collection is unchanged.");
   if (!presets.length) throw Error("No mod files can be made: no preset has an active layer with an exportable finish (Matte, Satin, Metallic, or a game-matched Glossy, Shimmer or Colour-shifting layer). Your collection is unchanged.");
   // Diagnostic knobs of a prepared test candidate stay with the packaged copy for the presets it keeps.
   const diagnostics = parseExportDiagnostics((value as { diagnostics?: unknown } | null)?.diagnostics, presets.map(p => p.id));
   const packaged: PresetCollection = { ...source, presets, ...(diagnostics ? { diagnostics } : {}) };
   const plan = planCollection(packaged);
-  return { source, packaged, plan, omissions, experimental };
+  return { source, packaged, plan, omissions, experimental, plateUv: plate ? plateUvRecord(plate) : null };
 }

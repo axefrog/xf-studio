@@ -10,6 +10,7 @@
 // the 2x2 average is ((top-left + top-right) + bottom-left) + bottom-right, over 4.
 // Non-square maps (the plate-local window) halve both sides until one reaches 1; each
 // further level is the two-texel average (first + second) / 2 along the other side.
+import { VerificationError } from "./resource-checks";
 
 export type VerifierChannel = "diffuse" | "roughness" | "metalness";
 
@@ -141,7 +142,7 @@ export interface ErrorStats { readonly mean: number; readonly p95: number; reado
 /** Mean, 95th percentile (NumPy's default linear method) and maximum. */
 export function errorStats(values: Float64Array): ErrorStats {
   const n = values.length;
-  if (!n) throw new Error("No values to summarise");
+  if (!n) throw new VerificationError("A decoded-texture check found no texels to compare");
   const sorted = Float64Array.from(values).sort();
   const q = 95 / 100, virtual = (n - 1) * q;
   const lower = Math.min(Math.max(Math.floor(virtual), 0), n - 1), upper = Math.min(lower + 1, n - 1);
