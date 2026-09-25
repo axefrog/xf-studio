@@ -27,7 +27,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## Last reviewed
 
-| Commit | Date | Scope | Result |
+| Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
 | `b9597bd` | 2026-09-25 | First deep review: core, pipeline/resolver/adapters, presentation/desktop (three parallel reviewers) | 7 High, 30 Medium, 18 Low. Over the High budget, so feature merges are paused except critical-path work. |

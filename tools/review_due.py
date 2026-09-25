@@ -24,7 +24,7 @@ def main():
     text = LEDGER.read_text(encoding='utf-8')
     section = text.split('## Last reviewed', 1)[1].split('##', 1)[0]
     commits = re.findall(r'^\|\s*`?([0-9a-f]{7,40})`?\s*\|', section, re.M)
-    base = commits[-1] if commits else git('rev-list', '--max-parents=0', 'HEAD').split()[0]
+    base = commits[0] if commits else git('rev-list', '--max-parents=0', 'HEAD').split()[0]
     merges = [line for line in git('log', '--merges', '--first-parent', '--format=%s', f'{base}..main').splitlines() if line]
     changed = 0
     for line in git('diff', '--numstat', f'{base}..main').splitlines():
