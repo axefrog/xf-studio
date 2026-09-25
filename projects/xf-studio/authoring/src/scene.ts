@@ -9,8 +9,7 @@ import { IdleAnimation } from "./idle-animation";
 import type { CameraState } from "./workspace-state";
 import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
-import { prepareEyeAppearances } from "./eye-appearance";
-import { eyeRoughnessMap } from "./eye-optics";
+import { createEyeMaterial, EYE_FLAT_ROUGHNESS, eyeParameters, IRIS_MASK_ENCODING } from "./eye-material";
 import type { ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import type { AdapterContext } from "./character-material-adapters";
@@ -129,7 +128,6 @@ async function assembleScene(
   let eyes = core.eyes;
   scene.add(gltf.scene);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
-  const loader = new THREE.TextureLoader();
   const { "head.albedo": albedo, "eyes.albedo": eyeColor, "head.normal": normal, "head.roughness": roughness } = core.textures;
   const skin = new THREE.MeshStandardMaterial({
     map: albedo,
@@ -140,62 +138,38 @@ async function assembleScene(
   });
   head.material = skin;
   extendSkin(head, skin);
-  // The game's eye UV0 spans several tiles (the texture repeats across the eyeball), so every
-  // eye texture repeats. Older prepared eyes were folded into one tile, where this is a no-op.
-  const repeatEyeTexture = (t: THREE.Texture) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.needsUpdate = true; return t; };
-  repeatEyeTexture(eyeColor);
-  const eyeMat = new THREE.MeshStandardMaterial({
-    map: eyeColor,
-    roughness: 0.18,
-  });
+  // The core eye is the fallback: the base game's eye texture through the same eyeball material as a resolved eye
+  // (eye-material.ts: colour sampled V-flipped, as the game's program does). The shown V's own eyes come with the
+  // character record and replace it; a layered eye design the preview can't draw yet keeps it (limit `eye-design`).
+  // The game's eye UV0 spans several tiles, so every eye texture repeats.
+  eyeColor.wrapS = eyeColor.wrapT = THREE.RepeatWrapping;
+  eyeColor.needsUpdate = true;
+  const coreEye = createEyeMaterial({ albedo: eyeColor }, eyeParameters({ scalars: {} }));
+  const eyeMat = coreEye.material;
+  releases.push(() => { eyeMat.dispose(); for (const texture of coreEye.owned) texture.dispose(); });
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
-  const eyeAppearances = await prepareEyeAppearances(async (bytes, entry, role) => {
-    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
-    try {
-      const t = await loader.loadAsync(url);
-      const dimensions = role === "roughness" ? entry.roughness! : entry;
-      if (t.image.width !== dimensions.width || t.image.height !== dimensions.height) {
-        t.dispose(); throw Error("Local eye image dimensions do not match its manifest");
-      }
-      if (role === "roughness") {
-        const map = repeatEyeTexture(eyeRoughnessMap(t.image as HTMLImageElement, renderer.capabilities.getMaxAnisotropy()));
-        t.dispose();
-        return map;
-      }
-      // Eye UV0 addresses the texture directly (repeating across tiles). Do not crop/translate it.
-      repeatEyeTexture(t);
-      t.flipY = false;
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      t.name = entry.label;
-      return t;
-    } finally { URL.revokeObjectURL(url); }
-  });
-  let selectedEye = eyeAppearances.select();
-  let eyeAppearanceStatus = selectedEye.status;
   let eyeOpticsEnabled = false;
-  function applyEyeMaterial() {
-    eyeMat.map = selectedEye.texture ?? eyeColor;
-    eyeMat.roughnessMap = eyeOpticsEnabled ? selectedEye.roughness ?? null : null;
-    eyeMat.roughness = eyeMat.roughnessMap ? selectedEye.status.asset!.roughness!.scale : 0.18;
-    eyeMat.needsUpdate = true;
-    eyeAppearanceStatus = selectedEye.status;
+  /** The resolved eyeballs drawn now (empty while the core eye shows). */
+  const resolvedEyeballs = () => drawnDetails().flatMap(item => item.eyes?.eyeballs ?? []);
+  function applyEyeOptics() {
+    for (const { handle } of [{ handle: coreEye.handle }, ...resolvedEyeballs()]) handle.setSourceRoughness(eyeOpticsEnabled);
   }
-  function setEyeOptics(enabled: boolean) { eyeOpticsEnabled = enabled; applyEyeMaterial(); }
+  function setEyeOptics(enabled: boolean) { eyeOpticsEnabled = enabled; applyEyeOptics(); }
+  /** Which eye is drawn and how (developer evidence and the status line's optics state). */
   function eyeAppearance() {
-    const map = eyeMat.map, reference = map === eyeColor;
-    const image = map?.image as HTMLImageElement | undefined;
-    return { ...eyeAppearanceStatus,
-      activeTexture: { url: reference ? "/assets/eye-color.png" : eyeAppearanceStatus.asset?.url,
-        sha256: reference ? undefined : eyeAppearanceStatus.asset?.sha256,
-        width: image?.width, height: image?.height, flipY: map?.flipY, colorSpace: map?.colorSpace },
-      material: { transparent: eyeMat.transparent, depthWrite: eyeMat.depthWrite, alphaTest: eyeMat.alphaTest,
-        normalMap: !!eyeMat.normalMap, roughnessMap: !!eyeMat.roughnessMap, roughnessScale: eyeMat.roughness },
-      optics: { requested: eyeOpticsEnabled, active: !!eyeMat.roughnessMap,
-        ...(selectedEye.roughnessError ? { error: selectedEye.roughnessError } : {}),
-        reason: !eyeOpticsEnabled ? "off" : eyeMat.roughnessMap ? "source-roughness-r" :
-          selectedEye.roughnessError ? "unavailable" : "no-matching-optics" },
+    const eyeballs = resolvedEyeballs();
+    const item = drawnDetails().find(entry => entry.component.slot === "eyes");
+    const shown = eyeballs[0]?.handle ?? coreEye.handle;
+    const templates = item ? [...new Set(item.component.materials.map(material => material.template))] : [];
+    return {
+      source: eyeballs.length ? "resolved" as const : "core" as const,
+      reason: eyeballs.length ? "resolved" : item ? "eye-design-not-drawn" : "no-resolved-eye",
+      definition: item?.component.definition ?? null, templates, gradient: shown.gradient, irisMaskEncoding: IRIS_MASK_ENCODING,
+      coreEyeVisible: eyes.visible, shells: item?.eyes?.shells.length ?? 0,
+      optics: { requested: eyeOpticsEnabled, active: shown.sourceRoughness, error: undefined as string | undefined,
+        reason: !eyeOpticsEnabled ? "off" : shown.sourceRoughness ? "source-roughness-r" : "no-source-roughness",
+        roughnessScale: shown.sourceRoughness ? shown.parameters.roughnessScale : EYE_FLAT_ROUGHNESS },
     };
   }
   // Profile stops are decoded from sRGB before the shader's overlay (see
@@ -206,9 +180,11 @@ async function assembleScene(
   let browUnderlay: BrowUnderlayEvidence | undefined;
   // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, brows: true, lashes: true, hair: true };
-  // Keep context details above the entire editable makeup stack (orders 10–41); skin and hair keep their own order.
-  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, brows: 100, lashes: 101, hair: 0 };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, brows: true, lashes: true, hair: true, eyes: true };
+  // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
+  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, brows: 100, lashes: 101, hair: 0, eyes: 0 };
+  // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
+  const EYE_SHELL_RENDER_ORDER = 99;
   let characterDetails: LoadedCharacterDetails | null = null;
   /**
    * How the resolved skin is shown (head-skin-placement.ts): on the core head when the launch route's head is
@@ -501,15 +477,12 @@ async function assembleScene(
     const savedEyes = group.morphs.find(m => m.region === "eyes");
     // No saved `eyes` pair means the base shape (`None`); the save stores only chosen morphs.
     const savedEyeShape = faceMorphChoiceIndex(eyeShapeChoices, savedEyes?.target ?? null);
-    selectedEye = eyeAppearances.select(group.appearances);
-    // Reset explicitly on every accepted save, including unresolved/missing images.
-    applyEyeMaterial();
+    // The saved eye colour arrives with the character record (setCharacterDetails), like the skin, brows, lashes and hair.
     currentSave = v;
     refreshPiercings();
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
-      eyeAppearance: eyeAppearance(),
       matchedPiercing: !!(piercingManifest && savedPiercing(piercingManifest, v)),
       ...(savedEyeShape === undefined ? {} : { eyeShape: savedEyeShape }),
     };
@@ -532,9 +505,10 @@ async function assembleScene(
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
       }
-      // Nothing of the previous V's skin may linger: the core head returns to the fixed default skin.
+      // Nothing of the previous V's skin or eyes may linger: the core head and eye return to their fixed defaults.
       head.material = skin;
       head.visible = true;
+      eyes.visible = true;
       resolvedSkin = null;
       previous.dispose();
     }
@@ -552,8 +526,9 @@ async function assembleScene(
     }
     characterDetails = next;
     for (const item of drawnDetails()) {
+      const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
-        mesh.renderOrder = DETAIL_RENDER_ORDER[item.component.slot];
+        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : DETAIL_RENDER_ORDER[item.component.slot];
         extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial);
         // Facial shapes: the same (target, region) names as the head's.
         for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
@@ -562,6 +537,9 @@ async function assembleScene(
       }
       scene.add(item.root);
     }
+    // The V's own eyeball replaces the core eye; without one (a layered design not drawn yet) the core eye stays.
+    eyes.visible = !resolvedEyeballs().length;
+    applyEyeOptics();
     scene.updateMatrixWorld(true);
     idle?.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
@@ -682,7 +660,8 @@ async function assembleScene(
     setHair,
     setCharacterDetails,
     detailContext,
-    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay }),
+    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
+      eyes: { core: eyes, appearance: eyeAppearance() } }),
     piercingManifest,
     prcManifest,
     piercingStyles,

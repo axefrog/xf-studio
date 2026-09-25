@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterDetailError, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
-import { detailFixture, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { detailFixture, eyeRequest, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -50,10 +50,10 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-2");
+    expect(record.schema).toBe("xfs/render-detail-3");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
-    expect(record.components.map(c => c.slot)).toEqual(["skin", "brows", "lashes", "hair"]);
+    expect(record.components.map(c => c.slot)).toEqual(["skin", "brows", "lashes", "hair", "eyes"]);
     const hair = record.components.find(c => c.slot === "hair")!;
     expect(hair.chunks).toEqual([0, 1]);
     expect(hair.geometry.depotPath).toBe(P.hairMesh);
@@ -75,7 +75,7 @@ describe("character record from the resolver", () => {
   test("an export failure empties only the affected slot, with one plain line", async () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
-    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable"]);
+    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable", "unavailable"]);
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
     expect(record.slots[3]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
     const b = await prepare(REQUEST_B);
@@ -110,6 +110,36 @@ describe("character record from the resolver", () => {
     expect(patched.scalars.SecondaryAlbedoInfluence).toBe(1);
   });
 
+  test("the eyes: eyeball and shell with their inputs, the gradient's sorted stops and the morph texture rule", async () => {
+    const { record } = await prepare(eyeRequest("gradient_blue"));
+    const eyes = record.components.find(c => c.slot === "eyes")!;
+    expect(eyes.chunks).toEqual([1, 2]);
+    expect(eyes.geometry).toMatchObject({ depotPath: P.eyeMorph, morphTargets: true });
+    const [eyeball, shell] = eyes.materials;
+    expect(eyeball!.template).toBe(P.eyeGradMt);
+    // The stops as the renderer bakes them: sorted, RGBA bytes, from the winning archive.
+    expect(eyeball!.gradients.IrisColorGradient).toEqual({ depotPath: P.blueGradient, archive: "basegame_fixture.archive", sha256: null, stops: [
+      { value: 0, color: [22, 22, 22, 255] }, { value: 0.785713971, color: [130, 192, 229, 255] }, { value: 1, color: [255, 255, 255, 255] }] });
+    // The mask keeps its own colour flag; the adapter decides how to read it.
+    expect(eyeball!.textures.IrisMask).toMatchObject({ depotPath: P.irisMask, isGamma: true });
+    expect(eyeball!.textures.Albedo).toMatchObject({ depotPath: P.eyeD, isGamma: true });
+    // The vanilla morph's flat normal replaces the eye's own, and the record says why.
+    expect(eyeball!.textures.Normal!.depotPath).toBe(P.editorNormal);
+    expect(eyes.morphTexture).toEqual({ morph: P.eyeMorph, texture: P.editorNormal, parameter: "Normal" });
+    expect(shell!.template).toBe(P.eyeShadowMt);
+    expect(Object.keys(shell!.textures)).toEqual(["Mask"]);
+    expect(record.slots.find(s => s.slot === "eyes")).toEqual({ slot: "eyes", state: "shown", label: "gradient blue" });
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
+    // A pack's colour: its own textures from its archive, and the fix copy's cleared rule leaves the material's normal.
+    const pack = (await prepare(eyeRequest("pack_eye_01"))).record.components.find(c => c.slot === "eyes")!;
+    expect(pack.morphTexture).toEqual({ morph: P.fixMorph, texture: null, parameter: null });
+    expect(pack.materials[0]!.textures.Albedo!.sources[0]).toMatchObject({ depotPath: P.packD, archive: "fixture_pack.archive" });
+    expect(pack.materials[0]!.textures.Normal!.depotPath).toBe(P.packN);
+    // A layered design is recorded beside its shell; the renderer says it isn't drawn.
+    const layered = (await prepare(eyeRequest("layered_design"))).record.components.find(c => c.slot === "eyes")!;
+    expect(layered.materials.map(m => m.template)).toEqual([P.layeredMt, P.eyeShadowMt]);
+  });
+
   test("small readers: PNG size, texture colour flag and hair profiles", () => {
     expect(pngSize(png)).toEqual({ width: 2, height: 1 });
     expect(pngSize(new Uint8Array(8))).toBeNull();
@@ -124,6 +154,11 @@ describe("character record from the resolver", () => {
       diffuse: { Red: 255, Green: 255, Blue: 255 }, falloff: { Red: 255, Green: 178, Blue: 165 } })).toEqual({ roughness0: 0.966365993,
       roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998, diffuse: [255, 255, 255], falloff: [255, 178, 165] });
     expect(skinProfileValues({ $type: "CHairProfile" })).toBeNull();
+    // Gradients: sorted by value, omitted fields read as their type defaults (alpha 255).
+    expect(gradientStops({ $type: "CGradient", gradientEntries: [{ value: 1, color: { Red: 255, Green: 255, Blue: 255 } },
+      { color: { Red: 22, Green: 22, Blue: 22, Alpha: 255 } }] })).toEqual([{ value: 0, color: [22, 22, 22, 255] }, { value: 1, color: [255, 255, 255, 255] }]);
+    expect(gradientStops({ $type: "CGradient", gradientEntries: [] })).toBeNull();
+    expect(gradientStops({ $type: "CHairProfile" })).toBeNull();
   });
 });
 
@@ -161,6 +196,21 @@ describe("exporter cache keys", () => {
     expect((await exporter.open(a).textures([P.capMask])).get(P.capMask)!.cached).toBe(true);
     expect((await exporter.open(b).textures([P.capMask])).get(P.capMask)!.cached).toBe(false);
     expect(runs.length).toBe(2);
+  });
+
+  test("a texture an archive lists only by hash (no path names) is exported by its hash, when its index has it", async () => {
+    const runs: string[] = [];
+    const exporter = createGameAssetExporter(join(root, "by-hash"), async ({ depotPaths, outDir, byHash }) => {
+      runs.push(`${byHash ? "hash" : "path"} ${depotPaths.join(",")}`);
+      // Like WolvenKit on a nameless archive: a path pattern finds nothing; a hash writes `<hash>.png`.
+      if (byHash) { mkdirSync(outDir, { recursive: true }); writeFileSync(join(outDir, `${depotHash(depotPaths[0]!)}.png`), png); }
+    }, { contains: (_source, hashes) => new Set(hashes.filter(hash => hash !== depotHash(P.strandId))) });
+    const source = archiveExportSource(join(root, "nameless.archive"), route.gameRoot);
+    const got = await exporter.open(source).textures([P.packD, P.strandId]);
+    expect([...got.keys()]).toEqual([P.packD]);
+    expect(runs).toEqual([`path ${P.packD},${P.strandId}`, `hash ${P.packD}`]);
+    // Cached like any other export.
+    expect((await exporter.open(source).textures([P.packD])).get(P.packD)!.cached).toBe(true);
   });
 });
 
@@ -261,6 +311,6 @@ describe("host preparation", () => {
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
-    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
   });
 });

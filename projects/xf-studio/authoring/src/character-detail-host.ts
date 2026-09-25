@@ -50,9 +50,9 @@ export type CharacterDetailHostOptions = {
   log?: (message: string) => void;
 };
 
-const NEEDS_SETUP = "Your V's own skin, brows, lashes and hair appear once your game folder and WolvenKit are set up.";
-const PREPARING = "Preparing your V's skin, brows, lashes and hair…";
-const FAILED = "Something went wrong while preparing your V's skin, brows, lashes and hair, so they aren't shown. The head still works.";
+const NEEDS_SETUP = "Your V's own skin, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up.";
+const PREPARING = "Preparing your V's skin, eyes, brows, lashes and hair…";
+const FAILED = "Something went wrong while preparing your V's skin, eyes, brows, lashes and hair, so they aren't shown. The head still works.";
 /** Request key: the character and the installation fingerprint it is prepared from (`installationFingerprint`). */
 export const characterRequestKey = (request: CharacterRequest, installation = "") =>
   createHash("sha256").update(canonicalJson(request)).update("\n" + installation).digest("hex").slice(0, 32);
@@ -138,13 +138,13 @@ export class CharacterDetailHost {
     const promise = begun
       .then(result => {
         this.set({ key, phase: "ready", message: "", progress: null, record: result.recordFile });
-        this.options.log?.(`Skin, brows, lashes and hair prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
+        this.options.log?.(`Skin, eyes, brows, lashes and hair prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })
       .catch(error => {
         const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
-        this.options.log?.(`Skin, brows, lashes and hair were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
+        this.options.log?.(`Skin, eyes, brows, lashes and hair were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
       })
       .finally(() => { if (this.running?.controller === controller) this.running = null; });

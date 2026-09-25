@@ -1,5 +1,5 @@
 /**
- * Application service for the preview's resolved character details (head skin, brows, lashes and hair). DOM-free:
+ * Application service for the preview's resolved character details (head skin, eyes, brows, lashes and hair). DOM-free:
  * it asks the host to prepare the current V (the creator default, or the loaded save), follows the
  * preparation, has the renderer device swap the result in, and publishes a read-only status.
  *
@@ -45,7 +45,7 @@ export type CharacterDetailStatus = {
 };
 
 const POLL_MS = 600;
-const FAILED = "Your V's own skin, brows, lashes and hair couldn't be prepared, so they aren't shown. The head still works.";
+const FAILED = "Your V's own skin, eyes, brows, lashes and hair couldn't be prepared, so they aren't shown. The head still works.";
 const pending = (): CharacterSlotStatus[] => DETAIL_SLOTS.map(slot => ({ slot, state: "pending", label: "" }));
 
 export class CharacterDetailActions {

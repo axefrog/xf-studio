@@ -165,7 +165,7 @@ export class StudioFileOperations {
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
           const savedAppearance = this.sources.loadSavedV(await file.bytes());
-          outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, brows, lashes and hair follow in a moment.",
+          outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, eyes, brows, lashes and hair follow in a moment.",
             savedAppearance }; break;
         }
         case "savedV.export":

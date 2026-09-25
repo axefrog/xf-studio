@@ -13,10 +13,17 @@
  *   and skin profiles, exactly as the generic resolver found them for the player's own installation on
  *   the launch route. The record never interprets channels; the renderer's material adapters do. A v2
  *   reader also accepts a v2 core head. The `skin` slot (the head component with its `skin.mt` chunk)
- *   joined v2 with step P1; a v2 record written before it has no skin outcome and is refused.
+ *   joined v2 with step P1.
+ * - `xfs/render-detail-3`: the character record gains the `eyes` slot (the eye-colour option's component with its
+ *   eyeball and wetness-shell chunks, each chunk's role taken from its template), a per-chunk `gradients` map
+ *   (`CGradient` stops, e.g. the iris colour ramp) and, per morph component, the effective morph target's
+ *   `baseTexture` rule, already applied to the chunk textures it replaces. A v3 reader refuses v2 character
+ *   records (the host prepares again) and still accepts a core head under any of the three schemas.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-2" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-3" as const;
+/** Earlier character schemas a reader recognises only to refuse them plainly. */
+export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2"];
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
 /** Where character records and their files are served; file names are content-addressed. */
 export const CHARACTER_DETAIL_ASSETS = "/assets/character/";
@@ -81,7 +88,8 @@ function morphSources(value: unknown): RenderMorphSource[] {
 export function parseCoreDetail(value: unknown): CoreDetail {
   const doc = value as CoreDetail;
   // A v2 reader accepts the unchanged core-head shape under either schema.
-  if (!doc || (doc.schema !== RENDER_DETAIL_SCHEMA && (doc.schema as string) !== CHARACTER_DETAIL_SCHEMA) || doc.detail !== "core-head")
+  if (!doc || (doc.schema !== RENDER_DETAIL_SCHEMA && (doc.schema as string) !== CHARACTER_DETAIL_SCHEMA &&
+      !RETIRED_CHARACTER_SCHEMAS.includes(doc.schema as string)) || doc.detail !== "core-head")
     fail("not a core head record.");
   if (doc.origin !== "game-files") fail("origin is invalid.");
   const nodes = doc.geometry?.nodes;
@@ -99,11 +107,11 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Version 2: the character record (the resolved head skin, brows, lashes and hair of the player's own game).
+// Version 3: the character record (the resolved head skin, brows, lashes, hair and eyes of the player's own game).
 
-export type DetailSlot = "skin" | "brows" | "lashes" | "hair";
+export type DetailSlot = "skin" | "brows" | "lashes" | "hair" | "eyes";
 /** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "brows", "lashes", "hair"];
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "brows", "lashes", "hair", "eyes"];
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -118,6 +126,16 @@ export type RenderRgba = [number, number, number, number];
 export type RenderSkinProfile = { depotPath: string; archive: string | null; sha256: string | null;
   roughness0: number; roughness1: number; lobeMix: number; blurSize: number;
   diffuse: [number, number, number]; falloff: [number, number, number] };
+/** One `CGradient` entry: its position and 8-bit RGBA colour as stored. */
+export type RenderGradientStop = { value: number; color: RenderRgba };
+/** A `CGradient` (e.g. `IrisColorGradient`), its stops sorted by value. The renderer bakes the ramp. */
+export type RenderGradient = { depotPath: string; archive: string | null; sha256: string | null; stops: RenderGradientStop[] };
+/**
+ * A morph component's effective `baseTexture` rule: the morph target (after ArchiveXL patches) binds a runtime
+ * texture built from `texture` to the material parameter `parameter`. When both are set, the chunk textures of
+ * that parameter in this record already are `texture`; `texture: null` (ArchiveXL's eye fix) leaves the material's own.
+ */
+export type RenderMorphTexture = { morph: string; texture: string | null; parameter: string | null };
 export type RenderChunkMaterial = {
   chunk: number;
   /** The mesh appearance's material name for this chunk. */
@@ -133,6 +151,8 @@ export type RenderChunkMaterial = {
   profiles: Record<string, RenderProfile>;
   /** Skin profiles the template's skin parameters bind (`skin.mt` `SkinProfile`). */
   skinProfiles: Record<string, RenderSkinProfile>;
+  /** Gradients the template's gradient parameters bind (`eye_gradient.mt` `IrisColorGradient`). */
+  gradients: Record<string, RenderGradient>;
 };
 export type RenderComponent = {
   /** Stable within the record: slot, component name and geometry hash. */
@@ -148,6 +168,8 @@ export type RenderComponent = {
   /** Visible chunks after the chunk mask. */
   chunks: number[];
   materials: RenderChunkMaterial[];
+  /** Morph components only: the effective morph target's `baseTexture` rule. */
+  morphTexture?: RenderMorphTexture;
 };
 export type DetailSlotState = { slot: DetailSlot; state: "shown" | "none" | "unavailable";
   /** Short plain label (the resolved choice), for the character panel. */
@@ -213,6 +235,19 @@ function skinProfile(value: unknown, what: string): RenderSkinProfile {
     diffuse: rgb(item?.diffuse, `${what} diffuse`), falloff: rgb(item?.falloff, `${what} falloff`) };
 }
 
+function gradient(value: unknown, what: string): RenderGradient {
+  const item = value as RenderGradient;
+  if (!Array.isArray(item?.stops) || !item.stops.length || item.stops.length > LIMITS.stops) fail(`${what} stops are invalid.`);
+  const read = item.stops.map((stop, index) => {
+    const at = finite(stop?.value, `${what} stop ${index}`);
+    if (at < 0 || at > 1 || !Array.isArray(stop.color) || stop.color.length !== 4) fail(`${what} stop ${index} is invalid.`);
+    return { value: at, color: stop.color.map((c, k) => int(c, `${what} stop ${index} colour ${k}`, 0, 255)) as RenderRgba };
+  });
+  if (read.some((stop, index) => index > 0 && stop.value < read[index - 1]!.value)) fail(`${what} stops are not sorted.`);
+  return { depotPath: text(item?.depotPath, `${what} depot path`), archive: item?.archive === null ? null : text(item?.archive, `${what} archive`),
+    sha256: optionalSha(item?.sha256 ?? null, what), stops: read };
+}
+
 function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
   const item = value as RenderChunkMaterial;
   return { chunk: int(item?.chunk, `${what} chunk`, 0, 63),
@@ -225,7 +260,8 @@ function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
     }),
     textures: entries(item?.textures, `${what} textures`, LIMITS.textures, texture),
     profiles: entries(item?.profiles, `${what} profiles`, 4, profile),
-    skinProfiles: entries(item?.skinProfiles, `${what} skin profiles`, 4, skinProfile) };
+    skinProfiles: entries(item?.skinProfiles, `${what} skin profiles`, 4, skinProfile),
+    gradients: entries(item?.gradients, `${what} gradients`, 4, gradient) };
 }
 
 function component(value: unknown, index: number): RenderComponent {
@@ -239,17 +275,22 @@ function component(value: unknown, index: number): RenderComponent {
   const materials = item.materials.map((material, k) => chunkMaterial(material, `${what} material ${k}`));
   if (materials.some(material => !chunks.includes(material.chunk))) fail(`${what} has a material for a hidden chunk.`);
   const geometry = item.geometry;
+  const rule = item.morphTexture;
+  if (rule !== undefined && (!rule || typeof rule !== "object")) fail(`${what} morph texture rule is invalid.`);
   return { id: text(item.id, `${what} id`), slot: item.slot, option: text(item.option, `${what} option`),
     definition: text(item.definition, `${what} definition`), component: text(item.component, `${what} component`),
     geometry: { ...resource(geometry, `${what} geometry`), depotPath: text(geometry?.depotPath, `${what} geometry path`),
       depotHash: /^[0-9]{1,20}$/.test(String(geometry?.depotHash)) ? String(geometry.depotHash) : fail(`${what} geometry hash is invalid.`),
       morphTargets: typeof geometry?.morphTargets === "boolean" ? geometry.morphTargets : fail(`${what} geometry kind is missing.`) },
-    renderChunks, chunks, materials };
+    renderChunks, chunks, materials,
+    ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
+      parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}) };
 }
 
 /** Strict parse of a character record: an unexpected field shape never reaches the loader. */
 export function parseCharacterDetail(value: unknown): CharacterDetail {
   const doc = value as CharacterDetail;
+  if (RETIRED_CHARACTER_SCHEMAS.includes(String(doc?.schema)) && doc?.detail === "character") fail(`the record version ${doc.schema} is retired; prepare it again.`);
   if (!doc || doc.schema !== CHARACTER_DETAIL_SCHEMA || doc.detail !== "character") fail("not a character record.");
   if (doc.origin !== "game-files") fail("origin is invalid.");
   if (doc.character?.source !== "default" && doc.character?.source !== "save") fail("character source is invalid.");
@@ -273,10 +314,11 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     components, slots };
 }
 
-/** Version dispatch: a v1 record is a core head; a v2 record is a core head or a character. */
+/** Version dispatch: a v1 record is a core head; a v2 or v3 record is a core head, and a v3 record may be a character. */
 export function parseRenderDetail(value: unknown): CoreDetail | CharacterDetail {
   const doc = value as { schema?: unknown; detail?: unknown };
-  if (doc?.schema === CHARACTER_DETAIL_SCHEMA && doc.detail === "character") return parseCharacterDetail(value);
-  if (doc?.schema === RENDER_DETAIL_SCHEMA || doc?.schema === CHARACTER_DETAIL_SCHEMA) return parseCoreDetail(value);
+  if (doc?.detail === "character") return parseCharacterDetail(value);
+  if (doc?.schema === RENDER_DETAIL_SCHEMA || doc?.schema === CHARACTER_DETAIL_SCHEMA || RETIRED_CHARACTER_SCHEMAS.includes(String(doc?.schema)))
+    return parseCoreDetail(value);
   return fail(`unsupported record version ${String(doc?.schema)}.`);
 }

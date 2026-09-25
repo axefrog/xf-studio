@@ -1,6 +1,6 @@
 # Eye rendering (V's eyes, game 2.31)
 
-**Maturity: Draft.** Consolidated on 25 September 2026 from the vanilla 2.31 eye resources (female first, male where cheap), the decompiled eye G-buffer, wetness-shell and deferred-lighting programs, the installed CCXL eye mods of the reference MO2 profile, and ArchiveXL 1.27.3. No claim here has runtime evidence. Grades follow the [knowledge rules](README.md): **[source]** (engine, framework or decompiled program), **[resource]**, **[wiki]** (Modding Docs at `be2f44ee`), **[runtime]**, **[hypothesis]**. Program GUIDs, SSA ranges, hashes and the extraction method are in the [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md).
+**Maturity: Draft.** Ranks 1–3 of the plan are built (§6.6). Consolidated on 25 September 2026 from the vanilla 2.31 eye resources (female first, male where cheap), the decompiled eye G-buffer, wetness-shell and deferred-lighting programs, the installed CCXL eye mods of the reference MO2 profile, and ArchiveXL 1.27.3. No claim here has runtime evidence. Grades follow the [knowledge rules](README.md): **[source]** (engine, framework or decompiled program), **[resource]**, **[wiki]** (Modding Docs at `be2f44ee`), **[runtime]**, **[hypothesis]**. Program GUIDs, SSA ranges, hashes and the extraction method are in the [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md).
 
 This page is rank 4 of the [head render plan](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort): the iris gradient, all 71 eye colours and the wetness shell. It answers which resources a V's eyes resolve to, what the game's programs do with them, how CCXL eye mods plug in, and how the Studio preview should reproduce it. [Materials and shaders](materials-and-shaders.md) holds the G-buffer and template background; the [CC file chain](cc-file-chain.md) holds the resolver rules.
 
@@ -92,7 +92,7 @@ Then the surface [source]:
 
 Three consequences for a renderer:
 
-- **Colour, normal and mask are sampled V-flipped** relative to the raw UV (`1 − v`), roughness is not [source]. The CCXL eye guide tells authors to invert the albedo on Y and to regenerate, not flip, the normal map [wiki: `ccxl-eye-textures.md` L267-271, image `inverted_y_03.png`]. The Studio's current eye preview samples the albedo unflipped.
+- **Colour, normal and mask are sampled V-flipped** relative to the raw UV (`1 − v`), roughness is not [source]. The CCXL eye guide tells authors to invert the albedo on Y and to regenerate, not flip, the normal map [wiki: `ccxl-eye-textures.md` L267-271, image `inverted_y_03.png`]. The Studio's eye preview follows this rule (§6.6).
 - **The iris is a projection, not a texture on the sphere.** Inside the iris the coordinate comes entirely from where the refracted view ray meets a plane 13.4 mm from the eye centre, in the eye's own frame; the mesh UV only chooses the iris/sclera blend. At a straight view the limbus (UV radius 0.165) projects to about 0.151, a 9 % magnification; at grazing views the iris slides against the limbus.
 - **The eye axis is engine data.** The two per-eye vectors are not material parameters. Reading: they are the eye joint's forward and lateral axes; the ±5° then turns each iris axis about 5° outward, like the eye's angle kappa [hypothesis]. In the bind pose the eye joints' forward is their local −Y [resource: `boneRigMatrices`]. A wrong sign shifts the iris sideways by about 0.03 UV, a fifth of its radius.
 
@@ -153,7 +153,7 @@ Every installed CCXL eye mod reaches the same chain, so the generic resolver han
 
 Consequences [resource]: every CCXL eye is **texture-only `eye.mt`**: no gradient, the vanilla optical scalars from the template (except `BlickScale`, inert), and the vanilla wetness shell and lashes untouched. No mod replaces a vanilla eye file at the same path, except Heterochromia's two normal maps. Heterochromia draws **two components**, each a split-eye mesh (`[lashes, eye, wet, eye, wet]`) with a complementary chunk mask and its own mesh appearance, selected by a switcher between `eyes_color`/`eyes_color_none` and `eyes_color_left`/`eyes_color_right`; per-eye colour is per component, not per material. Its female left app has an inline mask that disagrees with its `partsOverrides` mask, and it lists the vanilla eye entity in `partsValues`; both need a runtime look before the resolver commits to a reading.
 
-**Resolver gaps for eyes:** the morph `baseTexture` rule; the scope of `partsOverrides` on inline components (Heterochromia); gradient resources are not yet carried in the render record; `eye-appearance.ts` (one hand-made manifest pair) is migration debt to retire once the resolved chain draws.
+**Resolver gaps for eyes:** the scope of `partsOverrides` on inline components (Heterochromia). The morph `baseTexture` rule and gradient resources are now carried in the render record, and the hand-made eye manifest is retired (§6.6).
 
 ## 6. Implementation spec for the preview
 
@@ -211,6 +211,63 @@ Effort: **S** about a day of agent work, **M** a few days, **L** a week or more.
 | 5 | **Refraction/parallax UV** | Depth under the cornea at angles; the iris stops looking painted | S (with rank 4) | Eye-joint axes as uniforms |
 | 6 | **Heterochromia**: two components with their masks | One enabled mod works | S | Resolver scope check, runtime look |
 | 7 | **Multilayer eyes** (37 creator options) | The graphic eye designs | L | Shared multilayer adapter |
+
+### 6.6 Implementation status (ranks 1–3 built; ranks 4–7 open)
+
+**Rank 1: resolved eye component.** The character record is now `xfs/render-detail-3` (`src/render-detail.ts`). It carries an `eyes` slot, selected by the creator slot `eyes_color` in the same planner as brows and lashes. It also carries a per-chunk `gradients` map, the `CGradient` stops sorted by value as RGBA bytes, and per morph component a `morphTexture` rule. The eye component's chunks keep their roles from their templates (`src/render-templates.ts`: `eye.mt` and `eye_gradient.mt` go to the `eye` adapter, `eye_shadow.mt` to `eye-shell`, and `multilayered.mt` to a placeholder), so the male order needs no special case. The geometry is the effective morph target exported with raw UV0: on the reference install the eyeball UVs span U −1.64 to 1.99 and V −0.60 to 0.99, and the shell spans U 0–1 and V 0.048–0.406.
+
+The resolver reads each morph target's `baseTexture` and `baseTextureParamName`, including ArchiveXL patches of them (`src/resource-graph.ts`). The planner applies the rule to the texture parameter it names, when the chunk's adapter reads that parameter. Where it applies:
+
+- The vanilla eye morph binds `engine\textures\editor\normal.xbm` to `Normal`.
+- ArchiveXL's `…_normal_fix` copy clears the rule, so the material's own normal stands.
+- The head morph's rule names the head's own normal, so the skin is unchanged on the reference install.
+
+The hand-made single-eye manifest (`eye-appearance.ts`, `eye-optics.ts`, `tools/intake_eyes.ts`) is retired from the preview. Its parser now lives only in the render-fidelity study's fixture (`src/eye-study-fixture.ts`, staged by `tools/stage-private-eye-study.ts`), and a boundary test keeps every rendering module free of eye-mod names, saved identities and that fixture.
+
+One generic exporter fix came out of this. Some mod archives list hashes only, with no path names; the reference save's texture pack is one. For those, a WolvenKit path pattern finds nothing, so the exporter now asks for each missing texture by its depot hash, if the archive's own index lists it (`src/game-asset-export.ts`).
+
+**Rank 2: iris colour** (`src/eye-material.ts`). One eyeball material serves both templates, with a define for the gradient.
+
+- **Sampling.** Colour and mask are sampled at `(fold(u), 1 − v)`. The fold uses the raw derivatives, so the mip level doesn't jump at U = 0. Roughness is sampled at the raw UV. The earlier preview sampled colour at the raw UV, so it drew every eye upside down against the game; that is fixed, and the core fallback eye uses the same material.
+- **Gradient eyes.** For `eye_gradient.mt`, the baked 256-texel ramp is looked up at the mask's R and blended by its A in linear light. The ramp holds the 8-bit stops interpolated at the texel centres and is stored as sRGB.
+- **Mask reading.** R is read raw by default. `IRIS_MASK_ENCODING` switches to the decoded reading once test ask 9 settles it.
+- **Texture-only eyes.** `eye.mt` eyes use their albedo alone.
+- **Layered designs.** A `multilayered.mt` eye reports the limit code `eye-design`, and the scene keeps the core (base-game) eye with the chosen eye's wetness shell.
+- **Lighting.** Unchanged: the standard lighting, with the flat roughness 0.18 by default. The "Eye's own roughness" switch uses `RoughnessScale · Roughness.R` from the resolved chain. `Normal`, `NormalBubble` and the optics scalars are already in the record and in `EyeParameters` for ranks 4–5.
+
+**Rank 3: wetness shell.** The shell follows §4:
+
+- It is a forward pass at render order 99: after the eyeball, the skin and the makeup plates, and before brows and lashes.
+- Blending is `One / SrcAlpha`, with depth test on, no depth write and both sides drawn.
+- `alpha = saturate(1 + shadow·(lum − 1))`, which is 0.37 at a full mask in vanilla.
+- The highlight is GGX at `clamp(WetnessRoughness·G, 0.04, 1)`, using the eye's visibility term, with no Fresnel, no N·L and no environment, scaled by `WetnessStrength·B`.
+
+It is exact only in the creator display's scene-linear target. On the Studio stage it multiplies colour that is already tone-mapped and sRGB-encoded.
+
+**Checks.** Unit tests cover:
+
+- the record schema and its refusal of v2 character records;
+- eye selection for a vanilla gradient eye, a texture-only eye, a CCXL-style patched eye (built from the ArchiveXL fix appearance, with an `@eyes` template and soft paths), a layered design and the male chunk order;
+- the ramp maths and the raw and decoded predictions;
+- the flipped sampling rule and the shell formula;
+- A → B → A switching, and the boundary test;
+- the render-scheduler triggers.
+
+In the browser (`?verify=1`, reference MO2 profile), three Vs resolved and drew:
+
+| V | Eye | How it looks |
+|---|---|---|
+| Default V | `gradient_brown` | A warm mid-brown iris with lighter caramel fibres and a dark limbal ring |
+| Reference save | Kala eye 16 (`eye.mt`, from the hash-only archive) | A green-hazel iris with an amber ring round the pupil |
+| Save B | `gradient_light_blue` (previously unresolved) | A mid sky-blue iris with pale streaks and a dark limbal ring |
+
+- **Shell.** In all three the shell darkens the corners and under the upper lid. The tear line shows as a thin bright band along the lower lid under the Studio key light, and as separate catch points under the creator spot lights.
+- **Switching.** Switching reference → B → reference restored the same record identity.
+- **Coverage.** Both lighting presets and both themes were checked, with no console errors.
+
+None of this has been compared with the game.
+
+**Still open.** Rank 4 is the two-normal Eye light: Lambert on N2, GGX on N1 with the eye visibility and the exp2 Fresnel, and the `sunDir·N2` cut; the eyeball still uses the standard light and no normal map. Rank 5 is the refracted iris coordinate and the per-eye joint axes as uniforms, which `EYE_SURFACE` computes `uvC` for. Rank 6 is heterochromia's two components. Rank 7 is the multilayer adapter. Test asks 9–12 remain the gates.
 
 ## Open questions
 

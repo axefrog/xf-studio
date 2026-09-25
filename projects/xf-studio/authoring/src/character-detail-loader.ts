@@ -5,9 +5,10 @@ import { CHARACTER_DETAIL_ASSETS, DETAIL_SLOTS, parseCharacterDetail, type Chara
   type RenderResource, type RenderTexture } from "./render-detail";
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
+import type { EyeballHandle, EyeShellHandle } from "./eye-material";
 
 /**
- * Renderer device port for the resolved character details (head skin, brows, lashes, hair): it reads the host's
+ * Renderer device port for the resolved character details (head skin, brows, lashes, hair, eyes): it reads the host's
  * content-addressed character record, fetches and hash-checks each GLB and texture, keeps only the
  * chunks the record says are visible and drawable, and builds each chunk's material through the
  * adapter for its game template. It returns ready Three objects plus plain per-slot problems; on
@@ -21,6 +22,8 @@ export type LoadedCharacterComponent = {
   bones: THREE.Bone[];
   /** The skin adapter's handle and toned base colour, for the head's skin chunk. */
   skin?: NonNullable<AdaptedMaterial["skin"]>;
+  /** The eye component's drawn eyeball and wetness-shell meshes, by the role their template gives them. */
+  eyes?: { eyeballs: { mesh: THREE.SkinnedMesh; handle: EyeballHandle }[]; shells: { mesh: THREE.SkinnedMesh; handle: EyeShellHandle }[] };
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -40,7 +43,8 @@ export type CharacterDetailLoadOptions = {
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
-const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"], hair: ["hair", "it isn't"] };
+const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
+  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"] };
 /** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
 export function chunkOfMesh(name: string): number | null {
   const match = /^submesh_(\d+)_LOD_\d+/.exec(name);
@@ -135,6 +139,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         root.name = `detail_${component.slot}_${component.component}`;
         const meshes: THREE.SkinnedMesh[] = [], unwanted: THREE.Object3D[] = [], bones: THREE.Bone[] = [];
         let skin: LoadedCharacterComponent["skin"];
+        const eyes: NonNullable<LoadedCharacterComponent["eyes"]> = { eyeballs: [], shells: [] };
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
           if (!(object instanceof THREE.Mesh)) return;
@@ -173,6 +178,10 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           for (const limit of adapted.limits ?? []) if (!limits.some(item => item.slot === component.slot && item.limit === limit))
             limits.push({ slot: component.slot, limit });
           if (adapted.skin) skin ??= adapted.skin;
+          if (adapted.eye?.role === "eyeball") eyes.eyeballs.push({ mesh: object, handle: adapted.eye });
+          if (adapted.eye?.role === "shell") eyes.shells.push({ mesh: object, handle: adapted.eye });
+          // A placeholder chunk is recorded (so its limit is said) but never drawn.
+          if (adapted.hidden) object.visible = false;
           object.material = adapted.material;
           object.name = `detail_${component.slot}_${object.name}`;
           verticesUsed += object.geometry.getAttribute("position").count;
@@ -185,7 +194,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         }
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
-        components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}) });
+        components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}),
+          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}) });
         if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes };
       } catch (error) {
         if (signal?.aborted) throw error;

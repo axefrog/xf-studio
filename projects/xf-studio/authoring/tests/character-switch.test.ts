@@ -74,18 +74,21 @@ test("switching A → B → A replaces the whole character, and the makeup draft
         // The skin the head shows: its chunk material, tone tint and albedo.
         const skin = record.components.find(c => c.slot === "skin")?.materials[0];
         scene.skin = skin ? `${skin.name}|${skin.colours.TintColor?.join(",")}|${skin.textures.Albedo?.depotPath}` : "";
+        // The eyes the scene draws: the eye colour, its eyeball's template and albedo, and the shell beside it.
+        const eyes = record.components.find(c => c.slot === "eyes");
+        scene.eyes = eyes ? eyes.materials.map(m => `${m.template}|${m.textures.Albedo?.depotPath ?? m.textures.Mask?.depotPath}`).join(";") +
+          `|${eyes.definition}` : "";
         return { slots: record.slots };
       },
-      clear() { scene.details = []; scene.skin = ""; },
+      clear() { scene.details = []; scene.skin = ""; scene.eyes = ""; },
       async wait() {},
     };
     const saved = new SavedAppearanceActions({ apply(v): SavedAppearanceResult {
       const tpp = v.groups.head.find(g => g.name === "TPP")!;
-      // The renderer resets every morph, eye colour and saved piercing before applying the new V.
+      // The renderer resets every morph and saved piercing before applying the new V; the eyes come with the record.
       scene.morphs = tpp.morphs.map(m => `${m.target}_${m.region}`);
-      scene.eyes = tpp.appearances.find(a => a.name === "eyes_color")?.definition ?? "reference";
       scene.piercing = v.groups.head.some(g => g.appearances.some(a => a.name.startsWith("piercings_")));
-      return { applied: scene.morphs, appearanceReferences: tpp.appearances.length, matchedPiercing: scene.piercing, eyeAppearance: { message: scene.eyes } };
+      return { applied: scene.morphs, appearanceReferences: tpp.appearances.length, matchedPiercing: scene.piercing };
     } });
     const workspace = freshWorkspace();
     const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
@@ -100,20 +103,23 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     const shownA = [...scene.details];
-    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "brows", "lashes", "hair"]);
-    const skinA = scene.skin;
+    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "brows", "lashes", "hair", "eyes"]);
+    const skinA = scene.skin, eyesA = scene.eyes;
     expect(skinA).toBe(`pale|171,155,150,255|${P.skinD1}`);
+    expect(eyesA).toBe(`${P.eyeGradMt}|${P.eyeD};${P.eyeShadowMt}|${P.shellMask}|gradient_blue`);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
 
     saved.dispatch({ kind: "savedV.restore", value: B });
-    // A's details, its skin included, leave the scene at once, before B has been prepared.
+    // A's details, its skin and eyes included, leave the scene at once, before B has been prepared.
     expect(scene.details).toEqual([]);
     expect(scene.skin).toBe("");
+    expect(scene.eyes).toBe("");
     expect(details.snapshot().phase).toBe("preparing");
     await settle();
-    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["skin:skin_type_03", "brows:eyebrows_color2", "lashes:eyelash_color"]);
-    // B's own skin type and tone: nothing of A's skin lingers.
+    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["skin:skin_type_03", "brows:eyebrows_color2", "lashes:eyelash_color", "eyes:eyes_color"]);
+    // B's own skin type and tone, and its pack eye (texture-only): nothing of A's skin or gradient eye lingers.
     expect(scene.skin).toBe(`senna_d03|202,177,153,255|${P.skinD3}`);
+    expect(scene.eyes).toBe(`${P.eyeMt}|${P.packD};${P.eyeShadowMt}|${P.shellMask}|pack_eye_01`);
     expect(scene.morphs).toEqual(["h113_mouth"]);
     const b = details.snapshot();
     expect(b.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
@@ -123,6 +129,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     await settle();
     expect(scene.details).toEqual(shownA);
     expect(scene.skin).toBe(skinA);
+    expect(scene.eyes).toBe(eyesA);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
 
     // A slow B superseded by A never lands.
@@ -133,7 +140,8 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     await settle();
     expect(scene.details).toEqual(shownA);
     expect(scene.skin).toBe(skinA);
-    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "brown", "brown", "brown"]);
+    expect(scene.eyes).toBe(eyesA);
+    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "brown", "brown", "brown", "gradient blue"]);
 
     // A reload restores the last-loaded V: the workspace keeps it, and the shown character follows it.
     expect(characterRequestFor(saved.snapshot().savedV)).toEqual(characterRequestFromSave(A));

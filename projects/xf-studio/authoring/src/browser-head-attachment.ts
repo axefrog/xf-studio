@@ -48,7 +48,7 @@ export type AttachedHead = {
   savedAppearance: SavedAppearanceActions;
   preview: PreviewActions;
   motion: MotionActions;
-  /** Resolved skin, brows, lashes and hair of the shown V (default or loaded save). */
+  /** Resolved skin, eyes, brows, lashes and hair of the shown V (default or loaded save). */
   characterDetails: CharacterDetailActions;
   /** Releases every head-bound connection and the scene. Safe to call more than once. */
   dispose(): void;
@@ -85,7 +85,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
     ports.preview.presentInitialLayers();
-    // Skin, brows, lashes and hair follow the shown V: the restored or newly loaded save, else the default V.
+    // Skin, eyes, brows, lashes and hair follow the shown V: the restored or newly loaded save, else the default V.
     // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V).
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });

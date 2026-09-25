@@ -7,7 +7,7 @@ import { refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
-import { detailFixture, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { detailFixture, EYE_MASK, eyeRequest, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture()) {
   const { graph } = fixture.installation();
@@ -17,7 +17,7 @@ async function plan(request: typeof REQUEST_A | "default", fixture = detailFixtu
     : inputFromCharacterRequest(request as Extract<typeof REQUEST_A, { source: "save" }>);
   const resolved = await resolveCharacter(graph, input, cco);
   const defaults = new Map<string, ResolvedParam[]>();
-  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt]) {
+  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt, P.eyeMt, P.eyeGradMt, P.eyeShadowMt, P.layeredMt]) {
     const loaded = await graph.load(refFromPath(path), "mt");
     defaults.set(path.toLowerCase(), templateDefaults(loaded!.root).map(([name, value]) => ({ name, kind: value.kind, setBy: "template",
       value: value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "resource" ? value.text ?? "" : value.value,
@@ -30,9 +30,10 @@ describe("resolver selection for brows, lashes and hair", () => {
   test("slots come from the creator's uiSlot and the third-person groups; FPP twins and shadow meshes stay out", async () => {
     const { plan: result } = await plan(REQUEST_A);
     expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" }, { slot: "brows", state: "shown", label: "brown" },
-      { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" }]);
+      { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
+      { slot: "eyes", state: "shown", label: "gradient blue" }]);
     expect(result.components.map(c => `${c.slot}:${c.option}:${c.component}`)).toEqual(
-      ["skin:skin_type_01:head", "brows:eyebrows_color1:brow", "lashes:eyelash_color:eyes", "hair:hair_color1:hair"]);
+      ["skin:skin_type_01:head", "brows:eyebrows_color1:brow", "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes"]);
     const hair = result.components.find(c => c.slot === "hair")!;
     // Chunk 2 is a lower level of detail; the shadow mesh draws only glass.mt, which the preview does not draw.
     expect(hair.chunks).toEqual([0, 1]);
@@ -72,7 +73,9 @@ describe("resolver selection for brows, lashes and hair", () => {
 
   test("the default V comes from the effective creator resource's UI state", async () => {
     const { plan: result } = await plan("default");
-    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1"]);
+    expect(result.components.map(c => c.option)).toEqual(["skin_type_01", "eyebrows_color1", "eyelash_color", "hair_color1", "eyes_color"]);
+    // The creator's first eye colour, as a new V starts with.
+    expect(result.components.find(c => c.slot === "eyes")!.definition).toBe("gradient_blue");
     expect(result.components[0]!.definition).toBe(TONES.pale);
   });
 
@@ -167,5 +170,70 @@ describe("resolver selection for the head skin", () => {
     expect(chunk.scalars).toMatchObject({ SecondaryAlbedoInfluence: 1, SecondaryAlbedoTintColorInfluence: 1 });
     // The tone still comes from the vanilla chain the donor material bases on.
     expect(chunk.colours.TintColor).toEqual([202, 177, 153, 255]);
+  });
+});
+
+describe("resolver selection for the eyes", () => {
+  const eyes = async (definition: string) => (await plan(eyeRequest(definition))).plan;
+  const texturesOf = (chunk: { textures: Record<string, { ref: { path?: string | null } }> }) =>
+    Object.fromEntries(Object.entries(chunk.textures).map(([name, p]) => [name, refLabel(p.ref as never)]));
+
+  test("a vanilla gradient eye: the eyeball and its wetness shell, roles from their templates, the gradient in the record", async () => {
+    const result = await eyes("gradient_blue");
+    expect(result.slots.find(s => s.slot === "eyes")).toEqual({ slot: "eyes", state: "shown", label: "gradient blue" });
+    const component = result.components.find(c => c.slot === "eyes")!;
+    // The eye colour's mask hides the lashes (chunk 0); the eyeball and the shell draw.
+    expect(component.chunks).toEqual([1, 2]);
+    expect(component.materials.map(m => m.template)).toEqual([P.eyeGradMt, P.eyeShadowMt]);
+    expect(component.materials.map(m => renderTemplate(m.template)!.adapter)).toEqual(["eye", "eye-shell"]);
+    const [eyeball, shell] = component.materials;
+    expect(refLabel(eyeball!.gradients.IrisColorGradient!.ref)).toBe(P.blueGradient);
+    // Instance first (albedo, gradient), then the template's defaults (mask, roughness, bubble normal).
+    expect(texturesOf(eyeball!)).toEqual({ Albedo: P.eyeD, Normal: P.editorNormal, Roughness: P.eyeRm, NormalBubble: P.bubble, IrisMask: P.irisMask });
+    expect(eyeball!.scalars).toMatchObject({ RoughnessScale: 0.493420988 });
+    expect(texturesOf(shell!)).toEqual({ Mask: P.shellMask });
+    expect(shell!.colours.ShadowColor).toEqual([125, 58, 58, 255]);
+    expect(shell!.scalars).toMatchObject({ Intensity: 0.7, Exponent: 0.8, WetnessRoughness: 1, WetnessStrength: 4 });
+    // The vanilla morph's rule: its flat normal replaces the eye's own `Normal` (the shell reads no `Normal`).
+    expect(component.morphTexture).toMatchObject({ parameter: "Normal" });
+    expect(refLabel(component.morphTexture!.texture!.ref)).toBe(P.editorNormal);
+  });
+
+  test("a texture-only eye: no gradient, its own albedo, the morph's normal rule applied", async () => {
+    const component = (await eyes("texture_blue")).components.find(c => c.slot === "eyes")!;
+    const eyeball = component.materials[0]!;
+    expect(eyeball.template).toBe(P.eyeMt);
+    expect(eyeball.gradients).toEqual({});
+    expect(texturesOf(eyeball)).toEqual({ Albedo: P.textureEyeD, Normal: P.editorNormal, Roughness: P.eyeRm, NormalBubble: P.bubble });
+  });
+
+  test("a CCXL-style pack's colour: built from the app's fix appearance, its @eyes template expanded, no morph normal override", async () => {
+    const result = await eyes("pack_eye_01");
+    const component = result.components.find(c => c.slot === "eyes")!;
+    expect(component.definition).toBe("pack_eye_01");
+    // The fix copy of the morph target draws (its geometry is the vanilla morph's) and its base texture is cleared.
+    expect(component.drawnFrom.ref.path).toBe(P.fixMorph);
+    expect(component.morphTexture).toMatchObject({ texture: null, parameter: "" });
+    const [eyeball, shell] = component.materials;
+    expect(eyeball!.template).toBe(P.eyeMt);
+    expect(eyeball!.name).toBe("pack_eye_01@eyes");
+    expect(texturesOf(eyeball!)).toMatchObject({ Albedo: P.packD, Normal: P.packN });
+    expect(eyeball!.textures.Albedo!.archive).toBe("fixture_pack.archive");
+    // The vanilla shell stays untouched.
+    expect(shell!.template).toBe(P.eyeShadowMt);
+    expect(result.slots.find(s => s.slot === "eyes")).toEqual({ slot: "eyes", state: "shown", label: "pack eye 01" });
+  });
+
+  test("a layered eye design is recorded as a placeholder beside its shell; a placeholder alone never draws", async () => {
+    const component = (await eyes("layered_design")).components.find(c => c.slot === "eyes")!;
+    expect(component.materials.map(m => [m.template, m.placeholder])).toEqual([[P.layeredMt, true], [P.eyeShadowMt, false]]);
+    expect(renderTemplate(P.layeredMt)).toMatchObject({ adapter: "layered-placeholder", placeholder: true });
+  });
+
+  test("the chunk role comes from the template, never the index (the male eye mesh swaps them)", async () => {
+    const component = (await eyes("swapped_blue")).components.find(c => c.slot === "eyes")!;
+    expect(component.chunks).toEqual([1, 2]);
+    expect(component.materials.map(m => [m.chunk, renderTemplate(m.template)!.adapter])).toEqual([[1, "eye-shell"], [2, "eye"]]);
+    expect(EYE_MASK).toBe("18446744073709551614");
   });
 });

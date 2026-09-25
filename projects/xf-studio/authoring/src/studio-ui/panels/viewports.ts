@@ -76,7 +76,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
   });
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(rt, "head", slot, element);
-  // Quiet, overlaid status for the V's skin, brows, lashes and hair: progress while they prepare, one plain line
+  // Quiet, overlaid status for the V's skin, eyes, brows, lashes and hair: progress while they prepare, one plain line
   // when something can't be shown. Absolutely placed, so it never moves the viewport's other overlays.
   const detailStatus = h("p", { class: "viewport-detail-status", role: "status", hidden: true });
   element.append(slot, loading, detailStatus,
@@ -142,7 +142,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
       const details = frame.status.assets.characterDetails;
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
       const detailText = state.phase !== "ready" || !details ? ""
-        : details.phase === "preparing" ? "Preparing your V's skin, brows, lashes and hair…"
+        : details.phase === "preparing" ? "Preparing your V's skin, eyes, brows, lashes and hair…"
         : details.phase === "failed" ? details.message
         : unavailable?.message ?? "";
       detailStatus.hidden = !detailText;

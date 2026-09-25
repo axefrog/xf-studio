@@ -167,6 +167,12 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   // Reading state, evidence or timing never draws a frame (a measurement must not keep the viewport busy).
   for (const reader of ["cameraState", "frameTiming", "characterDetailsEvidence", "eyeAppearance", "eyeShapeOptions", "piercingSelection", "pick"])
     expect(wrapped).not.toContain(reader);
+  // Every eye change draws a frame: a V's eyes arrive and leave with its details (the core eye hides or returns in
+  // the same call), the roughness switch, and a save's facial shapes; the eye evidence is a reader.
+  for (const eyeChange of ["setCharacterDetails", "setEyeOptics", "applySavedV", "eyeShape"]) expect(wrapped).toContain(eyeChange);
+  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
+  expect(details).toContain("eyes.visible = true;");
+  expect(details).toContain("eyes.visible = !resolvedEyeballs().length;");
   // The frame loop is the scheduler's, not an always-on animation loop.
   expect(source).not.toContain("setAnimationLoop");
   expect(source).toContain("bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting })");
