@@ -1,4 +1,5 @@
 import { canonicalJson, EYE_PLATE_RECIPE, eyePlateRecipeSha256, sha256Hex, type EyePlateRecipe } from "./eye-plate-recipe";
+import type { CoreTextureSlot } from "./render-detail";
 
 /**
  * The 3D preview core (head, expanded eye plate, eyes and their maps) ships as an asset-free
@@ -20,6 +21,8 @@ export type PreviewCoreMap = {
   /** Material parameter as WolvenKit resolves it through the `.mi` inheritance chain. */
   parameter: "Albedo" | "Normal" | "Roughness";
   adapter: MapAdapter;
+  /** Where the renderer uses it. */
+  slot: CoreTextureSlot;
 };
 export type PreviewCoreRecipe = {
   schema: typeof PREVIEW_CORE_RECIPE_SCHEMA;
@@ -43,14 +46,16 @@ export const PREVIEW_CORE_RECIPE: PreviewCoreRecipe = Object.freeze({
   // The head mesh's own `default` appearance (the vanilla pale skin tone).
   head: { appearance: "default", chunk: 0 },
   maps: [
-    { file: "head-color.png", mesh: "head", parameter: "Albedo", adapter: "colour-copy" },
-    { file: "head-normal.png", mesh: "head", parameter: "Normal", adapter: "packed-normal" },
-    { file: "head-roughness.png", mesh: "head", parameter: "Roughness", adapter: "red-to-grey" },
-    { file: "eye-color.png", mesh: "eye", parameter: "Albedo", adapter: "colour-copy" },
+    { file: "head-color.png", mesh: "head", parameter: "Albedo", adapter: "colour-copy", slot: "head.albedo" },
+    { file: "head-normal.png", mesh: "head", parameter: "Normal", adapter: "packed-normal", slot: "head.normal" },
+    { file: "head-roughness.png", mesh: "head", parameter: "Roughness", adapter: "red-to-grey", slot: "head.roughness" },
+    { file: "eye-color.png", mesh: "eye", parameter: "Albedo", adapter: "colour-copy", slot: "eyes.albedo" },
   ],
 }) as PreviewCoreRecipe;
 
-export const PREVIEW_CORE_FILES = ["head.glb", ...PREVIEW_CORE_RECIPE.maps.map(map => map.file)] as const;
+/** The render detail record the renderer loads first; it names and hashes the other files. */
+export const PREVIEW_CORE_RECORD_FILE = "preview-core.json";
+export const PREVIEW_CORE_FILES = ["head.glb", ...PREVIEW_CORE_RECIPE.maps.map(map => map.file), PREVIEW_CORE_RECORD_FILE] as const;
 
 export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate: EyePlateRecipe) =>
   sha256Hex(canonicalJson({ preview: recipe, plate: eyePlateRecipeSha256(plate) }));

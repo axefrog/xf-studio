@@ -8,14 +8,17 @@ import { adaptMap, checkMap } from "../src/preview-core-maps";
 import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "../src/preview-core-materials";
 import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview-core-assemble";
 import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview-core-service";
-import { previewUncookArguments } from "../src/preview-core-wolvenkit";
+import { uncookArguments } from "../src/game-asset-export-wolvenkit";
+import { createGameAssetExporter, gameContentSource } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import {
-  eyeGlb, fakeUncookTools, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
+  eyeGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
 } from "./preview-core-fixture";
 
 const roots: string[] = [];
 const temporary = (label: string) => { const root = mkdtempSync(join(tmpdir(), `xfs-preview-${label}-`)); roots.push(root); return root; };
+/** Each scenario gets its own export cache, so one fake's exports never leak into another. */
+const fresh = (fake: { exporter: (root: string) => any }) => fake.exporter(temporary("exports"));
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 /** A stand-in game folder: readiness only needs the content archive directory to exist. */
 function gameFolder() {
@@ -123,21 +126,52 @@ test("assembly refuses a head whose triangles differ from the audited plate or a
   expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), { ...plate, selection: { ...plate.selection, morphTargetCount: 3 } }, "submesh_01_LOD_1")).toThrow("morph target count");
 });
 
-test("the WolvenKit call uncooks exactly the named depot paths with the game path for material resolution", () => {
-  const args = previewUncookArguments("C:\\Game", "archive/pc/content", ["base\\a.mesh", "base\\b.morphtarget"], "C:\\out");
-  expect(args.slice(0, 1)).toEqual(["uncook"]);
+test("the WolvenKit call uncooks exactly the named depot paths, with the game path only when materials are needed", () => {
+  const args = uncookArguments("C:\\Game\\archive\\pc\\content", ["base\\a.mesh", "base\\b.morphtarget"], "C:\\out", "C:\\Game");
+  expect(args.slice(0, 2)).toEqual(["uncook", "C:\\Game\\archive\\pc\\content"]);
   expect(args).toContain("MeshOnly");
   expect(args[args.indexOf("-gp") + 1]).toBe("C:\\Game");
   expect(args[args.indexOf("-r") + 1]).toBe("^(?:base\\\\a\\.mesh|base\\\\b\\.morphtarget)$");
   expect(args).not.toContain("-s");
+  expect(uncookArguments("C:\\x.archive", ["base\\t.xbm"], "C:\\out", null)).not.toContain("-gp");
+});
+
+test("the export cache keys each resource by depot path and source, and rejects unsafe paths", async () => {
+  const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
+  const fake = fakeUncook(plate, recipe), root = temporary("exports"), game = gameFolder();
+  const texture = "base\\fixture\\textures\\head_d01.xbm";
+  const session = fake.exporter(root).open(gameContentSource(game));
+  const first = await session.geometry([recipe.eye.meshDepotPath, "base\\fixture\\absent.mesh"]);
+  expect([...first.keys()]).toEqual([recipe.eye.meshDepotPath]);
+  expect(first.get(recipe.eye.meshDepotPath)).toMatchObject({ cached: false, hash: expect.stringMatching(/^\d+$/) });
+  // Textures WolvenKit decoded while resolving materials are reused without another call.
+  expect((await session.textures([texture])).get(texture)?.cached).toBe(false);
+  expect(fake.calls).toHaveLength(1);
+  session.close();
+  const again = fake.exporter(root).open(gameContentSource(game));
+  expect((await again.geometry([recipe.eye.meshDepotPath])).get(recipe.eye.meshDepotPath)?.cached).toBe(true);
+  expect((await again.textures([texture])).get(texture)?.cached).toBe(true);
+  await expect(again.geometry(["base\\..\\escape.mesh"])).rejects.toThrow("Not a plain depot path");
+  again.close();
+  expect(fake.calls).toHaveLength(1);
+  // A texture not decoded yet costs one texture-only call, without the game path.
+  const other = fake.exporter(root).open(gameContentSource(game));
+  expect((await other.textures(["base\\fixture\\textures\\eye_d02.xbm"])).size).toBe(1);
+  expect(fake.calls.at(-1)?.withMaterials).toBe(false);
+  other.close();
+  // A changed game install is a different source: nothing cached is reused.
+  writeFileSync(join(game, "archive", "pc", "content", "patch.archive"), "update");
+  const updated = fake.exporter(root).open(gameContentSource(game));
+  expect((await updated.geometry([recipe.eye.meshDepotPath])).get(recipe.eye.meshDepotPath)?.cached).toBe(false);
+  updated.close();
 });
 
 test("the service derives, verifies, caches and reuses the preview core", async () => {
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
   const cacheRoot = temporary("cache"), game = gameFolder();
   const steps: string[] = [];
-  const tools = fakeUncookTools(plate, recipe);
-  const result = await ensurePreviewCore({ gameRoot: game, cacheRoot, tools, recipe, plateRecipe: plate, progress: step => steps.push(step) });
+  const fake = fakeUncook(plate, recipe), exporter = fake.exporter(temporary("exports"));
+  const result = await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate, progress: step => steps.push(step) });
   expect(result.reused).toBe(false);
   expect(steps).toEqual(["reading", "checking", "assembling", "maps", "verifying"]);
   expect(result.manifest.files.map(file => file.name)).toEqual([...PREVIEW_CORE_FILES]);
@@ -148,35 +182,39 @@ test("the service derives, verifies, caches and reuses the preview core", async 
   const normal = decodePng(readFileSync(join(result.directory, "head-normal.png")));
   expect(normal.data[2]).toBeGreaterThan(200);
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toMatchObject({ state: "ready", directory: result.directory });
-  const again = await ensurePreviewCore({ gameRoot: game, cacheRoot, tools, recipe, plateRecipe: plate });
+  // One WolvenKit call with materials exported everything, including the decoded textures.
+  expect(fake.calls.map(call => call.withMaterials)).toEqual([true]);
+  const again = await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate });
   expect(again.reused).toBe(true);
   expect(again.manifest.cacheKey).toBe(result.manifest.cacheKey);
   // A changed cached file is never served.
   writeFileSync(join(result.directory, "eye-color.png"), "tampered");
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
   expect(previewCoreReadiness(cacheRoot, gameFolder(), recipe, plate)).toEqual({ state: "none" });
-  expect((await ensurePreviewCore({ gameRoot: game, cacheRoot, tools, recipe, plateRecipe: plate })).reused).toBe(false);
+  // Re-deriving reads every resource from the export cache without running WolvenKit again.
+  expect((await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate })).reused).toBe(false);
+  expect(fake.calls).toHaveLength(1);
 });
 
 test("an unsupported or missing head is reported plainly and blocks until the game changes", async () => {
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
   const cacheRoot = temporary("cache"), game = gameFolder();
   const unsupported = ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate,
-    tools: fakeUncookTools(plate, recipe, { mesh: Buffer.from("patched head") }) });
+    exporter: fresh(fakeUncook(plate, recipe, { mesh: Buffer.from("patched head") })) });
   await expect(unsupported).rejects.toMatchObject({ code: "preview_source_unsupported" });
   await expect(unsupported).rejects.toThrow("newer game patch");
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toMatchObject({ state: "blocked", code: "preview_source_unsupported" });
   writeFileSync(join(game, "archive", "pc", "content", "patch.archive"), "update");
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: fakeUncookTools(plate, recipe, { omit: "head" }) }))
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "head" })) }))
     .rejects.toMatchObject({ code: "preview_source_missing" });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: fakeUncookTools(plate, recipe, { omit: "eye-glb" }) }))
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "eye-glb" })) }))
     .rejects.toMatchObject({ code: "preview_tool_failed" });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: fakeUncookTools(plate, recipe, { omit: "material" }) }))
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "material" })) }))
     .rejects.toMatchObject({ code: "preview_tool_failed" });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: fakeUncookTools(plate, recipe, { textureSize: 100 }) }))
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { textureSize: 100 })) }))
     .rejects.toMatchObject({ code: "preview_verification_failed" });
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: fakeUncookTools(plate, recipe, { eye: () => eyeGlb({ offsetBind: true }) }) }))
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { eye: () => eyeGlb({ offsetBind: true }) })) }))
     .rejects.toMatchObject({ code: "preview_verification_failed" });
   // Work directories are always removed.
   expect(require("node:fs").readdirSync(cacheRoot).filter((name: string) => name.startsWith(".work-"))).toEqual([]);
@@ -186,13 +224,30 @@ test("cancellation stops the derivation, records it and leaves no partial entry"
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
   const cacheRoot = temporary("cache"), game = gameFolder();
   const controller = new AbortController();
-  const tools = fakeUncookTools(plate, recipe, { beforeWrite: async () => { controller.abort(); } });
-  const run = ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools, signal: controller.signal });
+  const exporter = fresh(fakeUncook(plate, recipe, { beforeWrite: async () => { controller.abort(); } }));
+  const run = ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter, signal: controller.signal });
   await expect(run).rejects.toBeInstanceOf(PreviewCoreError);
   await expect(run).rejects.toMatchObject({ code: "preview_cancelled" });
   expect(new PreviewCoreCache(cacheRoot).readStatus()).toMatchObject({ state: "failed", code: "preview_cancelled" });
   expect(require("node:fs").readdirSync(cacheRoot).filter((name: string) => name !== "status.json")).toEqual([]);
   // A missing tool surfaces as its own code.
-  const missing = { async uncook() { throw Object.assign(Error("XF Studio needs WolvenKit CLI"), { code: "preview_tool_missing" }); } };
-  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, tools: missing })).rejects.toMatchObject({ code: "preview_tool_missing" });
+  const missing = createGameAssetExporter(temporary("exports"), async () => { throw Object.assign(Error("XF Studio needs WolvenKit CLI"), { code: "preview_tool_missing" }); });
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: missing })).rejects.toMatchObject({ code: "preview_tool_missing" });
+});
+
+test("the derived cache carries a render record that names, hashes and sources every core file", async () => {
+  const { parseCoreDetail, CORE_TEXTURE_SLOTS, PREPARED_CORE_DETAIL } = await import("../src/render-detail");
+  const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
+  const result = await ensurePreviewCore({ gameRoot: gameFolder(), cacheRoot: temporary("cache"), recipe, plateRecipe: plate,
+    exporter: fresh(fakeUncook(plate, recipe)) });
+  const record = parseCoreDetail(JSON.parse(readFileSync(join(result.directory, "preview-core.json"), "utf8")));
+  expect(record).toMatchObject({ origin: "game-files", identity: result.manifest.cacheKey, geometry: { file: "head.glb" } });
+  const hash = (name: string) => result.manifest.files.find(file => file.name === name)!.sha256;
+  expect(record.geometry.sha256).toBe(hash("head.glb"));
+  expect(record.geometry.sources.map(source => source.depotPath)).toEqual([plate.source.morphDepotPath, plate.source.meshDepotPath, recipe.eye.meshDepotPath]);
+  for (const slot of CORE_TEXTURE_SLOTS) expect(record.textures[slot].sha256).toBe(hash(record.textures[slot].file));
+  expect(record.textures["head.roughness"].sources[0]).toMatchObject({ material: "01_ca_pale", parameter: "Roughness", adapter: "red-to-grey" });
+  expect(parseCoreDetail(structuredClone(PREPARED_CORE_DETAIL)).origin).toBe("prepared");
+  expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, file: "../secret.glb" } })).toThrow("plain asset file name");
+  expect(() => parseCoreDetail({ ...record, textures: { ...record.textures, "head.normal": { ...record.textures["head.normal"], sha256: "x" } } })).toThrow("hash");
 });

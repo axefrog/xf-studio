@@ -78,3 +78,16 @@ test("the character resolver keeps its rules pure and all host access in resolve
     expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
   }
 });
+
+test("the 3D preview derivation keeps definitions pure and WolvenKit in its one adapter", () => {
+  const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|studio-ui))/;
+  for (const name of ["preview-core-recipe", "preview-core-maps", "preview-core-materials", "preview-core-assemble", "glb", "render-detail", "preview-preparation"])
+    for (const dependency of imports(source(name))) expect(dependency, `${name} imports ${dependency}`).not.toMatch(io);
+  // The service reaches WolvenKit only through the generic export port.
+  for (const dependency of imports(source("preview-core-service")))
+    expect(dependency, `preview-core-service imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree|\.\/game-asset-export-wolvenkit)$/);
+  expect(imports(source("game-asset-export-wolvenkit"))).toContain("./process-tree");
+  // The renderer loads the core head only through the typed record loader.
+  expect(source("scene")).not.toContain('fetch("/assets/head.glb")');
+  expect(imports(source("scene"))).toContain("./core-detail-loader");
+});

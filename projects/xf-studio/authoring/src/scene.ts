@@ -18,6 +18,7 @@ import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, 
 import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
 import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
+import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
 
 export async function createScene(
   host: HTMLElement,
@@ -70,32 +71,18 @@ export async function createScene(
   fill.position.set(0.4, 1.65, -0.2);
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
-  const data = await (await fetch("/assets/head.glb")).arrayBuffer(),
-    weights = restoreFirstWeights(data);
-  const gltf = await new GLTFLoader().parseAsync(data, "/assets/");
-  scene.add(gltf.scene);
-  const meshes: THREE.Mesh[] = [];
-  gltf.scene.traverse((o) => {
-    if (o instanceof THREE.Mesh) meshes.push(o);
-  });
-  const head = meshes.find((m) => m.name === "head") as THREE.SkinnedMesh;
-  const plate = meshes.find(
-    (m) => m.name === "makeup_plate",
-  ) as THREE.SkinnedMesh;
-  let eyes = meshes.find((m) => m.name === "eyes") as THREE.Mesh;
-  if (!head || !plate || !eyes)
-    throw Error("Preview asset is missing required meshes.");
-  for (const m of meshes) {
-    m.frustumCulled = false;
-    if (m instanceof THREE.SkinnedMesh) {
-      const association = gltf.parser.associations.get(m);
-      const raw = weights.get(
-        gltf.parser.json.meshes[association?.meshes ?? -1]?.name,
-      );
-      if (!raw) throw Error(`Cannot restore full skin weights for ${m.name}`);
-      m.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-    }
+  // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
+  let core: LoadedCoreDetail;
+  try { core = await loadCoreDetail(renderer); }
+  catch (error) {
+    // Release the WebGL context and canvas a failed first load would otherwise leak.
+    env.dispose(); controls.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
+    throw error;
   }
+  const { gltf, meshes, head, plate } = core;
+  let eyes = core.eyes;
+  scene.add(gltf.scene);
+  const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
   const loader = new THREE.TextureLoader();
   async function texture(name: string, color = false) {
     const t = await loader.loadAsync(`/assets/${name}.png`);
@@ -104,12 +91,7 @@ export async function createScene(
     t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     return t;
   }
-  const [albedo, eyeColor, normal, roughness] = await Promise.all([
-    texture("head-color", true),
-    texture("eye-color", true),
-    texture("head-normal"),
-    texture("head-roughness"),
-  ]);
+  const { "head.albedo": albedo, "eyes.albedo": eyeColor, "head.normal": normal, "head.roughness": roughness } = core.textures;
   const skin = new THREE.MeshStandardMaterial({
     map: albedo,
     roughness: 0.85,
@@ -751,6 +733,8 @@ export async function createScene(
     record(renderDurations,performance.now()-renderStart);
   });
   const evidence = {
+    /** Which render record supplied the core head (derived from game files, or developer-prepared). */
+    coreDetail,
     meshes: meshes.map((m) => ({
       name: m.name,
       vertices: m.geometry.getAttribute("position").count,

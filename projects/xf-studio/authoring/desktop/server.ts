@@ -18,7 +18,7 @@ import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
-import type { PreviewCoreTools } from "../src/preview-core-service";
+import type { GameAssetExporter } from "../src/game-asset-export";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
@@ -28,7 +28,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
   updateTrial?: { native: NativeUpdater; trust: UpdateTrust;
     requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
-  previewTools?: (cli: string | null) => PreviewCoreTools) {
+  previewExporter?: (cli: string | null) => GameAssetExporter) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -64,7 +64,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
   // Community path: the core preview is derived from the player's own game files.
-  const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), tools: previewTools,
+  const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
     settings: () => { try { const { gameRoot, wolvenKitCli } = settingsStore.load().settings; return { gameRoot, wolvenKitCli }; }
       catch { return { gameRoot: null, wolvenKitCli: null }; } },
     log: message => report(message) });

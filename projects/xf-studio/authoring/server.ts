@@ -84,8 +84,11 @@ const server = Bun.serve({
       if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
         file = Bun.file(overlayPath);
     }
-    // Private prepared assets (public/assets or the overlay) win; otherwise serve the derived core preview.
-    if (!(await file.exists()) && path.startsWith(resolve(root, "assets") + sep)) {
+    // Private prepared assets (public/assets or the overlay) win as a whole set; without a prepared
+    // head the core preview files (and their render record) come from the derived cache.
+    const preparedHead = async () => await Bun.file(resolve(root, "assets", "head.glb")).exists() ||
+      (!!assetOverlay && await Bun.file(resolve(assetOverlay, "head.glb")).exists());
+    if (!(await file.exists()) && path.startsWith(resolve(root, "assets") + sep) && !(await preparedHead())) {
       const derived = previewCore.assetPath(path.slice(resolve(root, "assets").length + 1));
       if (derived) file = Bun.file(derived);
     }

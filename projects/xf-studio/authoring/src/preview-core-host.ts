@@ -1,8 +1,9 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { PREVIEW_CORE_FILES } from "./preview-core-recipe";
-import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreError, previewCoreReadiness, type PreviewCoreTools } from "./preview-core-service";
-import { createWolvenKitPreviewTools } from "./preview-core-wolvenkit";
+import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
+import { createGameAssetExporter, type GameAssetExporter } from "./game-asset-export";
+import { createWolvenKitUncook } from "./game-asset-export-wolvenkit";
 
 /**
  * Host application service that owns one derivation of the 3D preview at a time: it reads
@@ -30,7 +31,8 @@ export type PreviewCoreHostSettings = { gameRoot: string | null; wolvenKitCli: s
 export type PreviewCoreHostOptions = {
   cacheRoot: string;
   settings: () => PreviewCoreHostSettings;
-  tools?: (cli: string | null) => PreviewCoreTools;
+  /** Game asset exporter for a WolvenKit CLI path; defaults to WolvenKit with a cache under `cacheRoot/exports`. */
+  exporter?: (cli: string | null) => GameAssetExporter;
   log?: (message: string) => void;
   now?: () => number;
 };
@@ -91,10 +93,11 @@ export class PreviewCoreHost {
     const settings = this.options.settings();
     const controller = new AbortController();
     const started = (this.options.now ?? Date.now)();
-    const tools = (this.options.tools ?? createWolvenKitPreviewTools)(settings.wolvenKitCli);
+    const exporter = this.options.exporter?.(settings.wolvenKitCli) ??
+      createGameAssetExporter(join(this.options.cacheRoot, "exports"), createWolvenKitUncook(settings.wolvenKitCli));
     this.progress = { index: 0, total: PREVIEW_CORE_STEPS.length, label: PREVIEW_CORE_STEPS[0]!.label };
     this.lastFailure = null;
-    const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, tools, signal: controller.signal,
+    const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, exporter, signal: controller.signal,
       progress: (_step, index, total, label) => { this.progress = { index, total, label }; } })
       .then(result => {
         this.lastDurationSeconds = Math.round(((this.options.now ?? Date.now)() - started) / 100) / 10;

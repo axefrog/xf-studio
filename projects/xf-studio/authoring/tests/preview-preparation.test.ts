@@ -7,6 +7,7 @@ import { createPreviewCoreHandler } from "../src/preview-core-server";
 import { isPreviewState, PreviewPreparationActions, previewView, shouldAutoStart, type PreviewState } from "../src/preview-preparation";
 import { USER_FACING_JARGON } from "../src/alpha-availability";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
+import { createGameAssetExporter } from "../src/game-asset-export";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -40,7 +41,7 @@ test("the host runs one preparation at a time, reports progress and records fail
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
-    tools: () => ({ async uncook() { await gate; } }) });
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await gate; }) });
   const started = host.prepare();
   expect(started).toMatchObject({ phase: "preparing", canCancel: true, progress: { index: 0, total: 5 } });
   expect(host.prepare().phase).toBe("preparing");
@@ -54,8 +55,8 @@ test("the host runs one preparation at a time, reports progress and records fail
 test("cancelling a running preparation stops it and offers a restart", async () => {
   const { game, cli, cacheRoot } = setup();
   const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
-    tools: () => ({ uncook: ({ signal }) => new Promise((_, reject) => signal!.addEventListener("abort", () =>
-      reject(Object.assign(Error("cancelled"), { code: "preview_cancelled" })))) }) });
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), ({ signal }) => new Promise((_, reject) => signal!.addEventListener("abort", () =>
+      reject(Object.assign(Error("cancelled"), { code: "preview_cancelled" }))))) });
   host.prepare();
   expect(host.cancel().phase).toBe("preparing");
   await host.settled();

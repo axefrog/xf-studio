@@ -4,27 +4,21 @@ import { contentFingerprint, DerivedCache, fileSha256, samePath } from "./derive
 import { EYE_PLATE_RECIPE, sha256Hex, supportedEyePlateSource, type EyePlateRecipe } from "./eye-plate-recipe";
 import { decodePng, encodePng } from "./png";
 import { adaptMap, checkMap } from "./preview-core-maps";
-import { decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "./preview-core-materials";
+import { parseMaterialExport, resolveTextureParameter } from "./preview-core-materials";
 import { assemblePreviewGlb, verifyPreviewGlb, type PreviewGlbReport } from "./preview-core-assemble";
+import { gameContentSource, type ExportSource, type GameAssetExporter } from "./game-asset-export";
+import { RENDER_DETAIL_SCHEMA, type CoreDetail } from "./render-detail";
 import {
-  PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECIPE, previewCoreCacheKey, previewCoreCacheName,
+  PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECORD_FILE, PREVIEW_CORE_RECIPE, previewCoreCacheKey, previewCoreCacheName,
   previewCoreRecipeSha256, type MapAdapter, type PreviewCoreRecipe,
 } from "./preview-core-recipe";
 
 /**
  * Application service: derive the 3D preview core (head, eye plate, eyes and maps) from the
  * player's own Cyberpunk 2077 installation. It owns the source gate, cache policy,
- * verification, progress and cancellation; the injected tool port owns WolvenKit process
- * execution and the cache adapter owns file mechanics.
+ * verification, progress and cancellation. It is the first consumer of the generic game
+ * asset exporter, which owns WolvenKit and the per-resource export cache.
  */
-export interface PreviewCoreTools {
-  /**
-   * Uncook `depotPaths` from the game's archives into `outDir`, keeping depot-relative paths:
-   * the raw resources, mesh and morph-target GLBs (with skin and morph targets), each mesh's
-   * resolved `<name>.Material.json` and every texture those materials use, decoded to PNG.
-   */
-  uncook(input: { gameRoot: string; archiveDirectory: string; depotPaths: string[]; outDir: string; signal?: AbortSignal }): Promise<void>;
-}
 
 export type PreviewCoreErrorCode = "preview_source_missing" | "preview_source_unsupported" | "preview_tool_missing" | "preview_tool_failed" |
   "preview_verification_failed" | "preview_cancelled" | "preview_cache_unavailable";
@@ -64,7 +58,9 @@ export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string
   { step: "maps", label: "Converting the skin and eye textures" },
   { step: "verifying", label: "Checking the prepared preview files" },
 ];
-export type EnsurePreviewCoreOptions = { gameRoot: string; cacheRoot: string; tools: PreviewCoreTools; recipe?: PreviewCoreRecipe;
+export type EnsurePreviewCoreOptions = { gameRoot: string; cacheRoot: string; exporter: GameAssetExporter;
+  /** Archive source to read; defaults to the game's own content archives. */
+  source?: ExportSource; recipe?: PreviewCoreRecipe;
   plateRecipe?: EyePlateRecipe; signal?: AbortSignal; progress?: (step: PreviewCoreStep, index: number, total: number, label: string) => void };
 
 const LIMITS = [
@@ -86,8 +82,6 @@ export class PreviewCoreCache extends DerivedCache {
   }
 }
 
-const depotFile = (root: string, depotPath: string) => join(root, ...depotPath.split("\\"));
-const glbFor = (depotPath: string) => depotPath.endsWith(".mesh") ? depotPath.replace(/\.mesh$/, ".glb") : depotPath + ".glb";
 
 function unsupportedMessage(plate: EyePlateRecipe): string {
   const labels = plate.source.supported.map(item => item.label).join(", ");
@@ -121,7 +115,7 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
 
 export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Promise<PreviewCoreResult> {
   const recipe = options.recipe ?? PREVIEW_CORE_RECIPE, plate = options.plateRecipe ?? EYE_PLATE_RECIPE;
-  const { tools, signal, gameRoot } = options;
+  const { exporter, signal, gameRoot } = options;
   const total = PREVIEW_CORE_STEPS.length;
   const progress = (step: PreviewCoreStep) => {
     const index = PREVIEW_CORE_STEPS.findIndex(item => item.step === step);
@@ -142,42 +136,43 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     status(state, code, message);
     throw new PreviewCoreError(code, message, detail);
   };
+  let session: ReturnType<GameAssetExporter["open"]> | null = null;
   try {
     progress("reading");
-    const extracted = join(work, "uncook");
-    mkdirSync(extracted);
+    session = exporter.open(options.source ?? gameContentSource(gameRoot), signal);
     const headMesh = plate.source.meshDepotPath, headMorph = plate.source.morphDepotPath, eyeMesh = recipe.eye.meshDepotPath;
-    await tools.uncook({ gameRoot, archiveDirectory: plate.source.archiveDirectory, outDir: extracted, signal,
-      depotPaths: [headMorph, headMesh, eyeMesh] });
+    const geometry = await session.geometry([headMorph, headMesh, eyeMesh]);
     cancelled();
 
     progress("checking");
     for (const depot of [headMesh, headMorph, eyeMesh])
-      if (!existsSync(depotFile(extracted, depot))) fail("preview_source_missing", MISSING_MESSAGE, depot, "missing");
-    const hashes = { meshSha256: fileSha256(depotFile(extracted, headMesh)), morphSha256: fileSha256(depotFile(extracted, headMorph)) };
+      if (!geometry.has(depot)) fail("preview_source_missing", MISSING_MESSAGE, depot, "missing");
+    const hashes = { meshSha256: geometry.get(headMesh)!.rawSha256, morphSha256: geometry.get(headMorph)!.rawSha256 };
     const revision = supportedEyePlateSource(plate, hashes);
     if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
-    const eyeMeshSha256 = fileSha256(depotFile(extracted, eyeMesh));
-    const exported = (depot: string, what: string) => {
-      const file = depotFile(extracted, depot);
-      if (!existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Check the WolvenKit CLI in Build setup.`, depot);
-      return file;
+    const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256;
+    const exported = (file: string | null, depot: string, what: string) => {
+      if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Check the WolvenKit CLI in Build setup.`, depot);
+      return file!;
     };
-    const headGlb = exported(glbFor(headMorph), "head with its facial shapes");
-    const eyeGlb = exported(glbFor(eyeMesh), "eyes");
+    const headGlb = exported(geometry.get(headMorph)!.glb, headMorph, "head with its facial shapes");
+    const eyeGlb = exported(geometry.get(eyeMesh)!.glb, eyeMesh, "eyes");
     const materials = {
-      head: parseMaterialExport(cache.readJson(exported(headMesh.replace(/\.mesh$/, ".Material.json"), "head materials"))),
-      eye: parseMaterialExport(cache.readJson(exported(eyeMesh.replace(/\.mesh$/, ".Material.json"), "eye materials"))),
+      head: parseMaterialExport(cache.readJson(exported(geometry.get(headMesh)!.materials, headMesh, "head materials"))),
+      eye: parseMaterialExport(cache.readJson(exported(geometry.get(eyeMesh)!.materials, eyeMesh, "eye materials"))),
     };
-    const sources = recipe.maps.map(map => {
+    const resolved = recipe.maps.map(map => {
       const choice = map.mesh === "head" ? recipe.head : recipe.eye;
-      let resolved;
-      try { resolved = resolveTextureParameter(materials[map.mesh], choice.appearance, choice.chunk, map.parameter); }
+      try { return { map, resolved: resolveTextureParameter(materials[map.mesh], choice.appearance, choice.chunk, map.parameter) }; }
       catch (error) { return fail("preview_verification_failed", "The installed game's head or eye materials are not the kind XF Studio expects.", (error as Error).message); }
-      const png = join(extracted, ...decodedTexturePath(resolved.depotPath));
-      if (!existsSync(png)) fail("preview_tool_failed", "WolvenKit did not export a skin or eye texture. Check the WolvenKit CLI in Build setup.", resolved.depotPath);
-      const bytes = readFileSync(png);
-      return { map, resolved, bytes, decodedSha256: sha256Hex(bytes) };
+    });
+    const decoded = await session.textures([...new Set(resolved.map(entry => entry.resolved.depotPath))]);
+    cancelled();
+    const sources = resolved.map(({ map, resolved: parameter }) => {
+      const texture = decoded.get(parameter.depotPath);
+      if (!texture) fail("preview_tool_failed", "WolvenKit did not export a skin or eye texture. Check the WolvenKit CLI in Build setup.", parameter.depotPath);
+      const bytes = readFileSync(texture!.png);
+      return { map, resolved: parameter, bytes, decodedSha256: sha256Hex(bytes) };
     });
     const textures = Object.fromEntries(sources.map(source => [source.map.file, source.decodedSha256]));
     const key = previewCoreCacheKey(recipe, plate, { headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, textures });
@@ -211,9 +206,9 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     }
 
     progress("verifying");
-    let geometry: PreviewGlbReport;
+    let report: PreviewGlbReport;
     try {
-      geometry = verifyPreviewGlb(readFileSync(join(assets, "head.glb")), plate);
+      report = verifyPreviewGlb(readFileSync(join(assets, "head.glb")), plate);
       for (const source of sources) {
         const written = decodePng(readFileSync(join(assets, source.map.file)));
         const expected = adaptMap(decodePng(source.bytes), source.map.adapter);
@@ -222,13 +217,27 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       }
     } catch (error) { return fail("preview_verification_failed", "The prepared 3D preview failed verification.", (error as Error).message); }
     const file = (fileName: string) => { const path = join(assets, fileName); return { name: fileName, sha256: fileSha256(path), bytes: statSync(path).size }; };
+    // The render detail record: what the renderer loads, with hashes and game-resource provenance.
+    const record: CoreDetail = {
+      schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: key, origin: "game-files",
+      provenance: { label: `Your Cyberpunk 2077 files (${revision!.label})`, notes: LIMITS },
+      geometry: { file: "head.glb", sha256: file("head.glb").sha256, nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" },
+        sources: [{ depotPath: headMorph, sha256: hashes.morphSha256 }, { depotPath: headMesh, sha256: hashes.meshSha256 },
+          { depotPath: eyeMesh, sha256: eyeMeshSha256 }] },
+      textures: Object.fromEntries(recipe.maps.map(map => {
+        const texture = records.find(entry => entry.file === map.file)!;
+        return [map.slot, { file: map.file, sha256: file(map.file).sha256, sources: [{ depotPath: texture.depotPath, material: texture.material,
+          parameter: texture.parameter, adapter: texture.adapter }] }];
+      })) as CoreDetail["textures"],
+    };
+    cache.writeJson(join(assets, PREVIEW_CORE_RECORD_FILE), record);
     const manifest: PreviewCoreManifest = {
       schema: PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: recipe.id, recipeRevision: recipe.revision, plateRecipeId: plate.id,
       plateRecipeRevision: plate.revision, recipeSha256: previewCoreRecipeSha256(recipe, plate), deriverVersion: PREVIEW_CORE_DERIVER_VERSION, cacheKey: key,
       source: { revisionId: revision!.id, label: revision!.label, headMeshDepotPath: headMesh, headMorphDepotPath: headMorph, eyeMeshDepotPath: eyeMesh,
         headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, textures: records },
       files: PREVIEW_CORE_FILES.map(file),
-      geometry, limits: LIMITS,
+      geometry: report, limits: LIMITS,
     };
     cache.writeJson(join(staging, PREVIEW_CORE_MANIFEST_FILE), manifest);
     cache.publish(staging, name);
@@ -254,6 +263,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     throw new PreviewCoreError("preview_tool_failed", "WolvenKit could not read your game files. Check the WolvenKit CLI in Build setup, then try again.",
       `${(error as Error).message}\n${(error as { output?: string }).output ?? ""}`);
   } finally {
+    session?.close();
     try { cache.remove(work); } catch { /* Best-effort cleanup of private intermediates. */ }
   }
 }

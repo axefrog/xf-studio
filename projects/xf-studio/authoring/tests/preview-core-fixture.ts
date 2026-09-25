@@ -6,7 +6,7 @@ import { GlbWriter } from "../src/glb";
 import { encodePng } from "../src/png";
 import { idListSha256, sha256Hex, type EyePlateRecipe } from "../src/eye-plate-recipe";
 import { PREVIEW_CORE_RECIPE, type PreviewCoreRecipe } from "../src/preview-core-recipe";
-import type { PreviewCoreTools } from "../src/preview-core-service";
+import { createGameAssetExporter, type GameAssetExporter, type UncookRun } from "../src/game-asset-export";
 
 export const GRID = 5;
 export const HEAD_VERTICES = GRID * GRID;
@@ -128,28 +128,33 @@ export function texturePng(size: number, kind: "colour" | "normal" | "roughness"
   return encodePng({ width: size, height: size, data }, { alpha: true });
 }
 
-export type FakeUncook = PreviewCoreTools & { calls: number };
-/** Writes the synthetic export tree the way WolvenKit's `uncook` lays it out. */
-export function fakeUncookTools(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "eye-glb" | "material"; beforeWrite?: (signal?: AbortSignal) => Promise<void>;
-  mesh?: Buffer; eye?: () => Uint8Array; textureSize?: number } = {}): FakeUncook {
-  const tools: FakeUncook = { calls: 0, async uncook({ outDir, signal }) {
-    tools.calls++;
+export type FakeExport = { exporter: (cacheRoot: string) => GameAssetExporter; calls: { depotPaths: string[]; withMaterials: boolean }[] };
+/** A WolvenKit stand-in that writes the export tree the way `uncook` lays it out. */
+export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "eye-glb" | "material" | "textures";
+  beforeWrite?: (signal?: AbortSignal) => Promise<void>; mesh?: Buffer; eye?: () => Uint8Array; textureSize?: number } = {}): FakeExport {
+  const calls: FakeExport["calls"] = [];
+  const run: UncookRun = async ({ depotPaths, outDir, withMaterials, signal }) => {
+    calls.push({ depotPaths: [...depotPaths], withMaterials });
     await options.beforeWrite?.(signal);
+    const wanted = new Set(depotPaths);
     const write = (depot: string, bytes: Uint8Array | string) => { const file = join(outDir, ...depot.split("\\")); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, bytes); };
-    if (options.omit !== "head") { write(plate.source.meshDepotPath, options.mesh ?? SOURCE_BYTES.mesh); write(plate.source.morphDepotPath, SOURCE_BYTES.morph); }
-    write(recipe.eye.meshDepotPath, SOURCE_BYTES.eye);
-    write(plate.source.morphDepotPath + ".glb", headGlb());
-    if (options.omit !== "eye-glb") write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".glb"), (options.eye ?? eyeGlb)());
-    const materials = materialExports();
-    if (options.omit !== "material") {
-      write(plate.source.meshDepotPath.replace(/\.mesh$/, ".Material.json"), JSON.stringify(materials.head));
-      write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".Material.json"), JSON.stringify(materials.eye));
-    }
     const size = options.textureSize ?? 256;
-    write(TEXTURES.headAlbedo.replace(/\.xbm$/, ".png"), texturePng(size, "colour"));
-    write(TEXTURES.headNormal.replace(/\.xbm$/, ".png"), texturePng(size, "normal"));
-    write(TEXTURES.headRoughness.replace(/\.xbm$/, ".png"), texturePng(size, "roughness"));
-    write(TEXTURES.eyeAlbedo.replace(/\.xbm$/, ".png"), texturePng(size, "colour"));
-  } };
-  return tools;
+    const textures = [[TEXTURES.headAlbedo, "colour"], [TEXTURES.headNormal, "normal"], [TEXTURES.headRoughness, "roughness"], [TEXTURES.eyeAlbedo, "colour"]] as const;
+    if (withMaterials) {
+      if (options.omit !== "head") { write(plate.source.meshDepotPath, options.mesh ?? SOURCE_BYTES.mesh); write(plate.source.morphDepotPath, SOURCE_BYTES.morph); }
+      write(recipe.eye.meshDepotPath, SOURCE_BYTES.eye);
+      write(plate.source.morphDepotPath + ".glb", headGlb());
+      if (options.omit !== "eye-glb") write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".glb"), (options.eye ?? eyeGlb)());
+      const materials = materialExports();
+      if (options.omit !== "material") {
+        write(plate.source.meshDepotPath.replace(/\.mesh$/, ".Material.json"), JSON.stringify(materials.head));
+        write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".Material.json"), JSON.stringify(materials.eye));
+      }
+      // Material export decodes every texture the materials use, like WolvenKit with the game path.
+      if (options.omit !== "textures") for (const [depot, kind] of textures) write(depot.replace(/\.xbm$/, ".png"), texturePng(size, kind));
+    } else if (options.omit !== "textures") {
+      for (const [depot, kind] of textures) if (wanted.has(depot)) write(depot.replace(/\.xbm$/, ".png"), texturePng(size, kind));
+    }
+  };
+  return { calls, exporter: cacheRoot => createGameAssetExporter(cacheRoot, run) };
 }
