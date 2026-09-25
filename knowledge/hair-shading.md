@@ -101,7 +101,7 @@ The `cb0` hair registers are runtime GameOptions [source strings in the 2.31 exe
 
 ## 6. Brow decal colour blend (`mesh_decal_double_diffuse.mt`)
 
-The brow decal writes `sqrt(colour)` with `SrcAlpha/InvSrcAlpha` into GBuffer0, which holds `sqrt(albedo)` [source] ([materials and shaders §2.4](materials-and-shaders.md#24-what-a-post_gbuffer-decal-does-to-the-pixel-under-it)). The resulting albedo is `(a·√c + (1−a)·√skin)²`. For a dark brow over skin this acts like linear coverage `≈ 2a − a²`, so partial coverage looks denser and darker than a linear blend. The brow colour and coverage formula (gradient at `(1, 0.5)` × intensity × primary RGB + secondary tint; coverage `(p + (1−p)·s·0.7)²` at default contrast) is in the [brow material study](../research/eye-artistry/brow-lash-fidelity.md) [source].
+The brow decal writes `sqrt(colour)` with `SrcAlpha/InvSrcAlpha` into GBuffer0, which holds `sqrt(albedo)` [source] ([materials and shaders §2.4](materials-and-shaders.md#24-what-a-post_gbuffer-decal-does-to-the-pixel-under-it)). The resulting albedo is `(a·√c + (1−a)·√skin)²`. For a dark brow over skin this acts like linear coverage `≈ 2a − a²`, so partial coverage looks denser and darker than a linear blend. The brow colour and coverage formula (gradient at `(1, 0.5)` × intensity × primary RGB + secondary tint; coverage `(p + (1−p)·s·k)²` at default contrast, with `k` = `SecondaryDiffuseAlphaIntensity`: 0.6 in vanilla, 0.7 in the saved Arkhe brow) is in the [brow material study](../research/eye-artistry/brow-lash-fidelity.md) [source]. Vanilla brows also write a normal (0.4, mode 1) and roughness ≈ 0.50; the whole vanilla brow chain, and how brow colour relates to hair colour, is on [eyebrows](brows.md).
 
 ## 7. Resolving which `.hp` a material uses
 
@@ -123,7 +123,7 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 | Coverage | Remapped `Strand_Alpha.r`, stretched over the dither range (`hairResolvedCoverage`); strands and lashes are unblended, depth-writing, MSAA alpha-to-coverage with no alpha test (lashes still draw after the makeup layers) | Coverage fraction and its nesting faithful to §2 (see below); colour mixing within a pixel approximate (no 3-layer k-buffer) |
 | Hair cap (`mesh_decal_gradientmap_recolor.mt`) | Mask-blended decal over the scalp (no depth write, no alpha test); gradient indexed by the mask | Linear "over" blend, lighter at partial coverage than the engine's sqrt-space blend |
 | Lighting | Hair-class direct light (§5, gates and per-strand shift included) for key and fill lights on the skinned bitangent; card specular off; Three's ambient diffuse scaled by `EnvProbe/MultiScatter`. Under the Character creator lighting preset, the same model per spot light with `LocalLight` intensities (R 0.35; TRT and MultiScatter as `GlobalLight`) ([creator lighting §9](creator-lighting.md#9-the-studios-creator-lighting-preset)) | Structure [source], constants [community]; environment path approximated, no environment R/TRT; local-light path not decoded |
-| Brow decal | Per-vertex skin albedo under each brow vertex; solves an equivalent linear "over" blend | Faithful where the sampled skin albedo is right |
+| Brow decal | Per-vertex skin albedo under each brow vertex; solves an equivalent linear "over" blend | Faithful where the sampled skin albedo is right; the brow's normal and roughness writes are not drawn (fixed roughness 0.8) |
 
 ### Preview coverage
 
