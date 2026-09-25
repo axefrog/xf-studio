@@ -8,7 +8,7 @@ import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget } from "./studio-application";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { RecipeAction } from "./recipe-actions";
-import type { FieldLimit } from "./action-limits";
+import type { FieldLimit } from "./platform/api";
 import type { StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";

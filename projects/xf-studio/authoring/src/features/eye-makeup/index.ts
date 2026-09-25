@@ -15,6 +15,7 @@ import { ACTION_DESCRIPTORS, GESTURE_DESCRIPTORS, type ActionScope } from "../..
 import { applyEyeMakeup, assignEyeMakeupIds, eyeMakeupCapability, type EyeMakeupAction, type EyeMakeupEditorState,
   type EyeMakeupEffect } from "./core";
 import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";
+import { EYE_MAKEUP_LIMITS, EYE_MAKEUP_UNITS, eyeMakeupConsequence } from "./limits";
 
 export const EYE_MAKEUP_ID = featureId(EYE_MAKEUP_FEATURE);
 export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./core";
@@ -44,5 +45,5 @@ export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, ActionScope, typeof EYE_
   gestures: { apply: applyRecipeGesture, label: gestureHistoryLabel, descriptors: GESTURE_DESCRIPTORS },
   actions: featureActionTable<Recipe, EyeMakeupEditorState, EyeMakeupAction, ActionScope, EyeMakeupEffect>(
     ACTION_DESCRIPTORS, KINDS, { capability: eyeMakeupCapability, apply: applyEyeMakeup, assignIds: assignEyeMakeupIds,
-      label: historyLabel }),
+      label: historyLabel, units: EYE_MAKEUP_UNITS, limits: EYE_MAKEUP_LIMITS, consequence: eyeMakeupConsequence }),
 });

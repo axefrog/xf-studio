@@ -1,7 +1,8 @@
 import type { CollectionDraftSummary } from "./collection-actions";
 import type { CollectionRequest } from "./collection-service";
 import type { HistoryJumpPlan, HistoryState } from "./authoring-history";
-import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS } from "./studio-action-descriptors";
+import { FILE_DESCRIPTORS } from "./studio-action-descriptors";
+import type { ActionEffect, ConsequenceOverride } from "./platform/api";
 import type { StudioAction } from "./studio-application";
 import type { StudioFileAction } from "./studio-file-operations";
 
@@ -23,7 +24,9 @@ export type Consequence = {
 export type ConsequenceSubject = { action: StudioAction } | { file: StudioFileAction } | { request: CollectionRequest };
 type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit: number; removedLimit: number;
   /** For `history.jumpTo`: which way the jump goes. */
-  jump?: HistoryJumpPlan };
+  jump?: HistoryJumpPlan;
+  /** The action's registered effect and its spec's consequence override (feature-module platform §4). */
+  action?: { effect: ActionEffect; override?: ConsequenceOverride } };
 
 export function consequenceOf(subject: ConsequenceSubject, state: State): Consequence {
   const none: Consequence = { discards: [], recoverableBy: "none", confirm: false };
@@ -65,12 +68,11 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
   // A jump is a run of Undo or Redo steps: nothing is discarded, and the steps stay reachable.
   if (action.kind === "history.jumpTo") return done({ replaces: "layer-content", discards: [],
     recoverableBy: state.jump?.direction === "redo" ? "history.undo" : state.jump?.direction === "undo" ? "history.redo" : "none" });
-  if (ACTION_DESCRIPTORS[action.kind].effect !== "content") return none;
+  if (state.action?.effect !== "content") return none;
   // Every other content edit records one Undo entry; it drops Redo and, at the bound, the oldest Undo.
   const discards: Consequence["discards"] = [];
   if (state.history.redo) discards.push({ kind: "redo", label: state.history.redo.label });
   if (state.history.depth >= state.undoLimit) discards.push({ kind: "undo-entry", label: "Oldest Undo step" });
-  const destructive = action.kind === "point.remove" || action.kind === "field.remove" ||
-    action.kind === "layer.edit" && (action.command.kind === "remove" || action.command.kind === "reset");
-  return done({ ...(destructive ? { replaces: "layer-content" as const } : {}), recoverableBy: "history.undo", discards });
+  // What else it replaces is the spec's to say (for eye makeup, removals and resets replace layer content).
+  return done({ ...(state.action.override?.replaces ? { replaces: state.action.override.replaces } : {}), recoverableBy: "history.undo", discards });
 }

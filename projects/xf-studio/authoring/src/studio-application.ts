@@ -2,7 +2,6 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
-import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
@@ -20,7 +19,7 @@ import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceStat
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";
 import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
-  type Capability, type FeatureActionSpec, type FeatureModule, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
+  type Capability, type FeatureActionSpec, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
   type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
@@ -189,6 +188,11 @@ export class StudioApplication {
   featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
     return this.services.document.others?.document(feature)?.export();
   }
+  /** The pure state a feature's specs read: eye makeup's from its port, any other feature's from its live document. */
+  private featureStateOf(feature: string): FeatureState<unknown, unknown> | undefined {
+    if (feature === "eye-makeup") return this.services.eyeMakeup.state();
+    return this.services.document.others?.document(feature)?.state();
+  }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
     const targetCapability = this.targetCapability(target);
@@ -238,7 +242,12 @@ export class StudioApplication {
   }
   /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
   limitsFor(target: StudioTarget, kind: StudioAction["kind"], variant?: string): Record<string, FieldLimit> {
-    const limits = actionLimits(this.services.document.recipe, target, kind, variant);
+    const route = this.routes.route(kind);
+    if (!route.ok) return {};
+    // The spec's static limits and units, then the owning feature's state-dependent refinement.
+    let limits = inputLimits(route.spec.descriptor, route.spec.units, variant);
+    const spec = route.spec as Partial<FeatureActionSpec<unknown, unknown>>, state = this.featureStateOf(route.owner.id);
+    if (spec.limits && state) limits = spec.limits(state, target, variant, limits);
     const presets = this.services.collection?.summary().draft?.presets.length;
     if (kind === "preset.edit" && variant === "move" && limits.to && presets !== undefined)
       limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
@@ -359,8 +368,12 @@ export class StudioApplication {
   consequences(subject: ConsequenceSubject): Consequence {
     const jump = "action" in subject && subject.action.kind === "history.jumpTo"
       ? this.services.history?.plan(subject.action.entryId) : undefined;
+    // An action's own consequence: the generic rule from its descriptor, with its spec's override.
+    const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
+    const own = route?.ok ? { effect: route.spec.descriptor.effect,
+      override: (route.spec as Partial<FeatureActionSpec<unknown, unknown>>).consequence?.((subject as { action: StudioAction }).action) } : undefined;
     return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
-      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump });
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
   history(): HistoryState {

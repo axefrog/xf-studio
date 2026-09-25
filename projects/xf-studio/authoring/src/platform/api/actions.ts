@@ -25,16 +25,54 @@ import type { Capability } from "./capability";
 import type { FeatureResult, FeatureState } from "./document";
 import type { HistoryLabel } from "./history";
 
+/** The unit of a numeric or text input, for control labels, hints and scripts. */
+export type LimitUnit = "uv" | "fraction" | "count" | "degrees" | "pixels" | "characters" | "index";
 /**
- * One registered action. Migration step 1 registered the existing descriptor (scope,
- * payload, variants, effect and Undo policy) as-is; a feature's actions add their pure
- * capability and apply (step 2). History labels, limits/units and consequence overrides join
- * the spec in later steps (feature-module platform §8).
+ * Current limits for one input field of an action on a concrete target. `min`/`max`
+ * include state-dependent bounds (for example irregular Glitter flake size depends on
+ * flake count); `requires` explains a mode the target must be in first. Advisory, like
+ * every capability: dispatch and the part's parser remain authoritative.
  */
-// `A` names the action this spec describes; later steps type label, limits and apply with it.
+export type FieldLimit = { min?: number; max?: number; minLength?: number; maxLength?: number;
+  unit?: LimitUnit; dependsOn?: string[]; note?: string; requires?: { reason: string } };
+/**
+ * Units by input field: `field` for the action's own fields; with a command or key variant, `variant.field`
+ * for every field the variant uses (its own and the action's).
+ */
+export type SpecUnits = Readonly<Record<string, LimitUnit>>;
+/**
+ * What an action replaces beyond the generic consequence rule (derived from its effect and Undo policy),
+ * for example a removal that takes content away (feature-module platform §4).
+ */
+export type ConsequenceOverride = { readonly replaces?: "draft" | "preset" | "layer-content" };
+
+/**
+ * One registered action: its descriptor (scope, payload, variants, effect and Undo policy) and the
+ * units of its inputs. A feature's actions add their pure capability, apply, history label,
+ * state-dependent limits and consequence override (feature-module platform §1, steps 1–5).
+ */
+// `A` names the action this spec describes; a feature's spec types label, limits and apply with it.
 export type ActionSpec<A extends { kind: string } = { kind: string }, Scope extends string = string> = {
   readonly descriptor: ActionDescriptor<Scope>;
+  readonly units?: SpecUnits;
 };
+
+/**
+ * The static limits of an action's inputs (from its descriptor's payload and its spec's units): every
+ * numeric, enumerated or text input the person provides, with its range, length and unit.
+ */
+export function inputLimits(descriptor: ActionDescriptor, units: SpecUnits | undefined, variant?: string): Record<string, FieldLimit> {
+  const fields = { ...descriptor.payload, ...(variant ? descriptor.variants?.[variant]?.payload : undefined) };
+  const limits: Record<string, FieldLimit> = {};
+  for (const [name, schema] of Object.entries(fields)) {
+    if (schema.from !== "input" || schema.type === "object" || schema.type === "boolean" || schema.type === "bytes") continue;
+    const unit = units?.[[variant, name].filter(Boolean).join(".")];
+    limits[name] = { ...(schema.min === undefined ? {} : { min: schema.min }), ...(schema.max === undefined ? {} : { max: schema.max }),
+      ...(schema.minLength === undefined ? {} : { minLength: schema.minLength }),
+      ...(schema.maxLength === undefined ? {} : { maxLength: schema.maxLength }), ...(unit ? { unit } : {}) };
+  }
+  return limits;
+}
 /** Compile-time exhaustive: exactly one spec per kind of the owner's action union. */
 export type ActionTable<A extends { kind: string }, Scope extends string = string> =
   { readonly [K in A["kind"]]: ActionSpec<Extract<A, { kind: K }>, Scope> };
@@ -58,7 +96,17 @@ export type FeatureActionSpec<P, E, A extends { kind: string } = { kind: string 
     assignIds?(action: A, newId: () => string): A;
     /** What the action's Undo step is called in menus and the History panel (the look history's label). */
     label(action: A): HistoryLabel;
+    /**
+     * The state-dependent limits of the action's inputs on `target`, refining `base` (the static
+     * `inputLimits`); absent when the static limits are the whole story.
+     */
+    limits?(state: FeatureState<P, E>, target: FeatureTarget, variant: string | undefined, base: Record<string, FieldLimit>):
+      Record<string, FieldLimit>;
+    /** What this action replaces beyond the generic consequence rule; undefined when the rule says it all. */
+    consequence?(action: A): ConsequenceOverride | undefined;
   };
+/** The target an input limit is asked for (a layer, point, field, preset…), as the presentation names it. */
+export type FeatureTarget = { readonly kind: string; readonly id?: string; readonly layerId?: string };
 export type FeatureActionTable<P, E, A extends { kind: string }, Scope extends string = string, X = unknown> =
   { readonly [K in A["kind"]]: FeatureActionSpec<P, E, Extract<A, { kind: K }>, Scope, X> };
 
@@ -69,13 +117,17 @@ export type FeatureActionTable<P, E, A extends { kind: string }, Scope extends s
  */
 export function actionTable<A extends { kind: string }, Scope extends string>(
   descriptors: { readonly [K in A["kind"]]: ActionDescriptor<Scope> },
-  kinds: Readonly<Record<A["kind"], true>>): ActionTable<A, Scope> {
+  kinds: Readonly<Record<A["kind"], true>>,
+  /** Each kind's input units (`field` or `variant.field`), where it has any. */
+  units: Partial<Record<A["kind"], SpecUnits>> = {}): ActionTable<A, Scope> {
   const table: Record<string, ActionSpec<{ kind: string }, Scope>> = {};
   for (const kind of Object.keys(kinds) as A["kind"][]) {
     const descriptor = descriptors[kind];
     if (!descriptor) throw Error(`Action ${kind} has no descriptor.`);
-    table[kind] = Object.freeze({ descriptor });
+    const own = units[kind];
+    table[kind] = Object.freeze({ descriptor, ...(own ? { units: Object.freeze({ ...own }) } : {}) });
   }
+  for (const kind of Object.keys(units)) if (!(kind in table)) throw Error(`Units name ${kind}, which is not an action of this table.`);
   return Object.freeze(table) as ActionTable<A, Scope>;
 }
 
@@ -103,13 +155,25 @@ export function featureActionTable<P, E, A extends { kind: string }, Scope exten
   behaviour: { capability(state: FeatureState<P, E>, action: A): Capability;
     apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X>;
     assignIds?(action: A, newId: () => string): A;
-    label(action: A): HistoryLabel }): FeatureActionTable<P, E, A, Scope, X> {
-  const base = actionTable<A, Scope>(descriptors, kinds) as Readonly<Record<string, ActionSpec<A, Scope>>>;
+    label(action: A): HistoryLabel;
+    /** Each kind's input units. */
+    units?: Partial<Record<A["kind"], SpecUnits>>;
+    /** State-dependent limits, by kind: the kinds it names get a spec `limits` (see `FeatureActionSpec.limits`). */
+    limits?: Partial<Record<A["kind"], NonNullable<FeatureActionSpec<P, E, A, Scope, X>["limits"]>>>;
+    /** Consequence overrides (see `FeatureActionSpec.consequence`). */
+    consequence?(action: A): ConsequenceOverride | undefined }): FeatureActionTable<P, E, A, Scope, X> {
+  const base = actionTable<A, Scope>(descriptors, kinds, behaviour.units) as Readonly<Record<string, ActionSpec<A, Scope>>>;
   const table: Record<string, FeatureActionSpec<P, E, A, Scope, X>> = {};
-  for (const [kind, spec] of Object.entries(base)) table[kind] = Object.freeze({ descriptor: spec.descriptor,
-    capability: (state: FeatureState<P, E>, action: A) => behaviour.capability(state, action),
-    apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action),
-    label: (action: A) => behaviour.label(action),
-    ...(behaviour.assignIds ? { assignIds: behaviour.assignIds } : {}) });
+  for (const [kind, spec] of Object.entries(base)) {
+    const limits = behaviour.limits?.[kind as A["kind"]];
+    table[kind] = Object.freeze({ descriptor: spec.descriptor, ...(spec.units ? { units: spec.units } : {}),
+      capability: (state: FeatureState<P, E>, action: A) => behaviour.capability(state, action),
+      apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action),
+      label: (action: A) => behaviour.label(action),
+      ...(behaviour.assignIds ? { assignIds: behaviour.assignIds } : {}),
+      ...(limits ? { limits } : {}),
+      ...(behaviour.consequence ? { consequence: behaviour.consequence } : {}) });
+  }
+  for (const kind of Object.keys(behaviour.limits ?? {})) if (!(kind in table)) throw Error(`Limits name ${kind}, which is not an action of this table.`);
   return Object.freeze(table) as unknown as FeatureActionTable<P, E, A, Scope, X>;
 }
