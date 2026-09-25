@@ -123,7 +123,8 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       setText(count, String(presets.length));
       failed.hidden = !!draft || library.busy || library.progress?.phase !== "error";
       empty.hidden = !draft || presets.length > 0;
-      list.update(presets.map(preset => ({ id: preset.id, name: preset.name, meta: plural(preset.layers, "layer") })), draft?.selected, busy);
+      list.update(presets.map(preset => ({ id: preset.id, name: preset.name,
+        meta: preset.locked ? "Made with a newer XF Studio · kept as it is" : plural(preset.layers, "layer") })), draft?.selected, busy);
       applyCapability(addButton, port.library.capability({ kind: "preset.edit", command: { kind: "add" } }));
       const removed = draft?.removed.at(-1);
       restore.hidden = !removed;

@@ -76,9 +76,15 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     button({ label: "Add layer", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }) }));
   const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
+  // A look made with a newer XF Studio: say what happened, that it is safe, and the one next step.
+  const newerBody = h("p", { class: "empty-body" });
+  const newer = h("div", { class: "empty", role: "status" }, h("p", { class: "empty-title", text: "This look needs a newer XF Studio" }), newerBody,
+    h("div", { class: "empty-actions" }, button({ label: "Get the latest version", icon: "export", variant: "primary", onClick: () => {
+      void port.links.open("project-releases").then(result => { if (!result.ok) rt.feedback.toast("info", "Layers", result.message); });
+    } })));
   const element = h("div", { class: "panel-content" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
-    noPreset, empty, list.element,
+    noPreset, newer, empty, list.element,
     note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
   rt.anchors.register("layers.add", add);
   rt.anchors.register("layers.list", list.element);
@@ -88,8 +94,11 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
       // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
       const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
+      const locked = hasPreset && !frame.editable.available && frame.editable.code === "unavailable";
       noPreset.hidden = hasPreset;
-      empty.hidden = !hasPreset || layers.length > 0;
+      newer.hidden = !locked;
+      if (locked) setText(newerBody, frame.editable.reason ?? "");
+      empty.hidden = !hasPreset || locked || layers.length > 0;
       setText(count, String(layers.length));
       count.title = "The current preview budget is 32 layers per preset.";
       list.update([...layers].reverse().map(layer => {

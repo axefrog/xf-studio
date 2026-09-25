@@ -184,6 +184,17 @@ export class StudioApplication {
     const route = this.routes.route(kind);
     return route.ok ? route.owner.id : undefined;
   }
+  /**
+   * Whether a feature can be edited in the selected look: not when the look holds a newer build's data (it
+   * is kept exactly as it came), nor while no preset owns the editor. The refusal says why in plain words.
+   */
+  featureEditable(feature: string): StudioCapability {
+    const owner = this.routes.owner(feature);
+    if (owner?.owner !== "feature") return unknownCommand();
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    const locked = this.services.document.locked;
+    return locked ? refusal("unavailable", locked) : { available: true };
+  }
   /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
   featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
     return this.services.document.others?.document(feature)?.export();
@@ -422,6 +433,8 @@ export class StudioApplication {
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
+    // A look holding a newer build's data is kept exactly as it came: no feature edits it here (step 5).
+    if (route.owner.owner === "feature" && s.document.locked) return refusal("unavailable", s.document.locked);
     // A look transaction records the parts it names: nothing else may change while it runs.
     if (this.look && !this.look.features.includes(route.owner.id))
       return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
@@ -480,6 +493,7 @@ export class StudioApplication {
     if (this.look || this.gesture || s.controls.snapshot())
       return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
     if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
+    if (s.document.locked) return { ok: false, code: "unavailable", message: s.document.locked };
     const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
     if (!features.length || unknown.length)
       return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
@@ -589,11 +603,19 @@ export class StudioApplication {
           ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." },
       },
       files: {
-        capability: action => app.services.files?.capability(action) ?? missing("Files are still loading."),
-        execute: async action => app.services.files?.execute(action)
-          ?? { ok: false as const, code: "unavailable", message: "Files are still loading." },
+        capability: action => app.lockedExport(action) ?? app.services.files?.capability(action) ?? missing("Files are still loading."),
+        execute: async action => {
+          const locked = app.lockedExport(action);
+          if (locked) return { ok: false as const, code: "unavailable", message: locked.reason! };
+          return app.services.files?.execute(action) ?? { ok: false as const, code: "unavailable", message: "Files are still loading." };
+        },
       },
     };
+  }
+  /** A locked look's recipe and masks are not exported as if it were empty: this build cannot read them. */
+  private lockedExport(action: StudioFileAction): StudioCapability | undefined {
+    const locked = this.services.document.locked;
+    return locked && (action.kind === "recipe.export" || action.kind === "mask.export") ? refusal("unavailable", locked) : undefined;
   }
   /** The async family that owns `kind`, when it is `family`. */
   private ownsAsync(family: StudioRequestOwnerId, kind: string) {
@@ -639,7 +661,7 @@ export class StudioApplication {
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
-    if (this.gesture || this.look || this.unowned()) return false;
+    if (this.gesture || this.look || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
   /**
@@ -688,6 +710,7 @@ export class StudioApplication {
   }
   canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
     if (source === "surface" && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };

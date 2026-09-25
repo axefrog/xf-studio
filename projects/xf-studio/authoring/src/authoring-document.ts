@@ -23,7 +23,12 @@ export type DocumentState = { recipe: Recipe; active: number; selected: number;
    * The look's other registered features' live state (their parts and editor memory), present only
    * when the composition registers features beside the one this document edits (step 5).
    */
-  liveFeatures?: Record<string, LiveFeatureState> };
+  liveFeatures?: Record<string, LiveFeatureState>;
+  /**
+   * Present when the selected look holds a newer build's data (`Look.locked`): the document shows an empty
+   * part and nothing in the look is editable; the text says why. Input only: never exported or stored.
+   */
+  liveLocked?: string };
 /** `part`: another feature's live part changed (an action of that feature, or an Undo or Redo). */
 export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
@@ -64,7 +69,11 @@ export class AuthoringDocument {
       fieldSelection: parseFieldSelection(initial.fieldSelection, recipe) };
     this.history = lookHistory(initial.history, initial.historyTrimmed === true, parts);
     parts.others?.load(initial.liveFeatures);
+    this.lockedReason = initial.liveLocked;
   }
+  private lockedReason?: string;
+  /** Why the selected look is not editable in this version (it holds a newer build's data), or undefined. */
+  get locked(): string | undefined { return this.lockedReason; }
   /** The look as the history reads it: this document's feature is its recipe; the others are their live documents. */
   private readonly read = (feature: string) => feature === this.parts.feature ? this.state.recipe : this.parts.others?.read(feature);
   private recipeOf(parts: Record<string, unknown> | undefined) { return parts?.[this.parts.feature] as Recipe | undefined; }
@@ -267,6 +276,7 @@ export class AuthoringDocument {
       fieldSelection };
     this.history = history;
     this.parts.others?.load(value.liveFeatures); this.otherRevision++;
+    this.lockedReason = value.liveLocked;
     this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
     this.notify("restore");
   }

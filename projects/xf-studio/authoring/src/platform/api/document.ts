@@ -65,7 +65,14 @@ export interface MemoryCodec<M> {
  * stored form (`StoredPreset`) has the same shape. A missing part means the feature is not
  * part of this look, not an empty part.
  */
-export type Look = { id: string; name: string; revision: number; parts: Record<string, PartEnvelope> };
+export type Look = { id: string; name: string; revision: number; parts: Record<string, PartEnvelope>;
+  /**
+   * Present when this build cannot read the look (a newer build's part schema or model, in its parts or
+   * its Undo history): its parts and editor memory are then kept exactly as stored (`KEPT_MEMORY`) and
+   * it is not editable in this version; the text says so in plain words. Never stored: a reader finds
+   * it again.
+   */
+  locked?: string };
 export type StoredPreset = Look;
 export const COLLECTION_1 = "xfas/collection-1";
 export const COLLECTION_2 = "xfs/collection-2";
@@ -87,6 +94,14 @@ export type PartMemory<E = unknown, P = unknown> = { editor: E; history?: P[]; h
 export type LookMemory = Record<string, PartMemory>;
 /** The key of a look's own memory (its Undo history) beside its features' memory; not a valid feature ID. */
 export const LOOK_MEMORY = "@look";
+/**
+ * The key under which a locked look's stored editor memory is kept verbatim (its editor state is the
+ * stored memory as it was read); writers write it back unchanged. Not a valid feature ID.
+ */
+export const KEPT_MEMORY = "@kept";
+/** Why a look is locked, for the person: what happened, that nothing is lost, and the one next step. */
+export const NEWER_LOOK_MESSAGE = "This look was made with a newer version of XF Studio, so this version can't show or change it. " +
+  "It's kept exactly as it was: update XF Studio to edit it.";
 
 /** What an action reads: the feature's part and its editor state. */
 export type FeatureState<P, E> = { readonly part: P; readonly editor: E };

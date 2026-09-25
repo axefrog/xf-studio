@@ -29,6 +29,11 @@ export type FeatureInfo = { readonly id: string; readonly label: string; readonl
 export type FeatureFacade<A extends { kind: string } = { kind: string }> = FeatureInfo & {
   /** The feature's action kinds, in catalogue order. */
   kinds(): readonly A["kind"][];
+  /**
+   * Whether the selected look's part of this feature can be edited here: refused (with a plain reason) when
+   * the look was made with a newer version of XF Studio, so a view can say so on that look.
+   */
+  editable(): StudioCapability;
   capability(action: A): StudioCapability;
   dispatch(action: A): StudioDispatchResult;
   limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
@@ -210,6 +215,7 @@ export function createStudioPresentation<Slot>(sources: {
     const foreign = { available: false as const, code: "invalid_value" as const, reason: `That is not a ${info.label.toLowerCase()} command.` };
     return { ...info,
       kinds: () => a.actionKinds().filter(own),
+      editable: () => a.featureEditable(info.id),
       capability: action => own(action.kind) ? a.capability(action as never) : foreign,
       dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
       limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},

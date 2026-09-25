@@ -17,6 +17,7 @@ export type LookOmission = { presetId: string; presetName: string; reason: strin
   feature?: string };
 export const NO_EYE_MAKEUP_REASON = "It has no eye makeup.";
 export const NO_EXPORTER_REASON = "XF Studio can't make mod files for this part yet.";
+export const NEWER_LOOK_REASON = "It was made with a newer version of XF Studio.";
 
 export type PresetCollection = {
   // File-format compatibility ID; product branding does not change existing inputs.
@@ -74,6 +75,8 @@ export function eyeMakeupCollection(collection: LookCollection): PresetCollectio
 function eyeMakeupView(collection: LookCollection, parsed: boolean): PresetCollection {
   const omitted: LookOmission[] = [];
   const presets = collection.presets.flatMap(look => {
+    // A look this build cannot read (kept exactly as it came) cannot become mod files here.
+    if (look.locked) { omitted.push({ presetId: look.id, presetName: look.name, reason: NEWER_LOOK_REASON }); return []; }
     for (const feature of Object.keys(look.parts)) if (feature !== EYE_MAKEUP_FEATURE)
       omitted.push({ presetId: look.id, presetName: look.name, feature, reason: NO_EXPORTER_REASON });
     const envelope = look.parts[EYE_MAKEUP_FEATURE];

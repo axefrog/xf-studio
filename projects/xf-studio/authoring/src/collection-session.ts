@@ -9,7 +9,9 @@ import type { StoredCollection } from "./collection-store";
 /** The live editor document: its recipe (the look's eye-makeup part) and its memory for that look. */
 export type EditorSnapshot = EditorMemory & { recipe: Recipe;
   /** The look's other registered features' live state; present only when the composition registers more features (step 5). */
-  liveFeatures?: Record<string, LiveFeatureState> };
+  liveFeatures?: Record<string, LiveFeatureState>;
+  /** Present when the look is locked (it holds a newer build's data): why, in plain words. Never written back. */
+  liveLocked?: string };
 /**
  * Owns draft switching independently of markup, network requests and renderer. The live
  * document edits one feature's part of the selected look; every other part and feature memory
@@ -30,7 +32,8 @@ export class CollectionSession {
   /** Write the live editor into `state`'s selected look (the draft itself, or a copy of it). */
   private stashInto(state: CollectionWorkspace) {
     const preset = state.collection.presets.find(p => p.id === state.selected);
-    if (!preset) return;
+    // A locked look is never written from the editor: its parts and memory stay exactly as they were read.
+    if (!preset || preset.locked) return;
     const { recipe, liveFeatures, ...memory } = this.read();
     preset.parts = withLivePart(preset, recipe, this.model);
     const written = withLiveFeatures(preset, withLiveMemory(state.memory[preset.id], structuredClone(memory), this.model),
@@ -49,7 +52,8 @@ export class CollectionSession {
     const preset = this.state.collection.presets.find(p => p.id === this.state.selected), recipe = livePart(preset, this.model);
     const memory = preset ? this.state.memory[preset.id] : undefined, others = liveFeatureStates(preset, memory, this.model);
     this.show({ recipe: recipe ? structuredClone(recipe) : emptyRecipe(),
-      ...structuredClone(liveMemory(memory, this.model)), ...(others ? { liveFeatures: others } : {}) });
+      ...structuredClone(liveMemory(memory, this.model)), ...(others ? { liveFeatures: others } : {}),
+      ...(preset?.locked ? { liveLocked: preset.locked } : {}) });
   }
   select(id: string) {
     if (!this.state.collection.presets.some(p => p.id === id)) throw Error("Preset not found.");
@@ -57,7 +61,7 @@ export class CollectionSession {
   }
   renameCollection(name: string) {
     this.stash();
-    this.state.collection = this.model.parts.readCollection({ ...this.state.collection, name: name.trim() }, true);
+    this.state.collection = this.model.parts.readCollection({ ...this.state.collection, name: name.trim() }, true, "keep");
   }
   edit(command: PresetCommand) {
     this.stash(); const previous = this.state.selected;

@@ -24,6 +24,9 @@ import { emptyRecipe, type Recipe } from "./recipe";
 export type DocumentModel = { readonly parts: PartRegistry; readonly live: string };
 
 export { emptyRecipe } from "./recipe";
+/** Why a collection holding a look from a newer XF Studio is not saved to the library (the look is kept in the draft and in exports). */
+export const NEWER_LOOKS_LIBRARY_MESSAGE = "This collection has a look made with a newer version of XF Studio, so this version doesn't " +
+  "save it to your library. Use Export collection to keep a copy, or update XF Studio to save it.";
 export type Preset = Look;
 /**
  * The live editor document's memory for one look: its selection and the look's Undo history. The
@@ -70,9 +73,9 @@ export function withLiveMemory(memory: LookMemory | undefined, editor: EditorMem
   return model.parts.withLookHistory({ ...memory, [model.live]: { editor: { active, selected, ...(fieldSelection ? { fieldSelection } : {}) } } },
     data);
 }
-/** The live document's part of a look, or undefined when the look does not have one. */
-export function livePart(look: Pick<Look, "parts"> | undefined, model: DocumentModel): Recipe | undefined {
-  return look?.parts[model.live]?.body as Recipe | undefined;
+/** The live document's part of a look, or undefined when the look does not have one (or is locked: this build cannot read it). */
+export function livePart(look: Pick<Look, "parts" | "locked"> | undefined, model: DocumentModel): Recipe | undefined {
+  return look?.locked ? undefined : look?.parts[model.live]?.body as Recipe | undefined;
 }
 /** A look's parts with the live document's part set; an empty recipe is not added to a look that had none. */
 export function withLivePart(look: Look, recipe: Recipe, model: DocumentModel): Look["parts"] {
@@ -117,9 +120,13 @@ export function newLook(id: string, name: string, model: DocumentModel): Look {
   return { id, name, revision: 1, parts: { [model.live]: model.parts.envelope(model.live, emptyRecipe()) } };
 }
 
-/** A fresh draft of a stored collection of either schema (`xfas/collection-1` or `xfs/collection-2`). */
-export function collectionDraft(collection: unknown, model: DocumentModel, revision?: number): CollectionDraft {
-  const read = model.parts.readCollection(collection, true);
+/**
+ * A fresh draft of a stored collection of either schema (`xfas/collection-1` or `xfs/collection-2`). A look
+ * holding a newer build's data is kept verbatim and locked (step 5); the rest of the collection is editable.
+ */
+export function collectionDraft(collection: unknown, model: DocumentModel, revision?: number,
+  newer: Extract<NewerPolicy, "keep" | "refuse"> = "keep"): CollectionDraft {
+  const read = model.parts.readCollection(collection, true, newer);
   return { collection: read, revision, selected: read.presets[0]?.id, memory: {}, removed: [] };
 }
 
@@ -131,7 +138,10 @@ export function collectionDraft(collection: unknown, model: DocumentModel, revis
 export type RestoreWarnings = string[];
 /** How one stored draft format holds each look's memory. */
 type DraftFormat = { memory(draft: unknown, look: Look): LookMemory; removedMemory(entry: unknown, look: Look): LookMemory };
-/** How a restore treats damage (`warnings`: tolerant) and data from a newer build (`newer`). */
+/**
+ * How a restore treats damage (`warnings`: tolerant) and data from a newer build (`newer`): with `keep`,
+ * a look holding newer data (in its parts or its memory) is kept verbatim and locked.
+ */
 type ReadPolicy = { warnings?: RestoreWarnings; newer: NewerPolicy; model: DocumentModel };
 /**
  * A non-current entry that could not be read. Damage is dropped with a note when the restore is
@@ -139,7 +149,7 @@ type ReadPolicy = { warnings?: RestoreWarnings; newer: NewerPolicy; model: Docum
  * read-only view (`omit`), where it is left out silently because the store is never written back.
  */
 function skip(error: unknown, policy: ReadPolicy, note: string) {
-  if (isNewerData(error)) { if (policy.newer === "refuse") throw error; return; }
+  if (isNewerData(error)) { if (policy.newer !== "omit") throw error; return; }
   if (!policy.warnings) throw error;
   policy.warnings.push(`${note} (${(error as Error).message}).`);
 }
@@ -147,27 +157,42 @@ function skip(error: unknown, policy: ReadPolicy, note: string) {
 function readDraft(value: unknown, format: DraftFormat, policy: ReadPolicy): CollectionDraft {
   const { model } = policy, parts = model.parts;
   const input = value as { collection?: unknown; revision?: unknown; selected?: unknown; removed?: unknown };
-  const result = collectionDraft(input?.collection, model);
+  const stored = input?.collection as { schema?: unknown; presets?: unknown[] } | undefined;
+  // Without `keep`, a look holding newer data in its parts is refused, as the current draft's looks always were.
+  const result = collectionDraft(input?.collection, model, undefined, policy.newer === "keep" ? "keep" : "refuse");
+  /** A look's memory; with `keep`, newer data in it locks the look, which is then kept verbatim from its stored preset. */
+  const memoryOf = (look: Look, read: () => LookMemory, raw: unknown, schema: unknown) => {
+    try { return read(); }
+    catch (error) {
+      if (policy.newer !== "keep" || !isNewerData(error)) throw error;
+      Object.assign(look, parts.keepLook(raw, schema === COLLECTION_1 ? COLLECTION_1 : COLLECTION_2));
+      return read();
+    }
+  };
+  const storedPreset = (id: string) => stored?.presets?.find(item => (item as { id?: unknown } | null)?.id === id);
   if (input.revision !== undefined) {
     if (!Number.isSafeInteger(input.revision) || (input.revision as number) < 1) throw Error("Invalid collection revision");
     result.revision = input.revision as number;
   }
   if (typeof input.selected === "string" && result.collection.presets.some(p => p.id === input.selected)) result.selected = input.selected;
   // `expanded` (and the workspace's `filesOpen`) from the retired sidebar shell are ignored.
-  for (const look of result.collection.presets) result.memory[look.id] = withLiveDefault(format.memory(value, look), look, model);
+  for (const look of result.collection.presets) result.memory[look.id] = withLiveDefault(
+    memoryOf(look, () => format.memory(value, look), storedPreset(look.id), stored?.schema), look, model);
   if (Array.isArray(input.removed)) for (const entry of input.removed.slice(-REMOVED_PRESET_LIMIT)) {
     try {
-      const preset = parts.readCollection({ ...storedIdentity(result.collection, input.collection), presets: [entry?.preset] }).presets[0];
+      const identity = storedIdentity(result.collection, input.collection);
+      const preset = parts.readCollection({ ...identity, presets: [entry?.preset] }, false, policy.newer === "keep" ? "keep" : "refuse").presets[0];
       if (!Number.isInteger(entry.index) || entry.index < 0) throw Error("Invalid removed preset position");
-      result.removed.push({ preset, index: entry.index, memory: withLiveDefault(format.removedMemory(entry, preset), preset, model) });
+      const memory = memoryOf(preset, () => format.removedMemory(entry, preset), entry?.preset, identity.schema);
+      result.removed.push({ preset, index: entry.index, memory: withLiveDefault(memory, preset, model) });
     } catch (error) { skip(error, policy, "A removed preset kept for Restore was damaged and was dropped"); }
   }
   return result;
 }
-/** Every look has the live document's memory (defaults when none was stored), as every preset always had. */
+/** Every look has the live document's memory (defaults when none was stored), as every preset always had; a locked look's is kept as stored. */
 function withLiveDefault(memory: LookMemory, look: Look, model: DocumentModel): LookMemory {
   const { parts, live } = model;
-  if (memory[live]) return memory;
+  if (memory[live] || look.locked) return memory;
   const module = parts.feature(live)!;
   return { ...memory, [live]: { editor: module.editor.parse(undefined, parts.part(look, live) ?? module.part.empty()) } };
 }
@@ -201,10 +226,12 @@ function readWorkspaceDrafts(value: unknown, format: DraftFormat, policy: ReadPo
 export function parseCollectionWorkspace(value: unknown, model: DocumentModel, warnings?: RestoreWarnings,
   newer: NewerPolicy = "refuse"): CollectionWorkspace {
   const parts = model.parts;
+  // With `keep`, newer data in a look's memory is refused here and locks that look in `readDraft`.
+  const memoryPolicy: NewerPolicy = newer === "keep" ? "refuse" : newer;
   const memoryOf = (source: unknown, look: Look) =>
-    parts.readMemory((source as { memory?: Record<string, unknown> })?.memory?.[look.id], look, newer);
+    parts.readMemory((source as { memory?: Record<string, unknown> })?.memory?.[look.id], look, memoryPolicy);
   return readWorkspaceDrafts(value, { memory: memoryOf,
-    removedMemory: (entry, look) => parts.readMemory((entry as { memory?: unknown }).memory, look, newer) }, { warnings, newer, model });
+    removedMemory: (entry, look) => parts.readMemory((entry as { memory?: unknown }).memory, look, memoryPolicy) }, { warnings, newer, model });
 }
 
 /**
@@ -288,6 +315,6 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand, 
     if (!Number.isInteger(command.to) || command.to < 0 || command.to >= presets.length) throw Error("Invalid preset position.");
     presets.splice(command.to, 0, presets.splice(index, 1)[0]);
   } else if (command.kind === "rename") presets[index].name = command.name.trim();
-  state.collection = model.parts.readCollection(state.collection, true);
+  state.collection = model.parts.readCollection(state.collection, true, "keep");
   return state;
 }

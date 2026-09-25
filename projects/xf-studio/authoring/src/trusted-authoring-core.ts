@@ -44,7 +44,8 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
     ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
-    ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) }, { feature: documents.live, parts: documents.parts, others });
+    ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}),
+    ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts, others });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(

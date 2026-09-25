@@ -1,6 +1,6 @@
 import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
-import { collectionDraft, newLook, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
+import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
@@ -99,7 +99,7 @@ export class CollectionService {
   private remember(collection: LookCollection, revision: number) {
     let parsed: LookCollection, presets: Baseline["presets"];
     try {
-      parsed = this.model.parts.readCollection(collection, true);
+      parsed = this.model.parts.readCollection(collection, true, "keep");
       presets = new Map(parsed.presets.map(preset => [preset.id, { name: preset.name, raw: JSON.stringify(preset.parts),
         canonical: this.model.parts.canonicalParts(preset.parts) }]));
     } catch { return; }
@@ -216,6 +216,9 @@ export class CollectionService {
       return refusal("invalid_value", "Saved collection is no longer in this list. Refresh it first.");
     if (request.kind === "import" && (!Number.isSafeInteger(request.bytes) || request.bytes < 0 || request.bytes > 16_000_000))
       return refusal("limit", "Collection exceeds the current 16 MB import budget.");
+    // A look this build cannot read is kept exactly as it came; the library never takes it (its older rows stay as they are).
+    if ((request.kind === "save" || request.kind === "saveCopy") && this.actions.presetsForComparison().some(look => look.locked))
+      return refusal("unavailable", NEWER_LOOKS_LIBRARY_MESSAGE);
     // The draft is validated on every change, so only emptiness can refuse here; no snapshot is taken (CORE-05).
     if ((request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") &&
         !this.actions.summary().presets.length) return refusal("invalid_value", COLLECTION_MESSAGE);
@@ -340,6 +343,8 @@ export class CollectionService {
             json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection))
               : this.model.parts.writeMinimal(collection), null, 2) };
           const kept = storable ? "It was also saved to your library first."
+            : collection.presets.some(look => look.locked)
+            ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept."
             : "It wasn't saved to your library: it has parts the released XF Studio 0.1.0-alpha.1 can't read, and that version opens the same library. Your draft is kept.";
           message = plan ? `Build plan exported for the offline compiler; this is not an installable mod. ${kept}`
             : storable ? "Collection saved to your library and exported. Recipes and stable preset identities are included."
@@ -365,7 +370,8 @@ export class CollectionService {
         case "import": {
           // Either collection schema imports; parts of features this build lacks are kept.
           let collection: LookCollection;
-          try { collection = this.model.parts.readCollection(JSON.parse(request.text)); }
+          // A look this build cannot read is kept exactly as it came and locked; the others are editable.
+          try { collection = this.model.parts.readCollection(JSON.parse(request.text), false, "keep"); }
           catch (error) { throw new CollectionServiceError(error instanceof SyntaxError ? "invalid_json" : "invalid_collection",
             (error as Error).message); }
           this.actions!.dispatch({ kind: "collection.open", collection });
@@ -388,6 +394,8 @@ export class CollectionService {
 /** A look's parts with the live editor's recipe as its live-feature part (no parse; for dirty checks). */
 function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel,
   others?: Readonly<Record<string, unknown | undefined>>): Look["parts"] {
+  // A locked look is never written from the editor: its kept parts are what it holds.
+  if (look.locked) return look.parts;
   let parts = look.parts;
   if (look.parts[model.live] || recipe.layers.length) parts = { ...parts, [model.live]: model.parts.envelope(model.live, recipe) };
   if (!others) return parts;

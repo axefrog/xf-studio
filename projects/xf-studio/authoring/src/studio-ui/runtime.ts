@@ -29,6 +29,8 @@ export class Frame {
   get field() { return this.once("field", () => this.editor.selectedField()); }
   get revision() { return this.once("revision", () => this.editor.revision()); }
   get canUndo() { return this.once("canUndo", () => this.editor.canUndo()); }
+  /** Whether the selected look's eye makeup can be edited here (not when it was made with a newer XF Studio). */
+  get editable() { return this.once("editable", () => this.port.feature("eye-makeup").editable()); }
   get library() { return this.once("library", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
