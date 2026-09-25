@@ -13,6 +13,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
+
 ## 0.1.0-alpha.1
 
 ### New and improved
