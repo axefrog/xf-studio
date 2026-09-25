@@ -98,7 +98,7 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 - **Don't name the maintainer.** Documents in the repo describe the project, not a person. Use neutral phrasing ("the reference save", "the maintainer's reference character", "a supplied recipe") or state the fact without attribution. Git history already records who did what.
 - **Write current truth.** Update or replace stale statements; don't prepend dated diary paragraphs.
 - **Check links.** Run `python tools/check_links.py` before committing documentation changes; CI runs it on every push.
-- **No personal paths or identifiers.** The repository and site are public: no user-folder, save, Downloads or Temp paths, credentials or account identifiers. Use placeholders such as `PATH_TO_GAME` or `%USERPROFILE%`. `python tools/check_private_paths.py` enforces this in CI; run it before committing.
+- **No personal paths or identifiers.** The repository and site are public: no user-folder, save, Downloads or Temp paths, credentials or account identifiers. Use placeholders such as `PATH_TO_GAME` or `%USERPROFILE%`. `python tools/check_private_paths.py` enforces this in CI; run it before committing. Its patterns and test vectors live in `tools/private-data.json`, shared with the site's privacy check and the packaged-app content scan, so change them there.
 
 ## Sources, assets and repository hygiene
 
