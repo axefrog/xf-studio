@@ -25,7 +25,8 @@ test("the independent browser entry does not depend on legacy main or control mo
 });
 
 test("install detection keeps parsing pure and host access in its adapter", () => {
-  for (const name of ["install-detection", "mo2-instance", "install-detection-actions"]) {
+  for (const name of ["install-detection", "mo2-instance", "install-detection-actions", "framework-versions",
+    "mo2-placement", "pe-version"]) {
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
         /^(node:(?:fs|child_process|os)|\.\/(?:install-detection-host|install-detection-server|browser-|main$|scene|studio-ui))/);
