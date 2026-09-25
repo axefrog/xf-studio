@@ -4,7 +4,7 @@ Last reviewed **25 September 2026** by Claude (coordinator from 25 September; pr
 
 ## Summary
 
-XF Studio's eye-makeup editor works as a local prototype. Its Build derives the expanded eye plate from the player's own game and produces a verified **XF Eye Artistry** mod. **Nothing has been seen in the game yet.** A five-look test package is staged in MO2, and the maintainer will run the first in-game test after the desktop clean-machine trial. Brow, lash and hair colours in the preview now follow the game's decoded hair shader, pending in-game calibration. The first public alpha (MIT-licensed) is in release readiness. The R&D lab has Draft knowledge pages on materials/shaders, hair shading and the character-customisation file chain, plus tooling that decompiles game shaders into named HLSL.
+XF Studio's eye-makeup editor works as a local prototype. Its Build derives the expanded eye plate from the player's own game and produces a verified **XF Eye Artistry** mod. **Nothing has been seen in the game yet.** The six-board finish test package is staged in MO2 for the maintainer's first in-game test. Brow, lash and hair colours in the preview now follow the game's decoded hair shader, pending in-game calibration. The first public alpha (MIT-licensed) is in release readiness. The R&D lab has Draft knowledge pages on materials/shaders, hair shading and the character-customisation file chain, plus tooling that decompiles game shaders into named HLSL.
 
 ## What works (verified in code and tests)
 
@@ -30,7 +30,7 @@ Offline verification is not in-game proof. None of the following has runtime evi
 
 ## Waiting on the maintainer
 
-1. **First in-game test** (after the desktop Sandbox trial). The five-look XF Eye Artistry package is staged in the test profile: selector, Off/Matte/Metallic/Satin switching, finish look, clearing and persistence, plus brow/lash/hair captures for colour calibration. See the [validation card](validation.md#prepared-single-session-test-card). It needs a new manual save, because the test profile doesn't isolate saves.
+1. **First in-game test.** The [finish board](../experiments/016-finish-board/README.md) is staged in the test profile: selector, Off and board switching and clearing, flat finishes (Matte, Satin, Metallic, experimental Glossy), Shimmer, Colour-shifting against its control, blend steps and a metalness ramp, eyelid contact, save persistence, plus brow/lash/hair captures for colour calibration. See the board's test card and the [validation card](validation.md#prepared-single-session-test-card). It needs a new manual save, because the test profile doesn't isolate saves.
 2. **In-depth review of the new UI**, after which the legacy shell can be retired.
 
 ## Active direction
