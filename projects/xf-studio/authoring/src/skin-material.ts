@@ -201,8 +201,6 @@ uniform vec4 xfsSkinScalars;
 uniform vec2 xfsMicroScale;
 uniform vec2 xfsRoughnessBias;
 uniform vec2 xfsSecondaryParams;
-uniform vec3 xfsLobes;
-uniform vec3 xfsWrap;
 uniform float xfsNormalFlipY;
 vec3 xfsUnpackRG( const in vec4 texel ) {
 	vec2 xy = texel.xy * 2.0 - 1.0;
@@ -259,6 +257,8 @@ vec3 xfsTangentNormal = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsN.x, xfs
 
 /** The skin light: two specular lobes and a wrapped Burley diffuse (appended after `lights_physical_pars_fragment`). */
 const LIGHT = /* glsl */`
+uniform vec3 xfsLobes;
+uniform vec3 xfsWrap;
 #ifdef USE_ENVMAP
 vec3 xfsSkinIBL( const in vec3 viewDir, const in vec3 normal, const in float roughness ) {
 	return ( getIBLRadiance( viewDir, normal, clamp( roughness * xfsLobes.x, 0.0525, 1.0 ) ) +
@@ -292,23 +292,45 @@ void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geomet
 
 const IBL_CALL = "vec3 iblRadiance = getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );";
 
+const replaceChunk = (what: string) => (source: string, find: string, by: string) => {
+  if (!source.includes(find)) throw Error(`The ${what} shader expects ${find} in this Three.js build.`);
+  return source.replace(find, by);
+};
+
+/**
+ * Light a `MeshStandardMaterial` fragment program with the skin light (uniforms `xfsLobes`, `xfsWrap`): the two profile
+ * lobes, the wrapped Burley diffuse and the two-lobe image-based light. Decals over the skin use it too, because a
+ * post-G-buffer decal never changes the pixel's lighting class: makeup on skin is still lit as skin
+ * (knowledge/materials-and-shaders.md §2.4). Throws when this Three.js build lacks an expected chunk.
+ */
+export function patchSkinLight(fragment: string, chunks: Record<string, string> = THREE.ShaderChunk as unknown as Record<string, string>,
+  what = "skin"): string {
+  const replace = replaceChunk(what);
+  const iblChunk = chunks.lights_fragment_maps ?? "";
+  if (!iblChunk.includes(IBL_CALL)) throw Error(`The ${what} shader expects the image-based radiance call in this Three.js build.`);
+  fragment = replace(fragment, "#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>\n${LIGHT}`);
+  return replace(fragment, "#include <lights_fragment_maps>",
+    iblChunk.replace(IBL_CALL, "vec3 iblRadiance = xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness );"));
+}
+
+/** Uniform values for the skin light from a skin's parameters. */
+export const skinLightUniforms = (parameters: Pick<SkinParameters, "lobes" | "wrap">) => ({
+  xfsLobes: { value: new THREE.Vector3(parameters.lobes.roughness0, parameters.lobes.roughness1, parameters.lobes.weight) },
+  xfsWrap: { value: new THREE.Vector3(...parameters.wrap) },
+});
+
 /** Patch a `MeshStandardMaterial` program for the skin; throws when this Three.js build lacks an expected chunk. */
 export function patchSkinShader(shader: { vertexShader: string; fragmentShader: string }, chunks: Record<string, string> = THREE.ShaderChunk as unknown as Record<string, string>) {
-  const replace = (source: string, find: string, by: string) => {
-    if (!source.includes(find)) throw Error(`The skin shader expects ${find} in this Three.js build.`);
-    return source.replace(find, by);
-  };
+  const replace = replaceChunk("skin");
   const iblChunk = chunks.lights_fragment_maps ?? "";
   if (!iblChunk.includes(IBL_CALL)) throw Error("The skin shader expects the image-based radiance call in this Three.js build.");
   let fragment = shader.fragmentShader;
   fragment = replace(fragment, "#include <common>", `#include <common>\n${DECLARATIONS}`);
-  fragment = replace(fragment, "#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>\n${LIGHT}`);
+  fragment = patchSkinLight(fragment, chunks);
   fragment = replace(fragment, "#include <map_fragment>", SURFACE);
   fragment = replace(fragment, "#include <roughnessmap_fragment>", "float roughnessFactor = xfsRoughnessValue;");
   fragment = replace(fragment, "#include <metalnessmap_fragment>", "float metalnessFactor = xfsR.y;");
   fragment = replace(fragment, "#include <normal_fragment_maps>", "normal = normalize( tbn * xfsTangentNormal );");
-  fragment = replace(fragment, "#include <lights_fragment_maps>",
-    iblChunk.replace(IBL_CALL, "vec3 iblRadiance = xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness );"));
   shader.fragmentShader = fragment;
   return shader;
 }
@@ -328,8 +350,7 @@ export function createSkinMaterial(textures: SkinTextures, parameters: SkinParam
     xfsMicroScale: { value: new THREE.Vector2(...parameters.microDetailUVScale) },
     xfsRoughnessBias: { value: new THREE.Vector2(...parameters.detailRoughnessBias) },
     xfsSecondaryParams: { value: new THREE.Vector2(parameters.secondaryInfluence, parameters.secondaryTintInfluence) },
-    xfsLobes: { value: new THREE.Vector3(parameters.lobes.roughness0, parameters.lobes.roughness1, parameters.lobes.weight) },
-    xfsWrap: { value: new THREE.Vector3(...parameters.wrap) },
+    ...skinLightUniforms(parameters),
     xfsNormalFlipY: { value: -1 },
   };
   material.onBeforeCompile = shader => {

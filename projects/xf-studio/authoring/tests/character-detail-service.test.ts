@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
-import { detailFixture, eyeRequest, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -50,10 +50,10 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-3");
+    expect(record.schema).toBe("xfs/render-detail-4");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
-    expect(record.components.map(c => c.slot)).toEqual(["skin", "brows", "lashes", "hair", "eyes"]);
+    expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes"]);
     const hair = record.components.find(c => c.slot === "hair")!;
     expect(hair.chunks).toEqual([0, 1]);
     expect(hair.geometry.depotPath).toBe(P.hairMesh);
@@ -75,9 +75,10 @@ describe("character record from the resolver", () => {
   test("an export failure empties only the affected slot, with one plain line", async () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
-    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable", "unavailable"]);
+    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable", "unavailable", "unavailable"]);
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
-    expect(record.slots[3]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
+    expect(record.slots[1]!.message).toBe("WolvenKit couldn't read your V's face details from your game files, so they aren't shown.");
+    expect(record.slots[4]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
     const b = await prepare(REQUEST_B);
     expect(b.record.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
   });
@@ -311,6 +312,47 @@ describe("host preparation", () => {
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
-    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
   });
+});
+
+describe("face details in the record", () => {
+  test("each decal chunk carries its template's own name and priority, read from the template the chain ends at", async () => {
+    const { record } = await prepare(REQUEST_B);
+    const face = record.components.filter(c => c.slot === "face");
+    expect(face.map(c => c.option)).toEqual(["skin_type_03", "makeupCheeks_01", "facial_tattoo_02", "cyberware_01", "pack_liner"]);
+    // Vanilla templates without a stored name fall back to their path; the pack's copy names itself.
+    expect(face.at(-1)!.materials[0]).toMatchObject({ template: P.packFrontMt, templateName: "mesh_decal", materialPriority: "EMP_Front" });
+    expect(face[1]!.materials[0]).toMatchObject({ template: P.meshDecalMt, templateName: null, materialPriority: "EMP_Normal" });
+    // The emissive chunk is recorded (no inputs) so the renderer can report it; the cyberware's decal draws beside it.
+    expect(face[3]!.materials.map(m => [m.chunk, m.template, Object.keys(m.textures).length > 0])).toEqual([[0, P.meshDecalMt, true], [1, P.emissiveMt, false]]);
+    expect(face[1]!.materials[0]!.textures.DiffuseTexture).toMatchObject({ depotPath: P.frecklesD, isGamma: true });
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
+  });
+
+  test("one face detail that can't be read leaves the others shown, with one plain line", async () => {
+    const { record } = await prepare(REQUEST_B, fakeExporter({ failArchive: "fixture_pack" }));
+    expect(record.components.filter(c => c.slot === "face").map(c => c.option)).toEqual(["skin_type_03", "makeupCheeks_01", "facial_tattoo_02", "cyberware_01"]);
+    expect(record.slots.find(s => s.slot === "face")).toMatchObject({ state: "shown",
+      message: "Some of your V's face details couldn't be read from your game files, so not all of them are shown." });
+  });
+
+  test("templateIdentity reads a template's name and priority; an absent priority is the engine's default", () => {
+    expect(templateIdentity({ $type: "CMaterialTemplate", name: { $type: "CName", $storage: "string", $value: "mesh_decal" }, materialPriority: "EMP_Front" }))
+      .toEqual({ name: "mesh_decal", priority: "EMP_Front" });
+    expect(templateIdentity({ $type: "CMaterialTemplate" })).toEqual({ name: null, priority: "EMP_Normal" });
+    expect(templateIdentity({ $type: "CMaterialInstance" })).toEqual({ name: null, priority: null });
+    expect(templateIdentity(null)).toEqual({ name: null, priority: null });
+  });
+});
+
+test("two face choices drawing one shared mesh are two components with their own identities", async () => {
+  const both = { ...REQUEST_A, appearances: [...(REQUEST_A.source === "save" ? REQUEST_A.appearances : []),
+    { group: "face", option: "makeupCheeks_01", app: depotHash(P.frecklesApp), definition: FACE.frecklesBrown }] } as typeof REQUEST_A;
+  const { record } = await prepare(both);
+  const shared = record.components.filter(c => c.component === "hx_freckles");
+  expect(shared.map(c => c.option)).toEqual(["makeupCheeks_05", "makeupCheeks_01"]);
+  expect(new Set(shared.map(c => c.id)).size).toBe(2);
+  expect(shared[0]!.geometry.file).toBe(shared[1]!.geometry.file);
+  expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
 });

@@ -9,6 +9,8 @@
  * - `eye-design`: the eye colour is a layered (`multilayered.mt`) design the preview does not draw yet; the default
  *   eye is shown in its place, with the chosen eye's wetness.
  * - `layered-material`: another part made of layered materials is not drawn yet.
+ * - `decal-template`: a face detail uses a decal material (a `mesh_decal` family member such as the emissive or parallax
+ *   decal) the preview does not draw yet; that part is left out.
  */
-export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material"] as const;
+export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "decal-template"] as const;
 export type DetailLimit = typeof DETAIL_LIMITS[number];

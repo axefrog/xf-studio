@@ -9,6 +9,10 @@
 // texture-only eye, a layered design and a chunk-swapped (male-order) gradient eye; its morph target binds a flat
 // normal to `Normal`, and an ArchiveXL-style fix copy clears that for the app's "mod" appearance, which a
 // CCXL-style pack's colour is built from (a CCO on the eye slot, a patch mesh with an `@eyes` template and soft paths).
+// Face details: a lipstick behind an Off/style switcher, blush and freckles on one two-chunk mesh, a tattoo whose colour
+// follows the skin tone, face cyberware whose second chunk is an emissive decal the preview doesn't draw yet, the skin type's
+// personal-link decal (skin type 3), and a CCXL-style makeup option on a slot of its own whose material derives from a copy of
+// `mesh_decal.mt` at the pack's own path (named `mesh_decal`, priority `EMP_Front`), added to the `face` group.
 // No private save, game file or real mod name is used.
 import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
@@ -50,7 +54,24 @@ export const P = {
   editorNormal: "engine\\textures\\editor\\normal.xbm", fixMorph: "archive_xl\\fixture\\he_morphs_normal_fix.morphtarget",
   nullMorph: "archive_xl\\common\\null.morphtarget", packCco: "fixture_pack\\eyes.inkcharcustomization",
   packPatch: "fixture_pack\\eyes_patch.mesh", packD: "fixture_pack\\tex\\pack_eye_01_d.xbm", packN: "fixture_pack\\tex\\pack_eye_01_n.xbm",
+  meshDecalMt: "base\\materials\\mesh_decal.mt", emissiveMt: "base\\materials\\mesh_decal_emissive.mt",
+  lipsApp: "base\\fixture\\makeup_lips_05.app", lipsMorph: "base\\fixture\\hx_lips_morphs.morphtarget", lipsMesh: "base\\fixture\\hx_lips.mesh",
+  lipsD: "base\\fixture\\tex\\hx_lips_d05.xbm", lipsRedMi: "base\\fixture\\makeup\\lips_color__red.mi",
+  cheeksApp: "base\\fixture\\makeup_cheeks_05.app", frecklesApp: "base\\fixture\\makeup_freckles_01.app",
+  freckMorph: "base\\fixture\\hx_freckles_morphs.morphtarget", freckMesh: "base\\fixture\\hx_freckles.mesh",
+  cheeksD: "base\\fixture\\tex\\hx_cheeks_d05.xbm", frecklesD: "base\\fixture\\tex\\hx_freckles_d01.xbm",
+  tattooApp: "base\\fixture\\tattoo_02.app", tattooMorph: "base\\fixture\\hx_tattoo_02_morphs.morphtarget", tattooMesh: "base\\fixture\\hx_tattoo_02.mesh",
+  tattooD: "base\\fixture\\tex\\hx_tattoo_02_d.xbm",
+  cyberApp: "base\\fixture\\cyberware.app", cyberMorph: "base\\fixture\\hx_cyberware_01_morphs.morphtarget", cyberMesh: "base\\fixture\\hx_cyberware_01.mesh",
+  cyberD: "base\\fixture\\tex\\hx_cyberware_01_d.xbm", cyberN: "base\\fixture\\tex\\hx_cyberware_01_n.xbm",
+  linkMorph: "base\\fixture\\hx_personal_link_morphs.morphtarget", linkMesh: "base\\fixture\\hx_personal_link.mesh",
+  packLinerApp: "fixture_pack\\liner.app", packLinerMorph: "fixture_pack\\liner.morphtarget", packLinerMesh: "fixture_pack\\liner.mesh",
+  packLinerD: "fixture_pack\\tex\\liner_d.xbm", packFrontMt: "fixture_pack\\materials\\mesh_decal_front.mt",
 } as const;
+/** Face-detail definitions, as the vanilla creator names them. */
+export const FACE = { lipsRed: "hx_000_pwa__basehead__makeup_lips_05__06_red", cheeksRed: "hx_000_pwa__morphs_makeup_freckles_01__03_red",
+  frecklesBrown: "hx_000_pwa__morphs_makeup_freckles_01__03_light_brown", tattooSenna: "hx_000_pwa__tattoo_02__03_ca_senna",
+  cyberSenna: "hx_000_pwa__cyberware_01__03_ca_senna", packLiner: "pack_liner_black" } as const;
 /** The eye colour's chunk mask: every chunk but the lashes (chunk 0). */
 export const EYE_MASK = "18446744073709551614";
 /** Skin tone definitions, as the vanilla creator names them. */
@@ -65,6 +86,9 @@ const stop = (value: number, r: number, g: number, b: number) => ({ $type: "rend
 const profile = (tip: number) => cr2w({ $type: "CHairProfile", sampleCount: 127,
   gradientEntriesID: [stop(0.2, 120, 120, 120), stop(0.8, 140, 140, 140)], gradientEntriesRootToTip: [stop(0, 20, 12, 8), stop(1, tip, 60, 40)] });
 const template = (params: object[]) => cr2w({ $type: "CMaterialTemplate", parameters: { Elements: [[], params.map(data => handle(data))] } });
+/** A template with its own name and priority (what a copied `.mt` keeps). */
+const namedTemplate = (name: string, priority: string, params: object[]) =>
+  cr2w({ $type: "CMaterialTemplate", name: cn(name), materialPriority: priority, parameters: { Elements: [[], params.map(data => handle(data))] } });
 const tParam = (name: string, path: string) => ({ $type: "CMaterialParameterTexture", parameterName: cn(name), texture: rp(path) });
 const sParam = (name: string, value: number) => ({ $type: "CMaterialParameterScalar", parameterName: cn(name), scalar: value });
 const hParam = (name: string, path: string) => ({ $type: "CMaterialParameterHairParameters", parameterName: cn(name), hairProfile: rp(path) });
@@ -97,27 +121,71 @@ const lodMesh = (spec: Parameters<typeof mesh>[0], lods: number[]) => {
   return doc;
 };
 
-const option = (name: string, resource: string | null, definitions: string[], uiSlot: string, enabled = 1, hidden = 0) =>
-  appearanceOption(name, resource, definitions, { uiSlot, enabled, hidden });
+const option = (name: string, resource: string | null, definitions: string[], uiSlot: string, enabled = 1, hidden = 0, link = "None") =>
+  appearanceOption(name, resource, definitions, { uiSlot, enabled, hidden, link });
+const FACE_TARGETS: [string, string][] = [["h011", "eyes"], ["h012", "nose"]];
+/** The 2.31 `mesh_decal.mt` defaults the family reads (all three target alphas 0). */
+const MESH_DECAL_PARAMS = () => [tParam("DiffuseTexture", P.grey), cParam("DiffuseColor", 255, 255, 255), sParam("DiffuseAlpha", 0),
+  tParam("SecondaryMask", P.white), sParam("SecondaryMaskInfluence", 0), tParam("NormalTexture", P.editorNormal), sParam("NormalAlpha", 0),
+  tParam("NormalAlphaTex", P.white), sParam("UseNormalAlphaTex", 0), sParam("NormalsBlendingMode", 0), tParam("RoughnessTexture", P.white),
+  tParam("MetalnessTexture", P.black), sParam("RoughnessMetalnessAlpha", 0)];
 
 export function detailFixture(options: { skinPatch?: boolean } = {}): { archives: FixtureArchive[]; installation: () => Installation } {
   const base: FixtureArchive = { virtualPath: "archive/pc/content/basegame_fixture.archive", files: {
     [P.cco]: cco([
       switcherOption("skin_type", [["01", ["skin_type_01"]], ["03", ["skin_type_03"]]]),
-      option("skin_type_01", P.skinApp1, [TONES.pale, TONES.ivory, TONES.senna], "skin_type"),
-      option("skin_type_03", P.skinApp3, [TONES.pale, TONES.ivory, TONES.senna], "skin_type"),
+      option("skin_type_01", P.skinApp1, [TONES.pale, TONES.ivory, TONES.senna], "skin_type", 1, 0, "skin color"),
+      option("skin_type_03", P.skinApp3, [TONES.pale, TONES.ivory, TONES.senna], "skin_type", 1, 0, "skin color"),
       option("eyebrows_color1", P.browApp1, ["brown"], "eyebrows_color"),
       option("eyebrows_color2", P.browApp2, ["dark"], "eyebrows_color", 0),
       option("eyelash_color", P.lashApp, ["brown"], "eyelash_color"),
       option("hair_color1", P.hairApp, ["brown"], "hair_color"),
       option("hair_color_fpp_01", P.hairFppApp, ["default"], "hair_color_fpp", 1, 1),
       option("eyes_color", P.eyeApp, ["gradient_blue", "texture_blue", "layered_design", "swapped_blue"], "eyes_color"),
-    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color"], hairs: ["hair_color1"],
+      switcherOption("makeupLips", [["Off", ["makeupLips_none_00"]], ["05", ["makeupLips_05"]]]),
+      option("makeupLips_none_00", null, ["None"], "makeupLips_color", 0),
+      option("makeupLips_05", P.lipsApp, [FACE.lipsRed], "makeupLips_color", 0),
+      option("makeupCheeks_05", P.cheeksApp, [FACE.cheeksRed], "makeupCheeks_color", 0),
+      option("makeupCheeks_01", P.frecklesApp, [FACE.frecklesBrown], "makeupCheeks_color", 0),
+      option("facial_tattoo_02", P.tattooApp, ["hx_000_pwa__tattoo_02__01_ca_pale", FACE.tattooSenna], "facial_tattoo", 0, 1, "skin color"),
+      option("cyberware_01", P.cyberApp, ["hx_000_pwa__cyberware_01__01_ca_pale", FACE.cyberSenna], "cyberware", 0, 1, "skin color"),
+    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02"],
+      face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
         "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }),
     // Skin: the type's .app names the tone's mesh appearance on the one head morph component (plus a part the preview doesn't draw).
     [P.skinApp1]: app(toneAppearances("").map(entry => ({ ...entry, components: [...entry.components, meshComponent("seam_fix", P.shadowMesh)] }))),
-    [P.skinApp3]: app(toneAppearances("_d03")),
+    // Skin type 3 also brings the personal-link decal, as every vanilla skin type does.
+    [P.skinApp3]: app(toneAppearances("_d03").map(entry => ({ ...entry, components: [...entry.components, morphComponent("personal_link", P.linkMorph, "personal_link")] }))),
+    [P.linkMorph]: morphtarget(P.linkMesh, 1, FACE_TARGETS),
+    [P.linkMesh]: mesh({ appearances: [{ name: "personal_link", chunkMaterials: ["personal_slot"] }], entries: [{ name: "personal_slot", local: true, index: 0 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.cyberD), scalar("DiffuseAlpha", 1), tex("MetalnessTexture", P.white), scalar("RoughnessMetalnessAlpha", 0.5)])] }),
+    // Face details.
+    [P.meshDecalMt]: template(MESH_DECAL_PARAMS()), [P.emissiveMt]: template([]),
+    [P.lipsApp]: app([{ name: FACE.lipsRed, components: [morphComponent("hx_lips", P.lipsMorph, "red_05")] }]),
+    [P.lipsMorph]: morphtarget(P.lipsMesh, 1, FACE_TARGETS),
+    [P.lipsMesh]: mesh({ appearances: [{ name: "red_05", chunkMaterials: ["red_05"] }], entries: [{ name: "red_05", local: false, index: 0 }], external: [P.lipsRedMi] }),
+    [P.lipsRedMi]: mi(P.meshDecalMt, [tex("DiffuseTexture", P.lipsD), colour("DiffuseColor", 106, 40, 40), scalar("DiffuseAlpha", 0.4), scalar("NormalsBlendingMode", 1)]),
+    [P.cheeksApp]: app([{ name: FACE.cheeksRed, components: [morphComponent("hx_freckles", P.freckMorph, "cheeks_red_05")] }]),
+    [P.frecklesApp]: app([{ name: FACE.frecklesBrown, components: [morphComponent("hx_freckles", P.freckMorph, "freckles_brown_01")] }]),
+    [P.freckMorph]: morphtarget(P.freckMesh, 2, FACE_TARGETS),
+    [P.freckMesh]: mesh({ appearances: [{ name: "cheeks_red_05", chunkMaterials: ["cheeks", "cheeks_nose"] }, { name: "freckles_brown_01", chunkMaterials: ["freckles", "freckles_nose"] }],
+      entries: [{ name: "cheeks", local: true, index: 0 }, { name: "cheeks_nose", local: true, index: 0 }, { name: "freckles", local: true, index: 1 }, { name: "freckles_nose", local: true, index: 1 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.cheeksD), colour("DiffuseColor", 186, 20, 40), scalar("DiffuseAlpha", 2)]),
+        instance(P.meshDecalMt, [tex("DiffuseTexture", P.frecklesD), colour("DiffuseColor", 97, 63, 48), scalar("DiffuseAlpha", 0.3)])] }),
+    [P.tattooApp]: app(["hx_000_pwa__tattoo_02__01_ca_pale", FACE.tattooSenna].map(name => ({ name, components: [morphComponent("hx_tattoo", P.tattooMorph, name.split("__").pop()!)] }))),
+    [P.tattooMorph]: morphtarget(P.tattooMesh, 1, FACE_TARGETS),
+    [P.tattooMesh]: mesh({ appearances: [{ name: "01_ca_pale", chunkMaterials: ["ink_pale"] }, { name: "03_ca_senna", chunkMaterials: ["ink_senna"] }],
+      entries: [{ name: "ink_pale", local: true, index: 0 }, { name: "ink_senna", local: true, index: 1 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.tattooD), colour("DiffuseColor", 216, 204, 191), scalar("DiffuseAlpha", 0.7)]),
+        instance(P.meshDecalMt, [tex("DiffuseTexture", P.tattooD), colour("DiffuseColor", 119, 115, 110), scalar("DiffuseAlpha", 0.6)])] }),
+    [P.cyberApp]: app(["hx_000_pwa__cyberware_01__01_ca_pale", FACE.cyberSenna].map(name => ({ name, components: [morphComponent("hx_cyberware", P.cyberMorph, "cyberware_01")] }))),
+    [P.cyberMorph]: morphtarget(P.cyberMesh, 2, FACE_TARGETS),
+    [P.cyberMesh]: mesh({ appearances: [{ name: "cyberware_01", chunkMaterials: ["plate", "glow"] }],
+      entries: [{ name: "plate", local: true, index: 0 }, { name: "glow", local: true, index: 1 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.cyberD), scalar("DiffuseAlpha", 1), tex("NormalTexture", P.cyberN), scalar("NormalAlpha", 0.425),
+        scalar("NormalsBlendingMode", 1), scalar("RoughnessMetalnessAlpha", 1)]), instance(P.emissiveMt, [tex("DiffuseTexture", P.cyberD)])] }),
+    [P.lipsD]: xbm(true), [P.cheeksD]: xbm(true), [P.frecklesD]: xbm(true), [P.tattooD]: xbm(true), [P.cyberD]: xbm(true), [P.cyberN]: xbm(false),
     [P.headMorph]: morphtarget(P.headMesh, 1, [["h011", "eyes"], ["h012", "nose"]]),
     [P.headMesh]: mesh({ appearances: [
         { name: "01_ca_pale", chunkMaterials: ["pale"] }, { name: "01_ca_pale_00_warm_ivory", chunkMaterials: ["ivory"] },
@@ -203,7 +271,16 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
   // A CCXL-style eye pack: one colour on the eye slot, built from the app's "mod" appearance, its patch mesh's
   // `@eyes` template naming soft texture paths from the colour's name.
   const pack: FixtureArchive = { virtualPath: "archive/pc/mod/fixture_pack.archive", provider: "mo2-mod", providerName: "Fixture eye pack", priority: 3, files: {
-    [P.packCco]: cco([appearanceOption("", null, ["pack_eye_01"], { uiSlot: "eyes_color" })], {}),
+    [P.packCco]: cco([appearanceOption("", null, ["pack_eye_01"], { uiSlot: "eyes_color" }),
+      appearanceOption("pack_liner", P.packLinerApp, [FACE.packLiner], { uiSlot: "pack_liner", enabled: 0 })], { face: ["pack_liner"] }),
+    [P.packLinerApp]: app([{ name: FACE.packLiner, components: [morphComponent("pack_liner", P.packLinerMorph, "black")] }]),
+    [P.packLinerMorph]: morphtarget(P.packLinerMesh, 1, FACE_TARGETS),
+    [P.packLinerMesh]: mesh({ appearances: [{ name: "black", chunkMaterials: ["liner"] }], entries: [{ name: "liner", local: true, index: 0 }],
+      local: [instance(P.packFrontMt, [tex("DiffuseTexture", P.packLinerD), colour("DiffuseColor", 20, 20, 20), scalar("DiffuseAlpha", 1),
+        scalar("RoughnessMetalnessAlpha", 1)])] }),
+    // A copy of the vanilla decal template at the pack's own path: same name (so the same programs), front priority.
+    [P.packFrontMt]: namedTemplate("mesh_decal", "EMP_Front", MESH_DECAL_PARAMS()),
+    [P.packLinerD]: xbm(true),
     [P.packPatch]: mesh({ appearances: [{ name: "pack_eye_01", chunkMaterials: [], tags: ["blood_gradient_black"] }],
       entries: [{ name: "@eyes", local: true, index: 0 }],
       local: [instance(P.eyeMt, [tex("Albedo", "*fixture_pack\\tex\\{material}_d.xbm"), tex("Normal", "*fixture_pack\\tex\\{material}_n.xbm")])] }),
@@ -246,13 +323,22 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
 const saved = (items: [string, string, string, string][]): CharacterRequest => ({ schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: "female",
   appearances: items.map(([group, option, path, definition]) => ({ group, option, app: depotHash(path), definition })),
   morphs: [{ group: "TPP", region: "nose", target: "h012" }] });
-/** V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group), the gradient blue eye. */
+/**
+ * V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group), the gradient blue eye, red lipstick
+ * and red blush (listed in the creator group too, as saves repeat them).
+ */
 export const REQUEST_A = saved([["TPP", "skin_type_01", P.skinApp1, TONES.pale], ["TPP", "eyebrows_color1", P.browApp1, "brown"],
   ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "gradient_blue"],
   ["hairs", "hair_color1", P.hairApp, "brown"], ["FPP_hairs", "hair_color_fpp_01", P.hairFppApp, "default"],
-  ["character_customization", "eyebrows_color1", P.browApp1, "brown"]]);
-/** V "B": skin type 3 in senna, the mod's brow style, lashes, no hair at all, and the eye pack's colour. */
+  ["character_customization", "eyebrows_color1", P.browApp1, "brown"], ["character_customization", "makeupLips_05", P.lipsApp, FACE.lipsRed],
+  ["face", "makeupLips_05", P.lipsApp, FACE.lipsRed], ["face", "makeupCheeks_05", P.cheeksApp, FACE.cheeksRed]]);
+/**
+ * V "B": skin type 3 in senna (with its personal-link decal), the mod's brow style, lashes, no hair at all, the eye pack's colour,
+ * freckles, a tattoo and face cyberware in the senna tone, and the pack's own makeup option.
+ */
 export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna], ["TPP", "eyebrows_color2", P.browApp2, "dark"],
-  ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "pack_eye_01"]]);
+  ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "pack_eye_01"],
+  ["face", "makeupCheeks_01", P.frecklesApp, FACE.frecklesBrown], ["TPP", "facial_tattoo_02", P.tattooApp, FACE.tattooSenna],
+  ["face", "cyberware_01", P.cyberApp, FACE.cyberSenna], ["face", "pack_liner", P.packLinerApp, FACE.packLiner]]);
 /** A save-shaped request for one eye colour alone (the other slots none). */
 export const eyeRequest = (definition: string) => saved([["TPP", "eyes_color", P.eyeApp, definition]]);

@@ -157,6 +157,23 @@ Browser check of step P1 at `?verify=1`, MO2 profile `2025 (again)` (1,079 mount
 
 On the MO2 route every V also resolves the Face Details package's normal (4096²), its new-path roughness (1024²) and detail normal (2048²), the Microdetails package's `microdetail_n.xbm` (1024×512, the two-tile atlas), and the texture framework's secondary albedo, emissive mask (`EmissiveEV` 2) and tint mask (all 1024², `isGamma` set) [resource]. The base game's own tint mask (512²) is also `isGamma` [resource]. The head's morph target wins from `zz_FacialCustomizationFix_xBaebsae.archive`; its export matches the core head's positions, UVs, triangles and all facial morph targets, so the preview draws the resolved skin on the core head. Preparation: 35 s for the first V (cold texture exports), 7–15 s for the saves. Switching reference → new-game → reference restored the reference record byte for byte (same content address).
 
+## Rank 2 check: the face decals (26 September 2026)
+
+**Template survey.** On the MO2 profile `2025 (again)` (1,079 mounted archives, WolvenKit CLI 9.0.1), the resolver resolved one definition of every vanilla female face-decal option (all 13 scar choices; 222 descriptors; every appearance `defined`). Chunk templates: eye makeup 36 options → 36 `mesh_decal` chunks; lipstick 114 style options → 78 `mesh_decal` and 36 `mesh_decal_double_diffuse`; cheeks 24 → 48 `mesh_decal` (face and nose); pimples 3 → 4; scars → 13; facial tattoos 15 (+ the legacy `tattoo`) → 19; face cyberware 16 → 26. No other template occurs [resource]. Scars write normals at `NormalAlpha` 0.2–1 in mode 1 with surface alpha 0.02 (scar 3: 0.5) and colour alpha 0.1–0.45; glossy lip styles 21–38 add a white metalness map at surface alpha 0.05; matte styles write white roughness at 0.35–0.4 [resource].
+
+**Template identity.** The base game's `base\materials\mesh_decal.mt` (winning archive `ep1_1_nightcity.archive`, extracted SHA-256 `b1b181b7…`) and the legacy XF selectors' `base\axefrog\xf-eye-artistry-ccxl\materials\mesh_decal__emp_front.mt` differ in exactly one root field, `materialPriority` (`EMP_Normal` against `EMP_Front`); both have `name = mesh_decal` [resource]. `EMaterialPriority` is `EMP_Normal` 0, `EMP_Front` 1 (WolvenKit `WolvenKit.RED4/Types/Enums/cp77enums.cs`, local clone at `11720772`) [source]. `mesh_decal_double_diffuse.mt` has the same output structure as `mesh_decal`; its register order (`DiffuseTexture` 0, `DiffuseColor` 1, `DiffuseAlpha` 2 … `RoughnessTexture` 24–26, `MetalnessTexture` 27–29, `AlphaMaskContrast` 30, `RoughnessMetalnessAlpha` 31) matches the reads of pixel program `8834363738920290566` [source]. The installed shader cache index lists no `mesh_decal_normal` template.
+
+**Browser check** at `?verify=1` (headless Chrome with a GPU, throwaway profile, disposable server data), same profile and tool. Records stay in the ignored preview cache; screenshots stay in the ignored data folder.
+
+| V | Face details the record shows | Notes |
+|---|---|---|
+| Default | personal link | The only decal a default V wears; drawn from the skin type's appearance |
+| Reference save | personal link; `makeupLips_glossy_08` red (`mesh_decal`, colour 106,40,40, `DiffuseAlpha` 0.4, no surface write); `makeupCheeks_09` red blush (both chunks, `DiffuseAlpha` 2); the three legacy XF selectors (`EMP_Front` ×2 and one `EMP_Normal`) from their CCXL archive | First cold preparation 83 s (texture exports), later 8 s |
+| Save B | personal link; `makeupCheeks_02` light-brown freckles (both chunks, 0.5); `makeupPimples_03` brown (both chunks) | 18 s cold |
+| Test V (save B in memory, verify workspace only) | adds `cyberware_03` (the freckle mesh's `cyberware_04` appearance, two chunks, full normal/metal write), scar 3, tattoo 2, eye makeup 05 black | 10 s |
+
+Each decal vertex's nearest drawn-head vertex lies 0.40–0.41 mm away for the eye-makeup, lip, freckle, pimple and cyberware meshes, 0.52 mm for the personal link, 0.31 mm for the scar mesh and 0.21 mm for tattoo 2 [resource, measured on the export]. Default → reference → B → reference restored the reference record byte for byte. Checked under the Studio and Character creator lighting presets and in dark and light themes. Only console message: a D3D compiler precision warning about the constant 255/256, which comes from Three.js's own packing code, not from the decal program.
+
 ## Modding Docs pages and images consulted
 
 Clone `be2f44ee`; paths relative to the clone. Editor and wiki illustrations, not runtime proof.

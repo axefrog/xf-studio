@@ -5,7 +5,10 @@ import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECA
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
 import type { DetailSlot, RenderChunkMaterial } from "./render-detail";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
-import { createSkinMaterial, skinBaseTexels, skinParameters, type SkinImage, type SkinMaterialHandle, type SkinTexels } from "./skin-material";
+import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
+  type SkinTexels } from "./skin-material";
+import { createFaceDecalMaterial, faceDecalParameters, type FaceDecalHandle } from "./face-decal-material";
+import type { DecalSurfaceUnderlay } from "./head-skin-placement";
 import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, IRIS_MASK_ENCODING, shellParameters, type EyeHandle } from "./eye-material";
 import type { DetailLimit } from "./detail-limits";
 
@@ -35,18 +38,26 @@ export type AdapterContext = {
    * the colour is read on whichever head the scene draws (head-skin-placement.ts).
    */
   underlay?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => THREE.BufferAttribute;
+  /** Face details: the skin colour and roughness under each vertex of a decal mesh, read on the drawn head; throws when unavailable. */
+  surface?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => DecalSurfaceUnderlay;
   /** The resolved skin, when the skin was loaded first. */
   skin?: ResolvedSkinSurface;
   /** How hair profile stops are decoded (knowledge/hair-shading.md §3). */
   profileEncoding: ProfileEncoding;
 };
-/** The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser) and its head chunks. */
-export type ResolvedSkinSurface = { base: () => SkinTexels | null; chunks: readonly THREE.Mesh[] };
+/**
+ * The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser), its head chunks, and for
+ * face decals its effective roughness (bytes in channel 0) and its parameters (the skin light's lobes and wrap).
+ */
+export type ResolvedSkinSurface = { base: () => SkinTexels | null; chunks: readonly THREE.Mesh[];
+  roughness?: () => SkinTexels | null; parameters?: SkinParameters };
 export type AdaptedMaterial = { material: THREE.Material; owned: THREE.Texture[]; notes: string[];
   /** Why part of the chunk is not drawn, as codes the presentation words. */
   limits?: DetailLimit[];
-  /** The skin adapter's handle and its toned base colour for decals drawn over it. */
-  skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null };
+  /** The skin adapter's handle, its toned base colour and its effective roughness for decals drawn over it. */
+  skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null; roughness: () => SkinTexels | null };
+  /** A face decal's handle (its parameters, and the normals switch). */
+  decal?: FaceDecalHandle;
   /** The eye adapters' handle: its role (eyeball or wetness shell, from the template) and its switches. */
   eye?: EyeHandle;
   /** Recorded but not drawn yet (a placeholder template): the loader keeps the mesh hidden. */
@@ -78,7 +89,8 @@ export function texturePixels(texture: THREE.Texture | undefined, size: number):
   return { width, height, data: context.getImageData(0, 0, width, height).data };
 }
 
-const FLAT_NORMAL = [128, 128, 255, 255], BLACK = [0, 0, 0, 255], CLEAR = [0, 0, 0, 0];
+const FLAT_NORMAL = [128, 128, 255, 255], BLACK = [0, 0, 0, 255], CLEAR = [0, 0, 0, 0], WHITE = [255, 255, 255, 255];
+const srgbByte = (byte: number) => { const c = byte / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 /** Size of the skin colour image decals blend against (enough for per-vertex sampling). */
 const SKIN_BASE_SIZE = 1024;
 
@@ -127,7 +139,19 @@ const skinAdapter: MaterialAdapter = {
           mask: tintMask?.colorSpace === THREE.SRGBColorSpace }) : null;
       return base;
     };
-    return { material, owned, notes, limits, skin: { handle, base: baseImage } };
+    // The roughness the skin writes, for decals that keep it: R with the detail bias gated by B, at a mid microdetail term.
+    let rough: SkinTexels | null | undefined;
+    const roughnessImage = () => {
+      if (rough !== undefined) return rough;
+      const image = texturePixels(roughness, SKIN_BASE_SIZE);
+      const decode = (byte: number) => roughness.colorSpace === THREE.SRGBColorSpace ? srgbByte(byte) : byte / 255;
+      rough = image ? { width: image.width, height: image.height, texel: (x, y) => {
+        const at = (y * image.width + x) * 4;
+        return Math.round(skinRoughness(decode(image.data[at]!), decode(image.data[at + 2]!), parameters.detailRoughnessBias, 0.5) * 255);
+      } } : null;
+      return rough;
+    };
+    return { material, owned, notes, limits, skin: { handle, base: baseImage, roughness: roughnessImage } };
   },
 };
 
@@ -187,6 +211,60 @@ const doubleDiffuseDecal: MaterialAdapter = {
 };
 
 /**
+ * The face-detail decal family (face-decal-material.ts): `mesh_decal`, and on the face `mesh_decal_double_diffuse` and
+ * `mesh_decal_gradientmap_recolor`, from the chunk's own parameters. Every input is sampled through its resource's own
+ * `isGamma`, as the engine's sampler does; an optional input the record lacks falls back to the template's own default
+ * (white mask, flat normal, white roughness, black metalness). The decal blends in square-root space against the skin
+ * under it and is lit by the skin's own light when the resolved skin loaded first.
+ */
+const faceDecal: MaterialAdapter = {
+  id: "mesh-decal",
+  create(chunk, textures, mesh, context) {
+    const kind = renderTemplate(chunk.template, chunk.templateName)?.decal;
+    if (!kind) throw Error(`chunk ${chunk.chunk} is not a decal`);
+    const owned: THREE.Texture[] = [], notes: string[] = [];
+    const neutral = (rgba: number[]) => {
+      const texture = new THREE.DataTexture(new Uint8Array(rgba), 1, 1);
+      texture.needsUpdate = true;
+      owned.push(texture);
+      return texture;
+    };
+    const sampled = (parameter: string, wrap: TextureWrap = "repeat") => textures(parameter, "colour", wrap);
+    const diffuse = need(sampled("DiffuseTexture"), "DiffuseTexture", chunk);
+    const extra = kind === "double-diffuse"
+      ? { secondaryDiffuse: need(sampled("SecondaryDiffuseAlpha"), "SecondaryDiffuseAlpha", chunk), gradient: sampled("GradientMap", "clamp") ?? neutral(WHITE) }
+      : kind === "gradient-recolor"
+        ? { mask: need(sampled("MaskTexture"), "MaskTexture", chunk), gradient: need(sampled("GradientMap", "clamp"), "GradientMap", chunk) }
+        : {};
+    let underlay = false;
+    if (context.surface) {
+      try {
+        const under = context.surface(mesh, context.skin ?? null);
+        mesh.geometry.setAttribute("xfsUnderlay", under.colour);
+        mesh.geometry.setAttribute("xfsUnderRoughness", under.roughness);
+        underlay = true;
+      } catch (error) { notes.push(`linear decal blend (${(error as Error).message})`); }
+    }
+    if (!context.skin?.parameters) notes.push("lit as a standard surface (no resolved skin light)");
+    const made = createFaceDecalMaterial({ diffuse, ...extra,
+      secondaryMask: sampled("SecondaryMask") ?? neutral(WHITE), normal: sampled("NormalTexture") ?? neutral(FLAT_NORMAL),
+      normalAlpha: sampled("NormalAlphaTex") ?? neutral(WHITE), roughness: sampled("RoughnessTexture") ?? neutral(WHITE),
+      metalness: sampled("MetalnessTexture") ?? neutral(BLACK),
+    }, faceDecalParameters(kind, chunk.scalars, chunk.colours), { underlay, skinLight: context.skin?.parameters ?? null });
+    return { material: made.material, owned, notes, decal: made.handle };
+  },
+};
+
+/** A decal-family template the preview does not draw yet: recorded, hidden, and reported with the `decal-template` limit. */
+const decalPlaceholder: MaterialAdapter = {
+  id: "decal-placeholder",
+  create() {
+    return { material: new THREE.MeshBasicMaterial({ visible: false }), owned: [], notes: ["decal template not drawn yet"], hidden: true,
+      limits: ["decal-template"] };
+  },
+};
+
+/**
  * `eye.mt` and `eye_gradient.mt`: the eyeball (eye-material.ts). The template decides the role, never the chunk index
  * (the male mesh swaps the eye and wetness chunks). A gradient template must carry its mask and ramp.
  */
@@ -197,7 +275,7 @@ const eyeball: MaterialAdapter = {
     const roughness = textures("Roughness", "data", "repeat");
     const owned: THREE.Texture[] = [], notes: string[] = [];
     let irisMask: THREE.Texture | undefined, ramp: THREE.Texture | undefined;
-    if (renderTemplate(chunk.template)?.gradients?.includes("IrisColorGradient")) {
+    if (renderTemplate(chunk.template, chunk.templateName)?.gradients?.includes("IrisColorGradient")) {
       // The mask is a gamma resource; the preview reads its R raw unless the switch says decoded (eye-rendering.md §2.3).
       irisMask = need(textures("IrisMask", IRIS_MASK_ENCODING === "raw" ? "data" : "colour", "repeat"), "IrisMask", chunk);
       const stops = chunk.gradients.IrisColorGradient?.stops;
@@ -235,10 +313,14 @@ const layeredPlaceholder: MaterialAdapter = {
 
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
   skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
-  eye: eyeball, "eye-shell": eyeShell, "layered-placeholder": layeredPlaceholder });
+  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, "layered-placeholder": layeredPlaceholder, "decal-placeholder": decalPlaceholder });
 
-/** The adapter for a chunk's template, or undefined when the preview does not draw that template. */
-export function materialAdapter(template: string | null): MaterialAdapter | undefined {
-  const inputs = renderTemplate(template);
-  return inputs ? MATERIAL_ADAPTERS[inputs.adapter] : undefined;
+/**
+ * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that
+ * template. On the face every member of the decal family goes through the one decal material.
+ */
+export function materialAdapter(template: string | null, templateName?: string | null, slot?: DetailSlot): MaterialAdapter | undefined {
+  const inputs = renderTemplate(template, templateName);
+  if (!inputs) return undefined;
+  return slot === "face" && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
 }

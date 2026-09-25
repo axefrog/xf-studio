@@ -9,7 +9,7 @@ import { RENDER_TEMPLATES } from "../src/render-templates";
 const texture = (depotPath: string, isGamma = false): RenderTexture =>
   ({ file: `${"a".repeat(64)}.png`, sha256: "a".repeat(64), sources: [], depotPath, width: 4, height: 4, isGamma });
 const chunk = (template: string, textures: string[], extra: Partial<RenderChunkMaterial> = {}): RenderChunkMaterial => ({
-  chunk: 0, name: "m", template, scalars: {}, colours: {}, profiles: {}, skinProfiles: {}, gradients: {},
+  chunk: 0, name: "m", template, templateName: null, materialPriority: null, scalars: {}, colours: {}, profiles: {}, skinProfiles: {}, gradients: {},
   textures: Object.fromEntries(textures.map(name => [name, texture(`x\\${name}.xbm`)])), ...extra });
 const requests: string[] = [];
 const textures: ChunkTextures = (parameter, use, wrap) => { requests.push(`${parameter}:${use}:${wrap}`); return new THREE.Texture(); };
@@ -26,7 +26,11 @@ const profile = { depotPath: "p.hp", archive: null, sha256: null, sampleCount: 8
   id: [{ value: 0, color: [128, 128, 128] as [number, number, number] }], rootToTip: [{ value: 0, color: [40, 20, 10] as [number, number, number] }] };
 
 test("every template the host exports for has an adapter", () => {
-  for (const [template, inputs] of Object.entries(RENDER_TEMPLATES)) expect(materialAdapter(template)?.id).toBe(inputs.adapter);
+  for (const [name, inputs] of Object.entries(RENDER_TEMPLATES)) {
+    // By the template's own name, and by the vanilla depot path when the name could not be read.
+    expect(materialAdapter(null, name)?.id).toBe(inputs.adapter);
+    expect(materialAdapter(inputs.path)?.id).toBe(inputs.adapter);
+  }
   expect(materialAdapter("base\\materials\\glass.mt")).toBeUndefined();
   expect(materialAdapter("BASE/MATERIALS/HAIR.MT")?.id).toBe("hair-strand");
   expect(Object.keys(MATERIAL_ADAPTERS).sort()).toEqual([...new Set(Object.values(RENDER_TEMPLATES).map(t => t.adapter))].sort());

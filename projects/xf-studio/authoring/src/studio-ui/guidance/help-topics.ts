@@ -30,7 +30,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     body: `Open **Mod package** when your looks are ready.\n\n- **Check** lists which presets and layers can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes your own **${EYE_MAKEUP_MOD.modName}** mod files. Nothing is installed in your game or mod manager for you.`,
     tours: ["onboarding"] },
   { id: "character", title: "Your V in the preview", keywords: "save v character brows lashes hair eye shape load",
-    body: "Load a save from the **Character** panel and the preview shows that V's own eyes, brows, lashes and hair, read from your game and mods. Your looks and library are never changed by loading a save.",
+    body: "Load a save from the **Character** panel and the preview shows that V's own skin, makeup and face details, eyes, brows, lashes and hair, read from your game and mods. Your looks and library are never changed by loading a save.",
     tours: ["whats-new-0.1.0-alpha.1"] },
   { id: "layout", title: "Panels and layout", keywords: "panel dock float tab layout reset move window",
     body: "Drag a panel's tab to dock it beside another, or onto a floating spot. The **Panels** button in the header opens or closes any panel and resets the layout. [[key:shell.regions]] moves the keyboard focus between regions." },

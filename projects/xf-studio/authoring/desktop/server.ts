@@ -275,7 +275,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     beginInstallTransaction() { return activity.begin("install"); },
     /** The derived 3D preview's host service (tests and shutdown). */
     previewCore,
-    /** Resolved skin, eyes, brows, lashes and hair (tests and shutdown). */
+    /** Resolved skin, face details, eyes, brows, lashes and hair (tests and shutdown). */
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,

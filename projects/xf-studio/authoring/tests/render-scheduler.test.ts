@@ -213,3 +213,22 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   expect(source).toContain("bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting })");
   expect(source).toContain("playing.onChange = invalidate");
 });
+
+test("face details request frames when they arrive, leave or change normals, and draw between the skin and the makeup plates", async () => {
+  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  for (const change of ["setCharacterDetails", "setNormals", "applySavedV", "setStage"]) expect(wrapped).toContain(change);
+  // The normals toggle reaches every loaded decal; a new V's decals take the current setting.
+  const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
+  expect(normals).toContain("decal.handle.setNormals(v)");
+  expect(source).toContain("for (const item of next.components) for (const decal of item.decals ?? []) decal.handle.setNormals(normalsEnabled);");
+  const { faceDecalRenderOrder } = await import("../src/scene");
+  const normal = [0, 1, 2, 399, 5000].map(index => faceDecalRenderOrder("EMP_Normal", index));
+  // Above the opaque skin (0), below the editable makeup plates (10 and up), the eye shell (99), brows (100) and lashes (101).
+  expect(normal[0]!).toBeGreaterThan(0);
+  expect(normal.every((order, i) => i === 0 || order >= normal[i - 1]!)).toBe(true);
+  expect(faceDecalRenderOrder("EMP_Front", 0)).toBeGreaterThan(normal[3]!);
+  expect(faceDecalRenderOrder("EMP_Front", 5000)).toBeLessThan(10);
+  // An unknown or absent priority is the engine's default.
+  expect(faceDecalRenderOrder(null, 1)).toBe(faceDecalRenderOrder("EMP_Normal", 1));
+});

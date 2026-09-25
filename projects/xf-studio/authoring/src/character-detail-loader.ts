@@ -6,6 +6,7 @@ import { CHARACTER_DETAIL_ASSETS, DETAIL_SLOTS, parseCharacterDetail, type Chara
 import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
 import type { EyeballHandle, EyeShellHandle } from "./eye-material";
+import type { FaceDecalHandle } from "./face-decal-material";
 
 /**
  * Renderer device port for the resolved character details (head skin, brows, lashes, hair, eyes): it reads the host's
@@ -24,6 +25,8 @@ export type LoadedCharacterComponent = {
   skin?: NonNullable<AdaptedMaterial["skin"]>;
   /** The eye component's drawn eyeball and wetness-shell meshes, by the role their template gives them. */
   eyes?: { eyeballs: { mesh: THREE.SkinnedMesh; handle: EyeballHandle }[]; shells: { mesh: THREE.SkinnedMesh; handle: EyeShellHandle }[] };
+  /** A face detail's drawn decal chunks, with their chunk material (template priority) and handle. */
+  decals?: { mesh: THREE.SkinnedMesh; chunk: RenderComponent["materials"][number]; handle: FaceDecalHandle }[];
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -43,7 +46,7 @@ export type CharacterDetailLoadOptions = {
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
-const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
+const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
   hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"] };
 /** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
 export function chunkOfMesh(name: string): number | null {
@@ -124,6 +127,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     for (const component of ordered) {
       aborted();
       const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(resolvedSkin ? { skin: resolvedSkin } : {}) };
+      // Two components may share a name (two face choices drawing one mesh); a failure releases this one's root only.
+      let componentRoot: THREE.Object3D | undefined;
       try {
         // Every texture a drawn chunk names is fetched and verified before any material is built.
         const loadedImages = new Map<string, HTMLImageElement>();
@@ -136,16 +141,18 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
         const root = gltf.scene;
         roots.push(root);
+        componentRoot = root;
         root.name = `detail_${component.slot}_${component.component}`;
         const meshes: THREE.SkinnedMesh[] = [], unwanted: THREE.Object3D[] = [], bones: THREE.Bone[] = [];
         let skin: LoadedCharacterComponent["skin"];
         const eyes: NonNullable<LoadedCharacterComponent["eyes"]> = { eyeballs: [], shells: [] };
+        const decals: NonNullable<LoadedCharacterComponent["decals"]> = [];
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
           if (!(object instanceof THREE.Mesh)) return;
           const chunk = chunkOfMesh(object.name);
           const material = chunk === null ? undefined : component.materials.find(entry => entry.chunk === chunk);
-          const adapter = material ? materialAdapter(material.template) : undefined;
+          const adapter = material ? materialAdapter(material.template, material.templateName, component.slot) : undefined;
           if (!material || !adapter || !(object instanceof THREE.SkinnedMesh)) { unwanted.push(object); return; }
           const association = gltf.parser.associations.get(object);
           const raw = weights.get(gltf.parser.json.meshes[association?.meshes ?? -1]?.name);
@@ -180,6 +187,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           if (adapted.skin) skin ??= adapted.skin;
           if (adapted.eye?.role === "eyeball") eyes.eyeballs.push({ mesh: object, handle: adapted.eye });
           if (adapted.eye?.role === "shell") eyes.shells.push({ mesh: object, handle: adapted.eye });
+          if (adapted.decal) decals.push({ mesh: object, chunk: material, handle: adapted.decal });
           // A placeholder chunk is recorded (so its limit is said) but never drawn.
           if (adapted.hidden) object.visible = false;
           object.material = adapted.material;
@@ -195,14 +203,14 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
         components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}),
-          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}) });
-        if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes };
+          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}) });
+        if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
       } catch (error) {
         if (signal?.aborted) throw error;
         const [noun, isnt] = SLOT_NOUN[component.slot];
         problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
         notes.push(`${component.slot} ${component.component}: ${(error as Error).message}`);
-        const index = roots.findIndex(root => root.name === `detail_${component.slot}_${component.component}`);
+        const index = componentRoot ? roots.indexOf(componentRoot) : -1;
         if (index >= 0) { releaseDetailObject(roots[index]!); roots.splice(index, 1); }
       }
     }

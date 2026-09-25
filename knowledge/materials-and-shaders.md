@@ -223,7 +223,7 @@ All [source]/[resource] ([mesh-decal contract](../research/materials/mesh-decal-
 
 **Stage labels.** WolvenKit labels the first GUID "pixel". In all 19,647 records it is the **vertex** program; 2,564 records have no pixel program [source].
 
-**Template-to-program link.** Templates connect to programs only by template name plus an opaque material GUID. No template field stores a shader GUID [source].
+**Template-to-program link.** Templates connect to programs only by template name plus an opaque material GUID. No template field stores a shader GUID [source]. The name is the template resource's own `CMaterialTemplate.name`, not its depot path: a mod's copy of `mesh_decal.mt` at another path (the legacy XF generator's `mesh_decal__emp_front.mt`, identical to vanilla except `materialPriority`) keeps `name = mesh_decal` [resource] and drew in game [runtime], so tools must identify a template by that name. The Studio's renderer does ([head CC rendering §3](head-cc-rendering.md#3-the-head-decal-family)). `materialPriority` is `EMP_Normal` (0) or `EMP_Front` (1); serializers omit the default [source: WolvenKit RED4 enums].
 
 **Constant registers.**
 
@@ -401,7 +401,7 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 | `mesh_decal` | Base set | Current makeup export route [resource] |
 | `mesh_decal_blendable` | Adds `FresnelColor`/`Intensity`/`Exponent`, `VectorField`, fade controls | Single-lobe glossy candidate; surface alpha is masked by coverage [source] [glossy](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_wet_character` | Base set | **Writes surface alpha = 1.0** regardless of coverage. It would overwrite roughness across the whole plate. [source] |
-| `mesh_decal_double_diffuse` | `GradientMap`, `UseGradientMap`, `SecondaryDiffuseAlpha/Color/Intensity` | Brows. See [hair shading](hair-shading.md). [resource] |
+| `mesh_decal_double_diffuse` | `GradientMap`, `UseGradientMap`, `SecondaryDiffuseAlpha/Color/Intensity` | Brows and 36 of the 114 lip style options. Same outputs as `mesh_decal`: colour alpha `DiffuseAlpha` × coverage, surface (metalness from `MetalnessTexture`.R, roughness from `RoughnessTexture`.R, each × scale + bias) at `RoughnessMetalnessAlpha` × coverage, normal alpha `NormalAlpha` × (`NormalAlphaTex`.R or raw colour-map alpha) [source: pixel `8834363738920290566`, registers by the template's parameter order]. See [hair shading](hair-shading.md). [resource] |
 | `mesh_decal_gradientmap_recolor(_2)` | `MaskTexture`, `GradientMap` (or a `.gradient` in `_2`). `DiffuseTexture` is an ID map indexing the gradient. | Recolour from one greyscale map [resource]; add-on `meshdecal.py:53` |
 | `mesh_decal_gradientmap_recolor_blendable` | Base = `DiffuseColor` × `GradientMap`(`DiffuseTexture`.R, 0.5); **Fresnel colour** × intensity × w × saturate(\|1 − N·V\|^exponent) added before the square root. Colour coverage = `DiffuseAlpha` × gradient alpha × `MaskTexture`.R, **linear** (not squared). The vertex program sets w = max(1 + `MaterialModifiersConsts[2].x` − saturate((d − `FadeOutOffset`)/`FadeOutDistance`), 0), d = horizontal camera-to-object distance; the defaults remove the tint beyond 0.7 m. | Colour-shifting export route, with the fade pushed to 1000 m [source] [design](../research/materials/finish-designs/colour-shifting.md) |
 | `mesh_decal_parallax` | `HeightTexture`, `HeightStrength` | Parallax offset. The Blender add-on does not implement it. [resource] |
@@ -409,6 +409,8 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 | `mesh_decal_emissive_subsurface` | `EmissiveMask`, `EmissiveMaskChannel`, `EmissiveColor/EV`. Stage `subsurface_emissive`. | Emissive under skin [resource] [source] |
 | `mesh_decal_particles` | Flipbook atlas (plain `mesh_decal` has the same time-driven flipbook controls) | Not a glint model [source] |
 | `mesh_decal_morph`, `_revealed`, `_multitinted`, `_parallax` | Morph, reveal/flow, 8 tints, height | Not yet studied [resource] |
+
+2.31 has **no `mesh_decal_normal` template** (the compiled family is `mesh_decal` plus `__blackbody`, `_blendable`, `_double_diffuse`, `_emissive`, `_emissive_subsurface`, `_gradient`, `_gradientmap_recolor(_2, _blendable, _emissive)`, `_morph`, `_multitinted`, `_parallax`, `_particles`, `_revealed`, `_wet_character`); scars and face cyberware write their normals through plain `mesh_decal` [source: installed shader cache index]. Every vanilla female face decal uses `mesh_decal` or `mesh_decal_double_diffuse` [resource].
 
 ### 4.6 Multilayered: `engine\materials\multilayered.mt`, `multilayered_clear_coat.mt`
 

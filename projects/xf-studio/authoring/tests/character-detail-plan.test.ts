@@ -1,39 +1,44 @@
 import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { choiceLabel, planCharacterDetails, skinLabel } from "../src/character-detail-plan";
+import { choiceLabel, planCharacterDetails, skinLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
-import { detailFixture, EYE_MASK, eyeRequest, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
-async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture()) {
+async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}) {
   const { graph } = fixture.installation();
   const cco = await loadMergedCco(graph, "female");
   const input = request === "default"
-    ? (() => { const d = descriptorsFromUiState(cco.merged.cco, {}); return { bodyGender: "female" as const, origin: "ui-state" as const, appearances: d.appearances, morphs: d.morphs }; })()
+    ? (() => { const d = descriptorsFromUiState(cco.merged.cco, state); return { bodyGender: "female" as const, origin: "ui-state" as const, appearances: d.appearances, morphs: d.morphs }; })()
     : inputFromCharacterRequest(request as Extract<typeof REQUEST_A, { source: "save" }>);
   const resolved = await resolveCharacter(graph, input, cco);
   const defaults = new Map<string, ResolvedParam[]>();
-  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt, P.eyeMt, P.eyeGradMt, P.eyeShadowMt, P.layeredMt]) {
+  const identities = new Map<string, { name: string | null; priority: string | null }>() as Map<string, { name: string | null; priority: string | null }>;
+  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt, P.eyeMt, P.eyeGradMt, P.eyeShadowMt, P.layeredMt, P.meshDecalMt, P.emissiveMt, P.packFrontMt]) {
     const loaded = await graph.load(refFromPath(path), "mt");
+    identities.set(path.toLowerCase(), templateIdentity(loaded!.root));
     defaults.set(path.toLowerCase(), templateDefaults(loaded!.root).map(([name, value]) => ({ name, kind: value.kind, setBy: "template",
       value: value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "resource" ? value.text ?? "" : value.value,
       ...(value.kind === "resource" && value.ref ? { resource: graph.provenance(value.ref) } : {}) })));
   }
-  return { resolved, plan: planCharacterDetails(resolved, cco.merged.cco, defaults) };
+  return { resolved, plan: planCharacterDetails(resolved, cco.merged.cco, defaults, identities satisfies TemplateIdentities) };
 }
 
 describe("resolver selection for brows, lashes and hair", () => {
   test("slots come from the creator's uiSlot and the third-person groups; FPP twins and shadow meshes stay out", async () => {
     const { plan: result } = await plan(REQUEST_A);
-    expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" }, { slot: "brows", state: "shown", label: "brown" },
+    expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" },
+      { slot: "face", state: "shown", label: "lipstick (red), cheeks (red)" }, { slot: "brows", state: "shown", label: "brown" },
       { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
       { slot: "eyes", state: "shown", label: "gradient blue" }]);
     expect(result.components.map(c => `${c.slot}:${c.option}:${c.component}`)).toEqual(
-      ["skin:skin_type_01:head", "brows:eyebrows_color1:brow", "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes"]);
+      ["skin:skin_type_01:head", "face:makeupLips_05:hx_lips", "face:makeupCheeks_05:hx_freckles", "brows:eyebrows_color1:brow",
+        "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes"]);
     const hair = result.components.find(c => c.slot === "hair")!;
     // Chunk 2 is a lower level of detail; the shadow mesh draws only glass.mt, which the preview does not draw.
     expect(hair.chunks).toEqual([0, 1]);
