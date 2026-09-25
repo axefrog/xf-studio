@@ -28,17 +28,18 @@ export function verifyPackageBuildResult(
 ): void {
   const final = resolve(built.package ?? "");
   const manifestPath = resolve(built.manifest ?? "");
-  // The build service reports canonical paths (`realpathSync.native`), which expand Windows 8.3 short names
-  // such as a CI runner's `RUNNER~1` temp folder; compare against the same canonical form of the root.
+  // Containment is judged on canonical paths (`realpathSync.native`): callers may name the same folder by a
+  // Windows 8.3 short form (a CI runner's `RUNNER~1` temp folder) or its long form, and a link must not
+  // lead outside the root. The result and its manifest must also not be links themselves.
   const outside = () => Error("Package result is outside the local dist directory.");
-  let root: string;
-  try { root = realpathSync.native(resolve(distRoot)); } catch { throw outside(); }
-  if (!final.startsWith(root + sep) || manifestPath !== resolve(final, "manifest.json") || !statSync(manifestPath).isFile())
+  const canonical = (path: string) => { try { return realpathSync.native(path); } catch { throw outside(); } };
+  const canonicalRoot = canonical(resolve(distRoot));
+  const canonicalFinal = canonical(final);
+  if (!canonicalFinal.startsWith(canonicalRoot + sep) || !statSync(manifestPath).isFile() ||
+      canonical(manifestPath) !== resolve(canonicalFinal, "manifest.json"))
     throw outside();
-  const canonicalRoot = root;
-  const canonicalFinal = realpathSync.native(final);
-  if (!canonicalFinal.startsWith(canonicalRoot + sep) || lstatSync(final).isSymbolicLink() ||
-      realpathSync.native(manifestPath) !== resolve(canonicalFinal, "manifest.json") || lstatSync(manifestPath).isSymbolicLink())
+  if (lstatSync(final).isSymbolicLink() || lstatSync(manifestPath).isSymbolicLink() ||
+      resolve(manifestPath) !== resolve(final, "manifest.json"))
     throw Error("Package result is outside the local dist directory or uses a linked path.");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const sourceHash = createHash("sha256").update(sourceJson).digest("hex");

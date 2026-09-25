@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { PackageBuildError, runPackageCommand, type PackageCommandOptions } from "../src/package-build-service";
@@ -17,7 +17,7 @@ const PLATE = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtur
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = mkdtempSync(join(tmpdir(), "xfs-package-service-"));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-package-service-"))); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const sha = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 

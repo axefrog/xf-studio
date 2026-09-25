@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { preparePackageCollection } from "../src/package-filter";
@@ -11,7 +11,7 @@ const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../ex
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 test("final package identity verification works under a relocated host-owned dist root", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-portable-package-"));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-portable-package-"))); // Canonical: CI temp folders use 8.3 short names.
   try {
     const dist = join(root, "private", "packages");
     const final = join(dist, "candidate");
