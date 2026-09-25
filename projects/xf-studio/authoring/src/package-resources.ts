@@ -7,6 +7,7 @@
 // byte-identical to the ones the Python oracle produces.
 import { createHash } from "node:crypto";
 import type { CollectionPlan } from "./package-bake";
+import type { UvTransformConstants } from "./plate-uv-window";
 
 // WolvenKit JSON is untyped here; only the fields the rewrite touches are named.
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -44,14 +45,19 @@ const softTexture = (plan: CollectionPlan, parameter: string, channel: string) =
 const localInstance = (template: string, values: Json[]) => ({ $type: "CMaterialInstance", audioTag: cname("None"),
   baseMaterial: resourceRef(template), cookingPlatform: "PLATFORM_PC", enableMask: 0, resourceVersion: 4, values });
 
-/** The flat `@preset` instance, unchanged since the Experiment 005 builder; a diagnostic surface override replaces its scalars. */
-function flatMaterial(plan: CollectionPlan, surface: Record<string, number> = {}) {
+/** The plate-local window's UV transform, appended to a `mesh_decal` instance whose textures cover the window. */
+const windowValues = (uv: UvTransformConstants | undefined) => uv
+  ? (["UVScaleX", "UVOffsetX", "UVScaleY", "UVOffsetY"] as const).map(name => floatValue(name, uv[name])) : [];
+
+/** The flat `@preset` instance: the Experiment 005 layout plus, on the plate window, its UV transform; a diagnostic
+ * surface override replaces its scalars. */
+function flatMaterial(plan: CollectionPlan, surface: Record<string, number> = {}, uv?: UvTransformConstants) {
   const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] as const)
     .map(([name, channel]) => softTexture(plan, name, channel));
   for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0,
     SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
     values.push(floatValue(name, surface[name] ?? value));
-  values.push(colorValue("DiffuseColor", WHITE));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
   return localInstance("base/materials/mesh_decal.mt", values);
 }
 
@@ -64,14 +70,14 @@ function hiddenMaterial() {
 }
 
 /** `@faceted`: the flat instance plus a normal map composed with the skin normal (NormalsBlendingMode 1). */
-function facetedMaterial(plan: CollectionPlan) {
+function facetedMaterial(plan: CollectionPlan, uv?: UvTransformConstants) {
   const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"],
     ["NormalTexture", "normal"]] as const).map(([name, channel]) => softTexture(plan, name, channel));
   for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1,
     RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1,
     RoughnessBias: 0, MetalnessBias: 0 }))
     values.push(floatValue(name, value));
-  values.push(colorValue("DiffuseColor", WHITE));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
   return localInstance("base/materials/mesh_decal.mt", values);
 }
 
@@ -91,9 +97,10 @@ export const FRESNEL_TEMPLATE = "base/materials/mesh_decal_gradientmap_recolor_b
  * Replace the plate's appearances and materials. Each preset binds its route's template entry:
  * `<appearance>@<entry>`, whose `{material}` prefix resolves that preset's textures. Presets that share
  * the seed's template entry stay empty stubs, which ArchiveXL expands from the seed; any other preset
- * names its entry explicitly. A flat-only collection is byte-for-byte the Experiment 005 layout.
+ * names its entry explicitly. Entries of plate-window presets carry `uv`, the window's UV transform; head-UV
+ * entries (Fresnel, and flat or faceted presets a diagnostic keeps on head UV) have none.
  */
-export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter): Json {
+export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter, uv?: UvTransformConstants): Json {
   const root = mesh.Data.RootChunk, seed = plan.presets[0];
   const chunks = plan.plate.liftsMm.length, chunkCount = root.renderResourceBlob?.Data?.header?.renderChunkInfos?.length;
   if (chunkCount !== undefined && chunkCount !== chunks) throw Error(`The plate has ${chunkCount} render chunks; the plan lifts ${chunks}.`);
@@ -111,7 +118,10 @@ export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: Hand
   root.localMaterialBuffer.materials = entries.map(name => {
     if (name === HIDDEN_CHUNK_ENTRY) return hiddenMaterial();
     const preset = plan.presets.find(p => p.material === name)!;
-    return preset.route === "flat" ? flatMaterial(plan, preset.diagnostics?.surface) : preset.route === "faceted" ? facetedMaterial(plan) : fresnelMaterialInstance(plan, preset);
+    const windowed = preset.uvSpace === "plate-window" ? uv : undefined;
+    if (preset.uvSpace === "plate-window" && !uv) throw Error(`Preset ${preset.id} needs the plate's UV window.`);
+    return preset.route === "flat" ? flatMaterial(plan, preset.diagnostics?.surface, windowed)
+      : preset.route === "faceted" ? facetedMaterial(plan, windowed) : fresnelMaterialInstance(plan, preset);
   });
   root.localMaterialBuffer.rawData = null;
   root.localMaterialBuffer.rawDataHeaders = [];

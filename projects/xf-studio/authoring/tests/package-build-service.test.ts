@@ -110,7 +110,8 @@ test("Build promotes only a verified candidate with the full local-package manif
   for (const folder of [["input", "colour"], ["export"], ["export-dds"], ["roundtrip"]])
     expect(existsSync(join(intermediate, ...folder))).toBe(false);
   expect(JSON.parse(readFileSync(join(intermediate, "build.json"), "utf8")).plateStem).toBe("xfs_eye_plate");
-  expect(calls).toEqual(["import", "import", "serialize", "deserialize", "deserialize", "deserialize", "pack"]);
+  // The plate is serialized first: its UVs decide the texture window the bake compiles into.
+  expect(calls).toEqual(["serialize", "import", "import", "deserialize", "deserialize", "deserialize", "pack"]);
   // The verifier receives WolvenKit tools, the packaged collection, the host's plate files and hashes and the recipe's morph count.
   expect(verified).toHaveLength(1);
   expect(typeof verified[0].tools.exportTextures).toBe("function");
@@ -148,7 +149,8 @@ test("a failed or mismatched independent verification publishes no candidate", a
   const xlError = await runPackageCommand({ ...otherXl.options, verify: fakeVerify({ archiveXlSha256: "0".repeat(64) }) }).catch(e => e);
   expect(xlError.message).toContain("differs from the verified files");
   expect(readdirSync(join(otherXl.dir, "dist"))).toEqual([]);
-}, 60_000);
+  // Seven fake Builds, each baking the fixture into 2048 x 512 window maps (about 3 s each locally).
+}, 180_000);
 
 test("a cancelled Build stops before conversion and publishes nothing", async () => {
   const { dir, options, calls } = setup();

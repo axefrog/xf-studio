@@ -16,19 +16,20 @@ import { oracleTest } from "./optional-oracles";
 // which the verifier's own decoder must accept (and reject when tampered).
 import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { liftPlate } from "../src/plate-lift";
-import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
+import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 
 const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
 
 
 test("the verifier imports nothing from the compiler or other Studio modules", () => {
   const files = readdirSync(verifierDir).filter(name => name.endsWith(".ts"));
-  expect(files.sort()).toEqual(["dds-reader.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "verify-build.ts"]);
+  expect(files.sort()).toEqual(["dds-reader.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
   for (const name of files) {
     const code = readFileSync(join(verifierDir, name), "utf8");
     const specifiers = [...code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(m => m[1]);
     for (const specifier of specifiers)
-      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|plate-geometry|resource-checks|resource-inventory|texture-checks|verify-build))$/);
+      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|plate-geometry|resource-checks|resource-inventory|texture-checks|uv-window|verify-build))$/);
     expect(code, `${name} uses require()`).not.toMatch(/\brequire\s*\(/);
   }
 });
@@ -37,11 +38,12 @@ test("the verifier imports nothing from the compiler or other Studio modules", (
 // Archive members and plate inputs hold their WolvenKit JSON as text, so the fake `serialize`
 // derives each document from the very bytes the verifier hash-checked; the fake `export`
 // supplies each texture's decoded DDS. The builder's own conversions are never written.
-const SIZE = 16;
+// Maps are the production 2048 × 512 plate-window maps over the synthetic plate's window.
+const W = WINDOW_W, H = WINDOW_H;
 const depot = "xfs/test/collection";
 const presets = ["a1", "b2"].map((id, i) => ({
   id, name: `Look ${id}`, revision: 1, index: i + 1, appearance: `xfs_p${id}`, appAppearance: `xfs_cns__xfs_p${id}`,
-  route: "flat", material: "@preset", plateChunk: 0,
+  route: "flat", material: "@preset", plateChunk: 0, uvSpace: "plate-window",
   // Only the fields the verifier's route rules read; a Matte and a Metallic look are both flat.
   recipe: { layers: [{ id: `l${i}`, enabled: true, opacity: 1, finish: i ? "metallic" : "matte", color: "#406080" }] },
   textures: {
@@ -55,8 +57,9 @@ const plan = {
   mesh: `${depot}/models/xfs_eye_plate.mesh`, morph: `${depot}/models/xfs_eye_plate.morphtarget`, presets,
   plate: { liftsMm: [0.4] },
 };
-/** A real single-chunk plate cut from the synthetic head, and its lifted form for the given lifts. */
-const PLATE = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
+/** A real single-chunk plate cut from the synthetic head (with plate-like UVs), and its lifted form for the given lifts. */
+const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
+const WINDOW = plateWindow(PLATE);
 const PLATE_TARGETS = PLATE.morph.Data.RootChunk.targets.length;
 const liftedPlate = (liftsMm: number[]) => liftPlate(PLATE.mesh, PLATE.morph, liftsMm);
 const cname = (s: string) => ({ $type: "CName", $storage: "string", $value: s });
@@ -66,18 +69,28 @@ const sha = (data: Uint8Array | string) => createHash("sha256").update(data).dig
 const declaration = (p: typeof plan) =>
   `customizations:\r\n  female: ${p.customization.replaceAll("/", "\\")}\r\nresource:\r\n  scope:\r\n    player_customization.app:\r\n      - ${p.app.replaceAll("/", "\\")}\r\n`;
 
-function maps(seed: number) {
-  const n = SIZE * SIZE, diffuse = new Uint8Array(n * 4), roughness = new Uint8Array(n), metalness = new Uint8Array(n);
-  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
-    const t = y * SIZE + x;
-    // Covered blob in the upper half with a soft edge, so orientation and partial texels are meaningful.
-    const d = Math.hypot(x - 6 - seed, y - 4) / 5, alpha = y < 9 ? Math.max(0, Math.min(1, 1.6 - d)) : 0;
+/** Authored coverage of look `seed`: a soft, lopsided blob on the synthetic plate (authored v = 1 − stored V). */
+const blob = (seed: number) => (u: number, v: number) => {
+  const d = Math.hypot((u - .42 - .12 * seed) / .05, (v - .24) / .025);
+  return Math.max(0, Math.min(1, 1.6 - d)) * (u < .5 + .1 * seed ? 1 : .6);
+};
+/** `mirrored`: a builder that wrote the window's rows upside down (its maps are otherwise self-consistent). */
+const mapSet = (seed: number, mirrored = false) => {
+  const n = W * H, diffuse = new Uint8Array(n * 4), roughness = new Uint8Array(n), metalness = new Uint8Array(n), coverage = blob(seed);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = y * W + x, alpha = Math.sqrt(coverage(...texelUv(WINDOW.window, W, H, x, mirrored ? H - 1 - y : y)));
     diffuse.set([40 + 20 * seed, 120, 200 - 30 * seed, Math.round(alpha * 255)], t * 4);
-    roughness[t] = 90 + x * 5;
+    // Uniform in each 4 × 4 block (its stored BC4 form is then exact) and varying down the rows, so a flip shows.
+    roughness[t] = 60 + ((Math.floor(x / 4) * 5 + Math.floor(y / 4) * 11) % 150);
     metalness[t] = seed ? 200 : 0;
   }
-  return { diffuse, roughness, metalness };
-}
+  return { diffuse, roughness, metalness, chain: flatMipChain(diffuse, roughness, metalness, W, H), reference: coverageReference(WINDOW.window, coverage) };
+};
+const MAPS = [mapSet(0), mapSet(1)];
+type MapSet = ReturnType<typeof mapSet>;
+let maps = (seed: number): MapSet => MAPS[seed];
+/** The window material constants every flat plate-window entry carries. */
+const UV_VALUES = Object.entries(WINDOW.transform).map(([name, value]) => ({ $type: "Float", [name]: value }));
 
 function writeFile(path: string, data: string | Uint8Array) {
   mkdirSync(dirname(path), { recursive: true });
@@ -105,7 +118,7 @@ function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
         ({ $type: "rRef:ITexture", [name]: ref(`*${depot}/textures/{material}_${channel}.xbm`, true) })),
       ...Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
         RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }).map(([name, value]) => ({ $type: "Float", [name]: value })),
-      { $type: "Color", DiffuseColor: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 } }] }] } };
+      { $type: "Color", DiffuseColor: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 } }, ...structuredClone(UV_VALUES)] }] } };
   const morph = { ...structuredClone(lifted.morph.Data.RootChunk), baseMesh: ref(p.mesh), baseMeshAppearance: cname(p.presets[0].appearance) };
   const id = componentId(p.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(p.component), id, isEnabled: 1,
@@ -124,23 +137,29 @@ function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
       ...p.presets.map(preset => ({ name: cname(preset.appAppearance), index: preset.index, localizedName: preset.name }))] } }],
     headGroups: ["character_customization", "face"].map(group => ({ name: cname(group), options: [cname(p.selector)] })) };
   const xbm: Record<string, any> = {};
-  for (const preset of p.presets) for (const channel of ["diffuse", "roughness", "metalness"] as const)
-    xbm[preset.textures[channel]] = { width: SIZE, height: SIZE, setup: { hasMipchain: 1, isGamma: channel === "diffuse" ? 1 : 0,
-      compression: channel === "diffuse" ? "TCM_QualityColor" : "TCM_QualityR" } };
+  p.presets.forEach((preset, i) => {
+    for (const channel of ["diffuse", "roughness", "metalness"] as const)
+      xbm[preset.textures[channel]] = { width: W, height: H, setup: { hasMipchain: 1, isGamma: channel === "diffuse" ? 1 : 0,
+        compression: channel === "diffuse" ? "TCM_QualityColor" : "TCM_QualityR" },
+        ...(channel === "roughness" ? { renderTextureResource: storedBc4(maps(i).roughness, W, H) } : {}) };
+  });
   mutate?.(build, { mesh, morph, app, cc, xbm, plan: p });
 
   const dds = new Map<string, Uint8Array>();
   const compiled = p.presets.map((preset, i) => {
-    const m = maps(i), chain = flatMipChain(m.diffuse, m.roughness, m.metalness, SIZE);
+    const m = maps(i), chain = m.chain;
     const records = (["diffuse", "roughness", "metalness"] as const).map(channel => {
       const file = `${preset.appearance}_${channel}.raw`;
       writeFile(join(build, "baked", file), m[channel]);
-      const encoded = encodeFlatDds(chain[channel], SIZE, channel);
+      const encoded = encodeFlatDds(chain[channel], { width: W, height: H }, channel);
       writeFile(join(build, "input", channel === "diffuse" ? "dds-colour" : "dds-scalar", `${preset.appearance}_${channel}.dds`), encoded);
       dds.set(`${preset.appearance}_${channel}.dds`, encoded); // a lossless "decode"
-      return { channel, file, bytes: m[channel].length, sha256: sha(m[channel]) };
+      return { channel, file, bytes: m[channel].length, sha256: sha(m[channel]), width: W, height: H };
     });
-    return { id: preset.id, revision: 1, size: SIZE, route: "flat", maps: records };
+    const referenceFile = `${preset.appearance}_reference.raw`;
+    writeFile(join(build, "baked", referenceFile), m.reference.data);
+    return { id: preset.id, revision: 1, route: "flat", uvSpace: "plate-window", width: W, height: H, window: WINDOW.window, maps: records,
+      reference: { file: referenceFile, bytes: m.reference.data.length, sha256: sha(m.reference.data), ...m.reference.crop } };
   });
   const plate = { mesh: join(build, "plate", "xfs_eye_plate.mesh"), morph: join(build, "plate", "xfs_eye_plate.morphtarget") };
   writeFile(plate.mesh, JSON.stringify(doc(sourceMesh)));
@@ -156,7 +175,7 @@ function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
   writeFile(join(build, "package/archive/pc/mod", `${p.namespace}.archive`), archive);
   writeFile(join(build, "package/archive/pc/mod", `${p.namespace}.archive.xl`), declaration(p));
   writeFile(join(build, "build.json"), JSON.stringify({ plan: p, compiled, plateStem: "xfs_eye_plate", plateInputs, artifacts,
-    archiveSha256: sha(archive), installed: false, gameRenderingVerified: false }));
+    plateUv: WINDOW, archiveSha256: sha(archive), installed: false, gameRenderingVerified: false }));
   return { build, dds, plate };
 }
 
@@ -215,7 +234,7 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     const report = run(fixture, {}, calls);
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
-      "unpackedFilesVerified", "preservedMorphs", "plateGeometry", "resolvedDynamicPaths", "decodedPixelChecks",
+      "unpackedFilesVerified", "preservedMorphs", "plateGeometry", "plateUvWindow", "resolvedDynamicPaths", "decodedPixelChecks",
       "decodedMipChecks", "presetRoutes", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
     expect(report).toMatchObject({ presetCount: 2, selectorOptionCount: 3, meshAppearances: 2, materialTemplates: 1, textureCount: 6,
       unpackedFilesVerified: 10, preservedMorphs: PLATE_TARGETS, installed: false, gameRenderingVerified: false,
@@ -224,8 +243,17 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(report.plateGeometry).toMatchObject({ liftsMm: [0.4], chunks: 1, nonPositionBytesExact: true, meshMorphBaseIdentical: true });
     expect(report.resolvedDynamicPaths[1]).toEqual({ appearance: "xfs_cns__xfs_pb2", chunkMaterial: "xfs_pb2@preset", textures: presets[1].textures });
     expect(report.decodedPixelChecks[0].coverageError).toEqual({ mean: 0, p95: 0, max: 0 });
-    expect(report.decodedMipChecks[0].levels).toHaveLength(5);
+    expect(report.decodedMipChecks[0].levels).toHaveLength(12);
+    expect(report.decodedMipChecks[0].levels.at(-1)).toMatchObject({ width: 1, height: 1 });
     expect(report.decodedMipChecks[0].levels[1].partialTexels).toBeGreaterThan(0);
+    // The window re-derived from the packaged plate, stored rows reversed, and the window maps agreeing with the authored content.
+    expect(report.plateUvWindow.window).toEqual(WINDOW.window);
+    for (const [key, value] of Object.entries(WINDOW.transform)) expect(report.plateUvWindow.constants[key]).toBeCloseTo(value, 12);
+    const space = report.decodedPixelChecks[1] as { uvSpace: string; storedRows: string; mapping: { covered: number; mean: number; farShare: number } };
+    expect(space).toMatchObject({ uvSpace: "plate-window", width: W, height: H, storedRows: "reversed" });
+    expect(space.mapping.covered).toBeGreaterThan(0);
+    expect(space.mapping.mean).toBeLessThan(.03);
+    expect(space.mapping.farShare).toBe(0);
     // Every conversion ran on the verifier's own copies inside its work directory.
     const work = join(build, "verify");
     expect(calls).toEqual([`unbundle ${join(work, "archive", "xfs_cns.archive")}`, `serialize ${join(work, "unpacked")}`,
@@ -233,7 +261,7 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(readFileSync(join(work, "logs", "unbundle.log"), "utf8")).toContain("Unbundled");
     expect(() => run(fixture)).toThrow("work directory is not empty");
   } finally { rmSync(build, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("texture failures: supplied chain, baked input, decode drift and orientation", () => {
   const flipByte = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x40; writeFileSync(path, data); };
@@ -242,20 +270,20 @@ test("texture failures: supplied chain, baked input, decode drift and orientatio
   expectFailure(/Decoded .*error too large|Decoded base/, undefined, f => {
     // Decoded (exported) roughness far from the source everywhere.
     const data = Uint8Array.from(f.dds.get("xfs_pa1_roughness.dds")!);
-    for (let i = 148; i < 148 + SIZE * SIZE; i++) data[i] = 255 - data[i];
+    for (let i = 148; i < 148 + W * H; i++) data[i] = 255 - data[i];
     f.dds.set("xfs_pa1_roughness.dds", data);
   });
   expectFailure(/orientation|error too large/, undefined, f => {
-    const data = Buffer.from(f.dds.get("xfs_pa1_diffuse.dds")!), row = SIZE * 4;
-    const base = Buffer.from(data.subarray(148, 148 + SIZE * row));
-    for (let y = 0; y < SIZE; y++) base.copy(data, 148 + y * row, (SIZE - 1 - y) * row, (SIZE - y) * row);
+    const data = Buffer.from(f.dds.get("xfs_pa1_diffuse.dds")!), row = W * 4;
+    const base = Buffer.from(data.subarray(148, 148 + H * row));
+    for (let y = 0; y < H; y++) base.copy(data, 148 + y * row, (H - 1 - y) * row, (H - y) * row);
     f.dds.set("xfs_pa1_diffuse.dds", data);
   });
   expectFailure(/Unexpected DDS dimensions|size differs|Truncated|trailing/, undefined,
     f => f.dds.set("xfs_pb2_metalness.dds", f.dds.get("xfs_pb2_metalness.dds")!.subarray(0, 200)));
   expectFailure(/did not export/, undefined, undefined, { exportTextures: () => ok() });
   expectFailure(/export-textures-0 failed/, undefined, undefined, { exportTextures: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
-});
+}, 30_000);
 
 // Builds and tampers many packaged resources (about 1.3 s locally); slower CI runners need more than the 5 s default.
 test("resource failures: names, links, buffers, component id, morph count and XBM metadata", () => {
@@ -272,7 +300,12 @@ test("resource failures: names, links, buffers, component id, morph count and XB
   expectFailure(/Selector default must be Off/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.defaultIndex = 1; });
   expectFailure(/label differs from the preset name/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.definitions[2].localizedName = "x"; });
   expectFailure(/unexpected compression/, (_b, d) => { d.xbm[presets[0].textures.roughness].setup.compression = "TCM_None"; });
-  expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.at(-1).DiffuseColor.Alpha = 0; });
+  expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => v.DiffuseColor).DiffuseColor.Alpha = 0; });
+  // The window's UV transform is re-derived from the packaged plate's own UVs.
+  expectFailure(/UVOffsetY is .*expected/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => "UVOffsetY" in v).UVOffsetY *= -1; });
+  expectFailure(/UVScaleX is undefined/, (_b, d) => {
+    const values = d.mesh.localMaterialBuffer.materials[0].values; values.splice(values.findIndex((v: any) => "UVScaleX" in v), 1); });
+  expectFailure(/is 1024x1024, expected 2048x512/, (_b, d) => { Object.assign(d.xbm[presets[1].textures.metalness], { width: 1024, height: 1024 }); });
   expectFailure(/Only the seed appearance/, (_b, d) => { d.mesh.appearances[1].Data.chunkMaterials = [cname("x")]; });
   // The expected morph count comes from the plate recipe, not a constant.
   expectFailure(new RegExp(`Morph target count is ${PLATE_TARGETS}, not the plate recipe's ${PLATE_TARGETS + 1}`), undefined, undefined,
@@ -302,7 +335,7 @@ test("archive failures: inventory, archive hash, structural declaration and unpa
     xl(fixture, declaration(plan).replace(`female: ${plan.customization.replaceAll("/", "\\")}`, `female:\r\n    - ${plan.customization.replaceAll("/", "\\")}`));
     expect(run(fixture).presetCount).toBe(2);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("plate provenance: inputs must match the build record and the host, and must not change during verification", () => {
   expectFailure(/Plate mesh input differs from the build record/, undefined, f => writeFileSync(f.plate.mesh, JSON.stringify(doc({ changed: 1 }))));
@@ -324,7 +357,7 @@ test("plate provenance: inputs must match the build record and the host, and mus
     };
     expect(() => run(fixture, { serialize })).toThrow("Plate morph input changed during verification");
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("the verifier's own inventory refuses noncanonical paths and computes WolvenKit keys", () => {
   expect(canonicalResourcePath("a/b_c.xbm")).toBe(true);
@@ -340,8 +373,9 @@ test("the verifier's own inventory refuses noncanonical paths and computes Wolve
 });
 
 test("the DDS reader rejects malformed files", () => {
-  const m = maps(0), chain = flatMipChain(m.diffuse, m.roughness, m.metalness, SIZE), dds = encodeFlatDds(chain.diffuse, SIZE, "diffuse");
-  expect(readDdsChain(dds, "diffuse").levels.map(l => l.length)).toEqual([1024, 256, 64, 16, 4]);
+  const dds = encodeFlatDds(maps(0).chain.diffuse, { width: W, height: H }, "diffuse");
+  expect(readDdsChain(dds, "diffuse").levels.map(l => l.length / 4)).toEqual([2048 * 512, 1024 * 256, 512 * 128, 256 * 64, 128 * 32, 64 * 16,
+    32 * 8, 16 * 4, 8 * 2, 4, 2, 1]);
   expect(() => readDdsChain(dds, "roughness")).toThrow("format");
   expect(() => readDdsChain(dds.subarray(0, 100), "diffuse")).toThrow("header");
   expect(() => readDdsChain(new Uint8Array([...dds, 0]), "diffuse")).toThrow("trailing");
@@ -351,10 +385,14 @@ test("the DDS reader rejects malformed files", () => {
   expect(() => readDdsChain(badArray, "diffuse")).toThrow("format");
 });
 
-test("the independent reference chain equals the compiler chain on varied inputs", () => {
-  for (let seed = 0; seed < 3; seed++) {
-    const m = maps(seed), compiler = flatMipChain(m.diffuse, m.roughness, m.metalness, SIZE), { chain } = expectedChain(m.diffuse, m.roughness, m.metalness, SIZE);
+test("the independent reference chain equals the compiler chain on varied inputs, square and non-square", () => {
+  for (const [w, h] of [[16, 16], [64, 16], [8, 32], [2048, 512]]) for (let seed = 0; seed < 3; seed++) {
+    let s = seed * 7919 + w;
+    const next = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s >>> 24; };
+    const diffuse = Uint8Array.from({ length: w * h * 4 }, next), roughness = Uint8Array.from({ length: w * h }, next), metalness = Uint8Array.from({ length: w * h }, next);
+    const compiler = flatMipChain(diffuse, roughness, metalness, w, h), { chain } = expectedChain(diffuse, roughness, metalness, w, h);
     for (const channel of ["diffuse", "roughness", "metalness"] as const) expect(chain[channel]).toEqual(compiler[channel] as Uint8Array[]);
+    if (w === 2048) break;
   }
 });
 
@@ -425,7 +463,7 @@ test("plate geometry: the packaged plate must be the input lifted along its norm
     d.morph.blob.Data.diffsBuffer.Bytes = data.toString("base64");
   });
   expectFailure(/Plan plate lifts \[0.2\] differ from the presets' lifts \[0.4\]/, (_b, d) => { d.plan.plate.liftsMm = [0.2]; });
-});
+}, 30_000);
 
 // PIPE-28: the render and morph blobs are compared whole with the input; only the re-derived lift fields may differ.
 test("plate blobs: every field the lift does not own must be the input's", () => {
@@ -581,4 +619,27 @@ test("diagnostic lifts and surfaces: one chunk per lift, hidden chunks write not
   });
   expectFailure(/does not draw its lift's plate chunk/, (b, d) => { twoChunks(b, d); d.plan.presets[1].plateChunk = 0; });
   expectFailure(/2 chunks for 1 planned lifts|Plan plate lifts/, (b, d) => { twoChunks(b, d); d.plan.plate.liftsMm = [0.4]; });
-});
+}, 30_000);
+
+test("plate-local window: stored row order, record window and texture space are checked, and misplaced content fails the mapping", () => {
+  // A builder that rasterised the window upside down: every chain and hash is self-consistent, only the mapping disagrees.
+  const mirrored = [mapSet(0, true), mapSet(1, true)], original = maps;
+  maps = seed => mirrored[seed];
+  try { expectFailure(/does not match its authored head-UV content at the plate's UVs/); } finally { maps = original; }
+  // WolvenKit storing rows top to bottom would move every window map; the verifier decodes the stored BC4 level itself.
+  expectFailure(/is not stored with reversed rows/, (_b, d) => {
+    const rough = maps(0).roughness, flipped = new Uint8Array(rough.length);
+    for (let y = 0; y < H; y++) flipped.set(rough.subarray((H - 1 - y) * W, (H - y) * W), y * W);
+    d.xbm[presets[0].textures.roughness].renderTextureResource = storedBc4(flipped, W, H);
+  });
+  expectFailure(/has no stored texture data/, (_b, d) => { delete d.xbm[presets[1].textures.roughness].renderTextureResource; });
+  const rewrite = (change: (build: any) => void) => (f: Fixture) => {
+    const path = join(f.build, "build.json"), build = JSON.parse(readFileSync(path, "utf8"));
+    change(build); writeFileSync(path, JSON.stringify(build));
+  };
+  expectFailure(/uses another UV window than the packaged plate's/, undefined, rewrite(b => { b.compiled[0].window.u0 += .001; }));
+  expectFailure(/plate UV window differs from the one the packaged plate's UVs give/, undefined, rewrite(b => { b.plateUv.window.v1 -= .001; }));
+  expectFailure(/has no head-UV coverage reference at least 4096/, undefined, rewrite(b => { b.compiled[1].reference.grid = 1024; }));
+  expectFailure(/was built on head UV, but its route and diagnostics need plate-window/, (_b, d) => { d.plan.presets[0].uvSpace = "head"; });
+  expectFailure(/invalid diagnostic uvSpace/, (_b, d) => { (d.plan.presets[0] as any).diagnostics = { uvSpace: "window" }; });
+}, 30_000);

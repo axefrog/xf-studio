@@ -485,3 +485,35 @@ export function raster(l: Layer, size: number): Uint8ClampedArray<ArrayBuffer> {
   job.advance(Infinity);
   return job.data;
 }
+
+/**
+ * Export-only raster of one layer over a rectangle of authored UV (the package's plate-local window):
+ * texel (x, y) of the width × height result samples u = u0 + (x + ½)/width·(u1 − u0) and
+ * v = v0 + (y + ½)/height·(v1 − v0) with the same per-sample evaluator as `raster`. White RGB,
+ * coverage in alpha. The recipe and every editor or preview path keep using head UV.
+ */
+export function rasterWindow(l: Layer, width: number, height: number,
+  window: { u0: number; u1: number; v0: number; v1: number }): Uint8ClampedArray<ArrayBuffer> {
+  if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= 8192)) throw Error("Invalid raster size.");
+  if (!(window.u1 > window.u0 && window.v1 > window.v0)) throw Error("Invalid raster window.");
+  l = structuredClone(l);
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < data.length; i += 4) data[i] = data[i + 1] = data[i + 2] = 255;
+  if (!l.enabled) return data;
+  const polygon = curve(l.points);
+  const strength = prepareLayerStrength(l, polygon), softness = prepareLayerSoftness(l, polygon);
+  const sample = prepareRasterCoverage(l, polygon, strength, softness);
+  const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
+  let minU = Math.min(...polygon.map(p => p.u)) - pad, maxU = Math.max(...polygon.map(p => p.u)) + pad;
+  if (l.symmetry) { const a = minU; minU = Math.min(minU, 1 - maxU); maxU = Math.max(maxU, 1 - a); }
+  const minV = Math.min(...polygon.map(p => p.v)) - pad, maxV = Math.max(...polygon.map(p => p.v)) + pad;
+  const du = (window.u1 - window.u0) / width, dv = (window.v1 - window.v0) / height;
+  // Texels whose centre lies in the padded bounds; the rest stay zero exactly as `raster` leaves them.
+  const x0 = Math.max(0, Math.floor((clamp(minU) - window.u0) / du)), x1 = Math.min(width, Math.ceil((clamp(maxU) - window.u0) / du));
+  const y0 = Math.max(0, Math.floor((clamp(minV) - window.v0) / dv)), y1 = Math.min(height, Math.ceil((clamp(maxV) - window.v0) / dv));
+  for (let y = y0; y < y1; y++) {
+    const v = window.v0 + (y + .5) * dv;
+    for (let x = x0; x < x1; x++) data[(y * width + x) * 4 + 3] = Math.round(255 * sample(window.u0 + (x + .5) * du, v));
+  }
+  return data;
+}

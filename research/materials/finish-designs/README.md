@@ -12,6 +12,8 @@ One page per finish that goes beyond a flat colour. Each records the intended lo
 
 "Game-matched model" means recipe schema `xfs/recipe-11` with a layer `optics` field: the browser preview then follows the export route's arithmetic instead of the earlier browser study. Choosing Glossy, Shimmer or Colour-shifting uses it; layers made earlier keep their original preview until the user presses **Use game-matched model**, and Check omits them with that reason.
 
+**Texture density.** Flat and faceted presets export through a plate-local UV window: 2048 × 512 textures that cover only the plate's UV rectangle, mapped back by `mesh_decal`'s `UVScale`/`UVOffset` (about 0.13 × 0.12 mm per texel on the lids instead of 0.56 × 0.40 mm, at the same memory). The Colour-shifting template has no UV transform and keeps the 1024 head atlas ([experiment 019](../../../experiments/019-uv-window/README.md)).
+
 All four pages share three engine facts:
 
 1. **One surface per pixel.** The G-buffer stores one base colour, one normal, one roughness and one metalness per pixel; decals blend into those (`SrcAlpha/InvSrcAlpha`, colour in square-root space). No decal can add a clear coat or a second lobe.

@@ -5,6 +5,7 @@ import { parseCollection, planCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
 import { preflightPackageCollection } from "../src/package-preflight";
 import { HandleCounter, HIDDEN_CHUNK_ENTRY, rewritePlateMesh } from "../src/package-resources";
+import { plateUvWindow, uvTransformConstants } from "../src/plate-uv-window";
 import { SURFACE_OVERRIDE_RANGES } from "../src/export-diagnostics";
 import { VERIFIER_PLATE_LIFT_MM } from "../src/mod-verifier/plate-geometry";
 import { VERIFIER_SURFACE_RANGES } from "../src/mod-verifier/resource-checks";
@@ -117,7 +118,7 @@ test("diagnostic lifts and surfaces plan one chunk per lift and one flat entry p
 
   // Mesh rewrite: every appearance names each chunk; unused chunks bind the hidden entry, which writes nothing.
   const { mesh, morph } = plate(), lifted = liftPlate(mesh, morph, plan.plate.liftsMm);
-  const root = rewritePlateMesh(lifted.mesh, plan, new HandleCounter()).Data.RootChunk;
+  const root = rewritePlateMesh(lifted.mesh, plan, new HandleCounter(), uvTransformConstants(plateUvWindow({ uMin: .27, uMax: .73, vMin: .67, vMax: .82 }))).Data.RootChunk;
   expect(root.appearances[1].Data.chunkMaterials.map((c: any) => c.$value))
     .toEqual([HIDDEN_CHUNK_ENTRY, plan.presets[1].appearance + plan.presets[1].material, HIDDEN_CHUNK_ENTRY]);
   expect(root.materialEntries.map((e: any) => e.name.$value)).toEqual(["@preset", plan.presets[1].material, HIDDEN_CHUNK_ENTRY]);

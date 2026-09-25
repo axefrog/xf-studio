@@ -4,7 +4,9 @@
 // - `plateLiftMm`: this preset's eye-plate lift instead of the production default (plate-lift.ts),
 //   so several depth alternatives can sit side by side in one selector;
 // - `surface`: overrides of the flat material's roughness/metalness scale, bias and surface alpha,
-//   so one session can separate "the written roughness is ignored" from "the values are too glossy".
+//   so one session can separate "the written roughness is ignored" from "the values are too glossy";
+// - `uvSpace: "head"`: compile a flat or faceted preset on the 1024 head atlas without the UV transform
+//   (the layout before the plate-local window), so old and new texel density sit side by side.
 // The Studio never writes or shows these knobs, and the library does not keep them: only the package
 // filter reads them from an exported file. Every packaged use is restated by the independent verifier.
 import { MAX_PLATE_LIFT_MM } from "./plate-lift";
@@ -16,7 +18,7 @@ export const SURFACE_OVERRIDE_RANGES = {
 } as const;
 export type SurfaceParameter = keyof typeof SURFACE_OVERRIDE_RANGES;
 export type SurfaceOverride = Partial<Record<SurfaceParameter, number>>;
-export type PresetDiagnostics = { plateLiftMm?: number; surface?: SurfaceOverride };
+export type PresetDiagnostics = { plateLiftMm?: number; surface?: SurfaceOverride; uvSpace?: "head" };
 export type ExportDiagnostics = { schema: typeof EXPORT_DIAGNOSTICS_SCHEMA; presets: Record<string, PresetDiagnostics> };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -31,8 +33,8 @@ export function parseExportDiagnostics(value: unknown, presetIds: readonly strin
     throw Error(`Collection diagnostics must use ${EXPORT_DIAGNOSTICS_SCHEMA} with a presets map.`);
   const presets: Record<string, PresetDiagnostics> = {};
   for (const [id, entry] of Object.entries(value.presets)) {
-    if (!isRecord(entry) || Object.keys(entry).some(key => key !== "plateLiftMm" && key !== "surface"))
-      throw Error(`Diagnostics for preset ${id} may only set plateLiftMm and surface.`);
+    if (!isRecord(entry) || Object.keys(entry).some(key => key !== "plateLiftMm" && key !== "surface" && key !== "uvSpace"))
+      throw Error(`Diagnostics for preset ${id} may only set plateLiftMm, surface and uvSpace.`);
     const out: PresetDiagnostics = {};
     if (entry.plateLiftMm !== undefined) {
       const lift = entry.plateLiftMm;
@@ -50,6 +52,10 @@ export function parseExportDiagnostics(value: unknown, presetIds: readonly strin
         surface[name as SurfaceParameter] = number;
       }
       out.surface = surface;
+    }
+    if (entry.uvSpace !== undefined) {
+      if (entry.uvSpace !== "head") throw Error(`Diagnostic uvSpace for preset ${id} must be "head".`);
+      out.uvSpace = "head";
     }
     if (presetIds.includes(id) && Object.keys(out).length) presets[id] = out;
   }

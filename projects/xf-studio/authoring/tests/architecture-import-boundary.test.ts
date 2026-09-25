@@ -52,7 +52,9 @@ test("core modules never import presentation modules or browser entry points", (
 
 test("the package builder keeps resource definitions pure and external processes in its adapters", () => {
   // Pure definitions: no file, process or compiler access.
-  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake"]);
+  expect(imports(source("package-resources"))).toEqual(["node:crypto", "./package-bake", "./plate-uv-window"]);
+  // The plate-local UV window is pure arithmetic over WolvenKit JSON.
+  expect(imports(source("plate-uv-window"))).toEqual([]);
   // Orchestration reaches WolvenKit only through the PackageResourceTools port.
   for (const name of ["package-resource-builder", "package-build-service", "package-bake"])
     for (const dependency of imports(source(name)))

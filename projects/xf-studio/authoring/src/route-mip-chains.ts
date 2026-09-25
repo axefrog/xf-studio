@@ -18,22 +18,17 @@
 // - mask: linear coverage, so each lower level is the plain BOX mean of byte/255, re-encoded.
 // - gradient: uniform; every level repeats the base texel.
 //
-// Every 2x2 mean uses the flat chain's float order ((a + b) + c) + d, divided by 4.
-import { destinationContributions, reduceContributions, flatMipChain, mipLevelCount, CONTRIBUTION_CHANNELS } from "./flat-mip-chain";
+// Every 2x2 mean uses the flat chain's float order ((a + b) + c) + d, divided by 4. Non-square maps
+// (the plate-local window) follow the flat chain's rule: once one side reaches 1, each further level is
+// the two-texel mean (a + b) / 2 along the other side.
+import { destinationContributions, reduceContributions, reducePlanes, flatMipChain, mipDimensions, mipLevelCount, CONTRIBUTION_CHANNELS } from "./flat-mip-chain";
 
 const clip01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const toByte = (v: number) => Math.floor(clip01(v) * 255 + .5);
 const unorm = (b: number) => b / 255 * 2 - 1;
 
-/** Plain 2x2 BOX mean of `planes` interleaved float channels. */
-function halvePlanes(level: Float64Array<ArrayBufferLike>, side: number, planes: number): Float64Array<ArrayBufferLike> {
-  const half = side / 2, out = new Float64Array(half * half * planes);
-  for (let y = 0; y < half; y++) for (let x = 0; x < half; x++) {
-    const a = ((2 * y) * side + 2 * x) * planes, b = a + planes, c = a + side * planes, d = c + planes, o = (y * half + x) * planes;
-    for (let k = 0; k < planes; k++) out[o + k] = (((level[a + k] + level[b + k]) + level[c + k]) + level[d + k]) / 4;
-  }
-  return out;
-}
+/** Plain 2x2 BOX mean of `planes` interleaved float channels of a square level. */
+const halvePlanes = (level: Float64Array<ArrayBufferLike>, side: number, planes: number) => reducePlanes(level, side, side, planes);
 
 export interface FacetedMipChain {
   readonly diffuse: readonly Uint8Array[];
@@ -43,24 +38,25 @@ export interface FacetedMipChain {
   readonly normal: readonly Uint8Array[];
 }
 
-export function facetedMipChain(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, normal: Uint8Array, size: number): FacetedMipChain {
-  mipLevelCount(size);
-  const texels = size * size;
+export function facetedMipChain(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, normal: Uint8Array,
+  width: number, height = width): FacetedMipChain {
+  const dims = mipDimensions(width, height);
+  const texels = width * height;
   if (normal.length !== texels * 2) throw new RangeError("Normal map byte length does not match size");
-  const flat = flatMipChain(diffuse, roughness, metalness, size);
+  const flat = flatMipChain(diffuse, roughness, metalness, width, height);
   // Moments: x, y, x^2 + y^2 per base texel.
   let moments: Float64Array<ArrayBufferLike> = new Float64Array(texels * 3);
   for (let i = 0; i < texels; i++) {
     const x = unorm(normal[i * 2]), y = unorm(normal[i * 2 + 1]);
     moments[i * 3] = x; moments[i * 3 + 1] = y; moments[i * 3 + 2] = x * x + y * y;
   }
-  let contributions = destinationContributions(diffuse, roughness, metalness, size), side = size;
+  let contributions = destinationContributions(diffuse, roughness, metalness, width, height);
   const rough: Uint8Array[] = [roughness.slice()], normals: Uint8Array[] = [normal.slice()];
-  while (side > 1) {
-    contributions = reduceContributions(contributions, side);
-    moments = halvePlanes(moments, side, 3);
-    side /= 2;
-    const n = side * side, r = new Uint8Array(n), nb = new Uint8Array(n * 2);
+  for (let level = 1; level < dims.length; level++) {
+    const { width: w, height: h } = dims[level - 1];
+    contributions = reduceContributions(contributions, w, h);
+    moments = reducePlanes(moments, w, h, 3);
+    const n = dims[level].width * dims[level].height, r = new Uint8Array(n), nb = new Uint8Array(n * 2);
     for (let i = 0; i < n; i++) {
       const mx = moments[i * 3], my = moments[i * 3 + 1], variance = Math.max(0, moments[i * 3 + 2] - (mx * mx + my * my));
       nb[i * 2] = toByte(mx * .5 + .5); nb[i * 2 + 1] = toByte(my * .5 + .5);
@@ -76,14 +72,13 @@ export function facetedMipChain(diffuse: Uint8Array, roughness: Uint8Array, meta
 }
 
 /** Linear coverage mask chain. */
-export function maskMipChain(mask: Uint8Array, size: number): Uint8Array[] {
-  mipLevelCount(size);
-  if (mask.length !== size * size) throw new RangeError("Mask byte length does not match size");
-  let level: Float64Array<ArrayBufferLike> = Float64Array.from(mask, b => b / 255), side = size;
+export function maskMipChain(mask: Uint8Array, width: number, height = width): Uint8Array[] {
+  const dims = mipDimensions(width, height);
+  if (mask.length !== width * height) throw new RangeError("Mask byte length does not match size");
+  let level: Float64Array<ArrayBufferLike> = Float64Array.from(mask, b => b / 255);
   const chain: Uint8Array[] = [mask.slice()];
-  while (side > 1) {
-    level = halvePlanes(level, side, 1);
-    side /= 2;
+  for (let i = 1; i < dims.length; i++) {
+    level = reducePlanes(level, dims[i - 1].width, dims[i - 1].height, 1);
     chain.push(Uint8Array.from(level, toByte));
   }
   return chain;

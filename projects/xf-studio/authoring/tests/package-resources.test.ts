@@ -6,6 +6,7 @@ import {
   appearanceResource, archiveXlDeclaration, componentId, customizationResource, HandleCounter, resourceJson,
   rewritePlateMesh, rewritePlateMorph,
 } from "../src/package-resources";
+import { plateUvWindow, uvTransformConstants } from "../src/plate-uv-window";
 
 const plan = planCollection(JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8")));
@@ -14,7 +15,7 @@ const plateMesh = () => ({ Header: {}, Data: { RootChunk: { appearances: [{ Hand
 
 test("handle numbering follows the Python builder: mesh appearances, component bindings, app definitions, selector", () => {
   const handles = new HandleCounter();
-  const mesh = rewritePlateMesh(plateMesh(), plan, handles).Data.RootChunk;
+  const mesh = rewritePlateMesh(plateMesh(), plan, handles, uvTransformConstants(plateUvWindow({ uMin: .27, uMax: .73, vMin: .67, vMax: .82 }))).Data.RootChunk;
   expect(mesh.appearances.map((a: { HandleId: string }) => a.HandleId)).toEqual(["10000", "10001", "10002", "10003"]);
   expect(mesh.appearances[0].Data.chunkMaterials[0].$value).toBe(plan.presets[0].appearance + "@preset");
   expect(mesh.appearances[1].Data.chunkMaterials).toEqual([]);

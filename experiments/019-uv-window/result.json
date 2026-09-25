@@ -1,0 +1,461 @@
+{
+  "build": "xfs_c019a0b1c2d3e4f508a6b0000000000b0",
+  "archiveSha256": "cb392cd3e95bae6f039f964cfb5d98513eb4f4dadbea27d5273a1fcff91b4169",
+  "plateUvWindow": {
+    "bounds": {
+      "uMin": 0.27319,
+      "uMax": 0.72656,
+      "vMin": 0.67627,
+      "vMax": 0.82129
+    },
+    "window": {
+      "u0": 0.26588,
+      "u1": 0.73387,
+      "v0": 0.17637,
+      "v1": 0.32607
+    },
+    "constants": {
+      "UVScaleX": 2.13678,
+      "UVOffsetX": 0.00026,
+      "UVScaleY": 6.68013,
+      "UVOffsetY": -1.66188
+    },
+    "samples": 19680
+  },
+  "compression": [
+    {
+      "preset": "Lines · new density",
+      "uvSpace": "plate-window",
+      "size": "2048x512",
+      "bcCoverageEdge": {
+        "n": 9181,
+        "mean": 0.0096,
+        "p95": 0.02719,
+        "max": 0.12261
+      },
+      "bcCoverageInterior": {
+        "n": 20613,
+        "mean": 0.0018,
+        "p95": 0.02339,
+        "max": 0.03113
+      },
+      "bcColour": {
+        "n": 89382,
+        "mean": 0.00101,
+        "p95": 0.00392,
+        "max": 0.05098
+      }
+    },
+    {
+      "preset": "Lines · old density",
+      "uvSpace": "head",
+      "size": "1024x1024",
+      "bcCoverageEdge": {
+        "n": 661,
+        "mean": 0.00456,
+        "p95": 0.0139,
+        "max": 0.09818
+      },
+      "bcCoverageInterior": {
+        "n": 1510,
+        "mean": 0.0055,
+        "p95": 0.02339,
+        "max": 0.03113
+      },
+      "bcColour": {
+        "n": 6513,
+        "mean": 0.0013,
+        "p95": 0.00784,
+        "max": 0.00784
+      }
+    },
+    {
+      "preset": "Board 1 · new density",
+      "uvSpace": "plate-window",
+      "size": "2048x512",
+      "bcCoverageEdge": {
+        "n": 40820,
+        "mean": 0.00305,
+        "p95": 0.00904,
+        "max": 0.03599
+      },
+      "bcCoverageInterior": {
+        "n": 135067,
+        "mean": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "bcColour": {
+        "n": 527661,
+        "mean": 0.00028,
+        "p95": 0,
+        "max": 0.01961
+      }
+    },
+    {
+      "preset": "Board 1 · old density",
+      "uvSpace": "head",
+      "size": "1024x1024",
+      "bcCoverageEdge": {
+        "n": 2948,
+        "mean": 0.00545,
+        "p95": 0.02191,
+        "max": 0.07105
+      },
+      "bcCoverageInterior": {
+        "n": 9508,
+        "mean": 0.00023,
+        "p95": 0,
+        "max": 0.00783
+      },
+      "bcColour": {
+        "n": 37368,
+        "mean": 0.0005,
+        "p95": 0.00392,
+        "max": 0.01961
+      }
+    },
+    {
+      "preset": "Shimmer · new density",
+      "uvSpace": "plate-window",
+      "size": "2048x512",
+      "bcCoverageEdge": {
+        "n": 41245,
+        "mean": 0.00322,
+        "p95": 0.00783,
+        "max": 0.02358
+      },
+      "bcCoverageInterior": {
+        "n": 138538,
+        "mean": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "bcColour": {
+        "n": 539349,
+        "mean": 0.0003,
+        "p95": 0.00392,
+        "max": 0.01176
+      }
+    },
+    {
+      "preset": "Shimmer · old density",
+      "uvSpace": "head",
+      "size": "1024x1024",
+      "bcCoverageEdge": {
+        "n": 2968,
+        "mean": 0.00387,
+        "p95": 0.02022,
+        "max": 0.05253
+      },
+      "bcCoverageInterior": {
+        "n": 9792,
+        "mean": 0.00046,
+        "p95": 0.00783,
+        "max": 0.00783
+      },
+      "bcColour": {
+        "n": 38280,
+        "mean": 0.00054,
+        "p95": 0.00392,
+        "max": 0.01176
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.983,
+      "modulation": 0.96
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Line 0.6 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Line 1.2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Line 2.4 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Dots 0.5 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Dots 1 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 0,
+      "pattern": "Dots 2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.717,
+      "modulation": 0.607
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Line 0.6 mm",
+      "peak": 0.961,
+      "modulation": 0.958
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Line 1.2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Line 2.4 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Dots 0.5 mm",
+      "peak": 0.953,
+      "modulation": 0.885
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Dots 1 mm",
+      "peak": 0.992,
+      "modulation": 0.992
+    },
+    {
+      "density": "new",
+      "level": 1,
+      "pattern": "Dots 2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.381,
+      "modulation": -0.134
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Line 0.6 mm",
+      "peak": 0.965,
+      "modulation": 0.609
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Line 1.2 mm",
+      "peak": 1,
+      "modulation": 0.988
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Line 2.4 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Dots 0.5 mm",
+      "peak": 0.593,
+      "modulation": 0.345
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Dots 1 mm",
+      "peak": 0.999,
+      "modulation": 0.938
+    },
+    {
+      "density": "new",
+      "level": 2,
+      "pattern": "Dots 2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.169,
+      "modulation": -0.212
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Line 0.6 mm",
+      "peak": 0.972,
+      "modulation": 0.897
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Line 1.2 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Line 2.4 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Dots 0.5 mm",
+      "peak": 0.776,
+      "modulation": 0.554
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Dots 1 mm",
+      "peak": 0.977,
+      "modulation": 0.958
+    },
+    {
+      "density": "old",
+      "level": 0,
+      "pattern": "Dots 2 mm",
+      "peak": 0.995,
+      "modulation": 0.995
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.308,
+      "modulation": -0.168
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Line 0.6 mm",
+      "peak": 0.953,
+      "modulation": 0.317
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Line 1.2 mm",
+      "peak": 0.986,
+      "modulation": 0.799
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Line 2.4 mm",
+      "peak": 1,
+      "modulation": 1
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Dots 0.5 mm",
+      "peak": 0.34,
+      "modulation": 0.034
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Dots 1 mm",
+      "peak": 0.79,
+      "modulation": 0.485
+    },
+    {
+      "density": "old",
+      "level": 1,
+      "pattern": "Dots 2 mm",
+      "peak": 1,
+      "modulation": 0.975
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Line 0.3 mm",
+      "peak": 0.294,
+      "modulation": -0.068
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Line 0.6 mm",
+      "peak": 0.655,
+      "modulation": -0.044
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Line 1.2 mm",
+      "peak": 0.645,
+      "modulation": 0.046
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Line 2.4 mm",
+      "peak": 0.744,
+      "modulation": 0.744
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Dots 0.5 mm",
+      "peak": 0.214,
+      "modulation": 0.012
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Dots 1 mm",
+      "peak": 0.364,
+      "modulation": 0.035
+    },
+    {
+      "density": "old",
+      "level": 2,
+      "pattern": "Dots 2 mm",
+      "peak": 0.621,
+      "modulation": 0.413
+    }
+  ]
+}
