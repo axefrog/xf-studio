@@ -15,6 +15,36 @@ export type MenuItem =
   | { kind: "heading"; label: string; detail?: string };
 export type MenuAnchor = { x: number; y: number } | Element;
 
+/**
+ * A menu section: an optional short label (only where it aids scanning) over its entries.
+ * Context menus are actionable, not informational: see `menuFromSections`.
+ */
+export type MenuSection = { label?: string; detail?: string; items: MenuItem[] };
+const actionable = (item: MenuItem) => item.kind === "action" || item.kind === "submenu";
+/** Flatten sections, dropping any without an action or submenu (disabled entries still count: they state why). */
+export function menuFromSections(sections: readonly MenuSection[]): MenuItem[] {
+  const items: MenuItem[] = [];
+  for (const section of sections) {
+    if (!section.items.some(actionable)) continue;
+    if (items.length) items.push({ kind: "separator" });
+    if (section.label) items.push({ kind: "heading", label: section.label, detail: section.detail });
+    items.push(...section.items);
+  }
+  return items;
+}
+/** Split a flat menu into sections: a heading starts one, a separator ends one. */
+export function menuSections(items: readonly MenuItem[]): { label?: string; items: MenuItem[] }[] {
+  const sections: { label?: string; items: MenuItem[] }[] = [];
+  let current: { label?: string; items: MenuItem[] } | undefined;
+  for (const item of items) {
+    if (item.kind === "separator") { current = undefined; continue; }
+    if (item.kind === "heading") { current = { label: item.label, items: [] }; sections.push(current); continue; }
+    if (!current) { current = { items: [] }; sections.push(current); }
+    current.items.push(item);
+  }
+  return sections;
+}
+
 type OpenMenu = { element: HTMLElement; parent?: OpenMenu; child?: OpenMenu; invoker?: Element | null; close(restore: boolean): void };
 let root: OpenMenu | undefined;
 let layer: HTMLElement | undefined;
