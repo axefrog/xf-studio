@@ -19,7 +19,7 @@ import { characterRequestFor, sameCharacter, validOverride, type CharacterOverri
 import type { SavedV } from "./save-reader";
 import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoices } from "./render-detail";
 import { CHOICE_SLOTS, DETAIL_SLOTS, isChoiceName } from "./render-detail";
-import type { DetailLimit, DetailNotice } from "./detail-limits";
+import { withSlotLimits, type DetailLimit, type DetailNotice, type SlotLimits } from "./detail-limits";
 import { refusal, type Capability, type ReasonCode } from "./platform/api";
 
 /** The host's preparation state (character-detail-host.ts), as the transport returns it. */
@@ -41,6 +41,8 @@ export type CharacterDetailPort = {
     override?: CharacterOverride | null }>;
   /** Remove every resolved detail from the scene. */
   clear(): void;
+  /** Shown slots' limit codes when the renderer's change after `show` (a slot shown later, a re-bake after a restore; PREV-74). */
+  onLimits?(listener: (update: SlotLimits) => void): () => void;
   wait(ms: number, signal: AbortSignal): Promise<void>;
 };
 export type CharacterSlotStatus = { slot: DetailSlot; state: "pending" | DetailSlotState["state"]; label: string; message?: string;
@@ -91,6 +93,7 @@ export class CharacterDetailActions {
   constructor(private readonly port: CharacterDetailPort, initialTried?: unknown) {
     this.tried = validOverride(initialTried);
     this.status.tried = this.tried ? { ...this.tried } : null;
+    port.onLimits?.(update => { if (this.status.phase === "ready") this.publish({ ...this.status, slots: withSlotLimits(this.status.slots, update) }); });
   }
 
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }

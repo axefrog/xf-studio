@@ -23,6 +23,11 @@ import { type Ambiguity, type RuleNote, note } from "./resolution-evidence";
 export interface ResourceFetchPort {
   /** `extension` is the expected resource extension when the reference carries no path (e.g. "mesh"). */
   fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null>;
+  /**
+   * Whether the last null answer for this resource was for a reason that may not repeat (the tool did not run cleanly, or its
+   * output went missing), so a later read should try again. A port without it has every null counted as such.
+   */
+  transient?(archive: MountedArchive, ref: DepotRef): boolean;
 }
 export interface FetchedResource {
   readonly document: unknown;
@@ -32,6 +37,8 @@ export interface FetchedResource {
   readonly path?: string | null;
   /** The adapter extracted it just now (not from its cache): the resources it names are likely not cached either. */
   readonly fresh?: boolean;
+  /** Length of the document's JSON text, when the adapter knows it (the graph measures it otherwise). */
+  readonly bytes?: number;
 }
 
 /** Where a resource came from and why that source won. Contains no physical paths. */
@@ -180,13 +187,15 @@ const chunkLodMasks = (blob: unknown, scope: HandleScope): number[] | null => {
 };
 /**
  * Whether each render chunk draws in the scene: its `renderMask` (`EMeshChunkFlags`) has `MCF_RenderInScene`. A chunk with only
- * `MCF_RenderInShadows` (the vanilla hair `*_shadow` meshes, a body's seam-fix proxy) only casts shadows [resource]. A mask that is
- * absent or unreadable counts as drawn, as before this was read.
+ * `MCF_RenderInShadows` (the vanilla hair `*_shadow` meshes, a body's seam-fix proxy) only casts shadows [resource]. Only a missing
+ * field counts as drawn (the engine's default flags; PIPE-67): an empty flag list is a mask with no flags set, so the chunk is not
+ * drawn, and a value of another type is not a mask the engine would read as drawing either.
  */
 export function chunkInScene(mask: unknown): boolean {
-  if (typeof mask === "string" && mask.trim()) return mask.split(/[,|\s]+/).includes("MCF_RenderInScene");
-  if (typeof mask === "number" && Number.isInteger(mask)) return (mask & 1) === 1;
-  return true;
+  if (mask === undefined || mask === null) return true;
+  if (typeof mask === "string") return mask.split(/[,|\s]+/).includes("MCF_RenderInScene");
+  if (typeof mask === "number") return Number.isInteger(mask) && (mask & 1) === 1;
+  return false;
 }
 const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null => {
   const data = scope.data(blob);
@@ -198,21 +207,76 @@ const chunkSceneFlags = (blob: unknown, scope: HandleScope): boolean[] | null =>
 /**
  * Prefetch: when a resource is read, the resources of these kinds that it names are requested at once, in the same
  * extraction batch as whatever else is being read, instead of one batch each when a consumer later asks for them one at
- * a time (an `.app`'s part entities, and the templates, profiles, gradients and layer setups a mesh or material names,
- * which the character details read one by one). Only a resource that a consumer asked for and that the fetch port had
- * to extract just now (`FetchedResource.fresh`: its neighbours are likely not cached either) is expanded, one step deep,
- * except that a fresh layer setup's templates are always requested with it. A cached resource is never expanded, so a V
- * whose resources are cached starts no extraction it does not need. Prefetch changes when a resource is read, never what
- * is read for it: the same archive precedence and fetch port answer, and a consumer later gets the same promise.
+ * a time (the templates, profiles, gradients and layer setups a mesh or material names, which the character details read
+ * one by one). Only a resource that a consumer asked for and that the fetch port had to extract just now
+ * (`FetchedResource.fresh`: its neighbours are likely not cached either) is expanded, one step deep, except that a fresh
+ * layer setup's templates are always requested with it. A cached resource is never expanded, so a V whose resources are
+ * cached starts no extraction it does not need. Prefetch changes when a resource is read, never what is read for it: the
+ * same archive precedence and fetch port answer, and a consumer later gets the same promise.
+ *
+ * An `.app`'s part entities are not prefetched (PIPE-64): an `.app` names every appearance's parts (a framework's piercing
+ * `.app` names 31 where one appearance needs one to three), and the resolver reads the requested appearance's parts together
+ * (character-resolver.ts `resolveAppearance`), which batches them the same way.
  */
 export const PREFETCH: Readonly<Record<string, readonly string[]>> = {
-  app: ["ent"],
   mesh: ["mt", "hp", "sp", "gradient", "mlsetup"],
   mi: ["mt", "hp", "sp", "gradient", "mlsetup"],
   mlsetup: ["mltemplate"],
 };
 const CASCADE = new Set(["mlsetup"]);
 const extensionOf = (path: string | null | undefined) => path ? /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase() ?? null : null;
+
+/**
+ * What the graph keeps of a mesh, morph target or `.app` document once it is read (PIPE-55): the parts `mesh()`, `morph()` and
+ * `app()` read, never the buffers, bone tables, per-target offsets or compiled packages around them. A morph target's document is
+ * mostly its per-target data (about 10 MB for the player head's), which nothing here reads.
+ */
+type MeshShape = {
+  appearances: { name: string; chunkMaterials: string[]; tags: string[] }[];
+  entries: MaterialEntryModel[];
+  localMaterials: JsonObject[];
+  externalMaterials: { ref: DepotRef | null; text: string | null }[];
+  renderChunks: number | null; renderChunkLods: number[] | null; renderChunkScene: boolean[] | null;
+};
+type MorphShape = {
+  baseMesh: DepotRef | null; baseMeshAppearance: string; baseTexture: DepotRef | null; baseTextureParam: string;
+  /** Whether the document has a render blob (a patch replaces it only then). */
+  blob: boolean;
+  renderChunks: number | null; renderChunkLods: number[] | null; renderChunkScene: boolean[] | null;
+  targets: { name: string; region: string }[];
+};
+function readMeshShape(root: JsonObject): MeshShape {
+  const scope = new HandleScope(root);
+  const buffer = isObject(root.localMaterialBuffer) ? asArray(root.localMaterialBuffer.materials) : [];
+  return {
+    appearances: asArray(root.appearances).map(item => scope.data(item)).filter((d): d is JsonObject => !!d).map(data => ({
+      name: cname(data.name), chunkMaterials: asArray(data.chunkMaterials).map(cname), tags: asArray(data.tags).map(cname) })),
+    entries: asArray(root.materialEntries).filter(isObject).map(entry => ({ name: cname(entry.name), local: entry.isLocalInstance === 1 || entry.isLocalInstance === true, index: Number(entry.index ?? 0) })),
+    localMaterials: (buffer.length ? buffer : asArray(root.preloadLocalMaterialInstances)).map(item => scope.data(item)).filter((d): d is JsonObject => !!d),
+    externalMaterials: (asArray(root.externalMaterials).length ? asArray(root.externalMaterials) : asArray(root.preloadExternalMaterials))
+      .map(item => ({ ref: depotRef(item), text: depotText(item) })),
+    renderChunks: renderChunkCount(root.renderResourceBlob, scope),
+    renderChunkLods: chunkLodMasks(root.renderResourceBlob, scope), renderChunkScene: chunkSceneFlags(root.renderResourceBlob, scope),
+  };
+}
+function readMorphShape(root: JsonObject): MorphShape {
+  const scope = new HandleScope(root);
+  const blob = scope.data(root.blob);
+  return {
+    baseMesh: depotRef(root.baseMesh), baseMeshAppearance: cname(root.baseMeshAppearance),
+    baseTexture: depotRef(root.baseTexture), baseTextureParam: cname(root.baseTextureParamName),
+    blob: !!blob, renderChunks: blob ? renderChunkCount(blob.baseBlob, scope) : null,
+    renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null, renderChunkScene: blob ? chunkSceneFlags(blob.baseBlob, scope) : null,
+    targets: asArray(root.targets).filter(isObject).map(target => ({ name: cname(target.name), region: cname(target.regionName) })),
+  };
+}
+const readAppShape = (root: JsonObject): AppDefinitionModel[] => {
+  const scope = new HandleScope(root);
+  return asArray(root.appearances).map(item => scope.data(item)).filter((d): d is JsonObject => !!d).map(data => readDefinition(data, scope));
+};
+/** Root types whose documents are kept as a shape (`MeshShape`, `MorphShape`, the `.app`'s definitions). */
+const SHAPED = new Set(["CMesh", "MorphTargetMesh", "appearanceAppearanceResource"]);
+const jsonLength = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 
 export const snakeCase = (value: string) => {
   let out = "", split = false;
@@ -241,6 +305,16 @@ export class ResourceGraph {
   private readonly children = new Map<string, string[]>();
   /** Resources a consumer asked for, as opposed to prefetched ones. */
   private readonly requested = new Set<string>();
+  /** Resources the fetch port answered null for a reason that may not repeat (`ResourceFetchPort.transient`). */
+  private readonly transientFailures = new Set<string>();
+  /** The kept shapes of mesh, morph target and `.app` documents, by hash (`MeshShape`). */
+  private readonly meshShapes = new Map<string, MeshShape>();
+  private readonly morphShapes = new Map<string, MorphShape>();
+  private readonly appShapes = new Map<string, AppDefinitionModel[]>();
+  /** JSON length of what is kept of each read resource. */
+  private retainedTotal = 0;
+  /** Ambiguity collectors of the resolutions running now (`collect`). */
+  private readonly collectors = new Set<Map<string, Ambiguity>>();
 
   constructor(readonly depot: DepotIndex, readonly xl: ArchiveXlConfig, readonly port: ResourceFetchPort, private readonly prefetch = true) {
     for (const [hash, path] of xl.paths) this.paths.set(hash, path);
@@ -282,11 +356,40 @@ export class ResourceGraph {
     return { entry: current, lookup: this.lookup(current.hash), via };
   }
 
+  /** A consumer's provenance of a reference; its precedence ambiguities are recorded as observed (`observe`). */
   provenance(ref: DepotRef, extractedSha256: string | null = null): Provenance {
+    this.observe(ref);
+    return this.provenanceOf(ref, extractedSha256);
+  }
+
+  /**
+   * Record the precedence ambiguities of a reference a consumer reads (PIPE-63): in `observedAmbiguities` and in every running
+   * `collect`. Prefetched reads no consumer asked for are not recorded, so what a V reports doesn't depend on which resources a
+   * cold cache happened to prefetch.
+   */
+  private observe(ref: DepotRef): void {
+    const named = this.named(ref);
+    for (const ambiguity of this.locate(named).lookup.ambiguities) {
+      const key = `${ambiguity.code}|${ambiguity.subject}`, value = { ...ambiguity, subject: refLabel(named) };
+      this.observedAmbiguities.set(key, value);
+      for (const collector of this.collectors) collector.set(key, value);
+    }
+  }
+
+  /**
+   * Run `work` and return the precedence ambiguities of the resources it read (each consumer read, cached or not), so one V's report
+   * holds its own ambiguities rather than everything the long-lived graph ever met.
+   */
+  async collect<T>(work: () => Promise<T>): Promise<{ value: T; ambiguities: Ambiguity[] }> {
+    const seen = new Map<string, Ambiguity>();
+    this.collectors.add(seen);
+    try { const value = await work(); return { value, ambiguities: [...seen.values()] }; }
+    finally { this.collectors.delete(seen); }
+  }
+
+  private provenanceOf(ref: DepotRef, extractedSha256: string | null): Provenance {
     const named = this.named(ref);
     const { lookup, via } = this.locate(named);
-    for (const ambiguity of lookup.ambiguities)
-      this.observedAmbiguities.set(`${ambiguity.code}|${ambiguity.subject}`, { ...ambiguity, subject: refLabel(named) });
     return { ref: named, status: lookup.winner ? "archive" : "missing", archive: lookup.winner?.name ?? null,
       group: lookup.winner?.group ?? null, provider: lookup.winner?.providerName ?? null,
       alternatives: lookup.candidates.slice(1).map(c => `${c.name} (${c.group}, ${c.providerName})`),
@@ -296,11 +399,27 @@ export class ResourceGraph {
 
   /** How many resources this graph has read or is reading. */
   get size(): number { return this.loads.size; }
+  /** JSON length of what this graph keeps of the resources it read (their shapes for meshes, morph targets and `.app`s). */
+  get retainedBytes(): number { return this.retainedTotal; }
+  /**
+   * Consumer reads the fetch port answered null for a reason that may not repeat (PIPE-54). A graph with any should not be kept for
+   * later preparations, so the read is tried again; a prefetched resource no consumer asked for doesn't count.
+   */
+  get retryableFailures(): number {
+    let count = 0;
+    for (const hash of this.transientFailures) if (this.requested.has(hash)) count++;
+    return count;
+  }
 
+  /** A consumer's read of a resource (its ambiguities are recorded; see `observe`). */
   load(ref: DepotRef, extension: string | null = null): Promise<LoadedResource | null> {
-    const pending = this.read(ref, extension);
-    const hash = this.named(ref).hash;
-    if (this.prefetch && !this.requested.has(hash)) { this.requested.add(hash); pending.then(() => this.expand(hash), () => {}); }
+    const named = this.named(ref);
+    this.observe(named);
+    const pending = this.read(named, extension);
+    if (!this.requested.has(named.hash)) {
+      this.requested.add(named.hash);
+      if (this.prefetch) pending.then(() => this.expand(named.hash), () => {});
+    }
     return pending;
   }
 
@@ -326,7 +445,11 @@ export class ResourceGraph {
         const { entry, lookup } = this.locate(named);
         if (!lookup.winner) return null;
         const fetched = await this.port.fetch(lookup.winner, entry, extension);
-        if (!fetched) { this.loadErrors.set(named.hash, `${lookup.winner.name} provides it, but it could not be extracted or converted.`); return null; }
+        if (!fetched) {
+          this.loadErrors.set(named.hash, `${lookup.winner.name} provides it, but it could not be extracted or converted.`);
+          if (this.port.transient?.(lookup.winner, entry) ?? true) this.transientFailures.add(named.hash);
+          return null;
+        }
         if (fetched.path && !entry.path) this.paths.set(entry.hash, fetched.path);
         if (fetched.path && !named.path && entry.hash === named.hash) this.paths.set(named.hash, fetched.path);
         const { root } = cr2wRoot(fetched.document);
@@ -337,11 +460,40 @@ export class ResourceGraph {
           const wanted = [...new Set(found.filter(path => !/[*{]/.test(path) && kinds.includes(extensionOf(path) ?? "")))];
           if (wanted.length) this.children.set(named.hash, wanted);
         }
-        return { ref: this.named(named), root, provenance: this.provenance(named, fetched.extractedSha256) };
+        return { ref: this.named(named), root: this.keep(named.hash, root, fetched), provenance: this.provenanceOf(named, fetched.extractedSha256) };
       })();
       this.loads.set(named.hash, pending);
     }
     return pending;
+  }
+
+  /**
+   * What the graph keeps of a read document (PIPE-55): a mesh, morph target or `.app` as its shape, with only its type left as the
+   * loaded root; anything else as it is. Its retained size is counted.
+   */
+  private keep(hash: string, root: JsonObject, fetched: FetchedResource): JsonObject {
+    let kept = root, bytes: number;
+    if (typeof root.$type === "string" && SHAPED.has(root.$type)) {
+      const shape = root.$type === "CMesh" ? readMeshShape(root) : root.$type === "MorphTargetMesh" ? readMorphShape(root) : readAppShape(root);
+      if (root.$type === "CMesh") this.meshShapes.set(hash, shape as MeshShape);
+      else if (root.$type === "MorphTargetMesh") this.morphShapes.set(hash, shape as MorphShape);
+      else this.appShapes.set(hash, shape as AppDefinitionModel[]);
+      kept = { $type: root.$type };
+      bytes = jsonLength(shape);
+    } else bytes = fetched.bytes ?? jsonLength(fetched.document);
+    this.retainedTotal += bytes;
+    return kept;
+  }
+  /** A mesh's shape, its lists copied (fix names rewrite them per mesh). */
+  private meshShape(loaded: LoadedResource): MeshShape {
+    const shape = this.meshShapes.get(loaded.ref.hash) ?? readMeshShape(loaded.root);
+    return { ...shape, appearances: shape.appearances.map(a => ({ ...a, chunkMaterials: [...a.chunkMaterials], tags: [...a.tags] })),
+      entries: shape.entries.map(entry => ({ ...entry })) };
+  }
+  private morphShape(loaded: LoadedResource): MorphShape { return this.morphShapes.get(loaded.ref.hash) ?? readMorphShape(loaded.root); }
+  /** An `.app`'s definitions, copied (patches add to them). */
+  private appDefinitions(loaded: LoadedResource): AppDefinitionModel[] {
+    return structuredClone(this.appShapes.get(loaded.ref.hash) ?? readAppShape(loaded.root));
   }
 
   private learnPaths(value: unknown, depth = 0, found?: string[]): void {
@@ -357,7 +509,17 @@ export class ResourceGraph {
 
   patchesFor(hash: string): readonly XlPatch[] { return this.additions.patchesByTarget.get(hash) ?? []; }
 
+  /**
+   * A model's reads, recorded as a consumer's each time it is asked for (`observe`): the resource and the patch sources its
+   * builder reads. Models are memoised, so a later V on the same graph reports them too.
+   */
+  private observeModel(ref: DepotRef, applies: (patch: XlPatch) => boolean = () => true): void {
+    this.observe(ref);
+    for (const patch of this.patchesFor(ref.hash)) if (applies(patch)) this.observe(refFromHash(patch.source, patch.sourcePath));
+  }
+
   app(ref: DepotRef): Promise<AppModel | null> {
+    this.observeModel(ref, patch => patchModifies(patch, "appearances"));
     let pending = this.apps.get(ref.hash);
     if (!pending) { pending = this.buildApp(ref); this.apps.set(ref.hash, pending); }
     return pending;
@@ -365,9 +527,11 @@ export class ResourceGraph {
 
   /**
    * Start reading a resource's ArchiveXL patch sources together with it: they are applied in order afterwards, but read
-   * in one extraction batch instead of one batch per patch (a vanilla mesh several mods patch has many).
+   * in one extraction batch instead of one batch per patch (a vanilla mesh several mods patch has many). Only once the target
+   * itself is known to be provided (PIPE-64): a patch of a resource no archive provides is never applied.
    */
   private readPatchSources(ref: DepotRef, extension: string, applies: (patch: XlPatch) => boolean = () => true): void {
+    if (!this.locate(ref).lookup.winner) return;
     for (const patch of this.patchesFor(ref.hash))
       if (applies(patch)) this.load(refFromHash(patch.source, patch.sourcePath), extension).catch(() => {});
   }
@@ -376,18 +540,14 @@ export class ResourceGraph {
     this.readPatchSources(ref, "app", patch => patchModifies(patch, "appearances"));
     const loaded = await this.load(ref, "app");
     if (!loaded) return null;
-    const scope = new HandleScope(loaded.root);
-    const appearances = asArray(loaded.root.appearances).map(item => scope.data(item)).filter((d): d is JsonObject => !!d)
-      .map(data => readDefinition(data, scope));
+    const appearances = this.appDefinitions(loaded);
     const patchNotes: RuleNote[] = [];
     for (const patch of this.patchesFor(ref.hash)) {
       if (!patchModifies(patch, "appearances")) continue;
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "app");
       if (!source) continue;
-      const sourceScope = new HandleScope(source.root);
       const added = new Set<string>();
-      for (const definition of asArray(source.root.appearances).map(item => sourceScope.data(item)).filter((d): d is JsonObject => !!d)
-        .map(data => readDefinition(data, sourceScope))) {
+      for (const definition of this.appDefinitions(source)) {
         const multi = !definition.name;
         let isNew = !multi;
         for (const existing of appearances) {
@@ -415,6 +575,7 @@ export class ResourceGraph {
   }
 
   mesh(ref: DepotRef): Promise<MeshModel | null> {
+    this.observeModel(ref);
     let pending = this.meshes.get(ref.hash);
     if (!pending) { pending = this.buildMesh(ref); this.meshes.set(ref.hash, pending); }
     return pending;
@@ -424,26 +585,7 @@ export class ResourceGraph {
     this.readPatchSources(ref, "mesh");
     const loaded = await this.load(ref, "mesh");
     if (!loaded) return null;
-    const read = (root: JsonObject) => {
-      const scope = new HandleScope(root);
-      return {
-        scope,
-        appearances: asArray(root.appearances).map(item => scope.data(item)).filter((d): d is JsonObject => !!d).map(data => ({
-          name: cname(data.name), chunkMaterials: asArray(data.chunkMaterials).map(cname),
-          tags: asArray(data.tags).map(cname) })),
-        entries: asArray(root.materialEntries).filter(isObject).map(entry => ({ name: cname(entry.name), local: entry.isLocalInstance === 1 || entry.isLocalInstance === true, index: Number(entry.index ?? 0) })),
-        localMaterials: (() => {
-          const buffer = isObject(root.localMaterialBuffer) ? asArray(root.localMaterialBuffer.materials) : [];
-          const items = buffer.length ? buffer : asArray(root.preloadLocalMaterialInstances);
-          return items.map(item => scope.data(item)).filter((d): d is JsonObject => !!d);
-        })(),
-        externalMaterials: (asArray(root.externalMaterials).length ? asArray(root.externalMaterials) : asArray(root.preloadExternalMaterials))
-          .map(item => ({ ref: depotRef(item), text: depotText(item) })),
-        renderChunks: renderChunkCount(root.renderResourceBlob, scope),
-        renderChunkLods: chunkLodMasks(root.renderResourceBlob, scope), renderChunkScene: chunkSceneFlags(root.renderResourceBlob, scope),
-      };
-    };
-    const base = read(loaded.root);
+    const base = this.meshShape(loaded);
     const notes: RuleNote[] = [];
     const fix = this.xl.fixes.get(ref.hash);
     if (fix?.names.size) {
@@ -457,7 +599,7 @@ export class ResourceGraph {
     for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "mesh");
       if (!source) continue;
-      const patchMesh = read(source.root);
+      const patchMesh = this.meshShape(source);
       if (patchModifies(patch, "appearances") && patchMesh.appearances.length) {
         let expansionTag: string | null = null;
         for (const appearance of patchMesh.appearances) {
@@ -493,6 +635,7 @@ export class ResourceGraph {
   }
 
   morph(ref: DepotRef): Promise<MorphModel | null> {
+    this.observeModel(ref, () => !this.additions.patchSources.has(ref.hash));
     let pending = this.morphs.get(ref.hash);
     if (!pending) { pending = this.buildMorph(ref); this.morphs.set(ref.hash, pending); }
     return pending;
@@ -502,18 +645,7 @@ export class ResourceGraph {
     if (!this.additions.patchSources.has(ref.hash)) this.readPatchSources(ref, "morphtarget");
     const loaded = await this.load(ref, "morphtarget");
     if (!loaded) return null;
-    const read = (root: JsonObject) => {
-      const scope = new HandleScope(root);
-      const blob = scope.data(root.blob);
-      return {
-        baseMesh: depotRef(root.baseMesh), baseMeshAppearance: cname(root.baseMeshAppearance),
-        baseTexture: depotRef(root.baseTexture), baseTextureParam: cname(root.baseTextureParamName),
-        blob, renderChunks: blob ? renderChunkCount(blob.baseBlob, scope) : null,
-        renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null, renderChunkScene: blob ? chunkSceneFlags(blob.baseBlob, scope) : null,
-        targets: asArray(root.targets).filter(isObject).map(target => ({ name: cname(target.name), region: cname(target.regionName) })),
-      };
-    };
-    const base = read(loaded.root);
+    const base = this.morphShape(loaded);
     const notes: RuleNote[] = [];
     let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, renderChunkScene, baseTexture, baseTextureParam } = base;
     const targets = [...base.targets];
@@ -522,7 +654,7 @@ export class ResourceGraph {
     if (!this.additions.patchSources.has(ref.hash)) for (const patch of this.patchesFor(ref.hash)) {
       const source = await this.load(refFromHash(patch.source, patch.sourcePath), "morphtarget");
       if (!source) continue;
-      const patchMorph = read(source.root);
+      const patchMorph = this.morphShape(source);
       if (patchMorph.baseMesh && patchModifies(patch, "baseMesh")) baseMesh = patchMorph.baseMesh;
       if (patchModifies(patch, "baseMeshAppearance", !patchMorph.baseMeshAppearance)) baseMeshAppearance = patchMorph.baseMeshAppearance;
       // OnMorphTargetResourceLoad: an empty source value overwrites only when the patch names the property.

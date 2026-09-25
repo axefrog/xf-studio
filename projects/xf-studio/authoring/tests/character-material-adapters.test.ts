@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { chunkOfMesh, releaseDetailObject } from "../src/character-detail-loader";
+import { chunkOfMesh, releaseDetailObject, textureLedgerKey } from "../src/character-detail-loader";
 import { materialAdapter, MATERIAL_ADAPTERS, textureColourSpace, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
 import { hairMaterialFromScalars, HAIR_TEMPLATE_DEFAULTS } from "../src/hair-colour-model";
 import type { RenderChunkMaterial, RenderTexture } from "../src/render-detail";
@@ -150,4 +150,19 @@ test("the layered adapter says `layered-mask` only for a mask the host could not
   expect(skipped.layered!.evidence().layers).toEqual([0]);
   // A 4 mm part is baked at the smallest size, not at 1024 (PREV-63).
   expect(skipped.layered!.evidence().size).toBe(256);
+  // An unreadable bottom layer: a neutral stand-in that samples none of its maps, and a code the presentation words (PREV-76).
+  let sampled = 0;
+  const base = MATERIAL_ADAPTERS.layered.create(chunk("engine\\materials\\multilayered.mt", [], { layered: { setup: { depotPath: "s", archive: null, sha256: null },
+    mask: null, ratio: 1, useNormal: true, layers: [layer({ templateUnreadable: true, textures: { color: texture("c") } })] } }),
+  (...args) => { sampled++; return textures(...args); }, quad(), context({ slot: "piercings" }));
+  expect(base.limits).toEqual(["layered-base"]);
+  expect(base.layered!.evidence().layers).toEqual([0]);
+  expect(sampled).toBe(1); // Only the chunk's mesh-wide normal slot is looked up.
+});
+
+test("a shared texture's ledger key includes the resource's isGamma flag, which decides a colour input's colour space (PREV-79)", () => {
+  const file = `${"b".repeat(64)}.png`;
+  expect(textureLedgerKey({ file, isGamma: true }, "colour", "repeat")).not.toBe(textureLedgerKey({ file, isGamma: false }, "colour", "repeat"));
+  expect(textureColourSpace("colour", true)).not.toBe(textureColourSpace("colour", false));
+  expect(textureLedgerKey({ file, isGamma: true }, "colour", "repeat")).toBe(textureLedgerKey({ file, isGamma: true }, "colour", "repeat"));
 });

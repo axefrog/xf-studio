@@ -242,8 +242,18 @@ test("the authored plate's light, skin and composite change only inside calls th
   const restore = source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)"));
   expect(restore).toContain("layeredContextRestored(renderer);");
   expect(restore).toContain("handle.contextRestored()");
-  expect(restore).toContain("bakeLayered();");
+  // The re-bake's limits reach the panel and the core eye follows whether a layered eye design baked again (PREV-74).
+  expect(restore).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");
+  expect(restore).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
   expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
+  // A slot shown later publishes its bakes' limits too (PREV-74).
+  const visibility = source.slice(source.indexOf("function refreshDetailVisibility() {"), source.indexOf("function setHair("));
+  expect(visibility).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");
+  // The previous V is released only after the new one has baked, so a try can share a bake it keeps (PREV-78).
+  const swap = source.slice(source.indexOf("function setCharacterDetails("), source.indexOf("function bakeLayered()"));
+  expect(swap.indexOf("const bakeLimits = bakeLayered();")).toBeGreaterThan(-1);
+  expect(swap.indexOf("releasePrevious();", swap.indexOf("const bakeLimits = bakeLayered();"))).toBeGreaterThan(swap.indexOf("const bakeLimits = bakeLayered();"));
+  expect(swap).not.toContain("previous.dispose(kept);\n    }");
   // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
   const { createMakeupStack } = await import("../src/makeup-stack");
   const THREE = await import("three");

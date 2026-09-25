@@ -20,6 +20,7 @@ export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "eye-design": "Your V's eye design couldn't be drawn, so the default eye is shown in its place.",
   "layered-material": "Some of your V's piercings or other layered parts couldn't be drawn, so they aren't shown.",
   "layered-mask": "Part of the pattern on your V's piercings or eye design couldn't be read, so those parts show their base colour only.",
+  "layered-base": "The base finish of some of your V's piercings or layered parts couldn't be read, so a plain grey stands in for it.",
   "decal-template": "Some of your V's face details use materials the preview can't draw yet, so those parts aren't shown.",
   "rigid-part": "A piercing part stays in place while your V's head moves in the idle, because its shape carries no skinning.",
 };
