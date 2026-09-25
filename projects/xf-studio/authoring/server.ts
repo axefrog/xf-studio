@@ -10,6 +10,8 @@ import { createInstallDetectionHandler, hostFrameworkCheck } from "./src/install
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import { buildBrowser } from "./browser-build";
+import { PreviewCoreHost } from "./src/preview-core-host";
+import { createPreviewCoreHandler } from "./src/preview-core-server";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
@@ -25,6 +27,13 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
 } });
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
+// Derived 3D preview (head, plate, eyes, maps) from the configured game; `XFS_PREVIEW_CORE_CACHE` relocates it.
+const previewCore = new PreviewCoreHost({
+  cacheRoot: resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache")),
+  settings: () => { const tools = packageToolPaths(localSettings.load().settings); return { gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit }; },
+  log: message => console.log(message),
+});
+const previewCoreRequest = createPreviewCoreHandler(previewCore);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 const build = await buildBrowser(resolve(root, "build"));
@@ -43,6 +52,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
+    if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
@@ -73,6 +83,14 @@ const server = Bun.serve({
       const overlayPath = resolve(assetOverlay, "." + path.slice(resolve(root, "assets").length));
       if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
         file = Bun.file(overlayPath);
+    }
+    // Private prepared assets (public/assets or the overlay) win as a whole set; without a prepared
+    // head the core preview files (and their render record) come from the derived cache.
+    const preparedHead = async () => await Bun.file(resolve(root, "assets", "head.glb")).exists() ||
+      (!!assetOverlay && await Bun.file(resolve(assetOverlay, "head.glb")).exists());
+    if (!(await file.exists()) && path.startsWith(resolve(root, "assets") + sep) && !(await preparedHead())) {
+      const derived = previewCore.assetPath(path.slice(resolve(root, "assets").length + 1));
+      if (derived) file = Bun.file(derived);
     }
     if (!(await file.exists()))
       return new Response("Not found", { status: 404 });

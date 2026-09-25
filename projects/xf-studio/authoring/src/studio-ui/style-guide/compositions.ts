@@ -5,7 +5,7 @@ export function states() {
     `Four kinds of state must stay intelligible: the portable recipe/collection (authored work), the browser workspace (draft autosave, selections, view),
      immutable SQLite library revisions, and exported files. These patterns keep them apart in words and placement.`, [
     pattern({ id: "t-saved", title: "Saved versus unsaved", status: "implemented", wide: true,
-      specimen: `<div class="stack-s"><div class="row wrap gap-s"><span class="status-item">● Draft autosaved</span>${chip("Not in library", "warning")}${chip("Based on r3")}${chip("Newer r5 saved", "warning")}${chip("Working…", "info")}</div>
+      specimen: `<div class="stack-s"><div class="row wrap gap-s"><span class="status-item">● Draft autosaved</span>${chip("Not saved yet", "warning")}${chip("Saved")}${chip("Newer r5 saved", "warning")}${chip("Working…", "info")}</div>
         <p class="state-line warning">Your draft is based on revision 3; the library has revision 5 from elsewhere. Saving will report a conflict — save a copy or reopen it.</p></div>`,
       what: "The status bar reports browser autosave of the draft. The library chip reports the draft's relationship to SQLite: never saved, based on revision N, or behind a newer revision saved elsewhere.",
       when: "Always visible in the header and Presets panel; the Library panel explains the consequence in a sentence.",
@@ -41,7 +41,7 @@ export function states() {
   ]);
 }
 
-const mockHeader = (crumb: string, chipLabel = "Based on r3", category = "Eye makeup") => `<header class="shell-header"><div class="brand"><span class="brand-mark">XF</span></div><button type="button" class="category">${i("category")}<span>${category}</span>${i("chevronDown")}</button><nav class="crumbs"><span class="crumb-preset">${crumb}</span>${chip(chipLabel)}</nav><div class="header-actions">${btn("Undo", { icon: "undo", iconOnly: true, variant: "ghost" })}${btn("Save", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}</div></header>`;
+const mockHeader = (crumb: string, chipLabel = "Saved", category = "Eye makeup") => `<header class="shell-header"><div class="brand"><span class="brand-mark">XF</span></div><button type="button" class="category">${i("category")}<span>${category}</span>${i("chevronDown")}</button><nav class="crumbs"><span class="crumb-preset">${crumb}</span>${chip(chipLabel)}</nav><div class="header-actions">${btn("Undo", { icon: "undo", iconOnly: true, variant: "ghost" })}${btn("Save", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}</div></header>`;
 /** Schematic outline only — mock-ups never embed game-derived imagery. */
 const headOutline = `<svg viewBox="0 0 80 100" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M40 6c-17 0-27 13-27 31 0 14 6 25 13 32v14h28V69c7-7 13-18 13-32C67 19 57 6 40 6z" opacity=".6"/><path d="M22 40c5-4 11-4 15 0M43 40c4-4 10-4 15 0" stroke="oklch(.62 .14 350)" stroke-width="3" opacity=".9"/><path d="M24 42c4 2 9 2 12 0M44 42c3 2 8 2 12 0" opacity=".7"/><path d="M36 60c2 1 6 1 8 0" opacity=".5"/></svg>`;
 const stage = (label: string) => `<div class="viewport-panel mock-stage"><div class="viewport-top"><span class="viewport-context">${label}</span></div><div class="mock-head">${headOutline}</div><div class="viewport-bottom"><span></span><span class="ready-badge" data-phase="ready">Preview 1K · ready</span></div></div>`;
@@ -66,7 +66,7 @@ export function compositions() {
   const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2"><div class="mock-row stage-row">${group([["Head", "head"]], 0, stage("Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
     <div class="mock-row">${group([["Layers", "layers"], ["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Petal wash", "Matte", { swatch: "#b0587a", selected: true })}</ol></div>`, { condensed: true })}
     ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, `<div class="panel-content">${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div></div></div>`;
-  const future = `<div class="mock-shell future-mock">${mockHeader("Arched brows — draft", "Not in library", "Eyebrows (future)")}
+  const future = `<div class="mock-shell future-mock">${mockHeader("Arched brows — draft", "Not saved yet", "Eyebrows (future)")}
     <div class="future-banner">${i("info")}<span>Future direction — illustration only. Eyebrow authoring is not built and needs discussion before any data model is chosen.</span></div>
     <div class="mock-dock wide-3"><div class="mock-col">${group([["Brow sets", "presets"], ["Library", "library"]], 0, `<div class="panel-content"><ol class="item-list">${row("Arched brows", "draft", { preset: true, selected: true })}</ol></div>`)}</div>
     <div class="mock-col">${group([["Head", "head"]], 0, stage("Brows · Arched brows"))}</div>

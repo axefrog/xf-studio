@@ -27,7 +27,7 @@ try {
     mode: document.documentElement.dataset.desktopPreviewIntake,
     welcome: document.querySelector('#desktop-welcome').textContent })`);
   if (firstRun.setupOpen || firstRun.intake || firstRun.previewButton || firstRun.mode !== "disabled" ||
-    !firstRun.welcome.includes("XF Studio can't do that yet"))
+    !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
     throw Error(`Desktop first run did not lead with the community welcome: ${JSON.stringify(firstRun)}`);
   await browser.screenshot(resolve(screenshots, "desktop-welcome-first-run.png"));
   await browser.evaluate("document.querySelector('#desktop-welcome-start').click()");
@@ -57,7 +57,7 @@ try {
       headFetches: performance.getEntriesByType('resource').filter(item => item.name.endsWith('/assets/head.glb')).length };
   })()`);
   if (uvOnly.uv !== "ready" || uvOnly.head.phase !== "error" || uvOnly.headFetches ||
-    !uvOnly.head.error.includes("XF Studio can't do that yet") ||
+    !/3D (?:head )?preview/.test(uvOnly.head.error) ||
     uvOnly.camera.code !== "asset_unavailable" || !uvOnly.mask.available || !uvOnly.check.available ||
     !uvOnly.changed.ok || uvOnly.color !== "#123456" || !uvOnly.undo.ok || uvOnly.restored !== uvOnly.before)
     throw Error(`UV-only first run failed: ${JSON.stringify(uvOnly)}`);
@@ -83,7 +83,7 @@ try {
   await browser.screenshot(resolve(screenshots, "desktop-uv-only-editor.png"));
   await browser.evaluate("document.querySelector('#desktop-about-open').click()");
   const aboutText = await browser.evaluate("document.querySelector('#desktop-about').textContent");
-  if (!aboutText.includes("XF Studio can't do that yet") || /Private|Local setup|canary/.test(aboutText))
+  if (!aboutText.includes("built from your own Cyberpunk 2077 files") || /Private|Local setup|canary/.test(aboutText))
     throw Error(`About wording regressed: ${aboutText}`);
   await browser.screenshot(resolve(screenshots, "desktop-about.png"));
   await browser.evaluate("document.querySelector('#desktop-licences-open').click()");

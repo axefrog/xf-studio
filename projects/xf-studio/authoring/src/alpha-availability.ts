@@ -5,16 +5,15 @@
  */
 
 /**
- * Shown for every head, camera, motion and saved-V action when no 3D preview files are present.
- * It names the real cause: the head is derived from the user's own game installation, which
- * XF Studio cannot do yet. No dates or promises.
+ * Shown for every head, camera, motion and saved-V action until the 3D preview has been
+ * prepared from the player's own game files (the desktop then reports its progress instead).
  */
-export const NO_3D_PREVIEW_YET =
-  "The 3D head preview is built from your own Cyberpunk 2077 installation, and XF Studio can't do that yet. For now, design in the UV map; everything else works.";
+export const NO_3D_PREVIEW_IN_ALPHA =
+  "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
 
 /** Shown for Build when the host's Build setup is incomplete; the setup view lists the missing paths. */
 export const BUILD_NEEDS_SETUP =
-  "Building mod files needs a developer setup for now (game folder, WolvenKit and build tools). Check works without it.";
+  "Building mod files needs your game folder and the WolvenKit CLI. Set them up under Build setup; Check works without them.";
 
 /** Developer and evidence vocabulary that must not appear in a reason or label a community user sees. */
 export const USER_FACING_JARGON =

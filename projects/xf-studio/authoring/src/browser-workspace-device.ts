@@ -29,20 +29,27 @@ export function captureBrowserPanels(options: {
 export function createBrowserWorkspaceSession(options: {
   workspace: WorkspaceState;
   verification: boolean;
-  restored: { writable: boolean; error?: string };
+  restored: { writable: boolean; error?: string; warning?: string };
   storage: Pick<Storage, "setItem">;
   capture: WorkspaceCapturePorts;
+  /**
+   * Domain and content sources whose changes need saving. Never pass the whole presentation
+   * port: it also carries the save status itself, and a save must not request another save.
+   */
   sources: Observable[];
   window: EventSource;
   document: EventSource & { hidden: boolean };
   scrollTargets: EventSource[];
   toggleTargets: EventSource[];
   onStatus(status: WorkspaceSaveStatus): void;
+  /** Serialized size budget; the desktop host file allows more than browser storage. */
+  budget?: number;
 }) {
   const composer = new WorkspaceComposer(options.workspace, options.capture);
   const persistence = new WorkspacePersistence({ storage: options.storage,
     key: workspaceKeys(options.verification).workspace, writable: options.restored.writable,
-    restoreError: options.restored.error, capture: () => composer.capture() });
+    restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture(),
+    budget: options.budget });
   persistence.subscribe(options.onStatus);
   for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();
@@ -53,6 +60,8 @@ export function createBrowserWorkspaceSession(options: {
   for (const target of options.scrollTargets) target.addEventListener("scroll", request);
   for (const target of options.toggleTargets) target.addEventListener("toggle", request);
   return { request, flush, activate: () => persistence.activate(),
+    /** Add a content source created after the session (for example the collection library). */
+    watch: (source: Observable) => source.subscribe(request),
     setPreviewReady: () => composer.setPreviewReady(),
     snapshot: () => composer.capture(), status: () => persistence.snapshot() };
 }

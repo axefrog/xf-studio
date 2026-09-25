@@ -73,12 +73,13 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   const frame = (library: object, persistence?: object) => ({ library, persistence }) as unknown as Frame;
   const draft = { id: "c", name: "C", revision: 3, presets: [] };
   expect(libraryState(frame({ summaries: [] })).label).toBe("Loading library…");
-  expect(libraryState(frame({ summaries: [], draft: { ...draft, revision: undefined } })).label).toBe("Not in library");
-  expect(libraryState(frame({ summaries: [{ id: "c", revision: 5 }], draft })).label).toBe("Newer r5 saved");
+  expect(libraryState(frame({ summaries: [], draft: { ...draft, revision: undefined } })).label).toBe("Not saved yet");
+  expect(libraryState(frame({ summaries: [{ id: "c", revision: 5 }], draft })).label).toBe("Newer version saved");
   expect(libraryState(frame({ busy: true, progress: { phase: "working", message: "Saving" }, summaries: [], draft })).label).toBe("Working…");
-  expect(libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: false, dirtyPresets: [] })).label).toBe("Saved r3");
+  expect(libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: false, dirtyPresets: [] })).label).toBe("Saved");
   const dirty = libraryState(frame({ summaries: [], draft }, { baseline: "known", dirty: true, dirtyPresets: ["a", "b"], structureDirty: true }));
-  expect(dirty).toMatchObject({ label: "Unsaved · based on r3", tone: "info" });
+  expect(dirty).toMatchObject({ label: "Unsaved changes", tone: "info" });
+  expect(dirty.detail).toContain("Last saved as version 3 in your library; saving creates version 4");
   expect(dirty.detail).toContain("the collection name or preset order and 2 presets");
-  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] })).label).toBe("Based on r3");
+  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] })).label).toBe("Autosaved draft");
 });

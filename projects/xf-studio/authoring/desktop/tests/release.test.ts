@@ -134,7 +134,7 @@ describe("release staging and notes", () => {
     expect(notes).toContain("have not been tested in the game");
     expect(notes).toContain("MIT-licensed");
     expect(notes).toContain(noticesAssetName);
-    expect(notes).toContain("built from your own Cyberpunk 2077 installation");
+    expect(notes).toContain("built from your own Cyberpunk 2077 files");
     expect(() => releaseNotes({ version: "0.1.0-alpha.1", newAndImproved: "a", fixes: "b" }, version, []))
       .toThrow("do not include");
   });

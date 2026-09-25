@@ -4,7 +4,7 @@
 // Community installs never see the intake: the host reports previewIntake=false.
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
-import { NO_3D_PREVIEW_YET } from "../src/alpha-availability";
+import { mountPreviewPreparation } from "./preview-preparation.js";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -131,7 +131,7 @@ about.querySelector("#desktop-version").textContent = capabilities.metadataStatu
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
   `Build ${capabilities.buildHash}` : "This installation looks damaged. Reinstall XF Studio to repair it.";
 about.querySelector("#desktop-preview-note").textContent = capabilities.previewAssets === "ready" ? "" :
-  NO_3D_PREVIEW_YET;
+  "The 3D head preview is built from your own Cyberpunk 2077 files. The UV editor, library and Check work without it.";
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
 const updateStatus = about.querySelector("#desktop-update");
 const updateActions = about.querySelector("#desktop-update-actions");
@@ -190,10 +190,10 @@ document.body.append(aboutButton, about, licences);
 aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup for now. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files needs your game folder and the WolvenKit CLI. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
 const welcome = document.createElement("dialog");
 welcome.id = "desktop-welcome";
-welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers on the UV map, keep them in your library, and run Check to see which can become mod files.</p><p><strong>The 3D head preview is built from your own Cyberpunk 2077 installation, and XF Studio can&#39;t do that yet.</strong> For now, design in the UV map; everything else works.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup. You can find it later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files needs your game folder and the WolvenKit CLI. You can set them up later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
 document.body.append(setup, welcome);
 const descriptors = [
   ["gameRoot", "Cyberpunk 2077 game folder"],
@@ -255,7 +255,7 @@ function showSetup(view) {
   setupStatus.textContent = recovery ? "Your settings file is damaged. Restore the previous copy before editing." :
     `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." : "isn't set up yet."}`;
   aboutReadiness.textContent = recovery ? "Build settings need repair: open Build setup." :
-    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet; it needs a developer setup for now."}`;
+    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet: it needs your game folder and the WolvenKit CLI."}`;
 }
 async function setupAction(action) {
   const result = await setupActions.dispatch(action);
@@ -366,6 +366,13 @@ if (capabilities.previewIntake && capabilities.previewAssets !== "ready") {
   inspect.addEventListener("click", () => void intake("inspect"));
   importButton.addEventListener("click", () => { if (inspected === folder.value.trim()) void intake("import"); });
 }
+// Community path: prepare the 3D preview from the player's own game files.
+if (!(capabilities.previewIntake && capabilities.previewAssets !== "ready")) mountPreviewPreparation({ capabilities,
+  openSetup: () => void openSetup(),
+  useGameFolder: async path => {
+    await initialSetup.catch(() => {});
+    await setupAction({ kind: "setup.save", fields: { ...setupView.fields, gameRoot: path } });
+  } });
 document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
 document.documentElement.dataset.desktopPreviewIntake = capabilities.previewIntake ? "enabled" : "disabled";
 void import("/build/studio-main.js").catch(error => {
@@ -384,7 +391,7 @@ const report = () => {
   try { const probe = new Worker("/build/raster-worker.js", { type: "module" }); worker = true; probe.terminate(); }
   catch { /* Missing worker support. */ }
   const state = document.querySelector(".boot-error") ? "error" :
-    studio?.classList.contains("studio-ready") ? capabilities.previewAssets === "ready" ? "interactive" : "uv-only" : "starting";
+    studio?.classList.contains("studio-ready") ? document.documentElement.dataset.desktopPreviewAssets === "ready" ? "interactive" : "uv-only" : "starting";
   void fetch("/api/desktop/smoke", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker }) });
 };

@@ -8,8 +8,7 @@ import { freshWorkspace } from "../src/workspace-state";
 
 export function coreFixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft",
-    controlAction: action => { core.recipe.dispatch(action); } });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
   return { workspace, core, app: core.app, document: core.document };
 }
 const unusedTransport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },

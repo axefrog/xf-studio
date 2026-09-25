@@ -1,6 +1,7 @@
 import { initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
-import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace } from "./collection-workspace";
+import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace,
+  type RestoreWarnings } from "./collection-workspace";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
@@ -50,8 +51,12 @@ const finite = (x: unknown, min: number, max: number): x is number =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
 const uuid = (x: unknown): x is string => typeof x === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x);
 
-/** A versioned workspace is one atomic document; recipe files remain portable makeup only. */
-export function parseWorkspace(value: unknown): WorkspaceState {
+/**
+ * A versioned workspace is one atomic document; recipe files remain portable makeup only.
+ * With `warnings`, damaged recovery drafts and removed presets are dropped (and noted)
+ * instead of failing the restore; the current draft must always parse.
+ */
+export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): WorkspaceState {
   const v = value as WorkspaceState;
   if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
@@ -101,7 +106,7 @@ export function parseWorkspace(value: unknown): WorkspaceState {
       if (finite(v.panels[key], 0, 100000)) state.panels[key] = v.panels[key];
   }
   if (v.collections !== undefined) {
-    state.collections = parseCollectionWorkspace(v.collections);
+    state.collections = parseCollectionWorkspace(v.collections, warnings);
     const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);
     state.recipe = preset ? structuredClone(preset.recipe) : emptyRecipe();
     const memory = preset ? state.collections.editors[preset.id] ?? emptyMemory() : emptyMemory();
@@ -118,13 +123,21 @@ export function workspaceKeys(verification: boolean) {
   };
 }
 
+export type LoadedWorkspace = { state: WorkspaceState; writable: boolean; error?: string;
+  /** Damaged non-current entries that were dropped; the rest of the workspace was restored. */
+  warning?: string };
+
 /** Never replace unreadable saved work automatically. Storage errors stay visible to the UI. */
-export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: boolean) {
+export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: boolean): LoadedWorkspace {
   const keys = workspaceKeys(verification);
   let error: string | undefined;
   try {
     const raw = storage.getItem(keys.workspace);
-    if (raw !== null) return { state: parseWorkspace(JSON.parse(raw)), writable: true };
+    if (raw !== null) {
+      const warnings: RestoreWarnings = [];
+      const state = parseWorkspace(JSON.parse(raw), warnings);
+      return { state, writable: true, ...(warnings.length ? { warning: restoreWarning(warnings) } : {}) };
+    }
   } catch (e) { error = `Workspace could not be restored: ${(e as Error).message}`; }
   // The fallback shows the small authored contour. Saved workspaces and legacy
   // recipe-only drafts still pass through their existing parsers unchanged.
@@ -134,4 +147,9 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
     if (legacy !== null) state = freshWorkspace(parseRecipe(JSON.parse(legacy)));
   } catch (e) { error ??= `Saved draft could not be restored: ${(e as Error).message}`; }
   return { state, writable: !error, error };
+}
+
+function restoreWarning(warnings: RestoreWarnings) {
+  return warnings.length === 1 ? warnings[0] :
+    `${warnings.length} damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.`;
 }

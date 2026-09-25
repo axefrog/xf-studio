@@ -1,6 +1,6 @@
 # Character-customisation file chain
 
-**Maturity: Draft.** Consolidated and cross-checked for vanilla 2.31 female and male resources, ArchiveXL 1.27.3 source and one decoded 2.31 save. Not yet runtime-tested in the areas marked **[hypothesis]**. Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established.
+**Maturity: Draft.** Consolidated and cross-checked for vanilla 2.31 female and male resources, ArchiveXL 1.27.3 source, one decoded 2.31 save and the implemented resolver's run on the reference installation. Not yet runtime-tested in the areas marked **[hypothesis]**. Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established.
 
 This page answers four questions for XF Studio agents:
 
@@ -22,6 +22,7 @@ Material and shader internals (`.mt`/`.remt` templates, skin, hair, eye and deca
 | WolvenKit source | commit `11720772` | Save node reader **and writer**, resource types (`gameuiCharacterCustomizationPreset`, `…UiPreset`, CC controller components). |
 | Reference save | 2.31, save version 269, preset version 12 | One real female V: groups, resolved appearances, morphs ([save import](../research/eye-artistry/save-import.md)). |
 | Modding Docs clone | `be2f44ee` | Documented relationships and editor screenshots ([wiki chain map](../research/character-customization/file-chain-map.md)); CCXL guides. |
+| XF Studio character resolver | 2026-09-25, reference installation (MO2 route) | Resolves the reference save and PRC option 12 from data; reproduces the hand-traced chains and records every unproven precedence rule. [Validation](../research/character-customization/resolver-validation.md) |
 | Legacy xf-omega generator | commit `28c822ea` (2025-08-10), design notes in the legacy `sx-cp2077` docs at `b139ccab` (2026-04-18) | The predecessor female eye-makeup CCXL generator. The reference save still contains three of its selections, so the game accepted its resources. Reference only: its lessons are summarised in [legacy lessons](#lessons-from-the-legacy-generator). |
 
 ## 1. The chain at a glance
@@ -202,6 +203,7 @@ Makeup and decal `.app` overrides also name the head skin component `MorphTarget
 - **Every component that follows the face carries matching targets, but only for the regions it needs**: head and brows carry all 105; eyes and lashes the 21 `eyes` targets; a vanilla earring placeholder the 21 `ear` targets; a nose ring the 21 `nose` targets; a PRC linked-mesh ring all 105 [resource]. The pair `(target, region)` is the key, and the save stores both. A component without a region's targets simply does not follow that slider **[hypothesis; consistent with every inspected resource]**.
 - The [morphtarget guide](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/3d-modelling/morphtargets.md) (no page author evidenced) says the engine activates targets by name and region, face regions blend together while chest size is exclusive, and mods cannot add new activation names, only reuse existing ones [wiki].
 - **Facial rigs.** Each head `.app` uses a face-rig component; the game ships 22 female and 21 male per-shape skeleton rigs, and the [NPV rig guide](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/modding-guides/npcs/fixing-eye-clipping-in-npvs-by-replacing-facial-rigs.md) (saltypigloaf, 2025) reports that vanilla V always uses rig 000 whatever the sliders, a known cause of eye clipping that community rig-fix mods address [wiki]. The Studio's saved-head morph binds should account for this ([brow idle gap](../research/animation/brow-idle-gap.md), experiments 012/015).
+- **Exporting a morph target with its rig.** WolvenKit resolves a `.morphtarget`'s `baseMesh` itself: CLI `uncook` of the morph target from the game archives (or `export … -gp <game>` of an extracted copy) writes a bone-bound GLB with the base mesh's skin (254 joints, two four-influence sets for the female head) and every target as a shape key. No custom exporter is needed. CLI 8.17.4 reproduces experiment 012's bound head byte for byte; 9.0.1 gives identical positions, UVs, influences and morph deltas but gives joint nodes rest rotations with matching inverse binds, so rest deformation is identical [resource] ([experiment 013](../experiments/013-native-preview-core/README.md)). The export keeps native vertex and triangle order, so the eye plate recipe's native face IDs select the same rows in the GLB [resource].
 - Body morphs: `breast` (female: `t0_000_wa_base__full_breast_small` / none / `_big`), `nails_l`/`nails_r` (long nails), `penis_base`/`penis_circumcised` size. There is **no vanilla body-shape slider** beyond these.
 
 ### Meshes and materials
@@ -287,7 +289,7 @@ flowchart TD
 
 Limits that follow from the design: one colour for every item; slot numbers collide between packs (three septum packs all use `fpm17`); a pack's slot is only visible if its archive wins; vanilla style 12 cannot be used on its own while PRC is installed.
 
-What the Studio needs from this: nothing PRC-specific. The generic rules in the [next section](#8-generic-resolver-specification) — archive precedence, inline plus `partsValues` components, zero-chunk geometry, mesh-appearance lookup on each component's own base mesh, and resolving `baseMesh` through the **same** mount set — already produce the PRC result.
+What the Studio needs from this: nothing PRC-specific. The generic rules in [section 8](#8-generic-resolver-specification) — archive precedence, inline plus `partsValues` components, zero-chunk geometry, mesh-appearance lookup on each component's own base mesh, and resolving `baseMesh` through the **same** mount set — produce the PRC result, and the implemented resolver does so on the reference installation ([validation](../research/character-customization/resolver-validation.md#prc-as-vanilla-piercing-option-12)).
 
 ## 7. How a save stores CC choices
 
@@ -314,63 +316,49 @@ The safe order is: generate the complete group set from an option state using th
 
 Principle: the Studio interprets game files the way the game and its core frameworks do. Vanilla piercings, PRC, CCXL packs, hair-colour packs and future mods must all resolve from data through the same rules; there are no mod-specific adapters. Where a rule is not yet proven, the resolver reports the uncertainty instead of guessing.
 
+**Status: phase 1 implemented** in `projects/xf-studio/authoring/src` (`character-resolver.ts` and the pure modules it uses; host adapter `resolver-host.ts`; CLI `tools/resolve-character.ts`). It reproduces the hand-traced eyes, hair, brows, lashes, skin and PRC chains of the reference installation from data alone; see the [resolver validation](../research/character-customization/resolver-validation.md). Archive precedence and ArchiveXL semantics are consolidated in [mod loading](mod-loading.md). No Studio UI consumes it yet.
+
 ### Inputs
 
-1. **Installation view:** base game `archive/pc/content`, `archive/pc/ep1` (if present), `archive/pc/mod`, plus the mod manager's virtual view (MO2 profile with overwrite, Vortex deployment, or manual files). REDmod `mods/*/archives` is a later adapter. The existing [source discovery](../research/character-customization/mod-source-resolution.md) contract covers enumeration.
-2. **Framework declarations:** every active `.xl`/`.archive.xl` (ArchiveXL `customizations`, `resource.scope`/`fix`/`patch`/`copy`/`link`, `localization`), and TweakXL `r6/tweaks` YAML/TweakDB records (icons and labels only; see R11).
-3. **Character input:** either a UI state (body gender + option → choice identity, as in a CC preset) or a decoded save node (descriptors per group).
+1. **Installation view:** base game `archive/pc/content`, `archive/pc/ep1` (if present), `archive/pc/mod`, the ArchiveXL bundle directory, plus the mod manager's virtual view (MO2 profile with overwrite, or manual files). Vortex and REDmod are later adapters. [Source discovery](../research/authoring/source-discovery-foundation.md) enumerates the files; `resolver-host.ts` reads RDAR indexes and extracts resources with WolvenKit CLI into an ignored JSON cache.
+2. **Framework declarations:** every visible `.xl` in ArchiveXL's load order (`customizations`, `resource.scope`/`fix`/`patch`/`copy`/`link`). TweakXL records are presentation only (R11) and not read yet.
+3. **Character input:** a decoded save node (`inputFromSave`) or a UI option state (`descriptorsFromUiState`: option → definition, morph or switcher choice).
 
 ### Rules, in application order
 
-| # | Rule | Implemented from | Status |
+| # | Rule | Implemented from | Status and grade |
 |---|---|---|---|
-| R1 | **Archive precedence.** For each depot-path hash, the first provider wins: mod archives (ordered by a visible `archive/pc/mod/modlist.txt`, else first-alphabetical) before EP1 before base content. Loose-file conflicts (MO2) resolve first by manager priority. Keep every candidate. | [Catalogue probe](../research/character-customization/catalog-prototype.md) archive-hash stage; MO2 plugin/guide; WolvenKit `ArchiveManager` | Tool-side rule proven in source; **native engine order unread** (base-vs-mod collision and bundle order open) |
-| R2 | **CCO selection.** Body gender picks the male or female CCO; use the `_ep1` twin when EP1 is installed. | Save face-rig hash (section 2) | [resource]; confirm with a male EP1 save |
-| R3 | **ArchiveXL resource metadata:** expand `resource.scope` aliases transitively; apply `resource.fix` (`paths` remaps, mesh `names`/`context`); apply `resource.copy`, `resource.patch` (copy listed properties from the patch resource into each scoped target) and `resource.link` (alias only if the target path does not already exist). | ArchiveXL `ResourceMeta`, `ResourcePatch`, `ResourceLink` extensions ([resolver contract](../research/character-customization/mod-source-resolution.md)) | [source]; only `fix.paths` + `scope` implemented in the probe |
-| R4 | **CCO merge:** fix base option paths (registering app overrides), then for each registered custom resource in declaration order: append to same-named groups, expand unnamed options, merge named options, then a second pass for anonymous `uiSlot`/`link` overlays; regenerate choice indices; collect hair-colour tags. | ArchiveXL `Customization/Extension.cpp` 254–637 | [source]; probe covers one overlay type |
-| R5 | **State → descriptors.** From a UI state: activate switcher targets, propagate link indices from controllers to followers, then for each group emit `(app path, definition)` for active appearance options and `(region, target)` for non-`None` morphs. From a save: use the stored descriptors. | Section 2 (links, groups); vanilla UI presets | Links **[resource-inferred]**; save path [resource] |
-| R6 | **Descriptor → appearance.** Apply ArchiveXL app overrides `(app, definition) → (mod app, definition)`; load the winning `.app` (R1/R3); pick the appearance by name. If absent and the `.app` is in the `player_customization.app` scope, build the ArchiveXL dynamic appearance (clone template, mesh appearance = suffix after `__`). | ArchiveXL `ApplyAppOverride`, `FixCustomizationAppearance` | [source] |
-| R6b | **Always-on entity additions.** `resource.patch` can add component `.ent`s to the player entities themselves (the [facial cyberware guide](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/modding-guides/npcs/creating-facial-cyberware.md) patches `player_wa_tpp.ent`, cutscene, reflection, photo-mode and EP1 variants). Such components render regardless of CC choices, so the resolver must also resolve the effective player entity for the body gender. | [wiki]; ArchiveXL `PlayerBaseScope.xl` | [wiki] [source]; not implemented |
-| R7 | **Appearance → components.** Components = inline `components[]` ∪ components of every `partsValues` `.ent` (each resolved through R1/R3). Apply `partsOverrides` by `componentName` (`meshAppearance`, `chunkMask`). Inside the customization scope ArchiveXL additionally re-applies overrides, skipping components whose current `meshAppearance` is `default`, and applies an override without a component name to every remaining mesh component. | [wiki] `.app` guide; ArchiveXL `FixCustomizationComponents` | [resource] [wiki] [source] |
-| R8 | **Component → geometry.** Morph-target components: load the `.morphtarget` (after R3 patches, which may fill `blob`/`targets`), then its `baseMesh` **through the same mount set**; a blob with zero render chunks draws nothing. Mesh components: load the `.mesh`. Apply the component `chunkMask`. | PRC placeholders; [head details](../research/eye-artistry/head-details.md) (patched brow stubs); [PRC preview](../research/jewellery/prc-preview-slice.md) (linked meshes) | [resource] |
-| R9 | **Morphs.** Apply each `(target, region)` to every morph component whose `targets[]` contain that pair. | Save + morph resources | [resource]; manager semantics **[hypothesis]** |
-| R10 | **Materials.** `meshAppearance` → mesh `appearances[]` (with ArchiveXL expansion: empty `chunkMaterials` inherit, `name@context` substitution, `*` soft paths with `{material}` interpolation) → per-chunk material name → `materialEntries` (local or external) → `.mi` chain → template + parameters + textures/`.hp`/`.mlsetup`. | [Wiki chain map](../research/character-customization/file-chain-map.md); ArchiveXL `Mesh` extension; [materials and shaders](materials-and-shaders.md) | [wiki] [source]; expansion not yet implemented |
-| R11 | **Presentation only (TweakXL):** icons (`OptionsIcons.*` TweakDBIDs → `gamedataUIIcon_Record` atlas/part) and localisation keys for labels. Never required for geometry. | Legacy generator; vanilla definitions | [resource] |
-| R12 | **Later, full body:** visual-tag hiding (`hide_*`, `VisualTags.xl`), garment offsets, feet/genital controllers. | ArchiveXL `VisualTags.xl` | Deferred |
+| R1 | **Archive precedence.** MO2 virtual path first (overwrite, then the first `modlist.txt` row); then the mod group (visible `archive/pc/mod/modlist.txt`, else first-alphabetical), the ArchiveXL bundle group, EP1, content. Every candidate is kept. | [Mod loading §1–2](mod-loading.md#1-the-stages-in-order) | **Implemented** (`archive-precedence.ts`). Tool-source rules [source]; the native engine order is unread, so every mod-over-base, base-internal and collation-sensitive decision carries an ambiguity record |
+| R2 | **CCO selection.** Body gender picks the male or female CCO; the `_ep1` twin when EP1 archives are mounted. | Save face-rig hash (section 2) | **Implemented** (`ccoPath`). [resource]; confirm with a male EP1 save |
+| R3 | **ArchiveXL resource metadata:** scopes (transitive), fixes (`paths`, mesh `names`, `context`), copies and links (rejected over existing paths), patches of meshes, morph targets and `.app` definitions. | ArchiveXL `ResourceMeta`, `ResourceLink`, `ResourcePatch` | **Implemented** (`archivexl-config.ts`, `resource-graph.ts`) [source]. `.ent` patches (R6b) and `!exclude` tags not yet |
+| R4 | **CCO merge:** fix base option paths (registering app overrides), then per custom resource: groups, unnamed expansion, named options, a second pass for anonymous `uiSlot`/`link` overlays; regenerate indices; collect hair-colour tags. | ArchiveXL `Customization/Extension.cpp` 254–637 | **Implemented** (`cco-model.ts`), including the link-wildcard quirk [source] |
+| R5 | **State → descriptors.** From a UI state: activate switcher targets, propagate link indices from controllers to followers, emit `(app, definition)` and `(region, target)` per group. From a save: the stored descriptors. | Section 2; vanilla UI presets | **Implemented, simple rule.** Links [resource-inferred]; a follower with fewer choices keeps its default and records `link-index-out-of-range` **[hypothesis]** |
+| R6 | **Descriptor → appearance.** Apply app overrides; load the winning `.app`; pick the appearance by name; if absent and in the `player_customization.app` scope, build ArchiveXL's dynamic appearance. | ArchiveXL `ApplyAppOverride`, `FixCustomizationAppearance` | **Implemented** [source] |
+| R6b | **Always-on entity additions** through `.ent` patches of the player entities. | [wiki] facial cyberware guide; ArchiveXL `PlayerBaseScope.xl` | Not implemented |
+| R7 | **Appearance → components.** Inline components (compiled package first) ∪ components of each existing `partsValues` `.ent` (missing parts dropped, as ArchiveXL does); `partsOverrides` by component name; in the customization scope, ArchiveXL's first-override mesh appearance on the appearance's own mesh components. | [wiki] `.app` guide; ArchiveXL `FixCustomizationComponents`, Garment `OnResolveDefinition` | **Implemented.** Same-named inline and part components are treated as one; several same-named components in one appearance are all kept and flagged **[hypothesis]** |
+| R8 | **Component → geometry.** Morph targets after patches (a copied or patched blob counts), then `baseMesh` through the same mount set; zero render chunks draw nothing; the chunk mask selects visible chunks. | PRC placeholders; head details; PRC preview | **Implemented** (provenance and chunk counts; no GLB export) [resource] |
+| R9 | **Morphs.** Apply each `(target, region)` to every morph component whose `targets[]` contain it. | Save + morph resources | **Implemented** as a report of which components each pair reaches; manager semantics **[hypothesis]** |
+| R10 | **Materials.** Mesh appearance (with patches, `names` fixes and expansion) → chunk material → target entry, patch-mesh entry or `@template` → instance chain to `.mt`/`.remt`, with `@context` parameters and `*{attr}` path expansion; effective parameters nearest-first. | ArchiveXL `Mesh` extension; [materials and shaders](materials-and-shaders.md) | **Implemented** to the template and resource parameters; shader semantics are not interpreted [source] |
+| R11 | **Presentation only (TweakXL):** icons and localisation keys. | Legacy generator; vanilla definitions | Not implemented [resource] |
+| R12 | **Later, full body:** visual-tag hiding, garment offsets, feet/genital controllers. | ArchiveXL `VisualTags.xl` | Deferred |
 
 ### Output: a renderable description
 
-```ts
-type ResolvedCharacter = {
-  bodyGender: "female" | "male";
-  cco: { path: string; provider: Provenance; customResources: Provenance[] };
-  choices: ResolvedChoice[];          // option, choice identity, source (vanilla or mod), links applied
-  meshes: ResolvedMesh[];             // one per rendered component
-  morphs: { target: string; region: string }[];
-  unresolved: Gap[];                  // missing hash, ambiguous winner, unsupported rule
-};
-type ResolvedMesh = {
-  group: string;                      // TPP, face, hairs, …
-  appearance: { app: DepotRef; name: string; viaOverride?: DepotRef; dynamic?: boolean };
-  component: { name: string; type: "morph" | "skinned" | "garment"; chunkMask: string };
-  geometry: DepotRef;                 // .morphtarget or .mesh, with its baseMesh
-  chunks: { index: number; material: MaterialChain }[];
-  provenance: Provenance[];           // winner, candidates, rule, confidence per edge
-};
-```
+`ResolvedCharacter` (`character-resolver.ts`, schema `xfs/resolved-character-1`) lists one entry per unique saved or derived `(option, definition)` with the groups that use it, the requested and effective `.app` (with any override), who provided the choice (base CCO or which custom resource), the appearance status (`defined`, `dynamic` with its template, or `missing`) and its components. Each component carries its origin (inline or part), final mesh appearance and chunk mask, geometry provenance (`.morphtarget`, `.mesh`, render-chunk count, visible chunks, `drawsNothing`, patch sources), morph regions and the saved morphs that reach it, and per visible chunk the material route, instance chain, template and effective parameters. Every resource reference is a `Provenance`: depot path and hash, winning archive and provider, losing alternatives, the rule and its grade, copy/link hops and the extracted-byte SHA-256. Character-level `ambiguities` and `gaps` list everything unproven or unresolved. Reports stay local because they name installed mods.
 
-Everything is data: a vanilla piercing, a PRC slot and a CCXL earring produce the same `ResolvedMesh` shape, differing only in provenance.
+Everything is data: a vanilla piercing, a PRC slot and a CCXL earring produce the same shape, differing only in provenance.
 
-### How the existing PRC-specific code would be subsumed
+### Retiring the PRC-specific code
 
-| Current code | What it does | Replaced by |
+Demonstrated: with PRC installed, resolving vanilla piercing option 12 yields the framework's `.app`, its 128-slot bank (placeholders drawing nothing, filled slots from their item archives by alphabetical order), the kept vanilla part with the framework's chunk mask, and the stud's `default__02` → `base\eagul\mat_1.mi` material ([validation](../research/character-customization/resolver-validation.md#prc-as-vanilla-piercing-option-12)). The old code stays until the replacement is wired into the preview:
+
+| Current code | Replaced by | Migration step |
 |---|---|---|
-| `projects/xf-studio/authoring/tools/intake_prc.ts` | Reads a hard-coded framework `.app` path and three pinned slot morph targets from hand-extracted MO2 archives, checks the stud's second-chunk `.mi` chain, copies three GLBs | R1 (winner of `earring_14.app` and each `fpmN`), R7 (bank enumeration), R8 (skip zero-chunk placeholders; resolve linked meshes through the mount set), R10 (per-chunk materials, including `default__02`) |
-| `xfs/local-prc-piercings-1` manifest (and the separate `xfs/local-vanilla-piercings-2`) | Parallel private asset manifests per source | One content-addressed cache of converted geometry keyed by `(depot hash, winning container digest)` plus the `ResolvedCharacter` description |
-| `aggregatePrcStyle` in `src/piercing-preview.ts` and the `prc_active_bank` style | Combines up to eight slot GLBs into a synthetic style with one shared tint | Unnecessary: the chosen option's appearance already lists every component; the shared colour is the definition's `meshAppearance` |
-| Single-slot `prc_fpmNN` styles | Diagnostic views | A generic "inspect component" toggle for any resolved mesh |
-| PRC notes in `src/main.ts` (`piercing-note`), `src/studio-ui/panels/preview.ts`, `prcError`/`prcAvailable` in `src/presentation-status.ts` and `src/studio-main.ts` | Explain that PRC is private, approximate and unverified | Per-component provenance and confidence from the resolver, shown the same way for every source |
-| `tools/intake_piercings.ts` (vanilla) | Derives the 14 × 16 vanilla catalogue from the serialized CCO and `.app`s | The same resolver with no mods mounted |
+| `tools/intake_prc.ts`, `xfs/local-prc-piercings-1` manifest | Resolver provenance plus one content-addressed geometry cache keyed by `(depot hash, container fingerprint)` | 1. Add a geometry adapter that exports each resolved, drawing morph-target component to GLB (WolvenKit `export` or `uncook` with the winning archives), cached by that key. |
+| `tools/intake_piercings.ts` (vanilla) and `xfs/local-vanilla-piercings-2` | The same resolver with the option list from the merged CCO | 2. Build the piercing selector from `loadMergedCco` + `descriptorsFromUiState` instead of the vanilla manifest. |
+| `aggregatePrcStyle` and `prc_active_bank` in `src/piercing-preview.ts` | The resolved appearance's own component list with its shared `meshAppearance` | 3. Render any resolved appearance's drawing components; delete the aggregation. |
+| Single-slot `prc_fpmNN` styles | A generic "inspect component" toggle | 4. Offer per-component visibility from the resolved list. |
+| PRC notes in `src/main.ts`, `src/studio-ui/panels/preview.ts`, `prcError`/`prcAvailable` in `src/presentation-status.ts` and `src/studio-main.ts` | Per-component provenance and ambiguity shown the same way for every source | 5. Present provenance through a typed capability, then remove the PRC notes, manifests and tools together. |
 
 Consequence for the UI: with PRC installed, the vanilla "Piercing 12" choice **is** the PRC bank in game. Showing vanilla style 12 and a separate "PRC" style side by side, as today, misrepresents what the game renders.
 
@@ -388,9 +376,9 @@ Source: audit of `projects/xf-studio/authoring/src` on 2026-09-25. "Selectable" 
 
 | Detail | Needed to render | Path today | Status | Gap |
 |---|---|---|---|---|
-| Head mesh + facial morphs | head `.morphtarget`/`.mesh`, 105 targets | Blender-master `head.glb` with all 105 targets (`src/scene.ts`) | **Save** (5 regions) + **selectable eye shape** (22 choices) | No nose/mouth/jaw/ear selectors; male head absent |
-| Skin tone / type | 5 type `.app`s × 12 tones → `skin.mt` chain (albedo, packed normal, roughness R/B, microdetail, skin profile) | Old Blender-master tile; private study page only | **Not wired** | Saved `skin_type`/tone ignored; no SSS; shader adapter needed |
-| Eye colour | `he_` mesh appearance → eye `.mi` → textures | Exact saved pair only (`src/eye-appearance.ts`) | **Save** (one choice) | General eye catalogue; native eye mesh staged but not rendered |
+| Head mesh + facial morphs | head `.morphtarget`/`.mesh`, 105 targets | Derived from the user's installed game with all 105 targets and the eye plate cut from the same rows (`src/preview-core-*.ts` over `src/game-asset-export.ts`), loaded through one typed render record (`src/core-detail-loader.ts`); a developer-prepared `head.glb` still works | **Save** (5 regions) + **selectable eye shape** (22 choices) | No nose/mouth/jaw/ear selectors; male head absent; vanilla base-game head only, not the effective mod winner |
+| Skin tone / type | 5 type `.app`s × 12 tones → `skin.mt` chain (albedo, packed normal, roughness R/B, microdetail, skin profile) | The head mesh's `default` appearance maps (pale D01), derived from the game | **Not wired** | Saved `skin_type`/tone ignored; no SSS; shader adapter needed |
+| Eye colour | `he_` mesh appearance → eye `.mi` → textures | Derived preview: the native eyeball chunk (static at its bind pose) with the `gradient_brown` base albedo, no gradient; exact saved pair (`src/eye-appearance.ts`) | **Save** (one choice) | General eye catalogue; iris gradient, refraction and wetness |
 | Eyebrows + colour | `heb_` morph/mesh per style, decal material + gradient | Vanilla mesh + one Arkhe style (`src/brow-material.ts`) | **Save** + visibility | Other styles, vanilla 13 styles × 35 colours, colour accuracy |
 | Eyelashes + colour | vanilla: `he_` chunk 0 + `eyelashes__<colour>`; CCXL: own mesh | One CCXL lash mesh, flat colour (`src/lash-profile.ts`) | **Save** + visibility | Vanilla lashes, `.hp`-based colour |
 | Hair + colour | hair `.app` → mesh(es) + `.hp` + cap | One modded hair (`src/hair-preview.ts`, `src/hair-shading.ts`) | **Save** + visibility | Vanilla 51 styles, colour catalogue, physics |
@@ -404,7 +392,7 @@ Source: audit of `projects/xf-studio/authoring/src` on 2026-09-25. "Selectable" 
 | Idle/face rig | face rig animgraph + facial anims | vanilla CC idle clip (`src/idle-animation.ts`) | **Selectable** (motion panel), female | Male; wrinkle maps |
 | Male V | `pma` variants of all the above | `applySavedV` refuses male saves | **Missing** | Whole male asset set |
 
-Common prerequisites: a general option catalogue in TypeScript (today only the Python [catalogue probe](../research/character-customization/catalog-prototype.md)); the [generic resolver](#8-generic-resolver-specification) in place of today's exact-hash special cases for eyes, brows, lashes, hair and PRC; one **morph-target mesh path** for all `hx_` decals (makeup, pimples, tattoos, scars and face cyberware share morph-skinned decal meshes over the head, so one geometry path plus the decal material family covers them); and the skin shader adapter. `head.glb` comes from a Blender master derived from the vanilla head; a resolver-driven head would load the **winning** `h0_000_pwa__morphs.morphtarget`, which matters because installed mods (for example a facial-rig fix) can replace it ([saved skin chain](../research/eye-artistry/saved-skin-resource-chain.md)).
+Common prerequisites: wiring the implemented [generic resolver](#8-generic-resolver-specification) (it already yields the merged option catalogue and each choice's resources) into the preview in place of today's exact-hash special cases for eyes, brows, lashes, hair and PRC, plus feeding its resolved components through the generic geometry/texture exporter (`src/game-asset-export.ts`, which already caches exports per depot path and archive source) and the typed render record; one **morph-target mesh path** for all `hx_` decals (makeup, pimples, tattoos, scars and face cyberware share morph-skinned decal meshes over the head, so one geometry path plus the decal material family covers them); and the skin shader adapter. The derived `head.glb` reads the base game's content archives only; a resolver-driven head would load the **winning** `h0_000_pwa__morphs.morphtarget`, which matters because installed mods (for example a facial-rig fix) can replace it ([saved skin chain](../research/eye-artistry/saved-skin-resource-chain.md)).
 
 ## Lessons from the legacy generator
 
@@ -434,6 +422,9 @@ From the legacy xf-omega eye-makeup generator (female only, reference only) and 
 8. Does ArchiveXL remove and re-merge custom entries on every load, so that uninstalled options disappear cleanly?
 9. What is the native engine rule for a depot path present in both a base-game and a mod archive, and for bundle order? Tool sources (WolvenKit, ArchiveXL) put mods first; PRC depends on it, but the native lookup has not been read or measured.
 10. Are eye-makeup styles 21–36 in the EP1 CCO deliberately on a separate link key, and are all resource-listed choices visible in the UI?
+11. How does the engine treat several components with the same name in one appearance (the reference installation's teeth `.app` from a morph-additions mod has 16)?
+12. The EP1 CCO and the reference save use `i0_000_pwa_base__vagina__01_ca_pale_00_warm_ivory`, which no installed `i0_000_base__genitals.app` defines. What does the engine fall back to?
+13. Does the engine load resources that WolvenKit 8.17.4 and 9.0.1 reject as an older layout (a replacement feet `.app` with `castShadows` stored as `Bool`)?
 
 ## In-game test asks
 
@@ -451,4 +442,4 @@ Each is a small check for one prepared session; record game, ArchiveXL, TweakXL 
 
 ## Related pages
 
-[Materials and shaders](materials-and-shaders.md) · [Wiki file-chain map](../research/character-customization/file-chain-map.md) · [CCXL merge boundary](../research/character-customization/ccxl-merge-boundary.md) · [Catalogue probe](../research/character-customization/catalog-prototype.md) · [Source resolution](../research/character-customization/mod-source-resolution.md) · [Save import](../research/eye-artistry/save-import.md) · [CC controls and presets backlog](../research/backlog/cc-controls-and-presets.md)
+[Mod loading](mod-loading.md) · [Resolver validation](../research/character-customization/resolver-validation.md) · [Materials and shaders](materials-and-shaders.md) · [Wiki file-chain map](../research/character-customization/file-chain-map.md) · [CCXL merge boundary](../research/character-customization/ccxl-merge-boundary.md) · [Catalogue probe](../research/character-customization/catalog-prototype.md) · [Source resolution](../research/character-customization/mod-source-resolution.md) · [Save import](../research/eye-artistry/save-import.md) · [CC controls and presets backlog](../research/backlog/cc-controls-and-presets.md)

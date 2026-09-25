@@ -98,7 +98,7 @@ export function shell() {
       specimen: `<header class="shell-header demo-header">
         <div class="brand"><span class="brand-mark">XF</span><span class="brand-name">Studio</span></div>
         <button type="button" class="category">${i("category")}<span>Eye makeup</span>${i("chevronDown")}</button>
-        <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Based on r3")}</nav>
+        <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Saved")}</nav>
         <span class="verify-flag">Verification workspace</span>
         <div class="header-actions">${btn("Undo", { icon: "undo", iconOnly: true, variant: "ghost" })}${btn("Save", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}<span class="divider"></span>${btn("Commands", { icon: "command", variant: "ghost" })}${btn("Panels", { icon: "layout", iconOnly: true, variant: "ghost" })}${btn("Theme", { icon: "monitor", iconOnly: true, variant: "ghost" })}</div></header>`,
       what: "Brand, the authoring-category switcher (the expansion zone), a breadcrumb of collection › preset with the library state chip, the verification flag when isolated, and global actions: Undo, Save to library, Package, command palette, panels/layout and theme.",

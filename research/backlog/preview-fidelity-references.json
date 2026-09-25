@@ -72,6 +72,14 @@
       "localCopy": "research\\consumers\\preview-fidelity\\raw\\brow-texture-comparison.png",
       "sha256": "4987c4ed33948d16e74c8069ae78e2efe30115e2046cda0d42d3de1b8cae162a",
       "bytes": 432144
+    },
+    {
+      "label": "in-game portrait (reference character, current in-game appearance)",
+      "source": "a supplied in-game photograph of the reference character (personal path withheld)",
+      "localCopy": "research/consumers/preview-fidelity/raw/in-game-portrait-2026-09-25.jpg",
+      "sha256": "13094bfdb54bf4ce984b41eaf2aa37aedb1b6d6c5dee2f230da48deb22776747",
+      "bytes": 508432,
+      "notes": "2000x1600, supplied 25 Sep 2026. Uncontrolled overcast street lighting with depth of field; legacy XF Eye Artistry eye makeup active. Hair reads near-black with a cool sheen, lashes black, brows dark narrow brown, skin pale and cool. Directional colour reference only, not a matched capture."
     }
   ]
 }

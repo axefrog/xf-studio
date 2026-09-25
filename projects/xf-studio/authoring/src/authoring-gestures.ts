@@ -2,22 +2,22 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { GestureEdit, RecipeActions } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import { gestureHistoryLabel } from "./history-labels";
+import type { HistoryEntryId } from "./editor-actions";
 
 export type GestureSource = "uv" | "surface";
 
 /** Owns the Undo transaction; input adapters own coordinate and stale-pointer checks. */
 export class AuthoringGestures {
+  /** `checkpoint` is the Undo entry this gesture added (undefined when the top entry already matched). */
   private active?: { source: GestureSource; layer: Layer; changed: boolean;
-    checkpointDepth: number; checkpointCreated: boolean; baseline: string };
+    checkpoint?: HistoryEntryId; baseline: string };
   constructor(private document: AuthoringDocument, private actions: Pick<RecipeActions, "applyGesture">,
     private restoreUndo: () => void) {}
   begin(source: GestureSource, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;
     const baseline = JSON.stringify(this.document.recipe);
-    const priorDepth = this.document.undoDepth;
-    this.document.checkpoint();
-    this.active = { source, layer, changed: false,
-      checkpointDepth: this.document.undoDepth, checkpointCreated: this.document.undoDepth > priorDepth, baseline };
+    const checkpoint = this.document.checkpoint();
+    this.active = { source, layer, changed: false, checkpoint, baseline };
     return true;
   }
   apply(source: GestureSource, action: GestureEdit) {
@@ -25,8 +25,8 @@ export class AuthoringGestures {
     if (!active || active.source !== source || active.layer !== action.expectedLayer ||
       !this.document.recipe.layers.includes(active.layer)) return false;
     const changed = this.actions.applyGesture(action);
-    if (changed && !active.changed && active.checkpointCreated)
-      this.document.relabelCheckpoint(active.checkpointDepth, gestureHistoryLabel(action));
+    if (changed && !active.changed && active.checkpoint !== undefined)
+      this.document.relabelCheckpoint(active.checkpoint, gestureHistoryLabel(action));
     if (changed) active.changed = true;
     return changed;
   }
@@ -44,9 +44,8 @@ export class AuthoringGestures {
     else this.discardEmpty(active);
   }
   private discardEmpty(active: NonNullable<AuthoringGestures["active"]>) {
-    if (active.checkpointCreated && !active.changed && this.document.recipe.layers.includes(active.layer) &&
-      this.document.undoDepth === active.checkpointDepth &&
-      JSON.stringify(this.document.recipe) === active.baseline) this.document.undoRecipe();
+    if (active.checkpoint !== undefined && !active.changed && this.document.recipe.layers.includes(active.layer) &&
+      JSON.stringify(this.document.recipe) === active.baseline) this.document.discardCheckpoint(active.checkpoint);
   }
   snapshot() { return this.active ? { source: this.active.source, layerId: this.active.layer.id,
     changed: this.active.changed } : undefined; }

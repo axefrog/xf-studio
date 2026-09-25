@@ -36,7 +36,7 @@ export function components() {
       drives: "Enabled state = the action's capability; the tooltip on a disabled button is the application's reason (the command palette shows the same text).",
       a11y: "Disabled buttons cannot take focus, so every disabled command also appears with its reason in the command palette and context menus." }),
     pattern({ id: "c-chips", title: "Chips, badges and status vocabulary", status: "implemented",
-      specimen: `<div class="stack-s"><div class="row wrap gap-s">${chip("Based on r3")}${chip("Not in library", "warning")}${chip("Newer r5 saved", "warning")}${chip("Working…", "info")}</div>
+      specimen: `<div class="stack-s"><div class="row wrap gap-s">${chip("Saved")}${chip("Not saved yet", "warning")}${chip("Newer version saved", "warning")}${chip("Working…", "info")}</div>
         <div class="row wrap gap-s">${badge("Can be built", "success")}${badge("Preview only", "warning")}${badge("Current", "success")}${badge("Stale — draft changed since", "warning")}${badge("Blocked", "error")}</div></div>`,
       what: "Chips describe document/library state; badges qualify a result or capability. The words are fixed vocabulary: Working, Preview only, Can be built, Current, Stale, Blocked. A finished Build states its limits in one plain sentence (built and checked, not tested in game, nothing installed) rather than in badges.",
       when: "Whenever a result could be mistaken for more than it is. A green badge never implies game rendering.",

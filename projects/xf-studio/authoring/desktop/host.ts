@@ -14,6 +14,11 @@ export type DesktopCapabilities = Readonly<{
   updater: false;
   previewAssets: "missing" | "incomplete" | "ready";
   /**
+   * Where a ready core preview comes from: the player's own game files (the community path)
+   * or the developer intake's prepared files. Null while the preview is not ready.
+   */
+  previewSource: "derived" | "prepared" | null;
+  /**
    * Developer-only five-file preview intake. Community users cannot prepare
    * those files, so it is off unless the data folder holds the marker below.
    */
@@ -39,7 +44,8 @@ export function desktopVersionFromMetadata(value: unknown): DesktopVersion {
 }
 
 export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewAssets"],
-  version: DesktopVersion, userDataPath: string, packageBuild = false, previewIntake = false): DesktopCapabilities => ({
+  version: DesktopVersion, userDataPath: string, packageBuild = false, previewIntake = false,
+  previewSource: DesktopCapabilities["previewSource"] = null): DesktopCapabilities => ({
   schema: "xfs/desktop-capabilities-1",
   host: "electrobun",
   renderer: "webview2",
@@ -51,5 +57,6 @@ export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewA
   installation: false,
   updater: false,
   previewAssets,
+  previewSource: previewAssets === "ready" ? previewSource : null,
   previewIntake,
 });

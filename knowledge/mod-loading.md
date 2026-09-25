@@ -1,0 +1,87 @@
+# Mod loading and resource precedence
+
+**Maturity: Draft.** Consolidates MO2 2.5.2, ArchiveXL 1.27.3 (commit `5474e34d`) and WolvenKit (commit `11720772`) source reading with the XF Studio resolver's run against one reference installation (game 2.31 with Phantom Liberty, MO2 profile of about 1,000 mods, ArchiveXL 1.26.3 installed). Evidence grades follow the [knowledge rules](README.md). REDengine's own archive lookup has **not** been read or measured: every precedence rule below is a tool-source rule or a hypothesis for the native engine, and the resolver says so on each decision.
+
+This page answers: *given an installation, which bytes does the game use for a depot path, and what do ArchiveXL declarations change about them?* The [character-customisation file chain](cc-file-chain.md) builds on it.
+
+## 1. The stages, in order
+
+| Stage | Question | Rule | Grade | Code |
+|---|---|---|---|---|
+| 1. Virtual files | Which physical file is visible at a virtual path such as `archive/pc/mod/x.archive`? | MO2: overwrite, then the **first** `modlist.txt` row, wins; disabled rows are not mounted. An MO2 file over a physical game-folder file is expected to win (MO2's VFS overlays the game folder). Direct launch: the game folder only. | [source] MO2 `profile.cpp`; game-folder overlay **[hypothesis]** | `mo2-instance.ts`, `archive-precedence.ts` `buildMountPlan` |
+| 2. Mount groups | Which archives are mounted, in what order? | `archive/pc/mod/*.archive` (mod group), then ArchiveXL's bundle directory (an extra Mod-scope group inserted before the first non-mod group), then `archive/pc/ep1`, then `archive/pc/content`. | [source] WolvenKit `ArchiveManager.Lookup`, ArchiveXL `ArchiveService::ResolveArchiveGroup`; native order unread | `buildMountPlan` |
+| 3. Mod group order | Which of two mod archives wins a hash? | A visible `archive/pc/mod/modlist.txt` lists archives first-to-last; otherwise the **first alphabetical** archive wins (`PRC_f_…` beats `PRC_z_999_…`). | [source] MO2 basic_games Cyberpunk plugin and its maintainers' load-order guide; collation and unlisted-archive placement **[hypothesis]** | `DepotIndex.lookup` |
+| 4. Hash lookup | Which archive supplies a depot hash? | First mounted archive whose RDAR index contains the FNV-1a 64 of the sanitized path. | [source] RED4ext SDK `ResourcePath::HashSanitized`, WolvenKit `ArchiveReader` | `depot-path.ts`, `rdar-index.ts` |
+| 5. Depot additions | What if no archive has the path? | ArchiveXL `resource.copy` then `resource.link`; both are **rejected** when the path already exists. | [source] ArchiveXL `ResourceLink` | `archivexl-config.ts` `settleDepotAdditions`, `ResourceGraph.locate` |
+| 6. Load-time changes | What do `.xl` files change inside a resource? | `resource.fix` (paths, mesh material `names`, `context`), `resource.patch` (per-type properties, section 4), customization merge ([file chain §5](cc-file-chain.md#5-how-archivexlccxl-extends-the-lists)). | [source] ArchiveXL extensions | `resource-graph.ts`, `cco-model.ts` |
+| 7. What a launch rendered | Did the game really use those bytes? | Only a runtime capture (log naming the resource, resource-request probe, matched frame) can say. | [runtime] needed | — |
+
+## 2. Archive groups and naming
+
+- **Location decides the group, not the name.** `basegame_*.archive` inside `archive/pc/mod` (e.g. `basegame_Kala Standalone Eyes V2.archive`) is an ordinary mod archive.
+- **Not mounted by this model** (listed as unmounted, never silently ignored): archives in subfolders of `archive/pc/mod`, `archive/pc/hot`, REDmod `mods/*/archives`, and archives registered by other RED4ext plugins through ArchiveXL's API. Each is a later adapter.
+- **Collation.** "Alphabetical" is implemented as case-insensitive ordinal. When case-sensitive and case-insensitive order disagree for two colliding archives, the resolver records `collation-sensitive-order`.
+- **Base-internal collisions.** Many resources exist in both `basegame_1_engine.archive` and `basegame_4_appearance.archive`. Their relative order is unread; the resolver picks alphabetical-first and records `base-internal-collision`. For the reference character, all **70** such collisions were byte-identical when both copies were extracted, so the choice did not matter there [resource].
+- **Mod over base.** For the same character, **57** resources were supplied by a mod archive over a base copy; **55** of those payloads differ from the base bytes [resource] (skin textures, head morph rig fix, teeth app, nails, arm meshes, the lash `brown_liquorice.hp` and brow `hh_cap_grad__brown_ombre.xbm`). This is the single most consequential unproven rule; each case carries `mod-over-base-native-unread`.
+
+## 3. How ArchiveXL finds `.xl` files
+
+[source] `ExtensionLoader::Configure`: first the bundle directory (`red4ext/plugins/ArchiveXL/Bundle`, recursively), then every Mod-scope archive group's base directory recursively (the game's `archive/pc/mod`, including `X.archive.xl` beside archives), in reverse depot-group order. Every `.xl` is YAML; anchors and aliases are used by the bundle (`&AppearanceFixF` … `*AppearanceFixF`). The resolver reads the visible files in that order (bundle first, then `archive/pc/mod` by case-insensitive virtual path; the directory-iteration order under MO2's VFS is **[hypothesis]**). A YAML `!exclude` tag is dropped by the reader and reported as an issue.
+
+| Key | Effect | Merge across files |
+|---|---|---|
+| `customizations: {female, male}` | Registers `.inkcharcustomization` resources, merged in declaration order | appended |
+| `resource.scope` | Named alias → members; aliases expand **transitively** to leaf paths (e.g. `player_customization.app` → `player_wa_hair.app` → each hairstyle `.app`) | union |
+| `resource.fix` | `paths` (CCO option `.app` remaps plus app overrides), `names` (mesh material renames), `context` (dynamic material attributes) | later keys overwrite |
+| `resource.patch` | Copies properties from a patch resource into each (scope-expanded) target; see section 4 | list per target, sorted by `order` |
+| `resource.copy` | `source: [targets]`: new paths holding a copy of `source` | rejected if the target exists |
+| `resource.link` | `target: [aliases]`: aliases resolve to `target`. The scalar form `key: value` is filed the other way round by ArchiveXL's config reader (the key becomes the alias) | rejected if the alias exists or is a copy |
+
+`ResourcePatch::Configure` checks patch sources through the depot, which ArchiveXL's link hooks extend to copies and links; that is why Arkhe's brows can patch from an `arkhe_copy\…` path that no archive contains. A patch source may not itself be patched. Patches for one target are sorted by `order` with `std::sort`; the resolver keeps declaration order among equal values, which holds if ArchiveXL is built with MSVC, whose `std::sort` insertion-sorts ranges of up to 32 elements **[hypothesis]**.
+
+## 4. What a patch changes
+
+[source] ArchiveXL `ResourcePatch/Extension.cpp`. "Overwrite" means the target already has the property: an empty `props` list then does **not** replace it; only an explicit prop does.
+
+| Target type | Props | Behaviour |
+|---|---|---|
+| `.mesh` | `appearances` | Each patch appearance is added, or replaces a same-named one when the existing appearance has no chunk materials or the patch appearance has some. A patch mesh with material entries becomes the **material source** for its appearances. |
+| `.mesh` | `renderResourceBlob` | Replaces geometry (with bones, LOD info) — overwrite rule applies |
+| `.morphtarget` | `baseMesh`, `baseMeshAppearance`, `blob`, `boundingBox`, `targets`, `baseTexture(ParamName)` | `targets` merge by name; `blob` obeys the overwrite rule |
+| `.app` | `appearances`, `partsValues`, `partsOverrides`, `components`, `visualTags`, `censorshipMapping` | New appearances appended; existing ones gain parts (only if they exist) and overrides; an unnamed patch appearance applies to all |
+| `.ent` | `entity`, `components` | Merged into the compiled package (player entity patches, rule R6b) — not yet modelled |
+
+Mesh `resource.fix names` rename chunk materials and material entries before patches apply; `context` entries join the mesh's `@context` attributes.
+
+## 5. ArchiveXL dynamic materials (mesh side)
+
+[source] `Mesh/Extension.cpp` and `Garment/Dynamic.cpp`, replicated in `character-resolver.ts`:
+
+1. **Expansion.** An appearance with no chunk materials copies the chunk materials of an expansion source (a single appearance tag, else the `@context` attribute `appearance_expansion_source`, else the first appearance), replacing the part before `@` with its own name: `black_carbon@long` → `ash_brown@long`.
+2. **Lookup.** A chunk material name is first looked up among the target mesh's ordinary entries, then the patch mesh's, then as a template: `name@tpl` uses the source mesh's `@tpl` entry (`@material` when there is no `@`).
+3. **Instantiation.** The template instance is cloned. Same-named `@context` parameters replace its values; resource paths and `baseMaterial` starting with `*` are expanded: `{attr}` reads the material attributes (`material` = the part before `@`, `material.1`… = `+`-separated parts) and then the context attributes (the `@context` CName parameters with names converted to snake_case, e.g. `LongBaseMaterial` → `long_base_material`, plus `resource.fix context`). A trailing `?` makes a path optional. The inheritance chain is expanded the same way at each level.
+
+This is how one hair-colour pack colours every hairstyle without shipping per-style materials: the saved `38_ash_brown` becomes mesh appearance `ash_brown`, `ash_brown@long` instantiates the pack's `template__long.mi`, `*{long_base_material}` resolves to the hairstyle's own strand material and `*…\{material}.hp` to `ash_brown.hp`.
+
+## 6. Implementation and reproduction
+
+`projects/xf-studio/authoring/src`: `depot-path.ts` (hashing), `rdar-index.ts`, `archive-precedence.ts` (mount plan, `DepotIndex`), `archivexl-config.ts` (`.xl` semantics), `resource-graph.ts` (effective resources, provenance), `cco-model.ts`, `character-resolver.ts` — all pure — and `resolver-host.ts` (source discovery, index reading, WolvenKit CLI extraction to an ignored JSON cache keyed by depot hash and archive fingerprint). `tools/resolve-character.ts` writes a local report. Tests: `tests/archive-precedence.test.ts`, `cco-merge.test.ts`, `character-resolver.test.ts` (synthetic) and the opt-in `character-resolver-integration.test.ts`.
+
+On the reference installation the MO2 route mounts 1,079 archives (77 listed as not mounted), reads 1,000 visible `.xl` files and merges 242 female custom CCO resources; a cold resolve of the saved character takes about 9 minutes (WolvenKit extraction), a cached one about 16 s. Validation: [resolver validation](../research/character-customization/resolver-validation.md).
+
+## Open questions
+
+1. REDengine's lookup across and within archive groups (mod over base, EP1 over content, content-internal order, collation). Decisive evidence: a version-matched read of `ResourceDepot` lookup, or a runtime probe logging which archive served a hash.
+2. Does the game mount archives in `archive/pc/mod` subfolders, and where do REDmod groups sit relative to `archive/pc/mod`?
+3. How does the game treat an archive absent from a visible `modlist.txt`?
+4. The order in which ArchiveXL enumerates `.xl` files under MO2's VFS.
+5. Does WolvenKit's conversion failure on outdated resources (e.g. a `castShadows` field stored as `Bool`) mirror an in-game failure, or does the engine tolerate it?
+
+## In-game test asks
+
+1. **Mod over base, one resource.** With the reference profile, compare the lash colour with Alliekat's archive enabled and disabled (same save, same camera). A visible change confirms mod-over-base for `brown_liquorice.hp`.
+2. **Mod-versus-mod order.** In a throwaway MO2 profile, add a separate mod holding a copy of one PRC item archive under a name that sorts after `PRC_z_999_Framework_128.archive`, and disable the original item mod: the ring should disappear. Confirms first-alphabetical-wins without touching the installed mods.
+
+## Related pages
+
+[CC file chain](cc-file-chain.md) · [Source discovery](../research/authoring/source-discovery-foundation.md) · [MO2 source resolution](../research/character-customization/mod-source-resolution.md) · [Brown liquorice collision](../research/eye-artistry/brown-liquorice-profile-overlap.md) · [Resolver validation](../research/character-customization/resolver-validation.md)

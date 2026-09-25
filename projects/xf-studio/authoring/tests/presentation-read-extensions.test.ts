@@ -20,8 +20,7 @@ function mountFixture() {
   workspace.collections = collectionDraft(source, 3);
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
-  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft",
-    controlAction: action => { core.recipe.dispatch(action); } });
+  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
   core.app.attach({ quality: new PreviewQualityActions(1024, { assess: () => ({ accepted: true }), replace: () => {} }) });
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 1, height: 1 }),
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,

@@ -4,7 +4,8 @@
  * `StudioPresentationPort`. Nothing in `studio-ui/` imports this module.
  */
 import { createBrowserFileDevice } from "./browser-file-device";
-import { NO_3D_PREVIEW_YET } from "./alpha-availability";
+import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
+import { PREVIEW_READY_EVENT, PREVIEW_STATUS_EVENT, type PreviewStatusDetail } from "./preview-preparation";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -14,7 +15,6 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
-import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
@@ -70,12 +70,13 @@ async function start() {
   const core = createTrustedAuthoringCore(workspace, {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
-    controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage,
+    // The desktop host file (16 MB limit) holds more than browser storage.
+    ...(storage === localStorage ? {} : { budget: 12_000_000 }),
     capture: {
       editor: () => core.document.export(),
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
@@ -147,67 +148,87 @@ async function start() {
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
   if (verification) Object.assign(window, { xfStudioPresentation: port });
-  port!.subscribe(persist);
+  // Library content (preset edits, switches, saves) persists; the whole port is not watched,
+  // because it also publishes the save status and preview readiness (CORE-01).
+  session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });
   const desktopAssets = document.documentElement.dataset.desktopPreviewAssets;
   if (desktopAssets === "missing" || desktopAssets === "incomplete") {
-    // Community installs have no preview intake, so they get the plain alpha
-    // status; only a maintainer-enabled intake mentions the prepared files.
+    // Community installs have no preview intake: the desktop prepares the preview from the
+    // player's game files and reports its state; only a maintainer intake mentions prepared files.
     const reason = document.documentElement.dataset.desktopPreviewIntake !== "enabled"
-      ? NO_3D_PREVIEW_YET
+      ? document.documentElement.dataset.desktopPreviewStatus || NO_3D_PREVIEW_IN_ALPHA
       : desktopAssets === "missing"
         ? "3D preview files are missing. Use Enable 3D preview to import the five prepared files."
         : "3D preview files are incomplete. Check the preview-assets folder and import a valid prepared set.";
-    core.app.setPreviewUnavailable(reason);
-    viewportDevice.failHead(reason);
-    statusSource.changed();
+    const unavailable = (text: string) => {
+      core.app.setPreviewUnavailable(text);
+      viewportDevice.failHead(text);
+      statusSource.changed();
+    };
+    unavailable(reason);
     session.flush();
+    const onStatus = (event: Event) => {
+      const message = (event as CustomEvent<PreviewStatusDetail>).detail?.message;
+      if (typeof message === "string" && message) unavailable(message);
+    };
+    window.addEventListener(PREVIEW_STATUS_EVENT, onStatus);
+    window.addEventListener(PREVIEW_READY_EVENT, () => {
+      window.removeEventListener(PREVIEW_STATUS_EVENT, onStatus);
+      core.app.setPreviewUnavailable("");
+      void attachHead();
+    }, { once: true });
     return;
   }
-  try {
-    scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
-    let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
-    const services = createTrustedPreviewServices(workspace, createBrowserScenePreviewPorts(scene, {
-      setSurfaceControls: enabled => surface?.setEnabled(enabled),
-      hasSavedAppearance: () => !!workspace.savedV || !!savedAppearance?.hasSavedV(),
-    }));
-    savedAppearance = services.savedAppearance;
-    core.app.attach({ savedV: savedAppearance });
-    savedAppearance.subscribe(persist);
-    savedAppearance.subscribe(() => statusSource.changed());
-    previewDevice.connectScene(scene);
-    surface = viewportDevice.mountSurface({
-      layer: () => core.geometry.layer(), selected: () => core.presentation.selected, ...fieldHooks,
-      begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
-      apply: proposal => core.app.applyGesture("surface", proposal),
-      cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-      message: text => adapterMessage("surface", text),
-    });
-    ({ preview: previewActions, motion: motionActions } = services.finish());
-    core.app.attach({ preview: previewActions, motion: motionActions });
-    previewActions.subscribe(persist); motionActions.subscribe(persist);
-    previewActions.subscribe(() => statusSource.changed());
-    previewDevice.presentInitialLayers();
-    scene.controls.addEventListener("change", persist);
-    const evidence = scene.evidence;
-    status = { ...status, assets: { ...status.assets, loaded: true, detailErrors: [...evidence.detailErrors],
-      browMaterial: evidence.browMaterial as "saved-double-diffuse" | "provisional",
-      lashColor: evidence.lashColor as "saved-hair-profile" | "provisional",
-      lashProfileLabel: evidence.lashProfile
-        ? `${evidence.lashProfile.winner} (${evidence.lashProfile.basis.replaceAll("-", " ")})` : undefined,
-      hairError: evidence.hairError || undefined, piercingError: evidence.piercingError || undefined,
-      prcError: evidence.prcError || undefined, prcAvailable: !!evidence.prc.styles } };
-    viewportDevice.headReady();
-    session.setPreviewReady(); session.flush(); drawUV();
-    statusSource.changed();
-  } catch (error) {
-    const reason = `3D preview unavailable: ${(error as Error).message}`;
-    core.app.setPreviewUnavailable(reason);
-    viewportDevice.failHead(reason);
-    statusSource.changed();
-    console.error(error); session.flush();
+  await attachHead();
+
+  /** Load the 3D head and connect every head-dependent service (at start, or once the desktop has prepared it). */
+  async function attachHead() {
+    try {
+      scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
+      let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
+      const services = createTrustedPreviewServices(workspace, createBrowserScenePreviewPorts(scene, {
+        setSurfaceControls: enabled => surface?.setEnabled(enabled),
+        hasSavedAppearance: () => !!workspace.savedV || !!savedAppearance?.hasSavedV(),
+      }));
+      savedAppearance = services.savedAppearance;
+      core.app.attach({ savedV: savedAppearance });
+      savedAppearance.subscribe(persist);
+      savedAppearance.subscribe(() => statusSource.changed());
+      previewDevice.connectScene(scene);
+      surface = viewportDevice.mountSurface({
+        layer: () => core.geometry.layer(), selected: () => core.presentation.selected, ...fieldHooks,
+        begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
+        apply: proposal => core.app.applyGesture("surface", proposal),
+        cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
+        message: text => adapterMessage("surface", text),
+      });
+      ({ preview: previewActions, motion: motionActions } = services.finish());
+      core.app.attach({ preview: previewActions, motion: motionActions });
+      previewActions.subscribe(persist); motionActions.subscribe(persist);
+      previewActions.subscribe(() => statusSource.changed());
+      previewDevice.presentInitialLayers();
+      scene.controls.addEventListener("change", persist);
+      const evidence = scene.evidence;
+      status = { ...status, assets: { ...status.assets, loaded: true, detailErrors: [...evidence.detailErrors],
+        browMaterial: evidence.browMaterial as "saved-double-diffuse" | "provisional",
+        lashColor: evidence.lashColor as "saved-hair-profile" | "provisional",
+        lashProfileLabel: evidence.lashProfile
+          ? `${evidence.lashProfile.winner} (${evidence.lashProfile.basis.replaceAll("-", " ")})` : undefined,
+        hairError: evidence.hairError || undefined, piercingError: evidence.piercingError || undefined,
+        prcError: evidence.prcError || undefined, prcAvailable: !!evidence.prc.styles } };
+      viewportDevice.headReady();
+      session.setPreviewReady(); session.flush(); drawUV();
+      statusSource.changed();
+    } catch (error) {
+      const reason = `3D preview unavailable: ${(error as Error).message}`;
+      core.app.setPreviewUnavailable(reason);
+      viewportDevice.failHead(reason);
+      statusSource.changed();
+      console.error(error); session.flush();
+    }
   }
 }

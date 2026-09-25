@@ -1,32 +1,15 @@
 import { expect, test } from "bun:test";
-import { AuthoringControlEdits } from "../src/authoring-control-edits";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGestures } from "../src/authoring-gestures";
 import { CollectionService } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { applyLayerAction } from "../src/editor-actions";
-import { RecipeActions } from "../src/recipe-actions";
 import { PreviewActions } from "../src/preview-actions";
-import { StudioApplication } from "../src/studio-application";
+import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
 
 function fixture() {
-  const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  const undo = () => { const prior = document.undoRecipe(); if (!prior) return false;
-    document.recipe = prior; return true; };
-  const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
-    selected: document.selected, fieldSelection: document.fieldSelection }),
-  (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft",
-  index => document.gestureChanged(index));
-  const gestures = new AuthoringGestures(document, recipe, undo);
-  const controls = new AuthoringControlEdits(document, action => { recipe.dispatch(action); }, undo);
-  const app = new StudioApplication({ document, recipe, gestures, controls, undo,
-    layer: action => {
-      const next = applyLayerAction(document.recipe, document.recipe.layers[document.active]?.id, action);
-      document.checkpoint(); document.recipe = next.recipe;
-    } });
-  return { workspace, document, app };
+  const workspace = freshWorkspace();
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  return { workspace, document: core.document, app: core.app, core };
 }
 
 test("facade discovers target-specific commands, validates at invocation and detaches snapshots", () => {

@@ -93,7 +93,7 @@ function UiFirstRun {
   UiStep "save" {
     UiInvoke "Save"
     UiInvoke "Library" "ControlType.TabItem"
-    $state = UiFind "*matches library revision*" 20
+    $state = UiFind "*Matches version*" 20
     if (-not $state) { throw "The library did not report a saved revision" }
     Shot "04-saved"
     $state.Current.Name

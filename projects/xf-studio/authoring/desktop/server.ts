@@ -16,6 +16,12 @@ import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./up
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
+import { PreviewCoreHost } from "../src/preview-core-host";
+import { createPreviewCoreHandler } from "../src/preview-core-server";
+import type { GameAssetExporter } from "../src/game-asset-export";
+
+/** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
+export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
 
 /**
  * The Studio page loads only its own scripts, styles, workers and data from this loopback
@@ -29,7 +35,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
   updateTrial?: { native: NativeUpdater; trust: UpdateTrust;
-    requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number }) {
+    requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
+  previewExporter?: (cli: string | null) => GameAssetExporter) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -66,6 +73,16 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
+  // Community path: the core preview is derived from the player's own game files.
+  const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+    settings: () => { try { const { gameRoot, wolvenKitCli } = settingsStore.load().settings; return { gameRoot, wolvenKitCli }; }
+      catch { return { gameRoot: null, wolvenKitCli: null }; } },
+    log: message => report(message) });
+  const previewCoreRequest = createPreviewCoreHandler(previewCore);
+  /** Prepared developer files win; otherwise the derived preview; otherwise what is missing. */
+  const previewAssetState = async (): Promise<{ state: "ready" | "incomplete" | "missing"; source: "prepared" | "derived" | null }> =>
+    await coreAssetsReady() ? { state: "ready", source: "prepared" } : previewCore.ready() ? { state: "ready", source: "derived" } :
+      { state: existsSync(assetRoot) ? "incomplete" : "missing", source: null };
   // Maintainer-only: the five prepared preview files come from a private
   // pipeline, so the intake stays hidden and refused unless explicitly enabled.
   const previewIntake = () => existsSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER));
@@ -95,10 +112,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname.startsWith("/api/") && request.method === "POST" &&
           request.headers.get("Content-Type")?.split(";")[0].trim() !== "application/json")
         return new Response("Expected JSON", { status: 415 });
-      if (url.pathname === "/api/desktop/capabilities")
-        return Response.json(desktopCapabilities(await coreAssetsReady() ? "ready" :
-          existsSync(assetRoot) ? "incomplete" : "missing", version, dataRoot, buildReady(), previewIntake()),
+      if (url.pathname === "/api/desktop/capabilities") {
+        const preview = await previewAssetState();
+        return Response.json(desktopCapabilities(preview.state, version, dataRoot, buildReady(), previewIntake(), preview.source),
           { headers: { "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
           { headers: { "Cache-Control": "no-store" } });
@@ -167,10 +186,16 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       try { path = resolve(root, "." + decodeURIComponent(asset ? url.pathname.slice("/assets".length) : url.pathname === "/" ? "/index.html" : url.pathname)); }
       catch { return new Response("Bad path", { status: 400 }); }
       if (!path.startsWith(root + sep)) return new Response("Not found", { status: 404 });
-      const file = Bun.file(path);
+      let file = Bun.file(path);
+      let servedRoot = root;
+      if (asset && !(await coreAssetsReady())) {
+        // Without a complete developer intake, the core preview files come from the derived cache.
+        const derived = previewCore.assetPath(url.pathname.slice("/assets/".length));
+        if (derived) { path = derived; file = Bun.file(derived); servedRoot = resolve(derived, ".."); }
+      }
       if (!(await file.exists())) return new Response("Not found", { status: 404 });
       try {
-        const resolvedRoot = realpathSync(root), resolvedFile = realpathSync(path);
+        const resolvedRoot = realpathSync(servedRoot), resolvedFile = realpathSync(path);
         if (!resolvedFile.startsWith(resolvedRoot + sep) || !statSync(resolvedFile).isFile())
           return new Response("Not found", { status: 404 });
       } catch { return new Response("Not found", { status: 404 }); }
@@ -191,6 +216,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     renderer(): Readonly<typeof renderer> { return { ...renderer }; },
     beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
     beginInstallTransaction() { return activity.begin("install"); },
-    stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    /** The derived 3D preview's host service (tests and shutdown). */
+    previewCore,
+    stop() { shutdown.abort(); previewCore.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

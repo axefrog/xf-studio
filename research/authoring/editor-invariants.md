@@ -32,7 +32,15 @@ Rules:
 - Presets are complete looks. `CollectionSession` owns preset switching without UI or network dependencies.
 - SQLite v2 stores immutable collection and preset versions while preserving legacy look rows.
 - Keep drafts, per-preset Undo and stable IDs through edits and imports.
+- **Undo transactions track their own entry.** A gesture or form transaction keeps the identity of the Undo entry its checkpoint added (`AuthoringDocument.checkpoint()` returns it) and labels or discards only that entry, never by comparing depths. At `RECIPE_HISTORY_LIMIT` (80) a new entry displaces the oldest; discarding an empty transaction's entry, or undoing it, brings the displaced entry back.
+- **Form control edits are validated actions.** `controlEdit` passes the same capability gate as `dispatch` (target, descriptor payload types and ranges, domain rules) and returns a typed result; a refused edit never opens a transaction. `createTrustedAuthoringCore` wires control dispatch; hosts do not supply it.
 - Collection files and build plans are portable compiler inputs, not installable mods.
+
+## Browser workspace persistence
+
+- **Save on content changes only.** Autosave subscribes to domain and content sources (the authoring document, preferences, the collection library, preview services and view adapters), never to the whole presentation port, which also carries the save status and preview readiness. Save status is published only when it changes, and identical content is never rewritten.
+- **Bounded size** (`workspace-budget.ts`). Each workspace key targets at most 2,000,000 UTF-16 code units, because the normal and `?verify=1` keys share one origin quota of roughly five million. Every save stores the selected preset once (inside the collection, not again as the top-level editor), keeps the selected preset's full Undo history, keeps the latest 5 Undo entries of other presets, keeps removed presets without their histories and keeps recovery drafts' presets without histories or removed-preset lists. Only when that is still over budget, or the browser refuses the write, does a save give up more Undo depth and recovery copies, and it reports `nearly-full`. If nothing fits, it reports `full`. Neither case is silent. The live session keeps its full in-memory history; only the stored copy is trimmed.
+- **Tolerant restore.** Only the current collection draft must parse. A damaged recovery draft or removed-preset entry is dropped with a warning (`loadWorkspace().warning`, save status `repaired`); a damaged current draft still protects the original storage from being overwritten.
 
 ## Path, pigment and softness
 

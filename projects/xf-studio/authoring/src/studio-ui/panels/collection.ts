@@ -23,22 +23,23 @@ export function libraryState(frame: Frame) {
   if (!draft) return { tone: "neutral" as const, label: "Loading library…", detail: "" };
   const stored = library.summaries.find(item => item.id === draft.id);
   if (library.busy && library.progress?.phase === "working") return { tone: "info" as const, label: "Working…", detail: library.progress.message };
-  if (draft.revision === undefined) return { tone: "warning" as const, label: "Not in library",
-    detail: "This collection has never been saved to the local library. Your draft autosaves on this computer." };
-  if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: `Newer r${stored.revision} saved`,
-    detail: `Your draft is based on revision ${draft.revision}; the library has revision ${stored.revision} from elsewhere. Saving will report a conflict — save a copy or reopen it.` };
+  // Plain chip labels; version numbers live in the tooltip/detail line.
+  if (draft.revision === undefined) return { tone: "warning" as const, label: "Not saved yet",
+    detail: "This collection hasn't been saved to your library yet. Your draft autosaves on this computer; Save to library keeps a version you can return to." };
+  if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: "Newer version saved",
+    detail: `Your library has a newer version of this collection (version ${stored.revision}) saved elsewhere; your draft started from version ${draft.revision}. Saving will report a conflict — save a copy or reopen it.` };
   const persistence = frame.persistence;
-  if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: `Saved r${draft.revision}`,
-    detail: `The draft matches library revision ${draft.revision}.` };
+  if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: "Saved",
+    detail: `Matches version ${draft.revision} in your library.` };
   if (persistence?.baseline === "known") {
     const presets = persistence.dirtyPresets.length;
     const what = [persistence.structureDirty ? "the collection name or preset order" : "",
       presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
-    return { tone: "info" as const, label: `Unsaved · based on r${draft.revision}`,
-      detail: `Changed since library revision ${draft.revision}: ${what}. Edits are autosaved on this computer; Save to library records a new immutable revision.` };
+    return { tone: "info" as const, label: "Unsaved changes",
+      detail: `Last saved as version ${draft.revision} in your library; saving creates version ${draft.revision + 1}. Changed since then: ${what}. Your draft autosaves on this computer.` };
   }
-  return { tone: "neutral" as const, label: `Based on r${draft.revision}`,
-    detail: `Draft based on library revision ${draft.revision}. Edits since then are autosaved on this computer; Save to library records a new immutable revision.` };
+  return { tone: "neutral" as const, label: "Autosaved draft",
+    detail: `Started from version ${draft.revision} in your library. Your draft autosaves on this computer; Save to library keeps a new version.` };
 }
 
 export function presetsPanel(rt: StudioRuntime): PanelController {
@@ -176,7 +177,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     onClick: () => void rt.file({ kind: "collection.recover" }) });
   const recoverNote = note("", "info");
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
-  const savedEmpty = emptyState("Nothing saved yet", "Save to library creates revision 1 of this collection. Drafts still autosave on this computer.");
+  const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
   const fileButtons = {
     importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => importCollection(rt, event.currentTarget as Element) }),
     exportCollection: button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) }),
@@ -207,7 +208,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       applyCapability(refresh, port.authoring.requestCapability({ kind: "refresh" }));
       const recovery = frame.files.recovery;
       applyCapability(recover, recovery);
-      setText(recoverNote, draft?.previous ? `Next draft: “${draft.previous.name}”${draft.previous.revision ? ` (r${draft.previous.revision})` : ""}. ${draft.recoveryCount} of ${draft.recoveryLimit} drafts recoverable; recover again to walk through them.` : "");
+      setText(recoverNote, draft?.previous ? `Next draft: “${draft.previous.name}”${draft.previous.revision ? ` (version ${draft.previous.revision})` : ""}. ${draft.recoveryCount} of ${draft.recoveryLimit} drafts recoverable; recover again to walk through them.` : "");
       recoverNote.hidden = !draft?.previous;
       const signature = JSON.stringify([library.summaries, draft?.id, library.busy]);
       if (signature !== savedSignature) {
@@ -220,7 +221,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
           return h("li", { class: `saved-row${current ? " current" : ""}` },
             h("div", { class: "saved-main" }, h("strong", { text: item.name }),
-              h("span", { class: "muted small", text: `${plural(item.count, "preset")} · r${item.revision} · ${new Date(item.updatedAt).toLocaleString()}` }),
+              h("span", { class: "muted small", text: `${plural(item.count, "preset")} · version ${item.revision} · ${new Date(item.updatedAt).toLocaleString()}` }),
               current ? badge("This draft", "info") : null),
             open);
         }));
