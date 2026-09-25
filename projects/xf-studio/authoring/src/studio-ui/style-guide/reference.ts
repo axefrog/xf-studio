@@ -13,7 +13,7 @@ export function reference(panels: PanelInfo[]) {
     ["Pigment & edge", "pigment.edit, softness.edit (control transactions)", "editor.layer()"],
     ["Warp", "field.add/select/remove/clear, field.setReach", "editor.selectedField()"],
     ["Head / UV map", "viewport.attach/rehost/resize/uvCommand, camera.front, preview.setSurfaceControls/setWire, motion.*", "viewport.snapshot(), previewReadiness, contextAt()"],
-    ["Character", "preview.setEyeShape/setDetail/setHair/setPiercings, character.tryChoice, files savedV.import/export", "previewState().savedV/preview/character/eyeShapeOptions, status.assets"],
+    ["Character", "character.setOption/setOptions/reset/resetAll/useDefault/loadSave/loadPreset/keepChanges/undo/redo, preview.setEyeShape/setDetail/setHair/setPiercings, files savedV.import/export, characterPreset.import/export", "previewState().character/savedV/preview/eyeShapeOptions, characterPanel(), characterView(), characterChoices(), status.assets"],
     ["Camera & light", "camera.setFov/endFovGesture/front, preview.setExposure/setKeyAngle/setStudioLight/setStudioNeutral/applyStudioSetup/resetStudioLighting/setNormals/setEyeOptics", "previewState().preview, previewState().studioSetups, status.assets.eyeOptics"],
     ["Motion", "motion.setIdle/setPaused/setContributions/setBlink/playBlink", "previewState().motion"],
     ["Preview quality", "quality.set, quality.rebuild", "previewState().quality, previewReadiness"],
@@ -32,7 +32,7 @@ export function reference(panels: PanelInfo[]) {
     ["Collection file · recipe file · build plan", "Portable editable data; a build plan is compiler input — none is a mod."],
     ["Mod package · Check · Build", "Check lists what can be packaged (no files). Build creates your own mod files and checks them; the result says plainly that they are not tested in game and not installed."],
     ["Preview only", "A browser look that Build cannot turn into mod files yet."],
-    ["Preview context", "Brows, lashes, hair, piercings, V's face: view-only, not authoring."],
+    ["Preview context", "The V's creator options (skin, hair, eyes, brows, piercings, makeup…) and the 3D view's toggles: which V the makeup is shown on, never authoring, a save or a package."],
   ];
   return section("reference", "08", "Reference",
     `Mappings from patterns to the public presentation port, the keyboard model, terminology and the rules that keep future UI work inside the architecture contract.`, [

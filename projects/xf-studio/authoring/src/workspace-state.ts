@@ -15,6 +15,7 @@ import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isChoiceName } from "./render-detail";
+import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
@@ -27,10 +28,15 @@ export type PreviewState = {
   eyeShape: number;
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   /**
-   * The creator choice tried on the shown V: a piercing switcher choice (`localizedName`) and a colour, "" for the V's own. Owned by the
-   * character-detail service (`character.tryChoice`); cleared when another V is loaded or the installation no longer offers it.
+   * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`). Kept so stored bytes stay the same; always
+   * written empty once the character context owns every creator choice (CORE-58), and never read back.
    */
   piercingStyle: string; piercingDefinition: string;
+  /**
+   * The character context (character-context-actions.ts): the V's source and the creator choices set on it. Present only once
+   * something was set, so a workspace that never used the creator controls keeps its stored bytes.
+   */
+  character?: StoredCharacter;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
   /** Viewport lighting preset; the studio stage is the default. `exposure`, `lightAngle` and `studioLights` belong to it. */
   lightingPreset: LightingPreset;
@@ -148,11 +154,13 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     state.preview.textureSize = parsePreviewTextureSize(p.textureSize);
     for (const key of ["surface", "wire", "brows", "lashes", "hair", "piercings", "normals", "eyeOptics", "blinkPlaying", "idle", "idlePaused", "idleBody", "idleFace"] as const)
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
-    // The tried piercing style (a creator switcher choice and a colour), read with the record's own name rule so a stale or foreign
-    // value never reaches the host (UI-51); the pair is kept only whole.
+    // The retired tried piercing style is read (with the record's name rule) only so an untouched workspace writes it back unchanged.
     if (isChoiceName(p.piercingStyle) && isChoiceName(p.piercingDefinition)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
     }
+    // The character context: the V's source and the choices set on it, validated; anything unreadable is dropped.
+    const character = storedCharacterOf((p as { character?: unknown }).character);
+    if (character) state.preview.character = character;
     for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max], ["lightAngle", 0, 360],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];

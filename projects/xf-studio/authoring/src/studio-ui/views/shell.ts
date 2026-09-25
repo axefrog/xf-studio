@@ -19,7 +19,7 @@ export const SHELL_VIEW = {
     { id: "head", title: "Head", icon: "head", order: 60, slot: "stage",
       description: "Live 3D preview on V's head with on-surface editing." },
     { id: "character", title: "Character", icon: "character", order: 120, slot: "inspect",
-      description: "V from your save, eye shape and preview-only details." },
+      description: "Your V's creator options from your game and mods: change, turn Off or reset each one, and save presets." },
     { id: "lighting", title: "Camera & light", icon: "lighting", order: 130, slot: "inspect",
       description: "Field of view, framing, exposure, key light and display studies." },
     { id: "motion", title: "Motion", icon: "motion", order: 140, slot: "inspect",

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1; studio lighting actions and exposure range added on claude/studio-lighting; preview.setPiercingPreview replaced by character.tryChoice on claude/cleanup-layered",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel)",
  "states": {
   "starter": {
    "modes": {
@@ -423,16 +423,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -848,16 +862,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -1270,16 +1298,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -1692,16 +1734,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -2114,16 +2170,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -2238,6 +2308,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false
@@ -2734,16 +2814,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -3166,16 +3260,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -3588,16 +3696,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -4010,16 +4132,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -4432,16 +4568,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -4556,6 +4706,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false
@@ -5053,16 +5213,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -5486,16 +5660,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -5908,16 +6096,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -6330,16 +6532,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -6752,16 +6968,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -6876,6 +7106,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false
@@ -7372,16 +7612,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -7804,16 +8058,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -8226,16 +8494,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -8648,16 +8930,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -9070,16 +9366,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -9194,6 +9504,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false
@@ -9690,16 +10010,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -10122,16 +10456,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -10544,16 +10892,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -10966,16 +11328,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -11388,16 +11764,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -11512,6 +11902,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false
@@ -12011,16 +12411,30 @@
     "layer/quality.set": {
      "size": {}
     },
-    "layer/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "layer/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "layer/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "layer/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "layer/character.useDefault": {
+     "bodyGender": {}
     },
     "point/history.jumpTo": {
      "entryId": {}
@@ -12446,16 +12860,30 @@
     "point/quality.set": {
      "size": {}
     },
-    "point/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "point/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "point/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "point/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "point/character.useDefault": {
+     "bodyGender": {}
     },
     "viewport/history.jumpTo": {
      "entryId": {}
@@ -12868,16 +13296,30 @@
     "viewport/quality.set": {
      "size": {}
     },
-    "viewport/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "viewport/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "viewport/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "viewport/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "viewport/character.useDefault": {
+     "bodyGender": {}
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -13290,16 +13732,30 @@
     "collection/quality.set": {
      "size": {}
     },
-    "collection/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "collection/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "collection/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "collection/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "collection/character.useDefault": {
+     "bodyGender": {}
     },
     "preset/history.jumpTo": {
      "entryId": {}
@@ -13712,16 +14168,30 @@
     "preset/quality.set": {
      "size": {}
     },
-    "preset/character.tryChoice": {
-     "slot": {},
-     "choice": {
-      "minLength": 0,
+    "preset/character.setOption": {
+     "part": {},
+     "option": {
+      "minLength": 1,
       "maxLength": 127
      },
-     "definition": {
-      "minLength": 0,
+     "choice": {
       "maxLength": 127
      }
+    },
+    "preset/character.setOptions": {
+     "label": {
+      "maxLength": 80
+     }
+    },
+    "preset/character.reset": {
+     "part": {},
+     "option": {
+      "minLength": 1,
+      "maxLength": 127
+     }
+    },
+    "preset/character.useDefault": {
+     "bodyGender": {}
     }
    },
    "consequences": {
@@ -13836,6 +14306,16 @@
      "confirm": false
     },
     "file:savedV.export": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.import": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
+    "file:characterPreset.export": {
      "discards": [],
      "recoverableBy": "none",
      "confirm": false

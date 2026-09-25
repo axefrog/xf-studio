@@ -1,38 +1,54 @@
 /**
- * The character context: who the makeup is shown on. A DOM-free domain service holding one creator choice per option
- * (portable identities: part, option name, choice key), initialised from the creator's default V, a decoded save or a
- * portable CC preset (`xfs/cc-preset-1`), changed through typed actions with capabilities, and validated against the
- * installed creator catalogue. From the values it derives the resolver's descriptors through the shared rule R5
- * (`descriptorsFromUiState`), which the preview host resolves. It never writes a save and never enters a makeup recipe,
+ * The character context: who the makeup is shown on. It owns every creator choice for the shown V (CORE-58): the V it starts
+ * from (the creator's default V, a decoded save, or a portable `xfs/cc-preset-1` preset over the default V) and the choices a person
+ * set on top of it, as portable identities (part, option name, choice key). It never writes a save and never enters a makeup recipe,
  * collection or package (feature-module platform §2: a CC preset is preview context, not a part).
  *
- * Rules beyond R5, each from the game's data:
- * - **Links** [resource-inferred, knowledge/cc-file-chain.md "Links"]: choosing on a link controller gives every option
- *   with the same link key, in any part, the same choice position when it has one (skin tone → skin types, body, arms;
- *   one hair colour → every hairstyle's colour). A follower with fewer choices keeps its own.
- * - **From a save**: the save stores resolved appearances and morphs, not switcher or controller state
- *   (knowledge/cc-file-chain.md §7). Appearance and morph options take the saved choice; a switcher takes the choice whose
- *   activated options the save lists (its Off choice when it lists none); a colour-only controller takes the position of
- *   a saved member of its link. The result is checked by deriving the descriptors again and comparing with the save.
+ * This module is pure and shared. The browser's application service (character-context-actions.ts) holds the state, its own Undo
+ * history and the typed actions (`CHARACTER_CONTEXT_FAMILY`); the preview host, which has the whole installed catalogue, interprets
+ * the state with `deriveCharacter` into the resolver's descriptors (rule R5) and a read-only view of every row's current choice.
+ *
+ * **Only what the person set is stored** (CORE-50, CORE-51). Everything else is derived each time from the base and the rules:
+ * - **Links** [resource-inferred, knowledge/cc-file-chain.md "Links"]: a choice on a link member gives every option with the same link
+ *   key, in any part, the same choice. Appearance and morph members take the same position (a follower with fewer choices keeps its
+ *   own, and R5 records `link-index-out-of-range`). **Switcher** members take the choice that activates the same options
+ *   [hypothesis, CORE-61: `hairstyle` and `hairstyle_cyberware` list their styles in different orders, so a position would pick another
+ *   style; the in-game check is test ask 11 of the knowledge page]. Resetting a member resets its family to the base.
+ * - **From a save**: the save stores resolved appearances and morphs, not switcher or controller state (knowledge/cc-file-chain.md §7).
+ *   Appearance and morph options take the saved choice; a switcher takes the choice whose activated options the save lists (its Off
+ *   choice when it lists none); a colour-only controller takes the position of a saved member of its link. With choices set on top,
+ *   the save's own descriptors are kept for every option the choices don't change, so a choice changes only what it changes (a saved
+ *   option this installation no longer offers still draws as saved).
+ * - **From a preset**: its entries are choices over the default V. A switcher choice is matched by the options it activates first
+ *   (mods renumber choices), then by name.
  */
-import { CCO_PARTS, type AppearanceDescriptor, type CcoPart, type CcoResource, descriptorsFromUiState, type MorphDescriptor } from "./cco-model";
+import { activeOptionNames, CCO_PARTS, type AppearanceDescriptor, type CcoPart, type CcoResource, descriptorsFromUiState, type MorphDescriptor } from "./cco-model";
 import { type BodyGender, CatalogueIndex, type CcCatalogue, type CcChoice, type CcOption, followsLink, userFacing } from "./cc-catalogue";
-import { CC_PRESET_SCHEMA, type CcPreset, type CcPresetEntry, parseCcPreset } from "./cc-preset";
-import { CHARACTER_REQUEST_SCHEMA, type CharacterRequest, DEFAULT_CHARACTER } from "./character-detail-request";
-import { depotHash } from "./depot-path";
+import { CC_PRESET_SCHEMA, type CcPreset, type CcPresetEntry, type CcPresetValue, presetEntryWritable } from "./cc-preset";
+import { depotHash, refFromHash } from "./depot-path";
 import type { Ambiguity } from "./resolution-evidence";
-import { actionTable, type ActionDescriptor, type Capability, familyId, refusal, type SystemFamily, type ValueSchema } from "./platform/api";
-import type { SavedV } from "./save-reader";
+import { actionTable, type ActionDescriptor, familyId, type SystemFamily, type ValueSchema } from "./platform/api";
 
 /** One body gender's creator: the catalogue and the merged resource R5 derives descriptors from. */
-export interface CharacterSource { readonly catalogue: CcCatalogue; readonly cco: CcoResource }
+export interface CharacterSource { readonly catalogue: CcCatalogue; readonly cco: CcoResource; readonly index?: CatalogueIndex }
 
-export type CharacterContextAction =
-  | { kind: "character.setOption"; part: CcoPart; option: string; choice: string }
-  | { kind: "character.reset"; part?: CcoPart; option?: string }
-  | { kind: "character.useDefault"; bodyGender: BodyGender }
-  | { kind: "character.loadSave"; value: SavedV }
-  | { kind: "character.loadPreset"; value: unknown };
+/** A choice a person set, by portable identity. */
+export interface CharacterChoice {
+  readonly part: CcoPart;
+  readonly option: string;
+  /** The choice key: definition name, morph target or switcher choice name ("" is `None`). */
+  readonly choice: string;
+  /** A switcher choice from a preset: the options it activates, which identify it across installations. */
+  readonly activates?: readonly string[];
+  /** The mod a preset says supplies it (for the missing-choice report). */
+  readonly mod?: string | null;
+}
+/** A saved V's descriptors (every part), as the request carries them. */
+export interface SavedDescriptors {
+  readonly appearances: readonly { readonly part: CcoPart; readonly group: string; readonly option: string; readonly app: string; readonly definition: string }[];
+  readonly morphs: readonly { readonly part: CcoPart; readonly group: string; readonly region: string; readonly target: string }[];
+}
+export type CharacterBase = { readonly kind: "default" } | { readonly kind: "save"; readonly saved: SavedDescriptors };
 
 export interface MissingChoice {
   readonly part: CcoPart;
@@ -42,6 +58,8 @@ export interface MissingChoice {
   /** The mod the preset says supplies it; null for vanilla or when a save doesn't say. */
   readonly mod: string | null;
   readonly reason: "option-missing" | "choice-missing";
+  /** Where it came from: the V's save, or a choice (a preset's, or one made in another installation). */
+  readonly from: "save" | "choice";
 }
 export interface MissingReport {
   readonly entries: readonly MissingChoice[];
@@ -49,375 +67,378 @@ export interface MissingReport {
   readonly summary: readonly { readonly mod: string | null; readonly count: number; readonly message: string }[];
 }
 export interface SaveCheck {
-  /** Saved appearance and morph choices the derived V reproduces, of all saved ones (deduplicated across groups). */
+  /** Saved appearance and morph choices the recovered creator state reproduces, of all saved ones (deduplicated across groups). */
   readonly matched: number;
   readonly saved: number;
-  /** Saved `option = choice` pairs the derived V lacks, and derived ones the save lacks (first 32 each). */
+  /** Saved `option = choice` pairs the recovered state lacks, and derived ones the save lacks (first 32 each). */
   readonly savedOnly: readonly string[];
   readonly derivedOnly: readonly string[];
 }
-export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
-export interface CharacterValue {
-  readonly choice: string;
-  /** Set by the user, a save or a preset (otherwise the creator default). */
-  readonly explicit: boolean;
-  /** The option takes part in the V now (rule R5 activation); inactive options keep their value for later. */
-  readonly active: boolean;
-}
-export interface CharacterContextSnapshot {
+/** One option's value in the view: the current choice, the V's own (the base's), and whether a person set it. */
+export interface CharacterValue { readonly choice: string; readonly own: string; readonly set: boolean }
+export interface CharacterView {
   readonly bodyGender: BodyGender;
-  readonly ready: boolean;
-  readonly origin: ContextOrigin;
-  /** Every user-facing option's value, by option ID. */
-  readonly values: Readonly<Record<string, CharacterValue>>;
+  /** Every user-facing option that takes part in the V now (a row shows its active option), or that a person set. */
+  readonly values: Readonly<Record<string, CharacterValue & { readonly active: boolean }>>;
   readonly missing: MissingReport;
   readonly saveCheck: SaveCheck | null;
-  /** Bumps on every change, for cheap change detection. */
-  readonly revision: number;
 }
-/** What the preview host needs to draw the context: the resolver's descriptors (rule R5). */
+/** What the preview host resolves: the resolver's descriptors (rule R5, with the save's own where nothing changed). */
 export interface CharacterContextRequest {
   readonly bodyGender: BodyGender;
   readonly appearances: readonly AppearanceDescriptor[];
   readonly morphs: readonly MorphDescriptor[];
   readonly ambiguities: readonly Ambiguity[];
-  /** True when nothing departs from the creator's default V. */
-  readonly isDefault: boolean;
 }
+export interface CharacterDerivation { readonly view: CharacterView; readonly request: CharacterContextRequest }
 
-const EMPTY_MISSING: MissingReport = Object.freeze({ entries: [], summary: [] });
-const NOT_READY = (gender: BodyGender) => `The ${gender === "male" ? "masculine" : "feminine"} creator options aren't loaded yet. Prepare the preview with the game folder set, then try again.`;
+const EMPTY_MISSING: MissingReport = Object.freeze({ entries: Object.freeze([]) as readonly MissingChoice[], summary: Object.freeze([]) as MissingReport["summary"] });
 
-function summarise(entries: readonly MissingChoice[], from: "save" | "preset"): MissingReport {
-  const byMod = new Map<string | null, number>();
-  for (const entry of entries) byMod.set(entry.mod, (byMod.get(entry.mod) ?? 0) + 1);
+export function summariseMissing(entries: readonly MissingChoice[]): MissingReport {
+  if (!entries.length) return EMPTY_MISSING;
   const plural = (n: number) => n === 1 ? "1 choice uses" : `${n} choices use`;
-  return { entries, summary: [...byMod].map(([mod, count]) => ({ mod, count, message: mod
+  const summary: { mod: string | null; count: number; message: string }[] = [];
+  const saved = entries.filter(entry => entry.from === "save");
+  if (saved.length) summary.push({ mod: null, count: saved.length, message: `Your V has ${saved.length === 1 ? "a choice" : `${saved.length} choices`} the installed game and mods don't offer (a mod it used may be missing), so ${saved.length === 1 ? "it uses" : "they use"} the creator default.` });
+  const byMod = new Map<string | null, number>();
+  for (const entry of entries) if (entry.from === "choice") byMod.set(entry.mod, (byMod.get(entry.mod) ?? 0) + 1);
+  for (const [mod, count] of byMod) summary.push({ mod, count, message: mod
     ? `“${mod}” isn't installed or enabled here, so ${plural(count)} the creator default instead.`
-    : from === "save"
-      ? `This V has ${count === 1 ? "a choice" : `${count} choices`} the installed game and mods don't offer (a mod it used may be missing), so ${count === 1 ? "it uses" : "they use"} the creator default.`
-      : `${plural(count)} the creator default because the installed game doesn't offer ${count === 1 ? "it" : "them"}.` })) };
+    : `${plural(count)} the creator default because the installed game doesn't offer ${count === 1 ? "it" : "them"}.` });
+  return { entries, summary };
 }
 
-/**
- * The activation half of rule R5 (cco-model.ts `descriptorsFromUiState`): which options take part in the V, so the
- * presentation shows their rows. Kept identical to that rule; a test checks that every option R5 emits is active.
- */
+const indexOf = (source: CharacterSource) => source.index ?? new CatalogueIndex(source.catalogue);
+const flat = (state: ReadonlyMap<string, string>): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const [id, choice] of state) out[id.slice(id.indexOf("/") + 1)] = choice;
+  return out;
+};
+const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join("|") === [...b].sort().join("|");
+
+/** The options that take part in the V for a state (R5's activation, cco-model.ts `activeOptionNames`), as option IDs. */
 export function activeOptions(cco: CcoResource, state: Readonly<Record<string, string>>): Set<string> {
   const active = new Set<string>();
-  for (const part of CCO_PARTS) {
-    const { options } = cco.parts[part];
-    const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
-    const targets = new Set<string>();
-    for (const option of options) if (option.type === "switcher") for (const choice of option.options) for (const name of choice.names) targets.add(name);
-    const activate = (name: string, depth = 0) => {
-      const option = byName.get(name);
-      if (!option || depth > 16 || active.has(`${part}/${name}`)) return;
-      active.add(`${part}/${name}`);
-      if (option.type !== "switcher") return;
-      const choice = option.options.find(item => item.localizedName === state[name]) ?? option.options[option.defaultIndex] ?? option.options[0];
-      for (const target of choice?.names ?? []) activate(target, depth + 1);
-    };
-    for (const option of options) if (option.name && option.enabled && !targets.has(option.name)) activate(option.name);
-  }
+  for (const part of CCO_PARTS) for (const name of activeOptionNames(cco, part, state)) active.add(`${part}/${name}`);
   return active;
 }
 
-export class CharacterContext {
-  private sources = new Map<BodyGender, { source: CharacterSource; index: CatalogueIndex }>();
-  private gender: BodyGender = "female";
-  private origin: ContextOrigin = { kind: "default" };
-  private values = new Map<string, string>();
-  private missing: MissingReport = EMPTY_MISSING;
-  private saveCheck: SaveCheck | null = null;
-  /** A loaded preset's entries this installation can't honour, its unknown entries and fields: written back on export. */
-  private kept: { entries: CcPresetEntry[]; unknown: CcPreset["unknownEntries"]; extra: CcPreset["extra"] } = { entries: [], unknown: [], extra: {} };
-  private revision = 0;
-  private listeners = new Set<() => void>();
-
-  /** Provide (or replace) one body gender's creator. Values that no longer exist are dropped and reported. */
-  setSource(source: CharacterSource): void {
-    this.sources.set(source.catalogue.bodyGender, { source, index: new CatalogueIndex(source.catalogue) });
-    if (source.catalogue.bodyGender === this.gender) {
-      const lost: MissingChoice[] = [];
-      const index = this.sources.get(this.gender)!.index;
-      for (const [id, choice] of [...this.values]) {
-        const option = index.byOptionId(id);
-        if (option && index.choice(option, choice)) continue;
-        this.values.delete(id);
-        const [part, name] = id.split("/") as [CcoPart, string];
-        lost.push({ part, option: name, choice, mod: null, reason: option ? "choice-missing" : "option-missing" });
-      }
-      if (lost.length) this.missing = summarise([...this.missing.entries, ...lost], "preset");
-    }
-    this.publish();
+/**
+ * The catalogue's choice a person's choice names: by key, or for a switcher choice that carries the options it activates, the choice
+ * activating exactly those (then by key). Undefined when the option doesn't offer it.
+ */
+export function matchChoice(index: CatalogueIndex, option: CcOption, choice: Pick<CharacterChoice, "choice" | "activates">): CcChoice | undefined {
+  if (option.type === "switcher" && choice.activates?.length) {
+    const wanted = choice.activates;
+    const byActivation = option.choices.filter(item => sameSet(item.activates, wanted));
+    if (byActivation.length) return byActivation.find(item => item.key === choice.choice) ?? byActivation[0];
   }
-  source(gender: BodyGender = this.gender): CharacterSource | null { return this.sources.get(gender)?.source ?? null; }
-
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private publish() { this.revision++; for (const listener of this.listeners) listener(); }
-
-  /** The value of every user-facing option (explicit or default), with whether it takes part now. */
-  snapshot(): CharacterContextSnapshot {
-    const loaded = this.sources.get(this.gender);
-    const values: Record<string, CharacterValue> = {};
-    if (loaded) {
-      const active = activeOptions(loaded.source.cco, this.flatState());
-      for (const option of loaded.source.catalogue.options) {
-        if (!userFacing(option)) continue;
-        const explicit = this.values.get(option.id);
-        const choice = explicit ?? option.defaultChoice;
-        if (choice === null) continue;
-        values[option.id] = { choice, explicit: explicit !== undefined, active: active.has(option.id) };
-      }
-    }
-    return structuredClone({ bodyGender: this.gender, ready: !!loaded, origin: this.origin, values, missing: this.missing,
-      saveCheck: this.saveCheck, revision: this.revision });
-  }
-
-  capability(action: CharacterContextAction): Capability {
-    switch (action.kind) {
-      case "character.setOption": {
-        const loaded = this.sources.get(this.gender);
-        if (!loaded) return refusal("asset_unavailable", NOT_READY(this.gender));
-        const option = loaded.index.option(action.part, action.option);
-        if (!option) return refusal("missing_target", "That creator option isn't offered by the installed game and mods.");
-        if (option.hidden || followsLink(option)) return refusal("invalid_value", "That option follows another one, so it can't be set on its own.");
-        if (!loaded.index.choice(option, action.choice)) return refusal("invalid_value", `“${action.choice || "None"}” isn't one of ${option.label.text}'s choices.`);
-        return { available: true };
-      }
-      case "character.reset": {
-        if (action.option === undefined) return { available: true };
-        const loaded = this.sources.get(this.gender);
-        if (!loaded) return refusal("asset_unavailable", NOT_READY(this.gender));
-        return loaded.index.option(action.part ?? "head", action.option) ? { available: true }
-          : refusal("missing_target", "That creator option isn't offered by the installed game and mods.");
-      }
-      case "character.useDefault":
-        return this.sources.has(action.bodyGender) ? { available: true } : refusal("asset_unavailable", NOT_READY(action.bodyGender));
-      case "character.loadSave": {
-        const gender: BodyGender = action.value?.isMale ? "male" : "female";
-        if (!action.value?.groups) return refusal("invalid_value", "That isn't a decoded save.");
-        return this.sources.has(gender) ? { available: true } : refusal("asset_unavailable", NOT_READY(gender));
-      }
-      case "character.loadPreset": {
-        let preset: CcPreset;
-        try { preset = parseCcPreset(action.value); } catch (error) { return refusal("invalid_value", (error as Error).message); }
-        return this.sources.has(preset.bodyGender) ? { available: true } : refusal("asset_unavailable", NOT_READY(preset.bodyGender));
-      }
-    }
-  }
-
-  /** Apply an action; throws the refusal's reason when the capability refuses. Returns the new snapshot. */
-  dispatch(action: CharacterContextAction): CharacterContextSnapshot {
-    const allowed = this.capability(action);
-    if (!allowed.available) throw Error(allowed.reason);
-    switch (action.kind) {
-      case "character.setOption": this.setOption(action.part, action.option, action.choice); break;
-      case "character.reset":
-        if (action.option === undefined) this.start(this.gender, { kind: "default" });
-        else this.values.delete(`${action.part ?? "head"}/${action.option}`);
-        break;
-      case "character.useDefault": this.start(action.bodyGender, { kind: "default" }); break;
-      case "character.loadSave": this.loadSave(action.value); break;
-      case "character.loadPreset": this.loadPreset(parseCcPreset(action.value)); break;
-    }
-    this.publish();
-    return this.snapshot();
-  }
-
-  private start(gender: BodyGender, origin: ContextOrigin) {
-    this.gender = gender;
-    this.origin = origin;
-    this.values = new Map();
-    this.missing = EMPTY_MISSING;
-    this.saveCheck = null;
-    this.kept = { entries: [], unknown: [], extra: {} };
-  }
-
-  private setOption(part: CcoPart, name: string, choice: string) {
-    const { index, source } = this.sources.get(this.gender)!;
-    const option = index.option(part, name)!;
-    this.values.set(option.id, choice);
-    if (!option.link?.controller) return;
-    const position = index.choice(option, choice)!.position;
-    for (const member of source.catalogue.options) {
-      if (member === option || member.link?.key !== option.link.key) continue;
-      const same = member.choices[position];
-      if (same) this.values.set(member.id, same.key);
-    }
-  }
-
-  /** Members of a link family without a value take the position of one that has one (a controller first). */
-  private fillLinkFamilies() {
-    const { index, source } = this.sources.get(this.gender)!;
-    const families = new Map<string, CcOption[]>();
-    for (const option of source.catalogue.options) if (option.link) families.set(option.link.key, [...(families.get(option.link.key) ?? []), option]);
-    for (const members of families.values()) {
-      const known = members.find(member => member.link!.controller && this.values.has(member.id)) ?? members.find(member => this.values.has(member.id));
-      if (!known) continue;
-      const position = index.choice(known, this.values.get(known.id)!)!.position;
-      for (const member of members) {
-        if (this.values.has(member.id)) continue;
-        const same = member.choices[position];
-        if (same) this.values.set(member.id, same.key);
-      }
-    }
-  }
-
-  /** R5's state: option name → choice key (switcher choice name, definition or morph target). */
-  private flatState(): Record<string, string> {
-    const state: Record<string, string> = {};
-    for (const [id, choice] of this.values) state[id.slice(id.indexOf("/") + 1)] = choice;
-    return state;
-  }
-
-  private loadSave(saved: SavedV) {
-    const gender: BodyGender = saved.isMale ? "male" : "female";
-    this.start(gender, { kind: "save" });
-    const { index, source } = this.sources.get(gender)!;
-    const missing: MissingChoice[] = [];
-    const present = new Map<CcoPart, Set<string>>(CCO_PARTS.map(part => [part, new Set<string>()]));
-    const savedPairs = new Set<string>();
-    for (const part of CCO_PARTS) for (const group of saved.groups[part] ?? []) {
-      for (const item of group.appearances) {
-        savedPairs.add(`${part}/${item.name} = ${item.definition}`);
-        present.get(part)!.add(item.name);
-        const option = index.option(part, item.name);
-        if (option?.type === "appearance" && index.choice(option, item.definition)) this.values.set(option.id, item.definition);
-        // A hidden option follows another one; its mismatch shows in the save check, not as a missing choice.
-        else if (!option?.hidden && !missing.some(entry => entry.part === part && entry.option === item.name))
-          missing.push({ part, option: item.name, choice: item.definition, mod: null, reason: option ? "choice-missing" : "option-missing" });
-      }
-      for (const morph of group.morphs) {
-        savedPairs.add(`${part}/${morph.region} = ${morph.target}`);
-        const option = index.option(part, morph.region);
-        if (option?.type === "morph" && index.choice(option, morph.target)) this.values.set(option.id, morph.target);
-        else if (!missing.some(entry => entry.part === part && entry.option === morph.region))
-          missing.push({ part, option: morph.region, choice: morph.target, mod: null, reason: option ? "choice-missing" : "option-missing" });
-      }
-    }
-    // Switchers, innermost first: the choice whose activated options the save lists (nested switchers count once chosen).
-    const switchers = source.catalogue.options.filter(option => option.type === "switcher");
-    for (let pass = 0, changed = true; changed && pass < 8; pass++) {
-      changed = false;
-      for (const option of switchers) {
-        if (this.values.has(option.id)) continue;
-        const names = present.get(option.part)!;
-        let best: CcChoice | null = null, score = 0;
-        for (const choice of option.choices) {
-          const hits = choice.activates.filter(name => names.has(name)).length;
-          if (hits > score) { best = choice; score = hits; }
-        }
-        if (best) { this.values.set(option.id, best.key); names.add(option.name); changed = true; }
-      }
-    }
-    for (const option of switchers) if (!this.values.has(option.id)) {
-      const off = option.choices.find(choice => choice.off);
-      if (off) this.values.set(option.id, off.key);
-    }
-    // Link families: members the save doesn't list take the position of one it does (colour-only controllers, other styles' colours).
-    this.fillLinkFamilies();
-    this.missing = missing.length ? summarise(missing, "save") : EMPTY_MISSING;
-    const derived = this.request();
-    const derivedPairs = new Set([...derived.appearances.map(a => `${a.part}/${a.option} = ${a.definition}`),
-      ...derived.morphs.map(m => `${m.part}/${m.region} = ${m.target}`)]);
-    this.saveCheck = { matched: [...savedPairs].filter(pair => derivedPairs.has(pair)).length, saved: savedPairs.size,
-      savedOnly: [...savedPairs].filter(pair => !derivedPairs.has(pair)).slice(0, 32),
-      derivedOnly: [...derivedPairs].filter(pair => !savedPairs.has(pair)).slice(0, 32) };
-  }
-
-  private loadPreset(preset: CcPreset) {
-    this.start(preset.bodyGender, { kind: "preset", name: preset.name });
-    const { index } = this.sources.get(preset.bodyGender)!;
-    const missing: MissingChoice[] = [], kept: CcPresetEntry[] = [];
-    for (const entry of preset.values) {
-      const option = index.option(entry.part, entry.option);
-      const value = entry.value;
-      const described = value.kind === "appearance" ? value.definition : value.kind === "morph" ? value.morph : value.choice;
-      let choice: CcChoice | undefined;
-      if (option && value.kind === "appearance" && option.type === "appearance") choice = index.choice(option, value.definition);
-      else if (option && value.kind === "morph" && option.type === "morph") choice = index.choice(option, value.morph);
-      else if (option && value.kind === "switcher" && option.type === "switcher") {
-        // The activated options identify a switcher choice across installations; its name is the fallback.
-        const wanted = [...value.activates].sort().join("|");
-        choice = (wanted ? option.choices.find(item => [...item.activates].sort().join("|") === wanted) : undefined) ?? index.choice(option, value.choice);
-      }
-      if (option && choice && !option.hidden && !followsLink(option)) { this.values.set(option.id, choice.key); continue; }
-      kept.push(entry);
-      missing.push({ part: entry.part, option: entry.option, choice: described, mod: entry.mod, reason: option ? "choice-missing" : "option-missing" });
-    }
-    // A preset stores the options people choose; the options that follow them take the same position.
-    this.fillLinkFamilies();
-    this.missing = missing.length ? summarise(missing, "preset") : EMPTY_MISSING;
-    this.kept = { entries: kept, unknown: preset.unknownEntries, extra: preset.extra };
-  }
-
-  /** The context as a portable preset: explicit values of user-facing options, plus what a loaded preset carried that this installation couldn't use. */
-  toPreset(name: string | null = null): CcPreset {
-    const loaded = this.sources.get(this.gender);
-    const values: CcPresetEntry[] = [];
-    if (loaded) for (const option of loaded.source.catalogue.options) {
-      const key = this.values.get(option.id);
-      if (key === undefined || option.hidden || followsLink(option)) continue;
-      const choice = loaded.index.choice(option, key)!;
-      const value = option.type === "appearance" ? { kind: "appearance" as const, definition: key, app: option.app?.hash ?? null }
-        : option.type === "morph" ? { kind: "morph" as const, morph: key } : { kind: "switcher" as const, choice: key, activates: choice.activates };
-      const mod = choice.provenance.kind === "mod" ? choice.provenance : null;
-      values.push({ part: option.part, option: option.name, value, mod: mod?.mod ?? null,
-        resource: mod?.resource ? depotHash(mod.resource) : null, extra: {} });
-    }
-    const taken = new Set(values.map(entry => `${entry.part}/${entry.option}`));
-    for (const entry of this.kept.entries) if (!taken.has(`${entry.part}/${entry.option}`)) values.push(entry);
-    return { schema: CC_PRESET_SCHEMA, bodyGender: this.gender, name: name ?? (this.origin.kind === "preset" ? this.origin.name : null),
-      values, unknownEntries: this.kept.unknown, extra: this.kept.extra };
-  }
-
-  /** The resolver's descriptors for the current values (rule R5 over the merged creator resource). */
-  request(): CharacterContextRequest {
-    const loaded = this.sources.get(this.gender);
-    if (!loaded) return { bodyGender: this.gender, appearances: [], morphs: [], ambiguities: [], isDefault: this.values.size === 0 };
-    const derived = descriptorsFromUiState(loaded.source.cco, this.flatState());
-    return { bodyGender: this.gender, appearances: derived.appearances, morphs: derived.morphs, ambiguities: derived.ambiguities,
-      isDefault: this.values.size === 0 };
-  }
+  return index.choice(option, choice.choice);
 }
 
 /**
- * Today's preview request (character-detail-request.ts) for a context request, until the host takes a whole creator
- * state: the default V as `source: "default"`, anything else as the head descriptors in the saved-V shape (the host
- * resolves those exactly as it resolves a save's). Returns null when the request would exceed that shape's limits.
+ * The choice a link member takes when another member is set to `chosen` (CORE-61): a switcher member the one activating the same
+ * options, anything else the same position. Undefined when it has none (it then keeps its own, as R5 does).
  */
-export function previewRequestFor(request: CharacterContextRequest): CharacterRequest | null {
-  if (request.isDefault && request.bodyGender === "female") return DEFAULT_CHARACTER;
-  const appearances = request.appearances.filter(item => item.part === "head")
-    .map(item => ({ group: item.group, option: item.option, app: item.app.hash, definition: item.definition }));
-  const morphs = request.morphs.filter(item => item.part === "head").map(item => ({ group: item.group, region: item.region, target: item.target }));
-  if (appearances.length > 512 || morphs.length > 128) return null;
-  return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: request.bodyGender, appearances, morphs };
+export function linkedChoice(chosen: CcChoice, member: CcOption, from: CcOption): CcChoice | undefined {
+  if (member.type === "switcher" && from.type === "switcher") return member.choices.find(item => sameSet(item.activates, chosen.activates));
+  return member.choices[chosen.position];
+}
+
+/**
+ * The creator state a save stands for: saved appearances and morphs, recovered switcher choices and link families; with the
+ * missing-choice report and the check of what the state reproduces. Validated input only (`savedDescriptorsOf`).
+ */
+export function recoverSave(source: CharacterSource, saved: SavedDescriptors): { state: Map<string, string>; missing: MissingChoice[]; saveCheck: SaveCheck } {
+  const index = indexOf(source), { catalogue, cco } = source;
+  const state = new Map<string, string>(), missing: MissingChoice[] = [];
+  const present = new Map<CcoPart, Set<string>>(CCO_PARTS.map(part => [part, new Set<string>()]));
+  const savedPairs = new Set<string>();
+  const report = (part: CcoPart, option: string, choice: string, found: boolean) => {
+    if (!missing.some(entry => entry.part === part && entry.option === option))
+      missing.push({ part, option, choice, mod: null, reason: found ? "choice-missing" : "option-missing", from: "save" });
+  };
+  for (const item of saved.appearances) {
+    savedPairs.add(`${item.part}/${item.option} = ${item.definition}`);
+    present.get(item.part)!.add(item.option);
+    const option = index.option(item.part, item.option);
+    if (option?.type === "appearance" && index.choice(option, item.definition)) state.set(option.id, item.definition);
+    // A hidden option follows another one; its mismatch shows in the save check, not as a missing choice.
+    else if (!option?.hidden) report(item.part, item.option, item.definition, !!option);
+  }
+  for (const morph of saved.morphs) {
+    savedPairs.add(`${morph.part}/${morph.region} = ${morph.target}`);
+    const option = index.option(morph.part, morph.region);
+    if (option?.type === "morph" && index.choice(option, morph.target)) state.set(option.id, morph.target);
+    else report(morph.part, morph.region, morph.target, !!option);
+  }
+  // Switchers, innermost first: the choice whose activated options the save lists (nested switchers count once chosen).
+  const switchers = catalogue.options.filter(option => option.type === "switcher");
+  for (let pass = 0, changed = true; changed && pass < 8; pass++) {
+    changed = false;
+    for (const option of switchers) {
+      if (state.has(option.id)) continue;
+      const names = present.get(option.part)!;
+      let best: CcChoice | null = null, score = 0;
+      for (const choice of option.choices) {
+        const hits = choice.activates.filter(name => names.has(name)).length;
+        if (hits > score) { best = choice; score = hits; }
+      }
+      if (best) { state.set(option.id, best.key); names.add(option.name); changed = true; }
+    }
+  }
+  for (const option of switchers) if (!state.has(option.id)) {
+    const off = option.choices.find(choice => choice.off);
+    if (off) state.set(option.id, off.key);
+  }
+  // Link families: members the save doesn't list take the choice of one it does: a controller first, then a member with a row of its
+  // own (a skin type), and only then a hidden one (a proxy the game may leave at its default).
+  const families = new Set(catalogue.options.flatMap(option => option.link ? [option.link.key] : []));
+  for (const key of families) {
+    const members = index.family(key);
+    const known = members.find(member => member.link!.controller && state.has(member.id)) ??
+      members.find(member => !member.hidden && state.has(member.id)) ?? members.find(member => state.has(member.id));
+    if (!known) continue;
+    const chosen = index.choice(known, state.get(known.id)!)!;
+    for (const member of members) {
+      if (state.has(member.id)) continue;
+      const same = linkedChoice(chosen, member, known);
+      if (same) state.set(member.id, same.key);
+    }
+  }
+  const derived = descriptorsFromUiState(cco, flat(state));
+  const derivedPairs = new Set([...derived.appearances.map(a => `${a.part}/${a.option} = ${a.definition}`),
+    ...derived.morphs.map(m => `${m.part}/${m.region} = ${m.target}`)]);
+  const saveCheck: SaveCheck = { matched: [...savedPairs].filter(pair => derivedPairs.has(pair)).length, saved: savedPairs.size,
+    savedOnly: [...savedPairs].filter(pair => !derivedPairs.has(pair)).slice(0, 32),
+    derivedOnly: [...derivedPairs].filter(pair => !savedPairs.has(pair)).slice(0, 32) };
+  return { state, missing, saveCheck };
+}
+
+/**
+ * Interpret a context: the base's state, the person's choices in the order they were set (a later one wins, and a link member carries
+ * to its family), then R5. With a save base, the save's own descriptors are kept for every option whose derived descriptors the
+ * choices leave unchanged. `recovered` passes a memoised `recoverSave` of the same save.
+ */
+export function deriveCharacter(source: CharacterSource, base: CharacterBase, choices: readonly CharacterChoice[],
+  recovered?: ReturnType<typeof recoverSave>): CharacterDerivation {
+  const index = indexOf(source), { catalogue, cco } = source;
+  const fromSave = base.kind === "save" ? recovered ?? recoverSave(source, base.saved) : null;
+  const baseState = fromSave?.state ?? new Map<string, string>();
+  const missing: MissingChoice[] = [...fromSave?.missing ?? []];
+  const state = new Map(baseState), set = new Set<string>();
+  /** Options a choice reaches: itself, its link family and what a switcher's choice turns on (they take the derived descriptors). */
+  const reached = new Set<string>();
+  const reach = (option: CcOption, depth = 0) => {
+    if (depth > 16 || reached.has(option.id) && depth) return;
+    reached.add(option.id);
+    if (option.type !== "switcher") return;
+    const current = index.choice(option, state.get(option.id) ?? option.defaultChoice ?? "");
+    for (const name of current?.activates ?? []) { const target = index.option(option.part, name); if (target) reach(target, depth + 1); }
+  };
+  for (const choice of choices) {
+    const option = index.option(choice.part, choice.option);
+    const matched = option && !option.hidden && !followsLink(option) ? matchChoice(index, option, choice) : undefined;
+    if (!option || !matched) {
+      missing.push({ part: choice.part, option: choice.option, choice: choice.choice, mod: choice.mod ?? null,
+        reason: option ? "choice-missing" : "option-missing", from: "choice" });
+      continue;
+    }
+    state.set(option.id, matched.key);
+    set.add(option.id);
+    if (option.link) for (const member of index.family(option.link.key)) {
+      if (member === option) continue;
+      set.delete(member.id);
+      const same = linkedChoice(matched, member, option);
+      if (same) state.set(member.id, same.key); else state.delete(member.id);
+    }
+  }
+  // Reached once every choice is applied, so a switcher's targets are those of its final choice.
+  for (const choice of choices) {
+    const option = index.option(choice.part, choice.option);
+    if (!option || !set.has(option.id) && !option.link) continue;
+    reach(option);
+    if (option.link) for (const member of index.family(option.link.key)) reach(member);
+  }
+  const values = flat(state);
+  const derived = descriptorsFromUiState(cco, values);
+  let appearances: AppearanceDescriptor[] = derived.appearances, morphs: MorphDescriptor[] = derived.morphs;
+  if (base.kind === "save") {
+    // Keep the save's own descriptors for every option the choices don't change.
+    const ownDerived = descriptorsFromUiState(cco, flat(baseState));
+    const signature = (list: readonly { part: string; group: string }[], key: (item: never) => string, value: (item: never) => string) => {
+      const out = new Map<string, string[]>();
+      for (const item of list) { const k = key(item as never); out.set(k, [...out.get(k) ?? [], `${item.group}|${value(item as never)}`]); }
+      for (const [k, items] of out) out.set(k, items.sort());
+      return out;
+    };
+    const aKey = (a: AppearanceDescriptor) => `${a.part}/${a.option}`, aValue = (a: AppearanceDescriptor) => `${a.app.hash}|${a.definition}`;
+    const mKey = (m: MorphDescriptor) => `${m.part}/${m.region}`, mValue = (m: MorphDescriptor) => m.target;
+    const changed = (before: Map<string, string[]>, after: Map<string, string[]>) =>
+      new Set([...before.keys(), ...after.keys()].filter(k => (before.get(k) ?? []).join() !== (after.get(k) ?? []).join()));
+    const changedA = changed(signature(ownDerived.appearances, aKey, aValue), signature(derived.appearances, aKey, aValue));
+    const changedM = changed(signature(ownDerived.morphs, mKey, mValue), signature(derived.morphs, mKey, mValue));
+    for (const id of reached) { changedA.add(id); changedM.add(id); }
+    appearances = [...base.saved.appearances.filter(a => !changedA.has(`${a.part}/${a.option}`))
+      .map(a => ({ part: a.part, group: a.group, option: a.option, app: refFromHash(a.app), definition: a.definition })),
+      ...derived.appearances.filter(a => changedA.has(aKey(a)))];
+    morphs = [...base.saved.morphs.filter(m => !changedM.has(`${m.part}/${m.region}`)).map(m => ({ ...m })),
+      ...derived.morphs.filter(m => changedM.has(mKey(m)))];
+  }
+  const active = activeOptions(cco, values);
+  const view: Record<string, CharacterValue & { active: boolean }> = {};
+  for (const option of catalogue.options) {
+    if (!userFacing(option) || (!active.has(option.id) && !set.has(option.id))) continue;
+    const choice = state.get(option.id) ?? option.defaultChoice, own = baseState.get(option.id) ?? option.defaultChoice;
+    if (choice === null || own === null) continue;
+    view[option.id] = { choice, own, set: set.has(option.id), active: active.has(option.id) };
+  }
+  return {
+    view: { bodyGender: catalogue.bodyGender, values: view, missing: summariseMissing(missing), saveCheck: fromSave?.saveCheck ?? null },
+    request: { bodyGender: catalogue.bodyGender, appearances, morphs, ambiguities: derived.ambiguities },
+  };
+}
+
+/** A preset's entries as choices over the default V (matched against an installation only when interpreted). */
+export function choicesOfPreset(preset: CcPreset): CharacterChoice[] {
+  return preset.values.map(entry => ({ part: entry.part, option: entry.option,
+    choice: entry.value.kind === "appearance" ? entry.value.definition : entry.value.kind === "morph" ? entry.value.morph : entry.value.choice,
+    ...(entry.value.kind === "switcher" && entry.value.activates.length ? { activates: [...entry.value.activates] } : {}),
+    ...(entry.mod ? { mod: entry.mod } : {}) }));
+}
+
+/**
+ * The context as a portable preset (CORE-50, CORE-53): only the choices a person set, each as this installation names it (with its
+ * `.app` hash, activated options and supplying mod); a choice this installation doesn't offer is written back as the preset that
+ * brought it named it. Entries the reader would refuse are left out and counted. `kept` carries a loaded preset's unknown entries and
+ * fields.
+ */
+export function presetOfChoices(source: CharacterSource, choices: readonly CharacterChoice[], options: { name?: string | null;
+  kept?: { entries?: readonly CcPresetEntry[]; unknownEntries?: CcPreset["unknownEntries"]; extra?: CcPreset["extra"] } } = {}): { preset: CcPreset; leftOut: number } {
+  const index = indexOf(source);
+  const values: CcPresetEntry[] = [];
+  let leftOut = 0;
+  const kept = new Map((options.kept?.entries ?? []).map(entry => [`${entry.part}/${entry.option}`, entry]));
+  const last = new Map<string, CharacterChoice>();
+  for (const choice of choices) last.set(`${choice.part}/${choice.option}`, choice);
+  for (const choice of last.values()) {
+    const option = index.option(choice.part, choice.option);
+    const matched = option && !option.hidden && !followsLink(option) ? matchChoice(index, option, choice) : undefined;
+    let entry: CcPresetEntry;
+    if (option && matched) {
+      const value: CcPresetValue = option.type === "appearance" ? { kind: "appearance", definition: matched.key, app: option.app?.hash ?? null }
+        : option.type === "morph" ? { kind: "morph", morph: matched.key } : { kind: "switcher", choice: matched.key, activates: [...matched.activates] };
+      const mod = matched.provenance.kind === "mod" ? matched.provenance : null;
+      entry = { part: option.part, option: option.name, value, mod: mod?.mod ?? null, resource: mod?.resource ? depotHash(mod.resource) : null, extra: {} };
+    } else {
+      const from = kept.get(`${choice.part}/${choice.option}`);
+      entry = from ?? { part: choice.part, option: choice.option, value: choice.activates?.length
+        ? { kind: "switcher", choice: choice.choice, activates: [...choice.activates] } : { kind: "appearance", definition: choice.choice, app: null },
+        mod: choice.mod ?? null, resource: null, extra: {} };
+    }
+    if (presetEntryWritable(entry)) values.push(entry); else leftOut++;
+  }
+  return { leftOut, preset: { schema: CC_PRESET_SCHEMA, bodyGender: source.catalogue.bodyGender, name: options.name ?? null, values,
+    unknownEntries: options.kept?.unknownEntries ?? [], extra: options.kept?.extra ?? {} } };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Action descriptors: the family's catalogue entry. Registration beside the Studio's other families (and a handler in
-// StudioApplication) comes with the panel.
+// Validation of what crosses into the context (CORE-52): a save's descriptors are checked whole before anything changes.
+
+const PART_SET = new Set<string>(CCO_PARTS);
+const CHOICE_KEYS = new Set(["part", "option", "choice", "activates", "mod"]);
+const NAME = /^[^\u0000-\u001f\\<>"]{0,127}$/;
+export const SAVED_LIMITS = Object.freeze({ appearances: 1024, morphs: 256, choices: 2048 });
+const fail = (message: string): never => { throw Error(`That isn't a save XF Studio can read: ${message}`); };
+
+/** A decoded save's descriptors (every part), validated whole; throws a plain reason. */
+export function savedDescriptorsOf(value: unknown): SavedDescriptors {
+  const saved = value as { groups?: unknown };
+  if (!saved || typeof saved !== "object" || !saved.groups || typeof saved.groups !== "object") fail("it has no appearance groups.");
+  const appearances: SavedDescriptors["appearances"][number][] = [], morphs: SavedDescriptors["morphs"][number][] = [];
+  for (const part of CCO_PARTS) {
+    const groups = (saved.groups as Record<string, unknown>)[part] ?? [];
+    if (!Array.isArray(groups)) fail(`its ${part} groups are invalid.`);
+    for (const group of groups as unknown[]) {
+      const g = group as { name?: unknown; appearances?: unknown; morphs?: unknown };
+      if (!g || typeof g.name !== "string" || !NAME.test(g.name) || !Array.isArray(g.appearances) || !Array.isArray(g.morphs)) fail("a group is invalid.");
+      for (const item of g.appearances as unknown[]) {
+        const a = item as { name?: unknown; definition?: unknown; resourceHash?: unknown };
+        if (!a || typeof a.name !== "string" || !NAME.test(a.name) || typeof a.definition !== "string" || !NAME.test(a.definition) ||
+          typeof a.resourceHash !== "string" || !/^\d{1,20}$/.test(a.resourceHash)) fail("an appearance is invalid.");
+        appearances.push({ part, group: g.name as string, option: a.name as string, app: BigInt(a.resourceHash as string).toString(), definition: a.definition as string });
+      }
+      for (const item of g.morphs as unknown[]) {
+        const m = item as { region?: unknown; target?: unknown };
+        if (!m || typeof m.region !== "string" || !NAME.test(m.region) || typeof m.target !== "string" || !NAME.test(m.target)) fail("a morph is invalid.");
+        morphs.push({ part, group: g.name as string, region: m.region as string, target: m.target as string });
+      }
+    }
+  }
+  if (appearances.length > SAVED_LIMITS.appearances || morphs.length > SAVED_LIMITS.morphs) fail("it holds more choices than a V has.");
+  return { appearances, morphs };
+}
+
+/** A person's choice, validated (the workspace and the request read choices with this). */
+export function characterChoiceOf(value: unknown): CharacterChoice | null {
+  const c = value as Record<string, unknown>;
+  if (!c || typeof c !== "object" || Array.isArray(c) || !PART_SET.has(c.part as string) || typeof c.option !== "string" || !c.option ||
+    !NAME.test(c.option) || typeof c.choice !== "string" || !NAME.test(c.choice)) return null;
+  if (Object.keys(c).some(key => !CHOICE_KEYS.has(key))) return null;
+  if (c.activates !== undefined && (!Array.isArray(c.activates) || c.activates.length > 64 || !c.activates.every(name => typeof name === "string" && !!name && NAME.test(name)))) return null;
+  if (c.mod !== undefined && c.mod !== null && (typeof c.mod !== "string" || !c.mod || c.mod.length > 512 || /[\u0000-\u001f\\/]|^[A-Za-z]:/.test(c.mod))) return null;
+  return { part: c.part as CcoPart, option: c.option, choice: c.choice,
+    ...(Array.isArray(c.activates) && c.activates.length ? { activates: [...c.activates as string[]] } : {}),
+    ...(typeof c.mod === "string" ? { mod: c.mod } : {}) };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The family: its actions, descriptors and catalogue entry. Owned by the browser's `CharacterContextActions`.
+
+export type CharacterContextAction =
+  /** Set one option to a choice (a key from the catalogue); its link family follows. */
+  | { kind: "character.setOption"; part: CcoPart; option: string; choice: string }
+  /** Set several options in one step (for example every makeup row to Off). */
+  | { kind: "character.setOptions"; changes: { part: CcoPart; option: string; choice: string }[]; label?: string }
+  /** One option (and its link family) back to the V's own. */
+  | { kind: "character.reset"; part: CcoPart; option: string }
+  /** Every change back to the V's own; the V stays. */
+  | { kind: "character.resetAll" }
+  /** Show the creator's default V (the save stays loaded for later). */
+  | { kind: "character.useDefault"; bodyGender: BodyGender }
+  /** Show a decoded save's V; the choices made on the previous V are cleared (one step; `keepChanges` brings them back). */
+  | { kind: "character.loadSave"; value: unknown }
+  /** Show a decoded `xfs/cc-preset-1` preset's V. */
+  | { kind: "character.loadPreset"; value: unknown }
+  /** Put back the choices the last V change cleared, on the new V. */
+  | { kind: "character.keepChanges" }
+  | { kind: "character.undo" }
+  | { kind: "character.redo" };
 
 const input = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: true, from: "input", ...extra });
 const optional = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: false, from: "input", ...extra });
 type Scope = "viewport" | "file";
+/** Every creator change records a step in the character's own history, never in a look's (CORE-59): the look history policy is `none`. */
 const desc = (scope: Scope, effect: ActionDescriptor["effect"], payload: ActionDescriptor["payload"]): ActionDescriptor<Scope> =>
   ({ scope: [scope], effect, undo: "none", payload });
+const target = { part: input("enum", { values: CCO_PARTS }), option: input("string", { minLength: 1, maxLength: 127 }) };
 export const CHARACTER_CONTEXT_DESCRIPTORS = {
-  "character.setOption": desc("viewport", "workspace", { part: input("enum", { values: CCO_PARTS }), option: input("string", { minLength: 1, maxLength: 256 }),
-    choice: input("string", { maxLength: 256 }) }),
-  "character.reset": desc("viewport", "workspace", { part: optional("enum", { values: CCO_PARTS }), option: optional("string", { maxLength: 256 }) }),
+  "character.setOption": desc("viewport", "workspace", { ...target, choice: input("string", { maxLength: 127 }) }),
+  "character.setOptions": desc("viewport", "workspace", { changes: input("object"), label: optional("string", { maxLength: 80 }) }),
+  "character.reset": desc("viewport", "workspace", target),
+  "character.resetAll": desc("viewport", "workspace", {}),
   "character.useDefault": desc("viewport", "workspace", { bodyGender: input("enum", { values: ["female", "male"] }) }),
   "character.loadSave": desc("file", "workspace", { value: input("object") }),
   "character.loadPreset": desc("file", "workspace", { value: input("object") }),
+  "character.keepChanges": desc("viewport", "workspace", {}),
+  "character.undo": desc("viewport", "workspace", {}),
+  "character.redo": desc("viewport", "workspace", {}),
 } satisfies Record<CharacterContextAction["kind"], ActionDescriptor<Scope>>;
 
 const CHARACTER_ID = familyId("characterContext");
 export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scope, typeof CHARACTER_ID> = Object.freeze({
   owner: "system", id: CHARACTER_ID, label: "Character",
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
-    "character.setOption": true, "character.reset": true, "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true }),
+    "character.setOption": true, "character.setOptions": true, "character.reset": true, "character.resetAll": true, "character.useDefault": true,
+    "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.undo": true, "character.redo": true }),
 });

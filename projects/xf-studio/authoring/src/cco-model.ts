@@ -240,13 +240,7 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
 } {
   const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
   for (const part of CCO_PARTS) {
-    const { options } = cco.parts[part];
-    // Every name a switcher choice can activate. These options take their activation from switchers alone.
-    const switcherTargets = new Set<string>();
-    for (const option of options) if (option.type === "switcher")
-      for (const choice of option.options) for (const name of choice.names) switcherTargets.add(name);
-    const roots = options.filter(option => option.name && option.enabled && !switcherTargets.has(option.name));
-    const found = partDescriptors(cco, part, state, roots);
+    const found = partDescriptors(cco, part, state, r5Roots(cco, part));
     appearances.push(...found.appearances); morphs.push(...found.morphs); ambiguities.push(...found.ambiguities);
   }
   return { appearances, morphs, ambiguities, rules: R5_RULES() };
@@ -257,20 +251,6 @@ const R5_RULES = () => [
   note("R5-off-choice", "resource", "A definition with an empty (None) name selects no appearance and emits no descriptor; vanilla Off choices have that shape and the reference save stores no such entry."),
   note("R5-links", "hypothesis", "Link-index propagation from appearance controllers to followers and group listing inferred from vanilla CCO resources and UI presets."),
 ];
-
-/**
- * Rule R5 rooted at one switcher: the descriptors its current choice (`state[switcher]`, a choice `localizedName`) emits, with its
- * targets' definitions from `state`, nested switchers and linked followers followed exactly as `descriptorsFromUiState` does. A viewer's
- * tried creator choice (character-detail-plan.ts) goes through this, so a choice naming several options, or a colour its linked
- * followers take, resolves like the creator itself.
- */
-export function descriptorsFromSwitcher(cco: CcoResource, part: CcoPart, switcher: string, state: UiOptionState): {
-  appearances: AppearanceDescriptor[]; ambiguities: Ambiguity[]; rules: RuleNote[] } {
-  const root = cco.parts[part].options.find(option => option.name === switcher && option.type === "switcher");
-  if (!root) return { appearances: [], ambiguities: [], rules: R5_RULES() };
-  const found = partDescriptors(cco, part, state, [root]);
-  return { appearances: found.appearances, ambiguities: found.ambiguities, rules: R5_RULES() };
-}
 
 /** Every option name a switcher can activate, through any of its choices and nested switchers (the switcher's own reach). */
 export function switcherReach(cco: CcoResource, part: CcoPart, switcher: string): Set<string> {
@@ -289,22 +269,58 @@ export function switcherReach(cco: CcoResource, part: CcoPart, switcher: string)
   return reach;
 }
 
+/**
+ * A switcher's choice by its name (`localizedName`, the creator's choice identity): of several choices with that name, the first that
+ * turns an option on, else the first (PIPE-65: a same-named choice that drives nothing must not hide the one that does). The one rule
+ * R5 and the catalogue share.
+ */
+export function switcherChoiceNamed<C extends { localizedName: string; names: readonly string[] }>(option: { options: readonly C[] }, name: string | undefined): C | undefined {
+  if (name === undefined) return undefined;
+  let first: C | undefined;
+  for (const choice of option.options) if (choice.localizedName === name) {
+    if (choice.names.length) return choice;
+    first ??= choice;
+  }
+  return first;
+}
+
+/** The options of one part that no switcher names: R5's roots, active when `enabled`. */
+export function r5Roots(cco: CcoResource, part: CcoPart): CcoOption[] {
+  const { options } = cco.parts[part];
+  // Every name a switcher choice can activate. These options take their activation from switchers alone.
+  const switcherTargets = new Set<string>();
+  for (const option of options) if (option.type === "switcher")
+    for (const choice of option.options) for (const name of choice.names) switcherTargets.add(name);
+  return options.filter(option => option.name && option.enabled && !switcherTargets.has(option.name));
+}
+
+/**
+ * The activation half of rule R5 for one part: the names of the options that take part in the V for `state`, from `roots` (default:
+ * the part's R5 roots) through each active switcher's current choice. The one implementation: `descriptorsFromUiState` and the
+ * character context (which shows each row's active option) both use it (CORE-57).
+ */
+export function activeOptionNames(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[] = r5Roots(cco, part)): Set<string> {
+  const byName = new Map(cco.parts[part].options.filter(o => o.name).map(option => [option.name, option]));
+  const active = new Set<string>();
+  const activate = (option: CcoOption, depth = 0) => {
+    if (depth > 16 || active.has(option.name)) return;
+    active.add(option.name);
+    if (option.type !== "switcher") return;
+    const wanted = state[option.name];
+    const choice = switcherChoiceNamed(option, wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
+    for (const name of choice?.names ?? []) { const target = byName.get(name); if (target) activate(target, depth + 1); }
+  };
+  for (const option of roots) activate(option);
+  return active;
+}
+
 /** R5 for one part from the given roots: activation through switchers, link indices, definitions, then each group's listing. */
 function partDescriptors(cco: CcoResource, part: CcoPart, state: UiOptionState, roots: readonly CcoOption[]) {
   const appearances: AppearanceDescriptor[] = [], morphs: MorphDescriptor[] = [], ambiguities: Ambiguity[] = [];
   {
     const { options, groups } = cco.parts[part];
     const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
-    const active = new Set<string>();
-    const activate = (option: CcoOption, depth = 0) => {
-      if (depth > 16 || active.has(option.name)) return;
-      active.add(option.name);
-      if (option.type !== "switcher") return;
-      const wanted = state[option.name];
-      const choice = option.options.find(item => item.localizedName === wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
-      for (const name of choice?.names ?? []) { const target = byName.get(name); if (target) activate(target, depth + 1); }
-    };
-    for (const option of roots) activate(option);
+    const active = activeOptionNames(cco, part, state, roots);
     const linkIndex = new Map<string, number>();
     for (const option of options) {
       if (option.type !== "appearance" || !option.linkController || !option.link || !active.has(option.name)) continue;

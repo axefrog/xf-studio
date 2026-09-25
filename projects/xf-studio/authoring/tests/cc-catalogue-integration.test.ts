@@ -9,8 +9,10 @@ import { resolve } from "node:path";
 import { descriptorsFromUiState } from "../src/cco-model";
 import { CatalogueIndex, userFacing } from "../src/cc-catalogue";
 import { loadCreatorCatalogue } from "../src/cc-catalogue-host";
-import { CharacterContext, previewRequestFor } from "../src/character-context";
+import { type CharacterChoice, choicesOfPreset, deriveCharacter, presetOfChoices, recoverSave, savedDescriptorsOf } from "../src/character-context";
 import { readCcPreset, writeCcPreset } from "../src/cc-preset";
+import { catalogueCoverage } from "../src/cc-render-coverage";
+import { panelProjection } from "../src/cc-panel";
 import { openInstallation } from "../src/resolver-host";
 import { readSavedV } from "../src/save-reader";
 import { oracleDescribe } from "./optional-oracles";
@@ -45,46 +47,41 @@ oracleDescribe(missing.length === 0, `the creator catalogue oracle needs ${missi
       expect(facing.some(o => o.choices.some(c => c.off))).toBe(true);
       expect(facing.some(o => o.choices.some(c => c.swatch?.icon?.part))).toBe(true);
       expect(catalogue.options.every(o => o.choices.every(c => c.provenance.kind === "vanilla" || c.provenance.mod !== null))).toBe(true);
-      // The preview has a feminine head only; a masculine V's options say so.
-      if (gender === "female") expect(catalogue.counts.render.rendered).toBeGreaterThan(0);
-      else expect(catalogue.counts.render.rendered).toBe(0);
+      // The preview has a feminine head only; a masculine V's options say so (the preview's own projection, CORE-60).
+      const coverage = catalogueCoverage(catalogue), rendered = facing.filter(o => coverage.get(o.id)!.status === "rendered").length;
+      if (gender === "female") expect(rendered).toBeGreaterThan(0);
+      else expect(rendered).toBe(0);
+      // The panel's first paint stays well under 1 MB (UI-59).
+      expect(JSON.stringify(panelProjection(catalogue, coverage, "oracle").panel).length).toBeLessThan(1_000_000);
     }
   }, LONG);
 
   test("the default V's request equals the host's default derivation; a preset round trip is exact", async () => {
     const { source } = await load("female");
-    const context = new CharacterContext();
-    context.setSource(source);
-    const request = context.request();
-    expect(request.appearances).toEqual(descriptorsFromUiState(source.cco, {}).appearances);
+    expect(deriveCharacter(source, { kind: "default" }, []).request.appearances).toEqual(descriptorsFromUiState(source.cco, {}).appearances);
     // Change one choice on every user-facing head row the preview draws, then round-trip through a preset.
-    const index = new CatalogueIndex(source.catalogue);
+    const coverage = catalogueCoverage(source.catalogue), choices: CharacterChoice[] = [];
     for (const option of source.catalogue.options) {
-      if (!userFacing(option) || option.part !== "head" || option.render.status !== "rendered" || option.choices.length < 2) continue;
-      const choice = option.choices[option.choices.length - 1]!.key;
-      if (context.capability({ kind: "character.setOption", part: option.part, option: option.name, choice }).available)
-        context.dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice });
+      if (!userFacing(option) || option.part !== "head" || coverage.get(option.id)!.status !== "rendered" || option.choices.length < 2) continue;
+      choices.push({ part: option.part, option: option.name, choice: option.choices[option.choices.length - 1]!.key });
     }
-    expect(index.catalogue.options.length).toBeGreaterThan(0);
-    const again = new CharacterContext();
-    again.setSource(source);
-    again.dispatch({ kind: "character.loadPreset", value: JSON.parse(writeCcPreset(context.toPreset("oracle"))) });
-    expect(again.request()).toEqual(context.request());
-    expect(again.snapshot().missing.entries).toEqual([]);
-    expect(readCcPreset(writeCcPreset(again.toPreset())).values.length).toBe(context.toPreset().values.length);
-    expect(previewRequestFor(context.request())).not.toBeNull();
+    const derived = deriveCharacter(source, { kind: "default" }, choices);
+    const { preset } = presetOfChoices(source, choices, { name: "oracle" });
+    const again = deriveCharacter(source, { kind: "default" }, choicesOfPreset(readCcPreset(writeCcPreset(preset))));
+    expect(again.request).toEqual(derived.request);
+    expect(again.view.missing.entries).toEqual([]);
+    // Only the choices set are stored (CORE-51).
+    expect(preset.values.length).toBeLessThanOrEqual(choices.length);
+    expect(new CatalogueIndex(source.catalogue).catalogue.options.length).toBeGreaterThan(0);
   }, LONG);
 
   const savePath = env.XFS_RESOLVER_SAVE;
   (savePath && existsSync(savePath) ? test : test.skip)("a saved V round-trips through the context", async () => {
     const saved = savePath!.toLowerCase().endsWith(".json") ? JSON.parse(readFileSync(savePath!, "utf8")) : readSavedV(readFileSync(savePath!));
     const { source } = await load(saved.isMale ? "male" : "female");
-    const context = new CharacterContext();
-    context.setSource(source);
-    context.dispatch({ kind: "character.loadSave", value: saved });
-    const check = context.snapshot().saveCheck!;
+    const { saveCheck: check, missing } = recoverSave(source, savedDescriptorsOf(saved));
     console.log(`save check: ${check.matched}/${check.saved} saved choices reproduced; save only: ${check.savedOnly.join(", ")}; derived only: ${check.derivedOnly.join(", ")}`);
-    console.log(`missing: ${context.snapshot().missing.summary.map(s => s.message).join(" ")}`);
+    console.log(`missing: ${missing.map(entry => `${entry.option} = ${entry.choice}`).join(", ")}`);
     expect(check.matched / check.saved).toBeGreaterThan(0.9);
   }, LONG);
 });

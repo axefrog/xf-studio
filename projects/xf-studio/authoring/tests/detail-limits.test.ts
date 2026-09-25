@@ -4,15 +4,14 @@ import { characterDetailLine, DETAIL_LIMIT_TEXT, DETAIL_NOTICE_TEXT } from "../s
 
 test("a host of another version is worded as one plain line from its code, never silence", () => {
   expect(Object.keys(DETAIL_NOTICE_TEXT).sort()).toEqual([...DETAIL_NOTICES].sort());
-  const line = characterDetailLine({ phase: "failed", source: "save", message: "", notice: "version-skew", progress: null, choices: [], override: null,
-    tried: null, trying: null, slots: [] });
+  const line = characterDetailLine({ phase: "failed", source: "save", message: "", notice: "version-skew", progress: null, updating: false, updateError: null, choices: 0, drawn: [], slots: [] });
   expect(line).toEqual({ done: true, text: DETAIL_NOTICE_TEXT["version-skew"] });
   expect(line.text).toContain("Restart");
 });
 
 test("renderer limit codes are worded only by the presentation, one plain sentence each (UI-38)", () => {
   expect(Object.keys(DETAIL_LIMIT_TEXT).sort()).toEqual([...DETAIL_LIMITS].sort());
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, choices: [], override: null, tried: null, trying: null, slots: [
+  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], slots: [
     { slot: "skin", state: "shown", label: "Pale", limits: ["head-shape", "skin-glow"] },
     { slot: "brows", state: "shown", label: "Style 3" },
     { slot: "lashes", state: "shown", label: "Default" },
@@ -35,7 +34,7 @@ test("renderer and device modules carry codes, not the sentences", () => {
 });
 
 test("face details: the slot reads as plain words, and a decal the preview can't draw is one sentence from its code", () => {
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, choices: [], override: null, tried: null, trying: null, slots: [
+  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], slots: [
     { slot: "skin", state: "shown", label: "senna, skin type 3" },
     { slot: "face", state: "shown", label: "cheeks (light brown), face cyberware", limits: ["decal-template"] },
   ] });

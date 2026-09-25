@@ -372,7 +372,7 @@ describe("host preparation", () => {
       manualModRoot: null, wolvenKitCli: process.execPath };
     const calls: string[] = [];
     const host = new CharacterDetailHost({ cacheRoot: join(root, "host-stale"), settings: () => settings, exporter: () => fakeExporter(),
-      prepare: async options => { calls.push(options.route.mo2ProfileId ?? ""); return { record: {} as never, recordFile: `${"a".repeat(63)}${calls.length}.json` }; } });
+      prepare: async options => { calls.push(options.route.mo2ProfileId ?? ""); return { record: {} as never, recordFile: `${"a".repeat(63)}${calls.length}.json`, degraded: false }; } });
     const first = host.request(REQUEST_A);
     await host.settled();
     expect(host.state(first.key).phase).toBe("ready");
@@ -408,7 +408,7 @@ describe("host preparation", () => {
         const who = name(options.request as typeof REQUEST_A);
         overlap = Math.max(overlap, ++running);
         log.push(`start ${who}`);
-        const done = setTimeout(() => { running--; log.push(`finish ${who}`); resolve({ record: {} as never, recordFile: `${"b".repeat(64)}.json` }); }, 120);
+        const done = setTimeout(() => { running--; log.push(`finish ${who}`); resolve({ record: {} as never, recordFile: `${"b".repeat(64)}.json`, degraded: false }); }, 120);
         options.signal?.addEventListener("abort", () => setTimeout(() => {
           clearTimeout(done); running--; log.push(`cancelled ${who}`);
           reject(new CharacterDetailError("character_cancelled", "cancelled"));
@@ -464,7 +464,7 @@ describe("face details in the record", () => {
 
 test("two face choices drawing one shared mesh are two components with their own identities", async () => {
   const both = { ...REQUEST_A, appearances: [...(REQUEST_A.source === "save" ? REQUEST_A.appearances : []),
-    { group: "face", option: "makeupCheeks_01", app: depotHash(P.frecklesApp), definition: FACE.frecklesBrown }] } as typeof REQUEST_A;
+    { part: "head" as const, group: "face", option: "makeupCheeks_01", app: depotHash(P.frecklesApp), definition: FACE.frecklesBrown }] } as typeof REQUEST_A;
   const { record } = await prepare(both);
   const shared = record.components.filter(c => c.component === "hx_freckles");
   expect(shared.map(c => c.option)).toEqual(["makeupCheeks_05", "makeupCheeks_01"]);

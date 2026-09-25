@@ -9,6 +9,7 @@ import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
 import { installations, type InstallationRegistry } from "./installation-registry";
+import { CreatorCatalogueHost } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
 import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
@@ -29,9 +30,14 @@ import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
  * new one starts only after a cancelled one has stopped.
  *
  * It also keeps one in-memory `CharacterPreparationCache` per installation fingerprint (which includes the registry's generation;
- * PREV-68): the resolved appearances, templates and exports, and the served components. A tried choice on the same V then resolves and
- * exports only what the choice changes. A changed fingerprint (a mod installed, another profile) starts a new cache. Each state names
- * the record schema this host writes, so a page of another version can say so instead of failing silently.
+ * PREV-68): the resolved appearances, templates and exports, and the served components. A changed creator choice on the same V then
+ * resolves and exports only what the choice changes. A changed fingerprint (a mod installed, another profile) starts a new cache. Each
+ * state names the record schema this host writes, so a page of another version can say so instead of failing silently. A preparation
+ * that was degraded by a failure that may not repeat is served, but not kept as the final answer: the next request for it prepares
+ * again (PIPE-53).
+ *
+ * It also owns the installation's creator catalogue (`creator`, cc-catalogue-service.ts), which interprets a request's creator
+ * choices for the preparation and answers the Character panel.
  */
 export const CHARACTER_DETAIL_STATE_SCHEMA = "xfs/character-detail-state-1" as const;
 export type CharacterDetailPhase = "preparing" | "ready" | "failed" | "unknown";
@@ -59,6 +65,8 @@ export type CharacterDetailHostOptions = {
   exporter?: (cli: string | null) => GameAssetExporter;
   /** Test seam over the service call. */
   prepare?: (options: PrepareCharacterOptions) => ReturnType<typeof prepareCharacterDetails>;
+  /** Test seam over the creator catalogue. */
+  creator?: CreatorCatalogueHost;
   log?: (message: string) => void;
 };
 
@@ -91,7 +99,14 @@ export class CharacterDetailHost {
   private readonly states = new Map<string, CharacterDetailState>();
   /** What preparations on the current installation share, and the fingerprint it belongs to. */
   private shared: { fingerprint: string; cache: CharacterPreparationCache } | null = null;
-  constructor(private readonly options: CharacterDetailHostOptions) {}
+  /** Keys whose ready answer was degraded (PIPE-53): served once, prepared again when asked again. */
+  private readonly degraded = new Set<string>();
+  /** The installation's creator catalogue: the Character panel's options, and the interpreter of a request's creator choices. */
+  readonly creator: CreatorCatalogueHost;
+  constructor(private readonly options: CharacterDetailHostOptions) {
+    this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
+      resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
+  }
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }
 
@@ -120,7 +135,9 @@ export class CharacterDetailHost {
     const key = characterRequestKey(request, fingerprint);
     const known = this.states.get(key);
     const active = this.running && !this.running.controller.signal.aborted ? this.running : null;
-    if (known?.phase === "ready" || (known?.phase === "preparing" && active?.key === key)) return known;
+    // A degraded answer is served once, then prepared again (PIPE-53).
+    if ((known?.phase === "ready" && !this.degraded.has(key)) || (known?.phase === "preparing" && active?.key === key)) return known;
+    this.degraded.delete(key);
     // A different (or a stale, cancelled) preparation: stop it and forget its answer now, so a quick
     // V1 -> V2 -> V1 restarts V1 instead of reporting the cancelled run as still preparing.
     if (active) { active.controller.abort(); this.states.delete(active.key); }
@@ -140,6 +157,7 @@ export class CharacterDetailHost {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
       started = Date.now();
       return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
+        derive: request.choices?.length ? derived => this.creator.inputFor(derived) : undefined,
         resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
           if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
@@ -150,6 +168,7 @@ export class CharacterDetailHost {
     const promise = begun
       .then(result => {
         this.set({ key, phase: "ready", message: "", progress: null, record: result.recordFile });
+        if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair and piercings prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })
       .catch(error => {

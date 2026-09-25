@@ -204,8 +204,9 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       option("cyberware_01", P.cyberApp, ["hx_000_pwa__cyberware_01__01_ca_pale", FACE.cyberSenna], "cyberware", 0, 1, "skin color"),
       slotSwitcher("piercings", "piercings_color", [["Common-Off", ["piercings_00"]], ["01", ["piercings_01"]], ["12", ["piercings_12"]]]),
       option("piercings_00", null, ["None"], "piercings_color", 0),
-      option("piercings_12", P.earringApp12, [PIERCING.silver, PIERCING.black], "piercings_color", 0, 0, "piercings color"),
-      option("piercings_01", P.earringApp1, [PIERCING.silver, PIERCING.black], "piercings_color", 0, 0, "piercings color"),
+      // Each style option is a controller of the colour link, as in the vanilla creator (knowledge/cc-file-chain.md "Links").
+      appearanceOption("piercings_12", P.earringApp12, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
+      appearanceOption("piercings_01", P.earringApp1, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
     ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02"],
       face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
@@ -419,8 +420,8 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
 
 /** Save-shaped requests (option, `.app` hash and definition per consumer group), like the save reader produces. */
 const saved = (items: [string, string, string, string][]): CharacterRequest => ({ schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: "female",
-  appearances: items.map(([group, option, path, definition]) => ({ group, option, app: depotHash(path), definition })),
-  morphs: [{ group: "TPP", region: "nose", target: "h012" }] });
+  appearances: items.map(([group, option, path, definition]) => ({ part: "head" as const, group, option, app: depotHash(path), definition })),
+  morphs: [{ part: "head", group: "TPP", region: "nose", target: "h012" }] });
 /**
  * V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group), the gradient blue eye, red lipstick
  * and red blush (listed in the creator group too, as saves repeat them).

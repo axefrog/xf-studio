@@ -3,8 +3,10 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-catalogue-host"];
-const PURE = MODULES.filter(name => name !== "cc-catalogue-host");
+const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-panel",
+  "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server"];
+const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server", "browser-cc-catalogue-device", "studio-ui/panels/character"]);
+const PURE = MODULES.filter(name => !HOST.has(name));
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 /** Code without comments, so prose may explain the rules with examples. */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");

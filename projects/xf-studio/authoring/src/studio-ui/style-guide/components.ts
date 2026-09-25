@@ -58,6 +58,25 @@ export function components() {
       when: "Continuous recipe values (opacity, pigment, softness, reach, flake settings) and view preferences (FOV, exposure).",
       drives: `${code("authoring.controlBegin(id, layerId)")} → ${code("controlEdit(id, action)")} → ${code("controlCommit(id)")} / ${code("controlCancel(id)")}. Ranges come from ${code("actionDescriptors()")} limits, not UI constants.`,
       a11y: "The label is the input's label; the note under a disabled slider states why." }),
+    pattern({ id: "c-creator", title: "Creator options (generated rows)", status: "implemented", wide: true,
+      specimen: `<div class="cc-panel stack-s" style="max-width:420px">
+        <p class="cc-status busy" role="status">Updating…</p>
+        <section class="section cc-quick">${btn("Hide my V's own makeup", { icon: "eye", variant: "primary" })}${note("Turns every makeup row Off in one step, so only the makeup you're making shows on your V. Undo brings it back.")}</section>
+        <input class="field cc-search" type="search" placeholder="Find an option or choice" aria-label="Find a creator option or choice">
+        <section class="cc-section"><h4 class="cc-section-title">Eyes</h4><div class="cc-rows">
+          <div class="cc-row changed"><div class="cc-row-head"><button class="cc-row-main" type="button" aria-expanded="true">${i("chevronRight")}<span class="cc-row-label">Eye Color</span><span class="cc-row-current"><span class="swatch cc-row-swatch" style="--swatch:#3d6a8c"></span><span class="cc-row-value">Blue</span></span></button><span class="cc-row-actions">${btn("Back to your V's own: Gradient brown", { icon: "reset", iconOnly: true, small: true, variant: "quiet" })}</span></div>
+            <div class="cc-choices grid" role="radiogroup" aria-label="Eye Color choices">${["#5a3a22", "#3d6a8c", "#4f7d4a", "#7a6a5a", "#2a2a2a", "#8a5ab0"].map((colour, n) => `<button class="cc-choice swatch-choice" type="button" role="radio" aria-checked="${n === 1}" aria-label="Choice ${n + 1}"><span class="swatch" style="--swatch:${colour}"></span></button>`).join("")}</div></div>
+        </div></section>
+        <section class="cc-section"><h4 class="cc-section-title">Makeup</h4><div class="cc-rows">
+          <div class="cc-row"><div class="cc-row-head"><button class="cc-row-main" type="button" aria-expanded="false">${i("chevronRight")}<span class="cc-row-label">Eye Makeup</span><span class="cc-row-current"><span class="cc-row-value">04</span></span></button><span class="cc-row-actions"><button class="chip-button cc-off" type="button" aria-pressed="false">Off</button>${btn("This is your V's own choice.", { icon: "reset", iconOnly: true, small: true, variant: "quiet", disabled: true })}</span></div></div>
+          <div class="cc-row not-shown"><div class="cc-row-head"><button class="cc-row-main" type="button" aria-expanded="false">${i("chevronRight")}<span class="cc-row-label">Teeth</span><span class="cc-row-current"><span class="cc-row-value">01</span></span></button><span class="cc-row-actions"></span></div><p class="cc-row-detail">Not shown in the 3D view yet.</p></div>
+        </div></section></div>`,
+      what: "Every creator option of the shown V, generated from the installed game and mods: sections from the game's creator categories, rows of options sharing a creator slot (the active one shows), and the active option's choices opened in place, as a swatch grid for colours and chips otherwise, Off first. A changed row is marked and offers Reset to the V's own; an option with an Off choice offers Off; where each choice comes from is on hover.",
+      when: "The Character panel. The one prominent action, Hide my V's own makeup, sits above the rows; everything else is per row.",
+      combine: "One status line above (never moves the layout): Updating…, why a change couldn't be shown, or what's still loading. Undo and Redo for creator changes sit beside the V's source; they are separate from the makeup's history.",
+      drives: `${code("character.setOption")}, ${code("character.setOptions")} (the quick action, one step), ${code("character.reset")}, ${code("character.undo/redo")}; ${code("authoring.characterPanel()")}, ${code("characterView()")} and ${code("characterChoices(option)")} (frozen, paged), coverage notes from the preview's projection.`,
+      adapt: "Single column at every width; row values truncate, never wrap; the swatch grid fills the row with as many columns as fit.",
+      a11y: "Rows are buttons with aria-expanded; choices are a radiogroup with roving focus (arrow keys, Home, End). Ctrl+Z and Ctrl+Y inside the panel step the character's own history." }),
     pattern({ id: "c-switch", title: "Switch", status: "implemented",
       specimen: `<div class="stack-s">${toggle("Mirror across the face", true)}${toggle("Per-point edge softness", false)}${toggle("Saved V hair", false, { disabled: true, note: "Saved hair preview is unavailable." })}</div>`,
       what: "Binary settings that apply immediately. Recipe switches are one Undo step; preview switches are workspace preferences with no Undo.",

@@ -57,17 +57,19 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());
   expect(kinds("motion")).toEqual(all.filter(kind => kind.startsWith("motion.")).sort());
   expect(kinds("quality")).toEqual(all.filter(kind => kind.startsWith("quality.")).sort());
-  expect(kinds("savedV")).toEqual(["savedV.load", "savedV.restore"]);
+  expect(kinds("savedV")).toEqual(["savedV.clear", "savedV.load", "savedV.restore"]);
   // Before step 1: the selection set, from descriptor effect over the recipe kinds.
   expect(STUDIO_REGISTRY.kinds("eye-makeup").filter(kind => STUDIO_REGISTRY.descriptor(kind)?.effect === "selection").sort())
     .toEqual(["field.select", "layer.select", "point.select"]);
   // Scene gating and thrown-error codes replace the old prefix checks.
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.needsScene).map(owner => owner.id as string))
-    .toEqual(["preview", "motion", "savedV", "characterDetails"]);
-  // The creator choice tried on the shown V has one owner, the character-detail service (UI-48).
-  expect(kinds("characterDetails")).toEqual(["character.tryChoice"]);
+    .toEqual(["preview", "motion", "savedV"]);
+  // Every creator choice for the shown V has one owner, the character context (CORE-58); it needs no scene, so a change before the
+  // preview is ready is refused as not ready (CORE-64).
+  expect(kinds("characterContext")).toEqual(["character.keepChanges", "character.loadPreset", "character.loadSave", "character.redo", "character.reset",
+    "character.resetAll", "character.setOption", "character.setOptions", "character.undo", "character.useDefault"]);
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.thrown === "unavailable").map(owner => owner.id as string))
-    .toEqual(["preview", "motion", "quality", "characterDetails"]);
+    .toEqual(["preview", "motion", "quality"]);
 });
 
 test("the registry refuses duplicate owners and doubly owned kinds", () => {

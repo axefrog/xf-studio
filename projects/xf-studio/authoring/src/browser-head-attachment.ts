@@ -8,8 +8,10 @@
  * instead of doubling listeners (PREV-20). `dispose()` does the same for a head that loaded.
  */
 import { createBrowserCharacterDetailDevice } from "./browser-character-detail-device";
+import { createBrowserCreatorDevice } from "./browser-cc-catalogue-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
-import { CharacterDetailActions, followShownCharacter } from "./character-detail-actions";
+import { CharacterDetailActions } from "./character-detail-actions";
+import { CharacterContextActions, type CreatorPort } from "./character-context-actions";
 import type { createBrowserPreviewDevice } from "./browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
 import type { MotionActions } from "./motion-actions";
@@ -24,7 +26,8 @@ type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
 type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
-export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions };
+export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
+  characterContext?: CharacterContextActions };
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
@@ -41,6 +44,8 @@ export type HeadAttachmentPorts = {
   persist(): void;
   /** Tells the presentation that device status changed. */
   changed(): void;
+  /** The creator catalogue's host transport (default: the page's own host). */
+  creator?: CreatorPort;
 };
 
 export type AttachedHead = {
@@ -50,15 +55,12 @@ export type AttachedHead = {
   motion: MotionActions;
   /** Resolved skin, face details, eyes, brows, lashes, hair and piercings of the shown V (default or loaded save). */
   characterDetails: CharacterDetailActions;
+  /** Which V is shown and every creator choice set on it (CORE-58). */
+  characterContext: CharacterContextActions;
   /** Releases every head-bound connection and the scene. Safe to call more than once. */
   dispose(): void;
 };
 
-/** The workspace's persisted tried style as the character service reads it (it validates the value itself). */
-export function triedChoiceOf(workspace: WorkspaceState): unknown {
-  const { piercingStyle: choice, piercingDefinition: definition } = workspace.preview;
-  return choice ? { slot: "piercings", choice, definition } : null;
-}
 
 export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<AttachedHead> {
   const releases: (() => void)[] = [];
@@ -76,11 +78,11 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
     let savedAppearance: SavedAppearanceActions | undefined;
-    // Skin, face details, eyes, brows, lashes, hair and piercings follow the shown V: the restored or newly loaded save, else the default V.
-    // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V); a piercing style tried in the
-    // preview (`character.tryChoice`, owned by that service) is resolved on the same V, starting from the workspace's tried style.
-    // It starts following once the preview services have restored the workspace.
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene), triedChoiceOf(ports.workspace));
+    // Skin, face details, eyes, brows, lashes, hair and piercings follow the character context: the restored or newly loaded save, else
+    // the default V, with the creator choices set on it. A save switch replaces them completely (CharacterDetailActions supersedes the
+    // previous V); a changed choice on the same V keeps it on screen. It starts following once the preview services have restored the
+    // workspace.
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled),
@@ -100,11 +102,30 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     ports.attach({ characterDetails });
     releases.push(() => ports.attach({ characterDetails: undefined }));
     releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
-    releases.push(followShownCharacter(characterDetails, savedAppearance));
+    // The character context: its V is the restored save (or the default V), with the workspace's stored choices on it. A save loaded
+    // later becomes its V as one undoable step; its Undo shows an earlier V through the saved-V service.
+    const saved = savedAppearance;
+    const characterContext = new CharacterContextActions({ creator: ports.creator ?? createBrowserCreatorDevice(),
+      showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); } },
+    { stored: ports.workspace.preview.character, save: savedAppearance.snapshot().savedV });
+    releases.push(() => characterContext.dispose());
+    ports.attach({ characterContext });
+    releases.push(() => ports.attach({ characterContext: undefined }));
+    releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
+    // The shown details and the head's facial shape follow the context's V and choices.
+    let faces = "";
+    const follow = () => {
+      void characterDetails.setCharacter(characterContext.detailRequest());
+      const view = characterContext.view(), key = JSON.stringify(view?.faceMorphs ?? null);
+      if (view && key !== faces && view.bodyGender === "female") { faces = key; scene.setFaceMorphs(view.faceMorphs); }
+    };
+    releases.push(characterContext.subscribe(follow), characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));
+    follow();
+    characterContext.start();
     const cameraMoved = () => ports.persist();
     scene.controls.addEventListener("change", cameraMoved);
     releases.push(() => scene.controls.removeEventListener("change", cameraMoved));
-    return { scene, savedAppearance, preview, motion, characterDetails, dispose };
+    return { scene, savedAppearance, preview, motion, characterDetails, characterContext, dispose };
   } catch (error) {
     dispose();
     throw error;

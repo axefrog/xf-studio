@@ -10,7 +10,7 @@
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID } from "../features/eye-makeup";
-import { CHARACTER_DETAILS_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
+import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
   SAVED_V_FAMILY } from "./system-families";
 import type { DocumentModel } from "../collection-workspace";
 import type { StudioOwnerActions, StudioOwnerId, StudioRequestOwnerId } from "../studio-application";
@@ -23,7 +23,7 @@ export type { StudioOwnerActions, StudioOwnerId };
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
 export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY,
-  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_DETAILS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
+  QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
 
 // Compile-time: the list's IDs are exactly the owners StudioApplication binds handlers for.
 type ListedIds = (typeof STUDIO_OWNERS)[number]["id"];

@@ -383,10 +383,31 @@ async function assembleScene(
       for (const [i, weight] of faceMorphWeights(morphTargetNames(m), choice.region, choice.target)) m.morphTargetInfluences[i] = weight;
     }
   }
+  /** The eye shape the preview's own control chose last; it stays on top of the V's facial shape. */
+  let shownEyeShape: number | null = null;
   function eyeShape(index: number) {
     const choice = eyeShapeChoices[index];
     if (!choice) throw Error("That eye shape is not in this head.");
+    shownEyeShape = index;
     applyFaceMorph(choice);
+  }
+  /**
+   * The V's facial shape from the character context (region → target pairs of the third-person group): every morph the head and its
+   * plates carry is set to the pairs given (the base shape where none is), then the preview's eye shape is put back on top. Pairs the
+   * head doesn't carry are skipped and returned.
+   */
+  function setFaceMorphs(morphs: readonly { region: string; target: string }[]): string[] {
+    const names = morphs.map(m => `${m.target}_${m.region}`);
+    const missing = names.filter(name => head.morphTargetDictionary?.[name] === undefined);
+    for (const mesh of deforming()) {
+      mesh.morphTargetInfluences?.fill(0);
+      for (const name of names) {
+        const i = mesh.morphTargetDictionary?.[name];
+        if (i !== undefined) mesh.morphTargetInfluences![i] = 1;
+      }
+    }
+    if (shownEyeShape !== null && eyeShapeChoices[shownEyeShape]) applyFaceMorph(eyeShapeChoices[shownEyeShape]!);
+    return missing;
   }
   function eyeShapeOptions() {
     return { choices: eyeShapeChoices.map(choice => ({ ...choice })), eyesFollow: eyesFollowShape,
@@ -649,6 +670,7 @@ async function assembleScene(
     eyeShape,
     eyeShapeOptions,
     applySavedV,
+    setFaceMorphs,
     eyeAppearance,
     setEyeOptics,
     setHair,
@@ -732,7 +754,7 @@ async function assembleScene(
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["onFrame", "resize", "front", "updateLayer", "setLayerCanvases", "reconcileLayerCanvases",
-    "setLayerCanvas", "eyeShape", "applySavedV", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
+    "setLayerCanvas", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
     "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail", "setBlink", "animateBlink", "setWire",
     "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }
