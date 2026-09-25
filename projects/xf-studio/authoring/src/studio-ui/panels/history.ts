@@ -28,6 +28,7 @@ export function historyPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content history-panel" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, summary), h("div", { class: "row gap-xs" }, undo, redo)),
     noPreset, empty, trimmed, list, help);
+  rt.anchors.register("history.list", list);
 
   const views = new Map<string, RowView>();
   let rows: HistoryRow[] = [], key = "", blocked: string | undefined, lastCurrent = "";

@@ -37,7 +37,8 @@ export function modifierLabel(key: ModifierKey): string {
 const ANY: readonly ModifierKey[] = MODIFIER_KEYS;
 
 // ---------- Actions a binding performs ----------
-export type ShellCommand = "palette" | "shortcuts" | "regions" | "regions-back" | "context-menu" |
+export type ShellCommand = "palette" | "shortcuts" | "help" | "regions" | "regions-back" | "context-menu" |
+  "tour.next" | "tour.back" | "tour.skip" |
   "gesture.cancel" | "gesture.commit" |
   "tab.switch" | "tab.reorder" | "tab.close" | "tab.content" | "tab.float" |
   "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate";
@@ -177,7 +178,7 @@ export type EditorInputState = Readonly<{ target?: PointerTarget; gesture?: Gest
 // ---------- Keyboard bindings ----------
 /** `any` ignores modifiers entirely (Escape must work while Shift is still held). */
 export type KeyChord = Readonly<{ key: string; ctrl?: boolean; alt?: boolean; shift?: boolean; any?: boolean }>;
-export type KeyScope = "global" | "gesture" | "head" | "uv" | "tabs" | "rows";
+export type KeyScope = "global" | "gesture" | "head" | "uv" | "tabs" | "rows" | "tour";
 export type KeyBinding = Readonly<{
   id: string; scope: KeyScope; chords: readonly KeyChord[]; action: BindingAction; label: string;
   /** Compact label for hint strips, when the reference label is a sentence. */
@@ -199,6 +200,7 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "shell.regions", scope: "global", chords: [k("F6")], action: shell("regions"), label: "Move focus to the next region (header, panel groups, status bar)", inText: true },
   { id: "shell.regions-back", scope: "global", chords: [k("F6", { shift: true })], action: shell("regions-back"), label: "Move focus to the previous region", inText: true },
   { id: "shell.shortcuts", scope: "global", chords: [k("?")], action: shell("shortcuts"), label: "Keyboard & mouse reference", short: "all shortcuts", notInDialogs: true },
+  { id: "shell.help", scope: "global", chords: [k("F1")], action: shell("help"), label: "Help: tours, answers and this reference", short: "help", inText: true, notInDialogs: true },
   { id: "gesture.cancel", scope: "gesture", chords: [k("Escape", { any: true }), k("z", { ctrl: true }), k("z", { ctrl: true, shift: true })], action: shell("gesture.cancel"), label: "Cancel the active drag or wheel gesture (works while Shift is held)", short: "cancel", strip: true },
   { id: "head.front", scope: "head", chords: [k("f")], action: act("camera.front"), label: "Front view", short: "front view", strip: true },
   { id: "head.menu", scope: "head", chords: [k("F10", { shift: true }), k("ContextMenu")], action: shell("context-menu"), label: "Commands for the selected point" },
@@ -217,6 +219,9 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "rows.rename", scope: "rows", chords: [k("F2")], action: shell("row.rename"), label: "Rename the focused row" },
   { id: "rows.remove", scope: "rows", chords: [k("Delete")], action: shell("row.remove"), label: "Remove the focused row" },
   { id: "rows.duplicate", scope: "rows", chords: [k("d", { ctrl: true })], action: shell("row.duplicate"), label: "Duplicate the focused row" },
+  { id: "tour.skip", scope: "tour", chords: [k("Escape")], action: shell("tour.skip"), label: "Stop the tour (it can be replayed from Help)" },
+  { id: "tour.next", scope: "tour", chords: [k("ArrowRight"), k("Enter")], action: shell("tour.next"), label: "Next step (Enter on a button presses that button)" },
+  { id: "tour.back", scope: "tour", chords: [k("ArrowLeft")], action: shell("tour.back"), label: "Previous step" },
   { id: "rows.menu", scope: "rows", chords: [k("F10", { shift: true }), k("ContextMenu")], action: shell("context-menu"), label: "Commands for the focused row" },
 ];
 
@@ -429,6 +434,8 @@ export function bindingReference(): ReferenceSection[] {
       .map(binding => ({ input: pointerPanelLabel(binding), label: binding.label, ids: [binding.id] }))] },
     { id: "rows", title: "Presets and Layers rows", rows: [...keyRows("rows"), ...PANEL_POINTER_BINDINGS.filter(binding => binding.scope === "rows")
       .map(binding => ({ input: pointerPanelLabel(binding), label: binding.label, ids: [binding.id] }))] },
+    { id: "tour", title: "During a guided tour", detail: "Arrows and Enter work while the tour's card has focus; Esc also works elsewhere unless something else uses it.",
+      rows: keyRows("tour") },
   ];
 }
 /** The shape-editing subset (same in both viewports) for the Shape inspector's gesture help. */

@@ -3,7 +3,7 @@ import { trustedFixture } from "./studio-presentation-fixture";
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "installDetection", "library", "localSetup", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "installDetection", "library", "links", "localSetup", "preferences",
     "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "viewport"]);
   expect("document" in shell.authoring).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);

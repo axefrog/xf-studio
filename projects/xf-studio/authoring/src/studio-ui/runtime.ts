@@ -6,6 +6,7 @@ import type { StudioFileAction, StudioFileOutcome } from "../studio-file-operati
 import type { StudioPresentationPort } from "../studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
+import { AnchorRegistry } from "./guidance/anchors";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 type Ret<T extends (...args: never[]) => unknown> = ReturnType<T>;
@@ -50,6 +51,8 @@ export const sourceLabel = (kind: string) => sources.find(([pattern]) => pattern
 /** Shared presentation services. Holds no authored state of its own. */
 export class StudioRuntime {
   dock!: DockView;
+  /** Named guidance anchors that panels and the shell register as they build their controls. */
+  readonly anchors = new AnchorRegistry();
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
   readonly finishes: Ret<Port["authoring"]["finishCatalogue"]>;
   readonly glitterModels: Ret<Port["authoring"]["glitterModelCatalogue"]>;

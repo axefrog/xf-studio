@@ -25,6 +25,7 @@ import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
+import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
 import type { LocalSettings } from "../src/local-settings";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
@@ -163,9 +164,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
         let body: any;
         try { body = await routedRequest.json(); } catch { return new Response("Invalid link", { status: 400 }); }
-        if (!body || typeof body !== "object" || Object.keys(body).join() !== "link" || !OPEN_LINKS.includes(body.link))
+        if (!body || typeof body !== "object" || Object.keys(body).join() !== "link" || !(OPEN_LINKS.includes(body.link) || isProjectLink(body.link)))
           return new Response("Invalid link", { status: 400 });
-        const target = wolvenKitLinkUrl(wolvenKit.snapshot(), body.link);
+        // XF Studio's own public pages (Help) are fixed; WolvenKit's come from the pinned release.
+        const link: unknown = body.link;
+        const target = isProjectLink(link) ? PROJECT_LINKS[link] : wolvenKitLinkUrl(wolvenKit.snapshot(), link as WolvenKitLink);
         if (!target || !hostOptions.openExternal) return new Response("Link unavailable", { status: 409 });
         return new Response(null, { status: hostOptions.openExternal(target) === false ? 502 : 204 });
       }

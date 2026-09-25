@@ -15,6 +15,7 @@ One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/sr
 | `POINTER_BINDINGS` | Viewport (`head`/`uv`), input (`drag`, `wheel`, `double-click`, `right-drag`, `middle-drag`, `two-finger-drag`, `right-click`), exact modifier sets, targets, effect, action, label, hover cursor | `pointerBinding()` in both gesture adapters, the head camera adapter and the viewport context-menu gate. `pointerInputOf()` classifies every press, and `ADAPTER_INPUTS` lists the inputs each viewport's adapters consult |
 | `KEY_BINDINGS` | Scope (`global`, `gesture`, `head`, `uv`, `tabs`, `rows`), chords, action, label, short hint label, text-field and dialog rules | `keyBinding()` in the shell, viewport panels, dock tabs and item rows; `cancelsGesture()` in both adapters |
 | `GESTURE_BINDINGS` | What ends an active gesture (Release, a wheel pause) | Hints during a gesture |
+| `KEY_BINDINGS` scope `tour` | Esc (skip), → and Enter (next; Done on the last step) and ← (back) inside a guided tour's card. Esc also stops a tour elsewhere unless a gesture, menu, dialog or text field uses it | `tourKey()` in the guidance overlay and the shell's tour Esc handler |
 | `PANEL_POINTER_BINDINGS` | Dock and row pointer modifiers (Ctrl-drag floats a panel freely) | `panelModifiersHeld()` in the dock |
 | `MODIFIER_SUMMARIES` | What each modifier unlocks per viewport ("Hold Shift: shape tools") | Hint discovery |
 
@@ -74,7 +75,7 @@ The presentation reads the combined read-only snapshot through `port.viewport.in
 - **Tooltip.** `targetTip(context)` names a hovered makeup target and lists its bindings for the held modifiers. It appears after 450 ms of dwell.
 - **Cursor.** `cursorFor(context)` returns the active gesture's cursor, or otherwise the cursor of the drag binding under the pointer. The presentation sets it as `data-cursor` on the viewport slot, and `studio.css` renders it. Rotate and scale are SVG cursors: white glyphs with a dark halo, hotspot at the centre, falling back to the `CURSOR_FALLBACK` keywords (grab and nwse-resize). The scene clears the orbit controls' inline cursor, so the CSS applies.
 - **Preference.** `UIPreferences.inputHints` is on by default and persisted with the workspace. `inputHints.set` toggles it from View preferences, the palette or the Keyboard & mouse dialog. It hides the strip and tooltips; cursors stay.
-- **Reference and labels.** `bindingReference()` groups every binding by context for the Keyboard & mouse dialog and the style guide's keyboard map. `shortcutLabel()` supplies the menu, palette and header-button shortcut text. The viewports' accessible names are generated from their key bindings.
+- **Reference and labels.** `bindingReference()` groups every binding by context for the Keyboard & mouse dialog, the Help panel's searchable reference (`helpReference()`; F1 opens it through `shell.help`) and the style guide's keyboard map. `shortcutLabel()` supplies the menu, palette and header-button shortcut text. The viewports' accessible names are generated from their key bindings.
 
 ## Fixes found while wiring this
 

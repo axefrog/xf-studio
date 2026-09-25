@@ -407,6 +407,8 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
   let tree: DockTree = { root, floating, closed };
   if (typeof input.maximized === "string" && findGroup(tree, input.maximized)) tree.maximized = input.maximized;
   for (const missing of known.filter(id => !seen.has(id))) {
+    // A newly added panel that is closed by default (Help) stays closed until someone opens it.
+    if (fallback.closed.includes(missing)) { tree.closed = [...tree.closed, missing]; continue; }
     const home = locate(fallback, missing);
     const siblings = home ? home.group.panels.filter(id => id !== missing) : [];
     // A newly added panel joins as a background tab: the group keeps showing what the user left open.

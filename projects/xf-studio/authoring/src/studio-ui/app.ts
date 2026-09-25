@@ -22,6 +22,10 @@ import { historyPanel } from "./panels/history";
 import { historyCommandLabel, historyCommandTitle } from "./history-model";
 import { headPanel, uvPanel } from "./panels/viewports";
 import { previewSetupCard } from "./preview-setup-card";
+import { panelAnchor } from "./guidance/anchors";
+import { mountGuidance, type GuidanceController } from "./guidance/controller";
+import { helpPanel } from "./guidance/help-panel";
+import { CLOSED_PANEL_HOMES, type StudioPanelId } from "./layout-defaults";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
@@ -33,10 +37,14 @@ export function mountStudio(port: Port, root: HTMLElement) {
   const rt = new StudioRuntime(port, feedback);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
+  // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
+  let guidance!: GuidanceController;
+  const help = helpPanel(rt, { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) });
   const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), historyPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
     finishPanel(rt), shapePanel(rt), edgePanel(rt), warpPanel(rt), characterPanel(rt), lightingPanel(rt), motionPanel(rt), qualityPanel(rt),
-    activityPanel(rt)];
+    activityPanel(rt), help];
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
+  for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id as StudioPanelId), panel.spec.element);
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) });
   const dock = new DockView({
@@ -55,13 +63,16 @@ export function mountStudio(port: Port, root: HTMLElement) {
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
+    homes: CLOSED_PANEL_HOMES,
   });
   rt.dock = dock;
-  const header = shellHeader(rt, theme, view);
+  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch()); };
+  guidance = mountGuidance(rt, { openHelp });
+  const header = shellHeader(rt, theme, view, openHelp);
   const status = statusBar(rt);
   const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
-  root.replaceChildren(header.element, main, status.element, setupCard.element, setupCard.consent, feedback.toasts, feedback.live, feedback.assertive);
+  root.replaceChildren(header.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
   requestAnimationFrame(() => dock.recover());
@@ -81,7 +92,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
       if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
       else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
     }
-    header.update(frame); status.update(frame); setupCard.update(frame);
+    header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
     if (frame.previewSetup.setupRequests !== setupRequests) {
       setupRequests = frame.previewSetup.setupRequests;
@@ -123,7 +134,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     }, 120);
   });
 
-  const commands = () => buildCommands(rt, theme, view, byId);
+  const commands = () => [...buildCommands(rt, theme, view, byId), ...guidance.commands()];
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -140,10 +151,12 @@ export function mountStudio(port: Port, root: HTMLElement) {
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
       rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
+    else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
-  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands } });
+  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands,
+    guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };
 }
 
@@ -201,7 +214,7 @@ function themeItems(theme: Theme): MenuItem[] {
     { kind: "action", label: "Dark", icon: "moon", checked: theme.preference === "dark", run: () => theme.set("dark") }];
 }
 
-function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
+function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
   const port = rt.port;
   // Eye makeup is the only authoring category so far; with nothing to choose, it is a label, not a menu.
   const category = h("span", { class: "category", title: "Authoring category: eye makeup" },
@@ -216,6 +229,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
   const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
+  const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
+  for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton]] as const)
+    rt.anchors.register(anchor, control);
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", title: "Panels and layout", onClick: event => {
     const dock = rt.dock;
     openMenu([{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },
@@ -235,7 +251,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
-    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, panelsButton, themeButton));
+    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, panelsButton, themeButton));
   return {
     element,
     bindPalette(open: () => void) { palette.onclick = open; },

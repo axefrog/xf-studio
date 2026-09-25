@@ -2,7 +2,7 @@ import { group, split, type DockState, type DockTree, type PanelId, type SizeCla
 
 /** Stable panel IDs. Adding a panel later appends it beside its default siblings on restore. */
 export const PANEL_IDS = ["presets", "layers", "history", "library", "package", "head", "uv", "finish", "shape",
-  "edge", "warp", "character", "lighting", "motion", "quality", "activity"] as const satisfies readonly PanelId[];
+  "edge", "warp", "character", "lighting", "motion", "quality", "activity", "help"] as const satisfies readonly PanelId[];
 export type StudioPanelId = typeof PANEL_IDS[number];
 
 /**
@@ -19,7 +19,7 @@ export function defaultWide(): DockTree {
     group(["head"], "head", "g-head"),
     split("column", [group(["uv"], "uv", "g-uv"),
       group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")], [.42, .58], "s-right"),
-  ], [.21, .37, .42], "s-root"), closed: ["activity"] };
+  ], [.21, .37, .42], "s-root"), closed: ["activity", "help"] };
 }
 /** Compact workspaces: head and UV map side by side on top; two tab groups share the lower part. */
 export function defaultCompact(): DockTree {
@@ -28,8 +28,13 @@ export function defaultCompact(): DockTree {
     split("row", [group(["layers", "history", "presets", "library", "package"], "layers", "g-stack"),
       group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")],
     [.42, .58], "s-lower"),
-  ], [.56, .44], "s-root"), closed: ["activity"] };
+  ], [.56, .44], "s-root"), closed: ["activity", "help"] };
 }
+/**
+ * Where a panel that is closed by default opens (beside the first of these that is open). Help
+ * reads beside the inspectors rather than covering the head or the collection.
+ */
+export const CLOSED_PANEL_HOMES: Readonly<Partial<Record<StudioPanelId, readonly StudioPanelId[]>>> = { help: ["finish", "layers"] };
 export function defaultDockState(): DockState { return { wide: defaultWide(), compact: defaultCompact() }; }
 export const COMPACT_BREAKPOINT = 1100;
 export const sizeClassFor = (width: number): SizeClass => width >= COMPACT_BREAKPOINT ? "wide" : "compact";

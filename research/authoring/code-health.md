@@ -158,6 +158,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
+- **Guidance: tours, spotlights and Help** (claude/guidance). Presentation modules in `src/studio-ui/guidance/`: `anchors.ts` (typed anchor catalogue and `AnchorRegistry` on `StudioRuntime`), `engine.ts` (DOM-free `GuidanceService`, `guidance.*` actions), `tours.ts` and `help-topics.ts` (data), `content.ts` and `render.ts` (markdown-lite), `placement.ts`, `overlay.ts` (spotlight and callout), `controller.ts` (shell wiring, onboarding offer, Esc) and `help-panel.ts` (the new `help` dock panel). Core touch points: `UIPreferences.tours` (`tours.record`), the `port.links` surface with `project-links.ts` (both hosts open only named pages), the `shell.help` (F1) and `tour.*` key bindings, and the dock's homes for panels closed by default. Tests: `tests/guidance.test.ts`.
+
 - **Lighting presets and the grading-LUT host** (claude/creator-lighting). Domain: `creator-lighting.ts` (rig tables, falloff, intensity, camera pages), `grading-lut.ts` (display transform, LUT decode, selection by archive precedence), `creator-calibration.ts`. Three adapters: `creator-lighting-rig.ts`, `creator-display.ts` (render-target pass that replaces the studio stage's tone mapping while the preset shows), `lighting-preset-stage.ts` (hooked into `scene.ts`'s render loop). Host: `grading-lut-host.ts` (new `/api/preview-grading-lut` endpoint and `/assets/grading-lut/` files on both hosts; runs WolvenKit outside the resolver's trimmed JSON cache). Browser device: `browser-grading-lut-device.ts`. Actions: `preview.setLightingPreset`, `preview.setCreatorLighting`, `camera.creatorFraming`. (Last reviewed at `ac251d8`.)
 
 ## Fixed in claude/cleanup-hygiene

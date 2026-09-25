@@ -7,12 +7,13 @@ import { keyBinding, type KeyEvent } from "../input-bindings";
  * Letter keys are compared case-insensitively (Caps Lock and Shift report "Z"); Undo/Redo
  * never act inside text inputs, where native text editing wins.
  */
-export type StudioShortcut = "palette" | "save" | "undo" | "redo" | "regions" | "regions-back" | "help";
+export type StudioShortcut = "palette" | "save" | "undo" | "redo" | "regions" | "regions-back" | "help" | "guide";
 export type ShortcutKey = KeyEvent;
 
 const COMMANDS: Record<string, StudioShortcut> = {
   "shell.palette": "palette", "shell.save": "save", "shell.undo": "undo", "shell.redo": "redo",
   "shell.regions": "regions", "shell.regions-back": "regions-back", "shell.shortcuts": "help",
+  "shell.help": "guide",
 };
 
 export function studioShortcut(event: ShortcutKey, context: { textInput: boolean; modalOpen: boolean }): StudioShortcut | undefined {

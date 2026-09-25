@@ -4,7 +4,7 @@ import type { CollectionTransport } from "./collection-service";
 import type { SavedAppearanceState } from "./saved-appearance-actions";
 import type { SavedV } from "./save-reader";
 import { StudioFileOperations, type StudioFilePort } from "./studio-file-operations";
-import { createStudioPresentation, type StudioPresentationPort } from "./studio-presentation";
+import { createStudioPresentation, type ProjectLinkPort, type StudioPresentationPort } from "./studio-presentation";
 import type { PresentationStatusSource } from "./presentation-status";
 import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { UIPreferenceActions } from "./ui-preferences";
@@ -32,6 +32,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   installDetection?: InstallDetectionActions;
   /** The 3D preview setup service the presentation drives (card, consent, head pane). */
   previewSetup?: PreviewSetupActions;
+  /** Opens XF Studio's own public pages for the Help view. */
+  links?: ProjectLinkPort;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -71,7 +73,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, previewSetup: options.previewSetup });
+    localSetup: options.localSetup, installDetection: options.installDetection, previewSetup: options.previewSetup,
+    links: options.links });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

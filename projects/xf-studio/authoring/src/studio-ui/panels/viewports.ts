@@ -83,6 +83,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
     h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, surface, wire, idle)),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
   port.viewport.attach("head", slot);
+  rt.anchors.register("head.view", element);
   contextMenuGate("head", slot, event => viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {
     if (event.target !== element || isTextInput(event.target)) return;
@@ -170,6 +171,7 @@ export function uvPanel(rt: StudioRuntime): PanelController {
     h("div", { class: "viewport-top" }, warning), h("div", { class: "viewport-bottom" }, hints.strip));
   element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), stage, hints.tip);
   port.viewport.attach("uv", slot);
+  rt.anchors.register("uv.canvas", stage);
   let hintsShown: boolean | undefined;
   contextMenuGate("uv", slot, event => viewportMenu(rt, "uv", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {

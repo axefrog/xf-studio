@@ -145,6 +145,8 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     section("Finish", finishGroup, description, exportLine),
     shiftSection, glitterSection, classicSection, irregularSection, directSection);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
+  rt.anchors.register("finish.picker", finishGroup);
+  rt.anchors.register("finish.color", color.element);
   return {
     spec: { id: "finish", ...PANEL_META["finish"], element },
     update(frame) {

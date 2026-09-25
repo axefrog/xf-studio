@@ -80,6 +80,8 @@ export function layersPanel(rt: StudioRuntime): PanelController {
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
     noPreset, empty, list.element,
     note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
+  rt.anchors.register("layers.add", add);
+  rt.anchors.register("layers.list", list.element);
   return {
     spec: { id: "layers", ...PANEL_META["layers"], element },
     update(frame) {
