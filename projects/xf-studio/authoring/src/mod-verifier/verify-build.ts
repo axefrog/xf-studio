@@ -16,6 +16,14 @@
 // as YAML from the same bytes it hashes, and the plate inputs are re-hashed at the
 // end against the provenance recorded at the start.
 //
+// Routes are re-derived, not trusted: each preset's route comes from its packaged recipe under the
+// verifier's own restated finish rules (resource-checks.ts), and the builder's plan and compiled
+// records must name that same route. When the host passes the packaged collection it prepared,
+// every recipe in the build record must equal it.
+//
+// WolvenKit runs through injected tools: hosts supply the shared runner's adapter
+// (src/verifier-wolvenkit.ts), which keeps process mechanics out of this directory.
+//
 // Differences from verify.py, all deliberate:
 // - Base-map inputs are the baked raw maps, checked against the build record's
 //   SHA-256, instead of PNG copies written by the builder.
@@ -27,13 +35,12 @@
 // - The work directory must start empty, so stale files cannot be counted.
 // Dynamic expansion checks model inspected ArchiveXL rules; they do not run the game.
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { readDdsChain, type DdsKind } from "./dds-reader";
 import { resourceRecords, type ResourceFile } from "./resource-inventory";
 import { checkArchiveXl, checkResources, ensure, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError, type Node,
-  type VerifierPlan } from "./resource-checks";
+  type VerifierPlan, type VerifierRoute } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 
@@ -51,10 +58,10 @@ export interface VerifierTools {
 export interface VerifyBuildOptions {
   /** Intermediate build directory containing build.json. */
   readonly build: string;
-  /** WolvenKit.CLI executable the verifier runs itself. */
-  readonly wolvenkit: string;
-  /** Game folder that WolvenKit's `export` command requires; read only. */
-  readonly gamepath?: string;
+  /** The verifier's WolvenKit operations (src/verifier-wolvenkit.ts, or a test fake). */
+  readonly tools: VerifierTools;
+  /** The packaged (filtered) collection the host prepared; every recipe in the build record must equal it. */
+  readonly packagedCollection?: unknown;
   /** Empty or absent directory for the verifier's own files; defaults to <build>/verify. */
   readonly workDir?: string;
   /**
@@ -64,8 +71,6 @@ export interface VerifyBuildOptions {
   readonly plate?: { readonly mesh: string; readonly morph: string; readonly meshSha256?: string; readonly morphSha256?: string };
   /** Morph target count from the plate recipe; absent accepts the source plate's own count. */
   readonly morphTargets?: number;
-  /** Test seam for the WolvenKit operations. */
-  readonly tools?: Partial<VerifierTools>;
 }
 
 export const VERIFICATION_LIMITS: readonly string[] = [
@@ -90,6 +95,8 @@ export interface VerificationReport {
     premultipliedSurfaceError: { roughness: ErrorStats; metalness: ErrorStats }; route?: "faceted"; normalError?: ErrorStats;
   } | { preset: string; route: "fresnel"; coveredTexels: number; coverageError: ErrorStats; outsideCoverageMax: number; gradientError: ErrorStats })[];
   decodedMipChecks: { preset: string; levels: MipRow[] }[];
+  /** Each preset's route, re-derived from its recipe and matched by the plan, the compiled record and the resources. */
+  presetRoutes: { id: string; route: VerifierRoute }[];
   /** SHA-256 of the `.archive.xl` bytes that were parsed and checked. */
   archiveXlSha256: string;
   /** Plate input hashes, equal at the start and the end of verification. */
@@ -201,7 +208,7 @@ function checkFresnelTextures(build: string, record: Node, preset: VerifierPlan[
 
 function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], exported: Exported) {
   const route = routeOf(preset);
-  ensure((record.route ?? "flat") === route, `Compiled record for ${preset.appearance} is ${record.route}, planned ${route}`);
+  ensure(record.route === route, `Compiled record for ${preset.appearance} is ${record.route ?? "missing its route"}, but its recipe needs the ${route} route`);
   if (route === "fresnel") return checkFresnelTextures(build, record, preset, exported);
   const size: number = record.size, name = preset.appearance, raw = readBaked(build, record);
   ensure(raw.diffuse && raw.roughness && raw.metalness, `Build record for ${name} lacks a base map`);
@@ -274,22 +281,6 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
   return { pixel, mips: { preset: preset.name, levels } };
 }
 
-function defaultTools(wolvenkit: string, gamepath: string | undefined): VerifierTools {
-  const run = (label: string, args: string[]): ToolResult => {
-    const result = spawnSync(wolvenkit, args, { encoding: "utf8", timeout: 240_000, windowsHide: true, maxBuffer: 64 << 20 });
-    if (result.error) throw new VerificationError(`WolvenKit ${label} could not run: ${result.error.message}`);
-    return { exitCode: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
-  };
-  return {
-    unbundle: (archive, output) => run("unbundle", ["unbundle", archive, "-o", output]),
-    serialize: (input, output) => run("serialize", ["convert", "serialize", input, "-o", output]),
-    exportTextures: (input, output) => {
-      ensure(gamepath && existsSync(gamepath) && statSync(gamepath).isDirectory(), "WolvenKit texture export needs the game folder (--gamepath).");
-      return run("export", ["export", input, "-o", output, "--uext", "dds", "--gamepath", gamepath!]);
-    },
-  };
-}
-
 /** Plate input files and their hashes: the caller's, else the build record's; both must agree. */
 function plateInputs(build: Node, options: VerifyBuildOptions) {
   const recorded: Node[] = Array.isArray(build.plateInputs) ? build.plateInputs : [];
@@ -312,10 +303,9 @@ function plateInputs(build: Node, options: VerifyBuildOptions) {
 
 /** Verify one intermediate build; throws VerificationError on the first failed check. */
 export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
-  const out = resolve(options.build), wolvenkit = resolve(options.wolvenkit);
-  const injected = options.tools ?? {};
-  ensure((injected.unbundle && injected.serialize && injected.exportTextures) || isFile(wolvenkit), `WolvenKit is missing: ${wolvenkit}`);
-  const tools: VerifierTools = { ...defaultTools(wolvenkit, options.gamepath && resolve(options.gamepath)), ...injected };
+  const out = resolve(options.build), tools = options.tools;
+  ensure(tools && typeof tools.unbundle === "function" && typeof tools.serialize === "function" && typeof tools.exportTextures === "function",
+    "The verifier needs its WolvenKit tools");
   ensure(existsSync(join(out, "build.json")), `Build manifest is missing: ${out}`);
   const build = readJson(join(out, "build.json")), plan: VerifierPlan = build.plan;
   const work = resolve(options.workDir ?? join(out, "verify"));
@@ -343,6 +333,19 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   const records: Node[] = build.compiled;
   ensure(Array.isArray(records) && records.length === plan.presets.length, "Build record does not list one compiled record per preset");
   records.forEach((record, i) => ensure(record.id === plan.presets[i].id, `Compiled record ${i} does not match preset ${plan.presets[i].id}`));
+  // Routes before any conversion: the recipe decides, and the plan and compiled record must agree.
+  if (options.packagedCollection !== undefined) {
+    const source = options.packagedCollection as Node;
+    ensure(Array.isArray(source?.presets) && source.presets.length === plan.presets.length,
+      "Build record does not list the presets of the packaged collection");
+    plan.presets.forEach((preset, i) => ensure(source.presets[i]?.id === preset.id && sameJson(source.presets[i].recipe, preset.recipe),
+      `Build record's recipe for preset ${preset.name} differs from the packaged collection`));
+  }
+  const presetRoutes = plan.presets.map((preset, i) => {
+    const route = routeOf(preset);
+    ensure(records[i].route === route, `Compiled record for ${preset.appearance} is ${records[i].route ?? "missing its route"}, but its recipe needs the ${route} route`);
+    return { id: preset.id, route };
+  });
 
   // Archive and declaration: hash exactly the bytes that are unbundled and parsed.
   const packageDir = join(out, "package", "archive", "pc", "mod");
@@ -416,7 +419,7 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     materialTemplates: summary.materialTemplates, textureCount: plan.presets.reduce((n, p) => n + Object.keys(p.textures).length, 0),
     archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
     modelBuffersUnchanged: true, resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
-    decodedMipChecks: mipResults, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
+    decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
     installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };
 }

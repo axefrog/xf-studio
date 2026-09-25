@@ -1,4 +1,4 @@
-import { lstatSync, opendirSync, readFileSync } from "node:fs";
+import { lstatSync, opendirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
 import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
@@ -30,8 +30,12 @@ export interface SourceCandidate {
   readonly limitations: readonly string[];
 }
 
-/** A blocking issue makes the scan incomplete; a non-blocking one records MO2's own deterministic handling. */
-export interface SourceIssue { readonly code: string; readonly detail: string; readonly blocking: boolean }
+/**
+ * A blocking issue makes the scan incomplete; a non-blocking one records MO2's own deterministic handling.
+ * `mayHideSources` is false only when the issue concerns one skipped entry known not to be (or hold) an
+ * archive, `.xl` or modlist file, e.g. a symbolic link to a text file.
+ */
+export interface SourceIssue { readonly code: string; readonly detail: string; readonly blocking: boolean; readonly mayHideSources?: boolean }
 export interface LooseFileAssessment {
   readonly virtualPath: string;
   readonly contenders: readonly SourceCandidate[];
@@ -130,7 +134,15 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
         let stat;
         try { stat = lstatSync(path); }
         catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
-        if (stat.isSymbolicLink()) { issue("symlink_skipped", `${provider} symbolic link was skipped.`); continue; }
+        if (stat.isSymbolicLink()) {
+          // Links are never followed; only the target's type is read, to tell whether it could hold sources.
+          let directory = true;
+          try { directory = statSync(path).isDirectory(); } catch { /* A broken link is judged by its name. */ }
+          const sourceLike = directory || kindOf(prefix + portable(relative(absoluteRoot, path))) !== null;
+          issues.push({ code: "symlink_skipped", detail: `${provider} symbolic link was skipped.`, blocking: true, mayHideSources: sourceLike });
+          complete = false;
+          continue;
+        }
         if (stat.isDirectory()) {
           // MO2's virtual filesystem hides configured directory names (e.g. `.git`) inside mods and overwrite.
           if (provider.startsWith("mo2-") && skipDirectories.includes(name.toLowerCase())) continue;

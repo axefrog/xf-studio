@@ -38,6 +38,9 @@ export const SUPPORTED_WOLVENKIT_VERSIONS = ["8.17.4", "9.0.1"] as const;
 const RUNTIME_EXIT_CODES = new Set([0x80008096, 0x80008096 - 2 ** 32, 0x80008083, 0x80008083 - 2 ** 32]);
 const RUNTIME_MESSAGE = /You must install (?:or update )?\.NET|The framework '[^']+', version '[^']+' .*was not found|A fatal error occurred\. The folder \[.*host.fxr\] does not exist/i;
 
+/** The shared plain message for a missing .NET runtime. */
+export const WOLVENKIT_RUNTIME_MISSING_MESSAGE = "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer.";
+
 /** Did this run fail because the .NET runtime WolvenKit needs is missing? */
 export const isRuntimeMissing = (exitCode: number | null, output: string) =>
   (exitCode !== null && RUNTIME_EXIT_CODES.has(exitCode)) || RUNTIME_MESSAGE.test(output);
@@ -60,14 +63,31 @@ export function classifyWolvenKitRun(label: string, result: ProcessTreeResult, o
   return run;
 }
 
+const runLabel = (cli: string, args: readonly string[]) => `${basename(cli)} ${args.slice(0, args[0] === "convert" ? 2 : 1).join(" ")}`.trim();
+
 /** Run one WolvenKit command; abort or timeout stops the whole process tree. */
 export async function runWolvenKit(cli: string | null, args: readonly string[], options: WolvenKitRunOptions): Promise<WolvenKitRun> {
   if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit CLI isn't available.");
-  const label = `${basename(cli)} ${args.slice(0, args[0] === "convert" ? 2 : 1).join(" ")}`.trim();
+  const label = runLabel(cli, args);
   if (options.signal?.aborted) throw new WolvenKitRunError("cancelled", `${label} was cancelled.`);
   const result = await runProcessTree(cli, args, { signal: options.signal, timeoutMs: options.timeoutMs, cwd: options.cwd,
     env: options.env ? { ...process.env, ...options.env } : undefined, keep: options.keep ?? 64_000 });
   return classifyWolvenKitRun(label, result, options);
+}
+
+/**
+ * Blocking form of `runWolvenKit` for synchronous callers (the independent verifier) with the same success
+ * policy and typed errors. It cannot be cancelled; the time limit stops WolvenKit itself (not grandchildren,
+ * which WolvenKit CLI does not start).
+ */
+export function runWolvenKitSync(cli: string | null, args: readonly string[], options: Omit<WolvenKitRunOptions, "signal">): WolvenKitRun {
+  if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit CLI isn't available.");
+  const keep = options.keep ?? 64_000;
+  const result = spawnSync(cli, [...args], { cwd: options.cwd, env: options.env ? { ...process.env, ...options.env } : undefined,
+    encoding: "utf8", timeout: options.timeoutMs, windowsHide: true, maxBuffer: 256 << 20 });
+  const timedOut = (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+  return classifyWolvenKitRun(runLabel(cli, args), { exitCode: timedOut ? null : result.status, stdout: (result.stdout ?? "").slice(-keep),
+    stderr: (result.stderr ?? "").slice(-keep), stopped: timedOut ? "timeout" : null, ...(result.error && !timedOut ? { error: result.error } : {}) }, options);
 }
 
 /** Identity of one WolvenKit installation, read from its files: the version resource and a hash of its entry points. */
@@ -120,7 +140,7 @@ type ProbeOutput = { status: number | null; text: string; failed: boolean };
 function judgeProbe(version: ProbeOutput, help: () => ProbeOutput | Promise<ProbeOutput>): WolvenKitProbeResult | Promise<WolvenKitProbeResult> {
   const found = new RegExp(`\\b(${SUPPORTED_WOLVENKIT_VERSIONS.map(value => value.replace(/\./g, "\\.")).join("|")})\\b`).exec(version.text);
   if (isRuntimeMissing(version.status, version.text))
-    return { ok: false, code: "runtime_missing", issue: "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer." };
+    return { ok: false, code: "runtime_missing", issue: WOLVENKIT_RUNTIME_MISSING_MESSAGE };
   if (version.failed || version.status !== 0 || !found)
     return { ok: false, code: "unsupported", issue: `WolvenKit CLI must be a verified ${SUPPORTED_WOLVENKIT_VERSIONS.join(" or ")} installation.` };
   const judge = (output: ProbeOutput): WolvenKitProbeResult => output.failed || output.status !== 0 ||

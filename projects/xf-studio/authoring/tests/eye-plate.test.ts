@@ -201,7 +201,7 @@ test("the service derives, verifies, caches and reuses the plate", () => withDir
   calls.length = 0;
   const second = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe, calls) });
   expect(second.reused).toBe(true);
-  expect(calls).toEqual(["extract"]); // A cache hit only re-reads and hashes the game source.
+  expect(calls).toEqual([]); // Unchanged inputs reuse the verified plate without reading the head again.
   // A damaged cache entry is detected by its manifest hashes and rebuilt.
   writeFileSync(first.meshFile, "damaged");
   const repaired = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });

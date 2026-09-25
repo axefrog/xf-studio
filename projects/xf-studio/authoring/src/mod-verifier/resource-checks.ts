@@ -21,11 +21,27 @@ export type VerifierChannel = "diffuse" | "roughness" | "metalness" | "normal" |
 export interface VerifierPreset {
   readonly id: string; readonly name: string; readonly index: number;
   readonly appearance: string; readonly appAppearance: string;
-  /** Absent in builds made before the faceted and Fresnel routes: those are flat `@preset` presets. */
-  readonly route?: VerifierRoute; readonly material?: string;
-  readonly recipe?: Node;
+  /** The builder's route and material entry; both must agree with the route re-derived from `recipe`. */
+  readonly route: VerifierRoute; readonly material: string;
+  /** The packaged (filtered) recipe the preset was compiled from. */
+  readonly recipe: Node;
   readonly textures: Partial<Record<VerifierChannel, string>>;
 }
+
+/**
+ * The published per-finish export rules, restated here on purpose instead of imported from the
+ * builder's policy (src/finish-export.ts): `route` is the route that carries the finish (null when
+ * none can), `gameOptics` that only its game-matched model exports. `satin` is the legacy name of
+ * `regular`. tests/mod-verifier-routes.test.ts fails if this table and the builder's disagree.
+ */
+export const VERIFIER_FINISHES: Readonly<Record<string, { readonly route: VerifierRoute | null; readonly gameOptics: boolean }>> = {
+  matte: { route: "flat", gameOptics: false }, regular: { route: "flat", gameOptics: false }, satin: { route: "flat", gameOptics: false },
+  metallic: { route: "flat", gameOptics: false }, glossy: { route: "flat", gameOptics: true },
+  shimmer: { route: "faceted", gameOptics: true }, iridescent: { route: "fresnel", gameOptics: true },
+  glitter: { route: null, gameOptics: false },
+};
+const finishRule = (finish: unknown) => typeof finish === "string" && Object.hasOwn(VERIFIER_FINISHES, finish) ? VERIFIER_FINISHES[finish] : undefined;
+const GAME_MODEL = "game-matched-1";
 
 /** The published per-route resource specification, restated here independently of the builder. */
 export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: readonly (readonly [string, VerifierChannel])[] }> = {
@@ -36,8 +52,36 @@ export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: rea
   fresnel: { template: "base/materials/mesh_decal_gradientmap_recolor_blendable.mt",
     textures: [["MaskTexture", "mask"], ["GradientMap", "gradient"]] },
 };
-export const routeOf = (preset: VerifierPreset): VerifierRoute => preset.route ?? "flat";
-export const materialOf = (preset: VerifierPreset): string => preset.material ?? "@preset";
+/**
+ * The route a preset's own recipe requires, re-derived with the restated rules: every active layer must
+ * have a route (and its game-matched model where the finish has one); a colour shift means the Fresnel
+ * route with one pigment and nothing else; otherwise any Shimmer means faceted; otherwise flat.
+ */
+export function expectedRoute(preset: VerifierPreset): VerifierRoute {
+  const layers = activeLayers(preset), routes = new Set<VerifierRoute>();
+  ensure(layers.length > 0, `Preset ${preset.name} has no active layer`);
+  for (const layer of layers) {
+    const rule = finishRule(layer.finish);
+    ensure(rule?.route, `Preset ${preset.name} packages a ${String(layer.finish)} layer, which no export route can draw`);
+    ensure(!rule.gameOptics || layer.optics?.model === GAME_MODEL, `Preset ${preset.name} packages a ${layer.finish} layer without its game-matched model`);
+    ensure(rule.route !== "faceted" || !(layer.flakes && typeof layer.flakes === "object" && "model" in layer.flakes),
+      `Preset ${preset.name} packages a Shimmer layer without the classic flake settings`);
+    routes.add(rule.route);
+  }
+  if (routes.has("fresnel")) { fresnelPigment(preset); return "fresnel"; }
+  return routes.has("faceted") ? "faceted" : "flat";
+}
+/** The builder's route for a preset, which must equal the route its recipe requires. A missing route is not flat. */
+export function routeOf(preset: VerifierPreset): VerifierRoute {
+  ensure(typeof preset.route === "string" && Object.hasOwn(ROUTE_SPEC, preset.route), `Build record names no export route for preset ${preset.name}`);
+  const expected = expectedRoute(preset);
+  ensure(preset.route === expected, `Preset ${preset.name} was built for the ${preset.route} route, but its recipe needs the ${expected} route`);
+  return expected;
+}
+export const materialOf = (preset: VerifierPreset): string => {
+  ensure(typeof preset.material === "string", `Build record names no material entry for preset ${preset.name}`);
+  return preset.material;
+};
 /** XBM import settings each channel must carry. */
 export const CHANNEL_SETUP: Record<VerifierChannel, { isGamma: 0 | 1; compression: string }> = {
   diffuse: { isGamma: 1, compression: "TCM_QualityColor" }, gradient: { isGamma: 1, compression: "TCM_QualityColor" },
@@ -53,12 +97,18 @@ const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 const sameFloat32 = (actual: unknown, want: number) => typeof actual === "number" && Math.abs(actual - Math.fround(want)) <= 1e-7 * Math.max(1, Math.abs(want));
 const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
 
+/** Active layers of a preset's packaged recipe. */
+function activeLayers(preset: VerifierPreset): Node[] {
+  ensure(Array.isArray(preset.recipe?.layers), `Build record lacks the recipe of preset ${preset.name}`);
+  return preset.recipe.layers.filter((l: Node) => l && l.enabled && l.opacity > 0);
+}
+
 /** The one colour-shift pigment of a Fresnel preset, read from its recipe: base colour, shift colour and strength. */
 export function fresnelPigment(preset: VerifierPreset): { color: string; shift: { color: string; strength: number } } {
-  const layers: Node[] = (preset.recipe?.layers ?? []).filter((l: Node) => l.enabled && l.opacity > 0);
+  const layers = activeLayers(preset);
   ensure(layers.length > 0, `Fresnel preset ${preset.name} has no active layer`);
   const keys = new Set(layers.map(l => JSON.stringify([String(l.color).toLowerCase(), String(l.optics?.shift?.color).toLowerCase(), l.optics?.shift?.strength])));
-  ensure(keys.size === 1 && layers.every(l => l.finish === "iridescent" && l.optics?.model === "game-matched-1"),
+  ensure(keys.size === 1 && layers.every(l => finishRule(l.finish)?.route === "fresnel" && l.optics?.model === GAME_MODEL && l.optics.shift),
     `Fresnel preset ${preset.name} is not one colour-shift pigment`);
   return { color: layers[0].color, shift: layers[0].optics.shift };
 }

@@ -1,10 +1,13 @@
 import { parseCollection, type PresetCollection } from "./preset-collection";
 import type { PackageExperimental, PackageOmission } from "./package-filter";
 import type { EyePlateHeadRecord } from "./eye-plate-head-source";
+import type { ExportRoute } from "./finish-export";
 
 export type PackageAction = "check" | "build";
+/** A packaged preset's stable identity and its export route (results from before routes were recorded lack `route`). */
+export type PackagePresetIdentity = { id: string; revision: number; appearance: string; route?: ExportRoute };
 /** `modName`/`selectorLabel` come from the shared mod-branding module via the export plan. */
-export type PackageCheck = { ready: true; collectionId: string; namespace: string; modName: string; selectorLabel: string; presets: { id: string; revision: number; appearance: string }[];
+export type PackageCheck = { ready: true; collectionId: string; namespace: string; modName: string; selectorLabel: string; presets: PackagePresetIdentity[];
   originalPresetCount: number; omissions: PackageOmission[]; packagedCollectionSha256: string;
   /** Included layers whose finish adapter still needs in-game confirmation. */
   experimental?: PackageExperimental[] };

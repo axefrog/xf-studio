@@ -26,7 +26,8 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
 /**
  * `plate` is empty unless the hidden `XFS_PACKAGE_PLATE` developer override names a plate directory;
  * otherwise Build derives the built-in eye plate into `plateCache` (host-owned, ignored storage) from the
- * head that `route` loads. `headOverride` is the `XFS_EYE_PLATE_HEAD=base-game` escape hatch.
+ * head that `route` loads. `headOverride` comes from the Local setup choice `eyePlateHead` (or the
+ * `XFS_EYE_PLATE_HEAD=base-game` developer override).
  */
 export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
   route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
@@ -47,7 +48,7 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
     gamepath: configured.gamepath || "",
     route: { launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
       manualModRoot: settings.manualModRoot },
-    headOverride: eyePlateHeadOverride(env),
+    headOverride: eyePlateHeadOverride(env, settings.eyePlateHead),
   };
 }
 
@@ -162,7 +163,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
             JSON.stringify(checked.presets) !== JSON.stringify(plan.presets.map(p =>
-              ({ id: p.id, revision: p.revision, appearance: p.appearance }))))
+              ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }))))
           throw Error("Package preflight returned a different collection identity.");
         return json(checked);
       }

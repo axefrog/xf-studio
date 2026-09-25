@@ -15,7 +15,7 @@
 //             of one colour-shift pigment only.
 //
 // Glitter has no route: no stock template can show individual sub-pixel glints.
-import { canonicalFinish, type Finish } from "./finish";
+import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import type { GameOptics, Layer, Recipe } from "./recipe";
 
 export type ExportRoute = "flat" | "faceted" | "fresnel";
@@ -26,15 +26,6 @@ export const ROUTE_ADAPTER: Record<ExportRoute, ExportAdapterId> = {
 /** Local material template entry each route's presets bind to (`<appearance>@<entry>`). */
 export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, string> = { flat: "@preset", faceted: "@faceted" };
 
-/** Constant surface values for finishes that carry no per-texel optical map. */
-export const FLAT_SURFACE: Readonly<Record<"matte" | "regular" | "metallic" | "glossy", { roughness: number; metalness: number }>> = {
-  matte: { roughness: .88, metalness: 0 },
-  regular: { roughness: .38, metalness: 0 },
-  metallic: { roughness: .27, metalness: .65 },
-  // One G-buffer lobe: a low-roughness dielectric. The engine clamps roughness at 0.04 and
-  // fixes dielectric F0 at 0.04, so gloss can only sharpen the skin's own reflection.
-  glossy: { roughness: .12, metalness: 0 },
-};
 /** Colour-shifting base surface: a soft, slightly metallic sheen under the Fresnel tint. */
 export const FRESNEL_SURFACE = { roughness: .32, metalness: .25 } as const;
 /** Shift strength 1 maps to this FresnelColorIntensity (before scaling by the colour's peak channel). */
@@ -50,36 +41,84 @@ export type LayerExport =
   | { exportable: true; route: ExportRoute; adapter: ExportAdapterId; experimental: boolean; note: string }
   | { exportable: false; reason: string };
 
+type FinishId = ReturnType<typeof canonicalFinish>;
+type Surface = { readonly roughness: number; readonly metalness: number };
+/** One row of the per-finish export table. */
+export interface FinishExportRule {
+  /** The finish has a game-matched optics model, and only that model exports; earlier preview models stay preview-only. */
+  readonly gameOptics: boolean;
+  /** Route that carries an exportable layer; null when no stock material can draw the finish. */
+  readonly route: ExportRoute | null;
+  /** Built from the game's own materials but not yet confirmed in game. */
+  readonly experimental: boolean;
+  /** Constant roughness and metalness of a flat-route finish (no per-texel optical map). */
+  readonly surface?: Surface;
+  /** Check's note on an included layer. */
+  readonly layerNote: string;
+  /** The finish catalogue's summary of its export status. */
+  readonly summary: string;
+  /** What a layer's earlier preview model did, named when it cannot be exported. */
+  readonly earlierModel?: string;
+  /** Why no layer with this finish can be exported. */
+  readonly refusal?: string;
+}
+
+const FLAT_NOTE = "Flat colour with provisional roughness and metalness.";
+const FLAT_SUMMARY = "Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet.";
+/**
+ * The single per-finish export table: game-optics support, route, surface and user-facing notes. The
+ * catalogue, recipe validation, preview surfaces and compiler derive from it. The independent verifier
+ * restates it on purpose (mod-verifier/resource-checks.ts); a test fails if the two disagree.
+ */
+export const FINISH_EXPORT = {
+  matte: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .88, metalness: 0 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
+  regular: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .38, metalness: 0 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
+  metallic: { gameOptics: false, route: "flat", experimental: false, surface: { roughness: .27, metalness: .65 }, layerNote: FLAT_NOTE, summary: FLAT_SUMMARY },
+  // One G-buffer lobe: a low-roughness dielectric. The engine clamps roughness at 0.04 and
+  // fixes dielectric F0 at 0.04, so gloss can only sharpen the skin's own reflection.
+  glossy: { gameOptics: true, route: "flat", experimental: true, surface: { roughness: .12, metalness: 0 },
+    layerNote: "Experimental single-lobe gloss: one smooth reflection, no separate clear coat. Needs in-game confirmation.",
+    summary: "Experimental: exports as one smooth reflection (the game has no separate clear coat). Not yet tested in game.",
+    earlierModel: "a separate clear coat" },
+  shimmer: { gameOptics: true, route: "faceted", experimental: true,
+    layerNote: "Experimental facet normals over the skin normal; fine facets merge into a broader sheen at distance. Needs in-game confirmation.",
+    summary: "Experimental: exports as fine facet normals that merge into a sheen at distance. Not yet tested in game.",
+    earlierModel: "browser-only facet filtering" },
+  iridescent: { gameOptics: true, route: "fresnel", experimental: true,
+    layerNote: "Experimental two-tone Fresnel tint: one shift colour added toward grazing angles. Needs in-game confirmation.",
+    summary: "Experimental: exports as a two-tone Fresnel tint when the whole preset is one colour-shift pigment. Not yet tested in game.",
+    earlierModel: "a fixed thin-film study with no chosen shift colour" },
+  glitter: { gameOptics: false, route: null, experimental: false, layerNote: "",
+    summary: "Preview only for now. Check and Build leave out layers with this finish and tell you which.",
+    refusal: "No game material can show individual glitter flakes yet, so Glitter stays preview-only." },
+} as const satisfies Record<FinishId, FinishExportRule>;
+
+/** Export rule of a finish (the legacy `satin` reads as Satin, `regular`). */
+export const finishExportRule = (finish: Finish): FinishExportRule => FINISH_EXPORT[canonicalFinish(finish)];
+/** Constant surface of a flat-route finish; undefined for finishes with per-texel optics or no route. */
+export const flatSurface = (finish: Finish): Surface | undefined => finishExportRule(finish).surface;
+/** The finish has a game-matched optics model (recipe validation, finish actions and export read this). */
+export const hasGameOptics = (finish: Finish): boolean => finishExportRule(finish).gameOptics;
+
 const gameModel = (layer: Pick<Layer, "optics">): layer is { optics: GameOptics } => layer.optics?.model === "game-matched-1";
-const earlierModel = (label: string, what: string) =>
-  `This layer uses the earlier ${label} preview (${what}), which the game cannot draw. Switch it to the game-matched model in the Finish panel to include it.`;
+const capitalised = (finish: Finish) => { const name = finishLabel(finish); return name[0].toUpperCase() + name.slice(1); };
+const earlierModel = (finish: Finish, what: string) =>
+  `This layer uses the earlier ${capitalised(finish)} preview (${what}), which the game cannot draw. Switch it to the game-matched model in the Finish panel to include it.`;
 
 /** Export status of one layer's finish, independent of the rest of its preset. */
 export function layerExport(layer: Pick<Layer, "finish" | "optics" | "flakes">): LayerExport {
+  const rule = finishExportRule(layer.finish);
+  if (!rule.route) return { exportable: false, reason: rule.refusal ?? "The game cannot draw this finish yet." };
+  if (rule.gameOptics && !gameModel(layer)) return { exportable: false, reason: earlierModel(layer.finish, rule.earlierModel ?? "a browser-only study") };
   const finish = canonicalFinish(layer.finish);
-  if (finish === "matte" || finish === "regular" || finish === "metallic")
-    return { exportable: true, route: "flat", adapter: ROUTE_ADAPTER.flat, experimental: false,
-      note: "Flat colour with provisional roughness and metalness." };
-  if (finish === "glossy") return gameModel(layer)
-    ? { exportable: true, route: "flat", adapter: ROUTE_ADAPTER.flat, experimental: true,
-      note: "Experimental single-lobe gloss: one smooth reflection, no separate clear coat. Needs in-game confirmation." }
-    : { exportable: false, reason: earlierModel("Glossy", "a separate clear coat") };
-  if (finish === "shimmer") {
-    if (!gameModel(layer)) return { exportable: false, reason: earlierModel("Shimmer", "browser-only facet filtering") };
-    if (layer.flakes && "model" in layer.flakes) return { exportable: false, reason: "Shimmer needs the classic flake settings." };
-    return { exportable: true, route: "faceted", adapter: ROUTE_ADAPTER.faceted, experimental: true,
-      note: "Experimental facet normals over the skin normal; fine facets merge into a broader sheen at distance. Needs in-game confirmation." };
-  }
-  if (finish === "iridescent") return gameModel(layer) && layer.optics.shift
-    ? { exportable: true, route: "fresnel", adapter: ROUTE_ADAPTER.fresnel, experimental: true,
-      note: "Experimental two-tone Fresnel tint: one shift colour added toward grazing angles. Needs in-game confirmation." }
-    : { exportable: false, reason: earlierModel("Colour-shifting", "a fixed thin-film study with no chosen shift colour") };
-  return { exportable: false, reason: "No game material can show individual glitter flakes yet, so Glitter stays preview-only." };
+  if (finish === "shimmer" && layer.flakes && "model" in layer.flakes) return { exportable: false, reason: "Shimmer needs the classic flake settings." };
+  if (finish === "iridescent" && !layer.optics?.shift) return { exportable: false, reason: earlierModel(layer.finish, rule.earlierModel ?? "no chosen shift colour") };
+  return { exportable: true, route: rule.route, adapter: ROUTE_ADAPTER[rule.route], experimental: rule.experimental, note: rule.layerNote };
 }
 
 const active = (layer: Pick<Layer, "enabled" | "opacity">) => layer.enabled && layer.opacity > 0;
 const fresnelKey = (layer: Layer) => JSON.stringify([layer.color.toLowerCase(), layer.optics?.shift?.color.toLowerCase(), layer.optics?.shift?.strength]);
-export const FRESNEL_PRESET_RULE = "Colour-shifting exports only when every active layer in the preset is Colour-shifting with the same colour, shift colour and strength: the game adds one shift tint to the whole preset.";
+export const FRESNEL_PRESET_RULE = "Colour-shifting exports only when every other layer the game can draw in this preset is Colour-shifting with the same colour, shift colour and strength: the game adds one shift tint to the whole preset.";
 
 export type PresetExportPlan = {
   route: ExportRoute;
@@ -89,7 +128,9 @@ export type PresetExportPlan = {
   excluded: { layer: Layer; reason: string }[];
 };
 
-/** Choose one route for a preset and split its active layers into included and excluded. */
+/** Choose one route for a preset and split its active layers into included and excluded.
+ * Layers no route can carry (Glitter, earlier preview models) are left out first; the
+ * colour-shift "one pigment" rule then applies to the layers that remain exportable. */
 export function planPresetExport(recipe: Pick<Recipe, "layers">): PresetExportPlan {
   const layers = recipe.layers.filter(active);
   const status = layers.map(layer => ({ layer, result: layerExport(layer) }));
@@ -99,22 +140,17 @@ export function planPresetExport(recipe: Pick<Recipe, "layers">): PresetExportPl
     if (result.exportable) exportable.push({ layer, route: result.route });
     else excluded.push({ layer, reason: result.reason });
   }
+  const order = new Map(layers.map((layer, i) => [layer, i]));
+  const sorted = () => excluded.sort((a, b) => order.get(a.layer)! - order.get(b.layer)!);
   const fresnel = exportable.filter(item => item.route === "fresnel");
   if (fresnel.length) {
-    const whole = fresnel.length === layers.length && new Set(fresnel.map(item => fresnelKey(item.layer))).size === 1;
-    if (whole) return { route: "fresnel", included: fresnel.map(item => item.layer), excluded: [] };
+    const whole = fresnel.length === exportable.length && new Set(fresnel.map(item => fresnelKey(item.layer))).size === 1;
+    if (whole) return { route: "fresnel", included: fresnel.map(item => item.layer), excluded: sorted() };
     for (const item of fresnel) excluded.push({ layer: item.layer, reason: FRESNEL_PRESET_RULE });
   }
   const included = exportable.filter(item => item.route !== "fresnel");
   const route: ExportRoute = included.some(item => item.route === "faceted") ? "faceted" : "flat";
-  const order = new Map(layers.map((layer, i) => [layer, i]));
-  excluded.sort((a, b) => order.get(a.layer)! - order.get(b.layer)!);
-  return { route, included: included.map(item => item.layer), excluded };
-}
-
-/** Route of an already-filtered preset (every active layer is carried); lenient for unfiltered input. */
-export function presetRoute(recipe: Pick<Recipe, "layers">): ExportRoute {
-  return planPresetExport(recipe).route;
+  return { route, included: included.map(item => item.layer), excluded: sorted() };
 }
 
 /** Texture channels each route writes per preset, in plan order. */
@@ -148,11 +184,6 @@ export type FresnelMaterial = ReturnType<typeof fresnelMaterial>;
 
 /** User-facing description of a finish's export status, shared by the catalogue and Check. */
 export function finishExportSummary(finish: Finish): { adapter: "flat-provisional" | "experimental" | "none"; note: string } {
-  const id = canonicalFinish(finish);
-  if (id === "matte" || id === "regular" || id === "metallic")
-    return { adapter: "flat-provisional", note: "Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet." };
-  if (id === "glossy") return { adapter: "experimental", note: "Experimental: exports as one smooth reflection (the game has no separate clear coat). Not yet tested in game." };
-  if (id === "shimmer") return { adapter: "experimental", note: "Experimental: exports as fine facet normals that merge into a sheen at distance. Not yet tested in game." };
-  if (id === "iridescent") return { adapter: "experimental", note: "Experimental: exports as a two-tone Fresnel tint when the whole preset is one colour-shift pigment. Not yet tested in game." };
-  return { adapter: "none", note: "Preview only for now. Check and Build leave out layers with this finish and tell you which." };
+  const rule = finishExportRule(finish);
+  return { adapter: !rule.route ? "none" : rule.experimental ? "experimental" : "flat-provisional", note: rule.summary };
 }

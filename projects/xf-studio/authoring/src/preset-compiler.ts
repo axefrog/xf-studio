@@ -4,14 +4,12 @@
  */
 import { canonicalFinish, defaultFlakes, bakeFlakes, type LegacyFlakes } from "./finish";
 import {
-  FLAT_SURFACE, fresnelMaterial, planPresetExport, ROUTE_ADAPTER,
+  flatSurface, fresnelMaterial, planPresetExport, ROUTE_ADAPTER,
   type ExportRoute, type TextureChannel,
 } from "./finish-export";
 import { parseRecipe, raster, type Layer, type Recipe } from "./recipe";
 
 export const DECAL_ADAPTER = ROUTE_ADAPTER.flat;
-/** Finishes the flat route always carries; game-matched Glossy joins them through finish-export.ts. */
-export const SUPPORTED_FLAT_FINISHES: readonly ReturnType<typeof canonicalFinish>[] = ["matte", "regular", "metallic"];
 export const srgbToLinear = (v: number) =>
   v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 export const linearToSrgb = (v: number) =>
@@ -26,12 +24,6 @@ export class UnsupportedMaterialError extends Error {
   constructor(readonly layers: { id: string; finish: string; reason?: string }[]) {
     super(`Material export needs another adapter for: ${layers.map(l => `${l.id} (${l.finish})`).join(", ")}. The editable recipe is unchanged.`);
   }
-}
-
-/** The package preflight and compiler use the same active-layer route gate. */
-export function unsupportedFlatLayers(recipe: Recipe) {
-  return planPresetExport(recipe).excluded
-    .map(({ layer, reason }) => ({ id: layer.id, finish: canonicalFinish(layer.finish), reason }));
 }
 
 export type FlatSurface = {
@@ -72,7 +64,7 @@ function layerOptics(layer: Layer, size: number) {
     return { roughness: (p: number) => bake.surface[p * 4 + 1] / 255, metalness: (p: number) => bake.surface[p * 4 + 2] / 255,
       normal: (p: number): [number, number] => [unorm(bake.normal[p * 4]), unorm(bake.normal[p * 4 + 1])] };
   }
-  const surface = FLAT_SURFACE[finish as keyof typeof FLAT_SURFACE];
+  const surface = flatSurface(finish);
   if (!surface) throw new UnsupportedMaterialError([{ id: layer.id, finish }]);
   return { roughness: () => surface.roughness, metalness: () => surface.metalness, normal: (): [number, number] => [0, 0] };
 }

@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { EyePlateTools } from "./eye-plate-service";
-import { runWolvenKit, WolvenKitRunError } from "./wolvenkit-cli";
+import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, WolvenKitRunError } from "./wolvenkit-cli";
 
 /** Process adapter: the eye-plate derivation's WolvenKit commands, run through the shared WolvenKit runner. */
 const defaultTimeoutMs = 5 * 60_000;
@@ -17,7 +17,7 @@ export async function runTool(command: string, args: string[], signal?: AbortSig
     if (!(error instanceof WolvenKitRunError)) throw error;
     if (error.code === "cancelled") throw new ToolRunError("plate_cancelled", "Eye plate preparation was cancelled.", error.output);
     throw new ToolRunError("plate_tool_failed", error.code === "runtime_missing"
-      ? "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer." : error.message, error.output);
+      ? WOLVENKIT_RUNTIME_MISSING_MESSAGE : error.message, error.output);
   }
 }
 

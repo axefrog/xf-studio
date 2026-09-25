@@ -1,18 +1,21 @@
 import { defaultLocalSettings, type LocalSettings, type LocalSettingsDraft } from "./local-settings";
 import { evaluateLocalReadiness, packageToolPaths, type HostFeatures, type LocalReadiness } from "./local-settings-readiness";
 import { LocalSettingsStore } from "./local-settings-store";
+import { EYE_PLATE_HEAD_CHOICES, EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 
 export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
-  "manualModRoot" | "wolvenKitCli" | "bunExecutable">;
+  "manualModRoot" | "wolvenKitCli" | "bunExecutable" | "eyePlateHead">;
 export type LocalSetupView = {
   revision: number;
   source: "new" | "primary" | "backup";
   fields: LocalSetupFields;
   readiness: LocalReadiness;
   overridden: string[];
+  /** How the Studio names the eye plate head choice, so its form and Build's messages agree. */
+  eyePlateHead: { label: string; options: { value: EyePlateHead; label: string }[] };
 };
 const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-  "wolvenKitCli", "bunExecutable"] as const;
+  "wolvenKitCli", "bunExecutable", "eyePlateHead"] as const;
 const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE_WOLVENKIT"] as const;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -30,6 +33,8 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
       fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,
       readiness: evaluateLocalReadiness(effective, typeof host === "function" ? host(effective) : host),
       overridden: overrideNames.filter(name => !!env[name]),
+      eyePlateHead: { label: EYE_PLATE_HEAD_SETTING.label,
+        options: EYE_PLATE_HEAD_CHOICES.map(value => ({ value, label: EYE_PLATE_HEAD_SETTING.options[value] })) },
     };
   };
   return async (request: Request): Promise<Response> => {

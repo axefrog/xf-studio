@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { contentFingerprint, EyePlateCache, fileSha256 } from "./eye-plate-cache";
 import { derivePlateDocuments } from "./eye-plate-cut";
@@ -7,11 +8,12 @@ import {
   type HeadRole, type HeadSourcePlan,
 } from "./eye-plate-head-source";
 import {
-  EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
+  canonicalJson, EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
   supportedEyePlateSource, type EyePlateRecipe, type EyePlateSourceRevision,
 } from "./eye-plate-recipe";
 import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
+import { EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 import type { PackagePlate } from "./package-action";
 
 /**
@@ -26,8 +28,9 @@ import type { PackagePlate } from "./package-action";
  * - a mod supplies the head mesh or morph target, or an `.xl` patch changes plate data: the plate is
  *   cut from those resources when the recipe's topology gates hold (same selected triangles, order and
  *   vertex mapping; same morph target count; mesh and morph base agree), with provenance in the plate
- *   manifest. Otherwise Build stops with a plain message naming the mod and the documented escape
- *   hatch (`headOverride: "base-game"`, which hosts set from XFS_EYE_PLATE_HEAD=base-game).
+ *   manifest. Otherwise Build stops with a plain message naming the mod and the Local setup choice
+ *   "Head used for the eye plate: The unmodified game head" (`headOverride: "base-game"`; hosts read it
+ *   from the typed `eyePlateHead` setting, and XFS_EYE_PLATE_HEAD=base-game remains a developer override).
  */
 export interface EyePlateTools {
   /** Extract `depotPaths` from one archive file (or a directory of archives) into `outDir`, keeping depot-relative paths. */
@@ -45,7 +48,7 @@ export interface EyePlateHeadSourcePort {
 export type EyePlateHeadResolution = { plan: HeadSourcePlan; notes: string[] };
 export type { EyePlateHeadRecord } from "./eye-plate-head-source";
 
-export type EyePlateErrorCode = "plate_source_missing" | "plate_source_unsupported" | "plate_source_modded" | "plate_tool_failed" |
+export type EyePlateErrorCode = "plate_source_missing" | "plate_source_unsupported" | "plate_source_modded" | "plate_source_incomplete" | "plate_tool_failed" |
   "plate_verification_failed" | "plate_cancelled" | "plate_cache_unavailable";
 export class EyePlateError extends Error {
   constructor(readonly code: EyePlateErrorCode, message: string, readonly detail = "") { super(message); }
@@ -80,16 +83,17 @@ export function packagePlateRecord(manifest: EyePlateManifest): PackagePlate {
 
 export const EYE_PLATE_RESOURCE_DIRECTORY = "resources";
 export const EYE_PLATE_MANIFEST_FILE = "plate-manifest.json";
-/** Environment value hosts read for the escape hatch. */
+/** Developer environment override for the same choice. */
 export const EYE_PLATE_HEAD_OVERRIDE_ENV = "XFS_EYE_PLATE_HEAD";
-export const eyePlateHeadOverride = (env: Record<string, string | undefined>): "base-game" | undefined =>
-  env[EYE_PLATE_HEAD_OVERRIDE_ENV]?.trim().toLowerCase() === "base-game" ? "base-game" : undefined;
+/** The Local setup choice (`eyePlateHead`) or the developer override asks for the unmodified game head. */
+export const eyePlateHeadOverride = (env: Record<string, string | undefined>, setting?: EyePlateHead): "base-game" | undefined =>
+  setting === "base-game" || env[EYE_PLATE_HEAD_OVERRIDE_ENV]?.trim().toLowerCase() === "base-game" ? "base-game" : undefined;
 
 const LIMITS = [
   "Offline verification proves the plate's bytes equal the installed head's selected rows; it does not prove game rendering.",
   "The neutral cut coincides with the head surface and has no designed clearance.",
 ];
-const OVERRIDE_LIMIT = "An installed mod changes the head, but XFS_EYE_PLATE_HEAD=base-game cut the plate from the unmodified game head; the makeup may not sit exactly on the head the game shows.";
+const OVERRIDE_LIMIT = "An installed mod changes the head, but Build was set to cut the plate from the unmodified game head; the makeup may not sit exactly on the head the game shows.";
 const MODDED_LIMIT = "The plate was cut from the head as changed by installed mods (see head provenance); which archive and patches the game really loads is a tool-source expectation, not runtime evidence.";
 
 const readDocument = (cache: EyePlateCache, path: string) => cache.readJson(path) as any;
@@ -106,8 +110,8 @@ const MISSING_MESSAGE = "Build could not find the female player head in your Cyb
 function moddedMessage(providers: string[]): string {
   const names = providers.length ? providers.join(", ") : "an installed mod";
   return `Your installed head mod ${names} changes the head's shape data in a way ${EYE_MAKEUP_MOD.modName} doesn't support yet, so nothing was built. ` +
-    "To build anyway, disable that mod in the profile chosen in Local setup, or start XF Studio with the setting " +
-    `${EYE_PLATE_HEAD_OVERRIDE_ENV}=base-game to use the unmodified game head (the makeup may then not sit exactly on your modded head).`;
+    `To build anyway, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” under Game & tools in the Mod package panel, ` +
+    "then build again (the makeup may then not sit exactly on your modded head). Or disable that mod in the profile chosen in Local setup.";
 }
 
 /** Validate a cached entry against its manifest and the expected cache identity. */
@@ -125,6 +129,41 @@ function loadCached(cache: EyePlateCache, directory: string, key: string, recipe
     return { directory: resources, meshFile, morphFile, manifestFile, manifest, reused: true };
   } catch { return null; }
 }
+
+/**
+ * SHA-256 of an archive, remembered by path, size and modification time so an unchanged (often very large)
+ * mod archive is hashed once per host session, not on every Build.
+ */
+const archiveHashMemo = new Map<string, string>();
+export function stampedArchiveSha256(file: string): string {
+  const stat = statSync(file), key = `${file}|${stat.size}|${stat.mtimeMs}`;
+  let hash = archiveHashMemo.get(key);
+  if (!hash) { hash = fileSha256(file); archiveHashMemo.set(key, hash); }
+  return hash;
+}
+
+/**
+ * Identity of everything a plate derivation reads once the route is resolved: the recipe and deriver, the
+ * head choice, and each chosen archive by path, size and modification time with the entries read from it.
+ * Equal inputs select the same cached plate, so an unchanged route skips extraction and hashing entirely.
+ * A directory source (no route resolver) is identified by the content-archive fingerprint.
+ */
+function plateInputsKey(recipe: EyePlateRecipe, plan: HeadSourcePlan, override: boolean, fingerprint: string): string | null {
+  const stamp = (archive: HeadArchive) => {
+    if (archive.group === "directory") return { directory: fingerprint };
+    const stat = statSync(archive.file);
+    return { file: archive.file, size: stat.size, mtimeMs: stat.mtimeMs, group: archive.group, provider: archive.provider };
+  };
+  try {
+    const source = (item: HeadResourceSource | HeadPatchSource | null) => item && { entryPath: item.entryPath, archive: stamp(item.archive),
+      ...("baseGame" in item ? { baseGame: item.baseGame } : { target: item.target, sourcePath: item.sourcePath, declaredBy: item.declaredBy }) };
+    return createHash("sha256").update(canonicalJson({ deriver: EYE_PLATE_DERIVER_VERSION, recipe: eyePlateRecipeSha256(recipe), override,
+      mesh: source(plan.mesh), morph: source(plan.morph), baseMesh: source(plan.baseGame.mesh), baseMorph: source(plan.baseGame.morph),
+      patches: plan.patches.map(source), ignoredPatches: plan.ignoredPatches })).digest("hex");
+  } catch { return null; }
+}
+const INPUTS_DIRECTORY = "head-inputs";
+type InputsRecord = { key: string; name: string };
 
 /** Without a route resolver: the base game's content archives, as a directory. */
 function contentPlan(recipe: EyePlateRecipe, gameRoot: string): HeadSourcePlan {
@@ -170,6 +209,22 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     if (!mesh || !morph) throw missing();
     const patches = override ? [] : plan.patches;
 
+    // Unchanged inputs since a verified plate was published: reuse it without reading the head again.
+    const inputsKey = plateInputsKey(recipe, plan, override, fingerprint);
+    const inputsFile = inputsKey && join(cache.entry(INPUTS_DIRECTORY), `${inputsKey}.json`);
+    const remember = (record: InputsRecord) => {
+      if (!inputsFile) return;
+      try { mkdirSync(cache.entry(INPUTS_DIRECTORY), { recursive: true }); cache.writeJson(inputsFile, record); }
+      catch { /* Advisory: the next Build reads the head again. */ }
+    };
+    if (inputsFile && existsSync(inputsFile)) {
+      try {
+        const known = cache.readJson(inputsFile) as InputsRecord;
+        const reused = loadCached(cache, cache.entry(known.name), known.key, recipe);
+        if (reused) { status("ready", null, "The built-in eye plate is ready.", known.name); return reused; }
+      } catch { /* A damaged record is a miss. */ }
+    }
+
     // 2. Extract the chosen resources and patch sources, one WolvenKit call per archive.
     progress("Reading the female player head from your game files");
     const wanted: { archive: HeadArchive; entryPath: string }[] = [mesh, morph, ...patches];
@@ -194,7 +249,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     const archiveHashes = new Map<string, string | null>();
     const archiveHash = (archive: HeadArchive) => {
       if (archive.group === "content" || archive.group === "ep1" || archive.group === "directory") return null;
-      if (!archiveHashes.has(archive.file)) archiveHashes.set(archive.file, fileSha256(archive.file));
+      if (!archiveHashes.has(archive.file)) archiveHashes.set(archive.file, stampedArchiveSha256(archive.file));
       return archiveHashes.get(archive.file)!;
     };
     cancelled();
@@ -253,7 +308,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
       ignoredPatches: [
         ...plan.ignoredPatches.map(item => ({ target: item.target, source: item.sourcePath, declaredBy: item.declaredBy, reason: item.reason })),
         ...(override ? plan.patches.map(item => ({ target: item.target, source: item.sourcePath, declaredBy: item.declaredBy,
-          reason: `not applied: ${EYE_PLATE_HEAD_OVERRIDE_ENV}=base-game` })) : []),
+          reason: "not applied: Build was set to use the unmodified game head" })) : []),
         ...patches.filter(patch => !applied.some(item => item.sourcePath === patch.sourcePath && item.target === patch.target))
           .map(item => ({ target: item.target, source: item.sourcePath, declaredBy: item.declaredBy, reason: "changes no plate data" })),
       ],
@@ -261,7 +316,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     const key = eyePlateCacheKey(recipe, hashes, provenance);
     const name = eyePlateCacheName(recipe, key);
     const cached = loadCached(cache, cache.entry(name), key, recipe);
-    if (cached) { status("ready", null, "The built-in eye plate is ready.", name); return cached; }
+    if (cached) { remember({ key, name }); status("ready", null, "The built-in eye plate is ready.", name); return cached; }
 
     // 5. Cut, convert and verify against the head actually used.
     progress("Cutting the expanded eye plate from the head");
@@ -320,6 +375,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     status("ready", null, "The built-in eye plate is ready.", name);
     const published = loadCached(cache, directory, key, recipe);
     if (!published) throw new EyePlateError("plate_cache_unavailable", "The eye plate cache changed while it was being written.");
+    remember({ key, name });
     return { ...published, reused: false };
   } catch (error) {
     if (error instanceof EyePlateError) throw error;

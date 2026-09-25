@@ -135,7 +135,8 @@ export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAn
       targetAction(rt, target, { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry }, "Mirror across the face", "mirror",
         { checked: layer.symmetry }),
       { kind: "submenu", label: "Finish", icon: "finish", items: () => port.authoring.choicesFor(target, "layer.setFinish", "finish")
-        .filter(choice => choice.value !== "satin")
+        // Only the catalogue's finishes are offered; legacy stored names stay accepted but hidden.
+        .filter(choice => rt.finishes.some(item => item.id === choice.value))
         .map(choice => {
           const descriptor = rt.finishes.find(item => item.id === choice.value);
           return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,

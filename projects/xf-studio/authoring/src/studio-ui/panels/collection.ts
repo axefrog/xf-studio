@@ -246,6 +246,10 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<typeof setupFields[number][0], HTMLInputElement>;
   const route = h("select", { class: "field", "aria-label": "How you install mods", onchange: () => { dirty = true; showRoute(); } },
     h("option", { value: "direct", text: "Game folder (Vortex or manual)" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
+  // Build normally cuts the eye plate from the head your mods load; this is the way round an unsupported head mod.
+  // The host's setup view names the choice and its options, so this form and Build's messages agree.
+  const plateHead = h("select", { class: "field", onchange: () => { dirty = true; } });
+  const plateHeadLabel = h("span", { class: "control-label" });
   let dirty = false, loadedRevision = -1;
   const mo2Fields = h("div", {}, ...setupFields.filter(([key]) => key === "mo2Root" || key === "mo2ProfileId")
     .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
@@ -257,7 +261,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const saveSetup = button({ label: "Save settings", icon: "check", onClick: () => void (async () => {
     const current = port.localSetup.snapshot().view;
     if (!current) return;
-    const fields: LocalSetupFields = { ...current.fields, launchRoute: route.value as LocalSetupFields["launchRoute"] };
+    const fields: LocalSetupFields = { ...current.fields, launchRoute: route.value as LocalSetupFields["launchRoute"],
+      eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] };
     for (const [key] of setupFields) (fields as unknown as Record<string, string | null>)[key] = inputs[key].value.trim() || null;
     const result = await port.localSetup.dispatch({ kind: "setup.save", fields });
     if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Configuration saved on this computer."); }
@@ -307,7 +312,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       h("label", { class: "control" }, h("span", { class: "control-label", text: "How you install mods" }), route),
       ...setupFields.filter(([key]) => !["mo2Root", "mo2ProfileId", "manualModRoot"].includes(key))
         .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])),
-      mo2Fields, directFields, setupState, setupReadiness,
+      mo2Fields, directFields,
+      h("label", { class: "control" }, plateHeadLabel, plateHead),
+      setupState, setupReadiness,
       h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
       h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
@@ -323,6 +330,12 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       if (setup.view && !dirty && setup.view.revision !== loadedRevision) {
         loadedRevision = setup.view.revision;
         route.value = setup.view.fields.launchRoute;
+        const choice = setup.view.eyePlateHead;
+        setText(plateHeadLabel, choice.label);
+        setAttr(plateHead, "aria-label", choice.label);
+        if (plateHead.options.length !== choice.options.length)
+          plateHead.replaceChildren(...choice.options.map(option => h("option", { value: option.value, text: option.label })));
+        plateHead.value = setup.view.fields.eyePlateHead;
         for (const [key] of setupFields) setValue(inputs[key], setup.view.fields[key] ?? "");
         showRoute();
       }

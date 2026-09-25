@@ -127,4 +127,12 @@ test("links are skipped and never traversed", () => fixture(base => {
   expect(result.complete).toBe(false);
   expect(result.issues.map(x => x.code)).toContain("symlink_skipped");
   expect(result.candidates).toHaveLength(0);
+  // A linked folder could hold archives or .xl files; a link to a text file could not.
+  expect(result.issues.find(x => x.code === "symlink_skipped")?.mayHideSources).toBe(true);
+  put(join(outside, "notes.txt"));
+  rmSync(join(game, "archive", "pc", "mod", "linked"), { recursive: false, force: true });
+  try { symlinkSync(join(outside, "notes.txt"), join(game, "archive", "pc", "mod", "notes.txt"), "file"); }
+  catch (error) { if (String(error).includes("EPERM")) return; throw error; } // Windows accounts without symlink rights.
+  const text = discoverSources({ ...defaultLocalSettings(), gameRoot: game });
+  expect(text.issues.filter(x => x.code === "symlink_skipped").map(x => x.mayHideSources)).toEqual([false]);
 }));

@@ -29,7 +29,12 @@ export type PreviewCoreRecipe = {
   schema: typeof PREVIEW_CORE_RECIPE_SCHEMA;
   id: string;
   revision: number;
-  /** The head and plate come from the eye plate recipe's audited source, so Build and preview share one head. */
+  /**
+   * The eye plate recipe whose depot paths name the head and plate the preview shows. The preview reads them
+   * from the base game's content archives only; Build cuts the plate from the head the selected launch route
+   * loads (a head mod may win). With a head mod installed the two can differ until the preview reads the
+   * resolver's winning archives too (PREV-03).
+   */
   plateRecipeId: string;
   /**
    * The eye component: its mesh (materials and base geometry) and the morph resource the installed

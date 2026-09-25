@@ -40,15 +40,21 @@ export interface Installation {
     readonly route: "direct" | "mo2";
     readonly scanComplete: boolean;
     readonly scanIssues: readonly string[];
+    /** Blocking scan issues that may hide an archive, `.xl` or modlist file (see SourceIssue.mayHideSources). */
+    readonly scanGaps: readonly string[];
     readonly mountedArchives: number;
     readonly unmountedArchives: number;
     readonly indexErrors: readonly string[];
+    /** Mounted archives whose RDAR index could not be read, with their lookup rank (0 is searched first). */
+    readonly unreadIndexes: readonly UnreadIndex[];
     readonly xlFiles: number;
     readonly xlIssues: readonly string[];
     readonly ep1Installed: boolean;
     readonly modOrder: MountPlan["modOrder"];
   };
 }
+
+export interface UnreadIndex { readonly id: string; readonly name: string; readonly providerName: string; readonly rank: number; readonly error: string }
 
 const lower = (value: string) => value.toLowerCase();
 const XL_LOCATIONS = [/^red4ext\/plugins\/archivexl\/bundle\/.+\.xl$/, /^archive\/pc\/mod\/.+\.xl$/];
@@ -246,10 +252,13 @@ export function openInstallation(options: InstallationOptions): Installation {
   const plan = buildMountPlan(archives, modlist ? readFileSync(modlist.physicalPath, "utf8") : null);
   log(`Mounted ${plan.archives.length} archives (${plan.unmounted.length} not mounted); reading indexes`);
   const indexes = new Map<string, BigUint64Array>();
-  const indexErrors: string[] = [];
+  const indexErrors: string[] = [], unreadIndexes: UnreadIndex[] = [];
   for (const archive of plan.archives) {
     try { indexes.set(archive.id, readIndex(archive.id, options.cacheDir)); }
-    catch (error) { indexErrors.push(`${archive.name}: ${(error as Error).message}`); }
+    catch (error) {
+      indexErrors.push(`${archive.name}: ${(error as Error).message}`);
+      unreadIndexes.push({ id: archive.id, name: archive.name, providerName: archive.providerName, rank: archive.rank, error: (error as Error).message });
+    }
   }
   const depot = new DepotIndex(plan, indexes);
   const xlFiles = visibleLoose(candidates.filter(c => c.kind === "archive-xl"))
@@ -278,6 +287,7 @@ export function openInstallation(options: InstallationOptions): Installation {
   const graph = new ResourceGraph(depot, xl, fetcher);
   return { plan, depot, xl, graph, fetcher, summary: { route: options.launchRoute, scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
-    mountedArchives: plan.archives.length, unmountedArchives: plan.unmounted.length, indexErrors,
+    scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
+    mountedArchives: plan.archives.length, unmountedArchives: plan.unmounted.length, indexErrors, unreadIndexes,
     xlFiles: documents.length, xlIssues: [...xlIssues, ...xl.issues], ep1Installed: plan.ep1Installed, modOrder: plan.modOrder } };
 }

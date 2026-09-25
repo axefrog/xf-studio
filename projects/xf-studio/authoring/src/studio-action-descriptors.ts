@@ -1,4 +1,5 @@
 import type { CollectionRequest } from "./collection-service";
+import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { PreviewAction } from "./preview-preparation";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
@@ -61,7 +62,7 @@ export const ACTION_DESCRIPTORS = {
   "layer.setColor": desc("layer", "content", "transaction", { layerId: target("string"), color: input("string") }),
   "layer.setOpacity": desc("layer", "content", "transaction", { layerId: target("string"), opacity: input("number", 0, 1) }),
   "layer.setSymmetry": desc("layer", "content", "recipe", { layerId: target("string"), symmetry: input("boolean") }),
-  "layer.setFinish": desc("layer", "content", "recipe", { layerId: target("string"), finish: enumerated(["matte", "regular", "satin", "metallic", "shimmer", "glitter", "glossy", "iridescent"]) }),
+  "layer.setFinish": desc("layer", "content", "recipe", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
   "layer.useGameOptics": desc("layer", "content", "recipe", { layerId: target("string") }),
   "layer.setShift": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["color", "strength"]), value: input("number|string") }, {
     color: { value: inputText(7, 7) }, strength: { value: input("number", 0, 1) } }),

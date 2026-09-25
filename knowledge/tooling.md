@@ -22,7 +22,7 @@ The apphost finds .NET in this order: `DOTNET_ROOT_X64`, then `DOTNET_ROOT` (use
 - **Exit code is not enough.** `uncook` exits 0 when some requested resources fail to export, so callers must check the files they expected. [runtime of the tool] 8.17.4/9.0.1; see PREV-01 in the [code-health ledger](../research/authoring/code-health.md).
 - **`Unhandled exception`** in the output means failure even with exit 0; a bad `-r` regex, for example, raises `RegexParseException` (the pattern is a .NET regex over backslash depot paths, so every backslash must be escaped). [runtime of the tool]
 - **Folder `import`** exits 3 even when every file imported; success is `Imported N/N file(s)` with N > 0. [runtime of the tool] (Build adapter rule since Experiment 005.)
-- The one runner that applies these rules is [`wolvenkit-cli.ts`](../projects/xf-studio/authoring/src/wolvenkit-cli.ts); consumers map its typed errors.
+- The one runner that applies these rules is [`wolvenkit-cli.ts`](../projects/xf-studio/authoring/src/wolvenkit-cli.ts); consumers map its typed errors. Synchronous callers (the independent package verifier, through the injected [`verifier-wolvenkit.ts`](../projects/xf-studio/authoring/src/verifier-wolvenkit.ts)) use its blocking form `runWolvenKitSync`, which applies the same policy but cannot be cancelled. The character resolver's fetcher still starts WolvenKit itself.
 
 ## What `uncook` writes
 
