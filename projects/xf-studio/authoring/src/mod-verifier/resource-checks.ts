@@ -208,7 +208,9 @@ export interface ResolvedPreset {
 const value = (x: Node) => x?.$value;
 const dep = (x: Node): string => String(value(x?.DepotPath)).replaceAll("\\", "/");
 const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-const IGNORED = new Set(["HandleId", "BufferId", "HandleRefId"]);
+/** Serialization handles that WolvenKit renumbers; never part of a resource's content. */
+export const HANDLE_KEYS: ReadonlySet<string> = new Set(["HandleId", "BufferId", "HandleRefId"]);
+const IGNORED = HANDLE_KEYS;
 
 /** Python-style structural equality: object key order ignored; list order kept. */
 export function sameJson(a: Node, b: Node, ignore: ReadonlySet<string> = new Set()): boolean {
@@ -218,6 +220,41 @@ export function sameJson(a: Node, b: Node, ignore: ReadonlySet<string> = new Set
   if (Array.isArray(a)) return a.length === b.length && a.every((item: Node, i: number) => sameJson(item, b[i], ignore));
   const left = Object.keys(a).filter(k => !ignore.has(k)), right = Object.keys(b).filter(k => !ignore.has(k));
   return left.length === right.length && left.every(key => Object.hasOwn(b, key) && !ignore.has(key) && sameJson(a[key], b[key], ignore));
+}
+
+/** Where two JSON values first differ under `sameJson`'s rules (e.g. `header.renderLODs[0]`), or null when equal. */
+export function firstDifference(a: Node, b: Node, ignore: ReadonlySet<string> = new Set(), path = ""): string | null {
+  if (a === b) return null;
+  const here = path || "(root)";
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return here;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return here;
+    for (let i = 0; i < a.length; i++) { const found = firstDifference(a[i], b[i], ignore, `${path}[${i}]`); if (found) return found; }
+    return null;
+  }
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (ignore.has(key)) continue;
+    const at = path ? `${path}.${key}` : key;
+    if (!Object.hasOwn(a, key) || !Object.hasOwn(b, key)) return at;
+    const found = firstDifference(a[key], b[key], ignore, at);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Fields of the packaged plate the build owns; every other top-level field must be the plate input's.
+ * The render and morph blobs are compared whole in plate-geometry.ts, which re-derives what the lift changes.
+ */
+export const PLATE_MESH_BUILD_FIELDS: readonly string[] = ["appearances", "materialEntries", "localMaterialBuffer", "renderResourceBlob"];
+export const PLATE_MORPH_BUILD_FIELDS: readonly string[] = ["baseMesh", "baseMeshAppearance", "blob"];
+function sameAsSource(label: string, packaged: Node, source: Node, owned: readonly string[]) {
+  ensure(isMap(packaged) && isMap(source), `${label} is not a resource`);
+  for (const key of new Set([...Object.keys(packaged), ...Object.keys(source)])) {
+    if (owned.includes(key) || IGNORED.has(key)) continue;
+    ensure(Object.hasOwn(packaged, key) && Object.hasOwn(source, key) && sameJson(packaged[key], source[key], IGNORED),
+      `${label} ${key} differs from the source plate`);
+  }
 }
 
 /** Stable 64-bit component ID derived from its collection component name (0 maps to 1). */
@@ -247,13 +284,14 @@ export interface ResourceSummary {
 export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, artifactPaths: readonly string[],
   textureSizes: readonly number[], morphTargets: number | null): ResourceSummary {
   const { mesh, morph, app, customization: cc } = r;
-  // Geometry (render buffers and morph rows) is checked against the planned lifts in plate-geometry.ts.
-  for (const field of ["boneNames", "boneRigMatrices", "boundingBox"])
-    ensure(field in mesh && sameJson(mesh[field], r.sourceMesh[field], IGNORED), `Mesh ${field} differs from the source plate`);
-  ensure(sameJson(morph.targets, r.sourceMorph.targets, IGNORED), "Morph targets differs from the source plate");
+  // Everything the build does not own is the plate input's; the blobs are checked against the planned
+  // lifts in plate-geometry.ts.
+  sameAsSource("Mesh", mesh, r.sourceMesh, PLATE_MESH_BUILD_FIELDS);
+  sameAsSource("Morph", morph, r.sourceMorph, PLATE_MORPH_BUILD_FIELDS);
   const chunks = Array.isArray(plan.plate?.liftsMm) ? plan.plate!.liftsMm.length : 0;
   ensure(chunks > 0, "Plan names no plate lift");
   ensure(dep(morph.baseMesh) === plan.mesh, "Morph baseMesh does not reference the planned mesh");
+  ensure(value(morph.baseMeshAppearance) === plan.presets[0]?.appearance, "Morph baseMeshAppearance is not the seed appearance");
   const targetCount = Array.isArray(morph.targets) ? morph.targets.length : 0;
   ensure(morphTargets === null ? targetCount > 0 : targetCount === morphTargets,
     `Morph target count is ${targetCount}, not the plate recipe's ${morphTargets ?? "non-zero count"}`);

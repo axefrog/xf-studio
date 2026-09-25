@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import type { PackageBuild, PackageCheck, PackagePlate } from "./package-action";
+import { packagePresetIdentities } from "./package-filter";
 import { preflightPackageCollection } from "./package-preflight";
 import { buildPackageResources, plateStem, type BuildRecord } from "./package-resource-builder";
 import { createWolvenKitPackageTools, PackageToolError, type PackageResourceTools } from "./package-build-wolvenkit";
@@ -218,12 +219,14 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   log("independent verification complete");
   if (verification.archiveSha256 !== record.archiveSha256 || verification.presetCount !== check.presets.length ||
       verification.plateInputs?.mesh !== plateRecord.meshSha256 || verification.plateInputs?.morph !== plateRecord.morphSha256 ||
-      JSON.stringify(verification.presetRoutes) !== JSON.stringify(check.presets.map(p => ({ id: p.id, route: p.route }))))
+      JSON.stringify(verification.presetRoutes) !== JSON.stringify(check.presets.map(p => ({ id: p.id, route: p.route }))) ||
+      JSON.stringify(verification.plateGeometry?.liftsMm) !== JSON.stringify(check.plateLiftsMm))
     fail("package_verification_failed", "Independent verification does not match the build.");
   const built = record.plan;
   if (built.collectionId !== check.collectionId || built.namespace !== check.namespace ||
       built.modName !== check.modName || built.selectorLabel !== check.selectorLabel ||
-      JSON.stringify(built.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }))) !== JSON.stringify(check.presets))
+      JSON.stringify(packagePresetIdentities(built)) !== JSON.stringify(check.presets) ||
+      JSON.stringify(built.plate.liftsMm) !== JSON.stringify(check.plateLiftsMm))
     fail("package_identity_mismatch", "Compiled collection identities differ from preflight.");
 
   cancelled();
@@ -245,7 +248,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
       modName: check.modName, selectorLabel: check.selectorLabel,
       packagedCollectionSha256: packagedHash,
       originalPresetCount: check.originalPresetCount, omissions: check.omissions, experimental: check.experimental,
-      presets: check.presets, verifiedPresetCount: verification.presetCount,
+      presets: check.presets, plateLiftsMm: check.plateLiftsMm, verifiedPresetCount: verification.presetCount,
       verifiedUnpackedFiles: verification.unpackedFilesVerified,
       files: names.map(name => ({ path: `archive/pc/mod/${name}`, sha256: fileHash(join(target, name)),
         bytes: statSync(join(target, name)).size })),
@@ -261,6 +264,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   return { package: final, manifest: join(final, "manifest.json"),
     modName: check.modName, selectorLabel: check.selectorLabel, archiveSha256: verification.archiveSha256,
     presetCount: verification.presetCount, originalPresetCount: check.originalPresetCount,
-    omissions: check.omissions, experimental: check.experimental, packagedCollectionSha256: packagedHash, plate: plateRecord, installed: false,
+    omissions: check.omissions, experimental: check.experimental, packagedCollectionSha256: packagedHash, plate: plateRecord,
+    plateLiftsMm: check.plateLiftsMm, installed: false,
     gameRenderingVerified: false };
 }

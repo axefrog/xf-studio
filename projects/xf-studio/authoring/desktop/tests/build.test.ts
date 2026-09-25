@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { parseCollection } from "../../src/preset-collection";
-import { preparePackageCollection } from "../../src/package-filter";
+import { packagePresetIdentities, preparePackageCollection } from "../../src/package-filter";
 import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, probeBun, runDesktopBuild, useBuilderBun, type DesktopPlatePreparer } from "../build";
 import { EyePlateError, type EyePlateManifest } from "../../src/eye-plate-service";
 import { createDesktopServer } from "../server";
@@ -171,7 +171,7 @@ test("a matching staged result is promoted with partial-export identities and no
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex"),
     originalPresetCount: parsed.presets.length, omissions: prepared.omissions, namespace,
     modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
-    presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })),
+    presets: packagePresetIdentities(prepared.plan), plateLiftsMm: prepared.plan.plate.liftsMm,
     verifiedPresetCount: prepared.packaged.presets.length,
     files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex") })),
@@ -196,7 +196,7 @@ test("a matching staged result is promoted with partial-export identities and no
     `console.log("XFS_PACKAGE_RESULT=" + JSON.stringify({ package: final, manifest: path.join(final, "manifest.json"),`,
     `  modName: m.modName, selectorLabel: m.selectorLabel, archiveSha256: m.files[0].sha256, presetCount: m.verifiedPresetCount,`,
     `  originalPresetCount: m.originalPresetCount, omissions: m.omissions, packagedCollectionSha256: m.packagedCollectionSha256,`,
-    `  plate: m.plate, installed: false, gameRenderingVerified: false }));`,
+    `  plate: m.plate, plateLiftsMm: m.plateLiftsMm, installed: false, gameRenderingVerified: false }));`,
   ].join("\n");
   // The tools root is only known once the host exists; substitute it into the builder afterwards.
   const h = host("// placeholder\n");

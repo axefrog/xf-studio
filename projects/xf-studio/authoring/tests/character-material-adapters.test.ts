@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { chunkOfMesh } from "../src/character-detail-loader";
+import { chunkOfMesh, releaseDetailObject } from "../src/character-detail-loader";
 import { materialAdapter, MATERIAL_ADAPTERS, textureColourSpace, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
 import { hairMaterialFromScalars, HAIR_TEMPLATE_DEFAULTS } from "../src/hair-colour-model";
 import type { RenderChunkMaterial, RenderTexture } from "../src/render-detail";
@@ -101,4 +101,26 @@ test("exported chunk meshes map back to their render chunk", () => {
   expect(chunkOfMesh("submesh_07_LOD_1")).toBe(7);
   expect(chunkOfMesh("submesh_00_LOD_1_doubled")).toBe(0);
   expect(chunkOfMesh("Armature")).toBeNull();
+});
+
+// PREV-28: releasing loaded details frees each skinned mesh's bone texture along with its geometry.
+test("releasing a detail object disposes geometry and every skeleton's bone texture", () => {
+  const root = new THREE.Group(), parent = new THREE.Scene();
+  parent.add(root);
+  const bones = [new THREE.Bone(), new THREE.Bone()];
+  bones[0]!.add(bones[1]!);
+  const skeleton = new THREE.Skeleton(bones);
+  skeleton.computeBoneTexture();
+  const geometry = new THREE.BufferGeometry(), mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.add(bones[0]!);
+  mesh.bind(skeleton);
+  root.add(mesh);
+  let geometryDisposed = false, boneTextureDisposed = false;
+  geometry.addEventListener("dispose", () => { geometryDisposed = true; });
+  skeleton.boneTexture!.addEventListener("dispose", () => { boneTextureDisposed = true; });
+  releaseDetailObject(root);
+  expect(root.parent).toBeNull();
+  expect(geometryDisposed).toBe(true);
+  expect(boneTextureDisposed).toBe(true);
+  expect(skeleton.boneTexture).toBeNull();
 });

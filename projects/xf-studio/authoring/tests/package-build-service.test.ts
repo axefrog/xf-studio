@@ -55,6 +55,7 @@ function fakeVerify(overrides: Partial<VerificationReport> = {}, seen: VerifyBui
       plateInputs: { mesh: sha(readFileSync(options.plate!.mesh)), morph: sha(readFileSync(options.plate!.morph)) },
       unpackedFilesVerified: build.artifacts.length, limits: [...VERIFICATION_LIMITS], installed: false,
       presetRoutes: build.plan.presets.map((p: { id: string; route: string }) => ({ id: p.id, route: p.route })),
+      plateGeometry: { liftsMm: build.plan.plate.liftsMm },
       gameRenderingVerified: false, ...overrides } as VerificationReport;
   };
 }
@@ -96,6 +97,9 @@ test("Build promotes only a verified candidate with the full local-package manif
     plate: { source: "derived", cacheKey: "c".repeat(64), sourceRevision: "cp2077-2.31" } });
   // Each packaged preset records the route the verifier re-derived from its recipe.
   expect(written.presets).toEqual(prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })));
+  // The plate lifts are recorded (the production lift; a diagnostic candidate records its own and each preset's knobs).
+  expect(written.plateLiftsMm).toEqual([0.4]);
+  expect(result.plateLiftsMm).toEqual([0.4]);
   expect(written.limits).toEqual([...VERIFICATION_LIMITS]);
   expect(readdirSync(join(result.package, "archive", "pc", "mod")).sort())
     .toEqual([`${prepared.plan.namespace}.archive`, `${prepared.plan.namespace}.archive.xl`]);
@@ -137,6 +141,9 @@ test("a failed or mismatched independent verification publishes no candidate", a
   const otherRoute = setup();
   const routeError = await runPackageCommand({ ...otherRoute.options, verify: fakeVerify({ presetRoutes: [] }) }).catch(e => e);
   expect(routeError.message).toContain("does not match the build");
+  const otherLift = setup();
+  const liftError = await runPackageCommand({ ...otherLift.options, verify: fakeVerify({ plateGeometry: { liftsMm: [0] } as VerificationReport["plateGeometry"] }) }).catch(e => e);
+  expect(liftError.message).toContain("does not match the build");
   const otherXl = setup();
   const xlError = await runPackageCommand({ ...otherXl.options, verify: fakeVerify({ archiveXlSha256: "0".repeat(64) }) }).catch(e => e);
   expect(xlError.message).toContain("differs from the verified files");

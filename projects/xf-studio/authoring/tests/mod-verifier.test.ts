@@ -88,13 +88,14 @@ type Mutation = (build: string, data: { mesh: any; morph: any; app: any; cc: any
 /** A build directory plus the decoded DDS the fake export returns, by texture file name. */
 type Fixture = { build: string; dds: Map<string, Uint8Array>; plate: { mesh: string; morph: string } };
 
-function makeBuild(mutate?: Mutation): Fixture {
+/** `plate` is the single-chunk plate input (default: the fixture cut); the package holds its lifted form. */
+function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-"));
   const p = structuredClone(plan);
   const blob = { boneNames: [cname("root")], boneRigMatrices: [{ a: 1 }], boundingBox: { Min: 0, Max: 1 } };
-  const plateRoot = PLATE.mesh.Data.RootChunk, lifted = liftedPlate(p.plate.liftsMm);
+  const plateRoot = input.mesh.Data.RootChunk, lifted = liftPlate(input.mesh, input.morph, p.plate.liftsMm);
   const sourceMesh = { ...structuredClone(blob), renderResourceBlob: structuredClone(plateRoot.renderResourceBlob), appearances: [], materialEntries: [] };
-  const sourceMorph = structuredClone(PLATE.morph.Data.RootChunk);
+  const sourceMorph = structuredClone(input.morph.Data.RootChunk);
   const mesh = { ...structuredClone(blob), renderResourceBlob: { ...lifted.mesh.Data.RootChunk.renderResourceBlob, HandleId: "99" },
     appearances: p.presets.map((preset, i) => ({ HandleId: String(10 + i), Data: { $type: "meshMeshAppearance", name: cname(preset.appearance),
       chunkMaterials: i ? [] : [cname(p.presets[0].appearance + "@preset")] } })),
@@ -105,7 +106,7 @@ function makeBuild(mutate?: Mutation): Fixture {
       ...Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
         RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }).map(([name, value]) => ({ $type: "Float", [name]: value })),
       { $type: "Color", DiffuseColor: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 } }] }] } };
-  const morph = { ...structuredClone(lifted.morph.Data.RootChunk), baseMesh: ref(p.mesh) };
+  const morph = { ...structuredClone(lifted.morph.Data.RootChunk), baseMesh: ref(p.mesh), baseMeshAppearance: cname(p.presets[0].appearance) };
   const id = componentId(p.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(p.component), id, isEnabled: 1,
     meshAppearance: cname(p.presets[0].appearance), morphResource: ref(p.morph),
@@ -195,8 +196,8 @@ function run(fixture: Fixture, hooks: Hooks = {}, calls: string[] = []) {
   return verifyBuild({ build: fixture.build, tools: fakeTools(fixture, hooks, calls), ...hooks.options });
 }
 
-function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks) {
-  const fixture = makeBuild(mutate);
+function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks, plate: typeof PLATE = PLATE) {
+  const fixture = makeBuild(mutate, plate);
   try {
     after?.(fixture);
     expect(() => run(fixture, hooks)).toThrow(message);
@@ -425,6 +426,109 @@ test("plate geometry: the packaged plate must be the input lifted along its norm
   });
   expectFailure(/Plan plate lifts \[0.2\] differ from the presets' lifts \[0.4\]/, (_b, d) => { d.plan.plate.liftsMm = [0.2]; });
 });
+
+// PIPE-28: the render and morph blobs are compared whole with the input; only the re-derived lift fields may differ.
+test("plate blobs: every field the lift does not own must be the input's", () => {
+  const renderBlobs = (d: Parameters<Mutation>[1]) => [d.mesh.renderResourceBlob.Data, d.morph.blob.Data.baseBlob.Data];
+  const morphBlob = (d: Parameters<Mutation>[1]) => d.morph.blob.Data;
+  expectFailure(/Packaged plate mesh header\.bonePositions differs from the input/,
+    (_b, d) => { for (const b of renderBlobs(d)) b.header.bonePositions = [{ X: 1, Y: 0, Z: 0, W: 1 }]; });
+  expectFailure(/Packaged plate mesh header\.renderLODs\[0\] differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.renderLODs = [5]; });
+  expectFailure(/Packaged plate mesh header\.version differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.version = 21; });
+  expectFailure(/Packaged plate mesh header\.renderChunkInfos\[0\]\.materialId differs from the input/,
+    (_b, d) => { for (const b of renderBlobs(d)) b.header.renderChunkInfos[0].materialId = [3]; });
+  // PIPE-29: the head's position quantization must stay the input's.
+  expectFailure(/Packaged plate mesh header\.quantizationScale\.X differs from the input/,
+    (_b, d) => { for (const b of renderBlobs(d)) b.header.quantizationScale.X *= 2; });
+  expectFailure(/Packaged plate mesh buffer holds \d+ bytes, not the \d+ of the lifted layout/, (_b, d) => {
+    for (const b of renderBlobs(d)) b.renderBuffer.Bytes = Buffer.concat([Buffer.from(b.renderBuffer.Bytes, "base64"), Buffer.alloc(16)]).toString("base64");
+  });
+  expectFailure(/Packaged plate morph base header\.renderLODs\[0\] differs from the input/,
+    (_b, d) => { d.morph.blob.Data.baseBlob.Data.header.renderLODs = [5]; });
+  expectFailure(/Packaged plate morph header\.version differs from the input/, (_b, d) => { morphBlob(d).header.version = 1; });
+  expectFailure(/Packaged plate morph header\.numDiffs differs from the input/, (_b, d) => { morphBlob(d).header.numDiffs = 1; });
+  expectFailure(/Packaged plate morph header\.numDiffsMapping differs from the input/, (_b, d) => { morphBlob(d).header.numDiffsMapping += 1; });
+  expectFailure(/Packaged plate morph header\.targetTextureDiffsData differs from the input/, (_b, d) => { morphBlob(d).header.targetTextureDiffsData = []; });
+  expectFailure(/Packaged plate morph textureDiffsBuffer differs from the input/,
+    (_b, d) => { morphBlob(d).textureDiffsBuffer = { BufferId: "9", Flags: 0, Bytes: "AAAA" }; });
+  expectFailure(/Packaged plate morph header\.targetStartsInVertexDiffs\[1\] differs from the input/,
+    (_b, d) => { morphBlob(d).header.targetStartsInVertexDiffs[1] += 1; });
+  expectFailure(/Packaged morph mapping holds \d+ bytes, not the \d+ of the lifted input/, (_b, d) => {
+    const bytes = Buffer.from(morphBlob(d).mappingBuffer.Bytes, "base64");
+    morphBlob(d).mappingBuffer.Bytes = Buffer.concat([bytes, Buffer.alloc(64, 7)]).toString("base64");
+  });
+  expectFailure(/Packaged plate morph mappingBuffer\.Bytes differs from the input/, (_b, d) => {
+    const bytes = Buffer.from(morphBlob(d).mappingBuffer.Bytes, "base64"); bytes[bytes.length - 1] ^= 1;
+    morphBlob(d).mappingBuffer.Bytes = bytes.toString("base64");
+  });
+  expectFailure(/Morph boundingBox differs from the source plate/, (_b, d) => { d.morph.boundingBox = { Min: 9, Max: 9 }; });
+  expectFailure(/Morph baseTexture differs from the source plate/, (_b, d) => { d.morph.baseTexture = ref("base/other.xbm"); });
+  expectFailure(/Morph baseMeshAppearance is not the seed appearance/, (_b, d) => { d.morph.baseMeshAppearance = cname("xfs_eye_plate"); });
+  expectFailure(/Mesh boundingBox differs from the source plate/, (_b, d) => { d.mesh.boundingBox = { Min: 0, Max: 2 }; });
+  expectFailure(/Mesh extraField differs from the source plate/, (_b, d) => { d.mesh.extraField = 1; });
+}, 30_000);
+
+// PIPE-29: re-quantized morph targets. The fixture cut's deltas fit its quantization after the lift, so this
+// variant puts every delta at the bottom of its range; the lift then pushes some below it and the builder
+// re-quantizes those targets to the lifted range (24 of 105 targets do so on the real plate).
+const TIGHT: typeof PLATE = (() => {
+  const plate = structuredClone(PLATE), blob = plate.morph.Data.RootChunk.blob.Data;
+  const diffs = Buffer.from(blob.diffsBuffer.Bytes, "base64");
+  for (let at = 0; at < diffs.length; at += 12) diffs.writeUInt32LE((diffs.readUInt32LE(at) & 0xc0000000) >>> 0, at);
+  blob.diffsBuffer.Bytes = diffs.toString("base64");
+  return plate;
+})();
+const axisValues = (v: any) => (["X", "Y", "Z"] as const).map(axis => Number(v[axis]));
+/** Re-encode target `t`'s position deltas (every chunk) under a new quantization, as a builder choosing it would. */
+function requantize(blob: any, t: number, scale: number[], offset: number[]) {
+  const h = blob.header, diffs = Buffer.from(blob.diffsBuffer.Bytes, "base64");
+  const oldScale = axisValues(h.targetPositionDiffScale[t]), oldOffset = axisValues(h.targetPositionDiffOffset[t]);
+  const rows = h.numVertexDiffsInEachChunk[t].reduce((a: number, b: number) => a + b, 0);
+  for (let r = 0; r < rows; r++) {
+    const at = (h.targetStartsInVertexDiffs[t] + r) * 12, word = diffs.readUInt32LE(at);
+    let next = word & 0xc0000000;
+    for (let a = 0; a < 3; a++) {
+      const decoded = ((word >>> (10 * a)) & 0x3ff) / 1023 * oldScale[a] + oldOffset[a];
+      next |= Math.max(0, Math.min(1023, Math.round((decoded - offset[a]) / scale[a] * 1023))) << (10 * a);
+    }
+    diffs.writeUInt32LE(next >>> 0, at);
+  }
+  blob.diffsBuffer.Bytes = diffs.toString("base64");
+  (["X", "Y", "Z"] as const).forEach((axis, a) => { h.targetPositionDiffScale[t][axis] = scale[a]; h.targetPositionDiffOffset[t][axis] = offset[a]; });
+}
+
+test("re-quantized morph targets: the range must be exactly the lifted deltas', and errors stay under an absolute cap", () => {
+  const lifted = liftPlate(TIGHT.mesh, TIGHT.morph, [0.4]), inHeader = TIGHT.morph.Data.RootChunk.blob.Data.header;
+  const outHeader = lifted.morph.Data.RootChunk.blob.Data.header;
+  const changed = [...Array(inHeader.numTargets).keys()].filter(t =>
+    JSON.stringify(outHeader.targetPositionDiffScale[t]) !== JSON.stringify(inHeader.targetPositionDiffScale[t]));
+  expect(lifted.report.requantizedTargets).toBeGreaterThan(0);
+  expect(changed).toHaveLength(lifted.report.requantizedTargets);
+  const fixture = makeBuild(undefined, TIGHT);
+  try {
+    const report = run(fixture);
+    expect(report.plateGeometry).toMatchObject({ requantizedTargets: lifted.report.requantizedTargets, blobsMatchInput: true, meshQuantizationRetained: true });
+    expect(report.plateGeometry.maxMorphDeltaErrorMm).toBeGreaterThan(0);
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+  // A wider range than the lifted deltas need would loosen the half-step tolerance; the deltas still decode within it.
+  const t = changed[0]!;
+  expectFailure(/Packaged morph target \d+ is re-quantized to a range other than its lifted deltas/, (_b, d) => {
+    const blob = d.morph.blob.Data, scale = axisValues(blob.header.targetPositionDiffScale[t]), offset = axisValues(blob.header.targetPositionDiffOffset[t]);
+    requantize(blob, t, scale.map(s => s * 2), offset.map((o, a) => o - scale[a] / 2));
+  }, undefined, undefined, TIGHT);
+  // A target the lift did not need to re-quantize may not be widened either.
+  expectFailure(/Packaged morph target 0 is re-quantized to a range other than its lifted deltas/, (_b, d) => {
+    const blob = d.morph.blob.Data, scale = axisValues(blob.header.targetPositionDiffScale[0]), offset = axisValues(blob.header.targetPositionDiffOffset[0]);
+    requantize(blob, 0, scale.map(s => s * 4), offset.map((o, a) => o - scale[a] * 2));
+  });
+  expectFailure(/Packaged morph target \d+ quantization differs from the input outside X, Y and Z/, (_b, d) => {
+    d.morph.blob.Data.header.targetPositionDiffScale[t].W = 7;
+  }, undefined, undefined, TIGHT);
+  // The cap bounds the error whatever the quantization: an input whose own delta step is coarser than the cap is refused.
+  const coarse = structuredClone(PLATE), coarseHeader = coarse.morph.Data.RootChunk.blob.Data.header;
+  coarseHeader.targetPositionDiffScale[0] = { ...coarseHeader.targetPositionDiffScale[0], X: 0.2, Y: 0.2, Z: 0.2 };
+  expectFailure(/Packaged morph target 0 chunk 0 row \d+ delta error exceeds 0.02 mm/, undefined, undefined, undefined, coarse);
+}, 30_000);
 
 /** Two lifts and a diagnostic surface: look a1 on the unlifted chunk with skin roughness kept, b2 on the production lift. */
 const SURFACE = { RoughnessMetalnessAlpha: 0 };

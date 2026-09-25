@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync, readdirSync, statSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import type { PackageBuild } from "./package-action";
 import type { PresetCollection } from "./preset-collection";
-import type { preparePackageCollection } from "./package-filter";
+import { packagePresetIdentities, type preparePackageCollection } from "./package-filter";
 import { packagePlateRecord, type EyePlateManifest } from "./eye-plate-service";
 
 function fileSha256(path: string): string {
@@ -30,13 +30,23 @@ export function verifyPackageBuildResult(
   const manifestPath = resolve(built.manifest ?? "");
   // Containment is judged on canonical paths (`realpathSync.native`): callers may name the same folder by a
   // Windows 8.3 short form (a CI runner's `RUNNER~1` temp folder) or its long form, and a link must not
-  // lead outside the root. The result and its manifest must also not be links themselves.
+  // lead outside the root. The result and its manifest must also not be links themselves. A missing
+  // result, manifest or payload is the same plain containment error, never a raw file-system one.
   const outside = () => Error("Package result is outside the local dist directory.");
   const canonical = (path: string) => { try { return realpathSync.native(path); } catch { throw outside(); } };
+  const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
   const canonicalRoot = canonical(resolve(distRoot));
   const canonicalFinal = canonical(final);
-  if (!canonicalFinal.startsWith(canonicalRoot + sep) || !statSync(manifestPath).isFile() ||
+  if (!canonicalFinal.startsWith(canonicalRoot + sep) || !isFile(manifestPath) ||
       canonical(manifestPath) !== resolve(canonicalFinal, "manifest.json"))
+    throw outside();
+  // Lexically too: the result path must name the same folders below the root as its canonical path does,
+  // under the root as given or its canonical (long) form. A path outside that reaches in through a junction fails.
+  const fold = (path: string) => process.platform === "win32" ? path.toLowerCase() : path;
+  const below = relative(canonicalRoot, canonicalFinal).split(sep), parts = final.split(sep);
+  const lexicalRoot = parts.slice(0, parts.length - below.length).join(sep);
+  if (parts.length <= below.length || fold(parts.slice(-below.length).join(sep)) !== fold(below.join(sep)) ||
+      ![resolve(distRoot), canonicalRoot].some(root => fold(resolve(lexicalRoot)) === fold(root)))
     throw outside();
   if (lstatSync(final).isSymbolicLink() || lstatSync(manifestPath).isSymbolicLink() ||
       resolve(manifestPath) !== resolve(final, "manifest.json"))
@@ -44,8 +54,9 @@ export function verifyPackageBuildResult(
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const sourceHash = createHash("sha256").update(sourceJson).digest("hex");
   const packagedHash = createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex");
-  // Identities and the export route of each preset, as the host's own filter planned them.
-  const identities = prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }));
+  // Identities, export route and any diagnostic knobs of each preset, as the host's own filter planned them.
+  const identities = packagePresetIdentities(prepared.plan);
+  const liftsMm = JSON.stringify(prepared.plan.plate.liftsMm);
   const names = [prepared.plan.namespace + ".archive", prepared.plan.namespace + ".archive.xl"];
   const expectedFiles = names.map(name => `archive/pc/mod/${name}`);
   if (!Array.isArray(manifest.files) || manifest.files.length !== 2 ||
@@ -64,7 +75,7 @@ export function verifyPackageBuildResult(
     throw Error("Package contains unexpected files.");
   for (const entry of manifest.files) {
     const payload = resolve(final, entry.path);
-    if (!realpathSync.native(payload).startsWith(canonicalFinal + sep) ||
+    if (!canonical(payload).startsWith(canonicalFinal + sep) ||
         statSync(payload).size !== entry.bytes ||
         fileSha256(payload) !== entry.sha256)
       throw Error("Package payload does not match its manifest.");
@@ -78,6 +89,7 @@ export function verifyPackageBuildResult(
       manifest.modName !== prepared.plan.modName || manifest.selectorLabel !== prepared.plan.selectorLabel ||
       built.modName !== prepared.plan.modName || built.selectorLabel !== prepared.plan.selectorLabel ||
       JSON.stringify(manifest.presets) !== JSON.stringify(identities) ||
+      JSON.stringify(manifest.plateLiftsMm) !== liftsMm || JSON.stringify(built.plateLiftsMm) !== liftsMm ||
       manifest.verifiedPresetCount !== prepared.packaged.presets.length ||
       built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== prepared.packaged.presets.length ||
       built.originalPresetCount !== collection.presets.length || built.packagedCollectionSha256 !== packagedHash ||

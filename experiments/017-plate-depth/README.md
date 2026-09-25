@@ -37,7 +37,7 @@ The offset survives the face shapes. Across all 105 morph targets the eye-makeup
 - The head's position quantization still covers the lifted plate. 24 of 105 targets need a slightly wider delta range, so their deltas are re-encoded (largest error 7.5 µm); positions are within 2.8 µm of the intended lift.
 - The built-in plate cache keeps the exact head cut. The lift is an export step, so the preview, the plate verifier and the head-surface correspondence of the cached plate are unchanged.
 
-The independent package verifier restates the rule in its own decoder ([`plate-geometry.ts`](../../projects/xf-studio/authoring/src/mod-verifier/plate-geometry.ts)): every non-position byte must equal the plate input, each chunk's positions must be the input lifted along its normals within half a quantization step, every morph row must be the lifted input delta, and mesh and morph base must be identical.
+The independent package verifier restates the rule in its own decoder ([`plate-geometry.ts`](../../projects/xf-studio/authoring/src/mod-verifier/plate-geometry.ts)): the mesh, morph base and morph blobs must equal the plate input as whole objects apart from the fields the lift changes, which it re-derives (chunk offsets, buffer sizes, morph counts, starts and mapping); the head's position quantization must be unchanged and a re-quantized target's range must be exactly its lifted deltas; every non-position byte must equal the input; each chunk's positions must be the input lifted along its normals within half a quantization step (and 0.01 mm), every morph row the lifted input delta (within half a step and 0.02 mm); and mesh and morph base must be identical.
 
 **Contact with the lids.** Measured on the neutral pose and all 105 morph targets (not the dense idle or subframe gates of experiments [006](../006-plate-clearance/README.md) and [012](../012-native-plate-bootstrap/README.md), which were not rerun):
 
@@ -82,7 +82,7 @@ Density goes from 0.65 to 0.8. It sits beside Board 2's fine stripe and a Satin 
 
 ## Pipeline changes (for review)
 
-- **Lift** at Build ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/plate-lift.ts)), described above; recorded in `build.json` (`plateLift`) and the verifier report (`plateGeometry`).
+- **Lift** at Build ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/plate-lift.ts)), described above; recorded in `build.json` (`plateLift`), the verifier report (`plateGeometry`), and in Check, `manifest.json` and the build result as `plateLiftsMm`, with each preset's knobs in its identity (`presets[].diagnostics`).
 - **Diagnostic knobs**, never shown or saved by the Studio ([`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts)). An exported collection file may carry `diagnostics` (`xfs/export-diagnostics-1`) keyed by preset ID:
   - `plateLiftMm`: 0–1 mm;
   - `surface`: overrides of a flat preset's `RoughnessScale`/`RoughnessBias`/`MetalnessScale`/`MetalnessBias`/`RoughnessMetalnessAlpha`.

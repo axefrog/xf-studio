@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createPackageHandler, localPackageTools } from "../src/package-server";
-import { preparePackageCollection } from "../src/package-filter";
+import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
 import { createHash } from "node:crypto";
 import type { PackageAction, PackageCheck } from "../src/package-action";
 import { LocalSettingsStore } from "../src/local-settings-store";
@@ -21,7 +21,7 @@ const summary = (collection: unknown = fixture): PackageCheck => {
   return { ready: true, collectionId: plan.collectionId, namespace: plan.namespace,
     modName: plan.modName, selectorLabel: plan.selectorLabel, originalPresetCount: source.presets.length, omissions,
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(packaged)).digest("hex"),
-    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })) };
+    presets: packagePresetIdentities(plan), plateLiftsMm: plan.plate.liftsMm };
 };
 
 test("package boundary accepts only same-origin validated collection snapshots and ignores browser paths", async () => {
