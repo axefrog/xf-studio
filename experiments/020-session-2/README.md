@@ -48,5 +48,6 @@ Use MO2 profile **XF Studio diagnostic 2026-09-25**. Load a save, make a new man
 6. **Shimmer · strong.** Close up, do points flash as the light moves? At face distance, does it still look different from Satin?
 7. **Metal ramp · lifted.** Are the angular highlight shapes gone, and is there a visible seam partway along the lid?
 8. Note whether ray tracing or path tracing is on, and the game version.
+9. **Optional: piercings and the heart eye.** While at the mirror, set XF to Off, then one close-up each under the same light: piercing style 9 in black, style 1 in silver, then gold, and eye colour 24 (the heart design). The Studio now draws these from the game's own layered materials; a gold that shows grey, or plastic without its colour, tells us which way the game reads their colour mask ([test ask 14](../../knowledge/head-cc-rendering.md)). Restore your usual piercings and eyes afterwards (or load the safety save).
 
 Send the screenshots with a short note per step.
