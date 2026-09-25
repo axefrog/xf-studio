@@ -107,6 +107,8 @@ export class PreviewSetupActions {
   private busy = false;
   private notice: { text: string; key: string } | null = null;
   private detectedGame: string | null = null;
+  /** Why a copy that detection recognised can't be used (for example the Xbox app's), shown when no folder was found. */
+  private gameNote: string | null = null;
   private detection: "idle" | "looking" | "done" = "idle";
   private attempted: boolean;
   private lastWolvenKit: WolvenKitSetupState["phase"] | null = null;
@@ -142,7 +144,7 @@ export class PreviewSetupActions {
 
   snapshot(): PreviewSetupSnapshot {
     const state = this.port.preparation.snapshot(), wolvenKit = this.port.wolvenKit.snapshot();
-    const view = state ? previewView(state, this.detectedGame, wolvenKit, this.port.setupPlace) : null;
+    const view = state ? previewView(state, this.detectedGame, wolvenKit, this.port.setupPlace, this.gameNote) : null;
     const looking = this.looking(state);
     const working = this.working(state, wolvenKit);
     const visible = !!view?.visible && this.head.phase !== "ready";
@@ -326,9 +328,11 @@ export class PreviewSetupActions {
     this.detection = "looking";
     try {
       const outcome = await this.port.detection.dispatch({ kind: "detect.gameInstalls" });
-      const candidates = outcome.ok ? this.port.detection.snapshot().games?.candidates ?? [] : [];
+      const games = outcome.ok ? this.port.detection.snapshot().games : undefined;
+      const candidates = games?.candidates ?? [];
       this.detectedGame = candidates.length === 1 ? candidates[0]!.root : null;
-    } catch { this.detectedGame = null; }
+      this.gameNote = !candidates.length ? games?.unsupported?.[0]?.message ?? null : null;
+    } catch { this.detectedGame = null; this.gameNote = null; }
     finally { this.detection = "done"; this.notify(); }
   }
 

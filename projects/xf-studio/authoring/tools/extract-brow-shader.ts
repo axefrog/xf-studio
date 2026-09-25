@@ -2,12 +2,13 @@
  * material research. The output stays in the ignored research/consumers tree. */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { configuredGameRoot } from "./configured-game-root";
 
 const guid = process.argv[2];
 if (!guid || !/^\d+$/.test(guid)) throw Error("Pass a decimal shader GUID from shader-cache-index.json");
 const root = resolve(import.meta.dir, "../../../..");
-const cachePath = "F:/Games/Cyberpunk 2077/engine/shader_final.cache";
+const cachePath = join(configuredGameRoot(), "engine", "shader_final.cache");
 const bytes = readFileSync(cachePath);
 const footer = bytes.subarray(-112);
 if (footer.toString("ascii", 104, 108) !== "RDHS" || footer.readUInt32LE(108) !== 10)

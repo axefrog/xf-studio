@@ -135,7 +135,7 @@ The desktop first-run **Continue without paths** control dispatches the existing
 
 The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-detection-1` and `xfs/framework-version-check-1` results:
 
-- game install candidates confirmed by executable, each with its Steam/GOG/Epic/MO2 evidence, plus rejected registered paths;
+- game install candidates confirmed by executable, each with its Steam/GOG/Epic/MO2 evidence, plus rejected registered paths and `unsupported` copies (the Xbox app's), each with a plain message and next step that the preview setup card shows when nothing usable was found;
 - MO2 instances, each with its kind, game path, selected profile, configured directories and profile list;
 - framework versions (ArchiveXL, TweakXL, Codeware, RED4ext, redscript, CET) for the game folder and the configured MO2 profile, with the XF Eye Artistry minimums and a plain-language message and Nexus Mods/GitHub links for each shortfall. The host reads its own local settings for this check; the report carries mod and profile names, not paths. The same report feeds the advisory `frameworks` Local setup readiness entry. [Framework check](framework-version-check.md).
 
