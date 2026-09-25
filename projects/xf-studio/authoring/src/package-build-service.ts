@@ -19,6 +19,9 @@ import { createWolvenKitPackageTools, PackageToolError, type PackageResourceTool
 import { verifyBuild, type VerificationReport, type VerifyBuildOptions } from "./mod-verifier/verify-build";
 import { createWolvenKitVerifierTools } from "./verifier-wolvenkit";
 import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "./eye-plate-service";
+import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
+import { plateUvFootprint } from "./plate-uv-window";
+import type { PlateReachInput } from "./plate-reach";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;
 
@@ -138,6 +141,46 @@ function plateProvenance(manifestPath: string | undefined, mesh: string, morph: 
   return { plate: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets };
 }
 
+/** The UV footprint a plate manifest records; null when it records none (a plate cached before footprints were recorded). */
+function manifestPlateReach(manifestPath: string): PlateReachInput | null {
+  const path = existing(manifestPath, "Plate manifest");
+  try {
+    const manifest = JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+    if (manifest?.schema !== EYE_PLATE_MANIFEST_SCHEMA) fail("package_plate_mismatch", "The eye plate manifest is not a valid plate manifest.");
+    return readManifestPlateReach(path, manifest);
+  } catch (error) {
+    if (error instanceof PackageBuildError) throw error;
+    return fail("package_plate_mismatch", "The eye plate's recorded UV footprint is damaged. Build again to prepare the plate afresh.");
+  }
+}
+
+/**
+ * The packaged plate's UV footprint: the one its manifest records (hash-bound to the mesh through
+ * `plateProvenance`), or, for a developer override or a plate cached before footprints were recorded, read
+ * from the plate mesh through one WolvenKit serialize into a private work folder.
+ */
+async function packagedPlateReach(manifestPath: string | undefined, plate: string, stem: string, work: string,
+  tools: PackageResourceTools): Promise<PlateReachInput> {
+  const recorded = manifestPath ? manifestPlateReach(manifestPath) : null;
+  if (recorded) return recorded;
+  const input = join(work, "in"), output = join(work, "out");
+  mkdirSync(input, { recursive: true });
+  mkdirSync(output);
+  try {
+    // A copy of the mesh alone: the morph target is large, and only the mesh holds the UVs.
+    copyFileSync(join(plate, stem + ".mesh"), join(input, stem + ".mesh"));
+    try { await tools.serialize(input, output); }
+    catch (error) {
+      if (error instanceof PackageToolError && error.code !== "package_tool_failed") return fail(error.code, error.message);
+      return fail("package_tool_failed", `WolvenKit failed while reading the eye plate: ${(error as Error).message}`);
+    }
+    const json = join(output, stem + ".mesh.json");
+    if (!isFile(json)) fail("package_tool_failed", "WolvenKit failed while reading the eye plate: it wrote no mesh document.");
+    try { return plateReachInput(plateUvFootprint(JSON.parse(readFileSync(json, "utf8").replace(/^﻿/, "")).Data.RootChunk)); }
+    catch (error) { return fail("package_plate_invalid", `The eye plate mesh has no usable UVs: ${(error as Error).message}`); }
+  } finally { rmSync(work, { recursive: true, force: true }); }
+}
+
 /** Wall-clock nanoseconds as a decimal string, for a unique, sortable build token. */
 function timeToken(): string {
   const now = BigInt(Date.now()) * 1_000_000n + BigInt(Math.floor((performance.now() % 1) * 1_000_000));
@@ -155,17 +198,22 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   if (!isFile(collection) || statSync(collection).size > MAX_COLLECTION_BYTES)
     fail("invalid_collection", "Collection must be a file of at most 16 MB.");
   const sourceHash = fileHash(collection);
-  let summary: ReturnType<typeof preflightPackageCollection>;
-  try { summary = preflightPackageCollection(JSON.parse(readFileSync(collection, "utf8").replace(/^﻿/, ""))); }
-  catch (error) {
-    const message = (error as Error).message;
-    return fail(message.startsWith("No mod files can be made") ? "no_exportable_content" : "invalid_collection",
-      "Collection preflight rejected input: " + message);
-  }
-  const { packagedCollectionJson, ...check } = summary;
-  const packagedHash = check.packagedCollectionSha256;
+  let value: unknown;
+  const preflight = (plate: PlateReachInput | null) => {
+    try {
+      value ??= JSON.parse(readFileSync(collection, "utf8").replace(/^﻿/, ""));
+      return preflightPackageCollection(value, plate);
+    } catch (error) {
+      const message = (error as Error).message;
+      return fail(message.startsWith("No mod files can be made") ? "no_exportable_content" : "invalid_collection",
+        "Collection preflight rejected input: " + message);
+    }
+  };
+  // Check plans on the plate the host last prepared, when it passes that plate's manifest; Build (below) on the
+  // plate it packages. Presets that never reach the plate are omitted either way (PIPE-33).
+  let summary = preflight(options.check && options.plateManifest ? manifestPlateReach(options.plateManifest) : null);
   if (fileHash(collection) !== sourceHash) fail("collection_changed", "Collection changed during preflight; export a stable snapshot and retry.");
-  if (options.check) return check;
+  if (options.check) { const { packagedCollectionJson: _json, ...check } = summary; return check; }
 
   if (!options.plate || !options.wolvenkit || !options.gamepath)
     fail("package_input_missing", "Build requires --plate, --wolvenkit and --gamepath. --check only needs --collection.");
@@ -183,10 +231,21 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     ["WolvenKit tools", dirname(wolvenkit)], ["Bun tools", dirname(process.execPath)]] as const;
   const roots = guardPrivateRoots(options, protectedInputs, collection);
   if (!same(roots.output, outputRoot)) fail("package_root_unsafe", "Private output roots changed during the build.");
-  const token = `${check.namespace}-${timeToken()}`;
+  const token = `${summary.namespace}-${timeToken()}`;
   const intermediate = join(roots.build, token), final = join(roots.output, token);
   if (existsSync(intermediate) || existsSync(final)) fail("package_root_unsafe", "Build destination already exists.");
   mkdirSync(roots.build, { recursive: true });
+  const tools = (options.tools ?? ((cli, cwd, signal) => createWolvenKitPackageTools(cli, { cwd, signal })))(wolvenkit, roots.build, options.signal);
+  // One yield first, so an immediate cancel stops before any conversion.
+  await new Promise(done => setImmediate(done));
+  cancelled();
+  // The plate's UV footprint: recorded in the built-in plate's manifest, else read from the plate itself. The
+  // resource builder requires the plate it serializes to give the same footprint.
+  const plateReach = await packagedPlateReach(options.plateManifest, plate, stem, join(roots.build, `plate-uv-${token}`), tools);
+  cancelled();
+  summary = preflight(plateReach);
+  const { packagedCollectionJson, ...check } = summary;
+  const packagedHash = check.packagedCollectionSha256;
   const snapshot = join(roots.build, `source-${token}.json`);
   if (fileHash(collection) !== sourceHash) fail("collection_changed", "Collection changed during preflight; export a stable snapshot and retry.");
   writeFileSync(snapshot, packagedCollectionJson, { encoding: "utf8", flag: "wx" });
@@ -196,9 +255,8 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     if (textHash(written) !== packagedHash) fail("collection_changed", "Filtered collection snapshot changed while writing; retry.");
     log(`Building ${check.presets.length} preset(s) in ignored local intermediates: ${intermediate}`);
     cancelled();
-    const tools = (options.tools ?? ((cli, cwd, signal) => createWolvenKitPackageTools(cli, { cwd, signal })))(wolvenkit, roots.build, options.signal);
     record = await buildPackageResources({ collection: JSON.parse(written), output: intermediate, plate,
-      tools, signal: options.signal, log });
+      plateUv: plateReach.footprint, tools, signal: options.signal, log });
   } catch (error) {
     if (error instanceof PackageToolError) fail(error.code, error.code === "package_tool_failed"
       ? `WolvenKit failed while building resources: ${error.message}` : error.message);
@@ -248,7 +306,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
       modName: check.modName, selectorLabel: check.selectorLabel,
       packagedCollectionSha256: packagedHash,
       originalPresetCount: check.originalPresetCount, omissions: check.omissions, experimental: check.experimental,
-      presets: check.presets, plateLiftsMm: check.plateLiftsMm, verifiedPresetCount: verification.presetCount,
+      presets: check.presets, plateLiftsMm: check.plateLiftsMm, plateUv: check.plateUv, verifiedPresetCount: verification.presetCount,
       verifiedUnpackedFiles: verification.unpackedFilesVerified,
       files: names.map(name => ({ path: `archive/pc/mod/${name}`, sha256: fileHash(join(target, name)),
         bytes: statSync(join(target, name)).size })),
@@ -265,6 +323,6 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
     modName: check.modName, selectorLabel: check.selectorLabel, archiveSha256: verification.archiveSha256,
     presetCount: verification.presetCount, originalPresetCount: check.originalPresetCount,
     omissions: check.omissions, experimental: check.experimental, packagedCollectionSha256: packagedHash, plate: plateRecord,
-    plateLiftsMm: check.plateLiftsMm, installed: false,
+    plateLiftsMm: check.plateLiftsMm, plateUv: check.plateUv!, installed: false,
     gameRenderingVerified: false };
 }

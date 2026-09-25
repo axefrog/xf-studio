@@ -1,17 +1,22 @@
 import { parseCollection } from "../src/preset-collection";
 import { preflightPackageCollection } from "../src/package-preflight";
+import { parsePlateUvFootprint } from "../src/plate-uv-window";
+import type { CheckRequest } from "./check-runner";
 
 // One request per worker. The host terminates this worker after a complete
 // response or its deadline; synchronous compiler work never runs on loopback.
-self.onmessage = (event: MessageEvent<unknown>) => {
-  let collection;
-  try { collection = parseCollection(event.data); }
+self.onmessage = (event: MessageEvent<CheckRequest>) => {
+  let collection, plate: CheckRequest["plate"] = null;
+  try {
+    collection = parseCollection(event.data?.collection);
+    if (event.data?.plate) plate = { footprint: parsePlateUvFootprint(event.data.plate.footprint), sha256: String(event.data.plate.sha256) };
+  }
   catch (error) {
     self.postMessage({ kind: "invalid", message: error instanceof Error ? error.message : "Invalid collection." });
     return;
   }
   try {
-    const { packagedCollectionJson: _snapshot, ...result } = preflightPackageCollection(collection);
+    const { packagedCollectionJson: _snapshot, ...result } = preflightPackageCollection(collection, plate);
     self.postMessage({ kind: "success", result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Package Check failed.";

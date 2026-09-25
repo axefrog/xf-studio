@@ -8,12 +8,17 @@ import type { PackageResourceTools } from "../src/package-build-wolvenkit";
 import { VERIFICATION_LIMITS, type VerificationReport, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
 import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
-import type { PackageBuild } from "../src/package-action";
+import type { PackageBuild, PackageCheck } from "../src/package-action";
 import type { EyePlateManifest } from "../src/eye-plate-service";
 import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
+import { plateUvFootprint } from "../src/plate-uv-window";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
+import { OFF_PLATE_REASON } from "../src/package-filter";
 
-const PLATE = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
+/** A synthetic plate over the fixture's lids (UVs like the built-in plate's rectangle), and its UV footprint. */
+const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
+const FOOTPRINT = plateUvFootprint(PLATE.mesh.Data.RootChunk);
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -60,7 +65,7 @@ function fakeVerify(overrides: Partial<VerificationReport> = {}, seen: VerifyBui
   };
 }
 
-function setup(collection: unknown = fixture) {
+function setup(collection: unknown = fixture, recordFootprint = true) {
   const dir = resolve(root, crypto.randomUUID());
   const plate = join(dir, "plate"), game = join(dir, "game"), tools = join(dir, "tools");
   for (const path of [plate, game, tools]) mkdirSync(path, { recursive: true });
@@ -68,8 +73,10 @@ function setup(collection: unknown = fixture) {
   writeFileSync(join(plate, "xfs_eye_plate.morphtarget"), "morph fixture");
   const manifest = { schema: "xfs/eye-plate-cache-1", recipeId: "xfs-expanded-eye-plate", recipeRevision: 1, cacheKey: "c".repeat(64),
     source: { revisionId: "cp2077-2.31" }, verification: { morphTargets: 105 },
-    files: { mesh: { sha256: sha("mesh fixture") }, morph: { sha256: sha("morph fixture") } } };
+    files: { mesh: { sha256: sha("mesh fixture") }, morph: { sha256: sha("morph fixture") } },
+    ...(recordFootprint ? { uv: plateUvManifestRecord(FOOTPRINT) } : {}) };
   writeFileSync(join(dir, "plate-manifest.json"), JSON.stringify(manifest));
+  if (recordFootprint) writeFileSync(join(dir, PLATE_UV_FILE), JSON.stringify(FOOTPRINT));
   writeFileSync(join(tools, "WolvenKit.CLI.exe"), "fixture");
   const source = JSON.stringify(collection);
   writeFileSync(join(dir, "collection.json"), source);
@@ -86,7 +93,7 @@ test("Build promotes only a verified candidate with the full local-package manif
   collection.presets[0].recipe.layers[0].finish = "glitter";
   const { dir, options, calls, verified, source, manifest } = setup(collection);
   const result = await runPackageCommand(options) as PackageBuild;
-  const prepared = preparePackageCollection(collection);
+  const prepared = preparePackageCollection(collection, plateReachInput(FOOTPRINT));
   // The shared host gate accepts it, including the exact prepared-plate identity.
   verifyPackageBuildResult(result, prepared.source, prepared, source, join(dir, "dist"), { ...manifest,
     files: { mesh: { sha256: sha("mesh fixture") }, morph: { sha256: sha("morph fixture") } } } as EyePlateManifest);
@@ -172,3 +179,67 @@ test("Check needs no plate, WolvenKit or game and writes nothing", async () => {
   expect(existsSync(join(dir, "build"))).toBe(false);
   expect(existsSync(join(dir, "dist"))).toBe(false);
 });
+
+/** The fixture with its second preset moved below the eye plate (every point 0.4 lower in authored v). */
+const offPlate = () => {
+  const collection = structuredClone(fixture);
+  for (const layer of collection.presets[1].recipe.layers)
+    layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
+  return collection;
+};
+
+test("PIPE-33: Check with the prepared plate and Build both omit a preset that misses the plate, and record the plate", async () => {
+  const collection = offPlate();
+  const { dir, options, source, manifest } = setup(collection);
+  const expected = preparePackageCollection(collection, plateReachInput(FOOTPRINT));
+  expect(expected.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+    reason: OFF_PLATE_REASON }]);
+  // Check planned on the prepared plate's manifest agrees with Build; Check without a plate cannot judge it.
+  const check = await runPackageCommand({ collection: options.collection, check: true, plateManifest: options.plateManifest, appRoot: app,
+    buildRoot: options.buildRoot, distRoot: options.distRoot }) as PackageCheck;
+  expect(check.omissions).toEqual(expected.omissions);
+  expect(check.plateUv).toEqual(expected.plateUv);
+  const blind = await runPackageCommand({ collection: options.collection, check: true, appRoot: app,
+    buildRoot: options.buildRoot, distRoot: options.distRoot }) as PackageCheck;
+  expect(blind.omissions).toEqual([]);
+  expect(blind.plateUv).toBeNull();
+  const result = await runPackageCommand(options) as PackageBuild;
+  expect(result.omissions).toEqual(expected.omissions);
+  expect(result.packagedCollectionSha256).toBe(check.packagedCollectionSha256);
+  expect(result.plateUv).toEqual(expected.plateUv!);
+  const written = JSON.parse(readFileSync(result.manifest, "utf8"));
+  expect(written).toMatchObject({ omissions: expected.omissions, plateUv: expected.plateUv, verifiedPresetCount: 3 });
+  verifyPackageBuildResult(result, expected.source, expected, source, join(dir, "dist"), manifest);
+  // The host's gate refuses a result judged against another plate (or none).
+  expect(() => verifyPackageBuildResult(result, expected.source, preparePackageCollection(collection), source, join(dir, "dist"), manifest))
+    .toThrow("does not match this collection snapshot");
+  // build.json records the footprint of the plate the builder serialized.
+  const record = JSON.parse(readFileSync(join(dir, "build", basename(result.package), "build.json"), "utf8"));
+  expect(record.plateUv.footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
+}, 60_000);
+
+test("PIPE-33: a plate without a recorded footprint is read from its mesh; a footprint of another plate is refused", async () => {
+  const { options, calls } = setup(offPlate(), false);
+  const result = await runPackageCommand(options) as PackageBuild;
+  // One extra WolvenKit read of the plate mesh comes first; the omission is the same.
+  expect(calls[0]).toBe("serialize");
+  expect(calls.filter(call => call === "serialize")).toHaveLength(2);
+  expect(result.omissions.map(item => item.kind === "preset" && item.reason)).toEqual([OFF_PLATE_REASON]);
+  expect(result.plateUv?.footprintSha256).toBe(plateReachInput(FOOTPRINT).sha256);
+  // A manifest recording some other plate's footprint: the builder's own serialization disagrees, so nothing is built.
+  const other = setup();
+  const moved = { ...FOOTPRINT, uv: FOOTPRINT.uv.map((v, i) => i % 2 ? v : v + .001) };
+  writeFileSync(join(other.dir, PLATE_UV_FILE), JSON.stringify(moved));
+  writeFileSync(other.options.plateManifest!, JSON.stringify({ ...other.manifest, uv: plateUvManifestRecord(moved) }));
+  const error = await runPackageCommand(other.options).catch(e => e);
+  expect(error).toBeInstanceOf(PackageBuildError);
+  expect(error.message).toContain("The eye plate changed while this Build was planning on it");
+  expect(existsSync(join(other.dir, "dist"))).toBe(false);
+  // A damaged footprint file is a plain error, before anything is built.
+  const damaged = setup();
+  writeFileSync(join(damaged.dir, PLATE_UV_FILE), "{}");
+  const damagedError = await runPackageCommand(damaged.options).catch(e => e);
+  expect(damagedError.code).toBe("package_plate_mismatch");
+  expect(damagedError.message).toContain("recorded UV footprint is damaged");
+  expect(readdirSync(join(damaged.dir, "build"))).toEqual([]);
+}, 60_000);

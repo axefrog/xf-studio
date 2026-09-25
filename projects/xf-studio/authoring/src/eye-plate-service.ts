@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { contentFingerprint, EyePlateCache, fileSha256 } from "./eye-plate-cache";
+import { samePath } from "./derived-cache";
 import { derivePlateDocuments } from "./eye-plate-cut";
 import {
   applyHeadPatches, type AppliedHeadPatch, type EyePlateHeadRecord, type HeadArchive, type HeadPatchSource, type HeadResourceSource,
@@ -15,6 +16,9 @@ import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 import type { PackagePlate } from "./package-action";
+import { plateUvFootprint } from "./plate-uv-window";
+import { PLATE_UV_FILE, plateUvManifestRecord, readManifestPlateReach, type PlateUvManifestRecord } from "./plate-uv-footprint-io";
+import type { PlateReachInput } from "./plate-reach";
 
 /**
  * Application service: make the built-in expanded eye plate available to Build.
@@ -62,6 +66,12 @@ export type EyePlateManifest = {
   /** Which head resources were cut. Entries written before head-source resolution lack it and are rebuilt. */
   head?: EyePlateHeadRecord;
   files: { mesh: { name: string; sha256: string; bytes: number }; morph: { name: string; sha256: string; bytes: number } };
+  /**
+   * The plate's UV footprint (`plate-uv.json` beside the manifest): bounds, export window, vertex UVs and
+   * triangles, so Check can tell which presets reach the plate. Entries written before it was recorded lack it
+   * and are derived again once.
+   */
+  uv?: PlateUvManifestRecord;
   verification: EyePlateVerification;
   limits: string[];
 };
@@ -121,7 +131,8 @@ function loadCached(cache: EyePlateCache, directory: string, key: string, recipe
   try {
     const manifest = cache.readJson(manifestFile) as EyePlateManifest;
     if (manifest.schema !== EYE_PLATE_MANIFEST_SCHEMA || manifest.cacheKey !== key || manifest.recipeId !== recipe.id ||
-        manifest.recipeRevision !== recipe.revision || !manifest.head) return null;
+        manifest.recipeRevision !== recipe.revision || !manifest.head || !manifest.uv) return null;
+    readManifestPlateReach(manifestFile, manifest);
     const resources = join(directory, EYE_PLATE_RESOURCE_DIRECTORY);
     const meshFile = join(resources, manifest.files.mesh.name), morphFile = join(resources, manifest.files.morph.name);
     for (const [file, entry] of [[meshFile, manifest.files.mesh], [morphFile, manifest.files.morph]] as const)
@@ -173,6 +184,26 @@ function contentPlan(recipe: EyePlateRecipe, gameRoot: string): HeadSourcePlan {
     ({ role, depotPath, entryPath: depotPath, archive, baseGame: true, alternatives: [], notes: [] });
   const mesh = entry("mesh", recipe.source.meshDepotPath), morph = entry("morph", recipe.source.morphDepotPath);
   return { mesh, morph, patches: [], ignoredPatches: [], baseGame: { mesh, morph }, modded: false };
+}
+
+/**
+ * The UV footprint of the plate the cache last prepared for this game folder and recipe, for Check before a
+ * Build. Advisory: the next Build resolves the head again and plans on the plate it actually packages. `null`
+ * when no plate has been prepared yet (or the entry predates footprints, or anything is unreadable).
+ */
+export function cachedPlateReach(cacheRoot: string | null, gameRoot: string | null, recipe: EyePlateRecipe = EYE_PLATE_RECIPE):
+  { plate: PlateReachInput; manifestFile: string } | null {
+  if (!cacheRoot || !gameRoot) return null;
+  try {
+    const cache = new EyePlateCache(cacheRoot), status = cache.readStatus();
+    if (!status || status.state !== "ready" || !status.cacheName || status.recipeId !== recipe.id ||
+        status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot)) return null;
+    const manifestFile = join(cache.entry(status.cacheName), EYE_PLATE_MANIFEST_FILE);
+    const manifest = cache.readJson(manifestFile) as EyePlateManifest;
+    if (manifest.schema !== EYE_PLATE_MANIFEST_SCHEMA || manifest.recipeId !== recipe.id || manifest.recipeRevision !== recipe.revision) return null;
+    const plate = readManifestPlateReach(manifestFile, manifest);
+    return plate ? { plate, manifestFile } : null;
+  } catch { return null; }
 }
 
 export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<EyePlateResult> {
@@ -359,6 +390,9 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
       status("failed", "plate_verification_failed", "The derived eye plate failed verification.");
       throw new EyePlateError("plate_verification_failed", "The derived eye plate failed verification, so Build stopped.", (error as Error).message);
     }
+    // The footprint Check plans on comes from the finished resource, as Build will read it back.
+    const footprint = plateUvFootprint(readDocument(cache, meshReadback).Data.RootChunk);
+    cache.writeJson(join(staging, PLATE_UV_FILE), footprint);
     const file = (path: string) => ({ name: basename(path), sha256: fileSha256(path), bytes: statSync(path).size });
     const manifest: EyePlateManifest = {
       schema: EYE_PLATE_MANIFEST_SCHEMA, recipeId: recipe.id, recipeRevision: recipe.revision,
@@ -367,6 +401,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
         morphDepotPath: recipe.source.morphDepotPath, ...hashes },
       head: provenance,
       files: { mesh: file(join(resources, meshName)), morph: file(join(resources, morphName)) },
+      uv: plateUvManifestRecord(footprint),
       verification,
       limits: [...LIMITS, ...(kind === "installed-mods" ? [MODDED_LIMIT] : kind === "base-game-override" ? [OVERRIDE_LIMIT] : [])],
     };

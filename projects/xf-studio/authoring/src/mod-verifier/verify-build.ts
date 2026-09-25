@@ -44,8 +44,8 @@ import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigm
   VerificationError, type Node, type VerifierPlan, type VerifierRoute, type VerifierUvSpace } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
-import { expectedUvConstants, expectedWindow, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
-  type MappingStats, type PlateUvSamples, type VerifierWindow } from "./uv-window";
+import { expectedUvConstants, expectedWindow, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
+  type MappingStats, type PlateUvSamples, type ReferenceCrop, type VerifierWindow } from "./uv-window";
 
 export { VerificationError } from "./resource-checks";
 
@@ -90,7 +90,9 @@ type MipRow = { level: number; width: number; height: number; partialTexels: num
 /** The window the verifier derived from the packaged plate, its constants, and how many plate points it sampled. */
 export type PlateUvWindowReport = { bounds: PlateUvSamples["bounds"]; window: VerifierWindow; constants: Record<string, number>; samples: number };
 /** Per preset: texture space, stored row order (checked on a BC4 map) and, for window maps, the plate-sample mapping. */
-type SpaceCheck = { uvSpace: VerifierUvSpace; width: number; height: number; storedRows: "reversed"; mapping?: MappingStats };
+type SpaceCheck = { uvSpace: VerifierUvSpace; width: number; height: number; storedRows: "reversed"; mapping?: MappingCheck };
+/** Plate-sample statistics of a window map and its signed offset estimate (window texels; null: no edges on that axis). */
+export type MappingCheck = MappingStats & { offsetTexels: { u: number | null; v: number | null } };
 
 export interface VerificationReport {
   build: string; presetCount: number; selectorCount: 1; selectorOptionCount: number; appDefinitions: 2;
@@ -187,14 +189,30 @@ function checkSpace(build: string, record: Node, preset: VerifierPlan["presets"]
     reference.grid >= VERIFIER_REFERENCE_GRID, `Window preset ${name} has no head-UV coverage reference at least ${VERIFIER_REFERENCE_GRID} texels across`);
   const data = bytes(join(build, "baked", reference.file));
   ensure(sha256(data) === reference.sha256 && data.length === reference.width * reference.height, `Coverage reference for ${name} differs from the build record`);
-  const mapping = mappingStats(coverage, dims.width, dims.height, context.uv, data, reference, context.samples);
-  // A wrong window, axis flip or offset misplaces whole shapes: many plate points then disagree by more than half.
-  ensure(mapping.covered > 0 && mapping.mean < MAPPING_LIMITS.mean && mapping.farShare < MAPPING_LIMITS.farShare,
-    `Window map for ${name} does not match its authored head-UV content at the plate's UVs: ${JSON.stringify(mapping)}`);
-  return { ...check, mapping };
+  return { ...check, mapping: checkMapping(name, coverage, dims, context.uv, data, reference, context.samples) };
 }
-/** Plate-sample agreement a window map needs with its head-UV reference (coverage units). */
-export const MAPPING_LIMITS = Object.freeze({ mean: .03, farShare: .01 });
+/**
+ * Plate-sample agreement a window map needs with its head-UV reference: mean and far-off share in coverage
+ * units, and the signed offset estimate in window texels on each axis.
+ */
+export const MAPPING_LIMITS = Object.freeze({ mean: .03, farShare: .01, offsetTexels: 1 });
+
+/**
+ * The mapping gate of one window map (decoded level-0 coverage in image row order) against its head-UV
+ * reference at the plate samples. A wrong window, axis flip or large offset misplaces whole shapes, so many
+ * points disagree by more than half; a small shift passes those limits, so its signed estimate is bounded too.
+ */
+export function checkMapping(name: string, coverage: Float64Array, dims: { width: number; height: number }, uv: Record<string, number>,
+  reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples): MappingCheck {
+  const stats = mappingStats(coverage, dims.width, dims.height, uv, reference, crop, samples);
+  ensure(stats.covered > 0, `Window map for ${name} has no content at the plate's UVs`);
+  ensure(stats.mean < MAPPING_LIMITS.mean && stats.farShare < MAPPING_LIMITS.farShare,
+    `Window map for ${name} does not match its authored head-UV content at the plate's UVs: ${JSON.stringify(stats)}`);
+  const offsetTexels = mappingOffset(coverage, dims.width, dims.height, uv, reference, crop, samples);
+  ensure([offsetTexels.u, offsetTexels.v].every(o => o === null || Math.abs(o) <= MAPPING_LIMITS.offsetTexels),
+    `Window map for ${name} is shifted from its authored head-UV content by ${JSON.stringify(offsetTexels)} texels (limit ${MAPPING_LIMITS.offsetTexels})`);
+  return { ...stats, offsetTexels };
+}
 /** The reference must sample the head atlas at least this finely, so it is as sharp as the window map. */
 export const VERIFIER_REFERENCE_GRID = 4096;
 
@@ -284,6 +302,8 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
   const texels = width * height, active = new Uint8Array(texels);
   let covered = 0;
   for (let t = 0; t < texels; t++) if (source.planes[5][t] > 1e-5) { active[t] = 1; covered++; }
+  // Check omits presets that do not reach the plate; one that still arrives empty is refused plainly (PIPE-33).
+  ensure(covered > 0, `Preset ${preset.name} has no makeup in its ${width}x${height} texture, so nothing of it would show on the eye plate`);
   const colourPlanes = (level: ContributionPlanes) => level.planes.slice(0, 3);
   const colour = errorStats(absoluteErrors(colourPlanes(source), colourPlanes(actual), active, covered));
   const alpha = errorStats(absoluteErrors([source.planes[5]], [actual.planes[5]], active, covered));

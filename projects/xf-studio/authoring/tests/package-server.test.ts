@@ -7,7 +7,16 @@ import { createHash } from "node:crypto";
 import type { PackageAction, PackageCheck } from "../src/package-action";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { defaultLocalSettings } from "../src/local-settings";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { EyePlateCache } from "../src/eye-plate-cache";
+import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
+import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
+import { derivePlateDocuments } from "../src/eye-plate-cut";
+import { OFF_PLATE_REASON } from "../src/package-filter";
+import { preflightPackageCollection } from "../src/package-preflight";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
+import { plateUvFootprint } from "../src/plate-uv-window";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -136,5 +145,54 @@ test("the package server resolves local settings for each build and leaves Check
     const second = store.save({ ...first, gameRoot: join(directory, "game-b") }, 1);
     expect((await handler(request({ action: "build", collection: fixture }))).status).toBe(422);
     expect(selected).toBe(second.gameRoot!);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-33: Check plans on the plate the cache last prepared for this game, and the host holds the tool to it", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-plate-reach-"));
+  try {
+    // A prepared plate in the private cache: its status, manifest and UV footprint (a synthetic plate over the lids).
+    const cacheRoot = join(directory, "cache"), game = join(directory, "game"), name = "xfs-expanded-eye-plate-r1-fixture";
+    const footprint = plateUvFootprint(withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(),
+      "a\b.mesh"), plateLikeUv).mesh.Data.RootChunk);
+    mkdirSync(join(cacheRoot, name), { recursive: true });
+    const manifestFile = join(cacheRoot, name, "plate-manifest.json");
+    writeFileSync(manifestFile, JSON.stringify({ schema: EYE_PLATE_MANIFEST_SCHEMA, recipeId: EYE_PLATE_RECIPE.id,
+      recipeRevision: EYE_PLATE_RECIPE.revision, uv: plateUvManifestRecord(footprint) }));
+    writeFileSync(join(cacheRoot, name, PLATE_UV_FILE), JSON.stringify(footprint));
+    new EyePlateCache(cacheRoot).writeStatus({ recipeId: EYE_PLATE_RECIPE.id, recipeRevision: EYE_PLATE_RECIPE.revision, state: "ready",
+      code: null, message: "ready", gameRoot: game, contentFingerprint: "", cacheName: name });
+    const collection = structuredClone(fixture);
+    for (const layer of collection.presets[1].recipe.layers) layer.points = layer.points.map((p: { v: number }) => ({ ...p, v: p.v + .4 }));
+    const plate = plateReachInput(footprint);
+    let passed: string | undefined;
+    const planned = (value: unknown, reach: typeof plate | null) => {
+      const { packagedCollectionJson: _json, ...check } = preflightPackageCollection(value, reach);
+      return check;
+    };
+    const tools = { ...localPackageTools(), plateCache: cacheRoot, gamepath: game };
+    const handler = createPackageHandler(tools, async (_action, file, actionTools) => {
+      passed = actionTools.checkPlateManifest;
+      return planned(JSON.parse(readFileSync(file, "utf8")), plate);
+    });
+    const response = await handler(request({ action: "check", collection }));
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(passed).toBe(manifestFile);
+    expect(result.omissions).toEqual([{ kind: "preset", presetId: collection.presets[1].id, presetName: collection.presets[1].name,
+      reason: OFF_PLATE_REASON }]);
+    expect(result.plateUv.footprintSha256).toBe(plate.sha256);
+    // A tool answer planned on no plate (or another one) is not accepted.
+    const blind = createPackageHandler(tools, async (_action, file) => planned(JSON.parse(readFileSync(file, "utf8")), null));
+    expect((await blind(request({ action: "check", collection }))).status).toBe(422);
+    // Another game folder has no prepared plate yet: Check plans on none.
+    const other = createPackageHandler({ ...tools, gamepath: join(directory, "other") }, async (_action, file, actionTools) => {
+      passed = actionTools.checkPlateManifest;
+      return planned(JSON.parse(readFileSync(file, "utf8")), null);
+    });
+    const unplanned = await other(request({ action: "check", collection }));
+    expect(unplanned.status).toBe(200);
+    expect(passed).toBeUndefined();
+    expect((await unplanned.json()).omissions).toEqual([]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

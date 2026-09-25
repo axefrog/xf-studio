@@ -3,6 +3,7 @@ import type { PackageExperimental, PackageOmission } from "./package-filter";
 import type { EyePlateHeadRecord } from "./eye-plate-head-source";
 import type { ExportRoute } from "./finish-export";
 import type { PresetDiagnostics } from "./export-diagnostics";
+import type { PlateUvRecord } from "./plate-reach";
 
 export type PackageAction = "check" | "build";
 /**
@@ -19,7 +20,12 @@ export type PackageCheck = { ready: true; collectionId: string; namespace: strin
    * The packaged eye plate's lifts in millimetres, one render chunk each: `[0.4]` unless a diagnostic candidate
    * asks for others. Always set by Check; answers from older hosts lack it.
    */
-  plateLiftsMm?: number[] };
+  plateLiftsMm?: number[];
+  /**
+   * The eye plate whose UV footprint decided which presets reach it: the plate the host last prepared, or null
+   * when none has been prepared yet (Build then judges against the plate it packages). Older answers lack it.
+   */
+  plateUv?: PlateUvRecord | null };
 /**
  * Which eye plate was packaged: the built-in plate derived from the installed game (with the head resources it
  * was cut from: base game, installed mods or the base-game escape hatch), or a developer override.
@@ -32,6 +38,8 @@ export type PackageBuild = { package: string; manifest: string; modName: string;
   experimental?: PackageExperimental[];
   /** As in Check; results from before lifts were recorded lack it. */
   plateLiftsMm?: number[];
+  /** The packaged plate's UV footprint, which decided the plate-reach omissions; results from before it was recorded lack it. */
+  plateUv?: PlateUvRecord;
   installed: false; gameRenderingVerified: false };
 export class PackageRequestError extends Error {
   constructor(readonly code: string, message: string) { super(message); }

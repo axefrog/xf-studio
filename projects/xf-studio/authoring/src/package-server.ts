@@ -8,7 +8,10 @@ import type { PackageAction, PackageBuild, PackageCheck } from "./package-action
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { verifyPackageBuildResult } from "./package-result-verifier";
-import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
+import { cachedPlateReach, EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
+import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
+import { plateUvFootprint } from "./plate-uv-window";
+import type { PlateReachInput } from "./plate-reach";
 import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
 import { runProcessTree } from "./process-tree";
@@ -30,7 +33,9 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
  * `XFS_EYE_PLATE_HEAD=base-game` developer override).
  */
 export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
-  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
+  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game";
+  /** Check only: the manifest of the plate the cache last prepared, whose UV footprint Check plans on (set by the handler). */
+  checkPlateManifest?: string };
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
@@ -54,29 +59,51 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
 
 export type PlateToolsFactory = (wolvenkit: string) => EyePlateTools;
 
-/** Resolve the plate for a localhost Build: the developer override, or the verified built-in plate. */
-async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): Promise<{ args: string[]; manifest?: EyePlateManifest }> {
+/** The override plate's UV footprint, read with the host's own WolvenKit serialize of its mesh. */
+async function overridePlateReach(plate: string, tools: PackageTools, plateTools: PlateToolsFactory): Promise<PlateReachInput> {
+  const meshes = ["xfs_eye_plate.mesh", "xfas_eye_plate.mesh"].map(name => join(plate, name)).filter(path => {
+    try { return statSync(path).isFile(); } catch { return false; }
+  });
+  if (meshes.length !== 1) throw Error("The XFS_PACKAGE_PLATE developer override must hold exactly one eye plate mesh.");
+  const work = mkdtempSync(resolve(tmpdir(), "xfs-plate-uv-"));
+  try {
+    const json = await plateTools(tools.wolvenkit).serialize({ file: meshes[0], outDir: work });
+    return plateReachInput(plateUvFootprint(JSON.parse(readFileSync(json, "utf8").replace(/^\uFEFF/, "")).Data.RootChunk));
+  } finally { rmSync(work, { recursive: true, force: true }); }
+}
+
+/**
+ * Resolve the plate for a localhost Build: the developer override, or the verified built-in plate; with the
+ * plate's UV footprint, which the host's own filter plans on.
+ */
+async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): Promise<{ args: string[]; manifest?: EyePlateManifest; reach: PlateReachInput }> {
   if (tools.plate) {
     let valid = false;
     try { valid = statSync(tools.plate).isDirectory(); } catch { /* Missing override. */ }
     if (!valid) throw Error("The XFS_PACKAGE_PLATE developer override does not name a directory.");
-    return { args: ["--plate", tools.plate] };
+    return { args: ["--plate", tools.plate], reach: await overridePlateReach(tools.plate, tools, plateTools) };
   }
   try {
     const route = tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null };
     const plate = await ensureEyePlate({ gameRoot: tools.gamepath, cacheRoot: tools.plateCache, tools: plateTools(tools.wolvenkit),
       headSource: createInstalledHeadSource({ gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit, ...route },
         join(tools.plateCache, "resolver")), headOverride: tools.headOverride });
-    return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest };
+    const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
+    if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
+    return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest, reach };
   } catch (error) {
     if (error instanceof EyePlateError && error.detail) console.error(`Eye plate preparation failed (${error.code}):`, error.detail.slice(-3000));
     throw error;
   }
 }
 
-/** Run the TypeScript package CLI as a bounded child process; the host keeps its own identity gates. */
+/**
+ * Run the TypeScript package CLI as a bounded child process; the host keeps its own identity gates. Build reports
+ * the prepared plate's UV footprint through `onPlate` before the CLI starts, so the host can plan on it too.
+ */
 export async function runLocalPackage(action: PackageAction, file: string, tools: PackageTools,
-  plateTools: PlateToolsFactory = createWolvenKitEyePlateTools, signal?: AbortSignal): Promise<PackageCheck | PackageBuild> {
+  plateTools: PlateToolsFactory = createWolvenKitEyePlateTools, signal?: AbortSignal,
+  onPlate?: (plate: PlateReachInput) => void): Promise<PackageCheck | PackageBuild> {
   if (action === "build") {
     for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
       let valid = false;
@@ -97,9 +124,11 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
       if (!valid) throw Error("The configured Bun executable is unavailable. Check Local setup.");
     }
   }
-  const plate = action === "build" ? await localPlate(tools, plateTools) : { args: [] as string[] } as { args: string[]; manifest?: EyePlateManifest };
+  const plate = action === "build" ? await localPlate(tools, plateTools)
+    : { args: tools.checkPlateManifest ? ["--plate-manifest", tools.checkPlateManifest] : [] } as { args: string[]; manifest?: EyePlateManifest };
+  if (action === "build" && "reach" in plate) onPlate?.(plate.reach as PlateReachInput);
   const args = [script, "--collection", file, "--machine-result",
-    ...(action === "check" ? ["--check"] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
+    ...(action === "check" ? ["--check", ...plate.args] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
   const run = await runProcessTree(tools.bun, args, { cwd: hq, signal,
     timeoutMs: action === "check" ? localCheckDeadlineMs : localBuildDeadlineMs });
   if (run.stopped) throw Error(`Package ${action} ${run.stopped === "timeout" ? "exceeded its time limit and was stopped" : "was cancelled"}. ` +
@@ -120,9 +149,10 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
   return result;
 }
 
-type Runner = (action: PackageAction, file: string, tools: PackageTools) => Promise<PackageCheck | PackageBuild>;
+type Runner = (action: PackageAction, file: string, tools: PackageTools, onPlate?: (plate: PlateReachInput) => void) => Promise<PackageCheck | PackageBuild>;
+const defaultRunner: Runner = (action, file, tools, onPlate) => runLocalPackage(action, file, tools, undefined, undefined, onPlate);
 /** One active build per server; requests carry only a validated collection snapshot. */
-export function createPackageHandler(tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = runLocalPackage) {
+export function createPackageHandler(tools: PackageTools | ((action: PackageAction) => PackageTools) = () => localPackageTools(), runner: Runner = defaultRunner) {
   let building = false;
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -143,8 +173,12 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
       collection = parseCollection(input.collection);
     } catch (error) { return json({ error: (error as Error).message }, 400); }
     if (building) return json({ error: "A local package build is already running. Wait for its result before starting another." }, 409);
+    let actionTools = typeof tools === "function" ? tools(action) : tools;
+    // Check plans on the plate the cache last prepared for this game, if any; Build on the plate it prepares.
+    const cached = action === "check" ? cachedPlateReach(actionTools.plateCache, actionTools.gamepath) : null;
+    if (cached) actionTools = { ...actionTools, checkPlateManifest: cached.manifestFile };
     let prepared: ReturnType<typeof preparePackageCollection>;
-    try { prepared = preparePackageCollection(collection); }
+    try { prepared = preparePackageCollection(collection, cached?.plate ?? null); }
     catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
     const { plan, omissions, experimental, packaged } = prepared;
     const source = JSON.stringify(collection);
@@ -154,7 +188,8 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
     writeFileSync(file, source);
     if (action === "build") building = true;
     try {
-      const result = await runner(action, file, typeof tools === "function" ? tools(action) : tools);
+      const packagedPlate: { reach: PlateReachInput | null } = { reach: null };
+      const result = await runner(action, file, actionTools, reach => { packagedPlate.reach = reach; });
       if (action === "check") {
         const checked = result as PackageCheck;
         if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||
@@ -163,12 +198,14 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
             JSON.stringify(checked.presets) !== JSON.stringify(packagePresetIdentities(plan)) ||
-            JSON.stringify(checked.plateLiftsMm) !== JSON.stringify(plan.plate.liftsMm))
+            JSON.stringify(checked.plateLiftsMm) !== JSON.stringify(plan.plate.liftsMm) ||
+            JSON.stringify(checked.plateUv ?? null) !== JSON.stringify(prepared.plateUv))
           throw Error("Package preflight returned a different collection identity.");
         return json(checked);
       }
       const built = result as PackageBuild;
-      verifyPackageBuildResult(built, collection, prepared, source, dist);
+      // The host's own filter on the plate the build packaged: presets that do not reach it are omitted.
+      verifyPackageBuildResult(built, collection, packagedPlate.reach ? preparePackageCollection(collection, packagedPlate.reach) : prepared, source, dist);
       return json(built);
     } catch (error) {
       console.error("Local package action failed:", (error as Error).message);

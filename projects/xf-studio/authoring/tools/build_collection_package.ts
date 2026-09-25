@@ -5,8 +5,11 @@
 // independent verification is promoted into the ignored project dist directory. Both
 // hosts run this entry (desktop runs its bundled copy) as a bounded child process.
 //
-//   bun tools/build_collection_package.ts --collection <file> [--check] [--machine-result]
+//   bun tools/build_collection_package.ts --collection <file> [--check [--plate-manifest <file>]] [--machine-result]
 //     [--plate <dir> [--plate-manifest <file>] --wolvenkit <WolvenKit.CLI.exe> --gamepath <game>]
+//
+// Check with a prepared plate's manifest also omits presets that never reach that plate; Build always plans on
+// the plate it packages.
 //     [--app-root <dir>] [--build-root <dir>] [--dist-root <dir>] [--output-root <dir>]
 import { resolve } from "node:path";
 import { PackageBuildError, runPackageCommand } from "../src/package-build-service";

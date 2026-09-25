@@ -90,6 +90,8 @@ export function verifyPackageBuildResult(
       built.modName !== prepared.plan.modName || built.selectorLabel !== prepared.plan.selectorLabel ||
       JSON.stringify(manifest.presets) !== JSON.stringify(identities) ||
       JSON.stringify(manifest.plateLiftsMm) !== liftsMm || JSON.stringify(built.plateLiftsMm) !== liftsMm ||
+      // The plate footprint the host planned on (which presets reach the plate) must be the one the build used.
+      JSON.stringify(manifest.plateUv ?? null) !== JSON.stringify(prepared.plateUv) || JSON.stringify(built.plateUv ?? null) !== JSON.stringify(prepared.plateUv) ||
       manifest.verifiedPresetCount !== prepared.packaged.presets.length ||
       built.archiveSha256 !== manifest.files?.[0]?.sha256 || built.presetCount !== prepared.packaged.presets.length ||
       built.originalPresetCount !== collection.presets.length || built.packagedCollectionSha256 !== packagedHash ||

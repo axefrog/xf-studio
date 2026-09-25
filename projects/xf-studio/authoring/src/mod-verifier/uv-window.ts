@@ -130,6 +130,63 @@ export function mappingStats(coverage: Float64Array, width: number, height: numb
     p99: n ? sorted[Math.min(n - 1, Math.floor(.99 * (n - 1)))] : 0, farShare: n ? far / n : 0 };
 }
 
+/** Search range of the offset estimate (window texels) and its coarse-to-fine steps. */
+export const OFFSET_SEARCH = Object.freeze({ range: 8, steps: [1, 1 / 4, 1 / 16] as readonly number[] });
+
+/**
+ * Signed estimate of how far the game's map content sits from the authored content at the plate samples, in
+ * texels of the window map (u: image columns, v: image rows; positive = towards a larger column or row). It
+ * shifts only the game-side lookup by (su, sv) and takes the shift with the least total absolute difference from
+ * the authored reference: a joint search (a diagonal edge couples the axes) over whole texels within ±range,
+ * refined twice around the best. Among equal errors the shift nearest zero wins, so an edge along one axis
+ * reports 0 on it. The mean-error gate tolerates small misregistrations (a 6-texel shift of fine lines passes
+ * it); this estimate bounds them. `null` when no shift changes the error (nothing to align).
+ */
+export function mappingOffset(coverage: Float64Array, width: number, height: number, constants: Record<string, number>,
+  reference: Uint8Array, crop: ReferenceCrop, samples: PlateUvSamples, search = OFFSET_SEARCH): { u: number | null; v: number | null } {
+  // Texels with content, as a summed-area table: a sample far from all content can never differ under any shift.
+  const sat = new Int32Array((width + 1) * (height + 1));
+  for (let y = 0; y < height; y++) for (let x = 0, row = 0; x < width; x++) {
+    row += coverage[y * width + x] > 0 ? 1 : 0;
+    sat[(y + 1) * (width + 1) + x + 1] = sat[y * (width + 1) + x + 1] + row;
+  }
+  const anyContent = (x0: number, y0: number, x1: number, y1: number) => {
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(width, x1); y1 = Math.min(height, y1);
+    return x1 > x0 && y1 > y0 && sat[y1 * (width + 1) + x1] - sat[y0 * (width + 1) + x1] - sat[y1 * (width + 1) + x0] + sat[y0 * (width + 1) + x0] > 0;
+  };
+  const gx: number[] = [], gy: number[] = [], authored: number[] = [], reach = search.range + 2;
+  for (let i = 0; i < samples.uv.length; i += 2) {
+    const U = samples.uv[i], V = samples.uv[i + 1];
+    const tu = wrapT(constants.UVScaleX * (U - .5) + .5 + constants.UVOffsetX), tv = wrapT(constants.UVScaleY * (V - .5) + .5 + constants.UVOffsetY);
+    const x = tu * width - .5, y = (1 - tv) * height - .5;
+    const rx = U * crop.grid - .5 - crop.x0, ry = (1 - V) * crop.grid - .5 - crop.y0;
+    ensure(rx >= 0 && ry >= 0 && rx < crop.width - 1 && ry < crop.height - 1, "A plate sample lies outside the coverage reference");
+    const a = bilinear(reference, crop.width, crop.height, rx, ry) / 255;
+    const near = anyContent(Math.floor(x) - reach, Math.floor(y) - reach, Math.floor(x) + reach + 2, Math.floor(y) + reach + 2);
+    if (!a && !near) continue;
+    gx.push(x); gy.push(y); authored.push(a);
+  }
+  const error = (su: number, sv: number) => {
+    let sum = 0;
+    for (let i = 0; i < gx.length; i++) sum += Math.abs(bilinear(coverage, width, height, gx[i] + su, gy[i] + sv) - authored[i]);
+    return sum;
+  };
+  let best = { u: 0, v: 0, e: error(0, 0) }, least = best.e, most = best.e;
+  const tolerance = () => 1e-9 * Math.max(1, best.e);
+  for (const [level, step] of search.steps.entries()) {
+    const radius = level === 0 ? search.range : search.steps[level - 1], k = Math.round(radius / step), cu = best.u, cv = best.v;
+    for (let a = -k; a <= k; a++) for (let b = -k; b <= k; b++) {
+      const u = cu + a * step, v = cv + b * step;
+      if (Math.abs(u) > search.range || Math.abs(v) > search.range) continue;
+      const e = error(u, v);
+      if (level === 0) { least = Math.min(least, e); most = Math.max(most, e); }
+      if (e < best.e - tolerance() || (e <= best.e + tolerance() && Math.hypot(u, v) < Math.hypot(best.u, best.v))) best = { u, v, e };
+    }
+    if (level === 0 && !(most - least > 1e-9 * Math.max(1, most))) return { u: null, v: null };
+  }
+  return { u: best.u, v: best.v };
+}
+
 /**
  * Level 0 of a BC4 (`TCM_QualityR`) XBM as stored, decoded here (the verifier's own decoder), in stored row
  * order. Reads the serialized `renderTextureResource` blob; returns bytes, width × height.

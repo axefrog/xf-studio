@@ -10,6 +10,7 @@ import type { LocalSettings } from "../src/local-settings";
 import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateResult } from "../src/eye-plate-service";
 import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
+import { readManifestPlateReach } from "../src/plate-uv-footprint-io";
 import { runProcessTree } from "../src/process-tree";
 import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
@@ -236,6 +237,17 @@ export async function runDesktopBuild(value: unknown, settings: LocalSettings, d
     }
     return { kind: "failure", code: "package_build_failed", message: "The built-in eye plate could not be prepared. No candidate was published." };
   } finally { clearTimeout(plateTimer); signal?.removeEventListener("abort", plateAbort); }
+  // Plan on the prepared plate: presets whose makeup never reaches it are omitted, as the builder omits them.
+  try {
+    const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
+    if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
+    prepared = preparePackageCollection(collection, reach);
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith("No mod files can be made")) return { kind: "failure", code: "no_exportable_content", message };
+    log(`Build: the eye plate's UV footprint could not be read: ${message}`);
+    return { kind: "failure", code: "package_build_failed", message: "The built-in eye plate could not be prepared. No candidate was published." };
+  }
   const remainingMs = Math.max(1, timeoutMs - (Date.now() - started));
   mkdirSync(work, { recursive: true, mode: 0o700 });
   const snapshot = resolve(work, "collection.json");

@@ -9,7 +9,9 @@ import {
 import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/eye-plate-cut";
 import { plateTopology, verifyEyePlate } from "../src/eye-plate-verify";
 import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/eye-plate-cache";
-import { EyePlateError, ensureEyePlate, type EyePlateTools } from "../src/eye-plate-service";
+import { cachedPlateReach, EyePlateError, ensureEyePlate, type EyePlateTools } from "../src/eye-plate-service";
+import { plateUvFootprint } from "../src/plate-uv-window";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { depotPathRegex } from "../src/eye-plate-wolvenkit";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 
@@ -207,6 +209,37 @@ test("the service derives, verifies, caches and reuses the plate", () => withDir
   const repaired = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
   expect(repaired.reused).toBe(false);
   expect(readFileSync(repaired.meshFile, "utf8")).not.toBe("damaged");
+}));
+
+test("PIPE-33: the cache records the plate's UV footprint for Check, and derives older entries again once", () => withDirectory(async dir => {
+  const mesh = fixtureHeadMesh(), morph = fixtureHeadMorph();
+  const recipe = hashedRecipe(mesh, morph);
+  const game = fakeGame(dir), cacheRoot = join(dir, "cache");
+  const first = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  // The footprint of the finished plate resource, beside the manifest, bound by its hash, bounds and window.
+  const footprint = plateUvFootprint(JSON.parse(readFileSync(first.meshFile, "utf8")).Data.RootChunk);
+  expect(first.manifest.uv).toEqual(plateUvManifestRecord(footprint));
+  expect(JSON.parse(readFileSync(join(dirname(first.manifestFile), PLATE_UV_FILE), "utf8"))).toEqual(footprint);
+  expect(readdirSync(first.directory).sort()).toEqual(["xfs_eye_plate.mesh", "xfs_eye_plate.morphtarget"]);
+  // Check finds it through the cache status for the same game folder and recipe only.
+  const cached = cachedPlateReach(cacheRoot, game, recipe);
+  expect(cached).toEqual({ plate: plateReachInput(footprint), manifestFile: first.manifestFile });
+  expect(cachedPlateReach(cacheRoot, join(dir, "other-game"), recipe)).toBeNull();
+  expect(cachedPlateReach(null, game, recipe)).toBeNull();
+  // A damaged footprint is not planned on, and the entry is derived again.
+  writeFileSync(join(dirname(first.manifestFile), PLATE_UV_FILE), JSON.stringify({ ...footprint, uv: footprint.uv.map(v => v + .01) }));
+  expect(cachedPlateReach(cacheRoot, game, recipe)).toBeNull();
+  const repaired = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  expect(repaired.reused).toBe(false);
+  expect(cachedPlateReach(cacheRoot, game, recipe)?.plate.sha256).toBe(plateReachInput(footprint).sha256);
+  // An entry cached before footprints were recorded is derived again once, with the same plate bytes.
+  const { uv: _uv, ...older } = repaired.manifest;
+  writeFileSync(repaired.manifestFile, JSON.stringify(older));
+  expect(cachedPlateReach(cacheRoot, game, recipe)).toBeNull();
+  const upgraded = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) });
+  expect(upgraded.reused).toBe(false);
+  expect(upgraded.manifest.uv).toEqual(first.manifest.uv);
+  expect(upgraded.manifest.files).toEqual(first.manifest.files);
 }));
 
 test("an unsupported or missing head explains itself and blocks readiness until the game changes", () => withDirectory(async dir => {
