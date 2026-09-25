@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PreviewCoreHost, type PreviewCoreState } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import { isPreviewState, PreviewPreparationActions, previewView, shouldAutoStart, type PreviewState } from "../src/preview-preparation";
+import type { WolvenKitSetupState } from "../src/wolvenkit-setup";
 import { USER_FACING_JARGON } from "../src/alpha-availability";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { createGameAssetExporter } from "../src/game-asset-export";
@@ -28,7 +29,7 @@ test("the host reports what setup the preview still needs, in plain language", (
   settings = { gameRoot: game, wolvenKitCli: null };
   const noTool = host.snapshot();
   expect(noTool).toMatchObject({ phase: "needs-setup", needs: ["wolvenkit"], code: "preview_tool_missing" });
-  expect(noTool.message).toMatch(/WolvenKit CLI/);
+  expect(noTool.message).toMatch(/WolvenKit.*download it for you/);
   settings = { gameRoot: game, wolvenKitCli: cli };
   expect(host.snapshot()).toMatchObject({ phase: "idle", canPrepare: true, canCancel: false });
   expect(host.assetPath("head.glb")).toBeNull();
@@ -94,6 +95,24 @@ test("the preparation card offers exactly one next step for each state", () => {
   expect(previewView(state({ phase: "needs-setup", needs: ["game", "wolvenkit"] }), "D:\\Games\\Cyberpunk 2077").primary?.action).toBe("use-game");
   expect(previewView(state({ phase: "needs-setup", needs: ["game"] })).primary?.action).toBe("setup");
   expect(previewView(state({ phase: "needs-setup", needs: ["wolvenkit"] })).title).toMatch(/WolvenKit/);
+  // While only WolvenKit is missing, the card is WolvenKit's own: set it up (consent first), download, or get .NET.
+  const offer = { version: "9.0.1", downloadBytes: 45_266_234, installedBytes: 93_614_085, downloadSize: "45 MB", installedSize: "94 MB",
+    from: "WolvenKit's official release on GitHub", publisher: "the WolvenKit team", releasePage: "https://github.com/WolvenKit/WolvenKit/releases/tag/9.0.1",
+    licence: { name: "GNU General Public License v3.0", spdx: "GPL-3.0", url: "https://github.com/WolvenKit/WolvenKit/blob/9.0.1/LICENSE" } };
+  const wk = (phase: WolvenKitSetupState["phase"], patch: Partial<WolvenKitSetupState> = {}): WolvenKitSetupState => ({ schema: "xfs/wolvenkit-setup-1",
+    phase, message: "WolvenKit message.", code: null, source: null, version: null, offer, runtime: null, progress: null, step: null, detected: null,
+    canInstall: phase === "available", canCancel: false, ...patch });
+  const needsTool = state({ phase: "needs-setup", needs: ["wolvenkit"], canPrepare: false });
+  expect(previewView(needsTool, null, wk("available"))).toMatchObject({ title: "The 3D preview needs WolvenKit",
+    primary: { action: "wolvenkit-consent" }, secondary: { action: "setup" } });
+  expect(previewView(needsTool, null, wk("available", { detected: { path: "C:\\Tools\\WolvenKit.CLI.exe", version: "9.0.1" } })).secondary)
+    .toEqual({ label: "Use WolvenKit 9.0.1 from this computer", action: "wolvenkit-use-detected" });
+  expect(previewView(needsTool, null, wk("downloading", { progress: { receivedBytes: 10, totalBytes: 40 }, step: "10 of 40" })))
+    .toMatchObject({ progress: 0.25, primary: { action: "wolvenkit-cancel" } });
+  expect(previewView(needsTool, null, wk("needs-runtime", { runtime: { name: ".NET 10 Runtime", installed: false, installerUrl: "u", pageUrl: "p" } })))
+    .toMatchObject({ primary: { action: "runtime-install" }, links: [{ link: "runtime-page" }] });
+  // The game folder still comes first.
+  expect(previewView(state({ phase: "needs-setup", needs: ["game", "wolvenkit"] }), null, wk("available")).primary?.action).toBe("setup");
   expect(previewView(state({ phase: "blocked", message: "newer game patch" })).primary?.action).toBe("retry");
   expect(previewView(state({ phase: "failed", code: "preview_cancelled" })).viewport).toMatch(/wasn't prepared/);
   for (const phase of ["idle", "needs-setup", "preparing", "failed", "blocked"] as const) {

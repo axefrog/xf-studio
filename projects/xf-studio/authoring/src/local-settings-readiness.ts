@@ -11,7 +11,14 @@ export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
 /** Last recorded built-in eye plate outcome for this game folder (see `eyePlateReadiness`). */
 export type EyePlateHostReadiness = { issue: ReadinessIssue | null; limit: string };
 export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean;
-  eyePlate?: EyePlateHostReadiness; frameworks?: FrameworkVersionCheck };
+  /** Why the host's own Build gate refuses, in plain words, when `packageBuild` is false. */
+  packageBuildIssue?: string | null;
+  eyePlate?: EyePlateHostReadiness; frameworks?: FrameworkVersionCheck;
+  /**
+   * The host's WolvenKit setup outcome, when it manages WolvenKit (see `WolvenKitSetupHost`): null when a
+   * CLI is ready, otherwise the plain reason. It replaces the path-only WolvenKit checks.
+   */
+  wolvenKit?: ReadinessIssue | null };
 const available = (path: string | null, kind: "file" | "directory") => {
   if (!path) return false;
   try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); }
@@ -70,15 +77,17 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   }
 
   const buildIssues: ReadinessIssue[] = [];
-  if (host.packageBuild === false)
-    buildIssues.push(issue("package_host_unavailable", "This host does not provide mod package builds."));
-  if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", "Select the WolvenKit CLI executable."));
+  if (host.wolvenKit !== undefined) { if (host.wolvenKit) buildIssues.push(host.wolvenKit); }
+  else if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", WOLVENKIT_UNSET));
   else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
   if (settings.bunExecutable && !available(settings.bunExecutable, "file"))
     buildIssues.push(issue("bun_missing", "The selected Bun executable is unavailable."));
   buildIssues.push(...gameIssues);
   // The expanded eye plate is built in: Build derives it from the installed game, so it needs no path.
   if (host.eyePlate?.issue && gameIssues.length === 0) buildIssues.push(host.eyePlate.issue);
+  // The host's own Build gate (tool probes, bundled builder, storage) has the last word.
+  if (host.packageBuild === false && buildIssues.length === 0)
+    buildIssues.push(issue("package_host_unavailable", host.packageBuildIssue ?? "This host does not provide mod package builds."));
 
   const cacheIssues: ReadinessIssue[] = [];
   if (settings.sourceCache.directory && !writableDirectory(settings.sourceCache.directory))
@@ -114,14 +123,20 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   };
 }
 
+/** Shown when no WolvenKit is set up yet; XF Studio can download its own copy. */
+export const WOLVENKIT_UNSET = "WolvenKit isn't set up yet. XF Studio can download it for you, or you can enter your own WolvenKit CLI here.";
+
 /**
  * Environment overrides remain highest priority for localhost until package-server is migrated.
  * `XFS_PACKAGE_PLATE` is a hidden developer override for the built-in eye plate; it has no setting.
+ * WolvenKit resolves as: developer override, then the path in settings, then XF Studio's own
+ * downloaded copy (`managedWolvenKit`).
  */
-export function packageToolPaths(settings: LocalSettings, env: Record<string, string | undefined> = process.env) {
+export function packageToolPaths(settings: LocalSettings, env: Record<string, string | undefined> = process.env,
+  managedWolvenKit: string | null = null) {
   return {
     plate: env.XFS_PACKAGE_PLATE || null,
-    wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli,
+    wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli || managedWolvenKit,
     gamepath: env.XFS_PACKAGE_GAMEPATH || settings.gameRoot,
     bun: settings.bunExecutable,
   };

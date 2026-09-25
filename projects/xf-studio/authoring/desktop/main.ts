@@ -29,7 +29,8 @@ const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");
 let app: ReturnType<typeof createDesktopServer>;
 try {
   app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
-    resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"));
+    resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
+    { openExternal: url => Utils.openExternal(url) });
 } catch (error) {
   await fatal("XF Studio couldn't start.", `Your data folder may be unavailable: ${Utils.paths.userData}. ` +
     `Details are in ${log.path}.`, error);

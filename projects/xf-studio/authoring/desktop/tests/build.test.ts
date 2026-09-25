@@ -214,3 +214,55 @@ test("a matching staged result is promoted with partial-export identities and no
   expect(result.result.installed).toBe(false);
   expect(readdirSync(resolve(h.data, "package-work"))).toEqual([]);
 });
+
+test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, and official pages open by name", async () => {
+  const { makeZip } = await import("../../tests/zip-fixture");
+  const { WOLVENKIT_RELEASE } = await import("../../src/wolvenkit-release");
+  const files = { "WolvenKit.CLI.exe": "MZ fixture launcher", "WolvenKit.CLI.dll": "MZ fixture entry",
+    "WolvenKit.CLI.runtimeconfig.json": JSON.stringify({ runtimeOptions: { framework: { name: "Microsoft.NETCore.App", version: "10.0.0" } } }) };
+  const zip = makeZip(Object.entries(files).map(([name, data]) => ({ name, data })));
+  const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+  const feed = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(new Blob([new Uint8Array(zip)])) });
+  const h = host();
+  const opened: string[] = [];
+  const view = resolve(root, `static-${crypto.randomUUID()}`);
+  mkdirSync(view, { recursive: true });
+  writeFileSync(resolve(view, "index.html"), "<!doctype html><title>Studio</title>");
+  const app = createDesktopServer(view, h.data, { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" },
+    undefined, h.tools, fixtureWolvenKit, undefined, undefined, {
+      openExternal: url => { opened.push(url); return true; },
+      wolvenKit: { platform: "win32", findExisting: () => null,
+        dotnet: () => ({ root: "C:\dotnet", source: "default", frameworks: { "Microsoft.NETCore.App": ["10.0.12"] } }),
+        release: { ...WOLVENKIT_RELEASE, url: `http://127.0.0.1:${feed.port}/wk.zip`, archiveBytes: zip.length, archiveSha256: sha(zip),
+          files: 3, installedBytes: Object.values(files).reduce((sum, value) => sum + value.length, 0),
+          executableSha256: sha(files["WolvenKit.CLI.exe"]), entryDllSha256: sha(files["WolvenKit.CLI.dll"]) } } });
+  try {
+    new LocalSettingsStore(h.data).save({ ...defaultLocalSettings(), gameRoot: h.game }, 0);
+    const base = `http://127.0.0.1:${app.port}`;
+    const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0]!;
+    const read = { Cookie: cookie }, write = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+    const readiness = async () => (await (await fetch(base + "/api/local-settings", { headers: read })).json()).readiness.build;
+    const before = await readiness();
+    expect(before.ready).toBe(false);
+    expect(before.issues.map((issue: { code: string }) => issue.code)).toEqual(["wolvenkit_unset"]);
+    expect(before.issues[0].reason).toContain("download it for you");
+    expect((await (await fetch(base + "/api/desktop/capabilities", { headers: read })).json()).packageBuild).toBe(false);
+    expect((await fetch(base + "/api/desktop/wolvenkit")).status).toBe(403);
+    expect(await (await fetch(base + "/api/desktop/wolvenkit", { headers: read })).json()).toMatchObject({ phase: "available", canInstall: true });
+    const started = await fetch(base + "/api/desktop/wolvenkit", { method: "POST", headers: write,
+      body: JSON.stringify({ action: "install", version: WOLVENKIT_RELEASE.version }) });
+    expect(started.status).toBe(202);
+    await app.wolvenKit.settled();
+    expect(await (await fetch(base + "/api/desktop/wolvenkit", { headers: read })).json()).toMatchObject({ phase: "ready", source: "managed" });
+    expect(await readiness()).toMatchObject({ ready: true, issues: [] });
+    expect((await (await fetch(base + "/api/desktop/capabilities", { headers: read })).json()).packageBuild).toBe(true);
+    // The saved settings still name no WolvenKit: the managed copy is a default, not a user choice.
+    expect(new LocalSettingsStore(h.data).load().settings.wolvenKitCli).toBeNull();
+    expect(existsSync(resolve(h.data, "tools", "wolvenkit", WOLVENKIT_RELEASE.version, "WolvenKit.CLI.exe"))).toBe(true);
+    const open = (body: unknown) => fetch(base + "/api/desktop/open-link", { method: "POST", headers: write, body: JSON.stringify(body) });
+    expect((await open({ link: "wolvenkit-licence" })).status).toBe(204);
+    expect((await open({ link: "https://evil.example" })).status).toBe(400);
+    expect((await open({ link: "wolvenkit-licence", url: "https://evil.example" })).status).toBe(400);
+    expect(opened).toEqual([WOLVENKIT_RELEASE.licence.url]);
+  } finally { app.stop(); feed.stop(true); }
+});

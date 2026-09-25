@@ -85,7 +85,8 @@ test("the character resolver keeps its rules pure and all host access in resolve
 
 test("the 3D preview derivation keeps definitions pure and WolvenKit in its one adapter", () => {
   const io = /^(node:(?:fs|child_process|os)|\.\/(?:process-tree|game-asset-export-wolvenkit|browser-|scene|studio-ui))/;
-  for (const name of ["preview-core-recipe", "preview-core-maps", "preview-core-materials", "preview-core-assemble", "glb", "render-detail", "preview-preparation"])
+  for (const name of ["preview-core-recipe", "preview-core-maps", "preview-core-materials", "preview-core-assemble", "glb", "render-detail", "preview-preparation",
+    "wolvenkit-setup", "wolvenkit-release"])
     for (const dependency of imports(source(name))) expect(dependency, `${name} imports ${dependency}`).not.toMatch(io);
   // The service reaches WolvenKit only through the generic export port.
   for (const dependency of imports(source("preview-core-service")))
@@ -95,3 +96,14 @@ test("the 3D preview derivation keeps definitions pure and WolvenKit in its one 
   expect(source("scene")).not.toContain('fetch("/assets/head.glb")');
   expect(imports(source("scene"))).toContain("./core-detail-loader");
 });
+
+test("WolvenKit setup keeps its policy in the service and the network, archive and process work in adapters", () => {
+  // The renderer side and the pinned release are pure; the service reaches IO only through its adapters.
+  for (const name of ["wolvenkit-setup", "wolvenkit-release"])
+    for (const dependency of imports(source(name))) expect(dependency, `${name} imports ${dependency}`).not.toMatch(/^node:/);
+  const service = imports(source("wolvenkit-setup-host"));
+  for (const adapter of ["./tool-download", "./zip-extract", "./dotnet-runtime", "./wolvenkit-cli"]) expect(service).toContain(adapter);
+  for (const dependency of service) expect(dependency).not.toMatch(/^(node:child_process|\.\/process-tree|\.\/browser-|\.\/studio-ui)/);
+  expect(source("wolvenkit-setup-host")).not.toMatch(/\bfetch\(/);
+});
+

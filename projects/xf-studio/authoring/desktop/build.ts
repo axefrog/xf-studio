@@ -89,7 +89,8 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
         return "The packaged build tools failed integrity checks.";
     }
   } catch { return "The packaged build tools are unavailable."; }
-  if (!settings.wolvenKitCli || !file(settings.wolvenKitCli)) return "Select a WolvenKit CLI executable for Build.";
+  if (!settings.wolvenKitCli || !file(settings.wolvenKitCli))
+    return "WolvenKit isn't set up yet. XF Studio can download it for you from the 3D preview card.";
   if (!signature(settings.wolvenKitCli, "MZ")) return "The selected WolvenKit CLI is not a Windows executable.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
   catch { return "WolvenKit CLI could not complete its version and command checks."; }

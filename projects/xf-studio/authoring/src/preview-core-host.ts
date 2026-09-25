@@ -41,7 +41,7 @@ const MESSAGES = {
   ready: "The 3D preview is ready.",
   idle: "XF Studio can build the 3D head preview from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
   game: "Choose your Cyberpunk 2077 game folder so XF Studio can build the 3D head preview from your own game files.",
-  wolvenkit: "XF Studio needs WolvenKit CLI to read your game files, and it isn't set up yet. Add its location in Build setup to turn on the 3D preview. The UV editor, library and Check keep working without it.",
+  wolvenkit: "XF Studio needs WolvenKit to read your game files, and it isn't ready yet. XF Studio can download it for you. The UV editor, library and Check keep working without it.",
   cancelled: "Preparing the 3D preview was cancelled. You can start it again at any time.",
 } as const;
 

@@ -6,12 +6,17 @@ import { join, resolve } from "node:path";
 import { createWolvenKitGameAssetExporter } from "../src/game-asset-export-wolvenkit";
 import { packageToolPaths } from "../src/local-settings-readiness";
 import { LocalSettingsStore } from "../src/local-settings-store";
+import { localToolsRoot } from "../src/package-server";
+import { WolvenKitSetupHost } from "../src/wolvenkit-setup-host";
 import { ensurePreviewCore, PreviewCoreError } from "../src/preview-core-service";
 
 const cacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "..", "data", "preview-cache"));
-const tools = packageToolPaths(new LocalSettingsStore().load().settings);
+const settings = new LocalSettingsStore().load().settings;
+const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(), configured: () => process.env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli });
+const tools = { ...packageToolPaths(settings), wolvenkit: wolvenKit.usable() };
 if (!tools.gamepath || !tools.wolvenkit) {
-  console.error("Set the Cyberpunk 2077 folder and WolvenKit CLI in Local setup (or XFS_PACKAGE_GAMEPATH / XFS_PACKAGE_WOLVENKIT) first.");
+  console.error(tools.gamepath ? wolvenKit.snapshot().message + " (bun tools/setup-wolvenkit.ts downloads it.)"
+    : "Set the Cyberpunk 2077 folder in Local setup (or XFS_PACKAGE_GAMEPATH) first.");
   process.exit(2);
 }
 const started = Date.now();

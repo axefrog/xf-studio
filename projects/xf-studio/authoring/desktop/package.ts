@@ -10,7 +10,9 @@ let building = false;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
 export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: LocalSettingsStore;
-  deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe };
+  deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe;
+  /** XF Studio's own downloaded WolvenKit, used when the settings name none. */
+  managedWolvenKit?: () => string | null };
 /** Browser requests contain only action and collection; all build paths are host owned. */
 export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
   timeoutMs?: number, buildHost?: DesktopBuildHost, activity?: DesktopWorkActivity): Promise<Response> {
@@ -41,7 +43,9 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
     building = true;
     try {
       const signal = buildHost.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
-      const result = await runDesktopBuild(input.collection, buildHost.settings.load().settings,
+      const saved = buildHost.settings.load().settings;
+      const settings = { ...saved, wolvenKitCli: saved.wolvenKitCli ?? buildHost.managedWolvenKit?.() ?? null };
+      const result = await runDesktopBuild(input.collection, settings,
         buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe);
       if (result.kind === "success") return json(result.result);
       return json({ code: result.code, error: result.message }, result.code === "package_build_unavailable" ? 503 :

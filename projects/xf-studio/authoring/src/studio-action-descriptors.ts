@@ -1,5 +1,7 @@
 import type { CollectionRequest } from "./collection-service";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import type { PreviewAction } from "./preview-preparation";
+import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 import type { StudioFileAction } from "./studio-file-operations";
 
@@ -15,7 +17,7 @@ export type ActionDescriptor = { scope: readonly ActionScope[]; undo: UndoPolicy
   payload: PayloadSchema; variants?: Record<string, { payload: PayloadSchema; undo: UndoPolicy }>;
   effect: "selection" | "content" | "workspace" | "library" | "file" };
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool"; async: true;
   cancellable: boolean };
 
 const target = (type: ValueSchema["type"]): ValueSchema => ({ type, required: true, from: "target" });
@@ -126,8 +128,8 @@ export const ACTION_DESCRIPTORS = {
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],
-  payload: PayloadSchema = {}): RequestDescriptor => ({ scope: typeof scope === "string" ? [scope] : scope,
-    effect, payload, async: true, cancellable: false });
+  payload: PayloadSchema = {}, cancellable = false): RequestDescriptor => ({ scope: typeof scope === "string" ? [scope] : scope,
+    effect, payload, async: true, cancellable });
 export const REQUEST_DESCRIPTORS = {
   initialize: request("collection", "read"), refresh: request("collection", "read"),
   open: request("collection", "read", { id: target("string") }),
@@ -191,3 +193,21 @@ export function actionRegistry(): RegistryEntry[] {
     ...Object.entries(FILE_DESCRIPTORS).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo, async: true })),
   ].map(entry => structuredClone(entry));
 }
+
+/** Deriving the 3D preview from the player's own game files. The host owns every path; the browser sends only the action. */
+export const PREVIEW_PREPARATION_DESCRIPTORS = {
+  "preview.refresh": request("host", "read"),
+  "preview.prepare": request("host", "derive", {}, true),
+  "preview.cancel": request("host", "derive"),
+} satisfies Record<PreviewAction["kind"], RequestDescriptor>;
+
+/**
+ * WolvenKit CLI setup. `wolvenkit.install` is the person's consent to download exactly the pinned
+ * release they were shown (its version is the only payload); the host supplies the URL, hash and folder.
+ */
+export const WOLVENKIT_DESCRIPTORS = {
+  "wolvenkit.refresh": request("host", "read"),
+  "wolvenkit.install": request("host", "install-tool", { version: input("string") }, true),
+  "wolvenkit.cancel": request("host", "install-tool"),
+  "wolvenkit.recheck": request("host", "read"),
+} satisfies Record<WolvenKitSetupAction["kind"], RequestDescriptor>;
