@@ -128,7 +128,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### Arkhe
 
-[Beautiful EYEBROWS II](https://www.nexusmods.com/cyberpunk2077/mods/26168), [Universal Skin Tone](https://www.nexusmods.com/cyberpunk2077/mods/15426) and [Realistic Complexion III](https://www.nexusmods.com/cyberpunk2077/mods/19314). The eyebrow mod taught us how ArchiveXL copy/patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows. The skin mods provided alternative skin maps for render-fidelity comparisons. Private local reference only.
+[Beautiful EYEBROWS II](https://www.nexusmods.com/cyberpunk2077/mods/26168), [Universal Skin Tone](https://www.nexusmods.com/cyberpunk2077/mods/15426), [Realistic Complexion III](https://www.nexusmods.com/cyberpunk2077/mods/19314) and [Character Rendering Editor](https://www.nexusmods.com/cyberpunk2077/mods/32842). The eyebrow mod taught us how ArchiveXL copy/patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows. The skin mods provided alternative skin maps for render-fidelity comparisons, and the Character Rendering Editor's list of hair, skin and eye rendering options with their vanilla values gave the preview's hair light its default tuning. Private local reference only.
 
 ### eagul
 
@@ -144,7 +144,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### island_dancer
 
-[Hair Color Profiles CCXL](https://www.nexusmods.com/cyberpunk2077/mods/19115) and [Photoreal Eyes CCXL](https://www.nexusmods.com/cyberpunk2077/mods/22412), both co-credited to island_dancer and psiberx. Their shared material templates and dynamic material paths showed how dramatically material duplication can be reduced, and the hair profiles drive the preview's saved-hair shading. island_dancer also generously explained a Substance glitter graph and reviewed our glitter preview; the lesson that facets need visibly varied tilts shaped every glitter model since. Private local reference and inspiration only; the glitter graph is not reused.
+[Hair Color Profiles CCXL](https://www.nexusmods.com/cyberpunk2077/mods/19115) and [Photoreal Eyes CCXL](https://www.nexusmods.com/cyberpunk2077/mods/22412), both co-credited to island_dancer and psiberx. Their shared material templates and dynamic material paths showed how dramatically material duplication can be reduced, and the hair profiles drive the preview's saved-hair shading, with their selector icons serving as a colour check. island_dancer also generously explained a Substance glitter graph and reviewed our glitter preview; the lesson that facets need visibly varied tilts shaped every glitter model since. Private local reference and inspiration only; the glitter graph is not reused.
 
 ### Kala
 
@@ -192,7 +192,7 @@ Jakob, Hašan, Yan, Lawrence, Ramamoorthi and Marschner, [Discrete Stochastic Mi
 
 ### Karis (2016)
 
-Brian Karis (Epic Games), "Physically Based Hair Shading in Unreal" (SIGGRAPH 2016 course notes). The published hair lighting model that the game's decoded hair light matches; its defaults stand in for the game's unexported tuning values in our preview.
+Brian Karis (Epic Games), "Physically Based Hair Shading in Unreal" (SIGGRAPH 2016 course notes). The published hair lighting model that the game's decoded hair light matches, which let us read the compiled program term by term.
 
 ### Kneiphof and Klein (2025)
 
