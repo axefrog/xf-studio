@@ -85,7 +85,8 @@ function UiFirstRun {
     UiSetValue "Colour hex value" "#123456"
     $edited = UiValue "Colour hex value"
     Shot "03-edited"
-    UiInvoke "Undo"
+    # The button names the step it undoes ("Undo: Change colour"), so match the prefix.
+    UiInvoke "Undo:*"
     $after = UiValue "Colour hex value"
     if ($edited -ne "#123456" -or $after -ne $before) { throw "Edit/Undo mismatch: $before -> $edited -> $after" }
     [ordered]@{ before = $before; edited = $edited; afterUndo = $after }
