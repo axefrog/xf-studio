@@ -186,8 +186,40 @@ test("the studio stage draws through the scene-linear target too, with the backd
   expect(clear).toEqual({ colour: 0x14181c, alpha: 1 });
   expect(target).toBeNull();
   expect((renderer as unknown as { autoClear: boolean }).autoClear).toBe(true);
-  expect(stage.display.info()).toEqual({ path: "linear", samples: 4, width: 64, height: 32 });
+  expect(stage.display.info()).toEqual({ path: "linear", creatorTarget: "half-float", samples: 4, width: 64, height: 32 });
   stage.dispose();
+});
+
+test("without a renderable half-float buffer the creator preset renders into an 8-bit sRGB target, and the studio stage straight to the canvas (PREV-59)", () => {
+  for (const extensions of [["EXT_color_buffer_half_float"], []]) {
+    const scene = new THREE.Scene(), targets: (THREE.WebGLRenderTarget | null)[] = [];
+    let target: THREE.WebGLRenderTarget | null = null;
+    const renderer = {
+      autoClear: true, extensions: { has: (name: string) => extensions.includes(name) }, capabilities: { maxSamples: 4 },
+      getDrawingBufferSize: (v: THREE.Vector2) => v.set(16, 16), getRenderTarget: () => target,
+      setRenderTarget: (next: THREE.WebGLRenderTarget | null) => { target = next; },
+      getClearColor: (c: THREE.Color) => c, getClearAlpha: () => 1, setClearColor: () => {},
+      render(s: THREE.Scene) { if (s === scene) targets.push(target); },
+    } as unknown as THREE.WebGLRenderer;
+    const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: () => new Promise(() => {}) });
+    const camera = new THREE.PerspectiveCamera();
+    stage.render(camera);
+    stage.setPreset("creator");
+    stage.render(camera);
+    const [studio, creator] = targets;
+    if (extensions.length) {
+      // Either extension makes half float renderable (Three.js enables both): the linear path, as with EXT_color_buffer_float.
+      expect(stage.display.info()).toMatchObject({ path: "linear", creatorTarget: "half-float" });
+      expect(studio?.texture.type).toBe(THREE.HalfFloatType);
+      expect(creator?.texture.type).toBe(THREE.HalfFloatType);
+    } else {
+      expect(stage.display.info()).toMatchObject({ path: "direct", creatorTarget: "srgb8" });
+      expect(studio).toBeNull();
+      expect(creator?.texture).toMatchObject({ type: THREE.UnsignedByteType, colorSpace: THREE.SRGBColorSpace });
+      expect(creator?.samples).toBe(4);
+    }
+    stage.dispose();
+  }
 });
 
 test("the creator preset re-asks the host on activation and swaps the grade only when the host's cube changed (PREV-40)", async () => {

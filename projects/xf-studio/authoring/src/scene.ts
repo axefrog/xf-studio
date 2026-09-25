@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { extendSkin, restoreFirstWeights } from "./skin";
 import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
@@ -32,6 +31,7 @@ import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
 import { viewportPixelRatio, watchDevicePixelRatio } from "./device-pixel-ratio";
 import { linearTargetSupported } from "./linear-display";
+import { createStudioEnvironment } from "./studio-environment";
 
 /**
  * Draw order of the face's decals, below the editable makeup plates (10 to 41), the eye's wetness shell (99), brows (100) and
@@ -128,13 +128,8 @@ async function assembleScene(
     return requested > distance;
   }
   front();
-  const pmrem = new THREE.PMREMGenerator(renderer),
-    room = new RoomEnvironment(),
-    env = pmrem.fromScene(room, 0.04);
-  scene.environment = env.texture;
-  releases.push(() => env.dispose());
-  pmrem.dispose();
-  room.dispose();
+  const environment = createStudioEnvironment(renderer, scene);
+  releases.push(() => environment.dispose());
   const key = new THREE.DirectionalLight(0xfff2e9, 2.5);
   key.position.set(-0.3, 1.9, -0.5);
   key.target.position.set(0, 1.67, 0);
@@ -144,7 +139,7 @@ async function assembleScene(
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
   // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
-  const lighting = createLightingPresetStage({ scene, renderer, studioLights: [key, fill], loadLut: () => loadGradingLut() });
+  const lighting = createLightingPresetStage({ scene, renderer, studioLights: [key, fill, ...environment.lights], loadLut: () => loadGradingLut() });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await loadCoreDetail(renderer);
@@ -304,6 +299,10 @@ async function assembleScene(
   ({ manifest: prcManifest, error: prcError } = await loadPiercingResources(
     "/assets/prc/manifest.json", "xfs/local-prc-piercings-1", 4 * 1024 * 1024));
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
+  // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
+  const restored = () => { environment.restore(); makeup.contextRestored(); };
+  renderer.domElement.addEventListener("webglcontextrestored", restored);
+  releases.push(() => renderer.domElement.removeEventListener("webglcontextrestored", restored));
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
   // The skin under the authored plate, which the plate blends over and lights once with the skin's own light (plate-blend.ts): read on
