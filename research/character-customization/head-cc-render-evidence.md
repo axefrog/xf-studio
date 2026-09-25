@@ -144,6 +144,19 @@ Not overridden in this profile: every tone `.mi` (so tones keep vanilla tint val
 
 Also enabled: Arkhe's Character Rendering Editor (32842, package 3.0.0.0), a CET script that sets engine `GameOptions` at runtime: `Editor/Characters/Skin` (`SkinAmbientIntensity_Factor` 0.4, `SkinAmbientMix_Factor` 1.0, `AllowSkinAmbientMix`, `SubsurfaceSpecularTintWeight` 0.3, `SubsurfaceSpecularTint_R/G/B` 0.21/0.26/0.29), `Editor/Characters/RimEnhancement` (`GlobalCharacterFresnel` 3.0, `LightBlockerInfluence` 0.7), `Editor/Characters/Eyes` (`DiffuseBoost` 0.1, `UseAOOnEyes` off), feature toggles `CharacterSubsurfaceScattering`, `CharacterRimEnhancement`, `ContactShadows`, plus the hair options already in [hair shading](../../knowledge/hair-shading.md). Values are the script's "Vanilla" preset [community]; the option names exist as strings in the 2.31 executable. Its "Arkhe Balanced" preset changes, among others, skin ambient intensity to 0.206, SSS tint weight to 0.696 and global character Fresnel to 0.809. No file-based resolver can see these; a capture must record them.
 
+## P1 check: the skin chain the preview resolves (25 September 2026)
+
+Browser check of step P1 at `?verify=1`, MO2 profile `2025 (again)` (1,079 mounted archives), WolvenKit CLI 9.0.1; plus the default V on the direct route (57 archives). Records stay in the ignored preview cache. Per V, the skin slot's head component and its one `skin.mt` chunk:
+
+| V | Definition | Chunk | Albedo (winning archive, size) | Tint | Skin profile |
+|---|---|---|---|---|---|
+| Default, MO2 | `h0_000_pwa__basehead__01_ca_pale` (`skin_type_01`) | `skin1` (framework donor) | `…_d01.xbm` (Realistic Complexion III, 4096²) | (171,155,150) × 0 | `default.sp` from the WarmSmooth package: `roughness0` 1, `roughness1` 1.6, `lobeMix` 0.6, `blurSize` 2.5, falloff (255,155,119) |
+| Reference save | `…__01_ca_pale_00_warm_ivory` (`skin_type_05`) | `skin2_d05` (framework donor) | `…_d05.xbm` (same package, 4096²) | (255,245,181) × −0.15 | as above |
+| New-game save | `…__03_ca_senna` (`skin_type_03`) | framework donor | `…_d03.xbm` (same package, 4096²) | (202,177,153) × 0.70 | as above |
+| Default, direct | `…__01_ca_pale` | `01_ca_pale` | `…_d01.xbm` (`basegame_4_appearance.archive`, 1024²) | (171,155,150) × 0 | base game: 0.966, 1.597, 1, 1.4, (255,178,165) |
+
+On the MO2 route every V also resolves the Face Details package's normal (4096²), its new-path roughness (1024²) and detail normal (2048²), the Microdetails package's `microdetail_n.xbm` (1024×512, the two-tile atlas), and the texture framework's secondary albedo, emissive mask (`EmissiveEV` 2) and tint mask (all 1024², `isGamma` set) [resource]. The base game's own tint mask (512²) is also `isGamma` [resource]. The head's morph target wins from `zz_FacialCustomizationFix_xBaebsae.archive`; its export matches the core head's positions, UVs, triangles and all facial morph targets, so the preview draws the resolved skin on the core head. Preparation: 35 s for the first V (cold texture exports), 7–15 s for the saves. Switching reference → new-game → reference restored the reference record byte for byte (same content address).
+
 ## Modding Docs pages and images consulted
 
 Clone `be2f44ee`; paths relative to the clone. Editor and wiki illustrations, not runtime proof.

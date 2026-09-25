@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { materialAdapter, textureColourSpace, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
-import { CHARACTER_DETAIL_ASSETS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
+import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
+import { CHARACTER_DETAIL_ASSETS, DETAIL_SLOTS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture } from "./render-detail";
 import { restoreFirstWeights } from "./skin";
 
 /**
- * Renderer device port for the resolved character details (brows, lashes, hair): it reads the host's
+ * Renderer device port for the resolved character details (head skin, brows, lashes, hair): it reads the host's
  * content-addressed character record, fetches and hash-checks each GLB and texture, keeps only the
  * chunks the record says are visible and drawable, and builds each chunk's material through the
  * adapter for its game template. It returns ready Three objects plus plain per-slot problems; on
@@ -18,12 +18,16 @@ export type LoadedCharacterComponent = {
   root: THREE.Object3D;
   meshes: THREE.SkinnedMesh[];
   bones: THREE.Bone[];
+  /** The skin adapter's handle and toned base colour, for the head's skin chunk. */
+  skin?: NonNullable<AdaptedMaterial["skin"]>;
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
   components: LoadedCharacterComponent[];
   /** Slots that could not be shown in full, in plain words. */
   problems: { slot: DetailSlot; message: string }[];
+  /** Shown slots with a part the preview can't draw yet, in plain words. */
+  limits: { slot: DetailSlot; message: string }[];
   notes: string[];
   dispose(): void;
 };
@@ -35,7 +39,7 @@ export type CharacterDetailLoadOptions = {
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
-const SLOT_NOUN: Record<DetailSlot, [string, string]> = { brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"], hair: ["hair", "it isn't"] };
+const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"], hair: ["hair", "it isn't"] };
 /** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
 export function chunkOfMesh(name: string): number | null {
   const match = /^submesh_(\d+)_LOD_\d+/.exec(name);
@@ -105,12 +109,15 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     return pending;
   };
   const made = new Map<string, THREE.Texture>();
-  const problems: LoadedCharacterDetails["problems"] = [], notes: string[] = [];
+  const problems: LoadedCharacterDetails["problems"] = [], limits: LoadedCharacterDetails["limits"] = [], notes: string[] = [];
   const components: LoadedCharacterComponent[] = [];
+  // The skin loads first, so decals over it (brows) can blend against the resolved skin colour.
+  const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
+  let skinBase: AdapterContext["skinBase"];
   try {
-    for (const component of record.components) {
+    for (const component of ordered) {
       aborted();
-      const adapterContext = { slot: component.slot, ...options.context(component.slot) };
+      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinBase ? { skinBase } : {}) };
       try {
         // Every texture a drawn chunk names is fetched and verified before any material is built.
         const loadedImages = new Map<string, HTMLImageElement>();
@@ -125,6 +132,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         roots.push(root);
         root.name = `detail_${component.slot}_${component.component}`;
         const meshes: THREE.SkinnedMesh[] = [], unwanted: THREE.Object3D[] = [], bones: THREE.Bone[] = [];
+        let skin: LoadedCharacterComponent["skin"];
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
           if (!(object instanceof THREE.Mesh)) return;
@@ -160,6 +168,9 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           materials.push(adapted.material);
           owned.push(...adapted.owned);
           notes.push(...adapted.notes.map(note => `${component.slot} ${object.name}: ${note}`));
+          for (const message of adapted.limits ?? []) if (!limits.some(item => item.slot === component.slot && item.message === message))
+            limits.push({ slot: component.slot, message });
+          if (adapted.skin) skin ??= adapted.skin;
           object.material = adapted.material;
           object.name = `detail_${component.slot}_${object.name}`;
           verticesUsed += object.geometry.getAttribute("position").count;
@@ -172,7 +183,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         }
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
-        components.push({ component, root, meshes, bones });
+        components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}) });
+        if (skin && !skinBase) skinBase = skin.base;
       } catch (error) {
         if (signal?.aborted) throw error;
         const [noun, isnt] = SLOT_NOUN[component.slot];
@@ -186,5 +198,5 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
   const shown = new Set(components.map(item => item.component.slot));
   return { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
-    problems.findIndex(other => other.slot === problem.slot) === index), notes, dispose };
+    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, dispose };
 }

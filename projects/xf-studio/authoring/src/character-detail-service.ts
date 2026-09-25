@@ -1,12 +1,14 @@
 /**
- * Host application service: prepare the character render record (brows, lashes and hair) for one V from
+ * Host application service: prepare the character render record (head skin, brows, lashes and hair) for one V from
  * the installation the launch route loads. It opens the route with the generic resolver (the same source
  * discovery, archive precedence and ArchiveXL rules Build uses), resolves the V's choices, plans the
  * drawable components (character-detail-plan.ts), exports each winning resource through the generic
  * game-asset exporter (GLB for geometry, PNG for textures, cached per depot hash and archive fingerprint),
  * and writes a content-addressed record the renderer loads. Read-only towards the game and MO2.
  *
- * There is no mod-specific code: a CCXL hair, brow or lash pack resolves exactly like vanilla.
+ * There is no mod-specific code: a CCXL hair, brow or lash pack resolves exactly like vanilla, and so does a
+ * complexion mod, whether it replaces textures or skin profiles at their vanilla paths (archive precedence) or
+ * patches the head mesh's appearances through ArchiveXL (the resolver follows the patch's materials).
  */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -20,7 +22,7 @@ import { archiveExportSource, GameAssetExportError, type GameAssetExporter } fro
 import { templateDefaults } from "./material-template";
 import { asArray, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
-  type RenderComponent, type RenderProfile, type RenderProfileStop, type RenderTexture } from "./render-detail";
+  type RenderComponent, type RenderProfile, type RenderProfileStop, type RenderSkinProfile, type RenderTexture } from "./render-detail";
 import { renderTemplate } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
@@ -28,7 +30,7 @@ import type { Provenance, ResourceGraph } from "./resource-graph";
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's brows, lashes and hair" },
+  { step: "resolving", label: "Working out your V's skin, brows, lashes and hair" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -53,8 +55,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so brows, lashes and hair aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so brows, lashes and hair aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, brows, lashes and hair aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, brows, lashes and hair aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -91,6 +93,23 @@ export function hairProfileStops(root: JsonObject): Pick<RenderProfile, "sampleC
   const sampleCount = Number(root.sampleCount);
   if (!id.length || !rootToTip.length || !Number.isInteger(sampleCount) || sampleCount < 2 || sampleCount > 1024) return null;
   return { sampleCount, id: id.slice(0, 32), rootToTip: rootToTip.slice(0, 32) };
+}
+
+/** A serialized `CSkinProfile` as the record carries it (8-bit colours kept), or null when it is not one. */
+export function skinProfileValues(root: JsonObject): Omit<RenderSkinProfile, "depotPath" | "archive" | "sha256"> | null {
+  if (root.$type !== "CSkinProfile") return null;
+  const number = (value: unknown, fallback: number, max: number) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : fallback;
+  };
+  const colour = (value: unknown): [number, number, number] => {
+    const c = isObject(value) ? value : {};
+    const channel = (v: unknown) => Math.max(0, Math.min(255, Math.round(Number(v ?? 255)) || 0));
+    return [channel(c.Red), channel(c.Green), channel(c.Blue)];
+  };
+  // Serializers omit fields at their type defaults; a missing field reads as the class default (1 for scales, white colours).
+  return { roughness0: number(root.roughness0, 1, 16), roughness1: number(root.roughness1, 1, 16), lobeMix: number(root.lobeMix, 0, 16),
+    blurSize: number(root.blurSize, 0, 64), diffuse: colour(root.diffuse), falloff: colour(root.falloff) };
 }
 
 const paramText = (value: MaterialParamValue) => value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "name" ? value.value
@@ -150,7 +169,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     const index = CHARACTER_DETAIL_STEPS.findIndex(item => item.step === step);
     options.progress?.(step, index, total, CHARACTER_DETAIL_STEPS[index]!.label);
   };
-  const cancelled = () => { if (signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing brows, lashes and hair was cancelled."); };
+  const cancelled = () => { if (signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled."); };
 
   progress("reading");
   const open = options.open ?? (await import("./resolver-host")).openInstallation;
@@ -194,7 +213,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     try { return await session[kind]([...group.paths]) as unknown as Map<string, T>; }
     catch (error) {
       if (error instanceof GameAssetExportError) {
-        if (error.code === "cancelled" || signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing brows, lashes and hair was cancelled.");
+        if (error.code === "cancelled" || signal?.aborted) throw new CharacterDetailError("character_cancelled", "Preparing your V's details was cancelled.");
         if (error.code === "tool_missing" || error.code === "runtime_missing") throw new CharacterDetailError("character_tool_missing", TOOL_MISSING, error.message);
         toolFailures.add(group.archive.id);
         log(`WolvenKit could not export from ${group.archive.name}: ${error.message}`);
@@ -243,6 +262,16 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       profileOf.set(key, stops ? { depotPath: refLabel(provenance.ref), archive: loaded!.provenance.archive,
         sha256: hexSha(loaded!.provenance.extractedSha256), ...stops } : null);
     }
+  const skinProfileOf = new Map<string, RenderSkinProfile | null>();
+  for (const component of plan.components) for (const material of component.materials)
+    for (const provenance of Object.values(material.skinProfiles)) {
+      const key = refLabel(provenance.ref).toLowerCase();
+      if (skinProfileOf.has(key)) continue;
+      const loaded = await graph.load(provenance.ref, "sp");
+      const values = loaded ? skinProfileValues(loaded.root) : null;
+      skinProfileOf.set(key, values ? { depotPath: refLabel(provenance.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256), ...values } : null);
+    }
   cancelled();
 
   progress("writing");
@@ -277,13 +306,18 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
         const profile = profileOf.get(refLabel(provenance.ref).toLowerCase());
         if (profile) chunkProfiles[param] = profile; else complete = false;
       }
+      const chunkSkinProfiles: Record<string, RenderSkinProfile> = {};
+      for (const [param, provenance] of Object.entries(material.skinProfiles)) {
+        const profile = skinProfileOf.get(refLabel(provenance.ref).toLowerCase());
+        if (profile) chunkSkinProfiles[param] = profile; else complete = false;
+      }
       // A chunk missing an input its adapter reads is left out rather than drawn wrongly.
       if (!complete) {
         notes.push(`${component.component} chunk ${material.chunk}: an input could not be read; the chunk is not drawn.`);
         continue;
       }
       materials.push({ chunk: material.chunk, name: material.name, template: material.template, scalars: material.scalars,
-        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles });
+        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles });
     }
     if (!materials.length) { failSlot(component.slot, "export"); continue; }
     if (component.skippedChunks) notes.push(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);

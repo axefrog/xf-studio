@@ -15,8 +15,10 @@ import type { ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { sampleUnderlayAlbedo } from "./brow-material";
 import type { AdapterContext } from "./character-material-adapters";
-import type { LoadedCharacterDetails } from "./character-detail-loader";
+import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
+import { compareHeadSurfaces, type HeadSurface } from "./head-surface";
+import type { SkinImage } from "./skin-material";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
 import { HeadLoadError } from "./head-load-error";
@@ -32,6 +34,20 @@ function morphTargetNames(mesh: THREE.Mesh): string[] {
   const names: string[] = [];
   for (const [name, index] of Object.entries(mesh.morphTargetDictionary ?? {})) names[index] = name;
   return names;
+}
+
+/** A buffer attribute's values in vertex order (interleaved attributes included). */
+function attributeValues(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): ArrayLike<number> {
+  if (!(attribute instanceof THREE.InterleavedBufferAttribute)) return attribute.array;
+  const out = new Float32Array(attribute.count * attribute.itemSize);
+  for (let i = 0; i < attribute.count; i++) for (let k = 0; k < attribute.itemSize; k++) out[i * attribute.itemSize + k] = attribute.getComponent(i, k);
+  return out;
+}
+/** The drawn surface of a head mesh, for comparing two exports of it (head-surface.ts). */
+function headSurface(mesh: THREE.Mesh): HeadSurface {
+  const geometry = mesh.geometry, uv = geometry.getAttribute("uv");
+  return { positions: attributeValues(geometry.getAttribute("position")), uvs: uv ? attributeValues(uv) : null, index: geometry.index?.array ?? null,
+    morphNames: morphTargetNames(mesh), morphPositions: (geometry.morphAttributes.position ?? []).map(attributeValues) };
 }
 
 /**
@@ -204,15 +220,20 @@ async function assembleScene(
   // Profile stops are decoded from sRGB before the shader's overlay (see
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
-  let browUnderlay: { maxMatchedDistance: number; unmatched: number } | undefined;
-  function browUnderlayAttribute(brow: THREE.Mesh): THREE.BufferAttribute {
-    const image = albedo.image as CanvasImageSource & { width: number; height: number };
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width; canvas.height = image.height;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw Error("Cannot read the head albedo for the brow decal blend");
-    context.drawImage(image, 0, 0);
-    const pixels = context.getImageData(0, 0, image.width, image.height);
+  let browUnderlay: { maxMatchedDistance: number; unmatched: number; source: "resolved-skin" | "core-albedo" } | undefined;
+  /** Skin colour under a decal: the resolved skin's toned base colour when it loaded, else the core head's albedo. */
+  function browUnderlayAttribute(brow: THREE.Mesh, skinImage?: SkinImage | null): THREE.BufferAttribute {
+    let pixels: SkinImage;
+    if (skinImage) pixels = skinImage;
+    else {
+      const image = albedo.image as CanvasImageSource & { width: number; height: number };
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width; canvas.height = image.height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw Error("Cannot read the head albedo for the brow decal blend");
+      context.drawImage(image, 0, 0);
+      pixels = context.getImageData(0, 0, image.width, image.height);
+    }
     const world = (mesh: THREE.Mesh) => {
       mesh.updateWorldMatrix(true, false);
       const source = mesh.geometry.getAttribute("position"), out = new Float32Array(source.count * 3), v = new THREE.Vector3();
@@ -222,18 +243,27 @@ async function assembleScene(
     const result = sampleUnderlayAlbedo(world(brow), world(head), head.geometry.getAttribute("uv").array,
       { width: pixels.width, height: pixels.height, data: pixels.data });
     if (result.unmatched) throw Error(`${result.unmatched} decal vertices are not over the head surface`);
-    browUnderlay = { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched };
+    browUnderlay = { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched, source: skinImage ? "resolved-skin" : "core-albedo" };
     return new THREE.BufferAttribute(result.underlay, 3);
   }
-  // Resolved character details (brows, lashes, hair): loaded later from the host's character record
+  // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { brows: true, lashes: true, hair: true };
-  // Keep context details above the entire editable makeup stack (orders 10–41); hair keeps its own order.
-  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { brows: 100, lashes: 101, hair: 0 };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, brows: true, lashes: true, hair: true };
+  // Keep context details above the entire editable makeup stack (orders 10–41); skin and hair keep their own order.
+  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, brows: 100, lashes: 101, hair: 0 };
   let characterDetails: LoadedCharacterDetails | null = null;
+  /**
+   * How the resolved skin is shown: on the core head when the launch route's head is the same surface (the
+   * usual case; the eye plate and idle stay bound to it), or as the resolved head itself when a mod changes
+   * its shape (the core head is hidden). Null while the fixed default skin shows.
+   */
+  let resolvedSkin: { item: LoadedCharacterComponent; mode: "core-head" | "resolved-head"; reason: string } | null = null;
+  let normalsEnabled = true;
+  const HEAD_SHAPE_LIMIT = "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.";
+  const skinLimits = () => resolvedSkin?.mode === "resolved-head" ? [{ slot: "skin" as DetailSlot, message: HEAD_SHAPE_LIMIT }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
     return { overMakeup: slot === "lashes", profileEncoding,
-      ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh) => browUnderlayAttribute(mesh) } : {}) };
+      ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skinImage?: SkinImage | null) => browUnderlayAttribute(mesh, skinImage) } : {}) };
   }
   let piercingManifest: PiercingManifest | undefined, piercingError = "";
   let prcManifest: PiercingManifest | undefined, prcError = "";
@@ -430,8 +460,9 @@ async function assembleScene(
     ...(eyes.morphTargetDictionary ? [eyes] : []),
     ...[...piercingMeshes.values()].flat(),
   ];
-  // Resolved details join and leave with each character record.
-  const deforming = () => [...coreDeforming, ...(characterDetails?.components.flatMap(item => item.meshes) ?? [])];
+  // Resolved details join and leave with each character record (a skin drawn on the core head adds no mesh).
+  const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.mode === "core-head" && resolvedSkin.item === item)) ?? [];
+  const deforming = () => [...coreDeforming, ...drawnDetails().flatMap(item => item.meshes)];
   // The head is the authority for which eye shapes exist: its `eyes` targets in resource order.
   const eyeShapeChoices: FaceMorphChoice[] = faceMorphChoices(morphTargetNames(head), "eyes");
   const eyesFollowShape = followsFaceMorphChoices(morphTargetNames(eyes), eyeShapeChoices);
@@ -523,26 +554,46 @@ async function assembleScene(
     };
   }
   function refreshDetailVisibility() {
-    for (const item of characterDetails?.components ?? []) item.root.visible = detailVisible[item.component.slot];
+    for (const item of drawnDetails()) item.root.visible = detailVisible[item.component.slot];
   }
   function setHair(enabled: boolean) { detailVisible.hair = enabled; refreshDetailVisibility(); }
   /**
    * Swap in a character's resolved details, replacing the previous ones completely (null removes them).
    * The new meshes follow the head's current facial shapes and join the idle rig.
    */
-  function setCharacterDetails(next: LoadedCharacterDetails | null) {
-    if (characterDetails === next) return;
+  function setCharacterDetails(next: LoadedCharacterDetails | null): { limits: { slot: DetailSlot; message: string }[] } {
+    if (characterDetails === next) return { limits: skinLimits() };
     const previous = characterDetails;
+    const drawnBefore = drawnDetails();
     characterDetails = null;
     if (previous) {
-      idle?.detach(previous.components.flatMap(item => item.bones));
+      idle?.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
       }
+      // Nothing of the previous V's skin may linger: the core head returns to the fixed default skin.
+      head.material = skin;
+      head.visible = true;
+      resolvedSkin = null;
       previous.dispose();
     }
-    if (!next) return;
-    for (const item of next.components) {
+    if (!next) return { limits: [] };
+    const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin && item.meshes.length === 1);
+    if (skinItem) {
+      const resolvedHead = skinItem.meshes[0]!;
+      const comparison = compareHeadSurfaces(headSurface(head), headSurface(resolvedHead));
+      if (comparison.same) {
+        head.material = resolvedHead.material;
+        extendSkin(head, head.material as THREE.MeshStandardMaterial);
+        resolvedSkin = { item: skinItem, mode: "core-head", reason: comparison.reason };
+      } else {
+        head.visible = false;
+        resolvedSkin = { item: skinItem, mode: "resolved-head", reason: comparison.reason };
+      }
+      skinItem.skin!.handle.setNormals(normalsEnabled);
+    }
+    characterDetails = next;
+    for (const item of drawnDetails()) {
       for (const mesh of item.meshes) {
         mesh.renderOrder = DETAIL_RENDER_ORDER[item.component.slot];
         extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial);
@@ -554,15 +605,21 @@ async function assembleScene(
       scene.add(item.root);
     }
     scene.updateMatrixWorld(true);
-    idle?.attach(next.components.flatMap(item => item.bones));
-    characterDetails = next;
+    idle?.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
+    return { limits: skinLimits() };
   }
   function characterDetailsEvidence() {
     const loaded = characterDetails;
     return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
       slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
       notes: [...(loaded?.notes ?? [])], browUnderlay,
+      skin: resolvedSkin ? { mode: resolvedSkin.mode, reason: resolvedSkin.reason, parameters: structuredClone(resolvedSkin.item.skin!.handle.parameters),
+        material: (resolvedSkin.mode === "core-head" ? head.material as THREE.Material : resolvedSkin.item.meshes[0]!.material as THREE.Material).name,
+        textures: Object.fromEntries(Object.entries(resolvedSkin.item.component.materials[0]?.textures ?? {}).map(([name, texture]) =>
+          [name, { depotPath: texture.depotPath, archive: texture.sources[0]?.archive ?? null, width: texture.width, height: texture.height, isGamma: texture.isGamma }])),
+        geometry: { depotPath: resolvedSkin.item.component.geometry.depotPath, archive: resolvedSkin.item.component.geometry.sources[0]?.archive ?? null } }
+        : { mode: "default", material: (head.material as THREE.Material).name || "default" },
       components: loaded?.components.map(item => ({ slot: item.component.slot, option: item.component.option, definition: item.component.definition,
         component: item.component.component, geometry: item.component.geometry.depotPath, visible: item.root.visible,
         chunks: item.meshes.map(mesh => mesh.name), templates: [...new Set(item.component.materials.map(material => material.template))],
@@ -762,7 +819,9 @@ async function assembleScene(
     animateBlink: (v: boolean) => (animation = v),
     setWire: makeup.setWire,
     setNormals: (v: boolean) => {
+      normalsEnabled = v;
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
+      resolvedSkin?.item.skin?.handle.setNormals(v);
     },
     setExposure: (v: number) => (renderer.toneMappingExposure = v),
     /** Typed theme input for the stage backdrop; it never changes lighting. */

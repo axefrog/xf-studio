@@ -7,23 +7,29 @@
  *
  * Template paths are the game's own depot paths; nothing here names a mod or framework.
  */
-export type RenderAdapterId = "hair-strand" | "hair-cap-decal" | "double-diffuse-decal";
+export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal";
 export type RenderTemplateInputs = {
   readonly adapter: RenderAdapterId;
   /** Texture parameters the adapter samples. */
   readonly textures: readonly string[];
   /** `CHairProfile` parameters the adapter reads. */
   readonly profiles: readonly string[];
+  /** `CSkinProfile` parameters the adapter reads. */
+  readonly skinProfiles: readonly string[];
 };
 
 export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = Object.freeze({
+  // The head's skin (knowledge/head-cc-rendering.md §2, materials-and-shaders.md §4.1). The wrinkle maps
+  // (`Detailmap_Stretch/Squash`) and blood flow are animation-driven and neutral at rest, so they are not read.
+  "base\\materials\\skin.mt": { adapter: "skin", profiles: [], skinProfiles: ["SkinProfile"],
+    textures: ["Albedo", "Normal", "Roughness", "DetailNormal", "MicroDetail", "TintColorMask", "SecondaryAlbedo", "EmissiveMask"] },
   // Hair cards and lashes (knowledge/hair-shading.md §1–4).
-  "base\\materials\\hair.mt": { adapter: "hair-strand", textures: ["Strand_Alpha", "Strand_ID", "Strand_Gradient"], profiles: ["HairProfile"] },
+  "base\\materials\\hair.mt": { adapter: "hair-strand", textures: ["Strand_Alpha", "Strand_ID", "Strand_Gradient"], profiles: ["HairProfile"], skinProfiles: [] },
   // Hair caps: a post-G-buffer decal recoloured through a gradient.
-  "base\\materials\\mesh_decal_gradientmap_recolor.mt": { adapter: "hair-cap-decal", textures: ["MaskTexture", "GradientMap"], profiles: [] },
+  "base\\materials\\mesh_decal_gradientmap_recolor.mt": { adapter: "hair-cap-decal", textures: ["MaskTexture", "GradientMap"], profiles: [], skinProfiles: [] },
   // Brows (and, later, several lip styles): the double-diffuse post-G-buffer decal.
   "base\\materials\\mesh_decal_double_diffuse.mt": { adapter: "double-diffuse-decal",
-    textures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], profiles: [] },
+    textures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], profiles: [], skinProfiles: [] },
 });
 
 const key = (template: string) => template.toLowerCase().replaceAll("/", "\\");

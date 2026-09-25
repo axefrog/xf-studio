@@ -50,8 +50,9 @@ export type CharacterDetailHostOptions = {
   log?: (message: string) => void;
 };
 
-const NEEDS_SETUP = "Brows, lashes and hair appear once your game folder and WolvenKit are set up.";
-const FAILED = "Something went wrong while preparing brows, lashes and hair, so they aren't shown. The head still works.";
+const NEEDS_SETUP = "Your V's own skin, brows, lashes and hair appear once your game folder and WolvenKit are set up.";
+const PREPARING = "Preparing your V's skin, brows, lashes and hair…";
+const FAILED = "Something went wrong while preparing your V's skin, brows, lashes and hair, so they aren't shown. The head still works.";
 /** Request key: the character and the installation fingerprint it is prepared from (`installationFingerprint`). */
 export const characterRequestKey = (request: CharacterRequest, installation = "") =>
   createHash("sha256").update(canonicalJson(request)).update("\n" + installation).digest("hex").slice(0, 32);
@@ -119,7 +120,7 @@ export class CharacterDetailHost {
     const exporter = this.options.exporter?.(settings.wolvenKitCli) ??
       createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), settings.wolvenKitCli);
     const first = CHARACTER_DETAIL_STEPS[0]!;
-    this.set({ key, phase: "preparing", message: "Preparing brows, lashes and hair…", progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
+    this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
     // Whether this run still owns its key's state (a newer run for the same key takes it over).
     const owns = () => !this.running || this.running.key !== key || this.running.controller === controller;
     let started = 0;
@@ -129,7 +130,7 @@ export class CharacterDetailHost {
       return (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot,
         resolverCache: this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"), exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
-          if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: "Preparing brows, lashes and hair…", progress: { index, total, label }, record: null });
+          if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
         }, log: this.options.log });
     };
     // Start now, or once the cancelled run (still settling on the shared cache) has stopped.
@@ -137,13 +138,13 @@ export class CharacterDetailHost {
     const promise = begun
       .then(result => {
         this.set({ key, phase: "ready", message: "", progress: null, record: result.recordFile });
-        this.options.log?.(`Brows, lashes and hair prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
+        this.options.log?.(`Skin, brows, lashes and hair prepared in ${((Date.now() - started) / 1000).toFixed(1)} s (${request.source} V).`);
       })
       .catch(error => {
         const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
-        this.options.log?.(`Brows, lashes and hair were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
+        this.options.log?.(`Skin, brows, lashes and hair were not prepared: ${error instanceof CharacterDetailError ? `${error.code} ${error.detail}` : (error as Error)?.stack ?? error}`);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null });
       })
       .finally(() => { if (this.running?.controller === controller) this.running = null; });

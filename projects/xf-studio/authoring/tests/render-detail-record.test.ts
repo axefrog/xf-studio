@@ -8,15 +8,22 @@ const texture = () => ({ ...resource(`${sha("b")}.png`, "b"), depotPath: "base\\
 const character = (): CharacterDetail => ({
   schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: sha("c"), origin: "game-files",
   character: { source: "save", bodyGender: "female" }, provenance: { label: "Your game's installed files", notes: [], tool: "WolvenKit CLI 9.0.1" },
-  components: [{ id: "hair:hair:1", slot: "hair", option: "hair_color1", definition: "brown", component: "hair",
+  components: [{ id: "skin:head:2", slot: "skin", option: "skin_type_03", definition: "h0_000_pwa__basehead__03_ca_senna", component: "head",
+    geometry: { ...resource(`${sha("e")}.glb`, "e"), depotPath: "base\\head.morphtarget", depotHash: "2", morphTargets: true },
+    renderChunks: 1, chunks: [0], materials: [
+      { chunk: 0, name: "senna_d03", template: "base\\materials\\skin.mt", scalars: { TintScale: 0.7 }, colours: { TintColor: [202, 177, 153, 255] },
+        textures: { Albedo: texture() }, profiles: {}, skinProfiles: { SkinProfile: { depotPath: "engine\\materials\\defaults\\default.sp",
+          archive: "basegame_1_engine.archive", sha256: null, roughness0: 0.966, roughness1: 1.597, lobeMix: 1, blurSize: 1.4,
+          diffuse: [255, 255, 255], falloff: [255, 178, 165] } } }] },
+    { id: "hair:hair:1", slot: "hair", option: "hair_color1", definition: "brown", component: "hair",
     geometry: { ...resource(`${sha("d")}.glb`, "d"), depotPath: "base\\hair.mesh", depotHash: "1", morphTargets: false },
     renderChunks: 3, chunks: [0, 1], materials: [
       { chunk: 0, name: "long", template: "base\\materials\\hair.mt", scalars: { AlphaCutoff: 0 }, colours: {},
         textures: { Strand_Alpha: texture() }, profiles: { HairProfile: { depotPath: "base\\p.hp", archive: "mod.archive", sha256: null, sampleCount: 127,
-          id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 0, color: [4, 5, 6] }] } } },
+          id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 0, color: [4, 5, 6] }] } }, skinProfiles: {} },
       { chunk: 1, name: "cap", template: "base\\materials\\mesh_decal_gradientmap_recolor.mt", scalars: {}, colours: { DiffuseColor: [255, 255, 255, 255] },
-        textures: {}, profiles: {} }] }],
-  slots: [{ slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
+        textures: {}, profiles: {}, skinProfiles: {} }] }],
+  slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
     { slot: "hair", state: "shown", label: "brown" }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
@@ -40,29 +47,38 @@ describe("render record versions", () => {
 
   test("shapes the loader must never see are refused", () => {
     const bad = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return () => parseCharacterDetail(record); };
-    expect(bad(r => { r.components[0]!.materials[0]!.chunk = 2; })).toThrow("hidden chunk");
-    expect(bad(r => { r.components[0]!.chunks = [0, 0]; })).toThrow("twice");
-    expect(bad(r => { r.components[0]!.chunks = [5]; })).toThrow();
-    expect(bad(r => { r.components[0]!.geometry.file = "../x.glb"; })).toThrow("plain asset file name");
-    expect(bad(r => { (r.components[0]!.materials[0]!.textures.Strand_Alpha as { isGamma?: boolean }).isGamma = undefined; })).toThrow("colour flag");
-    expect(bad(r => { r.components[0]!.materials[1]!.colours.DiffuseColor = [256, 0, 0, 0]; })).toThrow();
-    expect(bad(r => { r.components[0]!.materials[0]!.profiles.HairProfile!.sampleCount = 1; })).toThrow();
+    const hair = (r: CharacterDetail) => r.components[1]!;
+    expect(bad(r => { hair(r).materials[0]!.chunk = 2; })).toThrow("hidden chunk");
+    expect(bad(r => { hair(r).chunks = [0, 0]; })).toThrow("twice");
+    expect(bad(r => { hair(r).chunks = [5]; })).toThrow();
+    expect(bad(r => { hair(r).geometry.file = "../x.glb"; })).toThrow("plain asset file name");
+    expect(bad(r => { (hair(r).materials[0]!.textures.Strand_Alpha as { isGamma?: boolean }).isGamma = undefined; })).toThrow("colour flag");
+    expect(bad(r => { hair(r).materials[1]!.colours.DiffuseColor = [256, 0, 0, 0]; })).toThrow();
+    expect(bad(r => { hair(r).materials[0]!.profiles.HairProfile!.sampleCount = 1; })).toThrow();
     expect(bad(r => { r.slots = r.slots.slice(1); })).toThrow("slot outcomes");
-    expect(bad(r => { r.slots[0] = { slot: "brows", state: "shown", label: "x" }; })).toThrow("shown without components");
+    expect(bad(r => { r.slots[1] = { slot: "brows", state: "shown", label: "x" }; })).toThrow("shown without components");
+    // Skin profiles: every chunk carries the map (possibly empty); values stay in range and colours are RGB bytes.
+    expect(bad(r => { delete (hair(r).materials[0] as { skinProfiles?: unknown }).skinProfiles; })).toThrow("skin profiles is missing");
+    expect(bad(r => { r.components[0]!.materials[0]!.skinProfiles.SkinProfile!.lobeMix = -1; })).toThrow("lobe mix");
+    expect(bad(r => { (r.components[0]!.materials[0]!.skinProfiles.SkinProfile as { falloff: number[] }).falloff = [255, 0]; })).toThrow("RGB");
+    // A v2 record written before the skin slot joined has no skin outcome and is refused (it is prepared again).
+    expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "skin"); })).toThrow("slot outcomes");
     expect(bad(r => { (r.character as { source: string }).source = "ui"; })).toThrow();
   });
 });
 
-// The brows, lashes and hair rendering path must follow resolved data only: no mod names, no saved
+// The skin, brows, lashes and hair rendering path must follow resolved data only: no mod names, no saved
 // appearance hashes or definitions, no per-mod manifests or developer-prepared asset paths. Piercings
 // still use their manifests (a documented follow-on), so their lines are the only exception in scene.ts.
+// Complexion mods and texture frameworks work through archive precedence and ArchiveXL patches, so none of
+// their names, archives or donor paths may appear either, nor any particular skin type or tone.
 describe("rendering boundary", () => {
   const RENDERING_PATH = ["scene", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
     "character-detail-service", "character-detail-host", "character-detail-server", "character-detail-loader", "character-detail-actions",
     "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
-    "browser-head-attachment", "browser-scene-preview-ports", "material-template"];
-  const PER_MOD = /arkhe|icxrus|softnatural|mel_ccxl|meluminary|island_dancer|alliekat|preemhair|eagul|\bprc\b|kala|brown_ombre|ash_brown|10_brown|38_ash|05_brown|\/assets\/(?:brows|lashes|hair)\b|brows\.glb|lashes\.glb|local-hair-assets|lash-profile-preview|brow-preview-1|\b\d{17,20}\b/i;
-  test("no per-mod identifiers remain in the brows, lashes and hair rendering path", () => {
+    "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface"];
+  const PER_MOD = /arkhe|icxrus|softnatural|mel_ccxl|meluminary|island_dancer|alliekat|preemhair|eagul|\bprc\b|kala|brown_ombre|ash_brown|10_brown|38_ash|05_brown|\/assets\/(?:brows|lashes|hair)\b|brows\.glb|lashes\.glb|local-hair-assets|lash-profile-preview|brow-preview-1|\b\d{17,20}\b|universalskintone|complexion|ks_uv|ks_donor|uv_framework|uv4\.xl|facialcustomizationfix|xbaebsae|warmsmooth|wa_head_overlay|wa_head_glow|4k\\\\common|_ca_pale|_ca_senna|_bl_espresso|_bl_dark|skin_type_0\d|basehead_d0\d/i;
+  test("no per-mod or per-choice identifiers remain in the skin, brows, lashes and hair rendering path", () => {
     for (const name of RENDERING_PATH) {
       const lines = readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8").split("\n");
       const offending = lines.map((line, index) => ({ line, index })).filter(({ line }) => PER_MOD.test(line) &&

@@ -10,13 +10,13 @@ import type { LightingStatus } from "../../preview-actions";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
-const SLOT_NAMES = { brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair" } as const;
+const SLOT_NAMES = { skin: "Skin", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair" } as const;
 
-/** One plain line about the shown V's brows, lashes and hair, from the resolved-detail status. */
+/** One plain line about the shown V's skin, brows, lashes and hair, from the resolved-detail status. */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
-  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s brows, lashes and hair from your game files…` };
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, brows, lashes and hair from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.message };
   const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
   return { done: true, text: [`${parts.join(" · ")}.`, details.message, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
@@ -44,7 +44,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   } });
   const detailNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Saved V", note("A save is read locally for your V's face, eyes, brows, lashes, hair and piercings. It is never modified or uploaded."),
+    section("Saved V", note("A save is read locally for your V's face, skin, eyes, brows, lashes, hair and piercings. It is never modified or uploaded."),
       h("div", { class: "row wrap gap-s" }, load, exportV), summary),
     section("Eyes", eyeShape.element, eyeNote),
     section("Preview context", brows.element, lashes.element, hair.element, piercings.element, style.element, colour.element, detailNote,
@@ -64,7 +64,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
           fact(icon("check"), `${result.applied.length} facial regions applied`, `${result.appearanceReferences} appearance references read${saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : ""}`),
           fact(icon(detailLine.done && assets.characterDetails?.slots.every(slot => slot.state !== "unavailable") ? "check" : "info"),
-            "Brows, lashes and hair", detailLine.text || "Waiting for the 3D head."),
+            "Skin, brows, lashes and hair", detailLine.text || "Waiting for the 3D head."),
           fact(icon(result.matchedPiercing ? "check" : "info"), result.matchedPiercing ? "Vanilla piercing matched" : "No matching vanilla piercing", result.matchedPiercing ? "Materials remain approximate." : "You can try a viewport-only style below."),
           fact(icon("info"), "Eyes", result.eyeAppearance.message),
         ]));
