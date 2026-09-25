@@ -4,9 +4,19 @@
  * kind falls through to a default owner. DOM-free; imports only the platform API.
  */
 import { undoPolicyOf, type ActionDescriptor, type ActionSpec, type UndoPolicy } from "../api/actions";
-import type { ActionOwner } from "../api/feature";
+import type { ActionOwner, AsyncDescriptor, AsyncSystemFamily } from "../api/feature";
 
-export type RegistryRoute<O extends ActionOwner> =
+/** Any owner the registry takes: synchronous families and features, and asynchronous families. */
+export type AnyOwner = ActionOwner | AsyncSystemFamily;
+/** The synchronous owners of a registry's owner union. */
+export type SyncOwner<O> = Exclude<O, { async: true }>;
+/** The asynchronous families of a registry's owner union. */
+export type AsyncOwner<O> = Extract<O, { async: true }>;
+export type AsyncRoute<O> =
+  | { ok: true; owner: O; kind: string; qualified: string; descriptor: AsyncDescriptor }
+  | { ok: false; code: "unknown_action"; kind: string };
+
+export type RegistryRoute<O> =
   | { ok: true; owner: O; kind: string; qualified: string; spec: ActionSpec }
   | { ok: false; code: "unknown_action"; kind: string };
 
@@ -14,14 +24,18 @@ export type RegistryRoute<O extends ActionOwner> =
 export type RegistryEntry = { kind: string; qualified: string; owner: string; ownerKind: ActionOwner["owner"];
   scope: readonly string[]; effect: ActionDescriptor["effect"]; undo: UndoPolicy };
 
-export class Registry<O extends ActionOwner = ActionOwner> {
+export class Registry<O extends AnyOwner = ActionOwner> {
   private readonly list: readonly O[];
   private readonly byId = new Map<string, O>();
-  private readonly byKind = new Map<string, { owner: O; spec: ActionSpec }>();
+  private readonly byKind = new Map<string, { owner: SyncOwner<O>; spec: ActionSpec }>();
+  private readonly byAsyncKind = new Map<string, { owner: AsyncOwner<O>; descriptor: AsyncDescriptor }>();
   private readonly ownedKinds = new Map<string, readonly string[]>();
   private readonly table: Readonly<Record<string, ActionDescriptor>>;
 
-  /** Throws when two owners share an ID or an action kind is owned twice. */
+  /**
+   * Throws when two owners share an ID or a kind is owned twice (synchronous and asynchronous kinds
+   * share one namespace).
+   */
   constructor(owners: readonly O[]) {
     this.list = Object.freeze([...owners]);
     const table: Record<string, ActionDescriptor> = {};
@@ -31,10 +45,15 @@ export class Registry<O extends ActionOwner = ActionOwner> {
       const kinds = Object.keys(owner.actions);
       for (const kind of kinds) {
         if (!kind || kind.includes("/")) throw Error(`Action kind "${kind}" of ${owner.id} is not a valid kind.`);
-        const taken = this.byKind.get(kind);
-        if (taken) throw Error(`Action ${kind} is owned by both ${taken.owner.id} and ${owner.id}.`);
+        const taken = this.byKind.get(kind)?.owner ?? this.byAsyncKind.get(kind)?.owner;
+        if (taken) throw Error(`Action ${kind} is owned by both ${taken.id} and ${owner.id}.`);
+        if ("async" in owner && owner.async) {
+          const descriptor = (owner.actions as Record<string, { descriptor: AsyncDescriptor }>)[kind].descriptor;
+          this.byAsyncKind.set(kind, { owner: owner as AsyncOwner<O>, descriptor });
+          continue;
+        }
         const spec = (owner.actions as Record<string, ActionSpec>)[kind];
-        this.byKind.set(kind, { owner, spec });
+        this.byKind.set(kind, { owner: owner as SyncOwner<O>, spec });
         table[kind] = spec.descriptor;
       }
       this.ownedKinds.set(owner.id, Object.freeze(kinds));
@@ -43,15 +62,28 @@ export class Registry<O extends ActionOwner = ActionOwner> {
   }
   owners(): readonly O[] { return this.list; }
   owner(id: string): O | undefined { return this.byId.get(id); }
-  /** Total: every kind resolves to its one owner or to `unknown_action`. */
-  route(kind: string): RegistryRoute<O> {
+  /** Total over synchronous kinds: every kind resolves to its one owner or to `unknown_action` (async kinds too). */
+  route(kind: string): RegistryRoute<SyncOwner<O>> {
     const found = this.byKind.get(kind);
     return found ? { ok: true, owner: found.owner, kind, qualified: `${found.owner.id}/${kind}`, spec: found.spec }
       : { ok: false, code: "unknown_action", kind };
   }
-  /** Every kind in registration order, or one owner's kinds. */
+  /** Total over asynchronous kinds (library requests, file workflows): their family or `unknown_action`. */
+  routeAsync(kind: string): AsyncRoute<AsyncOwner<O>> {
+    const found = this.byAsyncKind.get(kind);
+    return found ? { ok: true, owner: found.owner, kind, qualified: `${found.owner.id}/${kind}`, descriptor: found.descriptor }
+      : { ok: false, code: "unknown_action", kind };
+  }
+  /** Every synchronous kind in registration order, or one owner's kinds (for an async family, its requests). */
   kinds(ownerId?: string): readonly string[] {
     return ownerId === undefined ? Object.keys(this.table) : this.ownedKinds.get(ownerId) ?? [];
+  }
+  /** One async family's descriptors in registration order (shared and frozen: clone before handing out). */
+  asyncDescriptors(ownerId: string): Readonly<Record<string, AsyncDescriptor>> {
+    return Object.fromEntries((this.ownedKinds.get(ownerId) ?? []).flatMap(kind => {
+      const found = this.byAsyncKind.get(kind);
+      return found ? [[kind, found.descriptor]] : [];
+    }));
   }
   descriptor(kind: string): ActionDescriptor | undefined { return this.byKind.get(kind)?.spec.descriptor; }
   /** The union of every owner's descriptors, in registration order. Shared and frozen at the top level: clone before handing out. */

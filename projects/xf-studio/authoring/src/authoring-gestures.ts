@@ -3,22 +3,24 @@ import type { GestureEdit } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import { gestureHistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
+import { GESTURE_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
 
 export type GestureSource = "uv" | "surface";
 
-/** Owns the Undo transaction; input adapters own coordinate and stale-pointer checks. */
+/**
+ * Owns a pointer gesture's Undo transaction through the platform's `HistoryTransaction` (one step,
+ * named by the first frame that changed something; Escape restores the start and never creates
+ * Redo); input adapters own coordinate and stale-pointer checks.
+ */
 export class AuthoringGestures {
-  /** `checkpoint` is the Undo entry this gesture added (undefined when the top entry already matched). */
-  private active?: { source: GestureSource; layer: Layer; changed: boolean;
-    checkpoint?: HistoryEntryId; baseline: string };
+  private active?: { source: GestureSource; layer: Layer; transaction: HistoryTransaction<HistoryEntryId> };
   /** `actions.applyGesture` applies one frame through the feature's registered gestures (the eye-makeup port). */
   constructor(private document: AuthoringDocument, private actions: { applyGesture(edit: GestureEdit): boolean },
     private restoreUndo: () => void) {}
   begin(source: GestureSource, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;
-    const baseline = JSON.stringify(this.document.recipe);
-    const checkpoint = this.document.checkpoint();
-    this.active = { source, layer, changed: false, checkpoint, baseline };
+    this.active = { source, layer, transaction: HistoryTransaction.open(this.document.transactionHost(this.restoreUndo),
+      GESTURE_TRANSACTION, () => this.document.recipe.layers.includes(layer)) };
     return true;
   }
   apply(source: GestureSource, action: GestureEdit) {
@@ -26,28 +28,21 @@ export class AuthoringGestures {
     if (!active || active.source !== source || active.layer !== action.expectedLayer ||
       !this.document.recipe.layers.includes(active.layer)) return false;
     const changed = this.actions.applyGesture(action);
-    if (changed && !active.changed && active.checkpoint !== undefined)
-      this.document.relabelCheckpoint(active.checkpoint, gestureHistoryLabel(action));
-    if (changed) active.changed = true;
+    active.transaction.applied(changed, () => gestureHistoryLabel(action));
     return changed;
   }
   commit(source: GestureSource) {
     if (this.active?.source === source) {
       const active = this.active; this.active = undefined;
-      this.discardEmpty(active);
+      active.transaction.commit();
     }
   }
   cancel(source: GestureSource) {
     const active = this.active;
     if (!active || active.source !== source) return;
     this.active = undefined;
-    if (active.changed && this.document.recipe.layers.includes(active.layer)) this.restoreUndo();
-    else this.discardEmpty(active);
-  }
-  private discardEmpty(active: NonNullable<AuthoringGestures["active"]>) {
-    if (active.checkpoint !== undefined && !active.changed && this.document.recipe.layers.includes(active.layer) &&
-      JSON.stringify(this.document.recipe) === active.baseline) this.document.discardCheckpoint(active.checkpoint);
+    active.transaction.cancel();
   }
   snapshot() { return this.active ? { source: this.active.source, layerId: this.active.layer.id,
-    changed: this.active.changed } : undefined; }
+    changed: this.active.transaction.changed } : undefined; }
 }

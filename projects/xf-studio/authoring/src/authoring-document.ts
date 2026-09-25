@@ -6,6 +6,7 @@ import type { ReadonlyDeep } from "./read-only";
 import type { HistoryLabel } from "./history-labels";
 import { LOOK_HISTORY_1, type HistoryParts, type LookHistoryData } from "./platform/api";
 import { LookHistory } from "./platform/core/look-history";
+import type { TransactionHost } from "./platform/core/history-transaction";
 
 /**
  * The look's Undo history as the document is given it: its data (`LookHistoryData`, what this
@@ -152,6 +153,14 @@ export class AuthoringDocument {
   redoList() { return this.history.redoSteps(); }
   get redoDepth() { return this.history.redoDepth; }
   clearRedo() { this.history.clearRedo(); }
+  /**
+   * Where a gesture or form-control transaction records (the platform's `HistoryTransaction`): this
+   * look's history, with the recipe's JSON as the content fingerprint. `revert` restores and publishes.
+   */
+  transactionHost(revert: () => void): TransactionHost<HistoryEntryId> {
+    return { checkpoint: () => this.checkpoint(), relabel: (step, label) => this.relabelCheckpoint(step, label),
+      discard: step => this.discardCheckpoint(step), revert, content: () => JSON.stringify(this.state.recipe) };
+  }
   /** Kept Undo entries oldest first, without recipes. */
   historyEntries(): HistoryEntryInfo[] { return this.history.list(); }
   /** Identity of the entry the next Undo would restore (cheap; for Redo validity). */

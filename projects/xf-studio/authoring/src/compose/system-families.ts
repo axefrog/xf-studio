@@ -4,14 +4,17 @@
  * in `studio-action-descriptors.ts` and their services in `src/`; the family definitions move
  * into `platform/core` when that table is split (migration step 5).
  */
-import { actionTable, familyId, type SystemFamily } from "../platform/api";
+import { actionTable, asyncActionTable, familyId, type AsyncSystemFamily, type SystemFamily } from "../platform/api";
+import type { CollectionRequest } from "../collection-service";
+import type { StudioFileAction } from "../studio-file-operations";
 import type { CollectionStudioAction } from "../collection-actions";
 import type { HistoryAction } from "../authoring-history";
 import type { MotionAction } from "../motion-actions";
 import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
-import { ACTION_DESCRIPTORS, type ActionScope } from "../studio-action-descriptors";
+import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
+  type RequestDescriptor } from "../studio-action-descriptors";
 
 export type { CollectionStudioAction, HistoryAction };
 
@@ -21,6 +24,8 @@ const PREVIEW_ID = familyId("preview");
 const MOTION_ID = familyId("motion");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
+const LIBRARY_ID = familyId("library");
+const FILES_ID = familyId("files");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
@@ -63,4 +68,18 @@ export const QUALITY_FAMILY: SystemFamily<QualityAction, ActionScope, typeof QUA
 export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, typeof SAVED_V_ID> = Object.freeze({
   owner: "system", id: SAVED_V_ID, label: "Saved V", needsScene: true,
   actions: actionTable<SavedAppearanceAction, ActionScope>(ACTION_DESCRIPTORS, { "savedV.load": true, "savedV.restore": true }),
+});
+
+/**
+ * Asynchronous families (CORE-36): the collection library's requests (`CollectionService.execute`) and
+ * the file workflows (`StudioFileOperations`). They never record Undo; the registry routes them by
+ * owner (`routeAsync`) and keeps them out of the synchronous action table and its golden snapshot.
+ */
+export const LIBRARY_FAMILY: AsyncSystemFamily<CollectionRequest, RequestDescriptor, typeof LIBRARY_ID> = Object.freeze({
+  owner: "system", async: true, id: LIBRARY_ID, label: "Library",
+  actions: asyncActionTable<CollectionRequest, RequestDescriptor>(REQUEST_DESCRIPTORS),
+});
+export const FILES_FAMILY: AsyncSystemFamily<StudioFileAction, FileDescriptor, typeof FILES_ID> = Object.freeze({
+  owner: "system", async: true, id: FILES_ID, label: "Files",
+  actions: asyncActionTable<StudioFileAction, FileDescriptor>(FILE_DESCRIPTORS),
 });

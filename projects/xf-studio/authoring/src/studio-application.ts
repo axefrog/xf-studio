@@ -18,12 +18,12 @@ import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./reci
 import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
-import { actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
-  type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
-import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability,
-  type ReasonCode, type ValidationIssue } from "./platform/api";
-import type { Registry } from "./platform/core/registry";
-import type { StudioFileAction } from "./studio-file-operations";
+import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
+  type ValueSchema } from "./studio-action-descriptors";
+import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
+  type Capability, type FeatureModule, type ReasonCode, type ValidationIssue } from "./platform/api";
+import type { AnyOwner, Registry } from "./platform/core/registry";
+import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
@@ -44,6 +44,15 @@ export type StudioOwnerActions = {
   savedV: SavedAppearanceAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
+/**
+ * Each asynchronous family this application binds a handler for (CORE-36): the collection library's
+ * requests and the file workflows. The composition list registers exactly these beside the owners above.
+ */
+export type StudioOwnerRequests = {
+  library: CollectionRequest;
+  files: StudioFileAction;
+};
+export type StudioRequestOwnerId = keyof StudioOwnerRequests;
 /** Every action a presentation may dispatch: the union of the registered owners' actions. */
 export type StudioAction = StudioOwnerActions[StudioOwnerId];
 /** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
@@ -67,13 +76,17 @@ export type StudioGestureProposal =
   | { kind: "path.replacePoints"; points: Point[] };
 
 type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerActions[O]> };
+type AsyncHandlers = {
+  readonly library: AsyncActionHandler<CollectionRequest, Awaited<ReturnType<CollectionService["execute"]>>>;
+  readonly files: AsyncActionHandler<StudioFileAction, StudioFileOutcome>;
+};
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
   eyeMakeup: EyeMakeupPort; undo: () => boolean;
   /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
-  collection?: CollectionService; preview?: PreviewActions; motion?: MotionActions;
+  collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
@@ -86,14 +99,18 @@ export class StudioApplication {
   private previewUnavailable?: string;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   /** The action registry: owners, descriptors, Undo policy and routes. */
-  private readonly routes: Registry;
+  private readonly routes: Registry<AnyOwner>;
   /** One handler per registered owner: the compiler requires every owner in the composition list. */
   private readonly handlers: Handlers;
+  /** One handler per asynchronous family (library requests, file workflows). */
+  private readonly asyncHandlers: AsyncHandlers;
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
-  constructor(services: Services, registry: Registry) {
+  constructor(services: Services, registry: Registry<AnyOwner>) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
+    this.asyncHandlers = this.bindAsyncHandlers();
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
-    const owners = registry.owners().map(owner => owner.id).sort(), bound = Object.keys(this.handlers).sort();
+    const owners = registry.owners().map(owner => owner.id).sort(),
+      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers)].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
     this.subscribeSources();
@@ -122,15 +139,27 @@ export class StudioApplication {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
   actionKinds() { return [...this.routes.kinds()] as StudioAction["kind"][]; }
-  requestKinds() { return Object.keys(REQUEST_DESCRIPTORS) as CollectionRequest["kind"][]; }
+  /** Library request kinds (the registered `library` family). */
+  requestKinds() { return [...this.routes.kinds("library")] as CollectionRequest["kind"][]; }
   actionDescriptors() { return structuredClone(this.routes.descriptors()) as Record<StudioAction["kind"], ActionDescriptor>; }
-  requestDescriptors() { return structuredClone(REQUEST_DESCRIPTORS); }
-  gestureDescriptors() { return structuredClone(GESTURE_DESCRIPTORS); }
-  /** File workflow IDs (dispatched through `StudioFileOperations`) share the registry. */
-  fileKinds() { return Object.keys(FILE_DESCRIPTORS) as StudioFileAction["kind"][]; }
-  fileDescriptors() { return structuredClone(FILE_DESCRIPTORS); }
+  requestDescriptors() {
+    return structuredClone(this.routes.asyncDescriptors("library")) as Record<CollectionRequest["kind"], RequestDescriptor>;
+  }
+  /** Gesture proposals: eye makeup's registered gestures (the session and its Undo transaction are the platform's). */
+  gestureDescriptors() {
+    const owner = this.routes.owner("eye-makeup") as FeatureModule | undefined;
+    return structuredClone(owner?.gestures?.descriptors ?? {}) as Record<StudioGestureProposal["kind"], ActionDescriptor>;
+  }
+  /** File workflow IDs (the registered `files` family, run by `StudioFileOperations`). */
+  fileKinds() { return [...this.routes.kinds("files")] as StudioFileAction["kind"][]; }
+  fileDescriptors() {
+    return structuredClone(this.routes.asyncDescriptors("files")) as Record<StudioFileAction["kind"], FileDescriptor>;
+  }
   /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
-  registry() { return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>); }
+  registry() {
+    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: this.routes.asyncDescriptors("library"),
+      gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
+  }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
     const targetCapability = this.targetCapability(target);
@@ -428,6 +457,30 @@ export class StudioApplication {
       },
     };
   }
+  /**
+   * The asynchronous families' live behaviour: library requests run on the collection service and file
+   * workflows on the file operations, each attached by the composition root when it exists.
+   */
+  private bindAsyncHandlers(): AsyncHandlers {
+    const app = this;
+    return {
+      library: {
+        capability: request => coded(app.services.collection?.capability(request) ?? missing("Collection is still loading.")),
+        execute: async request => app.services.collection?.execute(request)
+          ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." },
+      },
+      files: {
+        capability: action => app.services.files?.capability(action) ?? missing("Files are still loading."),
+        execute: async action => app.services.files?.execute(action)
+          ?? { ok: false as const, code: "unavailable", message: "Files are still loading." },
+      },
+    };
+  }
+  /** The async family that owns `kind`, when it is `family`. */
+  private ownsAsync(family: StudioRequestOwnerId, kind: string) {
+    const route = this.routes.routeAsync(kind);
+    return route.ok && route.owner.id === family;
+  }
   /** Candidate actions use the hit target, never the currently selected row. */
   actionsFor(target: StudioTarget): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
@@ -493,11 +546,22 @@ export class StudioApplication {
   }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
+  /** A library request's capability, routed by the registry to the `library` family. */
   requestCapability(request: CollectionRequest): StudioCapability {
-    return coded(this.services.collection?.capability(request) ?? missing("Collection is still loading."));
+    return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();
   }
-  async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
-    ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
+  async execute(request: CollectionRequest) {
+    return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.execute(request)
+      : { ok: false as const, code: "invalid_value", message: "Unknown command." };
+  }
+  /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
+  fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
+    return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.capability(action) : unknownCommand();
+  }
+  executeFile(action: StudioFileAction): Promise<StudioFileOutcome> {
+    return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.execute(action)
+      : Promise.resolve({ ok: false, code: "invalid_value", message: "Unknown command." });
+  }
   /** True when a collection is loaded and no preset owns the editor recipe. */
   private unowned() {
     const owner = this.services.collection?.selectedPreset();

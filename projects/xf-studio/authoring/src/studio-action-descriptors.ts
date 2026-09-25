@@ -190,14 +190,22 @@ export const FILE_DESCRIPTORS = {
 /** One flat index over every family, for palettes, scripts and documentation checks. */
 export type RegistryEntry = { id: string; family: "action" | "request" | "gesture" | "file";
   scope: readonly ActionScope[]; undo: UndoPolicy; async: boolean };
-/** `actions` is the application's action registry (the union of every owner's table); it defaults to this file's table. */
-export function actionRegistry(actions: Readonly<Record<string, ActionDescriptor>> = ACTION_DESCRIPTORS): RegistryEntry[] {
+/**
+ * `actions` is the application's action registry (the union of every owner's table); the requests,
+ * gesture proposals and file workflows come from the registered library and files families and the
+ * live feature's gestures. Each defaults to this file's table.
+ */
+export function actionRegistry(actions: Readonly<Record<string, ActionDescriptor>> = ACTION_DESCRIPTORS,
+  families: { requests?: Readonly<Record<string, { scope: readonly string[] }>>;
+    gestures?: Readonly<Record<string, { scope: readonly string[]; undo: UndoPolicy }>>;
+    files?: Readonly<Record<string, { scope: readonly string[]; undo?: UndoPolicy }>> } = {}): RegistryEntry[] {
+  const { requests = REQUEST_DESCRIPTORS, gestures = GESTURE_DESCRIPTORS, files = FILE_DESCRIPTORS } = families;
   return [
     ...Object.entries(actions).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
-    ...Object.entries(REQUEST_DESCRIPTORS).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),
-    ...Object.entries(GESTURE_DESCRIPTORS).map(([id, d]) => ({ id, family: "gesture" as const, scope: d.scope, undo: d.undo, async: false })),
-    ...Object.entries(FILE_DESCRIPTORS).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo, async: true })),
-  ].map(entry => structuredClone(entry));
+    ...Object.entries(requests).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),
+    ...Object.entries(gestures).map(([id, d]) => ({ id, family: "gesture" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(files).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo ?? "none", async: true })),
+  ].map(entry => structuredClone(entry)) as RegistryEntry[];
 }
 
 /** Deriving the 3D preview from the player's own game files. The host owns every path; the browser sends only the action. */

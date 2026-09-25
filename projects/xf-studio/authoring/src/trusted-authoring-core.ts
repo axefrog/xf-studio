@@ -6,7 +6,7 @@ import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
 import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
-import type { Registry } from "./platform/core/registry";
+import type { AnyOwner, Registry } from "./platform/core/registry";
 import { RecipeActions } from "./recipe-actions";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "./recipe";
@@ -17,7 +17,7 @@ import type { WorkspaceState } from "./workspace-state";
  * action registry and the document model. Built once in `compose/` and passed in by the startup
  * and server roots; nothing below the roots imports the composition.
  */
-export type StudioComposition = { readonly registry: Registry; readonly documents: DocumentModel };
+export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel };
 
 /** Trusted, DOM-free authoring composition. The presentation receives only StudioApplication. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
@@ -34,9 +34,10 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     if (!route.ok || route.owner.id !== documents.live) throw Error(`${kind} is not an action of ${documents.live}.`);
     return route.spec as EyeMakeupSpec;
   };
+  // The live document edits the live feature's part; its look history chunks parts through the part registry.
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
-    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) });
+    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) }, { feature: documents.live, parts: documents.parts });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(
