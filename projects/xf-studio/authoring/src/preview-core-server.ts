@@ -2,7 +2,7 @@ import type { PreviewCoreHost } from "./preview-core-host";
 
 /**
  * Host endpoint for the 3D preview preparation. GET returns the read-only state; POST takes
- * only `{ action: "prepare" | "cancel" }`. Paths come from the host's own settings, never the
+ * only `{ action: "prepare" | "cancel" | "rebuild" }` (rebuild prepares a damaged preview again). Paths come from the host's own settings, never the
  * browser. Callers mount it behind their own session checks (the desktop adds a token cookie).
  */
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -26,9 +26,9 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     } catch { return json({ code: "invalid", error: "Invalid request." }, 400); }
     const action = (body as { action?: unknown })?.action;
     if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).join() !== "action" ||
-        (action !== "prepare" && action !== "cancel"))
-      return json({ code: "invalid", error: "Choose prepare or cancel." }, 400);
-    const state = action === "prepare" ? host.prepare() : host.cancel();
-    return json(state, action === "prepare" && !state.canCancel && state.phase !== "ready" ? 409 : 200);
+        (action !== "prepare" && action !== "cancel" && action !== "rebuild"))
+      return json({ code: "invalid", error: "Choose prepare, rebuild or cancel." }, 400);
+    const state = action === "prepare" ? host.prepare() : action === "rebuild" ? host.rebuild() : host.cancel();
+    return json(state, action !== "cancel" && !state.canCancel && state.phase !== "ready" ? 409 : 200);
   };
 }

@@ -39,18 +39,18 @@ try {
   await browser.evaluate("document.querySelector('#desktop-welcome-start').click()");
   await browser.waitFor("!document.querySelector('#desktop-welcome').open && document.querySelector('#studio.studio-ready')");
   // The card first offers the detected game folder (or, with none detected, Build setup).
-  await browser.waitFor("['use-game', 'setup', 'wolvenkit-consent'].includes(document.querySelector('#preview-card-primary')?.dataset.action)", 30_000);
+  await browser.waitFor("['previewSetup.useDetectedGame', 'previewSetup.openSetup', 'previewSetup.consent'].includes(document.querySelector('#preview-card-primary')?.dataset.action)", 30_000);
   let state = await card();
   console.log(`[${elapsed()}] card: ${state.title} → ${state.label}`);
-  if (state.action === "use-game") await browser.evaluate("document.querySelector('#preview-card-primary').click()");
-  else if (state.action === "setup") {
+  if (state.action === "previewSetup.useDetectedGame") await browser.evaluate("document.querySelector('#preview-card-primary').click()");
+  else if (state.action === "previewSetup.openSetup") {
     if (!gameArgument) throw Error("No single game install was detected; pass --game <folder>.");
     await browser.evaluate(`(async () => { const view = await (await fetch('/api/local-settings')).json();
       await fetch('/api/local-settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ revision: view.revision, fields: { ...view.fields, gameRoot: ${JSON.stringify(gameArgument)} } }) }); })()`);
     await browser.evaluate("document.getElementById('desktop-setup').dispatchEvent(new Event('close'))");
   }
-  await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'wolvenkit-consent'", 30_000);
+  await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'previewSetup.consent'", 30_000);
   state = await card();
   console.log(`[${elapsed()}] card: ${state.title} — ${state.body}`);
   await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-card.png"));
@@ -65,12 +65,12 @@ try {
   if (log.some(line => /WolvenKit download|WolvenKit .* downloaded/.test(line))) throw Error("A download started before consent.");
   await browser.evaluate("document.querySelector('#wolvenkit-consent-confirm').click()");
   await browser.waitFor("document.querySelector('#preview-card-title')?.textContent.startsWith('Downloading WolvenKit')", 10_000);
-  await browser.waitFor("parseFloat(document.querySelector('#preview-card-progress')?.value ?? 0) > 0.3", 300_000);
+  await browser.waitFor("parseFloat(document.querySelector('#preview-card-progress')?.getAttribute('aria-valuenow') ?? 0) > 30", 300_000);
   state = await card();
   console.log(`[${elapsed()}] ${state.title} ${state.step}`);
   await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-downloading.png"));
   if (noDotNet) {
-    await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'runtime-install'", 300_000);
+    await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'previewSetup.openLink'", 300_000);
     state = await card();
     console.log(`[${elapsed()}] card: ${state.title} — ${state.body} [${state.label} | ${state.secondary}]`);
     await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-needs-dotnet.png"));

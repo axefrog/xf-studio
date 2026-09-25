@@ -41,11 +41,11 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const state = frame.preview, preview = state.preview, saved = state.savedV, assets = frame.status.assets;
       applyCapability(load, port.files.capability({ kind: "savedV.import" }));
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
-      const key = JSON.stringify([saved, frame.viewport.head.error]);
+      const key = JSON.stringify([saved, (frame.viewport.head.error ?? frame.viewport.head.message)]);
       if (summary.dataset.key !== key) {
         summary.dataset.key = key;
         const result = saved.result;
-        summary.replaceChildren(...(!saved.loaded || !result ? [emptyState("Reference head", frame.viewport.head.error ??
+        summary.replaceChildren(...(!saved.loaded || !result ? [emptyState("Reference head", (frame.viewport.head.error ?? frame.viewport.head.message) ??
           "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
           fact(icon("check"), `${result.applied.length} facial regions applied`, `${result.appearanceReferences} appearance references read${saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : ""}`),
           fact(icon(result.matchedDetails.length === 2 ? "check" : "info"), result.matchedDetails.length === 2 ? "Brows and lashes matched" : "Brows and lashes: reference styles",
@@ -62,7 +62,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         return choice ? `Eye shape ${choice.number}${choice.target ? ` (${choice.target})` : " (base)"}` : "";
       };
       eyeShape.update(shapes.map(choice => ({ value: String(choice.index), label: shapeLabel(choice.index) })), String(preview?.eyeShape ?? 9),
-        !preview || !shapes.length, frame.viewport.head.error ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
+        !preview || !shapes.length, (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
       setText(eyeNote, overriding);
@@ -70,7 +70,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
         const enabled = !!preview?.[detail], allowed = enableReason(rt, { kind: "preview.setDetail", detail, enabled: true });
         control.update(enabled, { disabled: !preview || (!enabled && !allowed.available), reason: allowed.reason ??
-          frame.viewport.head.error ?? "Preview is still loading." });
+          (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading." });
       }
       const hairAllowed = enableReason(rt, { kind: "preview.setHair", enabled: true });
       hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? "Preview is still loading.",
@@ -80,7 +80,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       piercings.update(!!preview?.piercings, { disabled: !preview || !options.length || (!preview.piercings && !piercingAllowed.available),
         reason: piercingAllowed.reason ?? "Preview is still loading." });
       style.update([{ value: "", label: "Saved V / off" }, ...options.map(option => ({ value: option.id, label: option.label }))], preview?.piercingStyle ?? "", !options.length,
-        options.length ? undefined : !preview ? (frame.viewport.head.error ?? "Preview is still loading.") :
+        options.length ? undefined : !preview ? ((frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading.") :
           `Piercing preview unavailable${assets.piercingError ? `: ${assets.piercingError}` : ""}.`);
       const chosen = options.find(option => option.id === preview?.piercingStyle);
       colour.update((chosen?.choices ?? []).map(choice => ({ value: choice.definition, label: `${choice.index}. ${choice.label}` })), preview?.piercingDefinition, !chosen,
@@ -137,7 +137,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
-      const loading = { disabled: !ready, reason: frame.viewport.head.error ?? "Preview is still loading." };
+      const loading = { disabled: !ready, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading." };
       fov.update(preview?.camera.fov, loading); exposure.update(preview?.exposure, loading); angle.update(preview?.lightAngle, loading);
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
@@ -179,7 +179,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
       const motion = frame.preview.motion;
-      const unavailable = { disabled: !motion?.available, reason: frame.viewport.head.error ??
+      const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         (motion?.error ? `Idle unavailable: ${motion.error}` : "Motion preview is still loading.") };
       idle.update(!!motion?.idle, unavailable);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);

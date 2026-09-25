@@ -13,6 +13,7 @@ export type WorkspaceCapturePorts = {
   preview(): ReturnType<PreviewActions["snapshot"]> | undefined;
   motion(): ReturnType<MotionActions["snapshot"]> | undefined;
   uiPreferences?(): WorkspaceState["uiPreferences"];
+  previewSetup?(): WorkspaceState["previewSetup"];
 };
 
 /** Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. */
@@ -24,7 +25,8 @@ export class WorkspaceComposer {
     const editing = { ...this.ports.editor(), uvView: this.ports.uvView(),
       savedV: this.ports.savedV(), glitterChoices: this.initial.glitterChoices,
       library: this.initial.library, collections: this.ports.collections(),
-      uiPreferences: parseUIPreferences(this.ports.uiPreferences?.() ?? this.initial.uiPreferences) };
+      uiPreferences: parseUIPreferences(this.ports.uiPreferences?.() ?? this.initial.uiPreferences),
+      ...(this.ports.previewSetup ? { previewSetup: this.ports.previewSetup() } : {}) };
     const quality = this.ports.quality();
     if (!this.previewReady) return structuredClone({ ...this.initial, ...editing,
       preview: { ...this.initial.preview, textureSize: quality } });

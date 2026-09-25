@@ -14,7 +14,9 @@ import { collectionMenu, presetMenu } from "../target-menus";
 
 import { PANEL_META } from "../panel-meta";
 
-export type PanelController = { spec: PanelSpec; update(frame: Frame): void };
+export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
+  /** Mod package only: open Game & tools and put focus on the first field to fill in. */
+  showSetup?(): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Library facts derived only from the draft summary and saved list; nothing is guessed. */
@@ -236,14 +238,22 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
+  // Paths a person may need to type. The Bun runtime is XF Studio's own and has no field.
   const setupFields = [
     ["gameRoot", "Cyberpunk 2077 folder"],
-    ["wolvenKitCli", "WolvenKit CLI executable"],
-    ["bunExecutable", "Bun executable (optional)"], ["mo2Root", "MO2 instance folder"],
+    ["wolvenKitCli", "Your own WolvenKit (optional)"],
+    ["mo2Root", "MO2 instance folder"],
     ["mo2ProfileId", "MO2 profile name"], ["manualModRoot", "Additional direct mod folder (optional)"],
   ] as const;
+  type SetupField = typeof setupFields[number][0];
+  const hints: Partial<Record<SetupField, string>> = {
+    wolvenKitCli: "Leave this empty and XF Studio can download WolvenKit for you.",
+  };
   const inputs = Object.fromEntries(setupFields.map(([key, label]) => [key,
-    h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<typeof setupFields[number][0], HTMLInputElement>;
+    h("input", { class: "field", type: "text", "aria-label": label, spellcheck: "false", oninput: () => { dirty = true; } })])) as Record<SetupField, HTMLInputElement>;
+  const field = (key: SetupField) => h("label", { class: "control" },
+    h("span", { class: "control-label", text: setupFields.find(([name]) => name === key)![1] }), inputs[key],
+    hints[key] ? h("span", { class: "control-help", text: hints[key] }) : null);
   const route = h("select", { class: "field", "aria-label": "How you install mods", onchange: () => { dirty = true; showRoute(); } },
     h("option", { value: "direct", text: "Game folder (Vortex or manual)" }), h("option", { value: "mo2", text: "Mod Organizer 2" }));
   // Build normally cuts the eye plate from the head your mods load; this is the way round an unsupported head mod.
@@ -251,29 +261,25 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const plateHead = h("select", { class: "field", onchange: () => { dirty = true; } });
   const plateHeadLabel = h("span", { class: "control-label" });
   let dirty = false, loadedRevision = -1;
-  const mo2Fields = h("div", {}, ...setupFields.filter(([key]) => key === "mo2Root" || key === "mo2ProfileId")
-    .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
-  const directFields = h("div", {}, ...setupFields.filter(([key]) => key === "manualModRoot")
-    .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])));
+  const mo2Fields = h("div", {}, field("mo2Root"), field("mo2ProfileId"));
+  const directFields = h("div", {}, field("manualModRoot"));
   const showRoute = () => { mo2Fields.hidden = route.value !== "mo2"; directFields.hidden = route.value !== "direct"; };
-  const setupState = note("Loading local setup…");
+  const setupState = note("Loading your settings…");
   const setupReadiness = note("");
   const saveSetup = button({ label: "Save settings", icon: "check", onClick: () => void (async () => {
-    const current = port.localSetup.snapshot().view;
-    if (!current) return;
-    const fields: LocalSetupFields = { ...current.fields, launchRoute: route.value as LocalSetupFields["launchRoute"],
+    const fields: Partial<LocalSetupFields> = { launchRoute: route.value as LocalSetupFields["launchRoute"],
       eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] };
-    for (const [key] of setupFields) (fields as unknown as Record<string, string | null>)[key] = inputs[key].value.trim() || null;
-    const result = await port.localSetup.dispatch({ kind: "setup.save", fields });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Configuration saved on this computer."); }
+    for (const [key] of setupFields) fields[key] = inputs[key].value.trim() || null;
+    const result = await port.localSetup.dispatch({ kind: "setup.update", fields });
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Settings saved on this computer."); }
     else rt.feedback.toast("error", "Game & tools", result.message);
   })() });
   const restoreSetup = button({ label: "Restore previous settings", onClick: () => void (async () => {
     const result = await port.localSetup.dispatch({ kind: "setup.restorePrevious" });
-    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Previous configuration restored."); }
+    if (result.ok) { dirty = false; rt.feedback.toast("success", "Game & tools", "Previous settings restored."); }
     else rt.feedback.toast("error", "Game & tools", result.message);
   })() });
-  const refreshSetup = button({ label: "Reload setup", onClick: event => {
+  const refreshSetup = button({ label: "Reload settings", onClick: event => {
     const reload = () => void (async () => {
       const result = await port.localSetup.dispatch({ kind: "setup.refresh" });
       if (result.ok) { dirty = false; loadedRevision = -1; }
@@ -281,9 +287,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     })();
     if (!dirty) { reload(); return; }
     const anchor = event.currentTarget as Element;
-    openMenu([{ kind: "heading", label: "Discard unsaved setup edits?" },
-      { kind: "action", label: "Reload saved setup", run: reload }], anchor,
-    { label: "Reload local setup", invoker: anchor });
+    openMenu([{ kind: "heading", label: "Discard unsaved changes to these settings?" },
+      { kind: "action", label: "Reload saved settings", run: reload }], anchor,
+    { label: "Reload saved settings", invoker: anchor });
   } });
   const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
@@ -303,25 +309,30 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   }
   // Build readiness (including the host's Build setup) is part of the file capability.
   const buildCapability = () => port.files.capability({ kind: "package.build" });
+  const setupSection = h("details", { class: "section" }, h("summary", { text: "Game & tools" }),
+    note("Saved on this computer only. XF Studio finds your game and sets up WolvenKit for you; fill these in only to change what it chose."),
+    h("label", { class: "control" }, h("span", { class: "control-label", text: "How you install mods" }), route),
+    field("gameRoot"), field("wolvenKitCli"), mo2Fields, directFields,
+    h("label", { class: "control" }, plateHeadLabel, plateHead),
+    setupState, setupReadiness,
+    h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup));
   const element = h("div", { class: "panel-content" },
     section("Mod package", note(`Builds your own copy of ${EYE_MAKEUP_MOD.modName}, the eye-makeup mod, from the current draft (including unsaved edits). Each preset becomes one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
       h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
-    h("details", { class: "section" }, h("summary", { text: "Game & tools" }),
-      note("These locations are saved on this computer only. Choose your game folder and how you install mods."),
-      h("label", { class: "control" }, h("span", { class: "control-label", text: "How you install mods" }), route),
-      ...setupFields.filter(([key]) => !["mo2Root", "mo2ProfileId", "manualModRoot"].includes(key))
-        .map(([key, label]) => h("label", { class: "control" }, h("span", { class: "control-label", text: label }), inputs[key])),
-      mo2Fields, directFields,
-      h("label", { class: "control" }, plateHeadLabel, plateHead),
-      setupState, setupReadiness,
-      h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
+    setupSection,
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
       h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
         finish.exportAdapter === "flat-provisional" ? "success" : "warning")))),
     note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials in their game-matched model, but nobody has seen them in game yet. Check decides — this list is a guide.")));
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
+    showSetup() {
+      setupSection.open = true;
+      setupSection.scrollIntoView({ block: "nearest" });
+      const empty = [inputs.gameRoot, inputs.wolvenKitCli].find(input => !input.value) ?? inputs.gameRoot;
+      requestAnimationFrame(() => empty.focus());
+    },
     update(frame) {
       const files = frame.files, library = frame.library;
       applyCapability(check, port.files.capability({ kind: "package.check" }));
@@ -340,9 +351,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
         showRoute();
       }
       setText(setupState, setup.error ?? (setup.view?.source === "backup" ?
-        "The current settings file is damaged. Restore its previous copy before editing." :
-        setup.view ? `Saved locally · revision ${setup.view.revision}${setup.view.overridden.length ? ` · server overrides: ${setup.view.overridden.join(", ")}` : ""}` : "Loading local setup…"));
-      setText(setupReadiness, setup.view?.readiness.build.ready ? "Build inputs are available. Tool version and game rendering are checked separately." :
+        "The current settings file is damaged. Restore its previous copy before editing." : setup.view ? "" : "Loading your settings…"));
+      setupState.hidden = !setupState.textContent;
+      setText(setupReadiness, setup.view?.readiness.build.ready ? "Ready to build your mod files." :
         setup.view?.readiness.build.issues.map(issue => issue.reason).join(" ") ?? "");
       applyCapability(saveSetup, port.localSetup.capability({ kind: "setup.save", fields: setup.view?.fields ?? {} as LocalSetupFields }));
       applyCapability(refreshSetup, port.localSetup.capability({ kind: "setup.refresh" }));
@@ -359,7 +370,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       if (lastError && !pkg) { result.replaceChildren(h("div", { class: "result-card error" }, icon("error"),
         h("div", {}, h("strong", { text: lastError.kind === "package.build" ? "Build failed" : "Check failed" }), h("p", { text: lastError.message }),
           h("p", { class: "muted small", text: "Your collection is unchanged." }),
-          technicalDetails([["Code", lastError.code], ["Message", lastError.message], ["Time", new Date().toISOString()]],
+          technicalDetails([["Code", lastError.code], ["Message", lastError.message], ["Time", new Date(lastError.at).toLocaleString()]],
             "The desktop app also keeps a log in its data folder (About shows where).")))); return; }
       result.replaceChildren(renderResult(pkg!, library.draft?.presets ?? []));
     },

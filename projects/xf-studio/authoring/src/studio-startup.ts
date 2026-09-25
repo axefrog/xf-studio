@@ -7,8 +7,8 @@
  */
 import { createBrowserFileDevice } from "./browser-file-device";
 import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
-import { previewView, type PreviewPreparationActions } from "./preview-preparation";
-import { mountPreviewCard } from "./browser-preview-card";
+import type { PreviewPreparationActions } from "./preview-preparation";
+import { PreviewSetupActions } from "./preview-setup";
 import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from "./wolvenkit-setup";
 import { bindStageTheme } from "./stage-theme-binding";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
@@ -43,9 +43,9 @@ export type StudioHost = {
   localSetup?: LocalSetupActions;
   /** Opens a named official page; without it the page opens in a new browser tab. */
   openLink?: (link: WolvenKitLink) => Promise<void>;
-  /** Where the game folder and WolvenKit CLI are set, in the host's own words. */
+  /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Game & tools"). */
   setupPlace: string;
-  /** Opens the host's own setup form, when it has one outside the Studio panels. */
+  /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Game & tools is shown. */
   openSetup?: () => void;
   /** Lets the host ask for an immediate workspace save (the desktop does before closing). */
   onFlushRequest?: (flush: () => void) => void;
@@ -76,6 +76,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const localSetup = host.localSetup ?? createBrowserLocalSetup();
   const installDetection = createBrowserInstallDetection();
+  // Whether the 3D preview may start preparing by itself; a workspace preference (per verification scope).
+  let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
   let savedAppearance: SavedAppearanceActions | undefined;
   let previewActions: ReturnType<ReturnType<typeof createTrustedPreviewServices>["finish"]>["preview"] | undefined;
@@ -115,6 +117,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
       preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(),
       uiPreferences: () => preferences.snapshot(),
+      previewSetup: () => ({ autostart }),
     },
     sources: [core.document, preferences], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
@@ -152,8 +155,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
     message: text => adapterMessage("uv", text),
   }, workspace.uvView);
+  // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
+  const previewSetup = new PreviewSetupActions({
+    preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
+    openLink: host.openLink ?? (link => openInNewTab(host.wolvenKitSetup, link)),
+    openHostSetup: host.openSetup, setupPlace: host.setupPlace,
+    autostart: { get: () => autostart, set: on => { if (autostart !== on) { autostart = on; persist(); } } },
+    loadHead: () => attachHead(),
+  });
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, localSetup, installDetection, viewport: viewportDevice.attachment,
+    workspace, core, preferences, localSetup, installDetection, previewSetup, viewport: viewportDevice.attachment,
     previewReadiness: previewDevice.coordinator, status: statusSource,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
@@ -163,7 +174,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       read: () => savedAppearance?.snapshot().savedV,
       load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
       ready: () => !!scene,
-      unavailableReason: () => viewportDevice.attachment.snapshot().head.error,
+      unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice: createBrowserFileDevice({ document, pickers: {
       recipe: byId<HTMLInputElement>("device-recipe-picker"),
@@ -178,75 +189,38 @@ async function start(host: StudioHost, root: HTMLElement) {
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
-  // Setup changed outside the Studio's own panel (a game folder or WolvenKit chosen, WolvenKit
-  // downloaded, the preview prepared): re-read it so Build availability follows. A change reported
-  // while setup is busy is re-read as soon as it is free, so no change is missed.
-  let setupRefreshQueued = false;
-  const refreshSetup = () => {
-    if (localSetup.snapshot().busy) { setupRefreshQueued = true; return; }
-    setupRefreshQueued = false;
-    void localSetup.dispatch({ kind: "setup.refresh" });
-  };
-  localSetup.subscribe(() => { if (setupRefreshQueued && !localSetup.snapshot().busy) refreshSetup(); });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });
-  followPreviewPreparation();
+  followPreviewSetup();
 
   /**
-   * The 3D head has one source: the preview the host derives from the player's own game
-   * files. Until it is ready the head reports why (in the preparation's own words) and the
-   * card offers the next step; the head loads as soon as the preparation reports ready.
+   * The 3D head has one source: the preview the host derives from the player's own game files.
+   * Until it is interactive the head pane shows the setup service's typed state (checking,
+   * preparing, waiting for something, or failed with a way forward) and head actions say why.
    */
-  function followPreviewPreparation() {
-    const preparation = host.previewPreparation;
-    let attached = false;
-    const unavailable = (text: string) => {
-      core.app.setPreviewUnavailable(text);
-      viewportDevice.failHead(text);
+  function followPreviewSetup() {
+    let shown = "";
+    const show = () => {
+      const head = previewSetup.snapshot().head, key = JSON.stringify(head);
+      if (key === shown || head.phase === "ready") return;
+      shown = key;
+      core.app.setPreviewUnavailable(head.message || NO_3D_PREVIEW_IN_ALPHA);
+      if (head.phase === "failed") viewportDevice.failHead(head.message);
+      else viewportDevice.headPending(head.phase === "checking" ? "loading" : head.phase, head.message, head.progress);
       statusSource.changed();
     };
-    const follow = () => {
-      if (attached) return;
-      const state = preparation.snapshot();
-      if (state?.phase === "ready") {
-        attached = true;
-        core.app.setPreviewUnavailable("");
-        void attachHead();
-      } else unavailable(state ? previewView(state, null, host.wolvenKitSetup.snapshot()).viewport : NO_3D_PREVIEW_IN_ALPHA);
-    };
-    unavailable(NO_3D_PREVIEW_IN_ALPHA);
+    previewSetup.subscribe(show);
+    show();
     session.flush();
-    preparation.subscribe(follow);
-    host.wolvenKitSetup.subscribe(follow);
-    const saveField = async (field: "gameRoot" | "wolvenKitCli", path: string) => {
-      await localSetup.idle();
-      const view = localSetup.snapshot().view ?? (await localSetup.dispatch({ kind: "setup.refresh" }), localSetup.snapshot().view);
-      if (!view) throw Error("That setting couldn't be saved. Try again.");
-      const outcome = await localSetup.dispatch({ kind: "setup.save", fields: { ...view.fields, [field]: path } });
-      if (!outcome.ok) throw Error(outcome.message);
-    };
-    const wolvenKit = host.wolvenKitSetup;
-    const card = mountPreviewCard({ document, storage: localStorage, actions: preparation, wolvenKit, detection: installDetection,
-      setupPlace: host.setupPlace, openSetup: host.openSetup,
-      useGameFolder: path => saveField("gameRoot", path), useWolvenKit: path => saveField("wolvenKitCli", path),
-      openLink: host.openLink ?? (async link => {
-        const state = wolvenKit.snapshot(), url = state && wolvenKitLinkUrl(state, link);
-        if (!url || !window.open(url, "_blank", "noopener")) throw Error("That page couldn't be opened. Try again.");
-      }),
-      onSetupChanged: refreshSetup });
-    // A changed game folder or WolvenKit path may make the preview preparable (or stale).
-    let setupRevision = localSetup.snapshot().view?.revision;
-    localSetup.subscribe(() => {
-      const revision = localSetup.snapshot().view?.revision;
-      if (revision === setupRevision) return;
-      setupRevision = revision;
-      if (!attached) void card.refresh();
-    });
+    // After installing .NET in another window, coming back re-checks without a click.
+    window.addEventListener("focus", () => previewSetup.windowFocused());
+    void previewSetup.start();
   }
 
   /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
+    core.app.setPreviewUnavailable("");
     try {
       scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
       // The stage backdrop follows the resolved UI theme through the renderer's typed input.
@@ -288,11 +262,32 @@ async function start(host: StudioHost, root: HTMLElement) {
       statusSource.changed();
       host.onPreviewReady?.();
     } catch (error) {
-      const reason = `The 3D preview couldn't be loaded: ${(error as Error).message}`;
-      core.app.setPreviewUnavailable(reason);
-      viewportDevice.failHead(reason);
-      statusSource.changed();
+      // Release a partly loaded head so a retry starts clean; the setup service maps the failure to plain words.
+      if (scene) {
+        try { scene.renderer.setAnimationLoop(null); scene.renderer.dispose(); scene.renderer.forceContextLoss(); scene.renderer.domElement.remove(); }
+        catch { /* Best effort. */ }
+        scene = undefined;
+      }
       console.error(error); session.flush();
+      throw error;
     }
   }
+}
+
+/** The automatic-start choice saved by earlier builds in page storage (not verification-scoped). */
+function legacyAutostart(storage: Pick<Storage, "getItem">, verification: boolean) {
+  if (verification) return true;
+  try { return storage.getItem("xfs.preview.autostart") !== "off"; } catch { return true; }
+}
+
+/**
+ * Localhost opens official pages in a new tab. `noopener` makes `window.open` return null even when
+ * the tab opened, so the opener is cut on the returned window instead.
+ */
+async function openInNewTab(wolvenKit: WolvenKitSetupActions, link: WolvenKitLink) {
+  const state = wolvenKit.snapshot(), url = state && wolvenKitLinkUrl(state, link);
+  if (!url) throw Error("That page isn't available yet. Try again in a moment.");
+  const opened = window.open(url, "_blank");
+  if (!opened) throw Error("Your browser blocked the new tab. Allow pop-ups for XF Studio, then try again.");
+  opened.opener = null;
 }

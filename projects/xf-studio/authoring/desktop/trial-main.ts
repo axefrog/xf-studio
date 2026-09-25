@@ -3,6 +3,7 @@ import { PATHS, Utils } from "electrobun/main";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createDesktopServer } from "./server";
+import { useBuilderBun } from "./build";
 import { desktopVersionFromMetadata } from "./host";
 import { defaultLocalSettings } from "../src/local-settings";
 import { LocalSettingsStore } from "../src/local-settings-store";
@@ -28,8 +29,8 @@ try {
   if (store.load().source !== "new" || existsSync(resolve(dataRoot, "library.sqlite")))
     throw Error("Build trial user data is not fresh; refusing to overwrite it.");
   store.save({ ...defaultLocalSettings(), gameRoot: inputs.gameRoot!,
-    wolvenKitCli: inputs.wolvenKitCli!,
-    bunExecutable: inputs.bunExecutable! }, 0);
+    wolvenKitCli: inputs.wolvenKitCli! }, 0);
+  useBuilderBun(inputs.bunExecutable!);
   const viewRoot = resolve(PATHS.VIEWS_FOLDER, "studio");
   app = createDesktopServer(viewRoot, dataRoot, version, resolve(viewRoot, "check-worker.js"),
     resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"));

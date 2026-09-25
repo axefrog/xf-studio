@@ -29,6 +29,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **No WolvenKit setup needed.** If you don't have WolvenKit, XF Studio offers to download it for you the first time it needs it. Before anything is downloaded it tells you what WolvenKit is, why it's needed, how big it is (45 MB), where it comes from (WolvenKit's official release on GitHub) and its licence (GPL-3.0), and you choose. The download shows its progress, can be cancelled, is retried if the connection drops, and is checked against the official release before it's used. It goes into XF Studio's own folder; nothing is installed in Windows or your game. Once it's there, the 3D head preview and **Build** set themselves up. Checked end to end on one PC with game version 2.31: from a fresh start to the 3D head in about a minute, and a Build of a look with the downloaded WolvenKit passed its checks.
 - **Help getting Microsoft .NET.** WolvenKit needs Microsoft's free .NET 10 Runtime. If your PC doesn't have it, XF Studio says so plainly and offers one button that gets Microsoft's own installer, then picks it up when you come back.
 - If you already use WolvenKit CLI 8.17.4 or 9.0.1, you can still choose your own copy under **About → Build setup**; it always takes priority.
+- **The 3D preview setup is always one click away.** If you choose **Not now**, the head panel keeps saying what the preview needs and offers **Set up 3D preview** to bring the setup back. While the preview is being prepared or WolvenKit is downloading, the head panel shows the progress in neutral colours; red is kept for real problems.
+- **Clearer Game & tools and Build setup.** Your own WolvenKit is marked optional ("Leave this empty and XF Studio can download WolvenKit for you"), and the developer-only fields and notes (settings revisions, server overrides and a Bun path) are gone. **I already have WolvenKit** now opens Game & tools when you run XF Studio from its local server.
 
 ### Fixes and under the hood
 
@@ -54,3 +56,13 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - Clicking the finish a layer already has no longer resets it: Colour-shifting keeps its shift colour and strength, an older Glossy, Shimmer or Colour-shifting layer stays as it is until you press **Use game-matched model**, and no extra Undo step is added. Switching a layer away from Colour-shifting and back brings its shift colour and strength back, and leaving Glitter keeps the last Glitter model's settings for when you choose it again.
 - The Colour & finish panel now says **Left out of this preset** for a Colour-shifting layer that sits beside other finishes, matching what Check reports, instead of calling it experimental.
 - Undo and the History panel name shift strength edits "Shift strength" instead of "Shift colour".
+- If the 3D head can't be shown, XF Studio now says why in plain words and offers the next step instead of showing an error message from inside the app: update your graphics driver (or open XF Studio on the computer itself rather than over Remote Desktop) when the window can't draw 3D, **Prepare again** when the prepared preview files are damaged, and **Try again** otherwise. Trying again no longer needs a restart.
+- If the 3D preview or WolvenKit download loses contact with XF Studio's own service for a moment, the setup keeps trying, says so, and carries on when the service answers again, instead of freezing mid-step. Checked by stopping and restarting the local server while the preview was being prepared.
+- Links in the 3D preview setup and the WolvenKit download dialog are now readable in light mode.
+- The mouse and keyboard hints no longer cover the head panel's message while the 3D preview isn't ready.
+- The WolvenKit download dialog now starts on its heading instead of the Download button, so nothing downloads from an accidental Enter; Esc is the same as **Not now**.
+- Whether the 3D preview starts preparing by itself is now saved with your workspace, so the desktop app remembers it between launches.
+- If XF Studio's own WebView2 installer is missing from your copy, the message now says so and points you to Microsoft's page, instead of blaming your internet connection.
+- A failed Check or Build now shows when it failed, not when you looked at it.
+- Links that open in your browser from the local Studio page no longer also show "That page couldn't be opened".
+- The header no longer opens a menu with nothing to choose from; it simply names the eye makeup category.

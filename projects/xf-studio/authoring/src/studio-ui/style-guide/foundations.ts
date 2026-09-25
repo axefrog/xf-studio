@@ -97,26 +97,24 @@ export function shell() {
     pattern({ id: "s-header", title: "Application header", status: "implemented", wide: true,
       specimen: `<header class="shell-header demo-header">
         <div class="brand"><span class="brand-mark">XF</span><span class="brand-name">Studio</span></div>
-        <button type="button" class="category">${i("category")}<span>Eye makeup</span>${i("chevronDown")}</button>
+        <span class="category" title="Authoring category: eye makeup">${i("category")}<span>Eye makeup</span></span>
         <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Saved")}</nav>
         <span class="verify-flag">Verification workspace</span>
         <div class="header-actions"><span class="history-controls" role="group" aria-label="Undo and Redo">${btn("Undo: Move point", { icon: "undo", iconOnly: true, variant: "ghost", title: "Undo: Move point (Ctrl+Z)" })}${btn("Redo", { icon: "redo", iconOnly: true, variant: "ghost", disabled: true, title: "Redo (Ctrl+Shift+Z) — There is no undone change to redo." })}${btn("History", { icon: "history", iconOnly: true, variant: "ghost" })}</span>${btn("Save", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}<span class="divider"></span>${btn("Commands", { icon: "command", variant: "ghost" })}${btn("Panels", { icon: "layout", iconOnly: true, variant: "ghost" })}${btn("Theme", { icon: "monitor", iconOnly: true, variant: "ghost" })}</div></header>`,
-      what: "Brand, the authoring-category switcher (the expansion zone), a breadcrumb of collection › preset with the library state chip, the verification flag when isolated, and global actions: Undo, Redo and History (grouped; their tooltips name the step each would change, such as “Redo: Move point (Ctrl+Shift+Z)”, and keep the shortcut visible while unavailable), Save to library, Package, command palette, panels/layout and theme.",
+      what: "Brand, the authoring category (a plain label while there is only one; the switcher later), a breadcrumb of collection › preset with the library state chip, the verification flag when isolated, and global actions: Undo, Redo and History (grouped; their tooltips name the step each would change, such as “Redo: Move point (Ctrl+Shift+Z)”, and keep the shortcut visible while unavailable), Save to library, Package, command palette, panels/layout and theme.",
       when: "Always visible. Only commands that act on the whole document or workspace belong here; anything about a layer or panel stays in that panel.",
       combine: "The library chip repeats the Presets panel chip so saved state is visible when that panel is closed.",
       adapt: "Below 1100 px the brand word, collection crumb and action labels collapse to icons with names; below 720 px the chip and verification flag hide (the status bar still reports them).",
       drives: `${code("library.summary()")}, ${code("authoring.capability({kind:'recipe.undo'|'recipe.redo'})")}, ${code("authoring.history()")}, ${code("authoring.requestCapability({kind:'save'})")}, ${code("status.snapshot().verification")}, ${code("preferences")}.` }),
-    pattern({ id: "s-category", title: "Category switcher and growth", status: "implemented",
-      specimen: `<div class="menu static-menu" role="menu">${`<div class="menu-heading"><span>Authoring category</span></div>`}
-        <div class="menu-item" role="menuitemcheckbox" aria-checked="true"><span class="menu-icon">${i("check")}</span><span class="menu-text"><span class="menu-label">Eye makeup</span><small class="menu-hint">Presets, layers, finishes and one game selector</small></span></div>
-        <div class="menu-sep"></div><div class="menu-heading"><span>More categories are planned</span><small>Each will be discussed before it is built. Brows, lashes, hair and piercings in the preview are context only.</small></div></div>`,
-      what: "The header's category button is the one place new authoring categories join. Today it lists Eye makeup only and says, in words, that more are planned and discussion-gated.",
-      when: "A category appears here only when it has its own approved data model, actions and panels.",
-      combine: "Selecting a category swaps the panel registry and default layouts (see the future-category composition); shared panels such as Library and Package stay.",
-      avoid: "Listing unbuilt categories as clickable items, or turning preview-context toggles (brows, hair) into authoring entries." }),
+    pattern({ id: "s-category", title: "Category label and growth", status: "implemented",
+      specimen: `<div class="shell-header demo-header"><span class="category" title="Authoring category: eye makeup">${i("category")}<span>Eye makeup</span></span></div>`,
+      what: "The header names the authoring category. It is the one place new categories will join. With only Eye makeup there is nothing to choose, so it is a plain label, not a menu: menus list only what can be done.",
+      when: "It becomes a switcher (a menu with one item per category) only when a second category has its own approved data model, actions and panels.",
+      combine: "Selecting a category will swap the panel registry and default layouts (see the future-category composition); shared panels such as Library and Package stay.",
+      avoid: "A menu with nothing to choose, sections that only inform, listing unbuilt categories, or turning preview-context toggles (brows, hair) into authoring entries." }),
     pattern({ id: "s-status", title: "Status bar", status: "implemented", wide: true,
       specimen: `<footer class="status-bar demo-status"><span class="status-item">● Draft autosaved</span><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · revision 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">Preview 2K · updating</span></footer>`,
-      what: "Browser draft autosave state, the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
+      what: "Draft autosave state, the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
       when: "Always visible. It reports; it never hosts commands other than opening the activity log.",
       adapt: "Messages truncate with an ellipsis; the Activity panel keeps the full text.",
       drives: `${code("status.snapshot().workspace")}, ${code("library.summary().progress")}, ${code("previewState().gesture/control")}, ${code("previewReadiness.snapshot()")}.`,

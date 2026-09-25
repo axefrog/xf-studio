@@ -4,7 +4,7 @@ import { LocalSettingsStore } from "./local-settings-store";
 import { EYE_PLATE_HEAD_CHOICES, EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 
 export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
-  "manualModRoot" | "wolvenKitCli" | "bunExecutable" | "eyePlateHead">;
+  "manualModRoot" | "wolvenKitCli" | "eyePlateHead">;
 export type LocalSetupView = {
   revision: number;
   source: "new" | "primary" | "backup";
@@ -15,8 +15,8 @@ export type LocalSetupView = {
   eyePlateHead: { label: string; options: { value: EyePlateHead; label: string }[] };
 };
 const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-  "wolvenKitCli", "bunExecutable", "eyePlateHead"] as const;
-const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE_WOLVENKIT"] as const;
+  "wolvenKitCli", "eyePlateHead"] as const;
+const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE_WOLVENKIT", "XFS_PACKAGE_BUN"] as const;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
 /** Host-owned configuration endpoint. The browser can edit known fields, never select a settings file. */
@@ -28,7 +28,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
     const loaded = store.load();
     const paths = packageToolPaths(loaded.settings, env, managedWolvenKit());
     const effective = { ...loaded.settings, gameRoot: paths.gamepath,
-      wolvenKitCli: paths.wolvenkit, bunExecutable: paths.bun };
+      wolvenKitCli: paths.wolvenkit };
     return { revision: loaded.settings.revision, source: loaded.source,
       fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,
       readiness: evaluateLocalReadiness(effective, typeof host === "function" ? host(effective) : host),

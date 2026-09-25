@@ -2,6 +2,7 @@ import type { CollectionRequest } from "./collection-service";
 import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { PreviewAction } from "./preview-preparation";
+import type { PreviewSetupAction } from "./preview-setup";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
 import type { StudioFileAction } from "./studio-file-operations";
@@ -202,6 +203,7 @@ export const PREVIEW_PREPARATION_DESCRIPTORS = {
   "preview.refresh": request("host", "read"),
   "preview.prepare": request("host", "derive", {}, true),
   "preview.cancel": request("host", "derive"),
+  "preview.rebuild": request("host", "derive", {}, true),
 } satisfies Record<PreviewAction["kind"], RequestDescriptor>;
 
 /**
@@ -214,3 +216,32 @@ export const WOLVENKIT_DESCRIPTORS = {
   "wolvenkit.cancel": request("host", "install-tool"),
   "wolvenkit.recheck": request("host", "read"),
 } satisfies Record<WolvenKitSetupAction["kind"], RequestDescriptor>;
+
+/**
+ * The 3D preview setup the presentation drives (`StudioPresentationPort.previewSetup`): what the
+ * setup card, the WolvenKit consent and the head pane offer. `view` actions only change what is
+ * shown; the others ask the host (through the preparation, WolvenKit and settings ports above) or
+ * load the head. None changes a recipe or has Undo.
+ */
+export type PreviewSetupDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
+  effect: "view" | "read" | "derive" | "install-tool" | "settings" | "link" | "head"; async: boolean; cancellable: boolean };
+const setupAction = (effect: PreviewSetupDescriptor["effect"], payload: PayloadSchema = {}, cancellable = false): PreviewSetupDescriptor =>
+  ({ scope: ["host"], payload, effect, async: effect !== "view", cancellable });
+export const PREVIEW_SETUP_DESCRIPTORS = {
+  "previewSetup.show": setupAction("view"),
+  "previewSetup.dismiss": setupAction("view"),
+  "previewSetup.consent": setupAction("view"),
+  "previewSetup.consentClose": setupAction("view"),
+  "previewSetup.openSetup": setupAction("view"),
+  "previewSetup.refresh": setupAction("read"),
+  "previewSetup.openLink": setupAction("link", { link: enumerated(["wolvenkit-licence", "wolvenkit-release", "runtime-installer", "runtime-page"]) }),
+  "previewSetup.prepare": setupAction("derive", {}, true),
+  "previewSetup.cancel": setupAction("derive"),
+  "previewSetup.prepareAgain": setupAction("derive", {}, true),
+  "previewSetup.useDetectedGame": setupAction("settings"),
+  "previewSetup.installWolvenKit": setupAction("install-tool", { version: input("string") }, true),
+  "previewSetup.cancelDownload": setupAction("install-tool"),
+  "previewSetup.useDetectedWolvenKit": setupAction("settings"),
+  "previewSetup.recheckRuntime": setupAction("read"),
+  "previewSetup.retryHead": setupAction("head"),
+} satisfies Record<PreviewSetupAction["kind"], PreviewSetupDescriptor>;

@@ -81,6 +81,9 @@ export function createBrowserViewportDevice(options: {
     },
     headReady() { attachment.setReady("head"); },
     failHead(error: string) { attachment.setError("head", error); },
+    headPending(phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
+      attachment.setPending("head", phase, message, progress);
+    },
     drawUV() { uvEditor?.draw(); },
     capture() { return editors.capture(); },
     uvEditor() { return uvEditor; },

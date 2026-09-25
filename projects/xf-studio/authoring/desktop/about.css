@@ -58,8 +58,9 @@
   overflow-wrap: anywhere; background: var(--bg-panel, #20272f); border: 1px solid var(--line, #59616b); }
 #desktop-setup { width: min(600px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); overflow: auto; }
 #desktop-setup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-#desktop-setup-fields label { display: grid; gap: 4px; min-width: 0; }
+#desktop-setup-fields label { display: grid; gap: 4px; min-width: 0; align-content: start; }
 #desktop-setup-fields label[hidden] { display: none; }
+#desktop-setup-fields small { color: var(--text-muted, #b9c0c7); font-size: 12px; }
 #desktop-setup-fields input, #desktop-setup-fields select { box-sizing: border-box; width: 100%; min-width: 0;
   padding: 6px 8px; color: inherit; background: var(--bg-sunken, #111820); border: 1px solid var(--line-strong, #59616b); }
 .desktop-intake-label { display: grid; gap: 5px; width: 100%; }

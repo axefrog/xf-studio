@@ -26,12 +26,15 @@ export function targetTipMarkup(tip: NonNullable<ReturnType<typeof targetTip>>):
 /**
  * Viewport input feedback: the hint strip, the hovered-target tooltip and the cursor. Reads the
  * read-only `viewport.input()` snapshot (held modifiers plus each adapter's hover/gesture report)
- * on its own subscription, so hover and modifier changes never repaint other panels.
+ * on its own subscription, so hover and modifier changes never repaint other panels. The strip,
+ * tooltip and cursor show only while the viewport is interactive: a head that is still being set up
+ * shows its own message instead, and the input subscription can never bring the strip back over it.
  */
 export class ViewportInputHints {
   readonly strip: HTMLElement;
   readonly tip: HTMLElement;
   private enabled = true;
+  private interactive = false;
   private blocked: BlockReason | undefined;
   private stripKey = "";
   private tipKey = "";
@@ -58,22 +61,24 @@ export class ViewportInputHints {
   }
   update(frame: Frame) {
     this.enabled = frame.preferences.inputHints;
+    this.interactive = frame.viewport[this.scope].phase === "ready";
     const layer = frame.layer;
     this.blocked = !layer ? "no-layer" : this.scope === "head" && !frame.preview.preview?.surface ? "surface-off"
       : this.scope === "head" && !layer.enabled ? "layer-hidden" : undefined;
     this.render();
   }
   render() {
-    const context = this.context(), cursor = cursorFor(context);
+    const context = this.context(), cursor = this.interactive ? cursorFor(context) : "default";
     if (cursor === "default") delete this.slot.dataset.cursor; else this.slot.dataset.cursor = cursor;
-    this.strip.hidden = !this.enabled;
+    const shown = this.enabled && this.interactive;
+    this.strip.hidden = !shown;
     const hints = viewportHints(context), key = JSON.stringify(hints);
-    if (this.enabled && key !== this.stripKey) {
+    if (shown && key !== this.stripKey) {
       this.stripKey = key;
       this.strip.dataset.tone = hints.tone;
       this.strip.innerHTML = hintStripMarkup(hints);
     }
-    const tip = this.enabled && this.tipReady && this.pointer ? targetTip(context) : undefined;
+    const tip = shown && this.tipReady && this.pointer ? targetTip(context) : undefined;
     this.tip.hidden = !tip;
     if (tip) {
       const tipKey = JSON.stringify(tip);

@@ -20,7 +20,7 @@ const step = (num: string, title: string, body: string) =>
 function fromSource(blob: string) {
   return `    <div class="callout">
       <h3>Running it from source</h3>
-      <p>Developers can run the Studio from the repository with Bun. It needs resources extracted from their own copy of the game for the 3D preview, because none are included. The <a href="${blob}/projects/xf-studio/authoring/README.md">authoring guide</a> describes the setup and its limits.</p>
+      <p>Developers can run the Studio from the repository with Bun. Like the app, it builds the 3D preview from their own copy of the game the first time it runs, and nothing from the game is included. The <a href="${blob}/projects/xf-studio/authoring/README.md">authoring guide</a> describes the setup and its limits.</p>
     </div>`;
 }
 

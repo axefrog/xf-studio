@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_PROMPT } from "../webview2-install";
+import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_INSTALLER_MISSING, WEBVIEW2_PROMPT } from "../webview2-install";
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -112,8 +112,19 @@ describe("missing WebView2 is installed with one consent click", () => {
     expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "failed" });
     expect(calls).toEqual(["ask:Install it now", "run", "ask:Open the Microsoft download page", "download"]);
   });
+  test("a copy without the bundled installer says so instead of blaming the internet", async () => {
+    const prompts: string[] = [];
+    const { calls, port: p } = port({ installedAfter: false, choose: [0], bootstrapper: false });
+    const ask = p.ask;
+    p.ask = async prompt => { prompts.push(prompt.message); return ask(prompt); };
+    expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "failed" });
+    expect(calls).toEqual(["ask:Open the Microsoft download page", "download"]);
+    expect(prompts).toEqual([WEBVIEW2_INSTALLER_MISSING.message]);
+    expect(WEBVIEW2_INSTALLER_MISSING.detail).not.toMatch(/internet/i);
+  });
   test("prompts follow the wording policy", () => {
-    for (const text of [WEBVIEW2_PROMPT, WEBVIEW2_FAILED]) expect(USER_FACING_JARGON.test(`${text.message} ${text.detail}`)).toBe(false);
+    for (const text of [WEBVIEW2_PROMPT, WEBVIEW2_FAILED, WEBVIEW2_INSTALLER_MISSING])
+      expect(USER_FACING_JARGON.test(`${text.message} ${text.detail}`)).toBe(false);
   });
 });
 

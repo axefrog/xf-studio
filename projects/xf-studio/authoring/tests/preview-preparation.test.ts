@@ -78,6 +78,7 @@ test("the endpoint serves state, accepts only prepare or cancel, and refuses oth
   expect((await post({ action: "prepare", gameRoot: "C:\\" })).status).toBe(400);
   expect((await post({ action: "delete" })).status).toBe(400);
   expect((await post({ action: "prepare" })).status).toBe(409);
+  expect((await post({ action: "rebuild" })).status).toBe(409);
   expect((await post({ action: "cancel" })).status).toBe(200);
   expect((await handler(new Request("http://localhost:4317/api/preview-core"))).status).toBe(403);
   expect((await handler(new Request(url, { method: "PUT" }))).status).toBe(405);
@@ -136,6 +137,8 @@ test("renderer actions poll while preparing and stop once the host is ready", as
   expect(actions.snapshot()?.phase).toBe("ready");
   expect(calls).toEqual(["refresh", "refresh"]);
   expect(await actions.dispatch({ kind: "preview.cancel" })).toMatchObject({ ok: false });
+  // A ready preview can be prepared again (a damaged preview); nothing can while it is being prepared.
+  expect(actions.capability({ kind: "preview.rebuild" }).available).toBe(true);
   const broken = new PreviewPreparationActions(async () => { throw Error("offline"); });
   expect(await broken.dispatch({ kind: "preview.refresh" })).toMatchObject({ ok: false });
   actions.dispose();
@@ -144,4 +147,15 @@ test("renderer actions poll while preparing and stop once the host is ready", as
 test("the preview and the Build plate derive from one audited head recipe", async () => {
   const { PREVIEW_CORE_RECIPE } = await import("../src/preview-core-recipe");
   expect(PREVIEW_CORE_RECIPE.plateRecipeId).toBe(EYE_PLATE_RECIPE.id);
+});
+
+test("preparing again sets the ready preview aside and prepares it afresh", async () => {
+  const { game, cli, cacheRoot } = setup();
+  const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => {}, { contains: () => new Set() }) });
+  expect(host.rebuild()).toMatchObject({ phase: "preparing", canCancel: true });
+  expect(host.rebuild().phase).toBe("preparing");
+  await host.settled();
+  const unset = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: null }) });
+  expect(unset.rebuild()).toMatchObject({ phase: "needs-setup", canCancel: false });
 });

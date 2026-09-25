@@ -137,3 +137,11 @@ test("paused idle and contribution choices round trip, and legacy workspaces pre
   expect(disabled.preview.idlePaused).toBe(false); expect(disabled.preview.idleBody).toBe(false);
   expect(disabled.preview.camera).toEqual(state.preview.camera);
 });
+
+test("the 3D preview's automatic start is a workspace preference that defaults on", () => {
+  const fresh = freshWorkspace();
+  expect(fresh.previewSetup).toBeUndefined();
+  const off = parseWorkspace(JSON.parse(JSON.stringify({ ...fresh, previewSetup: { autostart: false } })));
+  expect(off.previewSetup).toEqual({ autostart: false });
+  expect(parseWorkspace(JSON.parse(JSON.stringify({ ...fresh, previewSetup: { autostart: "no" } }))).previewSetup).toBeUndefined();
+});

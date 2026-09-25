@@ -80,14 +80,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-09 | Med | Desktop | Desktop autosaves queue instead of replacing | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-10 | Med | Presentation | UI re-implements domain rules (satin alias, glitter model IDs, eye-shape list, limits) | Open |
 | UI-11 | Med | Rendering | scene.ts 893-line monolith, no dispose, renders every frame, leaks on load failure | Open |
-| UI-12 | Med | Tests | UI/desktop test gaps (bootstrap, panels, dock DOM, startup) | Open |
-| UI-21 | Med | Presentation | Preview preparation and WolvenKit setup reachable only through the standalone card; after "Not now" there is no way back until restart (not on the port; no boundary exception) | Open (alpha blocker) |
-| UI-22 | Med | Presentation | Head-load failure after ready is latched: no retry, raw loader text shown (e.g. "geometry nodes are missing") | Open (alpha blocker) |
-| UI-23 | Med | Presentation | Preparation/WolvenKit polling stops for good after one failed poll; the card freezes mid-step | Open (alpha blocker) |
-| UI-24 | Med | Presentation | Every not-ready head state uses the error phase: normal preparation shows a red danger icon | Open (alpha blocker) |
-| UI-25 | Med | Presentation | Game & tools and desktop Build setup show developer wording (revision/overrides, Bun executable, WolvenKit not marked optional); extends UI-03 | Open (alpha blocker) |
-| UI-26 | Med | Presentation | `studio-startup.ts` owns settings policy (partial-field merge, queued refresh, revision watch) instead of `LocalSetupActions` | Open |
-| UI-27 | Med | Accessibility | Card and consent links use yellow `--accent` text: about 1.4:1 contrast in light theme | Open (alpha blocker) |
+| UI-12 | Med | Tests | UI/desktop test gaps (bootstrap, panels, dock DOM, startup) | Partly fixed (claude/alpha-polish): the 3D preview first run and startup failure paths are tested through the DOM-free setup service (`tests/preview-setup.test.ts`); the bootstrap, panels and dock DOM still have no behavioural tests |
+| UI-21 | Med | Presentation | Preview preparation and WolvenKit setup reachable only through the standalone card; after "Not now" there is no way back until restart (not on the port; no boundary exception) | **Fixed** (claude/alpha-polish, 25 Sep) |
+| UI-22 | Med | Presentation | Head-load failure after ready is latched: no retry, raw loader text shown (e.g. "geometry nodes are missing") | **Fixed** (claude/alpha-polish, 25 Sep) |
+| UI-23 | Med | Presentation | Preparation/WolvenKit polling stops for good after one failed poll; the card freezes mid-step | **Fixed** (claude/alpha-polish, 25 Sep) |
+| UI-24 | Med | Presentation | Every not-ready head state uses the error phase: normal preparation shows a red danger icon | **Fixed** (claude/alpha-polish, 25 Sep) |
+| UI-25 | Med | Presentation | Game & tools and desktop Build setup show developer wording (revision/overrides, Bun executable, WolvenKit not marked optional); extends UI-03 | **Fixed** (claude/alpha-polish, 25 Sep) |
+| UI-26 | Med | Presentation | `studio-startup.ts` owns settings policy (partial-field merge, queued refresh, revision watch) instead of `LocalSetupActions` | **Fixed** (claude/alpha-polish, 25 Sep): `setup.update` and `requestRefresh()`; the revision watch moved into the preview setup service |
+| UI-27 | Med | Accessibility | Card and consent links use yellow `--accent` text: about 1.4:1 contrast in light theme | **Fixed** (claude/alpha-polish, 25 Sep) |
 | CORE-04 | Med | Core | Undo at the history limit mislabels entries and creates no-op entries | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-05 | Med | Core | Queries deep-copy/reparse the collection (context menu 0.1–0.4 s) and some stash as a side effect | Open |
 | CORE-06 | Med | Core | Control edits skip validation and throw raw errors, leaving a transaction open | **Fixed** (claude/cleanup-core, 25 Sep) |
@@ -123,8 +123,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-13:** dead history helpers; glitter measurements never pruned and keyed by layer IDs that repeat across presets; wrong import consequence text.
 - **CORE-14:** confusing names (`selectedCollection` returns a preset ID); `ReadonlyDeep` defined three times; shared mutable `glitterChoices`; stale test counts in the boundary doc.
 - **CORE-15:** preview reports ready for one frame after an edit; geometry cache recopies on double updates; reason codes come from matching message text.
-- **UI-19:** the header "Authoring category" drop-down still has a section that only says more categories are planned, with no action (`src/studio-ui/app.ts`). It breaks the actionable-menus rule.
-- **UI-20:** when the 3D preview is unavailable, the head view's input hints overlap the "3D preview unavailable" message.
+- **UI-19:** Fixed in claude/alpha-polish (the category is a plain label while Eye makeup is the only one).
+- **UI-20:** Fixed in claude/alpha-polish (see below).
 - **PIPE-26:** Fixed in claude/cleanup-pipeline2 (plain `plate_source_incomplete` stop).
 - **PIPE-27:** Fixed in claude/cleanup-pipeline2 (typed `eyePlateHead` setting in Game & tools).
 - **PIPE-07/PIPE-17 (extended):** the verifier's WolvenKit calls and the desktop Bun probe were moved onto the shared runners in claude/cleanup-pipeline2; `dotnet-runtime.ts` still adds another UTF-8-decoded `reg.exe` reader duplicating `install-detection-host.ts`.
@@ -136,18 +136,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-23:** Fixed (claude/cleanup-core2): one `historyTimeline()` mapper in `authoring-history.ts` serves both.
 - **CORE-24:** Fixed (claude/cleanup-core2): the first collection keeps every editor-memory field except the recipe.
 - **CORE-08/CORE-15 (extended):** new actions were added to both the descriptor table and the hand-kept `recipeKinds`/`undoPolicy()` sets (fixed in claude/cleanup-core2, see CORE-08); new refusals come back as `invalid_value` instead of `incompatible_mode` (open).
-- **UI-20 (not fixed):** `ViewportInputHints.render()` re-shows the strip on its own subscription (`viewports.ts:87`), so hints still overlap "3D preview unavailable".
-- **UI-28:** `window.open(url, "_blank", "noopener")` returns null, so localhost links open and also show "That page couldn't be opened" (`studio-startup.ts:235`).
-- **UI-29:** on localhost the card's "I already have WolvenKit" button does nothing (`openSetup` undefined).
-- **UI-30:** preview autostart preference lives in page `localStorage`: not verification-scoped, and lost on desktop as the loopback port changes.
-- **UI-31:** site finish grid still tags Shimmer/Glossy/Colour-shifting "Preview study"; `site/tools/release.ts:23` still mentions extracted game resources.
-- **UI-32:** "Browser autosave" tooltip on desktop; missing bundled WebView2 bootstrapper blamed on the internet; package error time is render time; consent dialog focuses Download.
-- **UI-33:** preparation and WolvenKit polling classes duplicate each other; `uv-editor` calls `getComputedStyle` on every draw.
+- **UI-20 (extended):** Fixed in claude/alpha-polish.
+- **UI-28, UI-29, UI-30, UI-31, UI-32:** Fixed in claude/alpha-polish (see below).
+- **UI-33:** Partly fixed in claude/alpha-polish: one `PolledHostState` serves both polling ports. Open: `uv-editor` calls `getComputedStyle` on every draw.
 - **UI-04/UI-10/UI-11/UI-12 (extended):** `bootstrap.js` grew (Start fresh); Satin alias and glitter ID mapping remain in the UI and the shift slider hard-codes 0–1; `scene.ts` 925 lines, renders every frame, allocates per frame; no behavioural tests for the preview card or startup failure paths.
 
 ## New subsystems since last review
 
-None. (The managed tool download and the shared WolvenKit runner were reviewed at `19bf84c`; the presentation layer's review follows the legacy-shell removal.)
+- **3D preview setup service** (claude/alpha-polish): `src/preview-setup.ts`, the shared `src/host-state-poller.ts` and the presentation's `src/studio-ui/preview-setup-card.ts` replace the standalone device card, and the port gained `previewSetup`. Include them in the next presentation review.
 
 ## Fixed in claude/wolvenkit-fetch
 
@@ -165,6 +161,26 @@ None. (The managed tool download and the shared WolvenKit runner were reviewed a
 - **CORE-04:** checkpoints return the entry they added; transactions label and discard that entry, and the displaced oldest entry returns when an entry is discarded or undone. Test: `tests/history-limit.test.ts`.
 - **CORE-06:** `capability()` applies descriptor payload ranges, `controlEdit` runs the same gate and returns a typed result, exceptions are classified by source, and control dispatch is wired inside `createTrustedAuthoringCore`. Test: `tests/control-edit-validation.test.ts`.
 - **CORE-11 (partial):** the tests above, plus touched fixtures (`studio-application`, `alpha-capability-reasons`, `application-boundary-fixture`) now build through `createTrustedAuthoringCore`.
+
+## Fixed in claude/alpha-polish
+
+Paths are relative to `projects/xf-studio/authoring`.
+
+- **UI-21:** a DOM-free `PreviewSetupActions` service (`src/preview-setup.ts`) owns the 3D preview first run: it follows the preparation and WolvenKit ports, finds the game folder, starts preparing by itself on first contact, loads the head, and maps every state to plain wording with one next step. The presentation reaches it only through `StudioPresentationPort.previewSetup` (detached snapshot of the card, the WolvenKit consent and the head pane; 16 typed `previewSetup.*` actions catalogued in `PREVIEW_SETUP_DESCRIPTORS`). The card and consent moved under `studio-ui` (`src/studio-ui/preview-setup-card.ts`) on design tokens; `src/browser-preview-card.ts` is gone, so no boundary exception was needed. "Not now" hides the card and the head pane offers the next step ("Set up 3D preview", "Show progress", "Try again"), which opens it again with focus on its heading.
+- **UI-22:** the renderer and preview-record loader throw a typed `HeadLoadError` (`src/head-load-error.ts`: `webgl_unavailable`, `preview_damaged`, `preview_unreachable`, `head_load_failed`). A failure is no longer latched: the head pane shows plain wording (graphics driver or Remote Desktop for WebGL; "Prepare again" for a damaged preview, which asks the host's new `rebuild` action to set the ready entry aside and prepare afresh; "Try again" otherwise, then "Prepare again" after a second untyped failure). A partly loaded scene is released before a retry. Loader text is never shown.
+- **UI-23 / UI-33 (polling):** `PolledHostState` (`src/host-state-poller.ts`) is the one polled host-state port behind both `PreviewPreparationActions` and `WolvenKitSetupActions`. A failed poll while the last known state was working re-arms with exponential backoff (capped at 8 s) and publishes `connection()` (failures, retrying); the card says "XF Studio lost contact with its 3D preview service. Still trying (attempt N)…" until the first valid reply clears it. Checked by stopping and restarting the localhost server mid-prepare.
+- **UI-24:** `ViewportPhase` gains `preparing` and `unavailable` (`setPending`), with `message` and `progress`. The head pane uses progress styling for checking, loading and preparing, a neutral head icon while something is still needed, and the danger icon only for failures; `data-tone` is set on every paint.
+- **UI-25:** Game & tools drops the revision and server-override line, the Bun field and "checked separately"; WolvenKit is "Your own WolvenKit (optional)" with "Leave this empty and XF Studio can download WolvenKit for you"; readiness reads "Ready to build your mod files". The desktop Build setup has the same WolvenKit field and hint and no Bun field. `bunExecutable` is retired from the settings (dropped on load like `pythonExecutable`); desktop Build always runs its own Bun, and `XFS_PACKAGE_BUN` is the localhost developer override. `USER_FACING_JARGON` now also matches settings revisions, server overrides, Bun and "checked separately", and a test scans `studio-ui` and the desktop bootstrap for the retired phrases. The "Head used for the eye plate" dropdown was checked in both themes: plain label, default "The head your game loads (recommended)".
+- **UI-26:** `LocalSetupActions` gained `setup.update` (waits for any request in flight, loads if needed, saves only the named fields over the saved ones) and `requestRefresh()` (a refresh asked for while busy runs once the request finishes). `studio-startup.ts` no longer merges fields, queues refreshes or watches the revision; Game & tools saves through `setup.update` too.
+- **UI-27:** card and consent links use `--accent-text` (`.link-button`); the card's inline stylesheet is replaced by token-based `studio.css` rules (`.setup-card`, `.consent-sheet`), documented as style-guide pattern `c-setup`.
+- **UI-20:** `ViewportInputHints` keeps its own `interactive` state from `viewport.snapshot()[scope].phase`; the strip, tooltip and cursor show only while the viewport is ready, so the input subscription can no longer bring the strip back over the head pane's message.
+- **UI-19:** the header category is a plain label (no menu, no informational section) while Eye makeup is the only category; the style guide's `s-category` pattern says it becomes a switcher only when a second approved category exists.
+- **UI-28:** localhost opens official pages with `window.open(url, "_blank")` and cuts `opener` on the returned window, so a successful open no longer reports an error; a blocked pop-up says how to allow it.
+- **UI-29:** "I already have WolvenKit" (and every "set it in Game & tools" step) dispatches `previewSetup.openSetup`; without a host setup form the Studio reveals the Mod package panel, opens Game & tools and focuses the first empty field.
+- **UI-30:** the automatic-start choice is the workspace field `previewSetup.autostart` (verification-scoped with the workspace, kept in the desktop's host-owned file); the earlier page-storage value is read once as a fallback outside verification.
+- **UI-31:** the site's finish grid tags Shimmer, Glossy and Colour-shifting "Experimental export" (Glitter stays "Preview study"); the "from source" callout says the preview is built from the developer's own game on first run.
+- **UI-32:** the autosave tooltip no longer says "Browser"; a missing bundled WebView2 installer has its own message that doesn't blame the internet (`WEBVIEW2_INSTALLER_MISSING`); the package error's time is when it happened (`files.last.at`); the consent opens on its heading, and Esc is "Not now".
+- **UI-12 (partial):** `tests/preview-setup.test.ts` (first run, Not now and re-open, lost poll with backoff and recovery, head-load failure and retry, damaged preview and Prepare again, detected folder merge, consent, catalogue and wording), `tests/local-setup-actions.test.ts`, and additions to the preparation, viewport-device, workspace and WebView2 tests.
 
 ## Fixed in claude/cleanup-core2
 

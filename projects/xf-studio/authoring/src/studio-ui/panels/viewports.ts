@@ -45,7 +45,22 @@ function readinessBadge() {
 export function headPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const slot = h("div", { class: "viewport-slot" });
-  const loading = h("div", { class: "viewport-state", role: "status" }, h("div", { class: "progress indeterminate" }), h("p", { text: "Preparing the head and makeup plate…" }));
+  // What the head pane shows until the head is interactive: progress, a neutral "still needed" note or a
+  // failure, always with the one next step from the preview setup (unless the setup card shows it).
+  const stateIcon = h("span", { class: "viewport-state-icon" });
+  const stateBar = h("div", { class: "progress" }), stateFill = h("span", { class: "progress-fill" });
+  stateBar.append(stateFill);
+  const stateText = h("p", { text: "Checking the 3D preview…" });
+  const stateNote = h("p", { class: "muted small", text: "You can keep working in the UV map.", hidden: true });
+  let nextAction: Parameters<typeof port.previewSetup.dispatch>[0] | undefined;
+  const next = button({ label: "Set up 3D preview", variant: "primary", small: true, onClick: () => {
+    if (!nextAction) return;
+    void port.previewSetup.dispatch(nextAction).then(outcome => {
+      if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message);
+    });
+  } });
+  next.hidden = true;
+  const loading = h("div", { class: "viewport-state", role: "status", "data-phase": "loading" }, stateIcon, stateBar, stateText, stateNote, next);
   const badge = readinessBadge();
   const context = h("span", { class: "viewport-context" });
   const front = button({ label: "Front view", icon: "front", iconOnly: true, small: true, variant: "ghost", onClick: () => rt.dispatch({ kind: "camera.front" }) });
@@ -72,19 +87,38 @@ export function headPanel(rt: StudioRuntime): PanelController {
     if (binding?.id === "head.menu") { event.preventDefault(); viewportMenu(rt, "head", element, undefined, element); }
     else if (binding?.id === "head.front") { event.preventDefault(); rt.dispatch({ kind: "camera.front" }); }
   });
+  let shownPhase = "";
+  function paintState(state: Frame["viewport"]["head"], step: Frame["previewSetup"]["head"]["next"]) {
+    // Progress while loading or preparing, neutral while something is still needed, an error only for failures.
+    const tone = state.phase === "error" ? "error" : state.phase === "unavailable" ? "neutral" : "progress";
+    loading.dataset.phase = state.phase;
+    if (loading.dataset.tone !== tone) loading.dataset.tone = tone;
+    if (shownPhase !== tone) {
+      shownPhase = tone;
+      stateIcon.replaceChildren(...(tone === "error" ? [icon("error")] : tone === "neutral" ? [icon("head")] : []));
+    }
+    stateIcon.hidden = tone === "progress";
+    stateBar.hidden = tone !== "progress";
+    const progress = state.phase === "preparing" && typeof state.progress === "number" ? state.progress : null;
+    stateBar.classList.toggle("indeterminate", progress === null);
+    stateFill.style.width = progress === null ? "" : `${Math.round(progress * 100)}%`;
+    const text = state.error ?? state.message ?? (tone === "error" ? "The 3D preview could not load." : "Checking the 3D preview…");
+    setText(stateText, text);
+    // Say what still works unless the message already does.
+    stateNote.hidden = tone === "progress" || /UV/.test(text);
+    nextAction = step?.action as typeof nextAction;
+    next.hidden = !step;
+    if (step) setText(next.querySelector("span")!, step.label);
+  }
   return {
     spec: { id: "head", ...PANEL_META["head"], element,
       visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("head")); } },
     update(frame) {
       const state = frame.viewport.head;
       loading.hidden = state.phase === "ready";
-      // A known reason already says what still works; only an unexplained failure needs the fallback line.
-      if (state.phase === "error") { loading.replaceChildren(icon("error"), ...(state.error ? [h("p", { text: state.error })] :
-        [h("p", { text: "The 3D preview could not load." }), h("p", { class: "muted small", text: "You can keep working in the UV map." })]));
-        loading.dataset.tone = "error"; }
+      if (state.phase !== "ready") paintState(state, frame.previewSetup.head.next);
+      // Hints hide themselves while the head isn't interactive (their own state), so they never cover this.
       badge.update(frame); hints.update(frame);
-      // Head gestures and shortcuts mean nothing without a head; the pane explains why instead.
-      if (state.phase !== "ready") hints.strip.hidden = true;
       const preview = frame.preview.preview, motion = frame.preview.motion;
       setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
       const playing = !!motion?.idle && !motion.idlePaused;

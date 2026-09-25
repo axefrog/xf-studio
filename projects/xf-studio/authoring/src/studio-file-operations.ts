@@ -31,8 +31,9 @@ export type StudioActivity = { id: string; scope: "file" | "collection" | "packa
   startedAt: number; requestId?: number; cancellable: false };
 export type StudioFileState = { busy?: StudioFileAction["kind"];
   collectionBusy: boolean;
+  /** The last finished file or collection request; `at` is when it finished (ms since the epoch). */
   last?: { kind: StudioFileAction["kind"] | CollectionRequest["kind"];
-    ok: boolean; code: string; message: string };
+    ok: boolean; code: string; message: string; at: number };
   package?: PackageResult & { freshness: "current" | "stale" };
   progress?: CollectionProgress;
   activity: StudioActivity[];
@@ -213,13 +214,13 @@ export class StudioFileOperations {
       request.kind === "exportCollection" ? "collection.export" : request.kind === "exportPlan" ? "collection.plan" :
       request.kind === "import" ? "collection.import" : request.kind,
       ok: result.ok, code: result.ok ? result.result.kind : result.code,
-      message: result.ok ? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message };
+      message: result.ok ? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
     this.notify();
     return result;
   }
   private finish(owner: symbol, kind: StudioFileAction["kind"], outcome: StudioFileOutcome): StudioFileOutcome {
     if (this.busy?.owner === owner) {
-      this.busy = undefined; this.last = { kind, ok: outcome.ok, code: outcome.code, message: outcome.message };
+      this.busy = undefined; this.last = { kind, ok: outcome.ok, code: outcome.code, message: outcome.message, at: Date.now() };
       this.notify();
     }
     return outcome;

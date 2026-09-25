@@ -80,8 +80,6 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   if (host.wolvenKit !== undefined) { if (host.wolvenKit) buildIssues.push(host.wolvenKit); }
   else if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", WOLVENKIT_UNSET));
   else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
-  if (settings.bunExecutable && !available(settings.bunExecutable, "file"))
-    buildIssues.push(issue("bun_missing", "The selected Bun executable is unavailable."));
   buildIssues.push(...gameIssues);
   // The expanded eye plate is built in: Build derives it from the installed game, so it needs no path.
   if (host.eyePlate?.issue && gameIssues.length === 0) buildIssues.push(host.eyePlate.issue);
@@ -128,7 +126,8 @@ export const WOLVENKIT_UNSET = "WolvenKit isn't set up yet. XF Studio can downlo
 
 /**
  * Environment overrides remain highest priority for localhost until package-server is migrated.
- * `XFS_PACKAGE_PLATE` is a hidden developer override for the built-in eye plate; it has no setting.
+ * `XFS_PACKAGE_PLATE` is a hidden developer override for the built-in eye plate, and `XFS_PACKAGE_BUN`
+ * for the Bun that runs the builder (the running Bun otherwise); neither has a setting.
  * WolvenKit resolves as: developer override, then the path in settings, then XF Studio's own
  * downloaded copy (`managedWolvenKit`).
  */
@@ -138,6 +137,6 @@ export function packageToolPaths(settings: LocalSettings, env: Record<string, st
     plate: env.XFS_PACKAGE_PLATE || null,
     wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli || managedWolvenKit,
     gamepath: env.XFS_PACKAGE_GAMEPATH || settings.gameRoot,
-    bun: settings.bunExecutable,
+    bun: env.XFS_PACKAGE_BUN || null,
   };
 }

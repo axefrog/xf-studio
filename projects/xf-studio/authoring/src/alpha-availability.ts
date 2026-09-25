@@ -12,12 +12,15 @@ export const NO_3D_PREVIEW_IN_ALPHA =
   "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
 
 /** Where the local Studio page sets the game folder and WolvenKit CLI (the desktop app calls it Build setup). */
-export const LOCALHOST_SETUP_PLACE = "the Mod package panel under Game & tools";
+export const LOCALHOST_SETUP_PLACE = "Game & tools";
 
 /** Shown for Build when the host's Build setup is incomplete; the setup view lists what is missing. */
 export const BUILD_NEEDS_SETUP =
   "Building mod files needs your Cyberpunk 2077 game folder and WolvenKit, which XF Studio sets up with the 3D preview. Check works without them.";
 
-/** Developer and evidence vocabulary that must not appear in a reason or label a community user sees. */
+/**
+ * Developer and evidence vocabulary that must not appear in a reason or label a community user sees,
+ * including settings revisions, server overrides, the Bun runtime and "checked separately" caveats.
+ */
 export const USER_FACING_JARGON =
-  /\bprivate\b|local setup|server override|path presence|provenance|offline verified|revision \d+ ·|\bcanary\b|prepared (?:files|assets|set)|five core|plate input|\bhost\b|adapter/i;
+  /\bprivate\b|local setup|server overrides?|path presence|provenance|offline verified|revision \d+|\bcanary\b|prepared (?:files|assets|set)|five core|plate input|\bhost\b|adapter|\bbun\b|checked separately/i;

@@ -12,6 +12,7 @@ import type { ViewportAttachment } from "./viewport-attachment";
 import type { WorkspaceState } from "./workspace-state";
 import type { LocalSetupActions } from "./local-setup-actions";
 import type { InstallDetectionActions } from "./install-detection-actions";
+import type { PreviewSetupActions } from "./preview-setup";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -29,6 +30,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  /** The 3D preview setup service the presentation drives (card, consent, head pane). */
+  previewSetup?: PreviewSetupActions;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -68,7 +71,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection });
+    localSetup: options.localSetup, installDetection: options.installDetection, previewSetup: options.previewSetup });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

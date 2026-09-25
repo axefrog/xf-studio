@@ -2,8 +2,10 @@
  * Renderer-side actions for setting up WolvenKit CLI, the tool XF Studio uses to read game files.
  * The host owns the download, every path and URL; this module reads its state, asks it to
  * download (only after the person agreed in the consent dialog), cancel or check again, polls while
- * it works, and turns the state into plain-language view facts for the card and consent dialog.
+ * it works (through the shared polled host state, which keeps retrying with backoff if contact is
+ * lost mid-download), and turns the state into plain-language view facts for the card and consent dialog.
  */
+import { PolledHostState, type HostConnection, type HostTimers } from "./host-state-poller";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 
 export type WolvenKitSetupPhase = "ready" | "available" | "downloading" | "installing" | "needs-runtime" | "failed" | "custom-missing" | "unsupported";
@@ -54,8 +56,8 @@ export type WolvenKitCard = {
   visible: boolean;
 };
 
-/** Pure: the card for one WolvenKit state. Hidden when WolvenKit is ready. */
-export function wolvenKitCard(state: WolvenKitSetupState): WolvenKitCard {
+/** Pure: the card for one WolvenKit state. Hidden when WolvenKit is ready. `setupPlace` names where paths are set. */
+export function wolvenKitCard(state: WolvenKitSetupState, setupPlace = "Build setup"): WolvenKitCard {
   const card = (patch: Partial<WolvenKitCard> & Pick<WolvenKitCard, "title" | "body">): WolvenKitCard =>
     ({ progress: null, step: null, primary: null, secondary: null, links: [], viewport: "The 3D preview needs WolvenKit.", visible: true, ...patch });
   const own = { label: "I already have WolvenKit", action: "setup" } as const;
@@ -85,9 +87,9 @@ export function wolvenKitCard(state: WolvenKitSetupState): WolvenKitCard {
       return card({ title: state.code === "wolvenkit_cancelled" ? "WolvenKit wasn't downloaded" : "WolvenKit couldn't be set up", body: state.message,
         primary: { label: `Download again (${state.offer.downloadSize})`, action: "wolvenkit-retry" }, secondary: own });
     case "custom-missing":
-      return card({ title: "WolvenKit can't be found", body: state.message, primary: { label: "Open Build setup", action: "setup" } });
+      return card({ title: "WolvenKit can't be found", body: state.message, primary: { label: `Open ${setupPlace}`, action: "setup" } });
     case "unsupported":
-      return card({ title: "The 3D preview needs WolvenKit", body: state.message, primary: { label: "Open setup", action: "setup" } });
+      return card({ title: "The 3D preview needs WolvenKit", body: state.message, primary: { label: `Open ${setupPlace}`, action: "setup" } });
   }
 }
 
@@ -133,45 +135,38 @@ export function wolvenKitLinkUrl(state: WolvenKitSetupState, link: WolvenKitLink
   }
 }
 
+type WolvenKitRequest = Parameters<WolvenKitTransport>[0];
 export class WolvenKitSetupActions {
-  private state: WolvenKitSetupState | null = null;
-  private listeners = new Set<() => void>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  constructor(private readonly transport: WolvenKitTransport, private readonly pollMs = 500) {}
-  snapshot(): WolvenKitSetupState | null { return this.state && structuredClone(this.state); }
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private publish(state: WolvenKitSetupState) {
-    this.state = state;
-    for (const listener of this.listeners) listener();
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (state.phase === "downloading" || state.phase === "installing")
-      this.timer = setTimeout(() => { this.timer = null; void this.dispatch({ kind: "wolvenkit.refresh" }); }, this.pollMs);
+  private readonly host: PolledHostState<WolvenKitSetupState, WolvenKitRequest>;
+  constructor(transport: WolvenKitTransport, pollMs = 500, timers?: HostTimers) {
+    this.host = new PolledHostState<WolvenKitSetupState, WolvenKitRequest>({ transport, isState: isWolvenKitSetupState,
+      working: state => state.phase === "downloading" || state.phase === "installing", refresh: { action: "refresh" }, pollMs, timers,
+      messages: { invalid: "WolvenKit's setup state is unavailable. Restart XF Studio and try again.",
+        unreachable: "XF Studio couldn't reach its WolvenKit setup. Restart XF Studio and try again." } });
   }
+  snapshot(): WolvenKitSetupState | null { return this.host.snapshot(); }
+  /** Contact with the host's WolvenKit setup (failed polls are retried while it downloads). */
+  connection(): HostConnection { return this.host.connection(); }
+  subscribe(listener: () => void) { return this.host.subscribe(listener); }
   capability(action: WolvenKitSetupAction): { available: boolean; reason?: string } {
     if (action.kind === "wolvenkit.refresh" || action.kind === "wolvenkit.recheck") return { available: true };
-    if (!this.state) return { available: false, reason: "WolvenKit's setup state is still loading." };
+    const state = this.host.snapshot();
+    if (!state) return { available: false, reason: "WolvenKit's setup state is still loading." };
     if (action.kind === "wolvenkit.install") {
-      if (!this.state.canInstall) return { available: false, reason: this.state.message };
-      return action.version === this.state.offer.version ? { available: true }
+      if (!state.canInstall) return { available: false, reason: state.message };
+      return action.version === state.offer.version ? { available: true }
         : { available: false, reason: "That WolvenKit version isn't the one XF Studio offers." };
     }
-    return this.state.canCancel ? { available: true } : { available: false, reason: "Nothing is being downloaded." };
+    return state.canCancel ? { available: true } : { available: false, reason: "Nothing is being downloaded." };
   }
   async dispatch(action: WolvenKitSetupAction): Promise<WolvenKitOutcome> {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, message: allowed.reason! };
-    try {
-      const request = action.kind === "wolvenkit.install" ? { action: "install" as const, version: action.version }
-        : { action: action.kind === "wolvenkit.refresh" ? "refresh" as const : action.kind === "wolvenkit.cancel" ? "cancel" as const : "recheck" as const };
-      const response = await this.transport(request);
-      if (!isWolvenKitSetupState(response.data)) return { ok: false, message: "WolvenKit's setup state is unavailable. Restart XF Studio and try again." };
-      this.publish(response.data);
-      return response.ok ? { ok: true } : { ok: false, message: response.data.message };
-    } catch {
-      return { ok: false, message: "XF Studio couldn't reach its WolvenKit setup. Restart XF Studio and try again." };
-    }
+    const request: WolvenKitRequest = action.kind === "wolvenkit.install" ? { action: "install", version: action.version }
+      : { action: action.kind === "wolvenkit.refresh" ? "refresh" : action.kind === "wolvenkit.cancel" ? "cancel" : "recheck" };
+    return this.host.request(request);
   }
-  dispose() { if (this.timer) clearTimeout(this.timer); this.listeners.clear(); }
+  dispose() { this.host.dispose(); }
 }
 
 export function createBrowserWolvenKitSetup(endpoint: string) {

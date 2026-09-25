@@ -1,10 +1,11 @@
 /**
  * Renderer-side actions for preparing the 3D preview from the player's game files. The host
- * owns the work and every path; this module only reads its state, asks it to start or
- * cancel, polls while it runs, and turns the state into plain-language view facts.
- * The preview card renders them; the Studio composition root follows the same actions to
- * load the head once the preview is ready.
+ * owns the work and every path; this module only reads its state, asks it to start, cancel or
+ * prepare again, polls while it runs (through the shared polled host state, which keeps retrying
+ * with backoff if contact is lost mid-run), and turns the state into plain-language view facts.
+ * The preview setup service (`preview-setup.ts`) follows these actions for the card and the head.
  */
+import { PolledHostState, type HostConnection, type HostTimers } from "./host-state-poller";
 import { wolvenKitCard, type WolvenKitCardAction, type WolvenKitLink, type WolvenKitSetupState } from "./wolvenkit-setup";
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";
@@ -19,8 +20,9 @@ export type PreviewState = {
   canPrepare: boolean;
   canCancel: boolean;
 };
-export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" };
-export type PreviewTransport = (action: "refresh" | "prepare" | "cancel") => Promise<{ ok: boolean; data: unknown }>;
+/** `preview.rebuild` discards the prepared files and prepares them again (a damaged preview). */
+export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
+export type PreviewTransport = (action: "refresh" | "prepare" | "cancel" | "rebuild") => Promise<{ ok: boolean; data: unknown }>;
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
 
 export function isPreviewState(value: unknown): value is PreviewState {
@@ -51,9 +53,10 @@ export type PreviewView = {
  * Pure: the plain-language card for one host state, plus an optional detected game folder and the
  * WolvenKit setup state. While the preview waits only for WolvenKit, WolvenKit's own card is shown.
  */
-export function previewView(state: PreviewState, detectedGame: string | null = null, wolvenKit: WolvenKitSetupState | null = null): PreviewView {
+export function previewView(state: PreviewState, detectedGame: string | null = null, wolvenKit: WolvenKitSetupState | null = null,
+  setupPlace = "Build setup"): PreviewView {
   if (state.phase === "needs-setup" && !state.needs.includes("game") && state.needs.includes("wolvenkit") && wolvenKit && wolvenKit.phase !== "ready") {
-    const card = wolvenKitCard(wolvenKit);
+    const card = wolvenKitCard(wolvenKit, setupPlace);
     return { title: card.title, body: card.body, progress: card.progress, step: card.step, primary: card.primary, secondary: card.secondary,
       links: card.links, visible: card.visible, viewport: card.viewport };
   }
@@ -106,37 +109,32 @@ function previewCard(state: PreviewState, detectedGame: string | null): Omit<Pre
 export const shouldAutoStart = (state: PreviewState, alreadyAttempted: boolean) => state.phase === "idle" && state.canPrepare && !alreadyAttempted;
 
 export class PreviewPreparationActions {
-  private state: PreviewState | null = null;
-  private listeners = new Set<() => void>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700) {}
-  snapshot(): PreviewState | null { return this.state && structuredClone(this.state); }
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private publish(state: PreviewState) {
-    this.state = state;
-    for (const listener of this.listeners) listener();
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (state.phase === "preparing") this.timer = setTimeout(() => { this.timer = null; void this.dispatch({ kind: "preview.refresh" }); }, this.pollMs);
+  private readonly host: PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">;
+  constructor(transport: PreviewTransport, pollMs = 700, timers?: HostTimers) {
+    this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
+      refresh: "refresh", pollMs, timers, messages: {
+        invalid: "The 3D preview state is unavailable. Restart XF Studio and try again.",
+        unreachable: "XF Studio couldn't reach its 3D preview service. Restart XF Studio and try again." } });
   }
+  snapshot(): PreviewState | null { return this.host.snapshot(); }
+  /** Contact with the host's preparation service (failed polls are retried while it works). */
+  connection(): HostConnection { return this.host.connection(); }
+  subscribe(listener: () => void) { return this.host.subscribe(listener); }
   capability(action: PreviewAction): { available: boolean; reason?: string } {
     if (action.kind === "preview.refresh") return { available: true };
-    if (!this.state) return { available: false, reason: "The 3D preview state is still loading." };
-    if (action.kind === "preview.prepare") return this.state.canPrepare ? { available: true } : { available: false, reason: this.state.message };
-    return this.state.canCancel ? { available: true } : { available: false, reason: "Nothing is being prepared." };
+    const state = this.host.snapshot();
+    if (!state) return { available: false, reason: "The 3D preview state is still loading." };
+    if (action.kind === "preview.prepare") return state.canPrepare ? { available: true } : { available: false, reason: state.message };
+    if (action.kind === "preview.rebuild") return state.phase === "ready" || state.canPrepare ? { available: true }
+      : { available: false, reason: state.phase === "preparing" ? "The 3D preview is being prepared." : state.message };
+    return state.canCancel ? { available: true } : { available: false, reason: "Nothing is being prepared." };
   }
   async dispatch(action: PreviewAction): Promise<PreviewOutcome> {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, message: allowed.reason! };
-    try {
-      const response = await this.transport(action.kind === "preview.refresh" ? "refresh" : action.kind === "preview.prepare" ? "prepare" : "cancel");
-      if (!isPreviewState(response.data)) return { ok: false, message: "The 3D preview state is unavailable. Restart XF Studio and try again." };
-      this.publish(response.data);
-      return response.ok ? { ok: true } : { ok: false, message: response.data.message };
-    } catch {
-      return { ok: false, message: "XF Studio couldn't reach its 3D preview service. Restart XF Studio and try again." };
-    }
+    return this.host.request(action.kind.slice("preview.".length) as "refresh" | "prepare" | "cancel" | "rebuild");
   }
-  dispose() { if (this.timer) clearTimeout(this.timer); this.listeners.clear(); }
+  dispose() { this.host.dispose(); }
 }
 
 /** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */

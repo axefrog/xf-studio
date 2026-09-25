@@ -223,9 +223,10 @@ const descriptors = [
   ["manualModRoot", "Optional direct mod folder"],
   ["mo2Root", "Mod Organizer 2 instance folder"],
   ["mo2ProfileId", "Mod Organizer 2 profile"],
-  ["wolvenKitCli", "Your own WolvenKit CLI (optional)"],
-  ["bunExecutable", "Optional Bun executable"],
+  ["wolvenKitCli", "Your own WolvenKit (optional)"],
 ];
+// Only the fields a person may need; XF Studio runs its own Bun, so there is no field for it.
+const hints = { wolvenKitCli: "Leave this empty and XF Studio can download WolvenKit for you." };
 const fieldsRoot = setup.querySelector("#desktop-setup-fields");
 const controls = new Map();
 for (const [name, labelText] of descriptors) {
@@ -246,6 +247,7 @@ for (const [name, labelText] of descriptors) {
     control.autocomplete = "off";
   }
   label.append(control);
+  if (hints[name]) label.append(Object.assign(document.createElement("small"), { textContent: hints[name] }));
   fieldsRoot.append(label);
   controls.set(name, control);
 }

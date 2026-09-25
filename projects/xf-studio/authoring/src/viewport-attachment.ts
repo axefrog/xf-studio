@@ -9,8 +9,13 @@ export type UVViewCommand = "both" | "single" | "other" | "fit";
 /** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
 export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 export type ViewportSize = { width: number; height: number };
-export type ViewportPhase = "loading" | "ready" | "error";
-export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; captured: boolean };
+/**
+ * `loading` and `preparing` show progress (`progress` 0–1 when known), `unavailable` is neutral
+ * (something is still needed; `message` says what), `error` is a failure (`error` says what).
+ */
+export type ViewportPhase = "loading" | "preparing" | "unavailable" | "ready" | "error";
+export type ViewportHostState = ViewportSize & { phase: ViewportPhase; error?: string; message?: string; progress?: number | null; captured: boolean };
+type PhaseState = { phase: ViewportPhase; error?: string; message?: string; progress?: number | null };
 export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState };
   uv: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
@@ -42,7 +47,7 @@ export type ViewportAttachmentPort<Slot> = {
 
 /** A layout-facing attachment boundary with no scene, worker or editor imports. */
 export class ViewportAttachment<Slot> {
-  private phases: Record<ViewportHostKind, { phase: ViewportPhase; error?: string }> = {
+  private phases: Record<ViewportHostKind, PhaseState> = {
     head: { phase: "loading" }, uv: { phase: "loading" },
   };
   private listeners = new Set<() => void>();
@@ -74,8 +79,14 @@ export class ViewportAttachment<Slot> {
   /** The device reports a view change (UV pan/zoom/mode) so readers of `snapshot()` can repaint. */
   viewChanged() { this.publish(); }
   setReady(kind: ViewportHostKind) { this.phases[kind] = { phase: "ready" }; this.publish(); }
-  setError(kind: ViewportHostKind, error: string) {
-    this.phases[kind] = { phase: "error", error }; this.publish();
+  setError(kind: ViewportHostKind, error: string) { this.setPhase(kind, { phase: "error", error }); }
+  /** Not interactive yet: still loading or preparing (with progress), or waiting for something (neutral). */
+  setPending(kind: ViewportHostKind, phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
+    this.setPhase(kind, { phase, message, progress });
+  }
+  private setPhase(kind: ViewportHostKind, next: PhaseState) {
+    if (JSON.stringify(next) === JSON.stringify(this.phases[kind])) return;
+    this.phases[kind] = next; this.publish();
   }
   attach(kind: ViewportHostKind, slot: Slot) { this.rehost(kind, slot); }
   /** Rehosting cancels captured gestures but never destroys the editor or its host. */

@@ -38,7 +38,7 @@ try {
     throw Error(`Deferring setup changed an unexpected setting or disabled Check: ${JSON.stringify(deferred)}`);
   await browser.evaluate("document.documentElement.dataset.testReload = 'before'; location.reload()");
   await browser.waitFor("!document.documentElement.dataset.testReload && document.querySelector('#studio.studio-ready') && !document.querySelector('#desktop-setup').open && !document.querySelector('#desktop-welcome').open");
-  await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'error'");
+  await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'unavailable'");
   const uvOnly = await browser.evaluate(`(() => {
     const port = window.xfStudioPresentation, layer = port.editor.layer();
     const before = layer.color;
@@ -53,8 +53,9 @@ try {
       color, before, changed, undo, restored: port.editor.layer().color,
       headFetches: performance.getEntriesByType('resource').filter(item => item.name.endsWith('/assets/head.glb')).length };
   })()`);
-  if (uvOnly.uv !== "ready" || uvOnly.head.phase !== "error" || uvOnly.headFetches ||
-    !/3D (?:head )?preview/.test(uvOnly.head.error) ||
+  // Waiting for the game folder is a neutral state (not an error) that says what the preview needs.
+  if (uvOnly.uv !== "ready" || uvOnly.head.phase !== "unavailable" || uvOnly.headFetches ||
+    !/3D (?:head )?preview/.test(uvOnly.head.message) || uvOnly.head.error ||
     uvOnly.camera.code !== "asset_unavailable" || !uvOnly.mask.available || !uvOnly.check.available ||
     !uvOnly.changed.ok || uvOnly.color !== "#123456" || !uvOnly.undo.ok || uvOnly.restored !== uvOnly.before)
     throw Error(`UV-only first run failed: ${JSON.stringify(uvOnly)}`);
@@ -90,7 +91,7 @@ try {
   await browser.screenshot(resolve(screenshots, "desktop-licences.png"));
   await browser.evaluate("document.querySelector('#desktop-licences').close()");
   // The preview card names the missing game folder: it offers a detected install, or Build setup.
-  await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['setup', 'use-game'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
+  await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['previewSetup.openSetup', 'previewSetup.useDetectedGame'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
   await browser.evaluate("document.querySelector('#desktop-about-open').click(); document.querySelector('#desktop-setup-open').click()");
   await browser.waitFor("document.querySelector('#desktop-setup').open && document.querySelector('#desktop-setup-status').textContent.includes('Check works')");
@@ -123,9 +124,9 @@ try {
     { version: "0.1.0", channel: "dev", buildHash: "fixture", metadataStatus: "ready" });
   try {
     browser = await launch(partialServer.url + "&verify=1", { width: 900, height: 650, debugPort: 9440 });
-    await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'error'");
+    await browser.waitFor("document.querySelector('#studio.studio-ready') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'unavailable'");
     const handPlaced = await browser.evaluate(`({ uv: window.xfStudioPresentation.viewport.snapshot().uv.phase,
-      reason: window.xfStudioPresentation.viewport.snapshot().head.error,
+      reason: window.xfStudioPresentation.viewport.snapshot().head.message,
       headFetches: performance.getEntriesByType('resource').filter(item => item.name.endsWith('/assets/head.glb')).length })`);
     if (handPlaced.uv !== "ready" || !/3D (?:head )?preview/.test(handPlaced.reason) || handPlaced.headFetches)
       throw Error(`Hand-placed preview files changed the UV-only startup: ${JSON.stringify(handPlaced)}`);
