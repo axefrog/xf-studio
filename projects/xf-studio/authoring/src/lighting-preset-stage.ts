@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { creatorCamera, DEFAULT_CREATOR_LIGHTING, type BodySex, type CreatorCameraPage, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
-import { createCreatorDisplay } from "./creator-display";
+import { createLinearDisplay } from "./linear-display";
 import { createCreatorLightRig } from "./creator-lighting-rig";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 
@@ -21,9 +21,10 @@ export const LUT_RECHECK_MS = 20_000;
 /**
  * Three adapter that switches the viewport between the studio stage and the creator preset. The studio
  * stage (IBL environment, key and fill lights, stage backdrop, ACES) is left untouched and only hidden;
- * the creator preset shows the creator light rig on a black background with no environment and renders
- * through the creator display pass. Switching is immediate and fully reversible: turning the preset off
- * restores exactly the environment, background and light visibility it found.
+ * the creator preset shows the creator light rig on a black background with no environment. Both draw
+ * through one scene-linear display (linear-display.ts): the studio stage tone-maps and encodes at output,
+ * the creator preset applies the game's grade. Switching is immediate and fully reversible: turning the
+ * preset off restores exactly the environment, background and light visibility it found.
  *
  * The LUT is requested from the host each time the preset turns on and re-checked every `LUT_RECHECK_MS`
  * while it shows. The host keys its answer by the installation fingerprint the character details use, so a
@@ -40,7 +41,7 @@ export function createLightingPresetStage(options: {
   loadLut: GradingLutLoader;
 }) {
   const { scene, renderer } = options;
-  const rig = createCreatorLightRig(), display = createCreatorDisplay(renderer);
+  const rig = createCreatorLightRig(), display = createLinearDisplay(renderer);
   scene.add(rig.group);
   let preset: LightingPreset = "studio", sex: BodySex = "female";
   let creator: CreatorLightingOptions = { ...DEFAULT_CREATOR_LIGHTING };
@@ -97,7 +98,6 @@ export function createLightingPresetStage(options: {
         rig.group.visible = false;
         saved = null;
         stopRecheck();
-        display.release();
       }
       notify();
     },
@@ -116,10 +116,7 @@ export function createLightingPresetStage(options: {
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
     /** Draw one frame through the active preset. */
-    render(camera: THREE.Camera) {
-      if (preset === "creator") display.render(scene, camera);
-      else renderer.render(scene, camera);
-    },
+    render(camera: THREE.Camera) { display.render(scene, camera, preset); },
     status: (): LightingPresetStatus => structuredClone({ preset, sex, defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
     /** Test and evidence access. */

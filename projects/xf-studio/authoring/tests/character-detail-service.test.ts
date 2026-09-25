@@ -6,7 +6,7 @@ import { CharacterDetailHost, characterRequestKey, installationFingerprint, type
 import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, templateIdentity, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
-import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
+import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
 import { detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
@@ -16,7 +16,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const png = encodePng({ width: 2, height: 1, data: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 128]) }, { alpha: true });
 
 /** An exporter over temp files: a tiny GLB-shaped file per geometry and a 2×1 PNG per texture. */
-function fakeExporter(options: { failArchive?: string; calls?: string[] } = {}): GameAssetExporter {
+function fakeExporter(options: { failArchive?: string; calls?: string[]; missing?: readonly string[] } = {}): GameAssetExporter {
   let n = 0;
   return { open(source) {
     const dir = join(root, `export-${n++}`);
@@ -33,7 +33,7 @@ function fakeExporter(options: { failArchive?: string; calls?: string[] } = {}):
       },
       async textures(paths) {
         options.calls?.push(`textures ${source.archivePath}`);
-        return new Map(paths.map((path): [string, ExportedTexture] => {
+        return new Map(paths.filter(path => !options.missing?.includes(path)).map((path): [string, ExportedTexture] => {
           const file = join(dir, `${depotHash(path)}.png`);
           writeFileSync(file, png);
           return [path, { depotPath: path, hash: depotHash(path), png: file, pngSha256: "", cached: false }];
@@ -141,6 +141,21 @@ describe("character record from the resolver", () => {
     expect(layered.materials.map(m => m.template)).toEqual([P.layeredMt, P.eyeShadowMt]);
   });
 
+  test("an unreadable input the adapter can draw without leaves the chunk drawn, with a note; a required one drops it (PREV-54)", async () => {
+    // The eye's `Normal` is recorded for the two-normal light (ranks 4–5), which no adapter samples yet.
+    const withoutNormal = (await prepare(eyeRequest("gradient_blue"), fakeExporter({ missing: [P.editorNormal] }))).record;
+    const eyes = withoutNormal.components.find(c => c.slot === "eyes")!;
+    expect(eyes.chunks).toEqual([1, 2]);
+    expect(eyes.materials[0]!.textures.Normal).toBeUndefined();
+    expect(eyes.materials[0]!.textures.Albedo).toBeDefined();
+    expect(withoutNormal.provenance.notes.some(note => note.includes("Normal (not exported) could not be read; drawn without it."))).toBe(true);
+    expect(withoutNormal.slots.find(s => s.slot === "eyes")!.state).toBe("shown");
+    // The eyeball can't be drawn without its colour: that chunk is left out and the shell stays.
+    const withoutAlbedo = (await prepare(eyeRequest("gradient_blue"), fakeExporter({ missing: [P.eyeD] }))).record;
+    expect(withoutAlbedo.components.find(c => c.slot === "eyes")!.chunks).toEqual([2]);
+    expect(withoutAlbedo.provenance.notes.some(note => note.includes("Albedo (not exported) could not be read; the chunk is not drawn."))).toBe(true);
+  });
+
   test("small readers: PNG size, texture colour flag and hair profiles", () => {
     expect(pngSize(png)).toEqual({ width: 2, height: 1 });
     expect(pngSize(new Uint8Array(8))).toBeNull();
@@ -212,6 +227,43 @@ describe("exporter cache keys", () => {
     expect(runs).toEqual([`path ${P.packD},${P.strandId}`, `hash ${P.packD}`]);
     // Cached like any other export.
     expect((await exporter.open(source).textures([P.packD])).get(P.packD)!.cached).toBe(true);
+  });
+
+  test("by-hash launches run a few at a time, and not at all when the archive index can't be read (PREV-55)", async () => {
+    // A fake WolvenKit: a path pattern finds nothing in a nameless archive; each `--hash` call takes a while and writes `<hash>.png`.
+    const launches: string[] = [];
+    let running = 0, peak = 0;
+    const fakeWolvenKit = async ({ depotPaths, outDir, byHash }: { depotPaths: string[]; outDir: string; byHash?: boolean }) => {
+      launches.push(byHash ? `hash ${depotPaths[0]}` : `path ${depotPaths.length}`);
+      if (!byHash) return;
+      running++; peak = Math.max(peak, running);
+      await Bun.sleep(20);
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(join(outDir, `${depotHash(depotPaths[0]!)}.png`), png);
+      running--;
+    };
+    const wanted = [P.packD, P.packN, P.strandId, P.capMask, P.irisMask, P.eyeD];
+    const indexed = createGameAssetExporter(join(root, "by-hash-lane"), fakeWolvenKit, { contains: (_source, hashes) => new Set(hashes) });
+    const started = performance.now();
+    const got = await indexed.open(archiveExportSource(join(root, "nameless-lane.archive"), route.gameRoot)).textures(wanted);
+    expect([...got.keys()].sort()).toEqual([...wanted].sort());
+    expect(launches.filter(launch => launch.startsWith("hash"))).toHaveLength(wanted.length);
+    expect(peak).toBe(Math.min(BY_HASH_CONCURRENCY, wanted.length));
+    // Six 20 ms launches at four at a time take two rounds, not six.
+    expect(performance.now() - started).toBeLessThan(6 * 20);
+    // An unreadable index: no by-hash launch at all, and the textures are simply absent.
+    launches.length = 0;
+    const unreadable = createGameAssetExporter(join(root, "by-hash-unindexed"), fakeWolvenKit, { contains: () => { throw Error("unreadable index"); } });
+    const none = await unreadable.open(archiveExportSource(join(root, "nameless-unindexed.archive"), route.gameRoot)).textures(wanted);
+    expect(none.size).toBe(0);
+    expect(launches).toEqual([`path ${wanted.length}`]);
+    // A tool failure in one launch surfaces once, after the others stopped.
+    const failing = createGameAssetExporter(join(root, "by-hash-failing"), async input => {
+      if (input.byHash && input.depotPaths[0] === P.strandId) throw new GameAssetExportError("tool_failed", "fake failure");
+      await fakeWolvenKit(input);
+    }, { contains: (_source, hashes) => new Set(hashes) });
+    await expect(failing.open(archiveExportSource(join(root, "nameless-failing.archive"), route.gameRoot)).textures(wanted)).rejects.toMatchObject({ code: "tool_failed" });
+    expect(running).toBe(0);
   });
 });
 

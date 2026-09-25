@@ -47,7 +47,8 @@ export type AdapterContext = {
 };
 /**
  * The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser), its head chunks, and for
- * face decals its effective roughness (bytes in channel 0) and its parameters (the skin light's lobes and wrap).
+ * face decals its surface (bytes: effective roughness in channel 0, metalness in channel 1) and its parameters (the skin
+ * light's lobes and wrap).
  */
 export type ResolvedSkinSurface = { base: () => SkinTexels | null; chunks: readonly THREE.Mesh[];
   roughness?: () => SkinTexels | null; parameters?: SkinParameters };
@@ -58,6 +59,8 @@ export type AdaptedMaterial = { material: THREE.Material; owned: THREE.Texture[]
   skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null; roughness: () => SkinTexels | null };
   /** A face decal's handle (its parameters, and the normals switch). */
   decal?: FaceDecalHandle;
+  /** How the skin under a face decal was read (developer evidence, kept with the loaded decal; PREV-51). */
+  decalSurface?: DecalSurfaceUnderlay["evidence"];
   /** The eye adapters' handle: its role (eyeball or wetness shell, from the template) and its switches. */
   eye?: EyeHandle;
   /** Recorded but not drawn yet (a placeholder template): the loader keeps the mesh hidden. */
@@ -139,14 +142,16 @@ const skinAdapter: MaterialAdapter = {
           mask: tintMask?.colorSpace === THREE.SRGBColorSpace }) : null;
       return base;
     };
-    // The roughness the skin writes, for decals that keep it: R with the detail bias gated by B, at a mid microdetail term.
+    // The surface the skin writes, for decals that keep it: channel 0 the roughness (R with the detail bias gated by B, at a
+    // mid microdetail term), channel 1 the metalness (the map's G, as the skin program reads it).
     let rough: SkinTexels | null | undefined;
     const roughnessImage = () => {
       if (rough !== undefined) return rough;
       const image = texturePixels(roughness, SKIN_BASE_SIZE);
       const decode = (byte: number) => roughness.colorSpace === THREE.SRGBColorSpace ? srgbByte(byte) : byte / 255;
-      rough = image ? { width: image.width, height: image.height, texel: (x, y) => {
+      rough = image ? { width: image.width, height: image.height, texel: (x, y, channel) => {
         const at = (y * image.width + x) * 4;
+        if (channel === 1) return Math.round(decode(image.data[at + 1]!) * 255);
         return Math.round(skinRoughness(decode(image.data[at]!), decode(image.data[at + 2]!), parameters.detailRoughnessBias, 0.5) * 255);
       } } : null;
       return rough;
@@ -236,12 +241,14 @@ const faceDecal: MaterialAdapter = {
       : kind === "gradient-recolor"
         ? { mask: need(sampled("MaskTexture"), "MaskTexture", chunk), gradient: need(sampled("GradientMap", "clamp"), "GradientMap", chunk) }
         : {};
-    let underlay = false;
+    let underlay = false, surface: DecalSurfaceUnderlay["evidence"] | undefined;
     if (context.surface) {
       try {
         const under = context.surface(mesh, context.skin ?? null);
         mesh.geometry.setAttribute("xfsUnderlay", under.colour);
         mesh.geometry.setAttribute("xfsUnderRoughness", under.roughness);
+        mesh.geometry.setAttribute("xfsUnderMetalness", under.metalness);
+        surface = under.evidence;
         underlay = true;
       } catch (error) { notes.push(`linear decal blend (${(error as Error).message})`); }
     }
@@ -251,7 +258,7 @@ const faceDecal: MaterialAdapter = {
       normalAlpha: sampled("NormalAlphaTex") ?? neutral(WHITE), roughness: sampled("RoughnessTexture") ?? neutral(WHITE),
       metalness: sampled("MetalnessTexture") ?? neutral(BLACK),
     }, faceDecalParameters(kind, chunk.scalars, chunk.colours), { underlay, skinLight: context.skin?.parameters ?? null });
-    return { material: made.material, owned, notes, decal: made.handle };
+    return { material: made.material, owned, notes, decal: made.handle, ...(surface ? { decalSurface: surface } : {}) };
   },
 };
 

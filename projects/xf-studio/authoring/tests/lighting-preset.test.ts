@@ -153,6 +153,42 @@ test("the Three stage hides the studio stage for the creator rig and restores ex
   stage.dispose();
 });
 
+test("the studio stage draws through the scene-linear target too, with the backdrop untoned beneath it (PREV-50)", () => {
+  const scene = new THREE.Scene(), backdrop = new THREE.Texture();
+  scene.background = backdrop;
+  const calls: string[] = [];
+  let target: THREE.WebGLRenderTarget | null = null, clear = { colour: 0x14181c, alpha: 1 };
+  const renderer = {
+    autoClear: true, toneMappingExposure: 1.2, extensions: { has: (name: string) => name === "EXT_color_buffer_float" }, capabilities: { maxSamples: 8 },
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(64, 32), getRenderTarget: () => target, setRenderTarget: (next: THREE.WebGLRenderTarget | null) => { target = next; },
+    getClearColor: (c: THREE.Color) => c.setHex(clear.colour), getClearAlpha: () => clear.alpha,
+    setClearColor: (c: THREE.ColorRepresentation, alpha = 1) => { clear = { colour: new THREE.Color(c).getHex(), alpha }; },
+    render(s: THREE.Scene, c: THREE.Camera) {
+      const into = target ? `target ${target.width}x${target.height}×${target.samples}` : "canvas";
+      const drawn = s === scene ? "scene" : s.background ? "backdrop" : ((s.children[0] as THREE.Mesh).material as THREE.Material).name;
+      calls.push(`${drawn} → ${into}${renderer.autoClear ? "" : " (over)"}${s === scene ? ` background=${s.background === null} clear=${clear.alpha}` : ""}`);
+      if (s !== scene && s.background) expect(s.background).toBe(backdrop);
+      expect(c).toBeDefined();
+    },
+  } as unknown as THREE.WebGLRenderer;
+  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: () => new Promise(() => {}) });
+  expect(stage.display.path).toBe("linear");
+  stage.render(new THREE.PerspectiveCamera());
+  expect(calls).toEqual([
+    "scene → target 64x32×4 background=true clear=0", // scene-linear, transparent where nothing draws, no backdrop
+    "xfs-display-coverage → target 64x32×4 (over)",   // coverage: alpha one wherever a surface wrote depth
+    "backdrop → canvas",                             // Three's own background pass, untoned as before
+    "xfs-studio-display → canvas (over)",            // tone mapping and sRGB at output, laid over the backdrop
+  ]);
+  // Nothing of the scene or renderer state is left changed.
+  expect(scene.background).toBe(backdrop);
+  expect(clear).toEqual({ colour: 0x14181c, alpha: 1 });
+  expect(target).toBeNull();
+  expect((renderer as unknown as { autoClear: boolean }).autoClear).toBe(true);
+  expect(stage.display.info()).toEqual({ path: "linear", samples: 4, width: 64, height: 32 });
+  stage.dispose();
+});
+
 test("the creator preset re-asks the host on activation and swaps the grade only when the host's cube changed (PREV-40)", async () => {
   const scene = new THREE.Scene();
   const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null,

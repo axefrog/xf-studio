@@ -163,6 +163,12 @@ export type RenderChunkMaterial = {
   /** Gradients the template's gradient parameters bind (`eye_gradient.mt` `IrisColorGradient`). */
   gradients: Record<string, RenderGradient>;
 };
+/** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
+export function chunkOfMesh(name: string): number | null {
+  const match = /^submesh_(\d+)_LOD_\d+/.exec(name);
+  return match ? Number(match[1]) : null;
+}
+
 export type RenderComponent = {
   /** Stable within the record: slot, component name and geometry hash. */
   id: string;
@@ -171,7 +177,10 @@ export type RenderComponent = {
   option: string;
   definition: string;
   component: string;
-  /** The resource whose render blob draws (a patch or copy source when ArchiveXL supplies it), exported to GLB. */
+  /**
+   * The resource whose render blob draws (a patch or copy source when ArchiveXL supplies it), exported to GLB. The host
+   * serves only the meshes of the chunks the record lists (`materials`), with sparse morph deltas (PREV-53).
+   */
   geometry: RenderResource & { depotPath: string; depotHash: string; morphTargets: boolean };
   renderChunks: number;
   /** Visible chunks after the chunk mask. */

@@ -90,6 +90,24 @@ export type GameAssetExporterOptions = {
   contains?: (source: ExportSource, hashes: readonly string[]) => Set<string>;
 };
 const UNKNOWN_TOOL: ExportTool = { key: "unknown", label: "an unidentified exporter" };
+/** How many by-hash launches one session runs at once (each WolvenKit call selects one resource by its hash). */
+export const BY_HASH_CONCURRENCY = 4;
+
+/**
+ * Run `task` over `items` with at most `limit` in flight. The first failure stops new work, waits for the running
+ * tasks to settle, and is rethrown (so a cancellation or a tool failure surfaces once, after its siblings stopped).
+ */
+export async function forEachLimited<T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let next = 0, failure: { error: unknown } | null = null;
+  const worker = async () => {
+    while (!failure && next < items.length) {
+      const item = items[next++]!;
+      try { await task(item); } catch (error) { failure ??= { error }; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  if (failure) throw (failure as { error: unknown }).error;
+}
 
 const depotFile = (root: string, depotPath: string) => join(root, ...depotPath.split("\\"));
 const glbFor = (depotPath: string) => /\.mesh$/i.test(depotPath) ? depotPath.replace(/\.mesh$/i, ".glb") : `${depotPath}.glb`;
@@ -227,17 +245,19 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
             const png = depotFile(outDir, pngFor(depotPath));
             if (existsSync(png)) store(depotPath, png, true); else unnamed.push(depotPath);
           }
-          // Not found by path: the archive may list hashes only. Ask for each missing texture by its hash, when the
-          // source's own index says it is there (or cannot say).
+          // Not found by path: the archive may list hashes only. Ask for each missing texture by its hash, but only when the
+          // source's own index says it is there: an unreadable index would otherwise cost one launch per texture for
+          // resources that may not exist at all (PREV-55). WolvenKit selects one resource per `--hash` call, so the calls
+          // run a few at a time, each into its own folder.
           const inIndex = unnamed.length ? present(unnamed) : null;
-          for (const depotPath of unnamed) {
-            if (inIndex && !inIndex.has(depotPath)) continue;
-            const hashDir = join(outDir, "by-hash");
+          const byHash = inIndex ? unnamed.filter(depotPath => inIndex.has(depotPath)) : [];
+          await forEachLimited(byHash, BY_HASH_CONCURRENCY, async depotPath => {
+            const hashDir = join(outDir, "by-hash", depotHash(depotPath));
             mkdirSync(hashDir, { recursive: true });
             await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
             const png = join(hashDir, `${depotHash(depotPath)}.png`);
             if (existsSync(png)) store(depotPath, png, true);
-          }
+          });
           return out;
         },
         close() { if (work) { try { cache.remove(work); } catch { /* Best effort. */ } work = null; } },

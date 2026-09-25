@@ -167,3 +167,53 @@ export class GlbWriter {
     return out;
   }
 }
+
+/**
+ * A copy of a GLB holding only the meshes `keep` selects (PREV-53): WolvenKit exports every render chunk of a mesh, but a
+ * character detail draws only its visible chunks, and each chunk carries its own dense morph deltas (105 facial targets
+ * in the head decals). Nodes whose mesh is dropped stay, empty, so node indices, skins and the scene graph are unchanged.
+ * Kept accessors are copied as they are (component type, normalisation, bounds), except morph target deltas: POSITION
+ * and NORMAL are stored sparsely against zero (most vertices of a facial target don't move), and TANGENT deltas, which
+ * Three's loader never reads, are left out. Target names and their order are kept. Deterministic. Throws on anything it
+ * does not copy (images, animations, extensions), so a caller can keep the whole file instead.
+ */
+export function keepGlbMeshes(bytes: Uint8Array, keep: (mesh: GltfJson, index: number) => boolean): Uint8Array {
+  const glb = parseGlb(bytes), json = glb.json;
+  if (json.extensionsUsed?.length || json.images?.length || json.animations?.length || (json.buffers?.length ?? 0) > 1)
+    throw Error("The GLB uses parts the chunk copy does not carry.");
+  const writer = new GlbWriter(), copied = new Map<number, number>();
+  const copy = (index: number): number => {
+    const known = copied.get(index);
+    if (known !== undefined) return known;
+    const source = json.accessors[index], accessor = readAccessor(glb, index);
+    if (source.sparse) throw Error("The GLB has a sparse accessor outside morph targets.");
+    const target = json.bufferViews[source.bufferView]?.target;
+    const made = writer.add(accessor.array, source.type, { normalized: !!source.normalized, ...(target ? { target } : {}) });
+    if (source.min) writer.accessors[made].min = source.min;
+    if (source.max) writer.accessors[made].max = source.max;
+    copied.set(index, made);
+    return made;
+  };
+  const meshIndex = new Map<number, number>(), meshes: GltfJson[] = [];
+  (json.meshes ?? []).forEach((mesh: GltfJson, index: number) => {
+    if (!keep(mesh, index)) return;
+    meshIndex.set(index, meshes.length);
+    meshes.push({ ...mesh, primitives: mesh.primitives.map((primitive: GltfJson) => ({ ...primitive,
+      attributes: Object.fromEntries(Object.entries<number>(primitive.attributes).map(([name, at]) => [name, copy(at)])),
+      ...(primitive.indices !== undefined ? { indices: copy(primitive.indices) } : {}),
+      ...(primitive.targets ? { targets: primitive.targets.map((target: Record<string, number>) => Object.fromEntries(Object.entries(target)
+        .filter(([name]) => name !== "TANGENT")
+        .map(([name, at]) => [name, name === "POSITION" || name === "NORMAL"
+          ? writer.addSparse(accessorFloats(readAccessor(glb, at)), json.accessors[at].type) : copy(at)]))) } : {}) })) });
+  });
+  const nodes = (json.nodes ?? []).map((node: GltfJson) => {
+    if (node.mesh === undefined) return node;
+    const mapped = meshIndex.get(node.mesh);
+    if (mapped !== undefined) return { ...node, mesh: mapped };
+    const { mesh: _mesh, skin: _skin, weights: _weights, ...rest } = node;
+    return rest;
+  });
+  const skins = json.skins?.map((skin: GltfJson) => skin.inverseBindMatrices === undefined ? skin : { ...skin, inverseBindMatrices: copy(skin.inverseBindMatrices) });
+  const { accessors: _a, bufferViews: _v, buffers: _b, ...rest } = json;
+  return writer.toGlb({ ...rest, meshes, nodes, ...(skins ? { skins } : {}) });
+}

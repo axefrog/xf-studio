@@ -19,8 +19,16 @@ export type RenderTemplateInputs = {
   readonly adapter: RenderAdapterId;
   /** The vanilla template's depot path (the fallback key when a chunk's template name is unknown). */
   readonly path: string;
-  /** Texture parameters the adapter samples. */
+  /** Texture parameters the adapter samples, or records for a later adapter. */
   readonly textures: readonly string[];
+  /**
+   * The inputs (texture, profile or gradient parameters) the adapter cannot draw without: a chunk missing one is left out.
+   * Every other listed input is optional (the adapter falls back to the template's neutral value) or recorded for a later
+   * adapter (the eye's `Normal` and `NormalBubble`), so a missing one is noted and the chunk still draws (PREV-54).
+   */
+  readonly required: readonly string[];
+  /** `required` when the chunk draws as a face detail through the decal family. */
+  readonly decalRequired?: readonly string[];
   /** `CHairProfile` parameters the adapter reads. */
   readonly profiles: readonly string[];
   /** `CSkinProfile` parameters the adapter reads. */
@@ -41,39 +49,48 @@ export type RenderTemplateInputs = {
 const DECAL_SURFACE = ["NormalTexture", "NormalAlphaTex", "RoughnessTexture", "MetalnessTexture", "SecondaryMask"] as const;
 const none = { profiles: [], skinProfiles: [] } as const;
 /** A decal-family template the preview does not draw yet: recorded, hidden, and reported with the `decal-template` limit. */
-const decalPlaceholder = (name: string) => ({ adapter: "decal-placeholder" as const, path: `base\\materials\\${name}.mt`, textures: [], ...none, placeholder: true as const });
+const decalPlaceholder = (name: string) => ({ adapter: "decal-placeholder" as const, path: `base\\materials\\${name}.mt`, textures: [], required: [], ...none,
+  placeholder: true as const });
 
 /** Keyed by template name. */
 export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = Object.freeze({
   // The head's skin (knowledge/head-cc-rendering.md §2, materials-and-shaders.md §4.1). The wrinkle maps
   // (`Detailmap_Stretch/Squash`) and blood flow are animation-driven and neutral at rest, so they are not read.
+  // Without a readable skin profile the adapter uses the base game's default profile values.
   skin: { adapter: "skin", path: "base\\materials\\skin.mt", profiles: [], skinProfiles: ["SkinProfile"],
-    textures: ["Albedo", "Normal", "Roughness", "DetailNormal", "MicroDetail", "TintColorMask", "SecondaryAlbedo", "EmissiveMask"] },
+    textures: ["Albedo", "Normal", "Roughness", "DetailNormal", "MicroDetail", "TintColorMask", "SecondaryAlbedo", "EmissiveMask"],
+    required: ["Albedo", "Normal", "Roughness"] },
   // Hair cards and lashes (knowledge/hair-shading.md §1–4).
-  hair: { adapter: "hair-strand", path: "base\\materials\\hair.mt", textures: ["Strand_Alpha", "Strand_ID", "Strand_Gradient"], profiles: ["HairProfile"], skinProfiles: [] },
+  hair: { adapter: "hair-strand", path: "base\\materials\\hair.mt", textures: ["Strand_Alpha", "Strand_ID", "Strand_Gradient"], profiles: ["HairProfile"], skinProfiles: [],
+    required: ["Strand_Alpha", "Strand_ID", "Strand_Gradient", "HairProfile"] },
   // Hair caps: a post-G-buffer decal recoloured through a gradient. On the face it is a member of the decal family,
   // which also reads the ID map (`DiffuseTexture`) the gradient is indexed by.
   mesh_decal_gradientmap_recolor: { adapter: "hair-cap-decal", path: "base\\materials\\mesh_decal_gradientmap_recolor.mt", decal: "gradient-recolor",
-    textures: ["MaskTexture", "GradientMap"], decalTextures: ["MaskTexture", "GradientMap", "DiffuseTexture", ...DECAL_SURFACE], ...none },
+    textures: ["MaskTexture", "GradientMap"], decalTextures: ["MaskTexture", "GradientMap", "DiffuseTexture", ...DECAL_SURFACE], ...none,
+    required: ["MaskTexture", "GradientMap"], decalRequired: ["MaskTexture", "GradientMap", "DiffuseTexture"] },
   // Brows and several lip styles: the double-diffuse post-G-buffer decal. Brows keep their own study adapter (brow-material.ts);
   // on the face the decal family also reads the normal and surface inputs.
   mesh_decal_double_diffuse: { adapter: "double-diffuse-decal", path: "base\\materials\\mesh_decal_double_diffuse.mt", decal: "double-diffuse",
     textures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"],
-    decalTextures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap", ...DECAL_SURFACE], ...none },
+    decalTextures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap", ...DECAL_SURFACE], ...none,
+    required: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], decalRequired: ["DiffuseTexture", "SecondaryDiffuseAlpha"] },
   // The plain post-G-buffer decal: eye makeup, most lip styles, cheeks, freckles, pimples, scars, tattoos, face cyberware,
   // stubble and the personal-link port (knowledge/head-cc-rendering.md §3). 2.31 has no separate normal-only decal template:
   // scars and cyberware write their normals through this one.
   mesh_decal: { adapter: "mesh-decal", path: "base\\materials\\mesh_decal.mt", decal: "mesh-decal", textures: ["DiffuseTexture", ...DECAL_SURFACE],
-    decalTextures: ["DiffuseTexture", ...DECAL_SURFACE], ...none },
+    decalTextures: ["DiffuseTexture", ...DECAL_SURFACE], ...none, required: ["DiffuseTexture"] },
   // The eyeball (knowledge/eye-rendering.md §2). Both templates share one program; the gradient one adds the iris
   // mask and colour ramp. `Normal` and `NormalBubble` feed the two-normal eye light (ranks 4–5) and are recorded now.
-  eye: { adapter: "eye", path: "base\\materials\\eye.mt", profiles: [], skinProfiles: [], textures: ["Albedo", "Normal", "Roughness", "NormalBubble"] },
+  // Without its roughness the eyeball keeps the flat preview roughness.
+  eye: { adapter: "eye", path: "base\\materials\\eye.mt", profiles: [], skinProfiles: [], textures: ["Albedo", "Normal", "Roughness", "NormalBubble"],
+    required: ["Albedo"] },
   eye_gradient: { adapter: "eye", path: "base\\materials\\eye_gradient.mt", profiles: [], skinProfiles: [], gradients: ["IrisColorGradient"],
-    textures: ["Albedo", "Normal", "Roughness", "NormalBubble", "IrisMask"] },
+    textures: ["Albedo", "Normal", "Roughness", "NormalBubble", "IrisMask"], required: ["Albedo", "IrisMask", "IrisColorGradient"] },
   // The eye's wetness shell: a forward pass that darkens the eye towards the lids and adds the tear line (§4).
-  eye_shadow: { adapter: "eye-shell", path: "base\\materials\\eye_shadow.mt", textures: ["Mask"], profiles: [], skinProfiles: [] },
+  eye_shadow: { adapter: "eye-shell", path: "base\\materials\\eye_shadow.mt", textures: ["Mask"], profiles: [], skinProfiles: [], required: ["Mask"] },
   // Layered (`.mlsetup`) materials: the graphic eye designs, many piercings and accessories. No adapter draws them yet.
-  multilayered: { adapter: "layered-placeholder", path: "engine\\materials\\multilayered.mt", textures: [], profiles: [], skinProfiles: [], placeholder: true },
+  multilayered: { adapter: "layered-placeholder", path: "engine\\materials\\multilayered.mt", textures: [], required: [], profiles: [], skinProfiles: [],
+    placeholder: true },
   // The rest of the 2.31 decal family (names from the installed shader cache's compiled templates): recorded, not drawn yet.
   ...Object.fromEntries(["mesh_decal__blackbody", "mesh_decal_blendable", "mesh_decal_emissive", "mesh_decal_emissive_subsurface", "mesh_decal_gradient",
     "mesh_decal_gradientmap_recolor_2", "mesh_decal_gradientmap_recolor_blendable", "mesh_decal_gradientmap_recolor_emissive", "mesh_decal_morph",
@@ -97,6 +114,10 @@ export function renderTemplate(template: string | null | undefined, name?: strin
 /** The texture parameters a chunk's adapter reads: the decal family's when the chunk is drawn as a face detail. */
 export const templateTextures = (inputs: RenderTemplateInputs, faceDetail: boolean): readonly string[] =>
   faceDetail && inputs.decalTextures ? inputs.decalTextures : inputs.textures;
+
+/** The inputs a chunk's adapter can't draw without (PREV-54): the decal family's when the chunk is drawn as a face detail. */
+export const templateRequired = (inputs: RenderTemplateInputs, faceDetail: boolean): readonly string[] =>
+  faceDetail && inputs.decalTextures ? inputs.decalRequired ?? inputs.required : inputs.required;
 
 /** `EMaterialPriority`, in draw order (WolvenKit's RED4 enum: `EMP_Normal` 0, `EMP_Front` 1) [source]. */
 export const MATERIAL_PRIORITIES = ["EMP_Normal", "EMP_Front"] as const;

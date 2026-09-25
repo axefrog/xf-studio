@@ -19,9 +19,9 @@
  * Wetness shell (§4) [source]: a forward pass after the opaque eye, skin and makeup, blending `out.rgb + dst·alpha`
  * with `alpha = saturate(1 + shadow·(lum − 1))`, `shadow = saturate(Intensity·R^Exponent)`, `lum` the mean of the
  * decoded `ShadowColor`, and a GGX highlight at roughness `clamp(WetnessRoughness·G, 0.04, 1)` on the vertex normal,
- * with the eye's visibility term, no Fresnel, no N·L and no environment, scaled by `WetnessStrength·B`. The blend is
- * exact only in the creator display's scene-linear target; drawn straight to the canvas it multiplies tone-mapped
- * colour (close for the darkening, slightly off for the highlight) [hypothesis about the visible error].
+ * with the eye's visibility term, no Fresnel, no N·L and no environment, scaled by `WetnessStrength·B`. Both lighting
+ * presets blend it in the display's scene-linear target (linear-display.ts), where it is exact; only a GPU without a
+ * renderable half-float buffer draws the studio stage straight to the canvas, where it multiplies tone-mapped colour.
  */
 import * as THREE from "three";
 import type { RenderChunkMaterial, RenderGradientStop } from "./render-detail";
