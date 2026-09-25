@@ -59,6 +59,8 @@ In order:
    Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md).
 4. Hair design
 5. Facial expressions and idles (static/animated; varied idle animations)
+
+   Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md).
 6. Tattoos
 7. Full body customisation
 8. World integration: quest design, area design
