@@ -28,7 +28,13 @@ export function parseEditorMemory(value: unknown, recipe: Recipe): EditorMemory 
   out.fieldSelection = parseFieldSelection(input?.fieldSelection, recipe);
   return out;
 }
-function parseDraft(value: unknown): CollectionDraft {
+/**
+ * Collects what a tolerant restore dropped. Only the current draft must parse; a damaged
+ * recovery draft or removed-preset entry is dropped with a note instead of blocking the
+ * whole workspace.
+ */
+export type RestoreWarnings = string[];
+function parseDraft(value: unknown, warnings?: RestoreWarnings): CollectionDraft {
   const input = value as CollectionDraft;
   const result = collectionDraft(parseCollection(input?.collection, true));
   if (input.revision !== undefined) {
@@ -39,20 +45,36 @@ function parseDraft(value: unknown): CollectionDraft {
   if (typeof input.expanded === "boolean") result.expanded = input.expanded;
   for (const preset of result.collection.presets) result.editors[preset.id] = parseEditorMemory(input.editors?.[preset.id], preset.recipe);
   if (Array.isArray(input.removed)) for (const entry of input.removed.slice(-REMOVED_PRESET_LIMIT)) {
-    const preset = parseCollection({ ...result.collection, presets: [entry.preset] }).presets[0];
-    if (!Number.isInteger(entry.index) || entry.index < 0) throw Error("Invalid removed preset position");
-    result.removed.push({ preset, index: entry.index, editor: parseEditorMemory(entry.editor, preset.recipe) });
+    try {
+      const preset = parseCollection({ ...result.collection, presets: [entry.preset] }).presets[0];
+      if (!Number.isInteger(entry.index) || entry.index < 0) throw Error("Invalid removed preset position");
+      result.removed.push({ preset, index: entry.index, editor: parseEditorMemory(entry.editor, preset.recipe) });
+    } catch (error) {
+      if (!warnings) throw error;
+      warnings.push(`A removed preset kept for Restore was damaged and was dropped (${(error as Error).message}).`);
+    }
   }
   return result;
 }
-export function parseCollectionWorkspace(value: unknown): CollectionWorkspace {
-  const result: CollectionWorkspace = parseDraft(value);
-  const previous = (value as CollectionWorkspace).previous;
-  if (previous !== undefined) result.previous = parseDraft(previous);
-  const older = (value as CollectionWorkspace).older;
-  if (Array.isArray(older) && result.previous)
-    result.older = older.slice(0, COLLECTION_RECOVERY_LIMIT - 1).map(parseDraft);
-  if (typeof (value as CollectionWorkspace).filesOpen === "boolean") result.filesOpen = (value as CollectionWorkspace).filesOpen;
+/**
+ * Parse a stored collection workspace. Without `warnings` every entry must be valid (in-memory
+ * round trips); with it, damaged recovery drafts and removed presets are dropped and noted.
+ */
+export function parseCollectionWorkspace(value: unknown, warnings?: RestoreWarnings): CollectionWorkspace {
+  const result: CollectionWorkspace = parseDraft(value, warnings);
+  const input = value as CollectionWorkspace;
+  const stored = [input.previous, ...(input.previous !== undefined && Array.isArray(input.older)
+    ? input.older.slice(0, COLLECTION_RECOVERY_LIMIT - 1) : [])].filter(draft => draft !== undefined);
+  const recovery: CollectionDraft[] = [];
+  for (const draft of stored) {
+    try { recovery.push(parseDraft(draft, warnings)); }
+    catch (error) {
+      if (!warnings) throw error;
+      warnings.push(`An earlier collection draft kept for recovery was damaged and was dropped (${(error as Error).message}).`);
+    }
+  }
+  if (recovery.length) { result.previous = recovery[0]; if (Array.isArray(input.older)) result.older = recovery.slice(1); }
+  if (typeof input.filesOpen === "boolean") result.filesOpen = input.filesOpen;
   return result;
 }
 

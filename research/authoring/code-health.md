@@ -38,9 +38,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-01 | High | Pipeline | Built-in plate always cut from the vanilla head, not the head the game actually loads (head mods/patches) | Fixing: claude/cleanup-pipeline |
 | PIPE-02 | High | Pipeline | Verifier trusts builder-produced roundtrip/export files; not data-independent; `.xl` only substring-checked | Fixing: claude/cleanup-pipeline |
 | UI-01 | High | Desktop | Damaged/incompatible `workspace.json` bricks the desktop app; window can't close | Fixing: alpha readiness |
-| UI-02 | High | Rendering | Renderer hard-codes brow/lash identities and per-mod manifests; resolver output not connected to rendering | In progress: preview-from-game adapter + follow-on |
-| CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | Fixing: claude/cleanup-core |
-| CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | Fixing: claude/cleanup-core |
+| UI-02 | High | Rendering | Renderer hard-codes brow/lash identities and per-mod manifests; resolver output not connected to rendering | Partly fixed: core head/plate/eyes load through one typed render record; brows/lashes/hair/piercings follow-on |
+| CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
+| CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
 | PIPE-04 | Med | Resolver | Resolver WolvenKit runner: no timeout/exit check, poisoned promise chain, non-atomic cache, cache not keyed by WolvenKit version | Open |
@@ -64,14 +64,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-10 | Med | Presentation | UI re-implements domain rules (satin alias, glitter model IDs, eye-shape list, limits) | Open |
 | UI-11 | Med | Rendering | scene.ts 893-line monolith, no dispose, renders every frame, leaks on load failure | Open |
 | UI-12 | Med | Tests | UI/desktop test gaps (bootstrap, panels, dock DOM, startup) | Open |
-| CORE-04 | Med | Core | Undo at the history limit mislabels entries and creates no-op entries | Fixing: claude/cleanup-core |
+| CORE-04 | Med | Core | Undo at the history limit mislabels entries and creates no-op entries | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-05 | Med | Core | Queries deep-copy/reparse the collection (context menu 0.1–0.4 s) and some stash as a side effect | Open |
-| CORE-06 | Med | Core | Control edits skip validation and throw raw errors, leaving a transaction open | Fixing: claude/cleanup-core |
+| CORE-06 | Med | Core | Control edits skip validation and throw raw errors, leaving a transaction open | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-07 | Med | Core | Optical-bake and range rules duplicated across core, workers and descriptors | Open |
 | CORE-08 | Med | Core | Duplicate action catalogues and Undo policies; finish choices not from the catalogue | Open |
 | CORE-09 | Med | Core (design) | One layer's glitter model bumps the whole recipe schema; nested schema conditionals | Open |
-| CORE-10 | Med | Core | One damaged recovery draft blocks the whole workspace restore | Fixing: claude/cleanup-core |
-| CORE-11 | Med | Tests | Core test gaps (startup wiring, history limit, workspace size, routing) | Fixing (partly): claude/cleanup-core |
+| CORE-10 | Med | Core | One damaged recovery draft blocks the whole workspace restore | **Fixed** (claude/cleanup-core, 25 Sep) |
+| CORE-11 | Med | Tests | Core test gaps (startup wiring, history limit, workspace size, routing) | Partly fixed (claude/cleanup-core); routing tests remain |
 
 **Low findings** (picked up opportunistically). Paths are relative to `projects/xf-studio/authoring`.
 
@@ -97,3 +97,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - Generic game asset export (`game-asset-export*.ts`) and the derived 3D preview core (`preview-core-*.ts`, `render-detail.ts`, `core-detail-loader.ts`, desktop `preview-preparation.js`), 25 September 2026.
+
+## Fixed in claude/cleanup-core
+
+- **CORE-01:** save status is published only on change, autosave watches content sources (`session.watch(bootstrap.collection)`) instead of the whole presentation port, and identical content is never rewritten. Test: `tests/workspace-persistence.test.ts` (fake timers, zero idle writes, resumes on edit).
+- **CORE-02:** `workspace-budget.ts` bounds the stored workspace (2,000,000 code units per key; selected preset stored once with full Undo, others 5 entries, removed and recovery entries without histories, progressive trimming) and publishes `nearly-full`/`full`. A worst-case realistic workspace (6 eight-layer presets, 80 Undo entries each, 20 removed presets and 4 recovery drafts all with histories, 123M code units verbatim) stores in 1.81M at the standard level. Desktop follow-up: the storage shim should save the host file independently of `localStorage` quota errors, and may pass a larger budget.
+- **CORE-10:** damaged recovery drafts and removed presets are dropped with a warning (`repaired` status); only the current draft must parse.
+- **CORE-04:** checkpoints return the entry they added; transactions label and discard that entry, and the displaced oldest entry returns when an entry is discarded or undone. Test: `tests/history-limit.test.ts`.
+- **CORE-06:** `capability()` applies descriptor payload ranges, `controlEdit` runs the same gate and returns a typed result, exceptions are classified by source, and control dispatch is wired inside `createTrustedAuthoringCore`. Test: `tests/control-edit-validation.test.ts`.
+- **CORE-11 (partial):** the tests above, plus touched fixtures (`studio-application`, `alpha-capability-reasons`, `application-boundary-fixture`) now build through `createTrustedAuthoringCore`.

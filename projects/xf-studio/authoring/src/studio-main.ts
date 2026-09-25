@@ -15,7 +15,6 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
-import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
@@ -71,7 +70,6 @@ async function start() {
   const core = createTrustedAuthoringCore(workspace, {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
-    controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
@@ -148,7 +146,9 @@ async function start() {
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
   if (verification) Object.assign(window, { xfStudioPresentation: port });
-  port!.subscribe(persist);
+  // Library content (preset edits, switches, saves) persists; the whole port is not watched,
+  // because it also publishes the save status and preview readiness (CORE-01).
+  session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();

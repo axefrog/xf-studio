@@ -63,7 +63,6 @@ let qualityActions: PreviewQualityActions;
 const core = createTrustedAuthoringCore(workspace, {
   resetStack: previous => previewCoordinator.syncStack(previous),
   selectedCollection: () => collectionApp?.workspaceSnapshot()?.selected ?? "draft",
-  controlAction: action => dispatchRecipeAction(action),
 });
 const { document: authoring, geometry, presentation, layers: layerActions,
   recipe: recipeActions, app } = core;
@@ -280,7 +279,15 @@ function dispatchRecipeAction(action: RecipeAction, record = false) {
 
 app.attach({ quality: qualityActions });
 const beginControl = (id: string) => { const layer = current(); if (layer) app.controlBegin(id, layer.id); };
-const controlAction = (id: string, action: RecipeAction) => app.controlEdit(id, action);
+const controlAction = (id: string, action: RecipeAction) => {
+  const outcome = app.controlEdit(id, action);
+  if (!outcome.ok) {
+    status(action.kind === "glitter.setIrregular" && outcome.code === "invalid_value"
+      ? "This amount and flake size exceed the fine Glitter preview range. Reduce size before raising amount."
+      : outcome.message);
+    sync();
+  }
+};
 function dispatchStudio(action: StudioAction) {
   const outcome = app.dispatch(action);
   if (!outcome.ok) { status(outcome.message); sync(); }

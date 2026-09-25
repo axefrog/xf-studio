@@ -67,7 +67,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   // suggested selector must not apply the eye morph a second time.
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
   core = createTrustedAuthoringCore(workspace, { resetStack: () => {},
-    selectedCollection: () => "draft", controlAction: action => core.recipe.dispatch(action) });
+    selectedCollection: () => "draft" });
   core.app.attach({ preview: actions, savedV: services.savedAppearance });
   const before = calls.filter(call => call.startsWith("eye:")).length;
   const imported = services.savedAppearance.dispatch({ kind: "savedV.restore", value: saved });
