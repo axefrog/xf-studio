@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { parseRecipe, type Recipe } from "./recipe";
+import { recipeFile } from "./recipe-schema";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };
 export type StoredLook = LookSummary & { recipe: Recipe };
@@ -66,7 +67,8 @@ export class LookLibrary {
       const now = new Date().toISOString();
       if (!id) this.db.query("INSERT INTO looks VALUES (?, ?)").run(lookId, now);
       this.db.query("INSERT INTO look_revisions VALUES (?, ?, ?, ?, ?)")
-        .run(lookId, revision, name, JSON.stringify(recipe), now);
+        // Rows hold a recipe file in the oldest schema that holds it, which older builds read.
+        .run(lookId, revision, name, JSON.stringify(recipeFile(recipe) ?? recipe), now);
       return { id: lookId, name, revision, updatedAt: now, recipe };
     }).immediate();
   }

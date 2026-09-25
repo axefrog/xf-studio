@@ -103,7 +103,7 @@ function rendering(recipe: { layers: Layer[] }, maskSizes: readonly number[]) {
   } catch (error) { compiled = { error: (error as Error).message }; }
   return {
     layers: recipe.layers.map(layer => ({ optical: previewOpticalKey(layer, 1024), alpha: maskAlphaKey(layer, 1024),
-      masks: maskSizes.map(size => sha(raster(layer, size))) })),
+      masks: maskSizes.map(size => sha(new Uint8Array(raster(layer, size).buffer))) })),
     plan: digest(plan), compiled,
   };
 }

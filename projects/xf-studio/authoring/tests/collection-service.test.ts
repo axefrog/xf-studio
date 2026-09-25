@@ -7,10 +7,11 @@ import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import type { LookCollection } from "../src/platform/api";
 import { looks, memoryOf, recipeOf } from "./fixtures/looks";
+import { recipeFile } from "../src/recipe-schema";
 
 function fixture() {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
-    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
+    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe: recipeFile(recipe)! }] };
   let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
   const saved = { collection: looks(collection), revision: 1, updatedAt: "now" };
   let saves = 0, packageInput: PresetCollection | undefined;

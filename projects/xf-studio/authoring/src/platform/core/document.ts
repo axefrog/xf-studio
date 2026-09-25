@@ -144,21 +144,51 @@ export class PartRegistry {
     if (!owner || !legacy || features.length !== 1 || features[0] !== owner.id) return undefined;
     const envelope = look.parts[owner.id];
     const body = envelope.schema === legacy.schema ? envelope.body
-      : owner.part.downgrade?.(owner.part.parse(envelope), legacy.schema)?.body;
+      : owner.part.downgrade?.(this.parsedPart(owner, envelope), legacy.schema)?.body;
     return body === undefined ? undefined
       : { id: look.id, name: look.name, revision: look.revision, [legacy.presetField]: structuredClone(body) };
   }
-  /** The stored form of one look: collection-1 preset fields when they hold it exactly, else parts. */
-  writePresetMinimal(look: Look): LegacyPreset | Look { return this.legacyPreset(look) ?? structuredClone(look); }
+  /**
+   * A part in the oldest schema its codec accepts that holds it exactly (`accepts` lists them
+   * oldest first; `downgrade` decides), else its current schema. Unregistered parts stay verbatim.
+   */
+  minimalPart(feature: string, envelope: PartEnvelope): PartEnvelope {
+    const module = this.byId.get(feature);
+    if (!module) return structuredClone(envelope);
+    const part = this.parsedPart(module, envelope);
+    for (const schema of module.part.accepts) {
+      if (schema === module.part.current) break;
+      const older = module.part.downgrade?.(part, schema);
+      if (older) return structuredClone(older);
+    }
+    return structuredClone(module.part.serialize(part));
+  }
+  /**
+   * The parsed value of an in-memory part: a look's registered parts are already parsed at their
+   * current schema (`readPart`), so writers use the body as it is (no second parse, which could
+   * reorder keys); any other schema is parsed.
+   */
+  private parsedPart(module: AnyFeatureModule, envelope: PartEnvelope): unknown {
+    return envelope.schema === module.part.current ? envelope.body : module.part.parse(envelope);
+  }
+  /** A look with each part in the oldest part schema that holds it. */
+  private minimalLook(look: Look): Look {
+    return { id: look.id, name: look.name, revision: look.revision,
+      parts: Object.fromEntries(Object.entries(look.parts).map(([feature, part]) => [feature, this.minimalPart(feature, part)])) };
+  }
+  /** The stored form of one look: collection-1 preset fields when they hold it exactly, else its minimal parts. */
+  writePresetMinimal(look: Look): LegacyPreset | Look { return this.legacyPreset(look) ?? this.minimalLook(look); }
   /**
    * The oldest collection schema that holds this collection exactly: `xfas/collection-1` (readable
-   * by 0.1.0-alpha.1) when every look is legacy-representable, else `xfs/collection-2`.
+   * by 0.1.0-alpha.1) when every look is legacy-representable, else `xfs/collection-2` with each
+   * part in the oldest part schema that holds it.
    */
   writeMinimal(collection: LookCollection): LegacyCollection | LookCollection {
     const presets = collection.presets.map(look => this.legacyPreset(look));
     return presets.every((preset): preset is LegacyPreset => preset !== undefined)
       ? { schema: COLLECTION_1, id: collection.id, name: collection.name, presets }
-      : this.write(collection);
+      : { schema: COLLECTION_2, id: collection.id, name: collection.name,
+        presets: collection.presets.map(look => this.minimalLook(look)) };
   }
   /** The collection-2 stored form (a validated copy). */
   write(collection: LookCollection): LookCollection {

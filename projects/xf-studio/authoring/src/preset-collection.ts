@@ -3,14 +3,16 @@ import { fresnelMaterial, HEAD_UV_ENTRY_SUFFIX, planPresetExport, ROUTE_CHANNELS
 import { parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type PresetDiagnostics } from "./export-diagnostics";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
-import { parseRecipe, type Recipe } from "./recipe";
+import type { Recipe, RecipeFile } from "./recipe";
+import { readRecipeFile, recipeFile } from "./recipe-schema";
 import { EYE_MAKEUP_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
 import { COLLECTION_2, type LookCollection } from "./platform/api";
 
 export type PresetCollection = {
   // File-format compatibility ID; product branding does not change existing inputs.
   schema: "xfas/collection-1"; id: string; name: string;
-  presets: { id: string; name: string; revision: number; recipe: Recipe }[];
+  /** Each preset's recipe as a recipe file: collection-1 input keeps its schema; a look's part is written in the oldest that holds it. */
+  presets: { id: string; name: string; revision: number; recipe: RecipeFile }[];
   /** Diagnostic-only export knobs of a prepared test candidate (export-diagnostics.ts); never authored in the Studio. */
   diagnostics?: ExportDiagnostics;
 };
@@ -37,21 +39,25 @@ export function parseCollection(value: unknown, allowEmpty = false): PresetColle
     if (!p || !uuid.test(p.id ?? "") || seen.has(p.id) || !title(p.name) || !Number.isSafeInteger(p.revision) || p.revision < 1)
       throw Error("Preset identities must be unique UUIDs with a name and positive revision.");
     seen.add(p.id);
-    return { id:p.id,name:p.name,revision:p.revision,recipe:parseRecipe(p.recipe) };
+    return { id:p.id,name:p.name,revision:p.revision,recipe:readRecipeFile(p.recipe) };
   });
   return { schema:input.schema,id:input.id,name:input.name,presets };
 }
 
 /**
  * The eye-makeup view of a look collection: each look that has an eye-makeup part, with that
- * part as its recipe. A look without one is not eye makeup, so the eye-makeup mod has nothing
- * of it to package. Each recipe is parsed from its part (a copy).
+ * part as its recipe file (the oldest recipe schema that holds it). A look without one is not
+ * eye makeup, so the eye-makeup mod has nothing of it to package. Each recipe is a copy.
  */
 export function eyeMakeupCollection(collection: LookCollection): PresetCollection {
   return { schema: "xfas/collection-1", id: collection.id, name: collection.name,
     presets: collection.presets.flatMap(look => {
       const recipe = STUDIO_PARTS.part<Recipe>(look, EYE_MAKEUP_FEATURE);
-      return recipe ? [{ id: look.id, name: look.name, revision: look.revision, recipe }] : [];
+      if (!recipe) return [];
+      // Every layer model this build registers has a recipe schema; one without needs its own exporter first.
+      const file = recipeFile(recipe);
+      if (!file) throw Error(`${look.name} uses a layer model the eye-makeup export cannot build yet.`);
+      return [{ id: look.id, name: look.name, revision: look.revision, recipe: file }];
     }) };
 }
 

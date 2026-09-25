@@ -1,17 +1,22 @@
 import {expect, test} from "bun:test";
 import {initialRecipe, parseRecipe} from "../src/recipe";
 import {glitterModel, parseGlitterChoices, selectGlitterModel, type GlitterChoices, type GlitterModel} from "../src/glitter-model";
+import {recipeFile} from "../src/recipe-schema";
 
 test("all Glitter studies are selectable without changing other layers or old recipes", () => {
   let recipe = initialRecipe(); recipe.layers[0].finish = "glitter";
   const unchanged = structuredClone(recipe.layers[1]);
   const choices: GlitterChoices = {};
+  // The in-memory recipe has no schema to move; written out, it takes the oldest schema that holds
+  // the model now chosen (classic again needs only recipe-7: nothing is pinned).
   for (const [model, schema] of [["irregular", "xfs/recipe-7"], ["direct", "xfs/recipe-8"],
-    ["clustered", "xfs/recipe-9"], ["fine", "xfs/recipe-10"], ["classic", "xfs/recipe-10"]] as const) {
+    ["clustered", "xfs/recipe-9"], ["fine", "xfs/recipe-10"], ["classic", "xfs/recipe-7"]] as const) {
     recipe = selectGlitterModel(recipe, recipe.layers[0].id, model, choices);
     expect(glitterModel(recipe.layers[0].flakes)).toBe(model);
-    expect(recipe.schema).toBe(schema);
+    expect(recipe).not.toHaveProperty("schema");
+    expect(recipeFile(recipe)!.schema).toBe(schema);
     expect(parseRecipe(recipe)).toEqual(recipe);
+    expect(parseRecipe(recipeFile(recipe))).toEqual(recipe);
     expect(recipe.layers[1]).toEqual(unchanged);
   }
 });
@@ -41,9 +46,10 @@ test("saved inactive choices reject malformed settings", () => {
 });
 
 test("a classic recipe-6 can select irregular flakes without invalid schema", () => {
-  const recipe = initialRecipe(); recipe.schema = "xfs/recipe-6"; recipe.layers[0].finish = "glitter";
+  const file = { schema: "xfs/recipe-6", ...initialRecipe() }; file.layers[0].finish = "glitter";
+  const recipe = parseRecipe(file);
   const selected = selectGlitterModel(recipe, recipe.layers[0].id, "irregular", {});
-  expect(selected.schema).toBe("xfs/recipe-7");
+  expect(recipeFile(selected)!.schema).toBe("xfs/recipe-7");
   expect(parseRecipe(selected)).toEqual(selected);
-  expect(recipe.schema).toBe("xfs/recipe-6");
+  expect(file.schema).toBe("xfs/recipe-6");
 });

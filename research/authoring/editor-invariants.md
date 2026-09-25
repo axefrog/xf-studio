@@ -4,7 +4,7 @@ Consolidated 25 September 2026 from the dated checkpoint paragraphs that previou
 
 ## Recipe schema versions
 
-New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src/recipe.ts`). Validation accepts `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-11`. Older schemas migrate **on read** to the current in-memory form. Recipes 8–11 keep their own schema so their optical model stays pinned.
+The in-memory recipe (`projects/xf-studio/authoring/src/recipe.ts`) is eye makeup's part `xfs/eye-makeup-part-2`: it has **no recipe-level schema**. Each layer's optical models (`flakes.model`, `optics.model`; classic flakes store none) are validated by the [per-layer model registry](../../projects/xf-studio/authoring/src/layer-models.ts). Recipe files accept `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-11`; older schemas migrate **on read** to the in-memory form, and each file's schema still gates which layer models it may hold. Writers use the oldest schema that holds every layer's models, never below `xfs/recipe-7` (what new recipes have always been written as).
 
 | Schema | Introduced | Migration rule for older input |
 |---|---|---|
@@ -14,18 +14,18 @@ New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src
 | `xfs/recipe-4` | Per-layer `strength`: `smooth-boundary` with positive blend distance (default 0.0005 control UV, bounds 0.000125–0.02) or explicit `legacy-nearest` | v1–v3 migrate to `legacy-nearest`, preserving saved looks; the upgrade to smooth is explicit and undoable |
 | `xfs/recipe-5` | Explicit per-layer `pathMode`; Bézier points with relative incoming/outgoing handles (Smooth = aligned arms, independent lengths; Symmetric = equal opposite arms; Corner = independent arms) | v1–v4 keep original Catmull–Rom geometry; conversion is explicit and undoable |
 | `xfs/recipe-6` | Explicit uniform/boundary (directional) softness with per-point widths | v1–v5 migrate to uniform softness without mask changes |
-| `xfs/recipe-7` | **Current default.** Opt-in irregular raster Glitter model | — |
-| `xfs/recipe-8` | Direct-light UV-cell Glitter | Pinned |
-| `xfs/recipe-9` | Clustered direct Glitter | Pinned |
-| `xfs/recipe-10` | Denser fine-speckle direct Glitter | Pinned |
-| `xfs/recipe-11` | Per-layer game-matched `optics` for Glossy, Shimmer and Colour-shifting (with shift colour and strength); accepts every recipe-10 layer | Pinned. Changing a layer to one of these finishes adds `optics` and moves the recipe to 11; existing layers keep their earlier study until **Use game-matched model** (`layer.useGameOptics`) |
+| `xfs/recipe-7` | Oldest schema writers use. Opt-in irregular raster Glitter model (`irregular-planar-1`) | — |
+| `xfs/recipe-8` | Direct-light UV-cell Glitter (`uv-cell-direct-1`) | Read as it is |
+| `xfs/recipe-9` | Clustered direct Glitter (`uv-cell-direct-2`) | Read as it is |
+| `xfs/recipe-10` | Denser fine-speckle direct Glitter (`uv-cell-direct-3`) | Read as it is |
+| `xfs/recipe-11` | Per-layer game-matched `optics` (`game-matched-1`) for Glossy, Shimmer and Colour-shifting (with shift colour and strength); accepts every recipe-10 layer | Read as it is. Changing a layer to one of these finishes adds `optics`; existing layers keep their earlier study until **Use game-matched model** (`layer.useGameOptics`) |
 
 Rules:
 
-- **Version the model whenever appearance changes.** Older recipes must keep their original look, so never silently upgrade existing pigment, softness, path or optical fields.
+- **Version the model whenever appearance changes, per layer.** Older recipes must keep their original look, so never silently upgrade existing pigment, softness, path or optical fields. A new or changed optical look registers a new layer model ID in `layer-models.ts`; it never bumps a recipe or part schema. A part schema bump is reserved for structural changes.
 - **Never rewrite stored revisions.** Old SQLite revisions stay unchanged; migration happens on read only.
 - **Share one evaluator.** Preview, PNG export, the raster worker and the compiler all use the same mask evaluator and adaptive Bézier tessellation. Raster bounds include every warp displacement and the maximum softness width.
-- **One schema rule for layer edits.** `requiredRecipeSchema()` ([`recipe-schema.ts`](../../projects/xf-studio/authoring/src/recipe-schema.ts)) takes the newest schema any layer's stored form needs (irregular Glitter 7, Direct 8, Clustered 9, Fine 10, game-matched optics 11) and never goes below the recipe's current schema. Every recipe action and Glitter-model change goes through it, so a per-layer choice never downgrades the recipe or invalidates another layer, and removing the layer that needed a newer schema does not move the recipe back. Capability and dispatch agree: every finish and Glitter model the application offers is applied.
+- **No edit touches a schema.** `selectGlitterModel`, `applyRecipeAction`, gestures and shape transforms change layers only and validate the result as an in-memory recipe, so one layer's choice can never invalidate another layer. The schema is derived when a recipe is written: `recipeFile()` ([`recipe-schema.ts`](../../projects/xf-studio/authoring/src/recipe-schema.ts)) takes the newest schema any layer's models need (irregular Glitter 7, Direct 8, Clustered 9, Fine 10, game-matched optics 11), so removing the layer that needed a newer schema writes the older one again. "Export recipe", library rows and collection-1 files all use it. Capability and dispatch agree: every finish and Glitter model the application offers is applied.
 - **Keep editor state out of portable recipes.** Field selection, UV view state and similar editor memory belong in editor/workspace state, not in the portable recipe.
 
 ## Layers, presets and collections
@@ -45,11 +45,11 @@ Rules:
 
 The [feature-module platform](feature-module-platform.md#step-2-status) document model (step 2):
 
-- **A collection holds looks; a look holds one part per feature.** In memory a collection is `xfs/collection-2`; eye makeup's part is `xfs/eye-makeup-part-1`, the recipe exactly as `parseRecipe` returns it. A missing part means the feature is not in that look. Parts and editor memory of features this build does not register are carried verbatim through the workspace, the library and files.
-- **Read either, write the oldest that holds it.** `xfas/collection-1` and `xfs/collection-2` both read everywhere (import, library rows, drafts, the package pipeline). Library rows and exported collection files are written as `xfas/collection-1` whenever every look is only eye makeup in a form part-1 holds, so 0.1.0-alpha.1 still reads them; otherwise as `xfs/collection-2`. Old rows are never rewritten.
+- **A collection holds looks; a look holds one part per feature.** In memory a collection is `xfs/collection-2`; eye makeup's part is `xfs/eye-makeup-part-2`, the recipe exactly as `parseRecipe` returns it (no schema). `xfs/eye-makeup-part-1`, a recipe file body, still reads. A missing part means the feature is not in that look. Parts and editor memory of features this build does not register are carried verbatim through the workspace, the library and files.
+- **Read either, write the oldest that holds it.** `xfas/collection-1` and `xfs/collection-2` both read everywhere (import, library rows, drafts, the package pipeline). Library rows and exported collection files are written as `xfas/collection-1` whenever every look is only eye makeup that a recipe schema holds, each recipe in its oldest schema, so 0.1.0-alpha.1 still reads them; otherwise as `xfs/collection-2`, with each part in the oldest part schema that holds it. Old rows are never rewritten. A collection-1 file read directly (Check, Build) keeps each recipe's own schema.
 - **Compare canonically.** A preset gets a new library revision only when its name or its canonical parts (parsed, serialized, keys sorted) changed; the dirty check compares the same way. A different key order or older recipe schema is never a change.
 - **The workspace is `xfs/workspace-2`**, under the same storage keys. Editor memory is per feature: each look's active layer, selection, warp selection and Undo history belong to eye makeup's memory for that look, and the remembered Glitter-model and Colour-shift settings are eye makeup's feature memory (the verbatim former `glitterChoices`). `xfas/workspace-1` reads losslessly, `historyTrimmed` included.
-- **Downgrade protection.** A workspace this build cannot read (damaged, or from a newer build) is never overwritten; desktop keeps the replaced `xfas/workspace-1` file once as `workspace.v1.bak`. A newer part schema of eye makeup is refused on read rather than dropped.
+- **Downgrade protection.** A workspace this build cannot read (damaged, or from a newer build) is never overwritten; desktop keeps the replaced `xfas/workspace-1` file once as `workspace.v1.bak`. A newer part schema of eye makeup, or a layer model this build does not register, is refused on read rather than dropped (see [step 3 decisions](feature-module-platform.md#step-3-status)).
 
 ## Browser workspace persistence
 

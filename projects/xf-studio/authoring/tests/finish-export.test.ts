@@ -9,7 +9,8 @@ import { describePackageExperimental, preparePackageCollection } from "../src/pa
 import { planCollection } from "../src/preset-collection";
 import { HandleCounter, rewritePlateMesh } from "../src/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/plate-uv-window";
-import { initialRecipe, parseRecipe, raster, type Layer, type Recipe } from "../src/recipe";
+import { initialRecipe, parseRecipe, parseRecipeFile, raster, type Layer, type Recipe } from "../src/recipe";
+import { recipeFile } from "../src/recipe-schema";
 import { facetedReference, maskReference } from "../src/mod-verifier/texture-checks";
 import { expectedMaterialValues } from "../src/mod-verifier/resource-checks";
 
@@ -37,7 +38,9 @@ test("each finish has one honest export status; earlier preview models and Glitt
 test("game-matched optics are recipe-11 only and carry a shift colour only on Colour-shifting layers", () => {
   const layer = { ...initialRecipe().layers[0], finish: "glossy" as const, optics: game };
   expect(() => parseRecipe({ schema: "xfs/recipe-10", uv: "gltf-uv0-top-left", layers: [layer] })).toThrow("game-matched");
-  expect(parseRecipe({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [layer] }).schema).toBe("xfs/recipe-11");
+  expect(parseRecipeFile({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [layer] }).schema).toBe("xfs/recipe-11");
+  // In memory (part-2) the layer's model validates itself; written out it needs recipe-11.
+  expect(recipeFile(parseRecipe({ uv: "gltf-uv0-top-left", layers: [layer] }))!.schema).toBe("xfs/recipe-11");
   expect(() => parseRecipe({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [{ ...layer, optics: { ...game, shift } }] })).toThrow();
   expect(() => parseRecipe({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [{ ...layer, finish: "iridescent" }] })).toThrow();
   expect(() => parseRecipe({ schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [{ ...layer, finish: "matte" }] })).toThrow();
@@ -177,7 +180,7 @@ test("choosing a finish uses its game-matched model; earlier layers switch only 
   const start = initialRecipe(), id = start.layers[0].id;
   let state = { recipe: start, active: 0, selected: 0, fieldSelection: {} };
   state = applyRecipeAction(state, { kind: "layer.setFinish", layerId: id, finish: "iridescent" }).state;
-  expect(state.recipe.schema).toBe("xfs/recipe-11");
+  expect(recipeFile(state.recipe)!.schema).toBe("xfs/recipe-11");
   expect(state.recipe.layers[0].optics).toEqual({ model: "game-matched-1", shift: { color: "#3fd4c2", strength: .6 } });
   state = applyRecipeAction(state, { kind: "layer.setShift", layerId: id, key: "strength", value: .25 }).state;
   expect(state.recipe.layers[0].optics?.shift?.strength).toBe(.25);

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { coverage, initialRecipe, MAX_LAYERS, parseRecipe } from "../src/recipe";
+import { coverage, initialRecipe, MAX_LAYERS, parseRecipe, parseRecipeFile } from "../src/recipe";
 import { editLayers } from "../src/layer-stack";
 import { RecipeHistory } from "../src/editor-actions";
 import { compileFlatPreset } from "../src/preset-compiler";
@@ -9,7 +9,7 @@ import { storedWorkspace } from "./fixtures/looks";
 test("legacy recipes upgrade explicitly; empty and variable stacks persist without corrupting history", () => {
   const legacy = { ...initialRecipe(), schema: "eye-artistry/recipe-1",
     layers: initialRecipe().layers.map(({ fields, strength: _strength, pathMode: _pathMode, softness: _softness, points, ...l }) => ({ ...l, points: points.map(({ handles: _handles, feather: _feather, ...point }) => point), field: fields[0] })) };
-  expect(parseRecipe(legacy).schema).toBe("xfs/recipe-7");
+  expect(parseRecipeFile(legacy).schema).toBe("xfs/recipe-7");
   expect(legacy.schema).toBe("eye-artistry/recipe-1");
   expect(() => parseRecipe({ ...legacy, layers: [] })).toThrow();
   const empty = { ...initialRecipe(), layers: [] };
