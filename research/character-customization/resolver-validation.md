@@ -56,6 +56,21 @@ A UI state `{piercings: "12", piercings_12: i0_000_pwa__earring__01_silver}` res
 
 The Build's eye plate now asks the same resolver which head mesh and morph target the route loads ([pipeline guide](../authoring/studio-to-mod-pipeline.md#where-the-eye-plate-comes-from)). For the MO2 profiles `2025 (again)` and `XF Studio diagnostic 2026-09-25` it reproduces the skin row above: the mesh is the base-game `e877b91a…`, patched by the -KS- UV Texture Framework `.xl` with no `props` (appearances only under ArchiveXL's rules, so plate geometry is unchanged), and the morph target is the Facial Customisation Rig Fix's `16ec1fae…`. Decoding both morph copies [resource]: the Rig Fix morph has the base game's base buffer, diffs, mapping and target names byte for byte, and renames six per-target bone names (`l_/r_J_jaw_ear_0..2_JNT` to `…_unused`) in all 105 targets. That is consistent with its stated purpose of stopping eye clipping by detaching those joints from the morphs [hypothesis about the runtime effect]. With all mods disabled both resources resolve to the base game.
 
+## UI states (rule R5)
+
+UI states go through `descriptorsFromUiState` before resolution. Two defects found by the [head CC render runs](head-cc-render-evidence.md#observations-recorded-here-in-detail) are fixed (code-health RES-01, RES-02):
+
+- A switcher target is active only while an active switcher's current choice names it; its `enabled` flag no longer keeps a default target (`skin_type_01`, `eyebrows_color1`, `hair_color1`) active beside the chosen one [resource].
+- An Off choice (a definition named `None`) emits no descriptor and so no `appearance-missing` gap [resource].
+
+| Check | Result |
+|---|---|
+| Six vanilla UI presets (female and male, corpo/nomad/street) against the base and `_ep1` CCOs, state derived from each preset's stored indices | Active appearance options and definitions equal the preset's `isActive` set. The only extras are enabled options that the older presets do not list (`finalSceneBruises`, `eyelash_color`, face-rig options) |
+| Head CC runs A, B and D re-run on the direct route | Only the chosen skin type, brow colour and hair colour remain; the empty `scars` descriptor and its gap are gone; nothing added |
+| Unit fixtures (`tests/cco-merge.test.ts`) | Enabled default deactivated; nested `cyberware` → `hairstyle`/`hairstyle_cyberware` swap with shared targets; Off chosen directly and through a link |
+
+Not modelled: whether a switcher that is a link controller (`facial_tattoo`) activates its followers (`tattoo` is active at Off in every preset), and ArchiveXL's activation of new enabled mod options missing from a loaded state.
+
 ## Mismatches and limits
 
 - **Material chains stop at the template.** Parameters and textures are listed with providers; no `.mt` shader semantics, `.mlsetup` layers or texture pixels are interpreted.

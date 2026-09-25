@@ -225,9 +225,15 @@ export interface MorphDescriptor { readonly part: CcoPart; readonly group: strin
 export type UiOptionState = Readonly<Record<string, string>>;
 
 /**
- * Rule R5 [resource-inferred; hypothesis for edge cases]: enabled switchers are active and activate the
- * options their current choice names; enabled appearance/morph options are active; a link follower takes its
- * controller's choice index. Each group then lists its active options.
+ * Rule R5, UI option state → descriptors:
+ * - **Switcher targets** [resource]: an option that any switcher choice names is active only while an active
+ *   switcher's current choice names it. Its own `enabled` flag (true for the default target, e.g.
+ *   `skin_type_01`) does not keep it active beside another choice. All six vanilla UI presets agree.
+ * - **Roots** [resource]: an option that no switcher names is active when `enabled`.
+ * - **Off choices** [resource]: a definition whose `name` is the empty CName (`None`) names no `.app`
+ *   appearance, so the option emits no descriptor (the creator's "Off", e.g. `scars` at index 0).
+ * - **Links** [hypothesis]: a link follower takes its appearance controller's choice index.
+ * Each group then lists its active options.
  */
 export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): {
   appearances: AppearanceDescriptor[]; morphs: MorphDescriptor[]; ambiguities: Ambiguity[]; rules: RuleNote[];
@@ -236,6 +242,10 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
   for (const part of CCO_PARTS) {
     const { options, groups } = cco.parts[part];
     const byName = new Map(options.filter(o => o.name).map(option => [option.name, option]));
+    // Every name a switcher choice can activate. These options take their activation from switchers alone.
+    const switcherTargets = new Set<string>();
+    for (const option of options) if (option.type === "switcher")
+      for (const choice of option.options) for (const name of choice.names) switcherTargets.add(name);
     const active = new Set<string>();
     const activate = (option: CcoOption, depth = 0) => {
       if (depth > 16 || active.has(option.name)) return;
@@ -245,8 +255,7 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
       const choice = option.options.find(item => item.localizedName === wanted) ?? option.options[option.defaultIndex] ?? option.options[0];
       for (const name of choice?.names ?? []) { const target = byName.get(name); if (target) activate(target, depth + 1); }
     };
-    for (const option of options) if (option.name && option.enabled) activate(option);
-    // Switcher targets override default enablement: a disabled target is active only when named.
+    for (const option of options) if (option.name && option.enabled && !switcherTargets.has(option.name)) activate(option);
     const linkIndex = new Map<string, number>();
     for (const option of options) {
       if (option.type !== "appearance" || !option.linkController || !option.link || !active.has(option.name)) continue;
@@ -267,7 +276,8 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
             detail: `Linked index ${index} exceeds this follower's ${option.definitions.length} choices.` });
         }
         definition ??= option.definitions[option.defaultIndex] ?? option.definitions[0];
-        if (definition && option.resource) chosen.set(option.name, { definition: definition.name });
+        // An empty (`None`) definition name is the "Off" choice: it names no appearance, so nothing is emitted.
+        if (definition?.name && option.resource) chosen.set(option.name, { definition: definition.name });
       } else if (option.type === "morph") {
         const wanted = state[option.name];
         const choice = option.morphNames.find(item => item.morphName === wanted || item.localizedName === wanted)
@@ -284,6 +294,8 @@ export function descriptorsFromUiState(cco: CcoResource, state: UiOptionState): 
     }
   }
   return { appearances, morphs, ambiguities, rules: [
-    note("R5-ui-state", "hypothesis", "Switcher activation, link-index propagation and group listing inferred from vanilla CCO resources and UI presets; native state code unread."),
+    note("R5-switcher-targets", "resource", "Only the targets named by an active switcher's current choice are active, whatever their enabled flag; options no switcher names follow enabled. Matches every switcher in the six vanilla UI presets; native state code unread."),
+    note("R5-off-choice", "resource", "A definition with an empty (None) name selects no appearance and emits no descriptor; vanilla Off choices have that shape and the reference save stores no such entry."),
+    note("R5-links", "hypothesis", "Link-index propagation from appearance controllers to followers and group listing inferred from vanilla CCO resources and UI presets."),
   ] };
 }
