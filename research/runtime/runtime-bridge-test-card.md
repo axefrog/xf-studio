@@ -12,7 +12,7 @@
    bun projects/xf-runtime-bridge/tools/package.ts
    ```
 
-   Use `dist/xf-runtime-bridge-0.1.0-diagnostic.zip` (bridge on, writes off). Record its SHA-256 and the manifest's `commit` in the session notes.
+   `package.ts` refuses a dirty project tree or a DLL not built cleanly from `HEAD`, so commit first, then build, then package. Use `dist/xf-runtime-bridge-0.1.0-diagnostic.zip` (bridge on, writes off). Record its SHA-256 and the manifest's `commit` in the session notes. The self-test must end with `ALL … CHECKS PASSED`.
 
 2. **Create a dedicated MO2 profile.** Name it `XF Runtime Bridge diagnostic`.
    - Copy it from the diagnostic profile `XF Studio diagnostic 2026-09-25`. That profile already has the current ArchiveXL, TweakXL, Codeware and redscript entries; RED4ext 1.30.0 and CET 1.37.1 load from the game folder.
@@ -37,7 +37,7 @@ Keep one PowerShell 7 window open in the repository root. Every command below is
 | # | Do | Expect |
 |---|---|---|
 | 1 | In MO2, select **XF Runtime Bridge diagnostic** and launch the game as usual. Wait for the main menu. | The game starts normally with no redscript error pop-up. A small green **"XF bridge: listening (read-only)"** label appears at the top left once CET initialises its mods; note whether that is at the main menu or only after loading a save. |
-| 2 | Run `pwsh -File projects/xf-runtime-bridge/tools/bridge-client.ps1 ping` | `OK   ping cid=ps-… {"plugin_version":"0.1.0","pong":true,"protocol":1,"sid":"<16 hex>"}` |
+| 2 | Run `pwsh -File projects/xf-runtime-bridge/tools/bridge-client.ps1 ping` | `OK   ping cid=ps-… <n>ms {"plugin_version":"0.1.0","pong":true,"protocol":1,"sid":"<16 hex>"}` |
 | 3 | Run `pwsh -File projects/xf-runtime-bridge/tools/bridge-client.ps1 smoke` at the main menu | `ping`, `bridge.info`, `game.version`, `game.state` and `layers.status` are `OK`. `game.version` shows `3.0.80.51928`. `player.position` is `OK` with `"available":false`. Note whether `layers.status` already lists `redscript`, `tweakxl` and `cet`. |
 | 4 | Load any save. Stand still in the world, then run `smoke` again. | `player.position` gives `"available":true` with coordinates. `script.describe` returns `"has_player":true` and `"tweak_marker":1`. `layers.status` lists `redscript`, `tweakxl` (`protocolVersion=1`) and `cet`. |
 | 5 | Open photo mode (normal key) and run `… bridge-client.ps1 call photomode.state`. Close photo mode and run it again. | `"active":true` inside photo mode, `"active":false` after closing. |
@@ -50,6 +50,8 @@ Keep one PowerShell 7 window open in the repository root. Every command below is
 **If something goes wrong:**
 - **Redscript error pop-up at start:** note or screenshot the text, close the game, and disable the `XF Runtime Bridge` entry in this profile. The coordinator reads `r6/logs/redscript_rCURRENT.log`.
 - **Game crash:** disable the entry and send the newest `red4ext/logs/*.log` files (under MO2 they are in `overwrite/red4ext/logs/`).
+- **A method answers `rtti_missing` or `rtti_signature`:** that function's name or signature on 2.31 differs from the pre-2.3 dump. The plugin refused the call, and the game is unaffected. Carry on; the log line `evt=rtti.signature_mismatch` says what differs.
+- **A method answers `timeout_after_start`:** the game thread was slow to finish that request. Carry on; the log shows `evt=game.task_completed_late` when it finished.
 - **Don't save during the session.** This profile shares the normal save folder, and nothing in the test needs a save.
 
 ## After the session (coordinator)
@@ -63,10 +65,10 @@ Expected evidence, and the question each part answers:
 | Log (MO2: under `overwrite/`) | Expected lines | Answers |
 |---|---|---|
 | `red4ext/logs/red4ext-<ts>.log` | `Loading plugin from '…XFRuntimeBridge.dll'…` and `XF Runtime Bridge (version: 0.1.0, author(s): XF Studio) has been loaded`; no "incompatible" warning | RED4ext accepted the plugin (API v1, SDK 1.0.0, runtime 2.31) |
-| `red4ext/logs/xfruntimebridge-<ts>.log` | `evt=plugin.load … game_file=3.0.80.51928`, `evt=plugin.config … bridge.enabled=true bridge.allow_writes=false`, `evt=plugin.scripts … added_to_redscript=true`, `evt=bridge.listen pipe=\\.\pipe\xf-runtime-bridge-<pid>-…`, `evt=rtti.register_types phase=post_register natives=5`, `evt=game.state state=BaseInitialization event=enter` … `state=Running event=enter`, `evt=game.running_first_tick` | Load order, config, RTTI registration and state transitions |
+| `red4ext/logs/xfruntimebridge-<ts>.log` | `evt=plugin.load … build=<commit> … game_file=3.0.80.51928`, `evt=plugin.build XFB_BUILD=<the manifest's commit>;dirty=0`, `evt=plugin.config … bridge.enabled=true bridge.allow_writes=false`, `evt=plugin.scripts … added_to_redscript=true`, `evt=bridge.listen pipe=\\.\pipe\xf-runtime-bridge-<pid>-…`, `evt=rtti.register_types phase=post_register natives=5`, `evt=game.state state=BaseInitialization event=enter` … `state=Running event=enter`, `evt=game.running_first_tick` | Load order, config, RTTI registration and state transitions |
 | same file | `layer=redscript … evt=script.log XFBridgeSystem.OnAttach`, `evt=native.ping from=redscript cid=rs-attach`, `evt=layer.announce layer=redscript`, `evt=layer.announce layer=tweakxl detail=XFRuntimeBridge.Meta.protocolVersion=1`, `layer=redscript … PlayerPuppet.OnGameAttached replacer=false x=…` | Redscript compiled and runs; TweakXL data reached TweakDB; wrap and add methods work |
 | same file | `layer=native cid=cet-1 evt=native.ping from=cet`, `evt=layer.announce layer=cet detail=onInit; CET v1.37.1`, `layer=cet … redscript DescribeJson: {…}` or a `not callable from CET` warning | CET calls natives; whether CET sees our redscript class (open question 2) |
-| same file | `evt=bridge.client_connected client_pid=…`, `evt=bridge.request method=… access=read`, `evt=bridge.response method=… code=ok ms=…`, `evt=bridge.write_refused method=diag.write_probe`, `evt=bridge.killed reason=script:cet-hotkey`, `evt=bridge.listener_closed`, `evt=game.state state=Shutdown event=enter`, `evt=plugin.unload` | Audit trail, write gate, kill switch, clean shutdown |
+| same file | `evt=bridge.client_connected client_pid=…`, `evt=bridge.request method=… access=read`, `evt=bridge.response method=… code=ok ms=…`, `evt=bridge.write_refused code=writes_disabled method=diag.write_probe`, `evt=bridge.killed reason=script:cet-hotkey`, `evt=bridge.server_stopped stop_ms=<under 1000>`, `evt=bridge.listener_closed`, `evt=game.state state=Shutdown event=enter`, `evt=plugin.unload` | Audit trail, write gate, kill switch, clean shutdown |
 | `r6/logs/redscript_rCURRENT.log` | The two `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts` in the compiled list; `Compilation complete` | `scripts->Add` path works under MO2 |
 | `red4ext/plugins/TweakXL/TweakXL.log` | `Reading "…xf_runtime_bridge.yaml"…` with no parse error | TweakXL loaded the data layer |
 | `bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/xf_runtime_bridge.log` | `onInit cet=v1.37.1` and `native ping reply`; info lines may only be flushed at exit | CET layer ran |

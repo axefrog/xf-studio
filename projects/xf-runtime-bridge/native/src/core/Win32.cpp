@@ -155,12 +155,7 @@ bool FileVersion(const std::filesystem::path& aPath, std::string& aOut)
 std::filesystem::path RuntimeDirectory()
 {
     wchar_t buffer[4096];
-    auto length = GetEnvironmentVariableW(L"XFB_RUNTIME_DIR", buffer, 4096);
-    if (length > 0 && length < 4096)
-    {
-        return std::filesystem::path(std::wstring(buffer, length));
-    }
-    length = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, 4096);
+    const auto length = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, 4096);
     if (length > 0 && length < 4096)
     {
         return std::filesystem::path(std::wstring(buffer, length)) / L"XFStudio" / L"runtime-bridge";

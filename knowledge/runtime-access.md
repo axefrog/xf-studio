@@ -21,6 +21,11 @@
 - **CET cannot open network connections.** Its sandbox exposes no sockets, HTTP, `ffi` or process spawning, and file access is confined to the mod folder [source] CET `LuaSandbox.cpp:10-79, 152-161, 695-719`. Any external link must be native.
 - **CET API details:** CET has `spdlog.warning`, not `spdlog.warn`; its Lua is LuaJIT (5.1), so use `unpack`; `onDraw` runs every frame even with the overlay closed [source] CET `LuaSandbox.cpp:641-666`, `LuaVM.cpp:50-56`.
 - **Retail `Log`/`LogChannel` print nowhere** unless CET (`gamelog.log`, `scripting.log`) or Red Hot Tools hooks them. Route script logs through a plugin native instead [source] CET `LuaVM_Hooks.cpp:192-250`.
+- **Bound JSON nesting before handing it to nlohmann/json, and serialise with `error_handler_t::replace`.**
+  - Parsing and destruction are iterative in 3.12, but copying, comparing and `dump()` recurse. A 10 KB value nested 5,000 deep overflowed a 1 MB stack, and the game thread's 2 MB would take only about twice that [offline].
+  - `dump()` throws `type_error.316` on invalid UTF-8 unless given a replace or ignore handler [source] json 3.12.0 `serializer::dump_escaped`.
+- **Don't `FlushFileBuffers` a named pipe before disconnecting.** It waits until the client reads, which a client can simply not do [offline: held a stop 12 s]. `DisconnectNamedPipe` discards unread data, so give a client a short, bounded window to read a final reply instead [doc] Microsoft `DisconnectNamedPipe`.
+- **`node:net` can't choose a pipe client's impersonation level or query the server PID.** Use `CreateFileW` with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION` and `GetNamedPipeServerProcessId` (through `bun:ffi` in Bun), or .NET's `NamedPipeClientStream` with `TokenImpersonationLevel.Identification` [offline].
 - **`redscript-cli lint` exits 0 even on errors,** so parse its output for them. It also doesn't check `@wrapMethod` parameter lists on `cb` methods [offline].
 
 ## 3. Logging locations
@@ -36,19 +41,24 @@
 ## 4. The XF bridge
 
 - **Transport:** a Windows named pipe owned by the RED4ext plugin, off unless `[bridge] enabled = true`. It is local only (`PIPE_REJECT_REMOTE_CLIENTS`, user-only DACL, first-instance flag, random name), and uses newline-delimited JSON, protocol 1.
-- **Security:**
-  - A 256-bit token per session, published in `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json`.
-  - Only allowlisted methods exist, and writes are gated by `allow_writes`.
-  - A rate limit applies, and a kill switch covers the CET hotkey, `bridge.kill` and a `KILL` file.
-  - Every request is logged with a correlation ID.
+- **Security boundary:** the Windows user at medium integrity. Other users, remote machines, browsers and low-integrity or AppContainer processes can't reach the pipe. Same-user processes can, but they could already read or change the game's memory ([design §4](../research/runtime/runtime-bridge-design.md#4-safety-model)).
+- **Security measures:**
+  - A 256-bit token per session, published in `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json`. The plugin has no override for this folder.
+  - Only allowlisted methods exist, and writes are gated by `allow_writes`. `bridge.kill` is a *control* method, which only changes the bridge.
+  - Input is bounded: 64 KiB per line and 32 levels of nesting, and only scalar `id` values are echoed. Deep nesting would otherwise overflow the stack when a value is copied or serialised [offline: a 5,000-deep request crashed the host before the fix].
+  - A rate limit covers unauthenticated requests too. Five malformed or unauthenticated requests drop the connection. Every refusal is logged.
+  - A kill switch covers the CET hotkey, `bridge.kill` and a `KILL` file. Stopping is bounded and never waits for a client to read.
+  - Every request is logged with a correlation ID. No C++ exception can unwind into the game.
   - A named pipe was chosen over loopback HTTP because browsers and other network clients cannot reach it ([design §3.1](../research/runtime/runtime-bridge-design.md#31-choosing-the-external-transport)).
-- **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick). A task not started before its timeout is cancelled and never runs.
-- **Game access:** by RTTI name at run time, so a renamed function fails with `rtti_missing` instead of crashing. Two routes are in use:
+- **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick).
+  - A task not started before its timeout is cancelled and never runs.
+  - A task already running at the timeout gets a 1 s grace. If it still hasn't finished, the client gets `timeout_after_start` and the late completion is logged.
+- **Game access:** by RTTI name at run time, plus a check of the static flag, parameter types and return type before each call. A missing function fails with `rtti_missing` and a changed signature with `rtti_signature`. A function whose signature is unchanged but whose behaviour changed is not caught; the runtime pin is the main guard. Two routes are in use:
   - `GetPlayer;GameInstance` → `entEntity.GetWorldPosition`;
   - `ScriptGameInstance.GetPhotoModeSystem` → `gamePhotoModeSystem.IsPhotoModeActive`.
 
-  These names come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31.
-- **Clients:** Bun (`node:net` opens `\\.\pipe\…`, [offline] Bun 1.4.2) and PowerShell 7 (`NamedPipeClientStream`, which also checks the server PID).
+  These names and signatures come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31.
+- **Clients:** Bun (`bun:ffi` calls kernel32, [offline] Bun 1.4.2) and PowerShell 7 (`NamedPipeClientStream`). Both open the pipe at the Identification impersonation level. Both check the server PID against `session.json` before sending the token. `node:net` can do neither, which is why the Bun client doesn't use it.
 
 ## 5. What agents can and cannot do yet
 

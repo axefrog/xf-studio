@@ -11,6 +11,11 @@
 //  - Scripts: sdk->scripts->Add(handle, L"Scripts") adds <plugin dir>/Scripts to redscript's
 //    compilation (v1/Funcs.cpp:123-139, ScriptCompilationSystem.cpp:101-134), so the .reds files
 //    that declare our natives only compile when this DLL is loaded.
+//
+// Every function the game or RED4ext calls (exports, state callbacks, RTTI callbacks) runs its
+// body inside a catch-all: a C++ exception must never unwind into game code. A failure while
+// loading leaves the plugin loaded with the bridge off (fail closed), because returning false
+// after RTTI callbacks were registered would leave RED4ext holding pointers into an unloaded DLL.
 
 // RED4ext.hpp first: it includes Common.hpp, which switches the SDK to header-only mode.
 #include <RED4ext/RED4ext.hpp>
@@ -22,6 +27,7 @@
 #include <RED4ext/Api/v1/Sdk.hpp>
 #include <RED4ext/Api/v1/Version.hpp>
 
+#include "core/BuildInfo.hpp"
 #include "core/Win32.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Natives.hpp"
@@ -35,6 +41,25 @@ using namespace xfb::plugin;
 constexpr uint64_t kHeartbeatTicks = 60ull * 60ull * 10ull; // about every 10 minutes at 60 fps
 constexpr size_t kMaxTasksPerTick = 4;
 
+// Runs a callback body; logs and swallows anything it throws. Returns aFallback on failure.
+template<typename F>
+bool Guarded(const char* aWhere, bool aFallback, F&& aBody) noexcept
+{
+    try
+    {
+        return aBody();
+    }
+    catch (const std::exception& e)
+    {
+        log::Error("plugin.callback_failed", std::string("where=") + aWhere + " what=" + e.what());
+    }
+    catch (...)
+    {
+        log::Error("plugin.callback_failed", std::string("where=") + aWhere + " what=unknown");
+    }
+    return aFallback;
+}
+
 void OnStateEvent(int aState, const char* aEvent)
 {
     Get().gameState.store(aState);
@@ -43,74 +68,94 @@ void OnStateEvent(int aState, const char* aEvent)
 
 bool OnBaseInitEnter(RED4ext::CGameApplication*)
 {
-    OnStateEvent(0, "enter");
-    return true;
+    return Guarded("BaseInitialization.enter", true, [] {
+        OnStateEvent(0, "enter");
+        return true;
+    });
 }
 bool OnBaseInitExit(RED4ext::CGameApplication*)
 {
-    OnStateEvent(0, "exit");
-    return true;
+    return Guarded("BaseInitialization.exit", true, [] {
+        OnStateEvent(0, "exit");
+        return true;
+    });
 }
 bool OnInitEnter(RED4ext::CGameApplication*)
 {
-    OnStateEvent(1, "enter");
-    return true;
+    return Guarded("Initialization.enter", true, [] {
+        OnStateEvent(1, "enter");
+        return true;
+    });
 }
 bool OnInitExit(RED4ext::CGameApplication*)
 {
-    OnStateEvent(1, "exit");
-    return true;
+    return Guarded("Initialization.exit", true, [] {
+        OnStateEvent(1, "exit");
+        return true;
+    });
 }
 
 bool OnRunningEnter(RED4ext::CGameApplication*)
 {
-    OnStateEvent(2, "enter");
-    Get().queue.SetPumping(true);
-    return true;
+    return Guarded("Running.enter", true, [] {
+        OnStateEvent(2, "enter");
+        Get().queue.SetPumping(true);
+        return true;
+    });
 }
 
 bool OnRunningUpdate(RED4ext::CGameApplication*)
 {
-    auto& state = Get();
-    const auto tick = state.runningTicks.fetch_add(1) + 1;
-    if (tick == 1)
-    {
-        log::Info("game.running_first_tick", "game thread is pumping bridge requests");
-    }
-    else if (tick % kHeartbeatTicks == 0)
-    {
-        log::Debug("game.heartbeat", "running_ticks=" + std::to_string(tick));
-    }
-    const auto ran = state.queue.Drain(kMaxTasksPerTick);
-    if (ran > 0)
-    {
-        log::Debug("game.drained", "tasks=" + std::to_string(ran));
-    }
-    return false; // stay registered (RED4ext removes callbacks that return true)
+    // false keeps the callback registered (RED4ext removes callbacks that return true),
+    // including after a failure.
+    return Guarded("Running.update", false, [] {
+        auto& state = Get();
+        const auto tick = state.runningTicks.fetch_add(1) + 1;
+        if (tick == 1)
+        {
+            log::Info("game.running_first_tick", "game thread is pumping bridge requests");
+        }
+        else if (tick % kHeartbeatTicks == 0)
+        {
+            log::Debug("game.heartbeat", "running_ticks=" + std::to_string(tick));
+        }
+        const auto ran = state.queue.Drain(kMaxTasksPerTick);
+        if (ran > 0)
+        {
+            log::Debug("game.drained", "tasks=" + std::to_string(ran));
+        }
+        return false;
+    });
 }
 
 bool OnRunningExit(RED4ext::CGameApplication*)
 {
-    Get().queue.SetPumping(false);
-    OnStateEvent(2, "exit");
-    return true;
+    return Guarded("Running.exit", true, [] {
+        Get().queue.SetPumping(false);
+        OnStateEvent(2, "exit");
+        return true;
+    });
 }
 
 bool OnShutdownEnter(RED4ext::CGameApplication*)
 {
-    OnStateEvent(3, "enter");
-    auto& state = Get();
-    state.queue.Close();
-    if (state.bridge)
-    {
-        state.bridge->Stop("game_shutdown");
-    }
-    return true;
+    return Guarded("Shutdown.enter", true, [] {
+        OnStateEvent(3, "enter");
+        auto& state = Get();
+        state.queue.Close();
+        if (state.bridge)
+        {
+            state.bridge->Stop("game_shutdown");
+        }
+        return true;
+    });
 }
 bool OnShutdownExit(RED4ext::CGameApplication*)
 {
-    OnStateEvent(3, "exit");
-    return true;
+    return Guarded("Shutdown.exit", true, [] {
+        OnStateEvent(3, "exit");
+        return true;
+    });
 }
 
 void RegisterStates(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
@@ -134,6 +179,22 @@ void RegisterStates(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* a
     }
 }
 
+void OnRegisterTypes()
+{
+    Guarded("rtti.register", true, [] {
+        RegisterTypes();
+        return true;
+    });
+}
+
+void OnPostRegisterTypes()
+{
+    Guarded("rtti.post_register", true, [] {
+        PostRegisterTypes();
+        return true;
+    });
+}
+
 std::string SemVerText(const RED4ext::v1::SemVer* aVersion)
 {
     if (!aVersion)
@@ -142,6 +203,22 @@ std::string SemVerText(const RED4ext::v1::SemVer* aVersion)
     }
     return std::to_string(aVersion->major) + "." + std::to_string(aVersion->minor) + "." +
            std::to_string(aVersion->patch);
+}
+
+void StartBridge(State& aState)
+{
+    std::string error;
+    aState.bridge = std::make_unique<Bridge>(aState.config, aState.session, aState.queue);
+    RegisterMethods(aState.bridge->GetDispatcher());
+    if (aState.bridge->Start(error))
+    {
+        log::Info("bridge.enabled", std::string("allow_writes=") + (aState.config.allowWrites ? "true" : "false"));
+    }
+    else
+    {
+        log::Error("bridge.start_failed", error);
+        aState.bridge.reset();
+    }
 }
 
 bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
@@ -168,11 +245,14 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     win32::FileVersion(win32::ProcessImagePath(), state.gameFileVersion);
 
     log::Info("plugin.load", std::string("name=\"XF Runtime Bridge\" version=") + XFB_VERSION_STRING +
+                                 " build=" + std::string(BuildCommit()) + (BuildDirty() ? "+dirty" : "") +
                                  " protocol=" + std::to_string(kProtocolVersion) + " sdk=" +
                                  std::to_string(RED4EXT_VER_MAJOR) + "." + std::to_string(RED4EXT_VER_MINOR) + "." +
                                  std::to_string(RED4EXT_VER_PATCH) + " game_product=" + state.gameProductVersion +
                                  " game_file=" + state.gameFileVersion + " pid=" +
                                  std::to_string(state.session.processId));
+    // The same marker tools/package.ts reads from the DLL file, so a log names its exact build.
+    log::Info("plugin.build", BuildMarker());
     log::Info("plugin.config", DescribeConfig(state.config));
     for (const auto& warning : state.config.warnings)
     {
@@ -182,8 +262,8 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     RegisterStates(aHandle, aSdk);
 
     auto* rtti = RED4ext::CRTTISystem::Get();
-    rtti->AddRegisterCallback(&RegisterTypes);
-    rtti->AddPostRegisterCallback(&PostRegisterTypes);
+    rtti->AddRegisterCallback(&OnRegisterTypes);
+    rtti->AddPostRegisterCallback(&OnPostRegisterTypes);
     log::Info("plugin.rtti_callbacks", "registered=true");
 
     if (aSdk->scripts && aSdk->scripts->Add(aHandle, L"Scripts"))
@@ -195,19 +275,13 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
         log::Error("plugin.scripts", "path=<plugin dir>/Scripts added_to_redscript=false (folder missing?)");
     }
 
-    if (state.config.bridgeEnabled)
+    if (state.config.bridgeEnabled && !state.session.token.empty())
     {
-        state.bridge = std::make_unique<Bridge>(state.config, state.session, state.queue);
-        RegisterMethods(state.bridge->GetDispatcher());
-        if (state.bridge->Start(error))
-        {
-            log::Info("bridge.enabled", std::string("allow_writes=") + (state.config.allowWrites ? "true" : "false"));
-        }
-        else
-        {
-            log::Error("bridge.start_failed", error);
-            state.bridge.reset();
-        }
+        StartBridge(state);
+    }
+    else if (state.config.bridgeEnabled)
+    {
+        log::Error("bridge.start_failed", "no session (see plugin.session_failed); the bridge stays off");
     }
     else
     {
@@ -230,24 +304,56 @@ void Unload()
     log::SetSink(nullptr);
     state.sink.reset();
 }
+
+// Fail closed: whatever went wrong, no pipe stays open.
+void DisableBridgeAfterFailure() noexcept
+{
+    try
+    {
+        auto& state = Get();
+        state.queue.Close();
+        if (state.bridge)
+        {
+            state.bridge->Stop("load_failed");
+            state.bridge.reset();
+        }
+    }
+    catch (...)
+    {
+    }
+}
 } // namespace
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
                                         const RED4ext::v1::Sdk* aSdk)
 {
-    switch (aReason)
+    try
     {
-    case RED4ext::v1::EMainReason::Load:
-        return Load(aHandle, aSdk);
-    case RED4ext::v1::EMainReason::Unload:
-        Unload();
-        break;
+        switch (aReason)
+        {
+        case RED4ext::v1::EMainReason::Load:
+            return Load(aHandle, aSdk);
+        case RED4ext::v1::EMainReason::Unload:
+            Unload();
+            break;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        log::Error("plugin.main_failed", std::string("what=") + e.what() + " bridge=disabled");
+        DisableBridgeAfterFailure();
+    }
+    catch (...)
+    {
+        log::Error("plugin.main_failed", "what=unknown bridge=disabled");
+        DisableBridgeAfterFailure();
     }
     return true;
 }
 
 RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
+    // Constant data only; nothing here can throw.
     aInfo->name = L"XF Runtime Bridge";
     aInfo->author = L"XF Studio";
     aInfo->version = RED4EXT_V1_SEMVER(XFB_VERSION_MAJOR, XFB_VERSION_MINOR, XFB_VERSION_PATCH);

@@ -2,9 +2,11 @@
 
 // One bridge session per game process: identity, secret and discovery file.
 //
-// Discovery: <runtime dir>/session.json (default %LOCALAPPDATA%\XFStudio\runtime-bridge) holds
-// the pipe name and the per-session token. The folder is in the user's profile, so its default
-// ACL already limits it to the user; the token never appears in any log.
+// Discovery: <runtime dir>/session.json (in game always %LOCALAPPDATA%\XFStudio\runtime-bridge)
+// holds the pipe name and the per-session token. The folder is in the user's profile, so its
+// default ACL limits it to the user (plus SYSTEM and administrators); the token never appears
+// in any log. The security boundary is the Windows user: any process running as that user at
+// medium integrity can read the token, just as it could read or change the game's memory.
 // Kill switch: the file <runtime dir>/KILL stops the bridge while present.
 
 #include <cstdint>
@@ -28,6 +30,8 @@ struct Session
     std::filesystem::path KillFile() const;
 };
 
-bool CreateSession(Session& aOut, std::string& aError);
+// aRuntimeDirOverride is for the offline self-test only. The plugin never passes it, and no
+// environment variable changes the folder, so in game it is always the LOCALAPPDATA one.
+bool CreateSession(Session& aOut, std::string& aError, const std::filesystem::path& aRuntimeDirOverride = {});
 bool KillFilePresent(const Session& aSession);
 } // namespace xfb

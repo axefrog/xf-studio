@@ -8,6 +8,9 @@ namespace
 {
 using json = nlohmann::json;
 
+constexpr const char* kInternalError =
+    R"({"v":1,"id":null,"cid":"-","ok":false,"error":{"code":"failed","message":"internal error"}})";
+
 json ErrorResponse(const json& aId, const std::string& aCid, const std::string& aCode, const std::string& aMessage)
 {
     return json{{"v", kProtocolVersion},
@@ -31,7 +34,86 @@ bool ConstantTimeEquals(const std::string& aLeft, const std::string& aRight)
     }
     return diff == 0;
 }
+
+// Only scalar ids are echoed; anything else (arrays, objects) is answered with id null.
+bool IsEchoableId(const json& aId)
+{
+    return aId.is_number() || aId.is_string() || aId.is_null();
+}
 } // namespace
+
+std::string_view AccessName(Access aAccess)
+{
+    switch (aAccess)
+    {
+    case Access::Read:
+        return "read";
+    case Access::Write:
+        return "write";
+    case Access::Control:
+        return "control";
+    }
+    return "read";
+}
+
+size_t JsonNestingDepth(std::string_view aText, size_t aLimit)
+{
+    size_t depth = 0;
+    size_t deepest = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (const auto c : aText)
+    {
+        if (inString)
+        {
+            if (escaped)
+            {
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
+            {
+                inString = false;
+            }
+            continue;
+        }
+        switch (c)
+        {
+        case '"':
+            inString = true;
+            break;
+        case '[':
+        case '{':
+            if (++depth > deepest)
+            {
+                deepest = depth;
+                if (deepest > aLimit)
+                {
+                    return deepest;
+                }
+            }
+            break;
+        case ']':
+        case '}':
+            if (depth > 0)
+            {
+                --depth;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return deepest;
+}
+
+std::string SerializeJson(const json& aValue)
+{
+    return aValue.dump(-1, ' ', false, json::error_handler_t::replace);
+}
 
 bool IsValidCid(const std::string& aCid)
 {
@@ -105,9 +187,9 @@ json Dispatcher::Describe() const
     json methods = json::array();
     for (const auto& [name, spec] : m_methods)
     {
-        const bool enabled = spec.access == Access::Read || m_config.allowWrites;
+        const bool enabled = spec.access != Access::Write || m_config.allowWrites;
         methods.push_back({{"name", name},
-                           {"access", spec.access == Access::Read ? "read" : "write"},
+                           {"access", AccessName(spec.access)},
                            {"thread", spec.runOn == RunOn::GameThread ? "game" : "bridge"},
                            {"enabled", enabled},
                            {"summary", spec.summary}});
@@ -141,10 +223,52 @@ std::string Dispatcher::NextCid()
     return "n" + std::to_string(m_cidCounter.fetch_add(1) + 1);
 }
 
-std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid) noexcept
+{
+    try
+    {
+        return HandleUnchecked(aLine, aClientPid);
+    }
+    catch (const std::exception& e)
+    {
+        log::Error("bridge.handle_failed", std::string("what=") + e.what() +
+                                               " client_pid=" + std::to_string(aClientPid));
+    }
+    catch (...)
+    {
+        log::Error("bridge.handle_failed", "what=unknown client_pid=" + std::to_string(aClientPid));
+    }
+    try
+    {
+        return {kInternalError, false};
+    }
+    catch (...)
+    {
+        return {};
+    }
+}
+
+DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aClientPid)
 {
     const auto started = std::chrono::steady_clock::now();
     m_requests.fetch_add(1);
+    const auto pidText = " client_pid=" + std::to_string(aClientPid);
+
+    // Every refusal is logged under its own event name; `rejected` marks malformed or
+    // unauthenticated requests, which count towards the transport's per-connection limit.
+    const auto refuse = [&](const char* aEvent, const json& aId, const std::string& aCid, const std::string& aCode,
+                            const std::string& aMessage, bool aRejected, const std::string& aDetail = {}) {
+        log::Warn(aEvent, "code=" + aCode + (aDetail.empty() ? "" : " " + aDetail) + pidText, aCid);
+        return DispatchResult{SerializeJson(ErrorResponse(aId, aCid, aCode, aMessage)), aRejected};
+    };
+
+    const auto depth = JsonNestingDepth(aLine, kMaxJsonDepth);
+    if (depth > kMaxJsonDepth)
+    {
+        return refuse("bridge.bad_request", nullptr, "-", "bad_request",
+                      "request nests deeper than " + std::to_string(kMaxJsonDepth) + " levels", true,
+                      "reason=too_deep bytes=" + std::to_string(aLine.size()));
+    }
 
     json request;
     try
@@ -153,84 +277,88 @@ std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
     }
     catch (const std::exception&)
     {
-        log::Warn("bridge.bad_request", "reason=invalid_json bytes=" + std::to_string(aLine.size()) +
-                                            " client_pid=" + std::to_string(aClientPid));
-        return ErrorResponse(nullptr, "-", "bad_request", "request is not valid JSON").dump();
+        return refuse("bridge.bad_request", nullptr, "-", "bad_request", "request is not valid JSON (UTF-8)", true,
+                      "reason=invalid_json bytes=" + std::to_string(aLine.size()));
     }
     if (!request.is_object())
     {
-        return ErrorResponse(nullptr, "-", "bad_request", "request must be a JSON object").dump();
+        return refuse("bridge.bad_request", nullptr, "-", "bad_request", "request must be a JSON object", true,
+                      "reason=not_object");
     }
 
-    const json id = request.contains("id") ? request["id"] : json(nullptr);
+    const auto idIt = request.find("id");
+    const json id = idIt != request.end() && IsEchoableId(*idIt) ? *idIt : json(nullptr);
     std::string cid;
-    if (request.contains("cid") && request["cid"].is_string() && IsValidCid(request["cid"].get<std::string>()))
+    const auto cidIt = request.find("cid");
+    if (cidIt != request.end() && cidIt->is_string() && IsValidCid(cidIt->get<std::string>()))
     {
-        cid = request["cid"].get<std::string>();
+        cid = cidIt->get<std::string>();
     }
     else
     {
         cid = NextCid();
     }
 
-    if (request.contains("v") && request["v"] != kProtocolVersion)
+    const auto tokenIt = request.find("token");
+    const bool authenticated = tokenIt != request.end() && tokenIt->is_string() &&
+                               ConstantTimeEquals(tokenIt->get<std::string>(), m_session.token);
+
+    // The rate limit covers every well-formed request, authenticated or not, so a client
+    // guessing tokens is throttled too. The reply is the same either way.
+    if (!TakeRateToken())
     {
-        return ErrorResponse(id, cid, "bad_version", "this bridge speaks protocol 1").dump();
+        return refuse("bridge.rate_limited", id, cid, "rate_limited",
+                      "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second",
+                      !authenticated, authenticated ? "" : "authenticated=false");
     }
 
-    // Token first: an unauthenticated caller learns nothing else about the bridge.
-    const auto tokenIt = request.find("token");
-    if (tokenIt == request.end() || !tokenIt->is_string() ||
-        !ConstantTimeEquals(tokenIt->get<std::string>(), m_session.token))
+    // Token before anything else: an unauthenticated caller learns nothing about the bridge.
+    if (!authenticated)
     {
-        log::Warn("bridge.unauthorized", "client_pid=" + std::to_string(aClientPid), cid);
-        return ErrorResponse(id, cid, "unauthorized", "missing or wrong session token").dump();
+        return refuse("bridge.unauthorized", id, cid, "unauthorized", "missing or wrong session token", true);
+    }
+
+    const auto versionIt = request.find("v");
+    if (versionIt != request.end() && *versionIt != kProtocolVersion)
+    {
+        return refuse("bridge.bad_version", id, cid, "bad_version", "this bridge speaks protocol 1", false);
     }
 
     if (m_killed.load())
     {
-        return ErrorResponse(id, cid, "killed", "bridge stopped by kill switch: " + KillReason()).dump();
-    }
-
-    if (!TakeRateToken())
-    {
-        log::Warn("bridge.rate_limited", "client_pid=" + std::to_string(aClientPid), cid);
-        return ErrorResponse(id, cid, "rate_limited",
-                             "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second")
-            .dump();
+        return refuse("bridge.killed_refused", id, cid, "killed", "bridge stopped by kill switch: " + KillReason(),
+                      false);
     }
 
     const auto methodIt = request.find("method");
     if (methodIt == request.end() || !methodIt->is_string())
     {
-        return ErrorResponse(id, cid, "bad_request", "missing method").dump();
+        return refuse("bridge.bad_request", id, cid, "bad_request", "missing method", true, "reason=no_method");
     }
     const auto methodName = methodIt->get<std::string>();
     const auto specIt = m_methods.find(methodName);
     if (specIt == m_methods.end())
     {
-        log::Warn("bridge.unknown_method", "method=" + methodName, cid);
-        return ErrorResponse(id, cid, "unknown_method", "method is not on the allowlist").dump();
+        return refuse("bridge.unknown_method", id, cid, "unknown_method", "method is not on the allowlist", false,
+                      "method=" + methodName);
     }
     const auto& spec = specIt->second;
-    const auto accessName = spec.access == Access::Read ? "read" : "write";
+    const std::string accessName(AccessName(spec.access));
 
-    log::Info("bridge.request", "method=" + methodName + " access=" + accessName +
-                                    " client_pid=" + std::to_string(aClientPid),
-              cid);
+    log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
 
     if (spec.access == Access::Write && !m_config.allowWrites)
     {
-        log::Warn("bridge.write_refused", "method=" + methodName + " reason=allow_writes_false", cid);
-        return ErrorResponse(id, cid, "writes_disabled",
-                             "write methods are off; set [bridge] allow_writes = true in config.ini")
-            .dump();
+        return refuse("bridge.write_refused", id, cid, "writes_disabled",
+                      "write methods are off; set [bridge] allow_writes = true in config.ini", false,
+                      "method=" + methodName + " reason=allow_writes_false");
     }
 
     MethodContext context;
     context.cid = cid;
     context.clientPid = aClientPid;
-    context.params = request.contains("params") && request["params"].is_object() ? request["params"] : json::object();
+    const auto paramsIt = request.find("params");
+    context.params = paramsIt != request.end() && paramsIt->is_object() ? *paramsIt : json::object();
 
     json response;
     std::string code = "ok";
@@ -245,6 +373,7 @@ std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
             auto fn = spec.fn;
             json envelope;
             std::string error;
+            const auto grace = GameThreadQueue::kDefaultRunningGrace;
             const auto result = m_queue.Run(
                 [fn, context]() -> json {
                     try
@@ -256,7 +385,8 @@ std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
                         return json{{"ok", false}, {"code", e.code}, {"message", e.what()}};
                     }
                 },
-                std::chrono::milliseconds(m_config.requestTimeoutMs), envelope, error);
+                std::chrono::milliseconds(m_config.requestTimeoutMs), envelope, error,
+                "method=" + methodName + " cid=" + cid, grace);
 
             switch (result)
             {
@@ -276,7 +406,16 @@ std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
                 code = "timeout";
                 response = ErrorResponse(id, cid, code,
                                          "the game thread did not start the request within " +
-                                             std::to_string(m_config.requestTimeoutMs) + " ms; it was cancelled");
+                                             std::to_string(m_config.requestTimeoutMs) +
+                                             " ms; it was cancelled and will never run");
+                break;
+            case QueueResult::TimeoutAfterStart:
+                code = "timeout_after_start";
+                response = ErrorResponse(
+                    id, cid, code,
+                    "the request started on the game thread but had not finished after " +
+                        std::to_string(m_config.requestTimeoutMs + grace.count()) + " ms (" + error +
+                        "); it may still complete, and the plugin log records it (game.task_completed_late)");
                 break;
             case QueueResult::QueueFull:
                 code = "busy";
@@ -309,10 +448,10 @@ std::string Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
     const auto level = code == "ok" ? Level::Info : Level::Warn;
     log::Write(level, "native", cid, "bridge.response",
                "method=" + methodName + " code=" + code + " ms=" + std::to_string(elapsedMs));
-    if (code == "ok")
+    if (code == "ok" && log::MinLevel() == Level::Debug)
     {
-        log::Debug("bridge.result", "method=" + methodName + " result=" + response["result"].dump(), cid);
+        log::Debug("bridge.result", "method=" + methodName + " result=" + SerializeJson(response["result"]), cid);
     }
-    return response.dump();
+    return {SerializeJson(response), false};
 }
 } // namespace xfb

@@ -1,6 +1,6 @@
 # Runtime bridge design (runtime access baseline)
 
-**Status: baseline built, not yet run in the game.** The plugin DLL builds, the bridge core passes an offline self-test through both clients, and the redscript and Lua layers pass offline checks. Nothing here has been observed in the running game yet; the [one-session test card](runtime-bridge-test-card.md) asks for that. Project: [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md). Consolidated answers live in [knowledge/runtime-access.md](../../knowledge/runtime-access.md).
+**Status: baseline built and hardened, not yet run in the game.** The plugin DLL builds, and the bridge core passes an offline self-test through both clients, including the cases added for the security review ([code-health ledger](../authoring/code-health.md), RB-01..11). The redscript and Lua layers pass offline checks. Nothing here has been observed in the running game yet; the [one-session test card](runtime-bridge-test-card.md) asks for that. Project: [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md). Consolidated answers live in [knowledge/runtime-access.md](../../knowledge/runtime-access.md).
 
 Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** read in a clone, **[doc]** vendor documentation outside the clones, **[offline]** exercised by our own build or self-test, **[runtime]** seen in the game (none yet), **[unverified]**.
 
@@ -60,7 +60,7 @@ The alternative native layer **red4ext-rs** (Rust, MIT) supports natives, game-s
 
 | Option | Security | Stability | Update resilience | Verdict |
 |---|---|---|---|---|
-| **Named pipe hosted by the RED4ext plugin** | Local only by construction: `PIPE_REJECT_REMOTE_CLIENTS` refuses SMB clients; an explicit DACL grants only the game's user (the default pipe DACL also grants Everyone read) [doc] Microsoft `CreateNamedPipe` and "Named Pipe Security and Access Rights". Browsers cannot open pipes, so no cross-site or DNS-rebinding exposure. No firewall prompt. | One overlapped-I/O thread, bounded messages, idle timeout; `Stop` never blocks. | Transport and protocol code never touches the game; only the handful of RTTI calls can break on a patch, and they fail soft. | **Chosen.** Bun 1.4.2 opens it through `node:net` and PowerShell through `NamedPipeClientStream` [offline]. |
+| **Named pipe hosted by the RED4ext plugin** | Local only by construction: `PIPE_REJECT_REMOTE_CLIENTS` refuses SMB clients; an explicit DACL grants only the game's user (the default pipe DACL also grants Everyone read) [doc] Microsoft `CreateNamedPipe` and "Named Pipe Security and Access Rights". Browsers cannot open pipes, so no cross-site or DNS-rebinding exposure. No firewall prompt. | One overlapped-I/O thread, bounded messages, idle timeout; `Stop` is bounded (about 0.5 s at most in the self-test, warning and cancelling I/O past 1 s) and never waits for a client to read. | Transport and protocol code never touches the game. Only the handful of RTTI calls can break on a patch. A missing function or a changed signature is refused with an error, but a function that keeps its signature and changes behaviour is not caught (§6). | **Chosen.** Bun 1.4.2 opens it through `bun:ffi` (kernel32) and PowerShell through `NamedPipeClientStream`, both at the Identification impersonation level [offline]. |
 | Loopback TCP or HTTP/WebSocket from the plugin | Any local process, including every browser tab, can reach `127.0.0.1`; needs origin checks, a token and care against request smuggling and DNS rebinding; Windows may prompt for firewall access. | Same threading as the pipe, plus a socket stack and (for HTTP) a server library. | Same. | Rejected for the baseline; reconsider only if a browser client must connect directly. |
 | File exchange (command and answer files) | Relies on folder ACLs; easy to audit. | Polling latency; partial writes; clean-up. | Good. | Kept only for the kill switch (`KILL` file) and discovery (`session.json`). |
 | CET-hosted endpoint | CET's sandbox has no sockets or HTTP [source] CET `LuaSandbox.cpp:10-79, 152-161`. | — | — | Impossible. |
@@ -68,13 +68,31 @@ The alternative native layer **red4ext-rs** (Rust, MIT) supports natives, game-s
 
 ### 3.2 Protocol 1
 
-One JSON object per line each way. Request `{"v":1,"id":…,"token":"…","method":"…","cid":"…","params":{}}`; response `{"v":1,"id":…,"cid":…,"ok":true,"result":…}` or `{"ok":false,"error":{"code","message"}}`. Checks run in this order: parse, token (constant-time compare), kill switch, rate limit, allowlist, write gate, then the method runs on its declared thread. Error codes: `bad_request`, `bad_version`, `unauthorized`, `killed`, `rate_limited`, `unknown_method`, `writes_disabled`, `game_not_running`, `timeout`, `busy`, `too_large`, `game_not_ready`, `rtti_missing`, `call_failed`, `script_layer_missing`, `failed`. Implemented in `native/src/core/Dispatcher.cpp`.
+One JSON object per line each way. Request `{"v":1,"id":…,"token":"…","method":"…","cid":"…","params":{}}`; response `{"v":1,"id":…,"cid":…,"ok":true,"result":…}` or `{"ok":false,"error":{"code","message"}}`. Only a number, string or null `id` is echoed; any other `id` is answered with `null`.
+
+Checks run in this order:
+1. The transport caps a line at 64 KiB.
+2. A nesting pre-scan refuses anything deeper than 32 levels. Parsing and destruction are iterative in nlohmann/json 3.12, but copying, comparing and serialising a value recurse, so a deeply nested value could overflow the thread's stack.
+3. Parse (strict UTF-8).
+4. Rate limit, for every well-formed request, authenticated or not.
+5. Token (constant-time compare).
+6. Protocol version.
+7. Kill switch.
+8. Allowlist.
+9. Write gate.
+10. The method runs on its declared thread.
+
+Every refusal is logged under its own event name. Malformed and unauthenticated requests count as rejected: the fifth on one connection drops it, and the server then waits 1 s before accepting again. Responses and logs serialise invalid UTF-8 as U+FFFD instead of throwing.
+
+Error codes: `bad_request`, `bad_version`, `unauthorized`, `killed`, `rate_limited`, `unknown_method`, `writes_disabled`, `game_not_running`, `timeout`, `timeout_after_start`, `busy`, `too_large`, `game_not_ready`, `rtti_missing`, `rtti_signature`, `call_failed`, `script_layer_missing`, `failed`. Implemented in `native/src/core/Dispatcher.cpp` and `PipeServer.cpp`.
+
+Access classes: **read** observes the game, **write** changes it (refused unless `allow_writes`), and **control** changes only the bridge itself. `bridge.kill` is the only control method; it can only take access away, so it stays available with writes off.
 
 | Method | Access | Thread | What it proves |
 |---|---|---|---|
 | `ping` | read | bridge | Transport, token, session id |
-| `bridge.info`, `bridge.methods` | read | bridge | Versions, status, allowlist with access classes |
-| `bridge.kill` | kill | bridge | Kill switch from the client side |
+| `bridge.info`, `bridge.methods` | read | bridge | Versions (including the build commit), status, allowlist with access classes |
+| `bridge.kill` | control | bridge | Kill switch from the client side |
 | `game.version`, `game.state` | read | bridge | `sdk->runtime` product version, exe file version, RED4ext state and tick count |
 | `layers.status` | read | bridge | Announcements from redscript, CET and the TweakXL marker |
 | `player.position` | read | game | `GetPlayer;GameInstance` then `entEntity.GetWorldPosition` by RTTI |
@@ -82,23 +100,45 @@ One JSON object per line each way. Request `{"v":1,"id":…,"token":"…","metho
 | `script.describe` | read | game | Native → redscript call (`XFRuntimeBridge.XFBridgeQuery.DescribeJson`) |
 | `diag.write_probe` | write | game | The write gate and audit log, with no game effect |
 
-Discovery: `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json` holds `pid`, `pipe`, `sid`, `token`, `started_at`, `plugin_version` and `allow_writes`; it exists only while the bridge listens. The folder sits in the user profile, so MO2's virtual file system does not redirect it and its default ACL keeps it private to the user. The PowerShell client also checks `GetNamedPipeServerProcessId` against `pid` before sending the token, which defeats a pipe-name squatter.
+Discovery: `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json` holds `pid`, `pipe`, `sid`, `token`, `started_at`, `plugin_version` and `allow_writes`; it exists only while the bridge listens. The folder sits in the user profile, so MO2's virtual file system does not redirect it, and its default ACL keeps it private to the user (plus SYSTEM and administrators). The plugin has no override for this folder; only the self-test passes its own folder explicitly. Both clients check `GetNamedPipeServerProcessId` against `pid` before sending the token, which defeats a pipe-name squatter. They also open the pipe at the Identification impersonation level, so a squatter could not impersonate the client either.
 
 ### 3.3 Threading
 
-The pipe thread never touches game objects. Game-thread methods go through `GameThreadQueue` (capacity 16), drained at most four per tick from the plugin's `Running` `OnUpdate`. A request not started within `request_timeout_ms` (default 2000) is cancelled and never runs, so a late write cannot happen after the client gave up. RED4ext removes a state callback that returns `true` [source] `StateSystem.cpp:128-160`, although the SDK comment says the Running result does not matter (`Api/v1/GameState.hpp`); the plugin therefore returns `false`. Whether calling script functions from the Running `OnUpdate` is safe in every game phase is **[unverified]**; the first session tests it.
+The pipe thread never touches game objects. Game-thread methods go through `GameThreadQueue` (capacity 16), drained at most four per tick from the plugin's `Running` `OnUpdate`. Each task has one atomic state (queued → running → done, or queued → cancelled), and the game thread and the waiter each change it with a compare-and-swap, so exactly one of them wins:
+- A request not started within `request_timeout_ms` (default 2000) is cancelled and never runs.
+- A request already running at the timeout gets a further 1 s grace. If it still hasn't finished, the client gets `timeout_after_start` ("it may still complete"), and the plugin logs `game.task_completed_late` when it does.
+
+So the client is never told "cancelled" about a request that then runs. Stopping the bridge (kill switch, shutdown, unload) closes the queue: queued tasks are cancelled and a waiter on a running task is released at once, which keeps the stop bounded.
+
+Every function the game or RED4ext calls (exports, state and RTTI callbacks, natives) and both bridge threads run inside a catch-all that logs the failure. A C++ exception never unwinds into game code, and a failed load leaves the bridge off.
+
+RED4ext removes a state callback that returns `true` [source] `StateSystem.cpp:128-160`, although the SDK comment says the Running result does not matter (`Api/v1/GameState.hpp`); the plugin therefore returns `false`. Whether calling script functions from the Running `OnUpdate` is safe in every game phase is **[unverified]**; the first session tests it.
 
 ## 4. Safety model
+
+**The security boundary is the Windows user at medium integrity.** The bridge keeps out:
+- other Windows users (DACL);
+- remote machines (`PIPE_REJECT_REMOTE_CLIENTS`);
+- browsers and web pages (pipes aren't reachable from the web);
+- low-integrity and AppContainer processes (not in the DACL, and the pipe's default medium mandatory label refuses write-up).
+
+It doesn't defend against other processes running as the same user at medium integrity. Such a process can read `session.json` and connect, but it could equally read or write the game's memory or inject a DLL, so the token adds no boundary there. The token and the server-PID check exist to stop accidental cross-talk (a stale session, another game instance) and a squatter taking over the pipe name. Everything below hardens the bridge within that boundary: bounded input, no crash from malformed requests, and an audit trail.
 
 | Rule | Implementation | Status |
 |---|---|---|
 | Local only | Named pipe with `PIPE_REJECT_REMOTE_CLIENTS`, a user-only DACL and `FILE_FLAG_FIRST_PIPE_INSTANCE`; the name has a random suffix | [offline] clients connect; remote refusal is [doc] |
 | Per-session token | 256-bit `BCryptGenRandom` token in `session.json`; required on every request; never logged | [offline] wrong or missing token refused; log scanned for the token |
+| Right server, no impersonation | Both clients check `GetNamedPipeServerProcessId` against `session.json`'s `pid` before sending the token, and open the pipe at the Identification impersonation level | [offline] both clients refuse a pipe served by another PID (exit 3) and send nothing |
+| Bounded input | 64 KiB per line; 32 levels of nesting (pre-scan before parsing); only scalar `id` values echoed; strict UTF-8 parse | [offline] a 5,000-deep request (which crashed the host before the fix) is refused and the host keeps answering |
+| Rejection limit | Malformed or unauthenticated requests are rate-limited like any other; the fifth on one connection drops it, and the server waits 1 s before accepting again; every refusal is logged | [offline] |
+| No exceptions into the game | Catch-alls on every export, state and RTTI callback, native and bridge thread; serialisation replaces invalid UTF-8; log text is cut on UTF-8 character boundaries | [offline] invalid UTF-8 in a result; unit checks for the log cut |
+| Bounded stop | No `FlushFileBuffers`; every wait watches the stop event except a fixed 0.5 s linger that lets a dropped client read its last reply; the queue releases its waiters; `Stop` warns and cancels I/O past 1 s | [offline] with a client that never reads, `Stop` took about 510 ms (kill, mostly the linger) and 0 ms (shutdown with a full pipe) |
 | Off unless enabled | `[bridge] enabled = false` by default: no pipe, no session file | [offline] default zip ships it off |
 | Read-only by default | Every method declares read or write; writes are refused unless `[bridge] allow_writes = true` | [offline] |
 | Allowlist | Only registered methods exist; nothing evaluates client-supplied code | [offline] |
-| Audit | Every request and response is logged with `cid`, method, access class, client PID, outcome and duration | [offline] |
-| Rate limit | Token bucket, `max_requests_per_second` (default 20, burst 40) | [offline] |
+| Audit | Every request, response and refusal is logged with `cid`, method, access class, client PID, outcome and duration | [offline] |
+| Provenance | The DLL carries `XFB_BUILD=<commit>;dirty=<0\|1>` (also logged as `evt=plugin.build` and returned by `bridge.info`); `package.ts` refuses a dirty tree or a DLL not built cleanly from `HEAD`; each zip ships `THIRD_PARTY_NOTICES.txt` | [offline] |
+| Rate limit | Token bucket, `max_requests_per_second` (default 20, burst 40), applied before the token check so it covers unauthenticated requests too | [offline] |
 | Kill switch | CET hotkey (`XFBridge_Kill`), `bridge.kill`, or a `KILL` file beside `session.json`; refuses everything, drops the client, removes `session.json`, closes the listener until restart | [offline] method and file; hotkey [unverified] |
 | Visible indicator | CET draws "XF bridge: listening (read-only / writes ON)" whenever the bridge listens | [unverified] |
 | Dedicated profile and saves | A dedicated MO2 profile; disposable test saves; never overwrite the player's saves | Process rule (§7.4) |
@@ -115,7 +155,7 @@ The pipe thread never touches game objects. Game-thread methods go through `Game
 | CET mod | `bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/xf_runtime_bridge.log` | 5 MiB × 3, appended across launches | Release builds flush only on warnings or at shutdown [source] CET `Utils.cpp:105-118`, `Utils.h:16-18` |
 | Self-test | stdout | — | Same line format |
 
-**Line format:** `sid=<session> lvl=<level> layer=<native|redscript|cet|tweakxl> cid=<correlation id> evt=<event> key=value …`. Every line is cut at 2 KiB with control characters replaced (`core/Log.cpp`).
+**Line format:** `sid=<session> lvl=<level> layer=<native|redscript|cet|tweakxl> cid=<correlation id> evt=<event> key=value …`. Every line is cut at 2 KiB on a UTF-8 character boundary, with control characters and invalid UTF-8 bytes replaced (`core/Log.cpp`); logging never throws.
 
 **Correlation IDs:**
 - Clients choose `cid` (a safe charset, up to 64 characters) or get `n<k>`.
@@ -127,7 +167,7 @@ Nothing logs per frame except a heartbeat about every ten minutes; `tools/captur
 ## 6. Update resilience
 
 - **Runtime pin.** The plugin declares `RED4EXT_V1_RUNTIME_VERSION_LATEST` (2.31, `3.0.80.51928`), so after a game patch RED4ext skips it with a clear "incompatible" warning until it is rebuilt [source] `PluginSystem.cpp:270-294`.
-- **RTTI by name.** Game access is by name at runtime and fails soft (`rtti_missing`); no hard-coded offsets or hooks.
+- **RTTI by name, with a signature check.** Game access is by name at runtime, with no hard-coded offsets or hooks. Before each call the plugin checks the function's static flag, parameter count and types, and return type name against what the call site passes and reads. A missing function is refused with `rtti_missing` and a changed signature with `rtti_signature`, so neither reaches the call. This is not a general guarantee: a function that keeps its signature but changes what it needs (for example, game state that isn't ready), or a crash inside the game's own code, is not caught. The runtime pin is the main guard, and in-game behaviour is still [unverified].
 - **Redscript surface.** The redscript layer uses only APIs already used by published mods and is linted against the game's own bundle; its `.reds` files compile only when the DLL loads (`scripts->Add`), so a missing DLL cannot break script compilation.
 - **Protocol version.** The transport and protocol are versioned (`v:1`) and independent of the game.
 

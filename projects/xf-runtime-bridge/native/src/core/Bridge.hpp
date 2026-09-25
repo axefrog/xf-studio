@@ -39,6 +39,7 @@ public:
 
 private:
     void Watch();
+    void StopListener(const std::string& aReason);
     void RemoveSessionFile();
 
     const Config& m_config;

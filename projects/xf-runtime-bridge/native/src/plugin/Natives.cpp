@@ -7,7 +7,9 @@
 // Game.XFBridge_* (CET RTTIHelper::ResolveFunction searches global functions by short name).
 //
 // All of them run on the thread that calls them (the game's script thread). None of them
-// touches game objects; they only read and write bridge bookkeeping.
+// touches game objects; they only read and write bridge bookkeeping. Each one reads its
+// parameters first (the script stack must always be consumed) and then runs its body inside
+// a catch-all: an exception must never unwind into the game's script VM.
 
 #include <RED4ext/RED4ext.hpp>
 
@@ -43,6 +45,24 @@ std::string CleanLayer(const std::string& aLayer)
     return out.empty() ? "unknown" : out;
 }
 
+// Runs a native's body; logs and swallows anything it throws.
+template<typename F>
+void Guarded(const char* aNative, F&& aBody) noexcept
+{
+    try
+    {
+        aBody();
+    }
+    catch (const std::exception& e)
+    {
+        log::Error("native.failed", std::string("native=") + aNative + " what=" + e.what());
+    }
+    catch (...)
+    {
+        log::Error("native.failed", std::string("native=") + aNative + " what=unknown");
+    }
+}
+
 // XFBridge_Ping(layer: String, cid: String) -> String
 void Ping(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
 {
@@ -52,29 +72,33 @@ void Ping(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString*
     RED4ext::GetParameter(aFrame, &cid);
     aFrame->code++; // skip ParamEnd
 
-    const auto layerName = CleanLayer(ToStd(layer));
-    const auto cidText = ToStd(cid);
-    log::Info("native.ping", "from=" + layerName, cidText);
+    Guarded("XFBridge_Ping", [&] {
+        const auto layerName = CleanLayer(ToStd(layer));
+        const auto cidText = ToStd(cid);
+        log::Info("native.ping", "from=" + layerName, cidText);
 
-    if (aOut)
-    {
-        const auto reply = json{{"ok", true},
-                                {"sid", Get().session.sessionId},
-                                {"cid", cidText},
-                                {"from", layerName},
-                                {"plugin_version", XFB_VERSION_STRING}};
-        *aOut = RED4ext::CString(reply.dump());
-    }
+        if (aOut)
+        {
+            const auto reply = json{{"ok", true},
+                                    {"sid", Get().session.sessionId},
+                                    {"cid", cidText},
+                                    {"from", layerName},
+                                    {"plugin_version", XFB_VERSION_STRING}};
+            *aOut = RED4ext::CString(SerializeJson(reply));
+        }
+    });
 }
 
 // XFBridge_Info() -> String (JSON)
 void Info(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
 {
     aFrame->code++; // skip ParamEnd
-    if (aOut)
-    {
-        *aOut = RED4ext::CString(InfoJson().dump());
-    }
+    Guarded("XFBridge_Info", [&] {
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(SerializeJson(InfoJson()));
+        }
+    });
 }
 
 // XFBridge_Log(layer: String, level: String, cid: String, message: String) -> Void
@@ -90,9 +114,11 @@ void LogFromScript(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, i
     RED4ext::GetParameter(aFrame, &message);
     aFrame->code++; // skip ParamEnd
 
-    Level parsed = Level::Info;
-    ParseLevel(ToStd(level), parsed);
-    log::Write(parsed, CleanLayer(ToStd(layer)), ToStd(cid), "script.log", ToStd(message));
+    Guarded("XFBridge_Log", [&] {
+        Level parsed = Level::Info;
+        ParseLevel(ToStd(level), parsed);
+        log::Write(parsed, CleanLayer(ToStd(layer)), ToStd(cid), "script.log", ToStd(message));
+    });
 }
 
 // XFBridge_Announce(layer: String, detail: String) -> Void
@@ -104,10 +130,12 @@ void Announce(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_
     RED4ext::GetParameter(aFrame, &detail);
     aFrame->code++; // skip ParamEnd
 
-    const auto layerName = CleanLayer(ToStd(layer));
-    const auto detailText = Sanitize(ToStd(detail), 512);
-    Get().layers.Announce(layerName, detailText);
-    log::Info("layer.announce", "layer=" + layerName + " detail=" + detailText);
+    Guarded("XFBridge_Announce", [&] {
+        const auto layerName = CleanLayer(ToStd(layer));
+        const auto detailText = Sanitize(ToStd(detail), 512);
+        Get().layers.Announce(layerName, detailText);
+        log::Info("layer.announce", "layer=" + layerName + " detail=" + detailText);
+    });
 }
 
 // XFBridge_Kill(reason: String) -> Bool   (kill switch for the CET hotkey)
@@ -117,20 +145,26 @@ void Kill(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64
     RED4ext::GetParameter(aFrame, &reason);
     aFrame->code++; // skip ParamEnd
 
-    auto& state = Get();
-    const bool hadBridge = state.bridge != nullptr;
-    if (hadBridge)
-    {
-        state.bridge->Kill("script:" + Sanitize(ToStd(reason), 64));
-    }
-    else
-    {
-        log::Info("bridge.kill_ignored", "reason=bridge_not_enabled");
-    }
     if (aOut)
     {
-        *aOut = hadBridge;
+        *aOut = false;
     }
+    Guarded("XFBridge_Kill", [&] {
+        auto& state = Get();
+        const bool hadBridge = state.bridge != nullptr;
+        if (hadBridge)
+        {
+            state.bridge->Kill("script:" + Sanitize(ToStd(reason), 64));
+        }
+        else
+        {
+            log::Info("bridge.kill_ignored", "reason=bridge_not_enabled");
+        }
+        if (aOut)
+        {
+            *aOut = hadBridge;
+        }
+    });
 }
 
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
@@ -158,12 +192,23 @@ void RegisterTypes()
 
 void PostRegisterTypes()
 {
-    auto* rtti = RED4ext::CRTTISystem::Get();
-    RegisterGlobal(rtti, "XFBridge_Ping", &Ping, "String", {"layer", "cid"});
-    RegisterGlobal(rtti, "XFBridge_Info", &Info, "String", {});
-    RegisterGlobal(rtti, "XFBridge_Log", &LogFromScript, nullptr, {"layer", "level", "cid", "message"});
-    RegisterGlobal(rtti, "XFBridge_Announce", &Announce, nullptr, {"layer", "detail"});
-    RegisterGlobal(rtti, "XFBridge_Kill", &Kill, "Bool", {"reason"});
-    log::Info("rtti.register_types", "phase=post_register natives=5");
+    try
+    {
+        auto* rtti = RED4ext::CRTTISystem::Get();
+        RegisterGlobal(rtti, "XFBridge_Ping", &Ping, "String", {"layer", "cid"});
+        RegisterGlobal(rtti, "XFBridge_Info", &Info, "String", {});
+        RegisterGlobal(rtti, "XFBridge_Log", &LogFromScript, nullptr, {"layer", "level", "cid", "message"});
+        RegisterGlobal(rtti, "XFBridge_Announce", &Announce, nullptr, {"layer", "detail"});
+        RegisterGlobal(rtti, "XFBridge_Kill", &Kill, "Bool", {"reason"});
+        log::Info("rtti.register_types", "phase=post_register natives=5");
+    }
+    catch (const std::exception& e)
+    {
+        log::Error("rtti.register_failed", std::string("what=") + e.what());
+    }
+    catch (...)
+    {
+        log::Error("rtti.register_failed", "what=unknown");
+    }
 }
 } // namespace xfb::plugin

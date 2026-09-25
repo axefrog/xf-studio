@@ -1,18 +1,24 @@
 // Bridge methods that need the game. Every game-thread method runs from the Running-state
 // OnUpdate callback (see Main.cpp) and reaches the game only through RTTI lookups by name.
 //
-// Why RTTI by name: if a patch renames or removes a function, the lookup fails at runtime and
-// the method returns a clear error; nothing crashes and no script compilation breaks.
-// Names used here were checked against red-dump-json (a8e52990, a pre-2.3 dump; re-check on 2.31):
-//   GetPlayer;GameInstance -> handle:PlayerPuppet        (globals.json)
-//   entEntity.GetWorldPosition() -> Vector4               (classes/entEntity.json)
-//   ScriptGameInstance.GetPhotoModeSystem(self) -> handle:gamePhotoModeSystem (classes/ScriptGameInstance.json)
-//   gamePhotoModeSystem.IsPhotoModeActive/CanPhotoModeBeEnabled/IsExitLocked -> Bool
+// Why RTTI by name, plus a signature check: if a patch removes or renames a function, the lookup
+// fails; if it changes the function's shape (static flag, parameter count or types, return
+// type), the check below refuses the call. Either way the method returns a clear error
+// (rtti_missing or rtti_signature) instead of calling with the wrong stack layout. The check
+// cannot catch a function that keeps its signature but changes what it needs or does; the
+// runtime pin in Main.cpp (RED4ext refuses the plugin on any other game build) is the main guard.
+// Names and signatures were checked against red-dump-json (a8e52990, a pre-2.3 dump; re-check on 2.31):
+//   GetPlayer;GameInstance(ScriptGameInstance) -> handle:PlayerPuppet, static   (globals.json)
+//   entEntity.GetWorldPosition() -> Vector4                                     (classes/entEntity.json)
+//   ScriptGameInstance.GetPhotoModeSystem(ScriptGameInstance) -> handle:gamePhotoModeSystem, static
+//   gamePhotoModeSystem.IsPhotoModeActive/CanPhotoModeBeEnabled/IsExitLocked() -> Bool
 // The GetPlayer call pattern is RED4ext.SDK examples/native_globals_redscript/Main.cpp:19-23 (tag 1.0.0).
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Scripting/Natives/ScriptGameInstance.hpp>
 #include <RED4ext/Scripting/Natives/Vector4.hpp>
+
+#include <initializer_list>
 
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Plugin.hpp"
@@ -34,7 +40,73 @@ void RequireGameInstance()
     }
 }
 
-RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunction, const std::string& aCid)
+std::string TypeName(const RED4ext::CProperty* aProperty)
+{
+    if (!aProperty || !aProperty->type)
+    {
+        return "<none>";
+    }
+    const auto* text = aProperty->type->GetName().ToString();
+    return text ? text : "<unnamed>";
+}
+
+bool TypeIs(const RED4ext::CProperty* aProperty, const char* aExpected)
+{
+    return aProperty && aProperty->type && aProperty->type->GetName() == RED4ext::CName(aExpected);
+}
+
+// What the code below will put on the stack and read back. nullptr return type = no return value.
+struct Signature
+{
+    bool isStatic;
+    const char* returnType;
+    std::initializer_list<const char*> params;
+};
+
+// Refuses the call unless the function has exactly the static flag, parameter types and
+// return type the caller was written for.
+void RequireSignature(const RED4ext::CBaseFunction* aFn, const std::string& aWhat, const Signature& aExpected,
+                      const std::string& aCid)
+{
+    std::string problem;
+    if (static_cast<bool>(aFn->flags.isStatic) != aExpected.isStatic)
+    {
+        problem = std::string("static=") + (aFn->flags.isStatic ? "true" : "false") +
+                  " expected=" + (aExpected.isStatic ? "true" : "false");
+    }
+    else if (aFn->params.size != aExpected.params.size())
+    {
+        problem = "params=" + std::to_string(aFn->params.size) + " expected=" + std::to_string(aExpected.params.size());
+    }
+    else if ((aFn->returnType == nullptr) != (aExpected.returnType == nullptr) ||
+             (aExpected.returnType && !TypeIs(aFn->returnType, aExpected.returnType)))
+    {
+        problem = "return=" + TypeName(aFn->returnType) +
+                  " expected=" + (aExpected.returnType ? aExpected.returnType : "<none>");
+    }
+    else
+    {
+        uint32_t index = 0;
+        for (const auto* expected : aExpected.params)
+        {
+            const auto* actual = aFn->params[index];
+            if (!TypeIs(actual, expected))
+            {
+                problem = "param" + std::to_string(index) + "=" + TypeName(actual) + " expected=" + expected;
+                break;
+            }
+            ++index;
+        }
+    }
+    if (!problem.empty())
+    {
+        log::Warn("rtti.signature_mismatch", "function=" + aWhat + " " + problem, aCid);
+        throw MethodError("rtti_signature", "signature changed, call refused: " + aWhat + " (" + problem + ")");
+    }
+}
+
+RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunction, const Signature& aSignature,
+                                          const std::string& aCid)
 {
     auto* rtti = RED4ext::CRTTISystem::Get();
     auto* cls = rtti->GetClass(aClass);
@@ -49,12 +121,13 @@ RED4ext::CBaseFunction* FindClassFunction(const char* aClass, const char* aFunct
         log::Warn("rtti.missing_function", std::string("class=") + aClass + " function=" + aFunction, aCid);
         throw MethodError("rtti_missing", std::string("function not found: ") + aClass + "." + aFunction);
     }
+    RequireSignature(fn, std::string(aClass) + "." + aFunction, aSignature, aCid);
     return fn;
 }
 
 bool CallBool(RED4ext::ScriptInstance aInstance, const char* aClass, const char* aFunction, const std::string& aCid)
 {
-    auto* fn = FindClassFunction(aClass, aFunction, aCid);
+    auto* fn = FindClassFunction(aClass, aFunction, {false, "Bool", {}}, aCid);
     bool value = false;
     RED4ext::StackArgs_t args;
     if (!RED4ext::ExecuteFunction(aInstance, fn, &value, args))
@@ -67,11 +140,20 @@ bool CallBool(RED4ext::ScriptInstance aInstance, const char* aClass, const char*
 json PlayerPosition(const MethodContext& aContext)
 {
     RequireGameInstance();
+    constexpr const char* kGetPlayer = "GetPlayer;GameInstance";
+    auto* getPlayer = RED4ext::CRTTISystem::Get()->GetFunction(kGetPlayer);
+    if (!getPlayer)
+    {
+        log::Warn("rtti.missing_function", std::string("global=") + kGetPlayer, aContext.cid);
+        throw MethodError("rtti_missing", std::string("global not found: ") + kGetPlayer);
+    }
+    RequireSignature(getPlayer, kGetPlayer, {true, "handle:PlayerPuppet", {"ScriptGameInstance"}}, aContext.cid);
+
     RED4ext::ScriptGameInstance gameInstance;
     RED4ext::Handle<RED4ext::IScriptable> player;
-    if (!RED4ext::ExecuteGlobalFunction("GetPlayer;GameInstance", &player, gameInstance))
+    if (!RED4ext::ExecuteGlobalFunction(kGetPlayer, &player, gameInstance))
     {
-        throw MethodError("rtti_missing", "global GetPlayer;GameInstance not found or failed");
+        throw MethodError("call_failed", std::string("global call failed: ") + kGetPlayer);
     }
     if (!player)
     {
@@ -79,7 +161,7 @@ json PlayerPosition(const MethodContext& aContext)
         return json{{"available", false}, {"reason", "no player (main menu or loading)"}};
     }
 
-    auto* fn = FindClassFunction("entEntity", "GetWorldPosition", aContext.cid);
+    auto* fn = FindClassFunction("entEntity", "GetWorldPosition", {false, "Vector4", {}}, aContext.cid);
     RED4ext::Vector4 position;
     RED4ext::StackArgs_t args;
     if (!RED4ext::ExecuteFunction(player.GetPtr(), fn, &position, args))
@@ -96,7 +178,8 @@ json PlayerPosition(const MethodContext& aContext)
 json PhotoModeState(const MethodContext& aContext)
 {
     RequireGameInstance();
-    auto* getter = FindClassFunction("ScriptGameInstance", "GetPhotoModeSystem", aContext.cid);
+    auto* getter = FindClassFunction("ScriptGameInstance", "GetPhotoModeSystem",
+                                     {true, "handle:gamePhotoModeSystem", {"ScriptGameInstance"}}, aContext.cid);
     RED4ext::ScriptGameInstance gameInstance;
     RED4ext::Handle<RED4ext::IScriptable> system;
     RED4ext::StackArgs_t args;
@@ -109,7 +192,7 @@ json PhotoModeState(const MethodContext& aContext)
     const json state{{"active", CallBool(instance, "gamePhotoModeSystem", "IsPhotoModeActive", aContext.cid)},
                      {"can_enable", CallBool(instance, "gamePhotoModeSystem", "CanPhotoModeBeEnabled", aContext.cid)},
                      {"exit_locked", CallBool(instance, "gamePhotoModeSystem", "IsExitLocked", aContext.cid)}};
-    log::Debug("game.photomode_state", state.dump(), aContext.cid);
+    log::Debug("game.photomode_state", SerializeJson(state), aContext.cid);
     return state;
 }
 
@@ -130,6 +213,7 @@ json ScriptDescribe(const MethodContext& aContext)
     {
         throw MethodError("script_layer_missing", "XFBridgeQuery.DescribeJson not found");
     }
+    RequireSignature(fn, "XFRuntimeBridge.XFBridgeQuery.DescribeJson", {true, "String", {"String"}}, aContext.cid);
     RED4ext::CString cid(aContext.cid);
     RED4ext::CString out;
     RED4ext::StackArgs_t args;
@@ -145,7 +229,7 @@ json ScriptDescribe(const MethodContext& aContext)
     }
     catch (const std::exception&)
     {
-        return json{{"raw", text}};
+        return json{{"raw", text}}; // serialised with invalid UTF-8 replaced (SerializeJson)
     }
 }
 } // namespace
