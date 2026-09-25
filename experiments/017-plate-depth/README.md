@@ -69,7 +69,7 @@ At 0.4 mm three neutral-pose vertices at each inner eye corner, on the lash line
 - Local lights, such as photo-mode lights, can shift roughness per light: r′ = saturate(r + k(byte/127.5 − 1)) [source mechanism; values unknown].
 - Reflection passes (probes, SSR, ray tracing) were not examined [hypothesis].
 
-**No pipeline defect was found, so production values are unchanged.** The candidate carries a calibrated alternative (*Gloss D*, all roughness +0.12: Matte 1.00, Satin 0.50 = vanilla eye makeup, Glossy 0.24, Metallic 0.39) and two controls that separate the causes: *Gloss B* writes no surface (skin roughness and metalness stay), and *Gloss C* forces roughness 1 and metalness 0. If the session confirms D, the finish table in [`finish-export.ts`](../../projects/xf-studio/authoring/src/finish-export.ts) should move by the same amount.
+**No pipeline defect was found, so production values are unchanged.** The candidate carries a calibrated alternative (*Gloss D*, all roughness +0.12: Matte 1.00, Satin 0.50 = vanilla eye makeup, Glossy 0.24, Metallic 0.39) and two controls that separate the causes: *Gloss B* writes no surface (skin roughness and metalness stay), and *Gloss C* forces roughness 1 and metalness 0. If the session confirms D, the finish table in [`finish-export.ts`](../../projects/xf-studio/authoring/src/finish-export.ts) should move by the same amount. The preview, now lit with the skin's light, reproduces the glossy read for Satin, Glossy and Metallic but not for Matte, and predicts that D alone softens highlight peaks without changing the broad sheen much ([materials §6](../../knowledge/materials-and-shaders.md#6-makeup-finish-implications)).
 
 ## 3. Shimmer strength: two parameter changes
 

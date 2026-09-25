@@ -20,4 +20,6 @@ All four pages share three engine facts:
 2. **One draw per preset.** The Studio flattens a preset into one decal draw on the eye plate. Per-texel inputs (textures) can vary within a preset; material constants cannot. That is why Colour-shifting, whose shift colour is a constant, is limited to one pigment per preset.
 3. **Metalness is the only way to raise specular.** Dielectric F0 is fixed at 0.04; F0 = lerp(0.04, albedo, metalness). Metalness ≥ 0.1 moves a Subsurface (skin) pixel off its SSS albedo path.
 
+The browser preview follows all three for the exported layers: it merges them into one decal, blends it over the skin and lights the blended surface once with the skin's light, so the SSS switch sits on the blended metalness ([head CC rendering §3](../../../knowledge/head-cc-rendering.md#3-the-head-decal-family)). What it predicts for Board 1, with and without the *Gloss D* values, is under [materials §6](../../../knowledge/materials-and-shaders.md#6-makeup-finish-implications).
+
 The next in-game session tests all of these at once with the [finish board](../../../experiments/016-finish-board/README.md).

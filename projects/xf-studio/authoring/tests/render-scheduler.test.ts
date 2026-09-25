@@ -214,6 +214,51 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   expect(source).toContain("playing.onChange = invalidate");
 });
 
+test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
+  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
+  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  // The skin light and the skin under the plate arrive and leave with the V's details (setCharacterDetails, wrapped).
+  const refresh = source.slice(source.indexOf("  function refreshPlateUnderlay() {"), source.indexOf("  refreshPlateUnderlay();\n"));
+  expect(refresh).toContain("makeup.setSkinLight(item?.skin?.handle.parameters ?? null);");
+  const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
+  expect(details.split("refreshPlateUnderlay();").length - 1).toBe(2);
+  expect(source.split("refreshPlateUnderlay();").length - 1).toBe(3);
+  for (const change of ["setCharacterDetails", "setNormals", "updateLayer", "setLayerCanvas", "setLayerCanvases", "reconcileLayerCanvases", "setWire"])
+    expect(wrapped).toContain(change);
+  // The normals toggle reaches the plate's facets; the composite is brought up to date inside the frame, before drawing.
+  const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
+  expect(normals).toContain("makeup.setNormals(v);");
+  const frame = source.slice(source.indexOf("    frame(dt, now) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
+  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeGreaterThan(-1);
+  expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
+  // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
+  const { createMakeupStack } = await import("../src/makeup-stack");
+  const THREE = await import("three");
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0.25, 0.5, 0.75, 0.5, 0.25, 0.625], 2));
+  const anchor = new THREE.SkinnedMesh(geometry), root = new THREE.Group();
+  root.add(anchor);
+  const stack = createMakeupStack(anchor, 1);
+  let draws = 0, target: unknown = null;
+  const renderer = { capabilities: { maxTextureSize: 4096 }, extensions: { has: () => true }, autoClear: true, getRenderTarget: () => target,
+    setRenderTarget: (next: unknown) => { target = next; }, getClearColor: (out: InstanceType<typeof THREE.Color>) => out, getClearAlpha: () => 1,
+    setClearColor: () => {}, clear: () => {}, render: () => { draws++; } } as unknown as import("three").WebGLRenderer;
+  const n = 3;
+  const underlay = () => ({ colour: new THREE.BufferAttribute(new Float32Array(n * 3).fill(0.4), 3),
+    roughness: new THREE.BufferAttribute(new Float32Array(n).fill(0.6), 1), metalness: new THREE.BufferAttribute(new Float32Array(n), 1) });
+  stack.setCanvases([{ width: 16, height: 16 } as HTMLCanvasElement]);
+  stack.setUnderlaySource(underlay);
+  stack.updateLayer(0, (await import("../src/recipe")).initialRecipe().layers[0]!);
+  stack.prepareBlend(renderer);
+  expect(draws).toBe(1);
+  stack.setSkinLight({ lobes: { roughness0: 0.97, roughness1: 1.6, weight: 1 }, wrap: [0.3, 0.2, 0.2] });
+  stack.setNormals(false);
+  for (let frame = 0; frame < 5; frame++) stack.prepareBlend(renderer);
+  expect(draws).toBe(1);
+  stack.setCanvases([]);
+});
+
 test("face details request frames when they arrive, leave or change normals, and draw between the skin and the makeup plates", async () => {
   const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
   const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
