@@ -3,7 +3,8 @@ import { createDoubleDiffuseDecalMaterial, doubleDiffuseParameters } from "./bro
 import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-model";
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
-import type { DetailSlot, RenderChunkMaterial } from "./render-detail";
+import type { DetailSlot, RenderChunkMaterial, RenderTexture } from "./render-detail";
+import { bakeOrder, createLayeredMaterial, layeredBakeSize, layeredGlobals, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
   type SkinTexels } from "./skin-material";
@@ -27,7 +28,8 @@ export type TextureWrap = "repeat" | "clamp";
 /** Only a colour input honours the resource's own `isGamma` flag; data inputs are never decoded. */
 export const textureColourSpace = (use: TextureUse, isGamma: boolean): THREE.ColorSpace =>
   use === "colour" && isGamma ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-export type ChunkTextures = (parameter: string, use: TextureUse, wrap: TextureWrap) => THREE.Texture | undefined;
+/** A chunk texture by its parameter name, or one of the chunk's served textures directly (a layered chunk's layer maps and masks). */
+export type ChunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => THREE.Texture | undefined;
 export type AdapterContext = {
   slot: DetailSlot;
   /** Draw after the editable makeup stack (lashes sit over the eye plate). */
@@ -64,7 +66,9 @@ export type AdaptedMaterial = { material: THREE.Material; owned: THREE.Texture[]
   /** The eye adapters' handle: its role (eyeball or wetness shell, from the template) and its switches. */
   eye?: EyeHandle;
   /** Recorded but not drawn yet (a placeholder template): the loader keeps the mesh hidden. */
-  hidden?: boolean };
+  hidden?: boolean;
+  /** A layered chunk's bake handle: the scene bakes the stack once with its renderer before the chunk shows. */
+  layered?: LayeredHandle };
 export interface MaterialAdapter {
   readonly id: RenderAdapterId;
   create(chunk: RenderChunkMaterial, textures: ChunkTextures, mesh: THREE.Mesh, context: AdapterContext): AdaptedMaterial;
@@ -307,20 +311,41 @@ const eyeShell: MaterialAdapter = {
 };
 
 /**
- * `multilayered.mt`: no layered-material adapter yet. The chunk stays hidden and says so with a code: on the eyes
- * (the graphic eye designs) the scene shows the default eye in its place.
+ * `multilayered.mt`: piercings, the graphic eye designs and other layered parts (layered-material.ts). The chunk's `.mlsetup` stack is
+ * baked once into surface maps over the mesh's own UV range and lit as a standard metal/rough surface. Every map is read through its
+ * resource's own colour flag for colour and never decoded for data (normals, roughness, metalness, microblends, mask layers). A chunk
+ * whose stack could not be read is left out with a code: on the eyes the scene then shows the default eye in its place.
  */
-const layeredPlaceholder: MaterialAdapter = {
-  id: "layered-placeholder",
-  create(_chunk, _textures, _mesh, context) {
-    return { material: new THREE.MeshBasicMaterial({ visible: false }), owned: [], notes: ["layered material not drawn yet"], hidden: true,
-      limits: [context.slot === "eyes" ? "eye-design" : "layered-material"] };
+const layered: MaterialAdapter = {
+  id: "layered",
+  create(chunk, textures, mesh, context) {
+    const stack = chunk.layered;
+    const hidden = (note: string): AdaptedMaterial => ({ material: new THREE.MeshBasicMaterial({ visible: false }), owned: [], notes: [note], hidden: true,
+      limits: [context.slot === "eyes" ? "eye-design" : "layered-material"] });
+    if (!stack) return hidden("no readable layer setup");
+    const order = bakeOrder(stack);
+    if (!order.length) return hidden("no visible layer");
+    const notes: string[] = [], limits: DetailLimit[] = [];
+    // A setup whose mask could not be read shows only its bottom layer (as the game does with a one-layer default mask).
+    const masked = stack.layers.slice(1).filter(layer => layer.opacity > 0);
+    if (masked.length && masked.every(layer => !layer.textures.mask)) { limits.push("layered-mask"); notes.push("no readable mask layers; only the bottom layer is drawn"); }
+    const layers = order.map(parameters => {
+      const source = stack.layers[parameters.index]!.textures;
+      const read = (role: keyof LayerTextures, use: TextureUse, wrap: TextureWrap) => source[role] ? textures(source[role]!, use, wrap) : undefined;
+      return { parameters, textures: { color: read("color", "colour", "repeat"), normal: read("normal", "data", "repeat"),
+        roughness: read("roughness", "data", "repeat"), metalness: read("metalness", "data", "repeat"),
+        microblend: read("microblend", "data", "repeat"), mask: read("mask", "data", "repeat") } satisfies LayerTextures };
+    });
+    const domain = uvDomain(mesh.geometry.getAttribute("uv") as THREE.BufferAttribute | undefined);
+    const made = createLayeredMaterial({ layers, domain, size: layeredBakeSize(stack, domain),
+      globals: { ...layeredGlobals(chunk, stack), normal: textures("GlobalNormal", "data", "repeat") } });
+    return { material: made.material, owned: [], notes, limits, layered: made.handle };
   },
 };
 
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
   skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
-  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, "layered-placeholder": layeredPlaceholder, "decal-placeholder": decalPlaceholder });
+  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "decal-placeholder": decalPlaceholder });
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that

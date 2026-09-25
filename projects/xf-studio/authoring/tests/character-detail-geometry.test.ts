@@ -116,7 +116,7 @@ describe("the loader parses each geometry file once", () => {
       materialPriority: "EMP_Normal", scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} })) });
   const record = (components: RenderComponent[]): CharacterDetail => ({ schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: "a".repeat(64),
     origin: "game-files", character: { source: "save", bodyGender: "female" }, provenance: { label: "fixture", notes: [] }, components,
-    slots: [{ slot: "face", state: "shown", label: "fixture" }] });
+    slots: [{ slot: "face", state: "shown", label: "fixture" }], choices: [] });
 
   test("two components drawing one file share one parse and its geometry, each with its own objects and skeleton", async () => {
     const bytes = morphMesh(3), file = `${sha(bytes)}.glb`;
@@ -161,4 +161,30 @@ test("face decal evidence comes from the loaded decal entry, so a V switch in an
       decals: [{ mesh, chunk: face.materials[0]!, handle: { parameters: {}, underlay: true, skinLight: true, setNormals() {} }, surface }] }] } as never;
   const evidence = characterDetailsEvidence({ details, skin: null, head: new THREE.Mesh() });
   expect(evidence.face[0]).toMatchObject({ mesh: mesh.name, underlay: true, surface });
+});
+
+test("an unskinned chunk (a framework's rigid linked mesh) is bound whole to one bone and stays where the export placed it", async () => {
+  const { bindRigid } = await import("../src/character-detail-loader");
+  const THREE = await import("three");
+  const root = new THREE.Group();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 1.6, 0.1, 0.01, 1.6, 0.1, 0, 1.61, 0.1], 3));
+  geometry.morphAttributes.position = [new THREE.Float32BufferAttribute(new Float32Array(9), 3)];
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+  mesh.name = "submesh_00_LOD_1";
+  mesh.position.set(0.002, 0, 0);
+  root.add(mesh);
+  const skinned = bindRigid(mesh, root);
+  expect(skinned).toBeInstanceOf(THREE.SkinnedMesh);
+  expect(skinned.name).toBe("submesh_00_LOD_1");
+  expect(mesh.parent).toBeNull();
+  expect(skinned.skeleton.bones).toHaveLength(1);
+  expect(skinned.morphTargetInfluences).toHaveLength(1);
+  // Every vertex fully on the one bone, and the same world position as before.
+  expect([...geometry.getAttribute("skinWeight").array].filter((_, i) => i % 4 === 0)).toEqual([1, 1, 1]);
+  root.updateMatrixWorld(true);
+  skinned.skeleton.update();
+  const at = skinned.getVertexPosition(1, new THREE.Vector3()).applyMatrix4(skinned.matrixWorld);
+  expect(at.x).toBeCloseTo(0.012, 6);
+  expect(at.y).toBeCloseTo(1.6, 6);
 });

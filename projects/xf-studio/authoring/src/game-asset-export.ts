@@ -7,7 +7,8 @@ import { depotHash, sanitizeDepotPath } from "./depot-path";
 /**
  * Generic export of game resources into renderer formats: any `.mesh` or `.morphtarget`
  * becomes a GLB (with skin, bones and morph targets as WolvenKit exports them) plus the
- * mesh's materials resolved through their `.mi` chains; any `.xbm` becomes a PNG.
+ * mesh's materials resolved through their `.mi` chains; any `.xbm` becomes a PNG; any `.mlmask`
+ * (a layered material's mask) becomes one greyscale PNG per mask layer, in layer order.
  * Results are cached per resource, keyed by its depot-path hash and the identity of the
  * archive source it was read from, so any consumer (the core preview today; resolved
  * skin, hair, piercings and other characters later) reuses the same exports.
@@ -43,6 +44,8 @@ export type ExportedGeometry = {
   cached: boolean;
 };
 export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean };
+/** A `.mlmask` decoded into one PNG per mask layer (index = layer), as WolvenKit writes them (`<name>_layers/<name>_<i>.png`). */
+export type ExportedMask = { depotPath: string; hash: string; layers: string[]; cached: boolean };
 
 /**
  * Typed failures an exporter's tool adapter reports. Consumers map them to their own codes and
@@ -63,6 +66,8 @@ export interface GameAssetExportSession {
   geometry(depotPaths: readonly string[]): Promise<Map<string, ExportedGeometry>>;
   /** Decode textures to PNG; missing resources are absent from the result. */
   textures(depotPaths: readonly string[]): Promise<Map<string, ExportedTexture>>;
+  /** Decode layered-material masks (`.mlmask`) to one PNG per layer; missing resources are absent from the result. */
+  masks(depotPaths: readonly string[]): Promise<Map<string, ExportedMask>>;
   /**
    * Which depot paths the source's own archive indexes contain, or null when that can't be read.
    * Tells "not in the game files" apart from "the tool did not export it".
@@ -113,6 +118,19 @@ const depotFile = (root: string, depotPath: string) => join(root, ...depotPath.s
 const glbFor = (depotPath: string) => /\.mesh$/i.test(depotPath) ? depotPath.replace(/\.mesh$/i, ".glb") : `${depotPath}.glb`;
 const materialsFor = (depotPath: string) => /\.mesh$/i.test(depotPath) ? depotPath.replace(/\.mesh$/i, ".Material.json") : null;
 const pngFor = (depotPath: string) => depotPath.replace(/\.xbm$/i, ".png");
+/** At most this many mask layers are read (the engine's layer limit is 20). */
+export const MAX_MASK_LAYERS = 32;
+/** WolvenKit's mask layers for an exported `.mlmask` at `file` (`<dir>/<stem>_layers/<stem>_<i>.png`), in order, stopping at the first gap. */
+export function maskLayerFiles(file: string): string[] {
+  const stem = file.replace(/\.mlmask$/i, ""), name = stem.split(/[\\/]/).pop()!;
+  const layers: string[] = [];
+  for (let index = 0; index < MAX_MASK_LAYERS; index++) {
+    const layer = join(`${stem}_layers`, `${name}_${index}.png`);
+    if (!existsSync(layer)) break;
+    layers.push(layer);
+  }
+  return layers;
+}
 /** The cache file names a complete geometry export must have, by resource kind. */
 export const requiredGeometryFiles = (depotPath: string): readonly string[] =>
   /\.mesh$/i.test(depotPath) ? ["raw", "export.glb", "materials.json"] : ["raw", "export.glb"];
@@ -257,6 +275,46 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
             await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
             const png = join(hashDir, `${depotHash(depotPath)}.png`);
             if (existsSync(png)) store(depotPath, png, true);
+          });
+          return out;
+        },
+        async masks(depotPaths) {
+          const out = new Map<string, ExportedMask>();
+          const store = (depotPath: string, layers: string[], fresh: boolean) => {
+            const names = layers.map((_, index) => `layer-${index}.png`);
+            const files = fresh ? cache.write(depotPath, source, Object.fromEntries(names.map((name, index) => [name, layers[index]!]))) : null;
+            out.set(depotPath, { depotPath, hash: depotHash(depotPath), layers: files ? names.map(name => files[name]!) : layers, cached: !fresh });
+          };
+          const cachedLayers = (files: Record<string, string> | null) => {
+            if (!files) return null;
+            const layers: string[] = [];
+            for (let index = 0; files[`layer-${index}.png`]; index++) layers.push(files[`layer-${index}.png`]!);
+            return layers.length ? layers : null;
+          };
+          const needed: string[] = [];
+          for (const depotPath of depotPaths) {
+            checkDepotPath(depotPath);
+            const cached = cachedLayers(cache.read(depotPath, source));
+            if (cached) store(depotPath, cached, false); else needed.push(depotPath);
+          }
+          if (!needed.length) return out;
+          const outDir = join(workDir(), "masks");
+          mkdirSync(outDir, { recursive: true });
+          await run({ source, depotPaths: needed, outDir, withMaterials: false, signal });
+          const unnamed: string[] = [];
+          for (const depotPath of needed) {
+            const layers = maskLayerFiles(depotFile(outDir, depotPath));
+            if (layers.length) store(depotPath, layers, true); else unnamed.push(depotPath);
+          }
+          // An archive that lists hashes only: one launch per mask it indexes (as for textures).
+          const inIndex = unnamed.length ? present(unnamed) : null;
+          const byHash = inIndex ? unnamed.filter(depotPath => inIndex.has(depotPath)) : [];
+          await forEachLimited(byHash, BY_HASH_CONCURRENCY, async depotPath => {
+            const hashDir = join(outDir, "by-hash", depotHash(depotPath));
+            mkdirSync(hashDir, { recursive: true });
+            await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
+            const layers = maskLayerFiles(join(hashDir, `${depotHash(depotPath)}.mlmask`));
+            if (layers.length) store(depotPath, layers, true);
           });
           return out;
         },

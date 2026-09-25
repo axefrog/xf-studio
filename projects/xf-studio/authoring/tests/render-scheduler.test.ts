@@ -207,7 +207,11 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   for (const eyeChange of ["setCharacterDetails", "setEyeOptics", "applySavedV", "eyeShape"]) expect(wrapped).toContain(eyeChange);
   const details = source.slice(source.indexOf("  function setCharacterDetails("), source.indexOf("  const ray = new THREE.Raycaster()"));
   expect(details).toContain("eyes.visible = true;");
-  expect(details).toContain("eyes.visible = !resolvedEyeballs().length;");
+  expect(details).toContain("eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;");
+  // Layered stacks (piercings, eye designs) bake inside the same wrapped call, so the frame that follows draws the baked maps.
+  expect(details).toContain("const bakeLimits = bakeLayered();");
+  // Showing or hiding piercings draws a frame; trying a style reaches the scene as new details (setCharacterDetails).
+  expect(wrapped).toContain("setPiercings");
   // The frame loop is the scheduler's, not an always-on animation loop.
   expect(source).not.toContain("setAnimationLoop");
   expect(source).toContain("bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting })");

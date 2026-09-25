@@ -2,7 +2,6 @@ import * as THREE from "three";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { BrowUnderlayEvidence, HeadSkinPlacement } from "./head-skin-placement";
 import type { IdleAnimation } from "./idle-animation";
-import type { PiercingManifest } from "./piercing-preview";
 import { skinSets } from "./skin";
 
 /**
@@ -15,9 +14,6 @@ export function coreSceneEvidence(input: {
   blinkBones: number;
   eyeShape: { choices: number; eyesFollow: boolean; eyeMorphTargets: number };
   profileEncoding: string;
-  piercingError: string; prcError: string;
-  piercingManifest?: PiercingManifest; prcManifest?: PiercingManifest;
-  piercingMeshes: ReadonlyMap<string, readonly THREE.Mesh[]>;
   idle?: IdleAnimation; idleError: string;
 }) {
   const { idle } = input;
@@ -30,11 +26,6 @@ export function coreSceneEvidence(input: {
     blinkBones: input.blinkBones,
     eyeShape: input.eyeShape,
     profileEncoding: input.profileEncoding,
-    piercingError: input.piercingError,
-    prcError: input.prcError,
-    piercing: { source: input.piercingManifest?.source, styles: input.piercingManifest?.styles.length ?? 0,
-      meshes: [...input.piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length, vertices: parts.reduce((n, m) => n + vertices(m), 0) })) },
-    prc: { source: input.prcManifest?.source, styles: input.prcManifest?.styles.length ?? 0 },
     idle: { available: !!idle, error: input.idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
       faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
@@ -94,7 +85,12 @@ export function characterDetailsEvidence(input: {
       textures: decal ? Object.fromEntries(Object.entries(decal.chunk.textures).map(([name, texture]) => [name, { depotPath: texture.depotPath,
         archive: texture.sources[0]?.archive ?? null, isGamma: texture.isGamma, width: texture.width, height: texture.height }])) : {} };
   })) ?? [];
-  return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null, face: faceEvidence,
+  // Layered chunks (piercings, eye designs): their stack, bake state and the maps the bake read, per drawn mesh.
+  const layeredEvidence = loaded?.components.flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => ({ slot: item.component.slot,
+    option: item.component.option, definition: item.component.definition, component: item.component.component, mesh: mesh.name,
+    visible: mesh.visible && item.root.visible, ...handle.evidence() }))) ?? [];
+  return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
+    override: loaded?.record.character.override ?? null, face: faceEvidence, layered: layeredEvidence,
     slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
     limits: loaded?.limits.map(limit => ({ ...limit })) ?? [],
     notes: [...(loaded?.notes ?? [])], browUnderlay: input.browUnderlay, skin: skinEvidence, eyes: eyeEvidence,

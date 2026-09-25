@@ -7,7 +7,7 @@ import { CharacterDetailError, gradientStops, hairProfileStops, pngSize, prepare
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
-  type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
+  type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
 import { detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
@@ -38,6 +38,18 @@ function fakeExporter(options: { failArchive?: string; calls?: string[]; missing
           writeFileSync(file, png);
           return [path, { depotPath: path, hash: depotHash(path), png: file, pngSha256: "", cached: false }];
         }));
+      },
+      // Masks: three layers per `.mlmask`, each a different image (so each layer's file is its own).
+      async masks(paths) {
+        options.calls?.push(`masks ${source.archivePath}`);
+        return new Map(paths.filter(path => !options.missing?.includes(path)).map((path): [string, ExportedMask] => {
+          const layers = [0, 1, 2].map(index => {
+            const file = join(dir, `${depotHash(path)}_${index}.png`);
+            writeFileSync(file, encodePng({ width: 4, height: 4, data: new Uint8Array(64).fill(index * 100) }, { alpha: true }));
+            return file;
+          });
+          return [path, { depotPath: path, hash: depotHash(path), layers, cached: false }];
+        }));
       } };
   } };
 }
@@ -50,10 +62,10 @@ describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
     const calls: string[] = [];
     const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
-    expect(record.schema).toBe("xfs/render-detail-4");
+    expect(record.schema).toBe("xfs/render-detail-5");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
-    expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes"]);
+    expect(record.components.map(c => c.slot)).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
     const hair = record.components.find(c => c.slot === "hair")!;
     expect(hair.chunks).toEqual([0, 1]);
     expect(hair.geometry.depotPath).toBe(P.hairMesh);
@@ -75,7 +87,7 @@ describe("character record from the resolver", () => {
   test("an export failure empties only the affected slot, with one plain line", async () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
-    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable", "unavailable", "unavailable"]);
+    expect(record.slots.map(s => s.state)).toEqual(Array(7).fill("unavailable"));
     expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
     expect(record.slots[1]!.message).toBe("WolvenKit couldn't read your V's face details from your game files, so they aren't shown.");
     expect(record.slots[4]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
@@ -364,7 +376,7 @@ describe("host preparation", () => {
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
-    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, face details, eyes, brows, lashes, hair and piercings appear once your game folder and WolvenKit are set up." });
   });
 });
 

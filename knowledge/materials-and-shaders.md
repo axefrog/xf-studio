@@ -294,6 +294,8 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `metal_base` `gbuffer_regular` | `1846801220589112223` | [evidence note](../research/materials/shader-system/README.md) |
 | `eye_shadow` `transparent_back_face` | `14043594489545752539` | [evidence note](../research/materials/shader-system/README.md), [eye rendering evidence](../research/character-customization/eye-rendering-evidence.md) |
 | `multilayered_clear_coat` `unlit` | `5403688829342147459` | [evidence note](../research/materials/shader-system/README.md) |
+| `multilayered` `gbuffer_regular` (MeshSkinned and MeshStatic) | `4792354088802328889` | [multilayered evidence](../research/materials/multilayered-shader-evidence.md) |
+| static `m_surfaceCache_GenerateMultilayer` (compute) | `7318179378413828262` | [multilayered evidence](../research/materials/multilayered-shader-evidence.md) |
 | `hair` `alpha_accum` / `basecolor_blend` / `gbuffer_solid` | `2782105832921211528` / `7571795766366002052` / `2903833597335136032` | [lash follow-up](../research/eye-artistry/lash-material-followup.md), [hair shading](hair-shading.md) |
 | static `m_shaderLightsComputeGlobalLocalShadows_Clustered_00000001` / `_11111111` (compute) | `10862954502888615639` / `6606735909222169407` | [evidence note](../research/materials/shader-system/README.md) |
 | static `m_classifyMaterials` (compute) | `13401747477113664336` | [evidence note](../research/materials/shader-system/README.md) |
@@ -414,25 +416,34 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 
 ### 4.6 Multilayered: `engine\materials\multilayered.mt`, `multilayered_clear_coat.mt`
 
-**`multilayered.mt`** is Standard class. It is `canBeMasked = 0`, opaque and depth-writing [resource].
+**`multilayered.mt`** is Standard class. It is `canBeMasked = 0`, opaque and depth-writing [resource]. The game uses it for earrings and piercings, the 37 graphic eye designs, and most clothing, weapons and props. Evidence, program hashes and line references: [multilayered shader evidence](../research/materials/multilayered-shader-evidence.md).
 
 **Inputs:**
 
-- `MultilayerSetup` (.mlsetup) and `MultilayerMask` (.mlmask);
+- `MultilayerSetup` (`.mlsetup`: an ordered list of layers, each naming a layer template, `.mltemplate`) and `MultilayerMask` (`.mlmask`: one mask per layer, stored as a BC4 tile atlas with tile tables) [resource];
 - `GlobalNormal` with its intensity, UV scale and bias;
-- runtime-filled `MaskAtlas`, `MaskTiles`, `Layers` (StructBuffers) and `Mask*` dimensions.
+- runtime-filled `MaskAtlas`, `MaskTiles`, `Layers` (StructBuffers), `LayersStartIndex`, `SetupLayerMask` and `Mask*` dimensions [source].
 
-**Runtime surface cache.** The static cache holds `m_surfaceCache_GenerateMultilayer` [source]. This is consistent with CDPR's statement that compute shaders prepare visible layers into a runtime texture ([multilayered assessment](../research/materials/multilayered-makeup-assessment.md)). The G-buffer shader then samples one resolved surface [hypothesis].
+**Evaluated per pixel [source].** The G-buffer program (`4792354088802328889`, one program for MeshSkinned and MeshStatic) loops over the layers at every pixel; it does not sample a cache. The static `m_surfaceCache_GenerateMultilayer` compute program repeats the same arithmetic into cache pages for another consumer, most likely the internal `multilayered_baked.mt` [resource]; when the engine uses that is open. A variant pass adds rain and wetness on top at runtime; that is weather, not material.
 
-**Layer values are name lookups.** Each `Multilayer_Layer` stores `colorScale`, `normalStrength`, `rough/metalLevelsIn/Out` as **CNames** that key into its `.mltemplate` override tables [source] (`G/Multilayer_Layer.hpp:22-40`). The per-layer numeric fields are `opacity`, `matTile`, `mbTile`, `microblend*` and `offsetU/V`. The wiki gives up to 20 layers [wiki] (`multilayered/README.md` L27, L80).
+**Layer values are name lookups.** Each layer stores `colorScale`, `normalStrength`, `rough/metalLevelsIn/Out` as **CNames** that key into its template's override tables; its numeric fields are `opacity`, `matTile`, `mbTile`, `microblend*` and `offsetU/V` [source] (`G/Multilayer_Layer.hpp:22-40`). The tables hold `{n, v}` entries; colour names are `<hex>_<hex>` with `null` in either half, and `null_null`/`null` are ordinary entries present in every vanilla template [resource]. Each template also has a `defaultOverrides` selection and `colorMaskLevelsIn/Out`. The wiki gives up to 20 layers [wiki] (`multilayered/README.md` L27, L80).
 
-**How the add-on composites** (an approximation):
+**How the layers combine [source unless marked]:**
 
-- straight lerp by opacity × contrast-adjusted mask;
-- levels treated as scale/bias;
-- `colorMaskLevelsIn` ignored.
+| Step | Arithmetic |
+|---|---|
+| Order | Front to back: from the highest layer index down; the bottom layer (index 0) ignores its mask. A layer with no mask data at a pixel is skipped |
+| Coverage | Mask `m` (bilinear, at `frac(uv)` with V flipped), crossfaded with the layer's microblend: `mp = saturate(k + (m − k)·c)`, `k = 1 − microblend.a`; `a = mp · opacity`. `c` comes from `microblendContrast` (taken as the value itself [hypothesis]) |
+| Share | Each layer takes `w = min(remaining, a)` of the coverage still remaining. **Not a lerp stack**: two half-covering layers over a base give 0.5 / 0.5 / 0. Coverage left over is black, with zero roughness and metalness |
+| Maps | Read at `offset + matTile · frac(uv)` (U times the setup's ratio) in the game's own texture rows; microblend likewise with `mbTile` |
+| Roughness, metalness | The map's R through its levels as a clamped scale/bias chain: `saturate(saturate(x·in₀ + in₁)·out₀ + out₁)`. The stored pairs are scale/bias (for example the input range 30…220 as (1.342, −0.158)) [resource] |
+| Colour | `colour map · lerp(1, colorScale, cm)`, where `cm` is the same chain on the **roughness** map through the template's colour-mask levels. Templates storing `colorMaskLevelsOut = (0, 0)` (most, including every earring template) must tint everywhere for vanilla gold and paint to look right; the CPU mapping is unread [hypothesis] |
+| Normals | Layer normals add up by share; microblend normals blend in at the mask's edges (`e = saturate(saturate(√(1 − 2·|mp − ½|))·opacity − Σa)`); the two mix by the strongest microblend weight and are laid over `GlobalNormal` (strengthened by its intensity) with reoriented normal mapping |
+| Output | GBuffer0 `sqrt(albedo)`, GBuffer1 the normal, GBuffer2 (metalness, roughness, ⅓); roughness is clamped to [0.04, 1] only by the deferred light |
 
-Cited at `materials/blender/nodes.py:398-554`, `material_types/multilayered.py:845`.
+Colour maps are sRGB (`isGamma`), roughness, metalness, normals and microblends linear [resource]. How community tools differ (the Blender add-on stacks bottom-up with a lerp, ignores the colour mask and uses another contrast curve; WolvenKit's preview paints flat colours) is recorded in the evidence note [community].
+
+**What the Studio draws.** The preview's layered adapter (`layered-material.ts`) bakes this arithmetic once per material into colour, normal and roughness/metalness maps over the mesh's own UV range and lights them as a standard metal/rough surface; a real-GPU test matches the bake to its CPU reference. It draws the V's piercings and the graphic eye designs ([head CC rendering](head-cc-rendering.md)). The rendered look is [hypothesis] until an in-game comparison.
 
 **`multilayered_clear_coat.mt`** [resource] [source]:
 
@@ -523,7 +534,7 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 7. **Runtime gradient atlases.** Recover the atlas construction for `.gradient` and `.hp` (row assignment, colour space, filtering). This affects eyes, brows, lashes and hair.
 8. **Unmapped debris.** Recover the G-buffer render-target formats (8-bit vs 10-bit precision affects the sqrt encoding) and the meaning of the low 5 stencil bits.
 9. **Ray-tracing libraries.** Parse the ray-tracing libraries in `staticshader_final.cache`. Their names survive (`ShadeSurfaceWithLightSample*`, `GBuffer0..2`), which could confirm the BRDF and G-buffer semantics independently.
-10. **Multilayer levels.** Confirm the multilayer levels semantics (`roughLevelsIn/Out` pairs) against the `m_surfaceCache_GenerateMultilayer` program.
+10. ~~**Multilayer levels.**~~ **Answered [source]:** the pairs feed a clamped scale/bias chain (`saturate(saturate(x·a + b)·c + d)`), identical in the G-buffer and surface-cache programs. Still open for multilayered: the CPU mapping of `colorMaskLevelsOut = (0, 0)` (which must tint), of `microblendContrast`, whether `colorScale` is linearised and `matTile` multiplied by `tilingMultiplier`, and when the surface cache is used ([evidence](../research/materials/multilayered-shader-evidence.md#open-questions-runtime-test-candidates)).
 11. **`Color` parameter encoding.** Do `CMaterialParameterColor` values reach shaders as byte/255 (as `eye_shadow`'s in-shader 2.2 linearisation suggests) or sRGB-decoded? This sets the in-game strength of the Colour-shifting tint. What is `MaterialModifiersConsts[2].x` on the player head?
 12. **Debug views.** Can the engine's `EEnvManagerModifier` debug views (G-buffer, Roughness, Metalness, Translucency, MaterialID) be enabled from CET or RED4ext? That would turn most questions here into one capture session.
 13. **Decal depth bias.** What depth bias does `OFFSET_DecalBias` apply, and does it explain why a coincident decal failed only close up?
@@ -545,4 +556,4 @@ Batch these into one prepared session with fixed camera, FOV and light, and reco
 
 ---
 
-Related: [Glitter in game](glitter-in-game.md) · [mesh-decal contract](../research/materials/mesh-decal-shader-contract.md) · [glossy feasibility](../research/materials/glossy-decal-feasibility.md) · [colour-shift feasibility](../research/materials/colour-shift-game-feasibility.md) · [multilayered assessment](../research/materials/multilayered-makeup-assessment.md) · [glint feasibility](../research/materials/redengine-glint-feasibility.md) · [finish taxonomy](../research/materials/makeup-finish-taxonomy.md) · [skin trace](../research/eye-artistry/saved-skin-shader-and-winner.md) · [eye/lip optics](../research/eye-artistry/eye-lip-optics-audit.md) · [backlog](../research/backlog/materials-shader-re.md). Community sources are acknowledged in the [community credits](../docs/community-credits.md).
+Related: [Glitter in game](glitter-in-game.md) · [mesh-decal contract](../research/materials/mesh-decal-shader-contract.md) · [glossy feasibility](../research/materials/glossy-decal-feasibility.md) · [colour-shift feasibility](../research/materials/colour-shift-game-feasibility.md) · [multilayered assessment](../research/materials/multilayered-makeup-assessment.md) · [multilayered evidence](../research/materials/multilayered-shader-evidence.md) · [glint feasibility](../research/materials/redengine-glint-feasibility.md) · [finish taxonomy](../research/materials/makeup-finish-taxonomy.md) · [skin trace](../research/eye-artistry/saved-skin-shader-and-winner.md) · [eye/lip optics](../research/eye-artistry/eye-lip-optics-audit.md) · [backlog](../research/backlog/materials-shader-re.md). Community sources are acknowledged in the [community credits](../docs/community-credits.md).

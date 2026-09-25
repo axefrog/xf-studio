@@ -8,9 +8,10 @@ import { restoreFirstWeights } from "./skin";
 import type { DetailLimit } from "./detail-limits";
 import type { EyeballHandle, EyeShellHandle } from "./eye-material";
 import type { FaceDecalHandle } from "./face-decal-material";
+import type { LayeredHandle } from "./layered-material";
 
 /**
- * Renderer device port for the resolved character details (head skin, brows, lashes, hair, eyes): it reads the host's
+ * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
  * content-addressed character record, fetches and hash-checks each GLB and texture, keeps only the
  * chunks the record says are visible and drawable, and builds each chunk's material through the
  * adapter for its game template. It returns ready Three objects plus plain per-slot problems; on
@@ -32,6 +33,8 @@ export type LoadedCharacterComponent = {
    * whichever order the scene swaps characters in (PREV-51).
    */
   decals?: { mesh: THREE.SkinnedMesh; chunk: RenderComponent["materials"][number]; handle: FaceDecalHandle; surface: AdaptedMaterial["decalSurface"] | null }[];
+  /** Layered chunks: their meshes and bake handles (the scene bakes each stack once, with its renderer). */
+  layered?: { mesh: THREE.SkinnedMesh; handle: LayeredHandle }[];
 };
 export type LoadedCharacterDetails = {
   record: CharacterDetail;
@@ -52,7 +55,10 @@ export type CharacterDetailLoadOptions = {
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
-  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"] };
+  hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], piercings: ["piercings", "they aren't"] };
+/** Every served texture a chunk names: its parameters' textures and, for a layered chunk, each layer's maps and mask. */
+export const chunkTextureFiles = (material: RenderComponent["materials"][number]): RenderTexture[] =>
+  [...Object.values(material.textures), ...(material.layered?.layers.flatMap(layer => Object.values(layer.textures)) ?? [])];
 export { chunkOfMesh };
 
 /**
@@ -76,6 +82,29 @@ const geometriesOf = (roots: readonly THREE.Object3D[]) => {
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Bind an unskinned chunk whole to one bone at the root, as a skinned mesh (so it draws, morphs and is released like every other
+ * chunk). It stays where the export placed it: the idle rig never moves that bone [hypothesis: how the engine places a rigid mesh in
+ * a skinned component is unread].
+ */
+export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D): THREE.SkinnedMesh {
+  const geometry = mesh.geometry, count = geometry.getAttribute("position").count;
+  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+  geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Float32Array.from({ length: count * 4 }, (_, i) => i % 4 ? 0 : 1), 4));
+  const skinned = new THREE.SkinnedMesh(geometry, mesh.material);
+  skinned.name = mesh.name;
+  skinned.position.copy(mesh.position); skinned.quaternion.copy(mesh.quaternion); skinned.scale.copy(mesh.scale);
+  const parent = mesh.parent ?? root;
+  parent.add(skinned);
+  mesh.removeFromParent();
+  const bone = new THREE.Bone();
+  bone.name = `xfs_rigid_${mesh.name}`;
+  root.add(bone);
+  root.updateMatrixWorld(true);
+  skinned.bind(new THREE.Skeleton([bone]));
+  return skinned;
 }
 
 export async function readCharacterRecord(file: string, fetcher: CharacterDetailFetch = fetch, signal?: AbortSignal): Promise<CharacterDetail> {
@@ -164,7 +193,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
       try {
         // Every texture a drawn chunk names is fetched and verified before any material is built.
         const loadedImages = new Map<string, HTMLImageElement>();
-        for (const material of component.materials) for (const texture of Object.values(material.textures))
+        for (const material of component.materials) for (const texture of chunkTextureFiles(material))
           loadedImages.set(texture.file, await imageOf(texture));
         aborted();
         const source = await parseOf(component.geometry);
@@ -178,6 +207,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         let skin: LoadedCharacterComponent["skin"];
         const eyes: NonNullable<LoadedCharacterComponent["eyes"]> = { eyeballs: [], shells: [] };
         const decals: NonNullable<LoadedCharacterComponent["decals"]> = [];
+        const layered: NonNullable<LoadedCharacterComponent["layered"]> = [];
+        // A drawn chunk whose exported geometry has no skin (a framework's linked mesh can be rigid) is bound whole to one root bone.
+        const rigid: THREE.Mesh[] = [];
+        root.traverse(object => { if (object instanceof THREE.Mesh && !(object instanceof THREE.SkinnedMesh) && chunkOfMesh(object.name) !== null) rigid.push(object); });
+        for (const mesh of rigid) bindRigid(mesh, root);
+        const rigidNames = new Set(rigid.map(mesh => mesh.name));
         root.traverse(object => {
           if (object instanceof THREE.Bone) { bones.push(object); return; }
           if (!(object instanceof THREE.Mesh)) return;
@@ -186,11 +221,11 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const adapter = material ? materialAdapter(material.template, material.templateName, component.slot) : undefined;
           if (!material || !adapter || !(object instanceof THREE.SkinnedMesh)) { unwanted.push(object); return; }
           const raw = source.weights.get(object.name);
-          if (!raw) throw Error(`missing skin weights for ${object.name}`);
-          object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
+          if (!raw && !rigidNames.has(object.name)) throw Error(`missing skin weights for ${object.name}`);
+          if (raw) object.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
           object.frustumCulled = false;
-          const chunkTextures = (parameter: string, use: TextureUse, wrap: TextureWrap) => {
-            const source = material.textures[parameter];
+          const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
+            const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
             if (!source) return undefined;
             const key = `${source.file}|${use}|${wrap}`;
             let texture = made.get(key);
@@ -218,6 +253,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           if (adapted.eye?.role === "eyeball") eyes.eyeballs.push({ mesh: object, handle: adapted.eye });
           if (adapted.eye?.role === "shell") eyes.shells.push({ mesh: object, handle: adapted.eye });
           if (adapted.decal) decals.push({ mesh: object, chunk: material, handle: adapted.decal, surface: adapted.decalSurface ?? null });
+          if (adapted.layered) layered.push({ mesh: object, handle: adapted.layered });
           // A placeholder chunk is recorded (so its limit is said) but never drawn.
           if (adapted.hidden) object.visible = false;
           object.material = adapted.material;
@@ -231,7 +267,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
         components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}),
-          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}) });
+          ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}) });
         if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes, roughness: skin.roughness, parameters: skin.handle.parameters };
       } catch (error) {
         if (signal?.aborted) throw error;

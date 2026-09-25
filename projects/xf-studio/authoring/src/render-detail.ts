@@ -24,11 +24,16 @@
  *   morph-skinned decal mesh over the head, in the documented draw order), and every chunk carries its template's own
  *   `templateName` (the name the engine finds the compiled programs by; a copied template keeps it) and
  *   `materialPriority`. A v4 reader refuses v2 and v3 character records and still accepts a core head under any schema.
+ * - `xfs/render-detail-5`: the character record gains the `piercings` slot (the V's earring and piercing parts, selected by the
+ *   creator's piercing slot and its chunk masks), each layered (`multilayered.mt`) chunk's `layered` stack (the `.mlsetup` layers
+ *   with their `.mltemplate` values and textures, the `.mlmask` layers as raw channels), the creator's `choices` for the slots a
+ *   viewer may try out (the piercing styles and colours), and the `override` the host applied for such a choice. A v5 reader
+ *   refuses v2 to v4 character records and still accepts a core head under any schema.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
-export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-4" as const;
+export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-5" as const;
 /** Earlier character schemas a reader recognises only to refuse them plainly. */
-export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3"];
+export const RETIRED_CHARACTER_SCHEMAS: readonly string[] = ["xfs/render-detail-2", "xfs/render-detail-3", "xfs/render-detail-4"];
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
 /** Where character records and their files are served; file names are content-addressed. */
 export const CHARACTER_DETAIL_ASSETS = "/assets/character/";
@@ -112,11 +117,14 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Version 4: the character record (the resolved head skin, face details, brows, lashes, hair and eyes of the player's own game).
+// Version 5: the character record (the resolved head skin, face details, brows, lashes, hair, eyes and piercings of the player's own game).
 
-export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes";
+export type DetailSlot = "skin" | "face" | "brows" | "lashes" | "hair" | "eyes" | "piercings";
 /** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes"];
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"];
+/** Slots whose creator choice a viewer may try out in the viewport without changing the V (the host resolves the choice). */
+export type ChoiceSlot = "piercings";
+export const CHOICE_SLOTS: readonly ChoiceSlot[] = ["piercings"];
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -141,6 +149,43 @@ export type RenderGradient = { depotPath: string; archive: string | null; sha256
  * that parameter in this record already are `texture`; `texture: null` (ArchiveXL's eye fix) leaves the material's own.
  */
 export type RenderMorphTexture = { morph: string; texture: string | null; parameter: string | null };
+/** A resource the record read values from (not a served file): its depot path, winning archive and extracted-byte hash. */
+export type RenderSourceRef = { depotPath: string; archive: string | null; sha256: string | null };
+/** The four surface maps of a layer template (`.mltemplate`), plus the layer's own microblend and its mask layer. */
+export const LAYER_TEXTURES = ["color", "normal", "roughness", "metalness", "microblend", "mask"] as const;
+export type LayerTextureRole = typeof LAYER_TEXTURES[number];
+/**
+ * One `Multilayer_Layer` of a `.mlsetup`, with the values its CNames select from its template's override tables (the template's
+ * own `defaultOverrides` name when the layer's name is not in the table), as stored: the renderer's layered adapter interprets them.
+ * `names` keeps the CNames the values came from, for provenance.
+ */
+export type RenderLayer = {
+  /** The layer template's depot path and where it was read, or null when the layer names none or it was unreadable. */
+  template: RenderSourceRef | null;
+  opacity: number;
+  matTile: number;
+  /** The template's `tilingMultiplier` (1 when unset). */
+  tilingMultiplier: number;
+  offsetU: number; offsetV: number;
+  mbTile: number; microblendContrast: number; microblendNormalStrength: number; microblendOffsetU: number; microblendOffsetV: number;
+  colorScale: [number, number, number];
+  normalStrength: number;
+  roughLevelsIn: [number, number]; roughLevelsOut: [number, number];
+  metalLevelsIn: [number, number]; metalLevelsOut: [number, number];
+  /** The template's colour-mask levels (`colorMaskLevelsIn/Out`). */
+  colorMaskLevelsIn: [number, number]; colorMaskLevelsOut: [number, number];
+  names: { colorScale: string; normalStrength: string; roughLevelsIn: string; roughLevelsOut: string; metalLevelsIn: string; metalLevelsOut: string };
+  /** Served textures by role; a role the layer lacks (or that could not be read) is absent. `mask` is this layer's `.mlmask` layer. */
+  textures: Partial<Record<LayerTextureRole, RenderTexture>>;
+};
+/** A `multilayered.mt` chunk's layer stack: the `.mlsetup` (in stored order, bottom first) and the `.mlmask` it is masked by. */
+export type RenderLayered = { setup: RenderSourceRef; mask: (RenderSourceRef & { layers: number }) | null; ratio: number; useNormal: boolean;
+  layers: RenderLayer[] };
+/** One creator choice a viewer may try: an option (a style) and its definitions (colours), in the creator's order. */
+export type RenderChoiceOption = { option: string; index: number; definitions: { name: string; index: number }[] };
+export type RenderChoices = { slot: ChoiceSlot; options: RenderChoiceOption[] };
+/** A viewer's choice the host applied in place of the V's own for one slot. */
+export type RenderOverride = { slot: ChoiceSlot; option: string; definition: string };
 export type RenderChunkMaterial = {
   chunk: number;
   /** The mesh appearance's material name for this chunk. */
@@ -162,6 +207,8 @@ export type RenderChunkMaterial = {
   skinProfiles: Record<string, RenderSkinProfile>;
   /** Gradients the template's gradient parameters bind (`eye_gradient.mt` `IrisColorGradient`). */
   gradients: Record<string, RenderGradient>;
+  /** A layered (`multilayered.mt`) chunk's layer stack. */
+  layered?: RenderLayered;
 };
 /** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
 export function chunkOfMesh(name: string): number | null {
@@ -199,13 +246,18 @@ export type CharacterDetail = {
   detail: "character";
   identity: string;
   origin: "game-files";
-  character: { source: "default" | "save"; bodyGender: "female" | "male" };
+  character: { source: "default" | "save"; bodyGender: "female" | "male";
+    /** The viewer's choice the host resolved in place of the V's own (a piercing style tried in the viewport). */
+    override?: RenderOverride };
   provenance: { label: string; notes: string[]; tool?: string };
   components: RenderComponent[];
   slots: DetailSlotState[];
+  /** What a viewer may try per choice slot: the creator's options on this installation (vanilla and custom alike). */
+  choices: RenderChoices[];
 };
 
-const LIMITS = { components: 32, chunks: 64, params: 160, textures: 16, stops: 32 };
+/** A framework that fills slots with inline components (one per filled slot) can bring many parts to one piercing choice. */
+const LIMITS = { components: 96, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, options: 64, definitions: 64 };
 const paramName = (value: unknown, what: string) => typeof value === "string" && /^[A-Za-z0-9_.@:+ -]{1,96}$/.test(value) ? value : fail(`${what} is invalid.`);
 const int = (value: unknown, what: string, min: number, max: number) =>
   Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? value as number : fail(`${what} is out of range.`);
@@ -282,7 +334,76 @@ function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
     textures: entries(item?.textures, `${what} textures`, LIMITS.textures, texture),
     profiles: entries(item?.profiles, `${what} profiles`, 4, profile),
     skinProfiles: entries(item?.skinProfiles, `${what} skin profiles`, 4, skinProfile),
-    gradients: entries(item?.gradients, `${what} gradients`, 4, gradient) };
+    gradients: entries(item?.gradients, `${what} gradients`, 4, gradient),
+    ...(item?.layered === undefined ? {} : { layered: layered(item.layered, `${what} layers`) }) };
+}
+
+function sourceRef(value: unknown, what: string): RenderSourceRef {
+  const item = value as RenderSourceRef;
+  return { depotPath: text(item?.depotPath, `${what} depot path`), archive: item?.archive === null ? null : text(item?.archive, `${what} archive`),
+    sha256: optionalSha(item?.sha256 ?? null, what) };
+}
+const pair = (value: unknown, what: string): [number, number] => {
+  if (!Array.isArray(value) || value.length !== 2) return fail(`${what} is not a pair.`);
+  return [finite(value[0], what), finite(value[1], what)];
+};
+function layer(value: unknown, what: string): RenderLayer {
+  const item = value as RenderLayer;
+  if (!item || typeof item !== "object") fail(`${what} is missing.`);
+  const colour = item.colorScale;
+  if (!Array.isArray(colour) || colour.length !== 3) fail(`${what} colour is not RGB.`);
+  const names = item.names ?? {} as RenderLayer["names"];
+  const name = (key: keyof RenderLayer["names"]) => typeof names[key] === "string" && names[key].length < 128 ? names[key] : fail(`${what} ${key} name is invalid.`);
+  const textures = item.textures;
+  if (!textures || typeof textures !== "object" || Array.isArray(textures)) fail(`${what} textures are missing.`);
+  for (const role of Object.keys(textures)) if (!(LAYER_TEXTURES as readonly string[]).includes(role)) fail(`${what} texture role ${role} is unknown.`);
+  return { template: item.template === null ? null : sourceRef(item.template, `${what} template`),
+    opacity: finite(item.opacity, `${what} opacity`), matTile: finite(item.matTile, `${what} tile`), tilingMultiplier: finite(item.tilingMultiplier, `${what} tiling`),
+    offsetU: finite(item.offsetU, `${what} offset`), offsetV: finite(item.offsetV, `${what} offset`), mbTile: finite(item.mbTile, `${what} microblend tile`),
+    microblendContrast: finite(item.microblendContrast, `${what} microblend contrast`),
+    microblendNormalStrength: finite(item.microblendNormalStrength, `${what} microblend normal`),
+    microblendOffsetU: finite(item.microblendOffsetU, `${what} microblend offset`), microblendOffsetV: finite(item.microblendOffsetV, `${what} microblend offset`),
+    colorScale: colour.map((c, k) => finite(c, `${what} colour ${k}`)) as [number, number, number],
+    normalStrength: finite(item.normalStrength, `${what} normal strength`),
+    roughLevelsIn: pair(item.roughLevelsIn, `${what} roughness in`), roughLevelsOut: pair(item.roughLevelsOut, `${what} roughness out`),
+    metalLevelsIn: pair(item.metalLevelsIn, `${what} metalness in`), metalLevelsOut: pair(item.metalLevelsOut, `${what} metalness out`),
+    colorMaskLevelsIn: pair(item.colorMaskLevelsIn, `${what} colour mask in`), colorMaskLevelsOut: pair(item.colorMaskLevelsOut, `${what} colour mask out`),
+    names: { colorScale: name("colorScale"), normalStrength: name("normalStrength"), roughLevelsIn: name("roughLevelsIn"), roughLevelsOut: name("roughLevelsOut"),
+      metalLevelsIn: name("metalLevelsIn"), metalLevelsOut: name("metalLevelsOut") },
+    textures: Object.fromEntries(Object.entries(textures).map(([role, entry]) => [role, texture(entry, `${what} ${role}`)])) };
+}
+function layered(value: unknown, what: string): RenderLayered {
+  const item = value as RenderLayered;
+  if (!item || typeof item !== "object" || !Array.isArray(item.layers) || !item.layers.length || item.layers.length > LIMITS.layers) fail(`${what} are invalid.`);
+  if (typeof item.useNormal !== "boolean") fail(`${what} normal flag is missing.`);
+  return { setup: sourceRef(item.setup, `${what} setup`),
+    mask: item.mask === null ? null : { ...sourceRef(item.mask, `${what} mask`), layers: int(item.mask?.layers, `${what} mask layers`, 0, 64) },
+    ratio: finite(item.ratio, `${what} ratio`), useNormal: item.useNormal, layers: item.layers.map((entry, index) => layer(entry, `${what} ${index}`)) };
+}
+
+function choices(value: unknown): RenderChoices[] {
+  if (!Array.isArray(value) || value.length > CHOICE_SLOTS.length) return fail("choices are invalid.");
+  const seen = new Set<string>();
+  return value.map((entry: RenderChoices, index) => {
+    if (!CHOICE_SLOTS.includes(entry?.slot) || seen.has(entry.slot)) fail(`choice slot ${index} is invalid.`);
+    seen.add(entry.slot);
+    if (!Array.isArray(entry.options) || entry.options.length > LIMITS.options) fail(`${entry.slot} choices are invalid.`);
+    const options = new Set<string>();
+    return { slot: entry.slot, options: entry.options.map((option, k) => {
+      const name = paramName(option?.option, `${entry.slot} choice ${k}`);
+      if (options.has(name)) fail(`${entry.slot} choice ${name} repeats.`);
+      options.add(name);
+      if (!Array.isArray(option.definitions) || !option.definitions.length || option.definitions.length > LIMITS.definitions) fail(`${entry.slot} choice ${name} has no definitions.`);
+      return { option: name, index: int(option.index, `${entry.slot} choice ${name} index`, 0, 1024),
+        definitions: option.definitions.map((definition, d) => ({ name: paramName(definition?.name, `${entry.slot} choice ${name} definition ${d}`),
+          index: int(definition?.index, `${entry.slot} choice ${name} definition ${d} index`, 0, 1024) })) };
+    }) };
+  });
+}
+function override(value: unknown): RenderOverride {
+  const item = value as RenderOverride;
+  if (!item || !CHOICE_SLOTS.includes(item.slot)) return fail("override is invalid.");
+  return { slot: item.slot, option: paramName(item.option, "override option"), definition: paramName(item.definition, "override definition") };
 }
 
 function component(value: unknown, index: number): RenderComponent {
@@ -316,6 +437,7 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
   if (doc.origin !== "game-files") fail("origin is invalid.");
   if (doc.character?.source !== "default" && doc.character?.source !== "save") fail("character source is invalid.");
   if (doc.character.bodyGender !== "female" && doc.character.bodyGender !== "male") fail("body gender is invalid.");
+  const applied = doc.character.override === undefined ? undefined : override(doc.character.override);
   if (!Array.isArray(doc.components) || doc.components.length > LIMITS.components) fail("components are invalid.");
   const components = doc.components.map(component);
   if (new Set(components.map(item => item.id)).size !== components.length) fail("component ids repeat.");
@@ -328,14 +450,14 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
       ...(entry.message === undefined ? {} : { message: text(entry.message, `${slot} message`) }) };
   });
   return { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: text(doc.identity, "identity"), origin: "game-files",
-    character: { source: doc.character.source, bodyGender: doc.character.bodyGender },
+    character: { source: doc.character.source, bodyGender: doc.character.bodyGender, ...(applied ? { override: applied } : {}) },
     provenance: { label: text(doc.provenance?.label, "provenance label"),
       notes: Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(entry => text(entry, "note")) : [],
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    components, slots };
+    components, slots, choices: choices(doc.choices) };
 }
 
-/** Version dispatch: a v1 record is a core head; a v2, v3 or v4 record is a core head, and a v4 record may be a character. */
+/** Version dispatch: a v1 record is a core head; a v2 to v5 record is a core head, and a v5 record may be a character. */
 export function parseRenderDetail(value: unknown): CoreDetail | CharacterDetail {
   const doc = value as { schema?: unknown; detail?: unknown };
   if (doc?.detail === "character") return parseCharacterDetail(value);

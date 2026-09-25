@@ -54,7 +54,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
     setBlink: () => calls.push("blink"), animateBlink: () => calls.push("play") };
   const services = createTrustedPreviewServices(workspace, {
     savedAppearance: { apply: () => { calls.push("save"); return { applied: [], appearanceReferences: 0,
-      matchedPiercing: false, eyeShape: 9 }; } },
+      eyeShape: 9 }; } },
     preview, motion,
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);
@@ -93,7 +93,7 @@ const savedV = (isMale: boolean): SavedV => ({ schema: "eye-artistry/saved-v-1",
   presetVersion: 1, isMale, brainIsMale: isMale,
   groups: { head: [{ name: "TPP", appearances: [], morphs: [] }], arms: [], body: [] },
   perspectives: [], tags: [], evidence: { nodeName: "appearance", nodeBytes: 1, bytesRead: 1, trailingBytes: 0, chunks: 1, decompressedBytes: 1 } });
-const applied = { applied: [], appearanceReferences: 0, matchedPiercing: false };
+const applied = { applied: [], appearanceReferences: 0 };
 
 test("the creator rig's body follows the applied save, derived by the saved-appearance service (CORE-25)", () => {
   const calls: string[] = [];
@@ -137,7 +137,28 @@ test("restoring the preview never changes the caller's workspace (CORE-25)", () 
   const services = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion });
   const { preview: actions } = services.finish();
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 1.5 });
-  // The restored state applied its fallbacks (brows off, no piercing style, base eye shape) to its own copy only.
-  expect(actions.snapshot()).toMatchObject({ brows: false, piercingStyle: "" });
+  // The restored state applied its fallbacks (brows off, base eye shape) to its own copy only. A tried piercing style is kept while
+  // the styles on offer are still on their way with the V's record (the host shows the V's own piercings for a style it doesn't offer).
+  expect(actions.snapshot()).toMatchObject({ brows: false, piercingStyle: "missing" });
   expect(workspace).toEqual(before);
+});
+
+test("a tried piercing style the installation no longer offers falls back to the V's own once the styles are known", () => {
+  const workspace = freshWorkspace();
+  workspace.preview.piercingStyle = "piercings_99";
+  workspace.preview.piercingDefinition = "gone";
+  const calls: string[] = [];
+  const noop = () => {};
+  const preview: PreviewPort = {
+    cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false, endFovGesture: noop, restoreCamera: noop,
+    setExposure: noop, setLightAngle: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
+    setHair: noop, setEyeShape: noop, setPiercings: enabled => calls.push(`piercings:${enabled}`), setDetail: noop,
+    setPiercingPreview: (style, definition) => calls.push(`try:${style}:${definition}`),
+    piercingOptions: () => [{ id: "piercings_01", label: "Piercing 01", choices: [{ index: 1, definition: "silver", label: "Silver" }] }],
+  };
+  const motion: MotionPort = { available: false, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const { preview: actions } = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }).finish();
+  expect(actions.snapshot()).toMatchObject({ piercingStyle: "", piercingDefinition: "" });
+  // The visibility preference always reaches the device (piercings arrive later with the record and follow it).
+  expect(calls).toEqual(["try::", "piercings:true"]);
 });

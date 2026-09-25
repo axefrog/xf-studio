@@ -207,7 +207,7 @@ describe("skin adapter", () => {
   });
 
   test("optional inputs fall back to neutral values the adapter owns; the three base maps are required", () => {
-    const only: ChunkTextures = parameter => ["Albedo", "Normal", "Roughness"].includes(parameter) ? new THREE.Texture() : undefined;
+    const only: ChunkTextures = parameter => typeof parameter === "string" && ["Albedo", "Normal", "Roughness"].includes(parameter) ? new THREE.Texture() : undefined;
     const adapted = materialAdapter("base\\materials\\skin.mt")!.create(skinChunk(["Albedo", "Normal", "Roughness"]), only, mesh(), context);
     expect(adapted.owned.length).toBe(4);
     const none: ChunkTextures = parameter => parameter === "Albedo" ? new THREE.Texture() : undefined;

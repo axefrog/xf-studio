@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch, type Session } from "../tools/cdp";
 import { oracleDescribe } from "./optional-oracles";
-import type { PlateProbe } from "./webgl-probe-page";
+import type { LayeredProbe, PlateProbe } from "./webgl-probe-page";
 
 /**
  * Real-GPU checks in headless Chrome (tests/webgl-probe-page.ts): every renderer material variant compiles and draws in
@@ -17,7 +17,7 @@ import type { PlateProbe } from "./webgl-probe-page";
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[]; failure?: string;
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
-  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; plate?: PlateProbe };
+  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; plate?: PlateProbe; layered?: LayeredProbe };
 const gap = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value - b[k]!)));
 /** Largest relative difference per channel. */
 const relative = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value / b[k]! - 1)));
@@ -96,6 +96,19 @@ oracleDescribe(existsSync(CHROME), `headless Chrome is not installed at ${CHROME
 
   test("every plate route compiles and draws, with and without the skin light", () => {
     expect(probe.plate!.routes).toEqual(["faceted", "fresnel", "flat+1 own", "faceted", "fresnel", "flat+1 own"]);
+    expect(probe.errors).toEqual([]);
+  });
+
+  test("the layered bake compiles on the GPU and matches its CPU reference: front-to-back coverage, levels, colour mask, microblend, RNM", () => {
+    const layered = probe.layered!;
+    expect(layered).toBeDefined();
+    expect(layered.error).toBeUndefined();
+    expect(layered.state).toBe("baked");
+    expect(layered.drawn).toEqual([2, 1, 0]);
+    // Half-float maps: agree to about three decimals.
+    expect(gap(layered.gpu.colour, layered.cpu.colour)).toBeLessThanOrEqual(0.004);
+    expect(gap(layered.gpu.normal, layered.cpu.normal)).toBeLessThanOrEqual(0.004);
+    expect(gap(layered.gpu.surface, layered.cpu.surface)).toBeLessThanOrEqual(0.004);
     expect(probe.errors).toEqual([]);
   });
 

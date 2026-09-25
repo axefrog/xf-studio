@@ -18,7 +18,8 @@
  * - **Drawable chunks** are those whose material template the renderer has an adapter for
  *   (render-templates.ts). A component with none (a hair shadow mesh on `glass.mt` or `metal_base.remt`) is
  *   left out; which components are shadow-only is still an open question (knowledge/head-cc-rendering.md).
- *   A placeholder template (`multilayered.mt`, no adapter yet) is recorded beside drawn chunks, so the renderer can
+ *   Layered chunks (`multilayered.mt`) draw only on `LAYERED_SLOTS` (piercings and eyes), so a hair's layered shadow proxy stays
+ *   out too. A placeholder template (a decal the preview can't draw yet) is recorded beside drawn chunks, so the renderer can
  *   say plainly that part is not shown, but never makes a component drawable on its own.
  * - **Morph texture rule**: a morph target's `baseTexture` replaces its named parameter's texture (the vanilla eye
  *   morph binds a flat `normal.xbm` to `Normal`; ArchiveXL's eye fix clears it) [hypothesis, eye-rendering.md §1.3].
@@ -32,18 +33,25 @@
  *   port) join the face details. Components are ordered by the creator resource's option order (merged CCO, so CCXL
  *   options follow vanilla), the documented fallback for the unknown order between same-priority decals
  *   (knowledge/head-cc-rendering.md §3).
+ * - **Piercings** (the `piercings` slot) are the choices on the creator's piercing slot (`piercings_color`), consumed by the face
+ *   groups like the face details. Each drawing component of the resolved appearance is planned with its own chunk mask, so a vanilla
+ *   style, a framework that replaces the style's `.app` (inline components, one per filled slot; zero-chunk placeholders draw
+ *   nothing) and a CCXL option on the slot all resolve through the same rules (knowledge/cc-file-chain.md §6). Their chunks are layered
+ *   (`multilayered.mt`): each carries its `.mlsetup` and `.mlmask` references for the host to read into the chunk's layer stack.
+ * - **Viewer choices**: a slot a viewer may try out (`CHOICE_SLOTS`) lists the creator's options for it (`slotChoices`), and a tried
+ *   choice replaces the V's own on that slot before resolution (`applyChoiceOverride`), in every group the creator lists it in.
  */
-import type { CcoResource } from "./cco-model";
+import type { AppearanceDescriptor, CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
-import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
-import { DETAIL_SLOTS } from "./render-detail";
+import type { ChoiceSlot, DetailSlot, DetailSlotState, RenderChoices, RenderMorphTexture, RenderOverride, RenderRgba } from "./render-detail";
+import { CHOICE_SLOTS, DETAIL_SLOTS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
-  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes" });
+  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes", piercings_color: "piercings" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
 /**
@@ -52,6 +60,8 @@ export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
  * consumer wiring hypothesis]. `character_customization` alone is the creator puppet; `finalSceneBruises` is quest-driven.
  */
 export const FACE_GROUPS: readonly string[] = ["TPP", "face", "beards"];
+/** The groups whose choices draw each slot on the third-person head: the face controller's for piercings, the head and hair controllers' otherwise. */
+export const slotGroups = (slot: DetailSlot): readonly string[] => slot === "piercings" || slot === "face" ? FACE_GROUPS : THIRD_PERSON_GROUPS;
 /**
  * Plain words for the face details the vanilla creator slots hold, for the label only (selection never uses them);
  * a CCXL option on a slot of its own reads "face detail".
@@ -69,6 +79,8 @@ export type PlannedChunk = {
   scalars: Record<string, number>; colours: Record<string, RenderRgba>;
   textures: Record<string, Provenance>; profiles: Record<string, Provenance>; skinProfiles: Record<string, Provenance>;
   gradients: Record<string, Provenance>;
+  /** A layered chunk's `.mlsetup` and `.mlmask` (null when the chain names none). */
+  layered: { setup: Provenance; mask: Provenance | null } | null;
 };
 export type PlannedComponent = {
   slot: DetailSlot; option: string; definition: string; component: string;
@@ -80,7 +92,7 @@ export type PlannedComponent = {
   /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
 };
-export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
+export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[]; choices: RenderChoices[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
@@ -89,7 +101,8 @@ export type TemplateIdentities = ReadonlyMap<string, { name: string | null; prio
 /** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
   skin: { noun: "skin", not: "isn't", pronoun: "it" }, face: { noun: "face details", not: "aren't", pronoun: "they" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
-  hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" } });
+  hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" },
+  piercings: { noun: "piercings", not: "aren't", pronoun: "they" } });
 
 /** A plain colour or style label from a definition name (`female__05_brown_liquorice` → `brown liquorice`). */
 export function choiceLabel(definition: string): string {
@@ -146,18 +159,26 @@ const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIden
 };
 
 /**
- * Plan one chunk. `faceDetail`: the chunk is drawn as a face detail, so only decal-family templates draw, with the
- * decal family's inputs.
+ * The slots whose layered (`multilayered.mt`) chunks draw: piercings and the eye designs. Elsewhere a layered chunk stays out as before:
+ * a hair's shadow proxy mixes layered and glass chunks, and which components are shadow-only is still open
+ * (knowledge/head-cc-rendering.md §4), so drawing it would add a visible shell the game may not show.
+ */
+export const LAYERED_SLOTS: readonly DetailSlot[] = ["piercings", "eyes"];
+
+/**
+ * Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs; layered
+ * templates draw only on `LAYERED_SLOTS`.
  */
 function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
-  identities: TemplateIdentities, faceDetail: boolean): PlannedChunk {
+  identities: TemplateIdentities, slot: DetailSlot): PlannedChunk {
+  const faceDetail = slot === "face";
   const template = material.template ? refLabel(material.template.ref) : null;
   const identity = template ? identities.get(template.toLowerCase()) : undefined;
   const found = renderTemplate(template, identity?.name);
-  const inputs = found && (!faceDetail || isDecal(found)) ? found : undefined;
+  const inputs = found && (!faceDetail || isDecal(found)) && (!found.layered || LAYERED_SLOTS.includes(slot)) ? found : undefined;
   const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, templateName: identity?.name ?? null,
     materialPriority: identity?.priority ?? null, drawn: !!inputs, placeholder: !!inputs?.placeholder,
-    scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} };
+    scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {}, layered: null };
   if (!inputs) return chunk;
   const textureInputs = templateTextures(inputs, faceDetail);
   for (const param of effectiveParams(material, defaults)) {
@@ -170,6 +191,15 @@ function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, 
       if (inputs.skinProfiles.includes(param.name) && /\.sp$/i.test(param.resource.ref.path)) chunk.skinProfiles[param.name] = param.resource;
       if (inputs.gradients?.includes(param.name) && /\.gradient$/i.test(param.resource.ref.path)) chunk.gradients[param.name] = param.resource;
     }
+  }
+  if (inputs.layered) {
+    const params = effectiveParams(material, defaults);
+    const layered = (name: string, extension: RegExp) => {
+      const param = params.find(entry => entry.name === name);
+      return param?.kind === "resource" && param.resource?.ref.path && extension.test(param.resource.ref.path) ? param.resource : null;
+    };
+    const setup = layered(inputs.layered.setup, /\.mlsetup$/i);
+    if (setup) chunk.layered = { setup, mask: layered(inputs.layered.mask, /\.mlmask$/i) };
   }
   const override = morphTextureOverride(rule, textureInputs);
   if (override) chunk.textures[override[0]] = override[1];
@@ -185,7 +215,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   const morphTexture = geometry.morphTexture && geometry.morphTarget
     ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
   const materials = component.materials.filter(material => !lods || ((lods[material.chunk] ?? 1) & 1) === 1)
-    .map(material => planChunk(material, defaults, morphTexture, identities, slot === "face"));
+    .map(material => planChunk(material, defaults, morphTexture, identities, slot));
   const drawn = materials.filter(material => material.drawn);
   // A face detail made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
   if (slot === "face" ? !drawn.length : !drawn.some(material => !material.placeholder)) return null;
@@ -265,7 +295,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
       continue;
     }
     const entries = resolved.appearances.filter(entry => entry.part === "head" && slotOf.get(entry.option) === slot &&
-      entry.groups.some(group => THIRD_PERSON_GROUPS.includes(group)));
+      entry.groups.some(group => slotGroups(slot).includes(group)));
     if (!entries.length) { slots.push({ slot, state: "none", label: "None" }); continue; }
     const planned = entries.flatMap(entry => entry.components.map(component => {
       const item = planComponent(slot, entry, component, defaults, identities);
@@ -273,7 +303,8 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
       if (item && slot === "skin" && decalOnly(item)) { skinDecals.push({ entry, component }); return null; }
       return item;
     }).filter((item): item is PlannedComponent => !!item));
-    const label = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition) : choiceLabel(entry.definition)))].join(", ");
+    const label = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
+      : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : choiceLabel(entry.definition)))].join(", ");
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
       const { noun, not, pronoun } = SLOT_WORDS[slot];
@@ -285,5 +316,61 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     components.push(...planned);
     slots.push({ slot, state: "shown", label });
   }
-  return { components, slots };
+  return { components, slots, choices: CHOICE_SLOTS.map(slot => ({ slot, options: slotChoices(cco, slot) })) };
 }
+
+/** Creator slot names (`uiSlot`) that feed one detail slot. */
+const creatorSlots = (slot: DetailSlot) => new Set(Object.entries(DETAIL_UI_SLOTS).filter(([, detail]) => detail === slot).map(([name]) => name));
+/** The creator's switchers that choose between the options of a detail slot (the piercing style switcher for `piercings_color`). */
+function slotSwitchers(cco: CcoResource, slot: DetailSlot) {
+  const names = creatorSlots(slot);
+  return cco.parts.head.options.flatMap(option => option.type === "switcher" && option.uiSlots.some(name => names.has(name)) ? [option] : []);
+}
+
+/**
+ * The options a viewer may try on a choice slot, as the creator offers them: every appearance option on the slot's creator slot that has
+ * an appearance resource and at least one named definition (so "Off" is not a choice to try; the V's own is), in the order of the slot's
+ * switcher (its choice index), then the resource's option order. Vanilla and CCXL options alike; never a mod name.
+ */
+export function slotChoices(cco: CcoResource, slot: ChoiceSlot): RenderChoices["options"] {
+  const names = creatorSlots(slot);
+  const switchIndex = new Map<string, number>();
+  for (const switcher of slotSwitchers(cco, slot)) for (const choice of switcher.options) for (const name of choice.names)
+    if (!switchIndex.has(name)) switchIndex.set(name, choice.index);
+  const seen = new Set<string>();
+  return cco.parts.head.options.flatMap((option, order) => {
+    if (option.type !== "appearance" || !names.has(option.uiSlot) || !option.resource || !option.name || seen.has(option.name)) return [];
+    seen.add(option.name);
+    const definitions = option.definitions.filter(definition => definition.name).slice(0, 64)
+      .map(definition => ({ name: definition.name, index: Math.min(definition.index, 1024) }));
+    return definitions.length ? [{ option: option.name, index: Math.min(switchIndex.get(option.name) ?? 1024, 1024), order, definitions }] : [];
+  }).sort((a, b) => a.index - b.index || a.order - b.order).slice(0, 64).map(({ option, index, definitions }) => ({ option, index, definitions }));
+}
+
+/**
+ * A viewer's tried choice in place of the V's own on one slot: every descriptor of an option on that slot is dropped, and the chosen
+ * option's definition is listed in each group the creator lists the option in. Returns null when the creator doesn't offer that choice
+ * (a stale or foreign request), so the V is shown as saved.
+ */
+export function applyChoiceOverride(appearances: readonly AppearanceDescriptor[], cco: CcoResource, override: RenderOverride): AppearanceDescriptor[] | null {
+  const offered = slotChoices(cco, override.slot).find(entry => entry.option === override.option);
+  const option = cco.parts.head.options.find(entry => entry.name === override.option);
+  if (!offered || !offered.definitions.some(entry => entry.name === override.definition) || option?.type !== "appearance" || !option.resource) return null;
+  const names = creatorSlots(override.slot);
+  const onSlot = new Set(cco.parts.head.options.filter(entry => names.has(entry.uiSlot)).map(entry => entry.name));
+  const groups = cco.parts.head.groups.filter(group => group.options.includes(option.name)).map(group => group.name);
+  if (!groups.length) return null;
+  return [...appearances.filter(entry => entry.part !== "head" || !onSlot.has(entry.option)),
+    ...groups.map(group => ({ part: "head" as const, group, option: option.name, app: option.resource!, definition: override.definition }))];
+}
+
+/**
+ * A plain piercing label: the style's number as the creator's switcher shows it, and the colour (`piercings_09`,
+ * `i0_000_pwa__earring__03_black` → `style 09, black`). A choice outside a numbered switcher reads as its colour only.
+ */
+export function piercingLabel(cco: CcoResource, option: string, definition: string): string {
+  const style = slotSwitchers(cco, "piercings").flatMap(switcher => switcher.options).find(choice => choice.names.includes(option))?.localizedName ?? "";
+  const colour = choiceLabel(definition);
+  return /^[0-9]{1,3}$/.test(style) ? `style ${style}, ${colour}` : colour;
+}
+

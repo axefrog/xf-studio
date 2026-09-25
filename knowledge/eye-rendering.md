@@ -182,7 +182,7 @@ Consequences [resource]: every CCXL eye is **texture-only `eye.mt`**: no gradien
 
 **Wetness-shell adapter** (`eye_shadow`). Its own mesh, drawn after the eyes, the makeup plate and the skin, with `transparent`, `depthTest` on, `depthWrite` off, `side: DoubleSide`, `blending: CustomBlending`, `blendSrc: OneFactor`, `blendDst: SrcAlphaFactor`. The fragment computes §4: direct lights only, GGX with the shell's own roughness and the eye visibility, no Fresnel, no environment. Tone mapping is the catch: the blend must happen in linear light. Both lighting presets draw into the Studio's scene-linear render target (`src/linear-display.ts`), where the shell is exact with `toneMapped: false`. Only a GPU without a renderable half-float buffer draws the Studio stage straight to the canvas, where the shell multiplies already tone-mapped colour.
 
-**Multilayer eyes**: through the multilayer adapter when it exists (Standard class, no refraction, the shell still on top). Until then say plainly that the design is not shown and draw the vanilla default eye.
+**Multilayer eyes**: through the shared layered adapter (Standard class, no refraction, the shell still on top); built, see rank 7 below. When a design can't be drawn, say so plainly (limit `eye-design`) and draw the vanilla default eye.
 
 ### 6.3 What to take from P1's skin work
 
@@ -210,7 +210,7 @@ Effort: **S** about a day of agent work, **M** a few days, **L** a week or more.
 | 4 | **Two-normal eye lighting** (Lambert on N2, cornea GGX on N1, IBL on N1) | Matte relief iris under a glassy cornea; halves today's over-bright highlight | M | Rank 2 |
 | 5 | **Refraction/parallax UV** | Depth under the cornea at angles; the iris stops looking painted | S (with rank 4) | Eye-joint axes as uniforms |
 | 6 | **Heterochromia**: two components with their masks | One enabled mod works | S | Resolver scope check, runtime look |
-| 7 | **Multilayer eyes** (37 creator options) | The graphic eye designs | L | Shared multilayer adapter |
+| 7 | **Done (26 September).** **Multilayer eyes** (37 creator options) | The graphic eye designs | L | Shared multilayer adapter |
 
 ### 6.6 Implementation status (ranks 1–3 built; ranks 4–7 open)
 
@@ -232,7 +232,7 @@ One generic exporter fix came out of this. Some mod archives list hashes only, w
 - **Gradient eyes.** For `eye_gradient.mt`, the baked 256-texel ramp is looked up at the mask's R and blended by its A in linear light. The ramp holds the 8-bit stops interpolated at the texel centres and is stored as sRGB.
 - **Mask reading.** R is read raw by default. `IRIS_MASK_ENCODING` switches to the decoded reading once test ask 9 settles it.
 - **Texture-only eyes.** `eye.mt` eyes use their albedo alone.
-- **Layered designs.** A `multilayered.mt` eye reports the limit code `eye-design`, and the scene keeps the core (base-game) eye with the chosen eye's wetness shell.
+- **Layered designs (rank 7, 26 September).** A `multilayered.mt` eye draws through the layered adapter that piercings use ([materials §4.6](materials-and-shaders.md#46-multilayered-enginematerialsmultilayeredmt-multilayered_clear_coatmt)): its `.mlsetup` stack is baked once over the eyeball's own UV range (the eye's UVs span several tiles, so the bake covers U −1.65…2.01 and V −0.60…1.00 at 2048²) and lit as a standard surface, with the chosen eye's wetness shell on top and the core eye hidden. Like the game's multilayered program it has no refraction and no Eye-class light. Only when the stack can't be read or baked does the scene keep the core eye, with the limit code `eye-design`. Checked in the browser with the heart design (colour 24, forced into the request for the check): layers 19, 10 and 0 bake and the heart sits the right way up; no comparison with the game yet (head CC test ask 14).
 - **Lighting.** Unchanged: the standard lighting, with the flat roughness 0.18 by default. The "Eye's own roughness" switch uses `RoughnessScale · Roughness.R` from the resolved chain. `Normal`, `NormalBubble` and the optics scalars are already in the record and in `EyeParameters` for ranks 4–5.
 
 **Rank 3: wetness shell.** The shell follows §4:
@@ -267,7 +267,7 @@ In the browser (`?verify=1`, reference MO2 profile), three Vs resolved and drew:
 
 None of this has been compared with the game.
 
-**Still open.** Rank 4 is the two-normal Eye light: Lambert on N2, GGX on N1 with the eye visibility and the exp2 Fresnel, and the `sunDir·N2` cut; the eyeball still uses the standard light and no normal map. Rank 5 is the refracted iris coordinate and the per-eye joint axes as uniforms, which `EYE_SURFACE` computes `uvC` for. Rank 6 is heterochromia's two components. Rank 7 is the multilayer adapter. Test asks 9–12 remain the gates.
+**Still open.** Rank 4 is the two-normal Eye light: Lambert on N2, GGX on N1 with the eye visibility and the exp2 Fresnel, and the `sunDir·N2` cut; the eyeball still uses the standard light and no normal map. Rank 5 is the refracted iris coordinate and the per-eye joint axes as uniforms, which `EYE_SURFACE` computes `uvC` for. Rank 6 is heterochromia's two components. Rank 7 is built (above). Test asks 9–12 remain the gates.
 
 ## Open questions
 

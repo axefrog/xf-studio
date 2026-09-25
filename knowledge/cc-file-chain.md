@@ -321,7 +321,7 @@ The safe order is: generate the complete group set from an option state using th
 
 Principle: the Studio interprets game files the way the game and its core frameworks do. Vanilla piercings, PRC, CCXL packs, hair-colour packs and future mods must all resolve from data through the same rules; there are no mod-specific adapters. Where a rule is not yet proven, the resolver reports the uncertainty instead of guessing.
 
-**Status: phase 1 implemented** in `projects/xf-studio/authoring/src` (`character-resolver.ts` and the pure modules it uses; host adapter `resolver-host.ts`; CLI `tools/resolve-character.ts`). It reproduces the hand-traced eyes, hair, brows, lashes, skin and PRC chains of the reference installation from data alone; see the [resolver validation](../research/character-customization/resolver-validation.md). Archive precedence and ArchiveXL semantics are consolidated in [mod loading](mod-loading.md). The Studio preview consumes it for brows, lashes and hair (the shown V's resolved components, planned by `character-detail-plan.ts` and exported into the character render record; [head CC rendering P0](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)); Build uses its archive layer for the eye plate's head.
+**Status: phase 1 implemented** in `projects/xf-studio/authoring/src` (`character-resolver.ts` and the pure modules it uses; host adapter `resolver-host.ts`; CLI `tools/resolve-character.ts`). It reproduces the hand-traced eyes, hair, brows, lashes, skin and PRC chains of the reference installation from data alone; see the [resolver validation](../research/character-customization/resolver-validation.md). Archive precedence and ArchiveXL semantics are consolidated in [mod loading](mod-loading.md). The Studio preview consumes it for the skin, face details, brows, lashes, hair, eyes and piercings (the shown V's resolved components, planned by `character-detail-plan.ts` and exported into the character render record; [head CC rendering P0](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)); Build uses its archive layer for the eye plate's head.
 
 ### Inputs
 
@@ -355,17 +355,17 @@ Everything is data: a vanilla piercing, a PRC slot and a CCXL earring produce th
 
 ### Retiring the PRC-specific code
 
-Demonstrated: with PRC installed, resolving vanilla piercing option 12 yields the framework's `.app`, its 128-slot bank (placeholders drawing nothing, filled slots from their item archives by alphabetical order), the kept vanilla part with the framework's chunk mask, and the stud's `default__02` → `base\eagul\mat_1.mi` material ([validation](../research/character-customization/resolver-validation.md#prc-as-vanilla-piercing-option-12)). The old code stays until the replacement is wired into the preview:
+**Done 26 September 2026.** With PRC installed, resolving vanilla piercing option 12 yields the framework's `.app`, its 128-slot bank (placeholders drawing nothing, filled slots from their item archives by alphabetical order), the kept vanilla part with the framework's chunk mask, and the stud's `default__02` → `base\eagul\mat_1.mi` material ([validation](../research/character-customization/resolver-validation.md#prc-as-vanilla-piercing-option-12)). The preview now draws exactly that: piercings are a slot of the character record, selected by the creator slot `piercings_color`, each resolved drawing component with its own chunk mask, through the layered adapter ([head CC rendering](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)). What the old code did and what replaced it:
 
-| Current code | Replaced by | Migration step |
-|---|---|---|
-| `tools/intake_prc.ts`, `xfs/local-prc-piercings-1` manifest | Resolver provenance plus one content-addressed geometry cache keyed by `(depot hash, container fingerprint)` | 1. Add a geometry adapter that exports each resolved, drawing morph-target component to GLB (WolvenKit `export` or `uncook` with the winning archives), cached by that key. |
-| `tools/intake_piercings.ts` (vanilla) and `xfs/local-vanilla-piercings-2` | The same resolver with the option list from the merged CCO | 2. Build the piercing selector from `loadMergedCco` + `descriptorsFromUiState` instead of the vanilla manifest. |
-| `aggregatePrcStyle` and `prc_active_bank` in `src/piercing-preview.ts` | The resolved appearance's own component list with its shared `meshAppearance` | 3. Render any resolved appearance's drawing components; delete the aggregation. |
-| Single-slot `prc_fpmNN` styles | A generic "inspect component" toggle | 4. Offer per-component visibility from the resolved list. |
-| PRC notes in `src/studio-ui/panels/preview.ts`, `prcError`/`prcAvailable` in `src/presentation-status.ts` and `src/studio-startup.ts` | Per-component provenance and ambiguity shown the same way for every source | 5. Present provenance through a typed capability, then remove the PRC notes, manifests and tools together. |
+| Removed | Replaced by |
+|---|---|
+| `tools/intake_prc.ts`, the `xfs/local-prc-piercings-1` manifest | The resolver's provenance and the generic exporter's content-addressed geometry, keyed by depot hash and winning archive |
+| `tools/intake_piercings.ts` and `xfs/local-vanilla-piercings-2` | The piercing styles and colours listed from the merged creator resource (`slotChoices`), in the record's `choices` |
+| `aggregatePrcStyle` and `prc_active_bank` in `src/piercing-preview.ts` | The resolved appearance's own component list with its shared `meshAppearance` |
+| Single-slot `prc_fpmNN` styles | Nothing yet: per-component visibility from the resolved list is a possible later control |
+| PRC notes in the preview panel, `prcError`/`prcAvailable` in the status | The same per-slot outcome and plain line as every other detail |
 
-Consequence for the UI: with PRC installed, the vanilla "Piercing 12" choice **is** the PRC bank in game. Showing vanilla style 12 and a separate "PRC" style side by side, as today, misrepresents what the game renders.
+With PRC installed, the "Piercing 12" choice **is** the PRC bank, as in game; there is no separate PRC style. Trying a style in the viewport asks the host to resolve the V with that creator choice in place of its own.
 
 ## 9. Male and female, NPCs and later full-body work
 
@@ -390,14 +390,14 @@ Source: audit of `projects/xf-studio/authoring/src` on 2026-09-25. The per-optio
 | XF Studio eye makeup | recipe → plate | `src/makeup-stack.ts` | **Selectable** (authoring) | Game parity of finishes |
 | Vanilla eye/lip/cheek makeup, pimples | `hx_` morphtarget per style + decal `.mi` | Resolved face-detail components through the decal family (`src/face-decal-material.ts`; [head CC rendering rank 2](head-cc-rendering.md#6-render-plan-ranked-by-visual-gain-per-effort)); CCXL makeup options the same way | **Save** or default V | Creator selectors; draw order within a priority; in-game comparison |
 | Facial tattoos, face scars, face cyberware | `hx_` morphtargets, chunk masks, tone link | Same path (tone from the saved definition; scars' and cyberware's normal writes included) | **Save** or default V | Creator selectors; decal templates other than the three drawn are reported, not drawn |
-| Piercings | `i1_` earring morphtargets + chunk masks + metal `.mi` | Vanilla 14 × 16 and private PRC (`src/piercing-preview.ts`) | **Selectable** + save (female) | Male; material fidelity |
+| Piercings | `i1_` earring morphtargets + chunk masks + multilayered `.mi` | Resolved components through the layered adapter (`src/layered-material.ts`); any installed framework by the same rules | **Save** or default V, and any creator style tried in the viewport (female) | Male; the colour-mask and contrast mappings (materials open question 10) |
 | Teeth | `ht_` morph/mesh + `teeth_base.mi` | Chain traced only | **Missing** | Visible when mouth opens (idle) |
 | Beard (male) | `hb_` morphtargets + beard `.mi` | none | **Missing** | Male head first |
 | Body, nails, arms, genitals, body tattoos | `t0_`/`a0_`/`l0_`/`i0_` resources | save decodes, nothing renders | **Missing** | Out of current head scope |
 | Idle/face rig | face rig animgraph + facial anims | vanilla CC idle clip (`src/idle-animation.ts`) | **Selectable** (motion panel), female | Male; wrinkle maps |
 | Male V | `pma` variants of all the above | `applySavedV` refuses male saves | **Missing** | Whole male asset set |
 
-Common prerequisites: wiring the implemented [generic resolver](#8-generic-resolver-specification) into the preview in place of today's exact-hash special cases for eyes and PRC (brows, lashes and hair already go through it and the generic exporter into the version 2 render record); one **morph-target mesh path** for all `hx_` decals (makeup, pimples, tattoos, scars and face cyberware share morph-skinned decal meshes over the head, so one geometry path plus the decal material family covers them; done in rank 2); and the skin shader adapter (done in P1). The derived `head.glb` reads the base game's content archives only; a resolver-driven head would load the **winning** `h0_000_pwa__morphs.morphtarget`, which matters because installed mods (for example a facial-rig fix) can replace it ([saved skin chain](../research/eye-artistry/saved-skin-resource-chain.md)).
+Common prerequisites: wiring the implemented [generic resolver](#8-generic-resolver-specification) into the preview (done: the skin, face details, brows, lashes, hair, eyes and piercings go through it and the generic exporter into the character render record); one **morph-target mesh path** for all `hx_` decals (makeup, pimples, tattoos, scars and face cyberware share morph-skinned decal meshes over the head, so one geometry path plus the decal material family covers them; done in rank 2); and the skin shader adapter (done in P1). The derived `head.glb` reads the base game's content archives only; a resolver-driven head would load the **winning** `h0_000_pwa__morphs.morphtarget`, which matters because installed mods (for example a facial-rig fix) can replace it ([saved skin chain](../research/eye-artistry/saved-skin-resource-chain.md)).
 
 ## Lessons from the legacy generator
 

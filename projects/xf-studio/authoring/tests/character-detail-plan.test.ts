@@ -35,10 +35,10 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(result.slots).toEqual([{ slot: "skin", state: "shown", label: "pale, skin type 1" },
       { slot: "face", state: "shown", label: "lipstick (red), cheeks (red)" }, { slot: "brows", state: "shown", label: "brown" },
       { slot: "lashes", state: "shown", label: "brown" }, { slot: "hair", state: "shown", label: "brown" },
-      { slot: "eyes", state: "shown", label: "gradient blue" }]);
+      { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 01, silver" }]);
     expect(result.components.map(c => `${c.slot}:${c.option}:${c.component}`)).toEqual(
       ["skin:skin_type_01:head", "face:makeupLips_05:hx_lips", "face:makeupCheeks_05:hx_freckles", "brows:eyebrows_color1:brow",
-        "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes"]);
+        "lashes:eyelash_color:eyes", "hair:hair_color1:hair", "eyes:eyes_color:eyes", "piercings:piercings_01:earring_01"]);
     const hair = result.components.find(c => c.slot === "hair")!;
     // Chunk 2 is a lower level of detail; the shadow mesh draws only glass.mt, which the preview does not draw.
     expect(hair.chunks).toEqual([0, 1]);
@@ -229,10 +229,13 @@ describe("resolver selection for the eyes", () => {
     expect(result.slots.find(s => s.slot === "eyes")).toEqual({ slot: "eyes", state: "shown", label: "pack eye 01" });
   });
 
-  test("a layered eye design is recorded as a placeholder beside its shell; a placeholder alone never draws", async () => {
+  test("a layered eye design draws through the layered adapter beside its shell", async () => {
     const component = (await eyes("layered_design")).components.find(c => c.slot === "eyes")!;
-    expect(component.materials.map(m => [m.template, m.placeholder])).toEqual([[P.layeredMt, true], [P.eyeShadowMt, false]]);
-    expect(renderTemplate(P.layeredMt)).toMatchObject({ adapter: "layered-placeholder", placeholder: true });
+    expect(component.materials.map(m => [m.template, m.placeholder])).toEqual([[P.layeredMt, false], [P.eyeShadowMt, false]]);
+    // This fixture's layered eye names no `.mlsetup`: the chunk is kept without a stack (the adapter then leaves it out with a code).
+    expect(component.materials[0]!.layered).toBeNull();
+    expect(renderTemplate(P.layeredMt)).toMatchObject({ adapter: "layered", layered: { setup: "MultilayerSetup", mask: "MultilayerMask" } });
+    expect(renderTemplate(P.layeredMt)!.placeholder).toBeUndefined();
   });
 
   test("the chunk role comes from the template, never the index (the male eye mesh swaps them)", async () => {

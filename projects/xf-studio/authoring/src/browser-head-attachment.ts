@@ -48,7 +48,7 @@ export type AttachedHead = {
   savedAppearance: SavedAppearanceActions;
   preview: PreviewActions;
   motion: MotionActions;
-  /** Resolved skin, face details, eyes, brows, lashes and hair of the shown V (default or loaded save). */
+  /** Resolved skin, face details, eyes, brows, lashes, hair and piercings of the shown V (default or loaded save). */
   characterDetails: CharacterDetailActions;
   /** Releases every head-bound connection and the scene. Safe to call more than once. */
   dispose(): void;
@@ -70,8 +70,13 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
     let savedAppearance: SavedAppearanceActions | undefined;
+    // Skin, face details, eyes, brows, lashes, hair and piercings follow the shown V: the restored or newly loaded save, else the default V.
+    // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V); a piercing style tried in the
+    // preview is resolved on the same V. It starts following once the preview services have restored the workspace.
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
+    releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
-      setSurfaceControls: enabled => surface?.setEnabled(enabled),
+      setSurfaceControls: enabled => surface?.setEnabled(enabled), piercings: characterDetails,
     }));
     savedAppearance = services.savedAppearance;
     ports.attach({ savedV: savedAppearance });
@@ -85,10 +90,6 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
     ports.preview.presentInitialLayers();
-    // Skin, face details, eyes, brows, lashes and hair follow the shown V: the restored or newly loaded save, else the default V.
-    // Every save switch replaces them completely (CharacterDetailActions supersedes the previous V).
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
-    releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     releases.push(characterDetails.subscribe(ports.changed));
     releases.push(followShownCharacter(characterDetails, savedAppearance));
     const cameraMoved = () => ports.persist();

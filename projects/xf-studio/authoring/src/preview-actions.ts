@@ -135,8 +135,6 @@ export class PreviewActions {
       if (!option || !option.choices.some(choice => choice.definition === action.definition))
         return refusal("unavailable", "That piercing style or colour is unavailable.");
     }
-    if (action.kind === "preview.setPiercings" && action.enabled && !this.port.piercingOptions?.().length)
-      return refusal("asset_unavailable", "Piercing preview assets are unavailable.");
     const target = action.kind === "preview.setDetail" ? action.detail : action.kind === "preview.setHair" ? "hair" : undefined;
     const requested = action.kind === "preview.setDetail" || action.kind === "preview.setHair" ? action.enabled : false;
     const unavailable = target && requested && this.port.availability?.(target);
