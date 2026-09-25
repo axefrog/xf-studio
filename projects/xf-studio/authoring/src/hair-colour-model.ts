@@ -190,11 +190,15 @@ export function linearEquivalentDecal(decal: Readonly<Rgb>, coverage: number, un
  * NOT in any resource. These are the defaults of the published model the program matches
  * (Karis, "Physically Based Hair Shading in Unreal", 2016) and remain a [hypothesis] until captured.
  */
-export const HAIR_LIGHTING_ASSUMED = Object.freeze({
+export interface HairLighting {
+  readonly shiftR: number; readonly shiftTRT: number; readonly intensityR: number; readonly intensityTRT: number;
+  readonly trtNpScale: number; readonly trtNpBias: number; readonly wrap: number; readonly kajiyaMix: number;
+  readonly scatter: number; readonly albedoMultiplier: number;
+}
+export const HAIR_LIGHTING_ASSUMED: HairLighting = Object.freeze({
   shiftR: -0.07, shiftTRT: 0.14, intensityR: 1, intensityTRT: 1,
   trtNpScale: 17, trtNpBias: 16.78, wrap: 1, kajiyaMix: 0.33, scatter: 1, albedoMultiplier: 1,
 });
-export type HairLighting = typeof HAIR_LIGHTING_ASSUMED;
 
 const dot3 = (a: Readonly<Rgb>, b: Readonly<Rgb>) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const unit = (a: Readonly<Rgb>): Rgb => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };

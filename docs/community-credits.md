@@ -44,7 +44,7 @@ By jac3km4 and contributors. [GitHub](https://github.com/jac3km4/redscript). Its
 
 ### Cyberpunk Blender Add-on (IO Suite)
 
-By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato, showed how community tools read each shader template's parameters and texture channels. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
+By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
 
 ### Mod Organizer 2
 
@@ -189,6 +189,10 @@ Thomas Deliot and Laurent Belcour, [anisotropic-grid glint paper](https://arxiv.
 ### Jakob et al. (2014)
 
 Jakob, Hašan, Yan, Lawrence, Ramamoorthi and Marschner, [Discrete Stochastic Microfacet Models](https://research.cs.cornell.edu/stochastic-sg14/). Framed the aliasing and temporal-coherence problem of tiny normal-mapped glitter.
+
+### Karis (2016)
+
+Brian Karis (Epic Games), "Physically Based Hair Shading in Unreal" (SIGGRAPH 2016 course notes). The published hair lighting model that the game's decoded hair light matches; its defaults stand in for the game's unexported tuning values in our preview.
 
 ### Kneiphof and Klein (2025)
 
