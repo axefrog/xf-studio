@@ -18,5 +18,6 @@ export const PANEL_META: Record<StudioPanelId, { title: string; icon: IconName; 
   lighting: { title: "Camera & light", icon: "lighting", description: "Field of view, framing, exposure, key light and display studies." },
   motion: { title: "Motion", icon: "motion", description: "Game close-up idle and the synthetic eyelid study." },
   quality: { title: "Preview quality", icon: "quality", description: "Resolution of generated preview textures, readiness and resource use." },
+  help: { title: "Help", icon: "help", description: "Guided tours, answers to common questions and every keyboard and mouse shortcut." },
   activity: { title: "Activity", icon: "activity", description: "Session log of results, warnings and errors." },
 };

@@ -22,6 +22,8 @@ export type DockViewOptions = {
   announce(message: string): void;
   beforeLayout?(): void;
   afterLayout?(): void;
+  /** Panels closed by default open beside the first of these that is open. */
+  homes?: Readonly<Record<PanelId, readonly PanelId[]>>;
 };
 const MIN_GROUP = { w: 150, h: 96 };
 const sideNames: Record<Side, string> = { left: "left", right: "right", top: "above", bottom: "below" };
@@ -349,7 +351,7 @@ export class DockView {
   }
   private siblingsInDefault(id: PanelId) {
     const home = locate(this.options.defaults(this.sizeClass), id);
-    return home ? home.group.panels.filter(item => item !== id) : [];
+    return home ? home.group.panels.filter(item => item !== id) : [...this.options.homes?.[id] ?? []];
   }
   private groupRect(groupId?: string): Rect | undefined {
     if (!groupId) return;

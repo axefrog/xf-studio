@@ -2,18 +2,28 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type DockLayout = { format: string; version: number; state: JsonValue };
-/** `inputHints`: contextual shortcut hints and target tooltips in the viewports (on by default). */
-export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout };
+/** How a guided tour ended, or that its offer was declined; kept so an offer is made only once. */
+export type TourRecord = "completed" | "skipped" | "declined";
+/**
+ * `inputHints`: contextual shortcut hints and target tooltips in the viewports (on by default).
+ * `tours`: guided tour progress by tour ID (absent until a tour ends or its offer is declined).
+ */
+export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
+  tours?: Record<string, TourRecord> };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
-  | { kind: "layout.set"; layout?: DockLayout };
+  | { kind: "layout.set"; layout?: DockLayout }
+  | { kind: "tours.record"; tourId: string; outcome: TourRecord };
 export type UIPreferenceCapability = { available: boolean; reason?: string };
 
 const MAX_LAYOUT_BYTES = 128 * 1024;
 const MAX_NODES = 8192;
 const MAX_DEPTH = 32;
 const unsafeKeys = new Set(["__proto__", "constructor", "prototype"]);
+const MAX_TOURS = 64;
+const tourId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(value);
+const tourRecord = (value: unknown): value is TourRecord => value === "completed" || value === "skipped" || value === "declined";
 
 export function defaultUIPreferences(): UIPreferences {
   return { schema: "xfs/ui-preferences-1", theme: "system", inputHints: true };
@@ -98,6 +108,10 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     if (typeof candidate.inputHints === "boolean") result.inputHints = candidate.inputHints;
     const layout = parseDockLayout(candidate.layout);
     if (layout) result.layout = layout;
+    if (candidate.tours && typeof candidate.tours === "object" && !Array.isArray(candidate.tours)) {
+      const tours = Object.entries(candidate.tours).filter(([id, record]) => tourId(id) && tourRecord(record)).slice(0, MAX_TOURS);
+      if (tours.length) result.tours = Object.fromEntries(tours) as Record<string, TourRecord>;
+    }
   } catch { /* A broken presentation preference must not discard authored work. */ }
   return result;
 }
@@ -116,6 +130,12 @@ export class UIPreferenceActions {
       return { available: false, reason: "Viewport hints are either shown or hidden." };
     if (action.kind === "layout.set" && action.layout !== undefined && !parseDockLayout(action.layout))
       return { available: false, reason: "The panel layout is not a supported bounded JSON document." };
+    if (action.kind === "tours.record") {
+      if (!tourId(action.tourId) || !tourRecord(action.outcome)) return { available: false, reason: "Tour progress needs a tour and how it ended." };
+      const known = this.value.tours ?? {};
+      if (!Object.hasOwn(known, action.tourId) && Object.keys(known).length >= MAX_TOURS)
+        return { available: false, reason: "Too many tours are remembered already." };
+    }
     return { available: true };
   }
   dispatch(action: UIPreferenceAction) {
@@ -123,6 +143,7 @@ export class UIPreferenceActions {
     if (!allowed.available) throw Error(allowed.reason);
     if (action.kind === "theme.set") this.value.theme = action.theme;
     else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
+    else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;
       if (layout) this.value.layout = layout;

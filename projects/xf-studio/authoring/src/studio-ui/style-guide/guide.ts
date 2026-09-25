@@ -72,6 +72,10 @@ body.guide { overflow: auto; height: auto; }
 .static-palette { display: flex; max-width: 520px; margin: 0; }
 .static-palette .palette-input { display: flex; align-items: center; }
 .static-sheet { display: block; max-width: 460px; }
+.static-callout { position: static !important; display: grid; }
+.specimen-spotlight { position: relative; height: 120px; overflow: hidden; background: var(--bg-panel); border: 1px solid var(--line-soft); }
+.specimen-spotlight .mock-row-demo { display: flex; gap: var(--sp-3); padding: 16px; }
+.static-spotlight { position: absolute !important; transition: none; }
 .demo-header, .demo-status { border: 1px solid var(--line); }
 .demo-header { height: var(--header-h); } .demo-status { height: var(--status-h); }
 .demo-dock-row { display: flex; gap: var(--sp-4); flex-wrap: wrap; }

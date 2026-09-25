@@ -12,6 +12,10 @@ import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
+import type { ProjectLink } from "./project-links";
+
+/** Opens one of XF Studio's own public pages; the host resolves the name, the view never sends a URL. */
+export type ProjectLinkPort = { open(link: ProjectLink): Promise<{ ok: true } | { ok: false; message: string }> };
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
@@ -69,6 +73,8 @@ export type StudioPresentationPort<Slot> = {
   readonly previewSetup: Pick<PreviewSetupActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<PreviewSetupSnapshot>;
   };
+  /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
+  readonly links: ProjectLinkPort;
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -105,6 +111,8 @@ export function createStudioPresentation<Slot>(sources: {
   installDetection?: InstallDetectionActions;
   /** Optional for fixtures; without it the port reports a head that needs no setup. */
   previewSetup?: PreviewSetupActions;
+  /** Optional for fixtures; without it the Help view says the page can't be opened here. */
+  links?: ProjectLinkPort;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -199,11 +207,14 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => NO_PREVIEW_SETUP, capability: () => ({ available: false, reason: "The 3D preview isn't set up here." }),
     dispatch: async () => ({ ok: false, message: "The 3D preview isn't set up here." }), descriptors: () => structuredClone(PREVIEW_SETUP_DESCRIPTORS),
   };
+  const linkSource = sources.links;
+  const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
+    : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, editor: Object.freeze(editor), localSetup: Object.freeze(localSetup),
     installDetection: Object.freeze(installDetection), previewSetup: Object.freeze(previewSetup),
-    status: Object.freeze({ snapshot: () => s.snapshot() }),
+    status: Object.freeze({ snapshot: () => s.snapshot() }), links,
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),

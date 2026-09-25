@@ -166,7 +166,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None. (Reviewed at `f1b732f`; the guidance system will be listed when it lands.)
+- **Guidance: tours, spotlights and Help** (claude/guidance). Presentation modules in `src/studio-ui/guidance/`: `anchors.ts` (typed anchor catalogue and `AnchorRegistry` on `StudioRuntime`), `engine.ts` (DOM-free `GuidanceService`, `guidance.*` actions), `tours.ts` and `help-topics.ts` (data), `content.ts` and `render.ts` (markdown-lite), `placement.ts`, `overlay.ts` (spotlight and callout), `controller.ts` (shell wiring, onboarding offer, Esc) and `help-panel.ts` (the new `help` dock panel). Core touch points: `UIPreferences.tours` (`tours.record`), the `port.links` surface with `project-links.ts` (both hosts open only named pages), the `shell.help` (F1) and `tour.*` key bindings, and the dock's homes for panels closed by default. Tests: `tests/guidance.test.ts`.
 
 ## Fixed in claude/cleanup-hygiene
 

@@ -265,6 +265,8 @@ test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, 
     expect((await open({ link: "wolvenkit-licence" })).status).toBe(204);
     expect((await open({ link: "https://evil.example" })).status).toBe(400);
     expect((await open({ link: "wolvenkit-licence", url: "https://evil.example" })).status).toBe(400);
-    expect(opened).toEqual([WOLVENKIT_RELEASE.licence.url]);
+    // The Help view's own public pages are named, never supplied as URLs.
+    expect((await open({ link: "project-issues" })).status).toBe(204);
+    expect(opened).toEqual([WOLVENKIT_RELEASE.licence.url, "https://github.com/axefrog/xf-studio/issues"]);
   } finally { app.stop(); feed.stop(true); }
 });

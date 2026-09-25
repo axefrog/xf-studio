@@ -1,5 +1,7 @@
 import { cursorFor, targetTip, viewportHints, type CursorKind, type ViewportInputContext } from "../../input-bindings";
 import { hintStripMarkup, targetTipMarkup } from "../input-hints";
+import { helpMarkup } from "../guidance/render";
+import { TOURS } from "../guidance/tours";
 import { badge, btn, chip, code, empty, eyebrow, i, menu, menuHeading, menuItem, menuSep, note, pattern, row, section, segmented, slider, toast, toggle } from "./kit";
 
 // Specimens are rendered by the app's own renderer from the input binding catalogue.
@@ -187,5 +189,36 @@ export function components() {
       what: "Drawn by the UV and on-head editor adapters, not the dock: contour points (selected is larger and white), gold tangent diamonds (guides that may cross the eye opening), warp origin circle, pull square and dashed reach ring. Guides show the contour before warp; the painted makeup shows the result after warp.",
       when: "Drag to edit (one Undo per gesture), Shift-drag to rotate, Shift+wheel to scale, double-click the outline to insert, Escape to cancel. Shift always means a shape tool: off makeup it does nothing. Right-drag (or Ctrl-drag) pans and wheel zooms — view changes are never edits.",
       drives: "Opaque gesture sessions (beginGesture/applyGesture/endGesture) inside the device adapters; the presentation only hosts them." }),
+    pattern({ id: "c-callout", title: "Guidance callout", status: "implemented",
+      specimen: calloutSpecimen(),
+      what: "A non-modal card with an eyebrow (tour and step), a title, a content area rendered from markdown-lite help text (bold, bullets and key chips generated from the binding catalogue), an optional note, progress marks and a row of custom buttons. Command buttons dispatch ordinary typed actions (“Do it for me”); Back, Next and Done move through the tour.",
+      when: "Tour steps and the one-time onboarding offer. Never for errors or confirmations: those stay toasts and menus.",
+      combine: "Sits beside the spotlighted anchor, or centred when a step has none. The onboarding offer uses the same card in the lower-left corner without a scrim, away from toasts (lower right) and the 3D preview card (centre).",
+      adapt: "360 px wide, capped to the window; below 560 px it becomes a sheet above or below the target. Its height follows its content and it scrolls if the window is short.",
+      drives: "GuidanceService snapshot (guidance.startTour, next, back, skip, finish) in src/studio-ui/guidance/engine.ts; button capabilities from the same port capabilities as every control.",
+      a11y: "role=dialog, aria-modal=false, labelled by its title and described by its body. Focus moves to the title when a person navigates, never when a step advances by itself; every step is announced. Esc skips, → and Enter go on, ← goes back; Enter on a button presses it. An unavailable button's reason is written in the note, not only in a tooltip.",
+      avoid: "Anchoring to CSS selectors, text the reader has to decode (IDs, action names), or buttons that change the look without going through validation and Undo." }),
+    pattern({ id: "c-spotlight", title: "Spotlight", status: "implemented",
+      specimen: `<div class="specimen-spotlight"><div class="mock-row-demo">${btn("Add layer", { icon: "plus", small: true })}${btn("Duplicate", { icon: "duplicate", small: true, variant: "ghost", iconOnly: true })}</div><span class="guidance-spotlight static-spotlight" style="left:10px;top:10px;width:112px;height:36px"></span></div>`,
+      what: "One rectangle around the anchor whose outer shadow dims the rest of the UI in the dark theme and lightens it in the light theme (the --guidance-scrim token), with a ring in --guidance-ring. With no anchor the whole window is dimmed and the callout is centred.",
+      when: "While a tour step points at something. It is never used to block input: the dimmed UI stays usable, so a step can ask the person to try the control.",
+      combine: "Lights an anchor (layers.add, uv.canvas, header.package …); if the control is hidden but its panel is showing, it lights the panel; if the panel is closed or behind a tab, the callout offers to show it through the ordinary panel command instead.",
+      adapt: "Follows the anchor's rectangle every frame while a tour runs, cut to what its scrolling panel shows, so window resizing, docking, floating and scrolling keep it aligned. It is a fixed overlay and never takes layout space.",
+      drives: "AnchorRegistry (src/studio-ui/guidance/anchors.ts): panels register named anchors as they build their controls; placeCallout() in placement.ts." }),
+    pattern({ id: "c-help", title: "Help view", status: "implemented",
+      what: "A dock panel with one search over guided tours, questions and answers, and the keyboard and mouse reference, plus links to the public knowledge pages and the issue tracker.",
+      when: `F1, the header's Help button or the command palette. ${TOURS.length} tours today: ${TOURS.map(tour => tour.title).join(", ")}.`,
+      combine: "Opens beside the inspectors (closed by default). Tours start from here, with their status (Done, Skipped, Not started). The reference is the same catalogue as the Keyboard & mouse sheet.",
+      adapt: "A panel like any other: dock, float or tab it. Tour rows drop their status badge below 420 px.",
+      drives: "HELP_TOPICS and HELP_LINKS (data), helpReference() over bindingReference(), port.links.open() for named public pages (the host opens them; the view never sends a URL)." }),
   ]);
+}
+
+function calloutSpecimen() {
+  const step = TOURS[0].steps[0];
+  return `<section class="guidance-callout static-callout" role="dialog" aria-modal="false" aria-label="Example tour step">
+    <header class="guidance-head"><span class="guidance-eyebrow">${TOURS[0].title} · 1 of ${TOURS[0].steps.length}</span><button type="button" class="icon-btn small guidance-close" aria-label="Skip tour">${i("close")}</button></header>
+    <h2 class="guidance-title">${step.content.title}</h2><div class="guidance-body">${helpMarkup(step.content.body)}</div>
+    <footer class="guidance-foot"><div class="guidance-dots" aria-hidden="true">${TOURS[0].steps.map((_, index) => `<i class="${index === 0 ? "current" : ""}"></i>`).join("")}</div>
+    <div class="guidance-actions">${btn("Add a layer for me", { small: true })}${btn("Next", { small: true, variant: "primary" })}</div></footer></section>`;
 }

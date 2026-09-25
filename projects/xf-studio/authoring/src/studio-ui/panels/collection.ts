@@ -110,6 +110,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     failed, empty, list.element,
     h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe),
     note("Each preset becomes one choice in the game's single eye-makeup selector, alongside Off."));
+  rt.anchors.register("presets.list", list.element);
   return {
     spec: { id: "presets", ...PANEL_META["presets"], element },
     update(frame) {
@@ -325,6 +326,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
         finish.exportAdapter === "flat-provisional" ? "success" : "warning")))),
     note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials in their game-matched model, but nobody has seen them in game yet. Check decides — this list is a guide.")));
+  rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
     showSetup() {

@@ -98,7 +98,7 @@ test("floating panels magnetize into a composite that grows instead of squeezing
 
 test("closing and reopening restores a panel beside its siblings", () => {
   let tree = closePanel(defaultWide(), "warp");
-  expect(tree.closed).toEqual(["activity", "warp"]);
+  expect(tree.closed).toEqual(["activity", "help", "warp"]);
   expect(locate(tree, "warp")).toBeUndefined();
   tree = openPanel(tree, "warp", ["shape", "edge"], area);
   expect(locate(tree, "warp")!.group.id).toBe("g-inspect");
@@ -145,6 +145,8 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   const expected = structuredClone(saved.state) as { wide: DockTree; compact: DockTree };
   locate(expected.wide, "layers")!.group.panels.push("history");
   locate(expected.compact, "layers")!.group.panels.push("history");
+  // Panels closed by default (Help) stay closed until someone opens them.
+  expected.wide.closed.push("help"); expected.compact.closed.push("help");
   expect(restored.state).toEqual(expected);
   expect(locate(restored.state.wide, "history")!.group.active).toBe("layers");
 });

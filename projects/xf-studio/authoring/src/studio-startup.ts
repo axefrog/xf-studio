@@ -10,6 +10,7 @@ import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
 import type { PreviewPreparationActions } from "./preview-preparation";
 import { PreviewSetupActions } from "./preview-setup";
 import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from "./wolvenkit-setup";
+import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -41,8 +42,8 @@ export type StudioHost = {
   wolvenKitSetup: WolvenKitSetupActions;
   /** The host's settings service; the desktop shares its Build setup dialog's instance. */
   localSetup?: LocalSetupActions;
-  /** Opens a named official page; without it the page opens in a new browser tab. */
-  openLink?: (link: WolvenKitLink) => Promise<void>;
+  /** Opens a named official page (WolvenKit's, or XF Studio's own); without it the page opens in a new browser tab. */
+  openLink?: (link: WolvenKitLink | ProjectLink) => Promise<void>;
   /** Where the game folder and WolvenKit CLI are set, in the host's own words ("Build setup", "Game & tools"). */
   setupPlace: string;
   /** Opens the host's own setup form, when it has one outside the Studio panels; otherwise Game & tools is shown. */
@@ -168,6 +169,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   bootstrap = createTrustedStudioBootstrap({
     workspace, core, preferences, localSetup, installDetection, previewSetup, viewport: viewportDevice.attachment,
+    links: { open: async link => {
+      try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
+      catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
+    } },
     previewReadiness: previewDevice.coordinator, status: statusSource,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
@@ -275,6 +280,13 @@ async function start(host: StudioHost, root: HTMLElement) {
 function legacyAutostart(storage: Pick<Storage, "getItem">, verification: boolean) {
   if (verification) return true;
   try { return storage.getItem("xfs.preview.autostart") !== "off"; } catch { return true; }
+}
+
+/** Localhost opens XF Studio's own public pages in a new tab. */
+function openProjectLinkInNewTab(link: ProjectLink) {
+  const opened = window.open(PROJECT_LINKS[link], "_blank");
+  if (!opened) throw Error("Your browser blocked the new tab. Allow pop-ups for XF Studio, then try again.");
+  opened.opener = null;
 }
 
 /**
