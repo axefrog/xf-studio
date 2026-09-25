@@ -8,10 +8,13 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CollectionService, type CollectionTransport } from "../src/collection-service";
+import type { EditorSnapshot } from "../src/collection-session";
 import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
-import { STUDIO_PARTS } from "../src/compose/studio-registry";
+import { collectionDraft, emptyMemory } from "../src/collection-workspace";
+import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { LookLibrary } from "../src/library-store";
-import { COLLECTION_2 } from "../src/platform/api";
+import { COLLECTION_2, type LookCollection } from "../src/platform/api";
 import { parseRecipeFile } from "../src/recipe";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
@@ -64,4 +67,52 @@ test("one collection-2 row makes the release's whole list fail: the limit the li
     const reopened = new CollectionLibrary(temp.path, STUDIO_PARTS);
     try { expect(reopened.list().map(item => item.name)).toContain("Newer"); } finally { reopened.close(); }
   } finally { temp.cleanup(); }
+});
+
+test("export works for a collection the library refuses: its draft is exported unsaved, and a storable one is saved first (CORE-38)", async () => {
+  const temp = library(), store = new CollectionLibrary(temp.path, STUDIO_PARTS);
+  const transport: CollectionTransport = { list: async () => store.list(), get: async id => store.get(id),
+    save: async (collection, revision) => store.save({ collection, revision }), package: async () => { throw Error("unused"); } };
+  const service = (collection: LookCollection) => {
+    let editor: EditorSnapshot = { recipe: structuredClone(recipeOf(collection.presets[0])), ...emptyMemory() };
+    return new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), { selected: "", name: "" },
+      () => editor, value => editor = value, transport);
+  };
+  try {
+    const file = readFixture(COLLECTION_FIXTURES[1]);
+    // A look with a part only collection-2 holds.
+    const mixed = STUDIO_PARTS.readCollection(file);
+    mixed.presets[0].parts.hair = { schema: "xfs/hair-part-3", body: { style: "x" } };
+    const refused = service(mixed), before = store.list();
+    await refused.execute({ kind: "initialize" });
+    const save = await refused.execute({ kind: "save" });
+    expect(save).toMatchObject({ ok: false, message: COLLECTION_2_LIBRARY_MESSAGE });
+    for (const kind of ["exportCollection", "exportPlan"] as const) {
+      expect(refused.capability({ kind })).toEqual({ available: true });
+      const exported = await refused.execute({ kind });
+      if (!exported.ok || exported.result.kind !== "export") throw Error(`${kind} failed: ${JSON.stringify(exported)}`);
+      const json = JSON.parse(exported.result.json);
+      if (kind === "exportCollection") {
+        expect(json.schema).toBe(COLLECTION_2);
+        expect(json.presets[0].parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { style: "x" } });
+        expect(STUDIO_PARTS.readCollection(json).presets.map(look => look.id)).toEqual(mixed.presets.map(look => look.id));
+      } else expect(json.presets.map((preset: { id: string }) => preset.id)).toEqual(mixed.presets.map(look => look.id));
+      const message = refused.summary().progress!.message;
+      expect(message).toContain("wasn't saved to your library");
+      expect(message).not.toContain("export the collection to a file");
+    }
+    // Nothing reached the library, and the draft still has no saved revision.
+    expect(store.list()).toEqual(before);
+    expect(refused.summary().draft?.revision).toBeUndefined();
+
+    // A collection the library takes is saved first, as before, and exported as collection-1.
+    const plain = service(STUDIO_PARTS.readCollection(file));
+    await plain.execute({ kind: "initialize" });
+    const exported = await plain.execute({ kind: "exportCollection" });
+    if (!exported.ok || exported.result.kind !== "export") throw Error(JSON.stringify(exported));
+    expect(JSON.parse(exported.result.json).schema).toBe("xfas/collection-1");
+    expect(plain.summary().progress!.message).toContain("saved to your library");
+    expect(store.list().find(item => item.id === mixed.id)?.revision).toBe(1);
+    expect(plain.summary().draft?.revision).toBe(1);
+  } finally { store.close(); temp.cleanup(); }
 });

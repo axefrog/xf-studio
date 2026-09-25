@@ -21,7 +21,8 @@ export class AuthoringControlEdits {
   private active?: Transaction;
   constructor(private document: AuthoringDocument,
     private dispatch: (action: RecipeAction) => boolean,
-    private restoreUndo: () => void,
+    /** Restores a cancelled transaction's start: `step` is its own checkpoint, undefined when the top step held the start. */
+    private restoreUndo: (step: HistoryEntryId | undefined) => void,
     /** The Undo step's name for an edit: the trusted core passes the registered spec's `label`. */
     private label: (action: RecipeAction) => HistoryLabel = historyLabel) {}
   begin(id: string, layerId: string | undefined) {

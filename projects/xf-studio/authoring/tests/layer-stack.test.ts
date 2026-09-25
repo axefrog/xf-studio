@@ -26,7 +26,10 @@ test("legacy recipes upgrade explicitly; empty and variable stacks persist witho
 
 test("layer operations preserve identity, isolate copies, allow removal of the last layer and reject invalid changes atomically", () => {
   const original = initialRecipe(), originalText = JSON.stringify(original), selected = original.layers[0].id;
-  let next = editLayers(original, selected, { kind: "duplicate", id: selected });
+  // A new layer's ID always comes from the host; the pure operation never invents one (CORE-44).
+  expect(() => editLayers(original, selected, { kind: "duplicate", id: selected })).toThrow("ID from the host");
+  expect(() => editLayers(original, selected, { kind: "add" })).toThrow("ID from the host");
+  let next = editLayers(original, selected, { kind: "duplicate", id: selected, newId: "copy-1" });
   const copy = next.recipe.layers[next.active];
   expect(copy.id).not.toBe(selected);
   copy.points[0].u = .1;
@@ -41,7 +44,7 @@ test("layer operations preserve identity, isolate copies, allow removal of the l
   while (next.recipe.layers.length) next = editLayers(next.recipe, next.recipe.layers[next.active]?.id,
     { kind: "remove", id: next.recipe.layers[0].id });
   expect(next.recipe.layers).toHaveLength(0);
-  next = editLayers(next.recipe, undefined, { kind: "add" });
+  next = editLayers(next.recipe, undefined, { kind: "add", newId: "added-1" });
   expect(next.recipe.layers).toHaveLength(1); expect(next.recipe.layers[0].enabled).toBe(true);
   expect(JSON.stringify(original)).toBe(originalText);
 });
@@ -49,7 +52,7 @@ test("layer operations preserve identity, isolate copies, allow removal of the l
 test("a new layer starts as a four-point upper-lid wash without changing saved or copied contours", () => {
   const original = initialRecipe(), saved = JSON.stringify(original), history = new RecipeHistory();
   history.checkpoint(original);
-  const added = editLayers(original, original.layers[0].id, { kind: "add" });
+  const added = editLayers(original, original.layers[0].id, { kind: "add", newId: "added-1" });
   const layer = added.recipe.layers[added.active];
   expect(layer.points).toHaveLength(4);
   expect(layer.pathMode).toBe("bezier");
@@ -61,10 +64,10 @@ test("a new layer starts as a four-point upper-lid wash without changing saved o
   expect(coverage(.37, .27, layer)).toBe(0);
   expect(JSON.stringify(original)).toBe(saved);
   expect(history.undo()).toEqual(parseRecipe(original));
-  const blank = editLayers({ ...original, layers: [] }, undefined, { kind: "add" });
+  const blank = editLayers({ ...original, layers: [] }, undefined, { kind: "add", newId: "added-2" });
   expect(parseRecipe(blank.recipe).layers[0].points).toEqual(layer.points);
   expect(compileFlatPreset(blank.recipe, 128).metadata.coveredTexels).toBeGreaterThan(0);
-  const duplicate = editLayers(added.recipe, layer.id, { kind: "duplicate", id: original.layers[0].id });
+  const duplicate = editLayers(added.recipe, layer.id, { kind: "duplicate", id: original.layers[0].id, newId: "copy-1" });
   expect(duplicate.recipe.layers[1].points).toEqual(original.layers[0].points);
   const reset = editLayers(duplicate.recipe, layer.id, { kind: "reset", id: original.layers[0].id });
   expect(reset.recipe.layers[0].points).toHaveLength(4);
@@ -75,7 +78,7 @@ test("a new layer starts as a four-point upper-lid wash without changing saved o
 test("reordering changes compiled overlapping colour, not recipe identities or source shapes", () => {
   const recipe = initialRecipe(); recipe.layers = recipe.layers.slice(0, 1);
   recipe.layers[0].color = "#ff0000";
-  let next = editLayers(recipe, recipe.layers[0].id, { kind: "duplicate", id: recipe.layers[0].id });
+  let next = editLayers(recipe, recipe.layers[0].id, { kind: "duplicate", id: recipe.layers[0].id, newId: "copy-1" });
   next.recipe.layers[1].color = "#0000ff";
   const before = compileFlatPreset(next.recipe, 64);
   const moved = editLayers(next.recipe, next.recipe.layers[1].id, { kind: "move", id: next.recipe.layers[1].id, to: 0 });

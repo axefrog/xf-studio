@@ -2,7 +2,7 @@ import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } f
 import { parseSavedV, type SavedV } from "./save-reader";
 import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveMemory, writeCollectionWorkspace,
   type CollectionWorkspace, type DocumentModel, type RestoreWarnings } from "./collection-workspace";
-import { isNewerData, LOOK_MEMORY, type LookMemory, type PartEnvelope } from "./platform/api";
+import { isNewerData, LOOK_HISTORY_1, LOOK_MEMORY, type LookMemory, type PartEnvelope } from "./platform/api";
 import type { DocumentHistory } from "./authoring-document";
 import { emptyLookHistory } from "./platform/core/look-history";
 import type { NewerPolicy } from "./platform/core/document";
@@ -216,7 +216,9 @@ function readEditorV2(v: StoredWorkspace, model: DocumentModel, newer: NewerPoli
  * (`workspace-budget.ts`) decides what is kept before this runs. The result shares structure
  * with `state`; serialize it at once.
  */
-export function serializeWorkspace(state: WorkspaceState, model: DocumentModel): StoredWorkspace {
+export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
+  /** `lookLevel`: Undo histories with steps in the look-level form (the storage budget's choice, CORE-39). */
+  options: { lookLevel?: boolean } = {}): StoredWorkspace {
   const { parts: registry, live: LIVE } = model;
   const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, collections,
     otherFeatures, ...view } = state;
@@ -225,9 +227,28 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel):
     parts: registry.minimalLook({ id: "", name: "", revision: 1,
       parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } }, false).parts,
     memory: registry.writeMemory(withLiveMemory(otherFeatures?.memory, { active, selected, fieldSelection, history,
-      ...(historyTrimmed ? { historyTrimmed: true } : {}) }, model)) };
+      ...(historyTrimmed ? { historyTrimmed: true } : {}) }, model), options) };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
-    ...(collections ? { collections: writeCollectionWorkspace(collections, model) } : {}) };
+    ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
+}
+
+/**
+ * Whether a stored workspace keeps any look's Undo history in the look-level form
+ * (`xfs/look-history-1`). Such a workspace already opens read-only in builds before the look history,
+ * so a host that writes it again keeps that form for every history (CORE-39).
+ */
+export function storesLookLevelHistory(value: unknown): boolean {
+  const record = (item: unknown): Record<string, unknown> | undefined =>
+    item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : undefined;
+  const look = (memory: unknown) => Object.values(record(memory) ?? {}).some(entry => record(entry)?.partSchema === LOOK_HISTORY_1);
+  const draft = (item: unknown) => {
+    const value = record(item);
+    return !!value && (Object.values(record(value.memory) ?? {}).some(look) ||
+      (Array.isArray(value.removed) && value.removed.some(entry => look(record(entry)?.memory))));
+  };
+  const stored = record(value), collections = record(stored?.collections);
+  return look(record(stored?.look)?.memory) || draft(collections) || draft(collections?.previous) ||
+    (Array.isArray(collections?.older) && collections.older.some(draft));
 }
 
 export function workspaceKeys(verification: boolean) {

@@ -3,13 +3,18 @@ import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, re
 import { isAbsolute, resolve } from "node:path";
 import type { DocumentModel } from "../src/collection-workspace";
 import { isNewerData } from "../src/platform/api";
-import { parseWorkspace, serializeWorkspace, WORKSPACE_1 } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace, storesLookLevelHistory, WORKSPACE_1, WORKSPACE_2 } from "../src/workspace-state";
 
 const maxWorkspaceBytes = 16_000_000;
 
 /** Fixed, host-owned workspace files survive the desktop server's changing loopback port. */
 export class DesktopWorkspaceStore {
   private readonly root: string;
+  /**
+   * By file: the text this store last wrote, or loaded and found readable without newer data. A save
+   * over that exact text needs no second parse of it (CORE-41).
+   */
+  private readonly known = new Map<string, { text: string; schema: unknown }>();
   /** `model` is the document model the workspace is read and written with (injected by the desktop server root). */
   constructor(dataRoot: string, private readonly model: DocumentModel) {
     if (!isAbsolute(dataRoot)) throw Error("Desktop workspace root must be absolute.");
@@ -26,22 +31,34 @@ export class DesktopWorkspaceStore {
    * Start fresh never sets a good current draft aside.
    */
   load(verification: boolean): string | null {
+    const raw = this.read(verification);
+    if (raw !== null) this.inspect(verification, raw);
+    return raw;
+  }
+  /** The stored text, unchecked, or null when there is none. */
+  private read(verification: boolean): string | null {
     const path = this.path(verification);
     if (!existsSync(path)) return null;
     const raw = readFileSync(path, "utf8");
     if (Buffer.byteLength(raw) > maxWorkspaceBytes) throw Error("Saved desktop workspace exceeds the size limit.");
-    this.inspect(raw);
     return raw;
   }
-  /** Whether stored text holds a newer build's data; throws when its current draft is unreadable. */
-  private inspect(raw: string): { newer: boolean } {
-    const value = JSON.parse(raw);
-    try { parseWorkspace(value, this.model, []); return { newer: false }; }
+  /**
+   * Whether stored text holds a newer build's data; throws when its current draft is unreadable.
+   * Text this store already checked (or wrote) is not parsed again.
+   */
+  private inspect(verification: boolean, raw: string): { newer: boolean; schema: unknown } {
+    const path = this.path(verification), known = this.known.get(path);
+    if (known?.text === raw) return { newer: false, schema: known.schema };
+    const value = JSON.parse(raw), schema = (value as { schema?: unknown } | null)?.schema;
+    try { parseWorkspace(value, this.model, []); }
     catch (error) {
       if (!isNewerData(error)) throw error;
       parseWorkspace(value, this.model, [], "omit");
-      return { newer: true };
+      return { newer: true, schema };
     }
+    this.known.set(path, { text: raw, schema });
+    return { newer: false, schema };
   }
   /**
    * Where a build that writes `xfs/workspace-2` keeps the `xfas/workspace-1` file it replaces, so an
@@ -63,27 +80,33 @@ export class DesktopWorkspaceStore {
     renameSync(path, resolve(this.root, kept));
     return kept;
   }
+  /**
+   * Replace the stored workspace with `raw`, parsed and written in this build's form. The previous
+   * file and the new text are each parsed at most once (CORE-41). Histories the renderer stored in the
+   * look-level form (its storage budget's choice) stay in that form (CORE-39).
+   */
   save(verification: boolean, raw: string): void {
     if (Buffer.byteLength(raw) > maxWorkspaceBytes) throw Error("Desktop workspace exceeds the size limit.");
-    // Refuse to replace an unreadable prior draft. The user can recover its file.
-    const previous = this.load(verification);
+    const previous = this.read(verification);
     // An unchanged copy (the update flush of a read-only workspace) is not a change.
     if (previous !== null && previous === raw) return;
-    const parsed = parseWorkspace(JSON.parse(raw), this.model);
-    // Never replace a workspace holding a newer build's data.
-    if (previous !== null && this.inspect(previous).newer)
-      throw Error("The saved desktop workspace holds data from a newer XF Studio; it was not replaced.");
+    // Refuse to replace an unreadable prior draft (the user can recover its file), or one holding a newer build's data.
+    const prior = previous === null ? undefined : this.inspect(verification, previous);
+    if (prior?.newer) throw Error("The saved desktop workspace holds data from a newer XF Studio; it was not replaced.");
+    const value = JSON.parse(raw), parsed = parseWorkspace(value, this.model);
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     const path = this.path(verification), temporary = resolve(this.root, `.workspace-${randomUUID()}.tmp`);
     // Downgrade protection: a version-1 file an older build wrote is kept beside it before it is replaced.
     const backup = resolve(this.root, this.backupName(verification));
-    if (previous !== null && (JSON.parse(previous) as { schema?: unknown }).schema === WORKSPACE_1)
+    if (prior?.schema === WORKSPACE_1)
       copyFileSync(path, backup);
+    const text = JSON.stringify(serializeWorkspace(parsed, this.model, { lookLevel: storesLookLevelHistory(value) }));
     try {
-      writeFileSync(temporary, JSON.stringify(serializeWorkspace(parsed, this.model)), { mode: 0o600, flag: "wx" });
+      writeFileSync(temporary, text, { mode: 0o600, flag: "wx" });
       const handle = openSync(temporary, "r+");
       try { fsyncSync(handle); } finally { closeSync(handle); }
       renameSync(temporary, path);
+      this.known.set(path, { text, schema: WORKSPACE_2 });
     } finally { rmSync(temporary, { force: true }); }
   }
 }

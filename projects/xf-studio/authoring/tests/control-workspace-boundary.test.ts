@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { AuthoringControlEdits } from "../src/authoring-control-edits";
 import { AuthoringDocument } from "../src/authoring-document";
+import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { RecipeActions } from "../src/recipe-actions";
+import { registeredEditing } from "./gesture-test-adapter";
 import { WorkspaceComposer } from "../src/workspace-composer";
 import { planLayerPreview, previewCapacity } from "../src/authoring-preview-policy";
 import { assessPreviewQuality } from "../src/preview-quality";
@@ -13,7 +15,7 @@ test("form edits group a slider gesture into one Undo and Escape restores its st
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
   let restores = 0;
-  const edits = new AuthoringControlEdits(document, action => actions.dispatch(action), () => {
+  const edits = new AuthoringControlEdits(document, registeredEditing(eyeMakeupPort(document, actions)).controls, () => {
     restores++;
     const prior = document.undoRecipe();
     if (prior) document.recipe = prior;

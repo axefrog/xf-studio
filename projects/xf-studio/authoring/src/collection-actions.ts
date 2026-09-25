@@ -41,8 +41,10 @@ export class CollectionActions {
   private listeners = new Set<() => void>();
 
   constructor(private model: DocumentModel, state: CollectionWorkspace, read: () => EditorSnapshot,
-    show: (editor: EditorSnapshot) => void) {
-    this.session = new CollectionSession(model, state, read, show);
+    show: (editor: EditorSnapshot) => void,
+    /** The host's ID source for new looks; defaults to random UUIDs. */
+    newId?: () => string) {
+    this.session = new CollectionSession(model, state, read, show, newId);
   }
 
   view(): ReadonlyDeep<CollectionWorkspace> { return structuredClone(this.session.state); }
@@ -97,6 +99,9 @@ export class CollectionActions {
         return refusal("invalid_value", "No removed preset to restore.");
       if ("id" in command && !state.collection.presets.some(p => p.id === command.id))
         return refusal("missing_target", "That preset no longer exists.");
+      const newId = "newId" in command ? command.newId : undefined;
+      if (newId && (state.collection.presets.some(p => p.id === newId) || state.removed.some(entry => entry.preset.id === newId)))
+        return refusal("invalid_value", "That preset ID is already in use.");
       const issue = command.kind === "move" ? positionIssue(command.to, state.collection.presets.length,
         { below: "This preset is already first.", above: "This preset is already last." }) :
         command.kind === "rename" ? nameIssue(command.name, 120) : undefined;

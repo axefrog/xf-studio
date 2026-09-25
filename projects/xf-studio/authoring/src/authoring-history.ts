@@ -84,6 +84,18 @@ export class AuthoringHistory {
     this.publish(next);
     return true;
   }
+  /**
+   * Restore a cancelled transaction's start without Redo: its own step `step` is taken off (only while
+   * it is the top step); without one, the top step already held the start, so its content is shown
+   * and the step stays (CORE-42).
+   */
+  revertTransaction(step: HistoryEntryId | undefined): boolean {
+    const next = step === undefined ? this.document.topRecipe()
+      : this.document.isLatestCheckpoint(step) ? this.document.undoRecipe() : undefined;
+    if (!next) return false;
+    this.publish(next);
+    return true;
+  }
   undo(): boolean { return this.document.canUndo && this.move({ direction: "undo", count: 1 }); }
   redo(): boolean { return this.move({ direction: "redo", count: 1 }); }
   /**

@@ -5,7 +5,7 @@ import { collectionDraft, newLook, withLiveMemory, withLivePart, type Collection
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { Recipe } from "./recipe";
-import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
+import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
@@ -322,14 +322,22 @@ export class CollectionService {
           message = `Saved “${stored.collection.name}” · revision ${stored.revision}. Changes made during saving remain in your draft.`; break;
         }
         case "exportCollection": case "exportPlan": {
-          const stored = await this.save(false), plan = request.kind === "exportPlan";
+          // The draft is saved first only when the library takes it: a collection that needs
+          // `xfs/collection-2` is refused there (CORE-30), and exporting it to a file is exactly how
+          // it is kept, so its draft snapshot is exported unsaved (CORE-38).
+          const plan = request.kind === "exportPlan", draft = this.actions!.snapshot().collection;
+          const storable = this.model.parts.writeMinimal(draft).schema === COLLECTION_1;
+          const collection = storable ? (await this.save(false)).collection : draft;
           // A collection file is written in the oldest schema that holds it exactly: `xfas/collection-1`
           // for eye-makeup looks, so 0.1.0-alpha.1 and the build tools read it (feature-module platform §2).
           result = { kind: "export", name: plan ? "xfs.build-plan.json" : "xfs.collection.json",
-            json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(stored.collection))
-              : this.model.parts.writeMinimal(stored.collection), null, 2) };
-          message = plan ? "Build plan exported for the offline compiler; this is not an installable mod."
-            : "Saved snapshot exported. Recipes and stable preset identities are included."; break;
+            json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection))
+              : this.model.parts.writeMinimal(collection), null, 2) };
+          const kept = storable ? "It was also saved to your library first."
+            : "It wasn't saved to your library: it has parts the released XF Studio 0.1.0-alpha.1 can't read, and that version opens the same library. Your draft is kept.";
+          message = plan ? `Build plan exported for the offline compiler; this is not an installable mod. ${kept}`
+            : storable ? "Collection saved to your library and exported. Recipes and stable preset identities are included."
+            : `Collection exported with its recipes and stable preset identities. ${kept}`; break;
         }
         case "package": {
           // Snapshot the unsaved editor state once; this request never writes SQLite or changes revision.

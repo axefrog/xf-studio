@@ -20,9 +20,10 @@ export const MIN_SELECTED_HISTORY = 10;
  * What one stored form keeps. `selected`: Undo steps of the selected look (or the loose editor);
  * `background`: of every other current look; `recovery`: how many recovery drafts are kept (their
  * looks, never their histories); `removed`: how many removed presets are kept for Restore (the latest,
- * without their histories).
+ * without their histories). `lookLevel`: histories are stored as `xfs/look-history-1` instead of whole
+ * parts (CORE-39; builds before the look history then open the workspace read-only).
  */
-export type WorkspacePlan = { background: number; selected: number; recovery: number; removed: number };
+export type WorkspacePlan = { background: number; selected: number; recovery: number; removed: number; lookLevel?: true };
 /** The standard policy: every save stores at least this little. */
 export const STANDARD_PLAN: WorkspacePlan = Object.freeze({ background: PERSISTED_BACKGROUND_HISTORY, selected: Infinity,
   recovery: Infinity, removed: Infinity });
@@ -87,39 +88,72 @@ export type FittedWorkspace = {
  * The stored workspace that fits `budget` (feature-module platform §3, `fitWorkspace`). It always
  * applies the standard policy, then, only while the encoded form is over budget, gives up in this order:
  *
+ * 0. the whole-part form of the Undo histories: they are stored as `xfs/look-history-1`, where a step
+ *    costs only the chunks it changed (CORE-39); nothing is dropped, but builds before the look
+ *    history open the workspace read-only;
  * 1. recovery drafts' histories (the standard policy already keeps their looks without them);
  * 2. other presets' histories, oldest steps first;
  * 3. the selected look's history, oldest steps first, keeping at least `MIN_SELECTED_HISTORY` steps;
  * 4. recovery copies (oldest draft first), then removed presets kept for Restore (oldest first);
  * 5. only when the looks alone leave no room for them, the selected look's last steps.
  *
- * The current presets themselves are never dropped. Nothing here changes the live session.
+ * The current presets themselves are never dropped. Nothing here changes the live session. `from` is
+ * the plan the previous save fitted (autosave passes it): each search starts at its value, so a save
+ * that fits where the last one did encodes a few candidates instead of bisecting every stage (CORE-41).
+ * The result is the same with or without it.
  */
-export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget = WORKSPACE_STORAGE_BUDGET): FittedWorkspace {
-  const encode = (plan: WorkspacePlan) => encodePlan(state, plan, model);
+export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget = WORKSPACE_STORAGE_BUDGET,
+  from?: WorkspacePlan): FittedWorkspace {
   const result = (plan: WorkspacePlan, encoded: string, minimal = false): FittedWorkspace => ({ encoded, size: encoded.length, plan,
-    trimmed: plan !== STANDARD_PLAN, overBudget: encoded.length > budget, minimal });
-  const standard = encode(STANDARD_PLAN);
-  if (standard.length <= budget) return result(STANDARD_PLAN, standard);
-  const extent = measure(state);
-  let plan: WorkspacePlan = { ...STANDARD_PLAN };
-  // Each stage searches the largest value of one plan field that fits; `fits` caches every encode.
+    trimmed: dropsMore(plan), overBudget: encoded.length > budget, minimal });
+  // Every candidate is encoded at most once.
   const tried = new Map<string, string>();
   const attempt = (candidate: WorkspacePlan) => {
     const key = JSON.stringify(candidate, (_k, value) => value === Infinity ? "all" : value);
     let encoded = tried.get(key);
-    if (encoded === undefined) tried.set(key, encoded = encode(candidate));
+    if (encoded === undefined) tried.set(key, encoded = encodePlan(state, candidate, model));
     return encoded;
   };
-  const stage = (field: keyof WorkspacePlan, from: number, to: number) => {
-    // `from` is the current (largest) value, `to` the smallest this stage may reach.
-    if (from <= to) return false;
-    const at = (value: number) => attempt({ ...plan, [field]: value });
-    if (at(to).length > budget) { plan = { ...plan, [field]: to }; return false; }
-    let low = to, high = from;       // at(low) fits; at(high) does not (the stage started over budget)
+  const standard = attempt(STANDARD_PLAN);
+  if (standard.length <= budget) return result(STANDARD_PLAN, standard);
+  // 0. The look-level form keeps every step. When it is not smaller (histories whose steps change
+  // every chunk), trimming continues in the whole-part form older builds read.
+  const levelled: WorkspacePlan = { ...STANDARD_PLAN, lookLevel: true };
+  const chunked = attempt(levelled);
+  if (chunked.length <= budget) return result(levelled, chunked);
+  const extent = measure(state);
+  let plan: WorkspacePlan = chunked.length < standard.length ? levelled : { ...STANDARD_PLAN };
+  // Each stage finds the largest value of one plan field that fits (sizes grow with what is kept).
+  const stage = (field: "background" | "selected" | "recovery" | "removed", largest: number, smallest: number) => {
+    // `largest` is the current value (over budget), `smallest` the least this stage may reach.
+    if (largest <= smallest) return false;
+    const fits = (value: number) => attempt({ ...plan, [field]: value }).length <= budget;
+    let low: number, high: number;   // fits(low); !fits(high)
+    const hint = from?.[field];
+    if (hint !== undefined && hint > smallest && hint < largest) {
+      // Gallop from the previous save's value: usually it or a neighbour is the answer.
+      if (fits(hint)) {
+        low = hint; high = largest;
+        for (let step = 1; low + step < high; step *= 2) {
+          if (!fits(low + step)) { high = low + step; break; }
+          low += step;
+        }
+      } else {
+        high = hint;
+        for (let step = 1; ; step *= 2) {
+          const value = Math.max(smallest, hint - step);
+          if (fits(value)) { low = value; break; }
+          high = value;
+          if (value === smallest) { plan = { ...plan, [field]: smallest }; return false; }
+        }
+      }
+    } else {
+      if (!fits(smallest)) { plan = { ...plan, [field]: smallest }; return false; }
+      low = smallest; high = largest;
+    }
     while (high - low > 1) {
       const middle = Math.floor((low + high) / 2);
-      if (at(middle).length <= budget) low = middle; else high = middle;
+      if (fits(middle)) low = middle; else high = middle;
     }
     plan = { ...plan, [field]: low };
     return true;
@@ -141,6 +175,12 @@ export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget
   plan = { ...plan, selected: 0 };
   const smallest = attempt(plan);
   return result(plan, smallest, true);
+}
+
+/** Whether a plan drops more than the standard policy (the form it is stored in drops nothing). */
+function dropsMore(plan: WorkspacePlan) {
+  return plan.background !== STANDARD_PLAN.background || plan.selected !== STANDARD_PLAN.selected ||
+    plan.recovery !== STANDARD_PLAN.recovery || plan.removed !== STANDARD_PLAN.removed;
 }
 
 /** How much each plan field can hold in this workspace (the largest meaningful value). */
@@ -167,7 +207,7 @@ export function encodeWorkspacePlan(state: WorkspaceState, plan: WorkspacePlan, 
   return encodePlan(state, plan, model);
 }
 function encodePlan(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): string {
-  return JSON.stringify(serializeWorkspace(compactWorkspace(state, plan, model), model));
+  return JSON.stringify(serializeWorkspace(compactWorkspace(state, plan, model), model, { lookLevel: plan.lookLevel === true }));
 }
 
 function compactWorkspace(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): WorkspaceState {

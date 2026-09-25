@@ -164,7 +164,7 @@ test("duplicating a layer queues its new ID without rebuilding completed sibling
   const h = harness();
   h.sizes.fill(1024);
   const original = h.document.recipe, id = original.layers[0].id;
-  const copied = editLayers(original, id, { kind: "duplicate", id }).recipe;
+  const copied = editLayers(original, id, { kind: "duplicate", id, newId: "copied-layer" }).recipe;
   h.document.replaceRecipe(copied, 1);
   h.coordinator.syncStack(original);
   expect(h.calls.filter(call => call.startsWith("request:"))).toEqual(["request:1:true:1024:false"]);
