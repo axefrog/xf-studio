@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `524a575` | 2026-09-25 | Pre-alpha review of presentation, startup, preview card and desktop host at `7e02636` (completes the `19bf84c` deep review after the legacy-shell removal); the core and pipeline cleanups merged since fix reviewed findings | 0 High, 7 Medium, 6 Low (UI-21..33); UI-05 fixed, UI-06 mostly fixed. Alpha blockers UI-19/20/21/22/23/24/25/27 assigned to claude/alpha-polish |
 | `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
 | `b9597bd` | 2026-09-25 | First deep review: core, pipeline/resolver/adapters, presentation/desktop (three parallel reviewers) | 7 High, 30 Medium, 18 Low. Over the High budget, so feature merges are paused except critical-path work. |
@@ -70,14 +71,21 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-14 | Med | Pipeline | process-tree and WolvenKit error paths untested | Partly fixed: the shared WolvenKit runner's success policy, runtime detection and identity are tested (`tests/wolvenkit-cli.test.ts`); process-tree itself is still untested |
 | UI-03 | Med | Presentation | Two setup forms with separate settings state (stale Build availability, conflicting revisions) | Open (settings v2 track) |
 | UI-04 | Med | Desktop | Desktop bootstrap is a second untyped, untested UI | Open |
-| UI-05 | Med | Presentation | Startup wiring duplicated in studio-main, port-smoke and main | Open |
-| UI-06 | Med | Presentation | Desktop decisions leak into shared startup via data attributes; raw error text shown | Open |
+| UI-05 | Med | Presentation | Startup wiring duplicated in studio-main, port-smoke and main | **Fixed** (claude/retire-legacy, 25 Sep) |
+| UI-06 | Med | Presentation | Desktop decisions leak into shared startup via data attributes; raw error text shown | Mostly fixed (claude/retire-legacy): typed host object; remaining raw error text is UI-22 |
 | UI-07 | Med | Desktop | Build readiness probes block the server synchronously | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-08 | Med | Desktop | Build failure details only in console | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-09 | Med | Desktop | Desktop autosaves queue instead of replacing | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-10 | Med | Presentation | UI re-implements domain rules (satin alias, glitter model IDs, eye-shape list, limits) | Open |
 | UI-11 | Med | Rendering | scene.ts 893-line monolith, no dispose, renders every frame, leaks on load failure | Open |
 | UI-12 | Med | Tests | UI/desktop test gaps (bootstrap, panels, dock DOM, startup) | Open |
+| UI-21 | Med | Presentation | Preview preparation and WolvenKit setup reachable only through the standalone card; after "Not now" there is no way back until restart (not on the port; no boundary exception) | Open (alpha blocker) |
+| UI-22 | Med | Presentation | Head-load failure after ready is latched: no retry, raw loader text shown (e.g. "geometry nodes are missing") | Open (alpha blocker) |
+| UI-23 | Med | Presentation | Preparation/WolvenKit polling stops for good after one failed poll; the card freezes mid-step | Open (alpha blocker) |
+| UI-24 | Med | Presentation | Every not-ready head state uses the error phase: normal preparation shows a red danger icon | Open (alpha blocker) |
+| UI-25 | Med | Presentation | Game & tools and desktop Build setup show developer wording (revision/overrides, Bun executable, WolvenKit not marked optional); extends UI-03 | Open (alpha blocker) |
+| UI-26 | Med | Presentation | `studio-startup.ts` owns settings policy (partial-field merge, queued refresh, revision watch) instead of `LocalSetupActions` | Open |
+| UI-27 | Med | Accessibility | Card and consent links use yellow `--accent` text: about 1.4:1 contrast in light theme | Open (alpha blocker) |
 | CORE-04 | Med | Core | Undo at the history limit mislabels entries and creates no-op entries | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-05 | Med | Core | Queries deep-copy/reparse the collection (context menu 0.1–0.4 s) and some stash as a side effect | Open |
 | CORE-06 | Med | Core | Control edits skip validation and throw raw errors, leaving a transaction open | **Fixed** (claude/cleanup-core, 25 Sep) |
@@ -126,6 +134,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-23:** Fixed (claude/cleanup-core2): one `historyTimeline()` mapper in `authoring-history.ts` serves both.
 - **CORE-24:** Fixed (claude/cleanup-core2): the first collection keeps every editor-memory field except the recipe.
 - **CORE-08/CORE-15 (extended):** new actions were added to both the descriptor table and the hand-kept `recipeKinds`/`undoPolicy()` sets (fixed in claude/cleanup-core2, see CORE-08); new refusals come back as `invalid_value` instead of `incompatible_mode` (open).
+- **UI-20 (not fixed):** `ViewportInputHints.render()` re-shows the strip on its own subscription (`viewports.ts:87`), so hints still overlap "3D preview unavailable".
+- **UI-28:** `window.open(url, "_blank", "noopener")` returns null, so localhost links open and also show "That page couldn't be opened" (`studio-startup.ts:235`).
+- **UI-29:** on localhost the card's "I already have WolvenKit" button does nothing (`openSetup` undefined).
+- **UI-30:** preview autostart preference lives in page `localStorage`: not verification-scoped, and lost on desktop as the loopback port changes.
+- **UI-31:** site finish grid still tags Shimmer/Glossy/Colour-shifting "Preview study"; `site/tools/release.ts:23` still mentions extracted game resources.
+- **UI-32:** "Browser autosave" tooltip on desktop; missing bundled WebView2 bootstrapper blamed on the internet; package error time is render time; consent dialog focuses Download.
+- **UI-33:** preparation and WolvenKit polling classes duplicate each other; `uv-editor` calls `getComputedStyle` on every draw.
+- **UI-04/UI-10/UI-11/UI-12 (extended):** `bootstrap.js` grew (Start fresh); Satin alias and glitter ID mapping remain in the UI and the shift slider hard-codes 0–1; `scene.ts` 925 lines, renders every frame, allocates per frame; no behavioural tests for the preview card or startup failure paths.
 
 ## New subsystems since last review
 
