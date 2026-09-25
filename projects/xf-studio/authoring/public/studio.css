@@ -114,6 +114,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .crumbs .icon { width: 12px; height: 12px; color: var(--text-faint); }
 .verify-flag { flex: none; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--signal); border: 1px dashed var(--signal-line); padding: 5px 7px; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+.history-controls { display: flex; align-items: center; gap: 1px; padding: 1px; border: 1px solid var(--line-soft); }
 .divider { width: 1px; height: 20px; background: var(--line); margin: 0 var(--sp-3); }
 
 /* ---------- Buttons, chips, badges ---------- */
@@ -425,6 +426,35 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .activity-item strong { font-weight: 600; white-space: nowrap; }
 .activity-item.success { border-color: var(--success); } .activity-item.warning { border-color: var(--warning); } .activity-item.error { border-color: var(--danger); }
 
+/* History: the current preset's steps, oldest first, on one timeline */
+.history-panel .list-head { flex-wrap: wrap; row-gap: var(--sp-3); }
+.history-trimmed { display: flex; align-items: center; gap: var(--sp-3); }
+.history-trimmed .icon { flex: none; }
+.history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; background: var(--bg-panel); border: 1px solid var(--line); container-type: inline-size; }
+.history-row + .history-row { border-top: 1px solid var(--line-soft); }
+.history-step { position: relative; display: flex; align-items: center; gap: var(--sp-4); width: 100%; min-height: var(--row-h); padding: 0 var(--sp-4) 0 var(--sp-4); border: 0; background: transparent; color: var(--text); text-align: left; }
+.history-step:hover { background: var(--bg-hover); }
+.history-step:focus-visible { outline-offset: -2px; }
+.history-step[aria-disabled="true"] { cursor: not-allowed; }
+.history-step::before { content: ""; position: absolute; left: calc(var(--sp-4) + 4.5px); top: 0; bottom: 0; width: 1px; background: var(--line-strong); }
+.history-row:first-child .history-step::before { top: 50%; }
+.history-row:last-child .history-step::before { bottom: 50%; }
+.history-row:only-child .history-step::before { display: none; }
+.history-marker { position: relative; z-index: 1; flex: none; width: 10px; height: 10px; border: 1.5px solid var(--text-muted); background: var(--text-muted); }
+.history-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.history-state { flex: none; font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--signal); }
+.history-state:empty, .history-time:empty { display: none; }
+.history-time { flex: none; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+@container (max-width: 230px) { .history-time { display: none; } }
+.history-row[data-kind="start"] .history-marker { background: var(--bg-panel); border-color: var(--line-strong); }
+.history-row[data-kind="start"] .history-label { color: var(--text-muted); font-weight: 500; }
+.history-row[data-kind="current"] .history-step { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.history-row[data-kind="current"] .history-marker { background: var(--accent); border-color: var(--accent-edge); }
+.history-row[data-kind="current"] .history-label { font-weight: 650; }
+.history-row[data-kind="undone"] .history-marker { background: var(--bg-panel); border-style: dashed; border-color: var(--text-faint); }
+.history-row[data-kind="undone"] .history-label, .history-row[data-kind="undone"] .history-time { color: var(--text-faint); }
+.history-row[data-kind="undone"] .history-label { font-style: italic; font-weight: 500; }
+
 /* ---------- Viewports ---------- */
 .viewport-panel { position: relative; height: 100%; min-height: 160px; background: var(--stage); color: var(--stage-text); overflow: hidden; }
 .viewport-panel:focus-visible { outline-offset: -3px; }
@@ -594,6 +624,8 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 }
 @media (forced-colors: active) {
   .dock-tab[aria-selected="true"]::before, .item-row.selected::before { background: Highlight; }
+  .history-row[data-kind="current"] .history-step { box-shadow: inset 3px 0 0 Highlight; }
+  .history-row[data-kind="current"] .history-marker { background: Highlight; }
   .switch:checked + .switch-track::after { background: Highlight; }
   .btn, .segmented, .field, .dock-group, .menu { border: 1px solid CanvasText; }
 }

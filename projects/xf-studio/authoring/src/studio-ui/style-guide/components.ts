@@ -132,6 +132,14 @@ export function components() {
       specimen: `<ol class="activity" style="max-width:420px"><li class="activity-item success"><time>14:02:11</time><strong>Library</strong><span>Saved “Night market set” · revision 4.</span></li><li class="activity-item warning"><time>14:01:40</time><strong>UV map</strong><span>This move reaches the layer's limits.</span></li><li class="activity-item error"><time>13:58:03</time><strong>Mod package</strong><span>No mod files can be made…</span></li></ol>`,
       what: "Session-only history of outcomes, warnings and errors, newest first.",
       when: "Opened from the status bar message or the Panels menu; closed by default." }),
+    pattern({ id: "c-history", title: "History timeline", status: "implemented",
+      specimen: `<div style="max-width:360px" class="stack-s"><p class="note info history-trimmed">${i("info")}<span>Older steps were not kept. Only the latest changes are kept for each preset.</span></p>
+        <ol class="history-list" aria-label="Changes to this preset, oldest first">${([["start", "Oldest kept version", ""], ["done", "Colour", "14:01"], ["done", "Move point", "14:02"],
+          ["current", "Opacity", "14:02"], ["undone", "Rename layer", "14:03"], ["undone", "Mirroring", "14:03"]] as const).map(([kind, label, time]) =>
+          `<li class="history-row" data-kind="${kind}"><button type="button" class="history-step"${kind === "current" ? ' aria-current="step" tabindex="0"' : ' tabindex="-1"'}><span class="history-marker" aria-hidden="true"></span><span class="history-label">${label}</span><span class="history-state">${kind === "current" ? "Current" : ""}</span><span class="history-time">${time}</span></button></li>`).join("")}</ol></div>`,
+      what: "The current preset's changes on one timeline, oldest first, named with the same labels as Undo and Redo. The current step is highlighted with a yellow marker and “Current”; steps after it are undone and dimmed with hollow markers. The first row is the oldest kept version.",
+      when: "Clicking a row goes to the look right after that step (the first row: before every listed step) as one change. Undone steps stay until a new edit discards them, exactly like Redo. When older steps were dropped at the 80-step limit or to fit browser storage, a note says “Older steps were not kept”.",
+      a11y: "An ordered list of buttons with roving focus: ↑/↓/Home/End move between rows, Enter or Space jumps. The current row carries aria-current=step; each row's name states its position, label, time and whether it is undone. Jumps are announced." }),
     pattern({ id: "c-strip", title: "Inspector context strip", status: "implemented",
       specimen: `<div class="layer-strip demo-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">4 of 4 from front</span></div></div>`,
       what: "A sticky line naming the layer an inspector edits.",

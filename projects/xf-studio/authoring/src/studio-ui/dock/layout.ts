@@ -409,7 +409,11 @@ export function parseTree(value: unknown, known: readonly PanelId[], fallback: D
   for (const missing of known.filter(id => !seen.has(id))) {
     const home = locate(fallback, missing);
     const siblings = home ? home.group.panels.filter(id => id !== missing) : [];
+    // A newly added panel joins as a background tab: the group keeps showing what the user left open.
+    const actives = new Map(allGroups(tree).map(entry => [entry.group.id, entry.group.active]));
     tree = openPanel(tree, missing, siblings, { x: 0, y: 0, w: 1280, h: 800 });
+    const host = locate(tree, missing), keep = host && actives.get(host.group.id);
+    if (keep) tree = activate(tree, keep);
   }
   return tree;
 }

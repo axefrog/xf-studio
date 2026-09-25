@@ -1,7 +1,7 @@
 import { group, split, type DockState, type DockTree, type PanelId, type SizeClass } from "./dock/layout";
 
 /** Stable panel IDs. Adding a panel later appends it beside its default siblings on restore. */
-export const PANEL_IDS = ["presets", "layers", "library", "package", "head", "uv", "finish", "shape",
+export const PANEL_IDS = ["presets", "layers", "history", "library", "package", "head", "uv", "finish", "shape",
   "edge", "warp", "character", "lighting", "motion", "quality", "activity"] as const satisfies readonly PanelId[];
 export type StudioPanelId = typeof PANEL_IDS[number];
 
@@ -15,7 +15,7 @@ export type StudioPanelId = typeof PANEL_IDS[number];
 export function defaultWide(): DockTree {
   return { floating: [], root: split("row", [
     split("column", [group(["presets", "library", "package"], "presets", "g-collection"),
-      group(["layers"], "layers", "g-layers")], [.4, .6], "s-left"),
+      group(["layers", "history"], "layers", "g-layers")], [.4, .6], "s-left"),
     group(["head"], "head", "g-head"),
     split("column", [group(["uv"], "uv", "g-uv"),
       group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")], [.42, .58], "s-right"),
@@ -25,7 +25,7 @@ export function defaultWide(): DockTree {
 export function defaultCompact(): DockTree {
   return { floating: [], root: split("column", [
     split("row", [group(["head"], "head", "g-head"), group(["uv"], "uv", "g-uv")], [.38, .62], "s-stage"),
-    split("row", [group(["layers", "presets", "library", "package"], "layers", "g-stack"),
+    split("row", [group(["layers", "history", "presets", "library", "package"], "layers", "g-stack"),
       group(["finish", "shape", "edge", "warp", "character", "lighting", "motion", "quality"], "finish", "g-inspect")],
     [.42, .58], "s-lower"),
   ], [.56, .44], "s-root"), closed: ["activity"] };

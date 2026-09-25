@@ -1,6 +1,6 @@
 import type { CollectionDraftSummary } from "./collection-actions";
 import type { CollectionRequest } from "./collection-service";
-import type { HistoryState } from "./authoring-history";
+import type { HistoryJumpPlan, HistoryState } from "./authoring-history";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS } from "./studio-action-descriptors";
 import type { StudioAction } from "./studio-application";
 import type { StudioFileAction } from "./studio-file-operations";
@@ -21,7 +21,9 @@ export type Consequence = {
   confirm: boolean;
 };
 export type ConsequenceSubject = { action: StudioAction } | { file: StudioFileAction } | { request: CollectionRequest };
-type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit: number; removedLimit: number };
+type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit: number; removedLimit: number;
+  /** For `history.jumpTo`: which way the jump goes. */
+  jump?: HistoryJumpPlan };
 
 export function consequenceOf(subject: ConsequenceSubject, state: State): Consequence {
   const none: Consequence = { discards: [], recoverableBy: "none", confirm: false };
@@ -60,6 +62,9 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
   if (action.kind === "recipe.undo") return done({ replaces: "layer-content", discards: [],
     recoverableBy: state.history.undo ? "recipe.redo" : "none" });
   if (action.kind === "recipe.redo") return done({ replaces: "layer-content", discards: [], recoverableBy: "recipe.undo" });
+  // A jump is a run of Undo or Redo steps: nothing is discarded, and the steps stay reachable.
+  if (action.kind === "history.jumpTo") return done({ replaces: "layer-content", discards: [],
+    recoverableBy: state.jump?.direction === "redo" ? "recipe.undo" : state.jump?.direction === "undo" ? "recipe.redo" : "none" });
   if (ACTION_DESCRIPTORS[action.kind].effect !== "content") return none;
   // Every other content edit records one Undo entry; it drops Redo and, at the bound, the oldest Undo.
   const discards: Consequence["discards"] = [];

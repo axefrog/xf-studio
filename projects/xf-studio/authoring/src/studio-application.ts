@@ -1,7 +1,8 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
-import type { AuthoringHistory, HistoryState } from "./authoring-history";
+import { HISTORY_START_ID, type AuthoringHistory, type HistorySnapshot, type HistoryState } from "./authoring-history";
+import { UNKNOWN_HISTORY_LABEL } from "./history-labels";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue, type ValidationIssue } from "./validation-issues";
@@ -24,7 +25,7 @@ import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
 
-export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
+export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
@@ -270,14 +271,28 @@ export class StudioApplication {
   }
   /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
   consequences(subject: ConsequenceSubject): Consequence {
+    const jump = "action" in subject && subject.action.kind === "history.jumpTo"
+      ? this.services.history?.plan(subject.action.entryId) : undefined;
     return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
-      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT });
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
   history(): HistoryState {
     const s = this.services;
     return s.history?.state() ?? { undo: s.document.canUndo ? s.document.historyLabel() : undefined,
       depth: s.document.undoDepth, redoDepth: 0 };
+  }
+  /**
+   * Read-only timeline of the current preset's history (oldest first, redo-able steps after
+   * the current one) for a history list. Labels and times are session-only; steps restored
+   * from a saved workspace read "Earlier change". It exposes no recipes.
+   */
+  historyTimeline(): HistorySnapshot {
+    const s = this.services;
+    if (s.history) return s.history.snapshot();
+    const steps = s.document.historyEntries().map(entry => ({ ...(entry.label ?? UNKNOWN_HISTORY_LABEL),
+      id: `step-${entry.id}`, ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" as const }));
+    return { startId: HISTORY_START_ID, steps, current: steps.length - 1, redoCount: 0, trimmed: s.document.historyTrimmed };
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(); }
@@ -295,7 +310,8 @@ export class StudioApplication {
     if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
       action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if ((action.kind === "recipe.undo" || action.kind === "recipe.redo") && (s.gestures.snapshot() || s.controls.snapshot()))
+    if ((action.kind === "recipe.undo" || action.kind === "recipe.redo" || action.kind === "history.jumpTo") &&
+      (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     // Descriptor payload types and ranges gate every entry point, not only context menus.
     const payload = payloadIssue(action);
@@ -313,6 +329,13 @@ export class StudioApplication {
       { available: false, reason: "There is no recipe change to undo." };
     else if (action.kind === "recipe.redo") raw = !s.history ? { available: false, reason: "Redo is not available in this host." } :
       s.history.canRedo() ? { available: true } : { available: false, reason: "There is no undone change to redo." };
+    else if (action.kind === "history.jumpTo") {
+      const plan = s.history?.plan(action.entryId);
+      raw = !s.history ? { available: false, reason: "History steps are not available in this host." } :
+        !plan ? { available: false, reason: "That history step no longer exists." } :
+        plan.direction === "none" ? { available: false, reason: "This is already the current step." } :
+        { available: true };
+    }
     else if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
     else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
       raw = layerCapability(s.document.recipe, action);
@@ -363,6 +386,7 @@ export class StudioApplication {
       let result: unknown;
       if (action.kind === "recipe.undo") result = s.undo();
       else if (action.kind === "recipe.redo") result = s.history!.redo();
+      else if (action.kind === "history.jumpTo") result = s.history!.jumpTo(action.entryId);
       else if (recipeKinds.has(action.kind)) s.document.withHistoryLabel(historyLabel(action as RecipeAction),
         () => s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind)));
       else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
@@ -551,7 +575,7 @@ function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
   return "invalid_value";
 }
 function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
-  if (action.kind === "recipe.undo" || action.kind === "recipe.redo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
+  if (action.kind === "recipe.undo" || action.kind === "recipe.redo" || action.kind === "history.jumpTo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
     action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
     action.kind.startsWith("quality.") || action.kind.startsWith("savedV.")) return "none";
   if (action.kind === "preset.edit" && action.command.kind === "remove" ||
