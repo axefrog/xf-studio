@@ -9,7 +9,7 @@
 | RED4ext plugin | Found at `red4ext/plugins/<dir>/<name>.dll` (at most one folder deep). Needs the exports `Supports` (API version), `Query` (name, version, runtime, SDK) and `Main(Load/Unload)`. Refused if its runtime doesn't match the game build, or its SDK is older than 0.5.0-compat. | `Main(Load)` runs before the game starts, and the plugin registers RTTI callbacks there | [source] RED4ext `PluginSystem.cpp:89-154, 223-321` |
 | Global natives for scripts | `CRTTISystem::AddPostRegisterCallback`, then `CGlobalFunction::Create` with flags `{isNative, isStatic}`, then `RegisterFunction` | Called by redscript as a declared `native func`, and by CET as `Game.Name(...)` | [source] SDK `examples/native_globals_redscript/Main.cpp:60-83`; CET `RTTIHelper.cpp:305-354` |
 | redscript | `r6/scripts/**.reds`, plus any path a plugin adds with `sdk->scripts->Add` (resolved against the plugin folder) | Class bodies, `@wrapMethod`/`@addMethod`, `ScriptableSystem` callbacks | [source] RED4ext `v1/Funcs.cpp:123-139`, `ScriptCompilationSystem.cpp:101-134`; redscript `unit.rs` |
-| TweakXL data | `r6/tweaks/**.yaml|.yml|.tweak`, imported right after TweakDB loads | none (data) | [source] TweakXL `Environment.hpp:13-16`, `TweakService.cpp:25-59` |
+| TweakXL data | `r6/tweaks/**.yaml\|.yml\|.tweak`, imported right after TweakDB loads | none (data) | [source] TweakXL `Environment.hpp:13-16`, `TweakService.cpp:25-59` |
 | CET mod | `bin/x64/plugins/cyber_engine_tweaks/mods/<name>/init.lua` | `registerForEvent` at top level only; `Game` and `Observe` are available from `onInit` | [source] CET `ScriptStore.cpp:31-64`, `ScriptContext.cpp:46-65, 194-196` |
 
 ## 2. Rules learned the hard way (from source)

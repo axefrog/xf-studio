@@ -25,7 +25,7 @@ const DOWNLOADABLE = /\.(?:zip|7z|rar|archive|xl|exe|msi|dmg|glb|gltf|blend|xbm|
 /** Phrases that would imply a release or download while releaseStatus is "unreleased". */
 export const UNRELEASED_CLAIMS = ["download now", "now available", "available now", "install now", "get it now", "latest release",
   "release notes", "coming soon"];
-/** In-game verification has not happened; these are rejected in every release state until runtime evidence exists. */
+/** Blanket in-game claims, rejected in every release state: runtime evidence is per feature, so copy names what was seen instead. */
 export const GAME_CLAIMS = ["tested in game", "tested in-game", "verified in game", "verified in-game", "game-verified", "works in game", "works in-game"];
 /** Dates and schedule language that future-direction copy ([data-future]) must not use: directions are discussed, not scheduled.
  *  “May” is omitted because it is also the modal verb, and the game's title is not a year. */
@@ -190,7 +190,10 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
     if (!scan.main) add(page, "missing <main id=\"main\">");
     if (!scan.links.some(link => link.value === "#main")) add(page, "missing skip link to #main");
     const text = scan.text.toLowerCase().replace(/\s+/g, " ");
-    for (const phrase of GAME_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}”, but nothing has been tested in the game`);
+    // Whole-word match, so honest negatives such as "untested in game" are not mistaken for claims.
+    for (const phrase of GAME_CLAIMS)
+      if (new RegExp(`(?<![a-z])${phrase}(?![a-z])`).test(text))
+        add(page, `text contains “${phrase}”; blanket in-game claims need recorded runtime evidence`);
     if (config.releaseStatus === "unreleased")
       for (const phrase of UNRELEASED_CLAIMS) if (text.includes(phrase)) add(page, `text contains “${phrase}” while releaseStatus is unreleased`);
     if (page === "index.html") {
