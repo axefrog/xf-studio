@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `fc36eae` | 2026-09-26 | Studio light rig (rendering, presentation) | 0 High, 0 Medium, 7 Low (PREV-69..72, UI-56..58). Default reproduces the old look exactly; persistence and render-on-demand pass |
 | `4afea26` | 2026-09-26 | Platform step 5: facades, live features, `app.transaction`, view contributions, renames, locked looks, spec limits | 0 High, 2 Medium, 9 Low (CORE-45..49, PIPE-44..45, UI-52..55). No performance regression. Fixes in claude/cleanup-platform3 |
 | `90b8602` | 2026-09-26 | Layered material and resolver-fed piercings (rendering, resolver, presentation) | 1 High (PIPE-40), 6 Medium, 8 Low (PIPE-40..43, PREV-62..68, UI-48..51). UI-02 and PIPE-11's piercing part confirmed fixed. Open Highs 2. Fixes in claude/cleanup-layered |
 | `4bf688a` | 2026-09-26 | Authored plate blend and skin light (rendering) | 0 High, 1 Medium, 4 Low (PREV-57..61). Matches the export plan and the game model otherwise; idle draws nothing. Fixes in claude/cleanup-render3 |
@@ -191,6 +192,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **PREV-69..72, UI-56..58** (studio light rig review at `fc36eae`), Open:
+  - **PREV-69:** the rig is joined to the preview port by a one-off spread in `browser-head-attachment.ts:81-83` instead of `createBrowserScenePreviewPorts`; a second user of the ports would get the four studio actions refused.
+  - **PREV-70:** test gaps: the head-attachment fake scene answers any key, so nothing proves the real path offers the rig; the creator-preset test hides a hand-made light list, not the rig's own; the skin light's image-based term isn't covered by the room-light GPU check.
+  - **PREV-71:** the rim is a live directional light even at zero strength, so every lit program (hair's per-light loop included) evaluates a third light that adds nothing by default.
+  - **PREV-72:** `studioLighting()` in `scene.ts` has no caller, and the key's reference geometry is written twice (`KEY_DISTANCE`, `DEFAULT_KEY_ELEVATION`).
+  - **UI-56:** creator-preset refusals use `invalid_value` where `incompatible_mode` fits (`preview-actions.ts:147-148`).
+  - **UI-57:** refusal wording and units differ from the controls ("Environment strength … 0 and 3" for the "Room light" percent slider; exposure refused in raw units but shown in EV, with the default reading +0.3 EV).
+  - **UI-58:** no panel test for the EV slider mapping, the setup chips' state or hiding under the creator preset.
 - **CORE-47..49, PIPE-44..45, UI-53..55** (platform step 5 review at `4afea26`): Fixed in claude/cleanup-platform3 (see below).
 - **UI-52** (platform step 5 review at `4afea26`): Partly fixed in claude/cleanup-platform3 (`featureStateOf` reads the editor document's feature). Open: views still dispatch through `port.authoring`, so facade isolation is neither used nor enforced; moving each feature view onto its own facade, with a boundary test that its dispatches go only through that facade, is deferred to the step-5 file moves (recorded in the [boundary assessment](ui-architecture-boundary.md#open-work)).
 - **PREV-65..68, PIPE-43, UI-49..51** (layered material review at `90b8602`), Open (claude/cleanup-layered):
@@ -209,7 +218,6 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **Studio light rig** (claude/studio-lighting): `src/studio-lighting.ts` (settings, setups, validation as plain data) and `src/studio-light-rig.ts` (the Three key, fill and rim lights and room-light strength), wired through `browser-head-attachment.ts` and four `preview.*` actions. Review with the next rendering review; worth a look: the hook living in `browser-head-attachment.ts` until it moves to the preview ports.
 - **Creator catalogue and character context** (`claude/cc-controls`): `src/cc-catalogue.ts`, `src/cc-presentation.ts`, `src/cc-render-coverage.ts`, `src/game-text.ts`, `src/tweakdb-flats.ts` (pure), `src/cc-catalogue-host.ts` (host: texts extracted with WolvenKit, TweakDB and the game's language setting read from the game folder), `src/character-context.ts` (domain service and its not-yet-registered action family), `src/cc-preset.ts` (`xfs/cc-preset-1` codec), `tools/cc-catalogue.ts`. Touches shared code in two places: `loadMergedCco` takes an optional reader, and `readArchiveXlConfig` reads `localization.onscreens`. Review focus: the text extraction's batching and cache keys, catalogue size (130,000 choices on the reference installation) before it crosses to a browser, and the activation rule copied from R5 (`activeOptions`, checked against `descriptorsFromUiState` by a test).
 
 ## Fixed in claude/cleanup-platform3
