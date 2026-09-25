@@ -179,6 +179,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - **Feature-module platform, step 3** (claude/platform-step3): `src/layer-models.ts`, part-2 codec. Reviewed only through the platform review of steps 1-2; review with the next deep review.
+- **Authored plate blend** (claude/plate-blend): `src/plate-blend.ts` (square-root blend of the makeup plate: shader patch, per-layer layers-below targets), wired through `makeup-stack.ts` and `scene.ts`. Review with the next rendering review.
 
 ## Fixed in claude/cleanup-render2
 
@@ -191,7 +192,7 @@ Findings PREV-50 to PREV-56 from the `bb2cc22` rendering review. Measurements: h
 - **PREV-54:** `render-templates.ts` lists each template's `required` inputs (`decalRequired` for the face family); a chunk is dropped only when one of those is unreadable, and an optional or recorded-for-later input earns a note. Test: an eye without its `Normal` still draws; without `Albedo` the eyeball chunk is left out.
 - **PREV-55:** the by-hash fallback runs only when the archive index lists the texture, and up to `BY_HASH_CONCURRENCY` (4) launches at a time, each into its own folder; the first failure stops new launches and surfaces after the others finish. Test with a fake WolvenKit: six launches peak at four and take two rounds; an unreadable index launches nothing.
 - **PREV-56:** `tests/webgl-display.test.ts` bundles `tests/webgl-probe-page.ts` and runs it in headless Chrome through `tools/cdp.ts` (about 4 s; skipped without Chrome, failing under `XFS_REQUIRE_ORACLES=1`): every face-decal variant (plain, double diffuse, gradient recolour; with and without underlay and skin light), the brows, skin, eyeball, shell and display passes compile and draw with no shader error (51 programs).
-- **Design note (not a finding):** the Studio's own makeup plate now blends in linear light under both presets, as it already did under the creator preset. The game blends the exported plate in square-root space like any `mesh_decal`, so its soft edges now read lighter than the game will show them. The plate could take the same per-vertex skin underlay and forward solve as the face decals.
+- **Design note (not a finding):** the Studio's own makeup plate blended in linear light, so its soft edges read lighter than the game's square-root blend. Done in claude/plate-blend: `src/plate-blend.ts` gives every exportable layer the face decals' per-vertex skin underlay and forward solve, plus a UV-space target of the blended layers below it, so the preview lands on the export's merged decal over the skin (see [head CC rendering §3](../../knowledge/head-cc-rendering.md#3-the-head-decal-family)).
 
 ## Fixed in claude/cleanup-polish
 
