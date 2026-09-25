@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `84cb39d` | 2026-09-26 | Deep review since `f1b732f`: guidance v1, host cleanup, render-on-demand cleanup, UV-window cleanup (four reviewers) | 0 High, 5 Medium, 12 Low. Fixes in claude/cleanup-hosts2 and claude/cleanup-polish |
 | `f1b732f` | 2026-09-25 | Deep review since `ac251d8`: plate-local UV window and verifier, store coverage, grading-LUT host, skin chain (pipeline/hosts); skin adapter, creator lighting, scene growth (rendering) | 1 High (PREV-29), 6 Medium, 11 Low. Open Highs 3 (at budget). Fixes in claude/cleanup-hosts, claude/cleanup-window, claude/cleanup-render |
 | `ac251d8` | 2026-09-25 | Deep review since `ecb4b33`: plate lift and diagnostics, head camera input, release prep, package gate, site knowledge generator, private-path check, P0 character details; plus a separate security review of the runtime bridge | 2 High (PIPE-28, RB-01), 8 Medium, 15 Low. Open Highs now 4, over budget: feature merges pause until PIPE-28 and RB-01 are fixed |
 | `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixed in claude/release-prep (PREV-20..24, UI-34/35, REL-01; PREV-25 partly; changelog and site corrected); the workflow's first run failed on a test timeout, fixed there, rerun pending |
@@ -77,6 +78,11 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-32 | Med | Verifier | UV-window mapping gate isn't independent: the head-UV coverage reference comes from the same `rasterWindow` it checks (a mirrored raster passes) (`package-bake.ts:79`, `verify-build.ts:185-192`) | **Fixed** (claude/cleanup-window, 25 Sep) |
 | PIPE-33 | Med | Pipeline | Check doesn't know the UV window: a preset entirely off the plate passes Check, then fails Build with a raw verifier error for the whole collection | **Fixed** (claude/cleanup-window, 25 Sep) |
 | PREV-30 | Med | Hosts | Grading-LUT host runs WolvenKit directly: no timeout, exit code ignored, no cancel, no .NET-missing guidance (extends PIPE-04/07) | **Fixed** (claude/cleanup-hosts, 25 Sep): LUT extraction runs through `wolvenkit-cli.ts` with a per-step deadline, strict exit/log rules, cancellation of a superseded preparation and a plain missing-.NET note |
+| PREV-45 | Med | Hosts | Any WolvenKit error is transient, so the LUT host retries every ~40 s forever; each retry re-runs discovery synchronously (1.7-2.4 s host stall) (`grading-lut-host.ts:114-126,145,198`) | Open (cleanup-hosts2) |
+| PREV-46 | Med | Hosts | `.failed` markers aren't keyed by WolvenKit identity, so a resource stays missing after a WolvenKit upgrade (`resolver-host.ts:175,180-182,305`) | Open (cleanup-hosts2) |
+| PREV-47 | Med | Hosts | Archive-index `.u64` cache written non-atomically and trusted on read: a killed first scan leaves an empty index that hides a mod's overrides until the archive changes (`resolver-host.ts:103,114`) | Open (cleanup-hosts2) |
+| PIPE-36 | Med | Pipeline | Check can plan without a plate (fresh install) or on a stale one (profile/head/game change): it reports N ready while Build packages fewer, and never says reach wasn't checked (`eye-plate-service.ts:198-200`) | Open (cleanup-hosts2) |
+| PIPE-37 | Med | Pipeline | Cached plate footprint isn't checked against the current window rule; a future rule change makes every Build fail until the cache is deleted by hand (`eye-plate-service.ts:134-135`) | Open (cleanup-hosts2) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Partly fixed: the resolver fetcher now has one lane per cache folder with single-flight and unique batch folders (claude/cleanup-hosts); the game-asset exporter is still per-caller, and there is no cross-process single-flight (unique folders and atomic cache writes keep processes from corrupting each other) |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Mostly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures, hair and skin profiles; character details load with cancellation, supersede and dispose (claude/render-resolver); the head's skin moved onto it with a `skin` slot and the `skin.mt` adapter (claude/skin-material). Open: the core head record (plate, eyes and the fixed default skin shown until the character record arrives) is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -171,9 +177,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 - **Feature-module platform, step 1** (claude/platform-step1). New module families `src/platform/api/` (action, capability and owner types; `actionTable`, `coded`, `undoPolicyOf`), `src/platform/core/registry.ts` (`Registry`), `src/features/eye-makeup/index.ts` (module #1's registration) and `src/compose/` (`system-families.ts`, `studio-registry.ts`: the composition list). `StudioApplication` routes by owner through one handler per owner. Tests: `tests/studio-registry.test.ts`, the platform boundary tests in `tests/architecture-import-boundary.test.ts`, and the golden `tests/golden/studio-registry.json`.
 
-- **Guidance: tours, spotlights and Help** (claude/guidance). Presentation modules in `src/studio-ui/guidance/`: `anchors.ts` (typed anchor catalogue and `AnchorRegistry` on `StudioRuntime`), `engine.ts` (DOM-free `GuidanceService`, `guidance.*` actions), `tours.ts` and `help-topics.ts` (data), `content.ts` and `render.ts` (markdown-lite), `placement.ts`, `overlay.ts` (spotlight and callout), `controller.ts` (shell wiring, onboarding offer, Esc) and `help-panel.ts` (the new `help` dock panel). Core touch points: `UIPreferences.tours` (`tours.record`), the `port.links` surface with `project-links.ts` (both hosts open only named pages), the `shell.help` (F1) and `tour.*` key bindings, and the dock's homes for panels closed by default. Tests: `tests/guidance.test.ts`.
-
 - **Eye materials and the eye record** (claude/eye-render). `src/eye-material.ts` holds the eyeball and wetness-shell materials, the ramp bake and the pure formulas. The character record moved to `xfs/render-detail-3` (`eyes` slot, `gradients`, `morphTexture`). Also new: the `eye`, `eye-shell` and `layered-placeholder` adapters, the morph `baseTexture` rule in `resource-graph.ts` and `character-resolver.ts`, and the exporter's by-hash texture fallback for archives without path names. Retired: `eye-appearance.ts`, `eye-optics.ts` and `tools/intake_eyes.ts`. The study-only `eye-study-fixture.ts` (with `tools/stage-private-eye-study.ts`) keeps the render-fidelity page working. Tests: `tests/eye-material.test.ts`, `tests/eye-study-fixture.test.ts`, and the eye cases in the plan, service, record, switch and scheduler tests.
+
+(Guidance, the host, render and window cleanups were reviewed at `84cb39d`.)
 
 ## Fixed in claude/platform-step2
 
@@ -223,6 +229,17 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - Tests are in `plate-reach`, `package-build-service`, `package-server`, `eye-plate` and desktop `check-runner`/`build`. A real Check and Build of the finish board with an added off-plate preset both omitted it and agreed on the packaged snapshot hash.
 - **PIPE-34:** `bakeCollection` without a window (the Experiment 005 oracle's `tools/bake_collection.ts`) writes a plan whose every preset has `uvSpace: "head"`, matching its maps. Tested.
 - **PIPE-35:** `mappingOffset` in `mod-verifier/uv-window.ts` gives a signed offset estimate. It runs a joint search over shifts of the map lookup (±8 window texels, refined 1 → 1/4 → 1/16) for the least total difference from the reference at the plate samples, using only samples near content. The gate bounds the estimate to 1 texel per axis (`MAPPING_LIMITS.offsetTexels`), and the verification report records it per window preset. Tests shift a real bake by ±2 and ±4 texels in each axis: the estimate recovers each shift with its sign, and at 2 texels the mean and far-off limits alone pass. On the real session-2 and finish-board builds every window preset's estimate is 0 on both axes, except 0.06 texel in V on the sharpest line pattern. `tools/uv-window-probe.ts` reports it.
+- **PREV-48:** a changed LUT with identical source metadata swaps the grade without requesting a frame (`lighting-preset-stage.ts:68-72`).
+- **PREV-49:** a failed atomic cache write drops already-extracted documents for the whole batch; cancelling a superseded LUT preparation can't stop discovery or graph loading.
+- **PIPE-38:** the mapping gate accepts an all-empty window map for very faint makeup (offset null is accepted).
+- **PIPE-39:** the shift estimate is unreliable for presets that barely reach the plate (0.6-0.8 texel on lossless data).
+- **UI-41:** F6 region cycling skips the tour card and onboarding offer.
+- **UI-42:** a tour button's `then: "next"` can double-advance after an async command (latent).
+- **UI-43:** starting a tour while one runs replaces it without recording how it ended.
+- **UI-44:** help and tour text restate which finishes export (extends UI-10).
+- **UI-45:** idle playback runs 5-20 % slow while orbiting (scheduler resets its clock mid-frame).
+- **UI-46:** a device-pixel-ratio change (monitor move, zoom) isn't picked up until reload (pre-existing).
+- **UI-47:** the hover highlight stays after a drag ends until the mouse moves.
 
 ## Fixed in claude/cleanup-hygiene
 
