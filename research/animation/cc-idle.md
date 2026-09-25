@@ -41,7 +41,7 @@ Browser verification in the isolated `?verify=1` page: actual moving head/facial
 
 ## Remaining fidelity questions
 
-- Trace the actual game animation graph/entity selection and phase/blend rules. Resource names identify genuine female UI close-up clips but do not alone prove the precise default runtime combination.
+- The creator's face graph and its selection rules are now traced offline ([facial expressions §5](../../knowledge/facial-expressions.md#5-the-character-creator-idle)): `ui_closeup_shot` is the looping close-up face clip, and section one-shots play when a creator section opens. Runtime confirmation and the body graph's selection remain open. The vanilla `face_rig` components reference the male player facial setup rather than the female basehead setup this bake uses; which one the engine solves with is untested.
 - The external solver currently supplies rotation/translation; scale arrays and wrinkle shading are not reproduced. Teeth/tongue rendering and final skin/eye materials remain incomplete.
 - The two clips are looped independently in the studio. A boundary inspection found small nonzero endpoint differences (largest face rotation boundary about 0.0078 rad at the eyes); exact game blending may hide these. No artificial boundary correction has been introduced.
 - Check all supported face shapes and modded rigs. Preserving customization morphs does not prove every closed-eyelid contact or posed surface intersection.
