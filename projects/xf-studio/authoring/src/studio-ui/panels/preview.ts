@@ -150,14 +150,12 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const creatorExposure = new Slider({ label: "Creator exposure (k)", min: log(exposureRange.min), max: log(exposureRange.max), step: .01,
     format: value => (10 ** value).toPrecision(3),
     transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
-  const resetExposure = button({ label: "Default exposure", icon: "reset", small: true, variant: "quiet",
-    onClick: () => {
-      const value = port.authoring.previewState().lighting?.defaultExposure;
-      if (value !== undefined) rt.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value });
-    } });
+  const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
+    title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
+    onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Advanced: creator lighting calibration" }),
     note("For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise."),
-    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetExposure));
+    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
     transaction: {
@@ -211,9 +209,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
       creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
-      const defaultExposure = frame.preview.lighting?.defaultExposure;
-      applyCapability(resetExposure, defaultExposure === undefined ? { available: false, reason: loading.reason }
-        : port.authoring.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: defaultExposure }));
+      applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       if (!fovNote.textContent) setText(fovNote, "Camera distance follows the viewed face area as the lens angle changes. Game FOV numbers may use a different convention.");
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);

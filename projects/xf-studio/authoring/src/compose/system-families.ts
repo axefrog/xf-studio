@@ -46,7 +46,7 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
     "camera.front": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
-    "preview.setCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
+    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
     "preview.setEyeShape": true, "preview.setPiercingPreview": true, "preview.setPiercings": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true }),

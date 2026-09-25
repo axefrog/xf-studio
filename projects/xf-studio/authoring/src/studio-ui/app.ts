@@ -391,6 +391,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...([["full", "full cone angles"], ["half", "half cone angles"]] as const).map(([value, label]) =>
       act(`lighting.creator.cone.${value}`, `Creator lighting diagnostic: ${label}`, "Diagnostics",
         { kind: "preview.setCreatorLighting", key: "cone", value }, { icon: "lighting", keywords: "creator calibration spot angle" })),
+    act("lighting.creator.reset", "Creator lighting diagnostic: restore defaults", "Diagnostics",
+      { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" }),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop character-creator idle" : "Play character-creator idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),

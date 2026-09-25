@@ -110,6 +110,7 @@ export const ACTION_DESCRIPTORS = {
   "preview.setCreatorLighting": desc("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
     intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
+  "preview.resetCreatorLighting": desc("viewport", "workspace", "none"),
   "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
   "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),

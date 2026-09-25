@@ -46,6 +46,7 @@
   "camera.creatorFraming",
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
+  "preview.resetCreatorLighting",
   "preview.setExposure",
   "preview.setKeyAngle",
   "preview.setEyeShape",
@@ -1539,6 +1540,14 @@
     }
    }
   },
+  "preview.resetCreatorLighting": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
   "preview.setExposure": {
    "scope": [
     "viewport"
@@ -2262,6 +2271,15 @@
   },
   {
    "id": "preview.setCreatorLighting",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.resetCreatorLighting",
    "family": "action",
    "scope": [
     "viewport"

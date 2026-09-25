@@ -1,7 +1,7 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { FaceMorphChoice } from "./face-morphs";
-import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
+import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "./platform/api";
@@ -20,6 +20,7 @@ export type PreviewAction =
   | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
   | { kind: "preview.setCreatorLighting"; key: "cone"; value: ConeReading }
   | { kind: "preview.setCreatorLighting"; key: "exposure"; value: number }
+  | { kind: "preview.resetCreatorLighting" }
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
   | { kind: "preview.setEyeShape"; index: number }
@@ -124,6 +125,12 @@ export class PreviewActions {
       if (!valid) return refusal("invalid_value", action.key === "exposure"
         ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
     }
+    if (action.kind === "preview.resetCreatorLighting") {
+      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
+      const current = this.state.creatorLighting;
+      if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
+        && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
+    }
     if (action.kind === "camera.creatorFraming") {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
       if (action.page !== "face" && action.page !== "hair") return refusal("invalid_value", "That creator page does not exist.");
@@ -157,6 +164,9 @@ export class PreviewActions {
         this.state.lightingPreset = action.preset; break;
       case "preview.setCreatorLighting":
         this.state.creatorLighting = { ...this.state.creatorLighting, [action.key]: action.value };
+        this.port.setCreatorLighting!(this.state.creatorLighting); break;
+      case "preview.resetCreatorLighting":
+        this.state.creatorLighting = { ...DEFAULT_CREATOR_LIGHTING };
         this.port.setCreatorLighting!(this.state.creatorLighting); break;
       case "preview.setExposure": this.port.setExposure(action.value); this.state.exposure = action.value; break;
       case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
