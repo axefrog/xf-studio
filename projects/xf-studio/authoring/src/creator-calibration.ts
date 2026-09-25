@@ -6,8 +6,11 @@
 import { displayTransform, invertNeutralAxis, sampleGradingLut, logC3Encode, srgbDecode, type GradingLut } from "./grading-lut";
 
 export type Rgba8Image = { width: number; height: number; data: Uint8Array };
-/** x, y, width, height: pixels, or fractions of the image when every value is at most 1. */
+/** x, y, width, height, in the patch file's declared units. */
 export type PatchBox = readonly [number, number, number, number];
+/** How a patch file's boxes are measured: image pixels, or fractions of the image's width and height. Never guessed. */
+export type PatchUnits = "pixels" | "fractions";
+export const PATCH_UNITS: readonly PatchUnits[] = ["pixels", "fractions"];
 export type PatchSet = Readonly<Record<string, PatchBox>>;
 export type PatchMean = { srgb: [number, number, number]; pixels: number };
 
@@ -15,9 +18,10 @@ export const SKIN_PATCHES = ["forehead", "cheek_left", "cheek_right", "chin"] as
 /** Patch name prefixes the protocol groups; front-lit hair excludes the `hair_rim_*` edges. */
 export const PATCH_GROUPS = Object.freeze({ hair: /^hair_(?!rim)/, brow: /^brow_/, lash: /^lash_/ });
 
-export function patchMean(image: Rgba8Image, box: PatchBox): PatchMean {
-  const fraction = box.every(v => v <= 1);
-  const [x, y, w, h] = fraction ? [box[0] * image.width, box[1] * image.height, box[2] * image.width, box[3] * image.height] : box;
+export function patchMean(image: Rgba8Image, box: PatchBox, units: PatchUnits): PatchMean {
+  if (!PATCH_UNITS.includes(units)) throw Error(`Patch units must be one of ${PATCH_UNITS.join(", ")}.`);
+  if (units === "fractions" && box.some(v => v < 0 || v > 1)) throw Error("A fractional patch box has a value outside 0–1.");
+  const [x, y, w, h] = units === "fractions" ? [box[0] * image.width, box[1] * image.height, box[2] * image.width, box[3] * image.height] : box;
   const x0 = Math.max(0, Math.round(x)), y0 = Math.max(0, Math.round(y));
   const x1 = Math.min(image.width, Math.round(x + w)), y1 = Math.min(image.height, Math.round(y + h));
   if (x1 - x0 < 1 || y1 - y0 < 1) throw Error("A patch lies outside the image.");

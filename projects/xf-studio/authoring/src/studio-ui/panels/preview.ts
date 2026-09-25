@@ -7,10 +7,16 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
 import type { LightingStatus } from "../../preview-actions";
+import type { DetailLimit } from "../../detail-limits";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
 const SLOT_NAMES = { skin: "Skin", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair" } as const;
+/** What each renderer limit code means for the person using the app (detail-limits.ts). */
+export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
+  "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",
+  "skin-glow": "Glowing skin details from your installed mods aren't shown yet.",
+};
 
 /** One plain line about the shown V's skin, brows, lashes and hair, from the resolved-detail status. */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
@@ -19,7 +25,8 @@ export function characterDetailLine(details: DetailStatus | undefined): { done: 
   if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, brows, lashes and hair from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.message };
   const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
-  return { done: true, text: [`${parts.join(" · ")}.`, details.message, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
+  const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);
+  return { done: true, text: [`${parts.join(" · ")}.`, details.message, ...limits, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
 }
 
 export function characterPanel(rt: StudioRuntime): PanelController {

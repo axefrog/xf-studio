@@ -192,7 +192,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
-  if (verification) Object.assign(window, { xfStudioPresentation: port });
+  if (verification) Object.assign(window, { xfStudioPresentation: port,
+    // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
+    xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
+      frames: scene.frameTiming() }) : null });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);

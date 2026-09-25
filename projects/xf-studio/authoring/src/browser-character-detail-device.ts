@@ -3,8 +3,7 @@ import { loadCharacterDetails, readCharacterRecord, type CharacterDetailFetch } 
 import type { DetailSlot } from "./render-detail";
 import type { createScene } from "./scene";
 
-type Scene = Pick<Awaited<ReturnType<typeof createScene>>, "setCharacterDetails" | "detailContext" | "renderer"> &
-  Partial<Pick<Awaited<ReturnType<typeof createScene>>, "characterDetailsEvidence">>;
+type Scene = Pick<Awaited<ReturnType<typeof createScene>>, "setCharacterDetails" | "detailContext" | "renderer">;
 
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
@@ -39,15 +38,14 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       const placed = scene.setCharacterDetails(loaded);
       const limits = [...loaded.limits, ...(placed?.limits ?? [])];
-      // Developer evidence (browser console, debug level): how the resolved details landed in the scene.
-      if (scene.characterDetailsEvidence) console.debug(`XF Studio character details ${JSON.stringify(scene.characterDetailsEvidence())}`);
       // Record outcomes, overridden by anything that failed to load in this browser; a shown slot with a part
-      // the preview can't draw yet keeps its state and carries that one plain line.
+      // the preview can't draw yet keeps its state and carries the limit codes (the presentation words them).
+      // How the details landed in the scene is developer evidence, read in `?verify=1` (studio-startup.ts).
       return { slots: record.slots.map(slot => {
         const problem = loaded.problems.find(item => item.slot === slot.slot);
         if (problem) return { slot: slot.slot, state: "unavailable" as const, label: slot.label, message: problem.message };
-        const limit = slot.state === "shown" && !slot.message ? limits.find(item => item.slot === slot.slot) : undefined;
-        return limit ? { ...slot, message: limit.message } : slot;
+        const codes = slot.state === "shown" ? [...new Set(limits.filter(item => item.slot === slot.slot).map(item => item.limit))] : [];
+        return codes.length ? { ...slot, limits: codes } : slot;
       }) };
     },
     clear() { scene.setCharacterDetails(null); },

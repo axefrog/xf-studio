@@ -3,8 +3,9 @@ import * as THREE from "three";
 import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
 import { compareHeadSurfaces, type HeadSurface } from "../src/head-surface";
 import type { RenderChunkMaterial, RenderSkinProfile, RenderTexture } from "../src/render-detail";
-import { createSkinMaterial, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, skinBaseColour, skinBaseImage, skinLobes, skinParameters, skinRoughness,
-  tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/skin-material";
+import { createSkinMaterial, imageTexels, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, skinBaseColour, skinBaseImage, skinBaseTexels, skinLobes, skinParameters,
+  skinRoughness, tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/skin-material";
+import { sampleUnderlayAlbedo } from "../src/brow-material";
 
 const close = (a: readonly number[], b: readonly number[], digits = 6) => a.forEach((value, k) => expect(value).toBeCloseTo(b[k]!, digits));
 const profile = (values: Partial<RenderSkinProfile> = {}): RenderSkinProfile => ({ depotPath: "engine\\materials\\defaults\\default.sp", archive: "x.archive",
@@ -70,6 +71,38 @@ describe("tone tint maths (decompiled skin G-buffer program)", () => {
     expect(Array.from(image.data.slice(4, 8))).toEqual([188, 188, 188, 255]);
     expect(image.data[0]).toBeLessThan(188);
     expect(image.data[2]!).toBeLessThan(image.data[0]!);
+  });
+});
+
+describe("toned skin under decals, read only where sampled (PREV-43)", () => {
+  // A deterministic 32×32 skin with a tint mask and a secondary albedo.
+  const size = 32, pixels = (seed: number) => ({ width: size, height: size,
+    data: Uint8ClampedArray.from({ length: size * size * 4 }, (_, i) => (i * seed + (i >> 5) * 7) % 256) });
+  const albedo = pixels(13), mask = pixels(29), secondary = pixels(71);
+  const params = { tintColor: tintUnits([202, 177, 153]), tintScale: -0.4, secondaryInfluence: 0.6, secondaryTintInfluence: 0.5 };
+  const gamma = { albedo: true, secondary: true, mask: false };
+
+  test("the lazy texels equal the full toned image everywhere", () => {
+    const image = skinBaseImage(albedo, mask, secondary, params, gamma), texels = skinBaseTexels(albedo, mask, secondary, params, gamma);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) for (let c = 0; c < 3; c++)
+      expect(texels.texel(x, y, c)).toBe(image.data[(y * size + x) * 4 + c]!);
+  });
+
+  test("a decal's underlay reads only the texels under its vertices, with the same result as the full image", () => {
+    let reads = 0;
+    const counted = { ...albedo, data: new Proxy(albedo.data, { get: (target, key) => { if (typeof key === "string" && /^\d+$/.test(key)) reads++;
+      return Reflect.get(target, key); } }) as unknown as Uint8ClampedArray };
+    const texels = skinBaseTexels(counted, mask, secondary, params, gamma);
+    expect(reads).toBe(0);
+    const source = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), uvs = new Float32Array([0.1, 0.1, 0.5, 0.5, 0.9, 0.2]);
+    const target = new Float32Array([0.001, 0, 0, 1, 0.001, 0]);
+    const lazy = sampleUnderlayAlbedo(target, source, uvs, texels, 0.01);
+    const full = sampleUnderlayAlbedo(target, source, uvs, skinBaseImage(albedo, mask, secondary, params, gamma), 0.01);
+    expect(Array.from(lazy.underlay)).toEqual(Array.from(full.underlay));
+    // Two vertices, four bilinear texels each, three albedo channels per toned texel: nowhere near the 1,024 texels of the image.
+    expect(reads).toBeLessThanOrEqual(2 * 4 * 3);
+    expect(Array.from(sampleUnderlayAlbedo(target, source, uvs, imageTexels(albedo), 0.01).underlay))
+      .toEqual(Array.from(sampleUnderlayAlbedo(target, source, uvs, albedo, 0.01).underlay));
   });
 });
 

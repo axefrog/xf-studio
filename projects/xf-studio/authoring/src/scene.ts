@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { extendSkin, restoreFirstWeights, skinSets } from "./skin";
+import { extendSkin, restoreFirstWeights } from "./skin";
 import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
@@ -13,12 +13,14 @@ import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
 import type { ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
-import { sampleUnderlayAlbedo } from "./brow-material";
 import type { AdapterContext } from "./character-material-adapters";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
-import { compareHeadSurfaces, type HeadSurface } from "./head-surface";
-import type { SkinImage } from "./skin-material";
+import { coreAlbedoReader, createHeadSkinPlacement, morphTargetNames, type BrowUnderlayEvidence, type HeadSkinPlacement } from "./head-skin-placement";
+import type { DetailLimit } from "./detail-limits";
+import type { ResolvedSkinSurface } from "./character-material-adapters";
+import { characterDetailsEvidence, coreSceneEvidence } from "./scene-evidence";
+import { bindRenderTriggers, createRenderScheduler, invalidating } from "./render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
 import { HeadLoadError } from "./head-load-error";
@@ -28,27 +30,6 @@ import { attachHeadCameraInput } from "./head-camera-input";
 import type { StageTheme } from "./stage-backdrop";
 import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
-
-/** A mesh's morph target names in influence order (GLTFLoader keys the dictionary by `extras.targetNames`). */
-function morphTargetNames(mesh: THREE.Mesh): string[] {
-  const names: string[] = [];
-  for (const [name, index] of Object.entries(mesh.morphTargetDictionary ?? {})) names[index] = name;
-  return names;
-}
-
-/** A buffer attribute's values in vertex order (interleaved attributes included). */
-function attributeValues(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): ArrayLike<number> {
-  if (!(attribute instanceof THREE.InterleavedBufferAttribute)) return attribute.array;
-  const out = new Float32Array(attribute.count * attribute.itemSize);
-  for (let i = 0; i < attribute.count; i++) for (let k = 0; k < attribute.itemSize; k++) out[i * attribute.itemSize + k] = attribute.getComponent(i, k);
-  return out;
-}
-/** The drawn surface of a head mesh, for comparing two exports of it (head-surface.ts). */
-function headSurface(mesh: THREE.Mesh): HeadSurface {
-  const geometry = mesh.geometry, uv = geometry.getAttribute("uv");
-  return { positions: attributeValues(geometry.getAttribute("position")), uvs: uv ? attributeValues(uv) : null, index: geometry.index?.array ?? null,
-    morphNames: morphTargetNames(mesh), morphPositions: (geometry.morphAttributes.position ?? []).map(attributeValues) };
-}
 
 /**
  * Creates the 3D head scene in `host`. A failure at any point after the renderer exists releases
@@ -95,7 +76,7 @@ async function assembleScene(
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
   host.prepend(renderer.domElement);
-  releases.push(() => { renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
+  releases.push(() => { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, stage);
@@ -220,32 +201,9 @@ async function assembleScene(
   // Profile stops are decoded from sRGB before the shader's overlay (see
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
-  let browUnderlay: { maxMatchedDistance: number; unmatched: number; source: "resolved-skin" | "core-albedo" } | undefined;
-  /** Skin colour under a decal: the resolved skin's toned base colour when it loaded, else the core head's albedo. */
-  function browUnderlayAttribute(brow: THREE.Mesh, skinImage?: SkinImage | null): THREE.BufferAttribute {
-    let pixels: SkinImage;
-    if (skinImage) pixels = skinImage;
-    else {
-      const image = albedo.image as CanvasImageSource & { width: number; height: number };
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width; canvas.height = image.height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) throw Error("Cannot read the head albedo for the brow decal blend");
-      context.drawImage(image, 0, 0);
-      pixels = context.getImageData(0, 0, image.width, image.height);
-    }
-    const world = (mesh: THREE.Mesh) => {
-      mesh.updateWorldMatrix(true, false);
-      const source = mesh.geometry.getAttribute("position"), out = new Float32Array(source.count * 3), v = new THREE.Vector3();
-      for (let i = 0; i < source.count; i++) v.fromBufferAttribute(source, i).applyMatrix4(mesh.matrixWorld).toArray(out, i * 3);
-      return out;
-    };
-    const result = sampleUnderlayAlbedo(world(brow), world(head), head.geometry.getAttribute("uv").array,
-      { width: pixels.width, height: pixels.height, data: pixels.data });
-    if (result.unmatched) throw Error(`${result.unmatched} decal vertices are not over the head surface`);
-    browUnderlay = { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched, source: skinImage ? "resolved-skin" : "core-albedo" };
-    return new THREE.BufferAttribute(result.underlay, 3);
-  }
+  // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
+  const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(albedo) });
+  let browUnderlay: BrowUnderlayEvidence | undefined;
   // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
   const detailVisible: Record<DetailSlot, boolean> = { skin: true, brows: true, lashes: true, hair: true };
@@ -253,17 +211,20 @@ async function assembleScene(
   const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, brows: 100, lashes: 101, hair: 0 };
   let characterDetails: LoadedCharacterDetails | null = null;
   /**
-   * How the resolved skin is shown: on the core head when the launch route's head is the same surface (the
-   * usual case; the eye plate and idle stay bound to it), or as the resolved head itself when a mod changes
-   * its shape (the core head is hidden). Null while the fixed default skin shows.
+   * How the resolved skin is shown (head-skin-placement.ts): on the core head when the launch route's head is
+   * the same one-chunk surface (the usual case; the eye plate and idle stay bound to it), otherwise as the
+   * resolved head itself with the core head hidden. Null while the fixed default skin shows.
    */
-  let resolvedSkin: { item: LoadedCharacterComponent; mode: "core-head" | "resolved-head"; reason: string } | null = null;
+  let resolvedSkin: { item: LoadedCharacterComponent; placement: HeadSkinPlacement } | null = null;
   let normalsEnabled = true;
-  const HEAD_SHAPE_LIMIT = "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.";
-  const skinLimits = () => resolvedSkin?.mode === "resolved-head" ? [{ slot: "skin" as DetailSlot, message: HEAD_SHAPE_LIMIT }] : [];
+  const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
     return { overMakeup: slot === "lashes", profileEncoding,
-      ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skinImage?: SkinImage | null) => browUnderlayAttribute(mesh, skinImage) } : {}) };
+      ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => {
+        const result = skinPlacement.underlay(mesh, skin ?? null);
+        browUnderlay = result.evidence;
+        return result.attribute;
+      } } : {}) };
   }
   let piercingManifest: PiercingManifest | undefined, piercingError = "";
   let prcManifest: PiercingManifest | undefined, prcError = "";
@@ -461,7 +422,7 @@ async function assembleScene(
     ...[...piercingMeshes.values()].flat(),
   ];
   // Resolved details join and leave with each character record (a skin drawn on the core head adds no mesh).
-  const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.mode === "core-head" && resolvedSkin.item === item)) ?? [];
+  const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.placement.mode === "core-head" && resolvedSkin.item === item)) ?? [];
   const deforming = () => [...coreDeforming, ...drawnDetails().flatMap(item => item.meshes)];
   // The head is the authority for which eye shapes exist: its `eyes` targets in resource order.
   const eyeShapeChoices: FaceMorphChoice[] = faceMorphChoices(morphTargetNames(head), "eyes");
@@ -561,7 +522,7 @@ async function assembleScene(
    * Swap in a character's resolved details, replacing the previous ones completely (null removes them).
    * The new meshes follow the head's current facial shapes and join the idle rig.
    */
-  function setCharacterDetails(next: LoadedCharacterDetails | null): { limits: { slot: DetailSlot; message: string }[] } {
+  function setCharacterDetails(next: LoadedCharacterDetails | null): { limits: { slot: DetailSlot; limit: DetailLimit }[] } {
     if (characterDetails === next) return { limits: skinLimits() };
     const previous = characterDetails;
     const drawnBefore = drawnDetails();
@@ -578,18 +539,15 @@ async function assembleScene(
       previous.dispose();
     }
     if (!next) return { limits: [] };
-    const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin && item.meshes.length === 1);
+    // The same placement the brow decals were projected with (decided once per loaded skin).
+    const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
-      const resolvedHead = skinItem.meshes[0]!;
-      const comparison = compareHeadSurfaces(headSurface(head), headSurface(resolvedHead));
-      if (comparison.same) {
-        head.material = resolvedHead.material;
+      const placement = skinPlacement.place(skinItem.meshes);
+      if (placement.mode === "core-head") {
+        head.material = skinItem.meshes[0]!.material;
         extendSkin(head, head.material as THREE.MeshStandardMaterial);
-        resolvedSkin = { item: skinItem, mode: "core-head", reason: comparison.reason };
-      } else {
-        head.visible = false;
-        resolvedSkin = { item: skinItem, mode: "resolved-head", reason: comparison.reason };
-      }
+      } else head.visible = false;
+      resolvedSkin = { item: skinItem, placement };
       skinItem.skin!.handle.setNormals(normalsEnabled);
     }
     characterDetails = next;
@@ -608,22 +566,6 @@ async function assembleScene(
     idle?.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: skinLimits() };
-  }
-  function characterDetailsEvidence() {
-    const loaded = characterDetails;
-    return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
-      slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
-      notes: [...(loaded?.notes ?? [])], browUnderlay,
-      skin: resolvedSkin ? { mode: resolvedSkin.mode, reason: resolvedSkin.reason, parameters: structuredClone(resolvedSkin.item.skin!.handle.parameters),
-        material: (resolvedSkin.mode === "core-head" ? head.material as THREE.Material : resolvedSkin.item.meshes[0]!.material as THREE.Material).name,
-        textures: Object.fromEntries(Object.entries(resolvedSkin.item.component.materials[0]?.textures ?? {}).map(([name, texture]) =>
-          [name, { depotPath: texture.depotPath, archive: texture.sources[0]?.archive ?? null, width: texture.width, height: texture.height, isGamma: texture.isGamma }])),
-        geometry: { depotPath: resolvedSkin.item.component.geometry.depotPath, archive: resolvedSkin.item.component.geometry.sources[0]?.archive ?? null } }
-        : { mode: "default", material: (head.material as THREE.Material).name || "default" },
-      components: loaded?.components.map(item => ({ slot: item.component.slot, option: item.component.option, definition: item.component.definition,
-        component: item.component.component, geometry: item.component.geometry.depotPath, visible: item.root.visible,
-        chunks: item.meshes.map(mesh => mesh.name), templates: [...new Set(item.component.materials.map(material => material.template))],
-        vertices: item.meshes.reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0) })) ?? [] };
   }
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
@@ -651,73 +593,62 @@ async function assembleScene(
     if (frontPending) front();
     return true;
   };
-  const observer = new ResizeObserver(resize);
-  observer.observe(host);
-  releases.push(() => observer.disconnect());
-  resize();
   let animation = false,
     amount = 0;
   const start = performance.now();
-  let previous = start;
-  let totalFrames=0,zeroIntervals=0,lastFrameAt=start;
-  const frameIntervals:number[]=[],renderDurations:number[]=[];
-  const record=(items:number[],value:number)=>{items.push(value);if(items.length>180)items.shift();};
   const frameListeners = new Set<() => void>();
-  renderer.setAnimationLoop(() => {
-    const now = performance.now(), t = (now - start) / 1000, dt = (now - previous) / 1000;
-    totalFrames++;lastFrameAt=now;
-    if(dt>0 && dt<5)record(frameIntervals,dt*1000);else if(dt===0)zeroIntervals++;
-    previous = now;
-    if (idle?.enabled) idle.update(dt);
-    else blink(animation ? Math.pow(Math.max(0, Math.cos(t * 2.3)), 16) : amount);
-    if (controls.enabled) controls.update();
-    // At long orbits, move the near plane in front of a conservative head
-    // envelope so the thin makeup plate retains depth precision.
-    const centre = new THREE.Vector3(0, 1.67, 0).add(idleFrameOffset);
-    const clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
-    if (clip.near !== camera.near || clip.far !== camera.far) {
-      camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
-    }
-    if (frameListeners.size) {
-      scene.updateMatrixWorld(true);
-      for (const update of frameListeners) update();
-    }
-    const renderStart=performance.now();
-    lighting.render(camera);
-    record(renderDurations,performance.now()-renderStart);
+  // Reused every frame: the head centre the clip planes are measured from.
+  const centre = new THREE.Vector3();
+  // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or the
+  // blink study plays. The scene's own mutators, the makeup stack, the lighting device, the idle, the
+  // controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
+  const scheduler = createRenderScheduler({
+    clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
+    animating: () => idle?.enabled ? !idle.paused : animation,
+    frame(dt, now) {
+      if (idle?.enabled) { if (!idle.paused) idle.update(dt); }
+      else blink(animation ? Math.pow(Math.max(0, Math.cos((now - start) / 1000 * 2.3)), 16) : amount);
+      if (controls.enabled) controls.update();
+      // At long orbits, move the near plane in front of a conservative head
+      // envelope so the thin makeup plate retains depth precision.
+      centre.set(0, 1.67, 0).add(idleFrameOffset);
+      const clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
+      if (clip.near !== camera.near || clip.far !== camera.far) {
+        camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
+      }
+      if (frameListeners.size) {
+        scene.updateMatrixWorld(true);
+        for (const update of frameListeners) update();
+      }
+      lighting.render(camera);
+    },
   });
-  const evidence = {
-    /** Which render record supplied the core head (derived from game files, or developer-prepared). */
-    coreDetail,
-    meshes: meshes.map((m) => ({
-      name: m.name,
-      vertices: m.geometry.getAttribute("position").count,
-      morphs: m.morphTargetInfluences?.length ?? 0,
-      skinSets:
-        m instanceof THREE.SkinnedMesh ? skinSets(m.geometry).length : 0,
-    })),
-    blinkBones: bones.length,
+  const invalidate = () => scheduler.invalidate();
+  releases.push(() => scheduler.dispose());
+  releases.push(bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting }));
+  // Creator options (exposure, intensity form, cone) don't notify the lighting device's listeners.
+  Object.assign(lighting, invalidating(lighting, ["setCreatorOptions"], invalidate));
+  if (idle) { const playing = idle; playing.onChange = invalidate; releases.push(() => { playing.onChange = undefined; }); }
+  const observer = new ResizeObserver(() => { resize(); invalidate(); });
+  observer.observe(host);
+  releases.push(() => observer.disconnect());
+  resize();
+  invalidate();
+  const evidence = coreSceneEvidence({ coreDetail, meshes, blinkBones: bones.length,
     eyeShape: { choices: eyeShapeChoices.length, eyesFollow: eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
-    profileEncoding,
-    piercingError,
-    prcError,
-    piercing: { source: piercingManifest?.source, styles: piercingManifest?.styles.length ?? 0,
-      meshes: [...piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length,
-        vertices: parts.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })) },
-    prc: { source: prcManifest?.source, styles: prcManifest?.styles.length ?? 0 },
-    idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
-      mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
-      faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
-  };
-  return {
+    profileEncoding, piercingError, prcError, piercingManifest, prcManifest, piercingMeshes, idle, idleError });
+  const api = {
     scene,
     camera,
     /** Releases the renderer, its canvas, the stage and observers; the scene is unusable afterwards. */
     dispose: () => { setCharacterDetails(null); releaseAll(releases); },
+    /** Run `callback` before each drawn frame (the viewport draws only when something changed; see `requestRender`). */
     onFrame: (callback: () => void) => {
       frameListeners.add(callback);
-      return () => frameListeners.delete(callback);
+      return () => { frameListeners.delete(callback); invalidate(); };
     },
+    /** Something the scene can't see changed what it draws (for example the selected layer's handles): draw a frame. */
+    requestRender: invalidate,
     renderer,
     controls,
     cameraInput,
@@ -740,13 +671,8 @@ async function assembleScene(
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
-    frameTiming:()=>{
-      const summarize=(values:number[])=>{const ordered=[...values].sort((a,b)=>a-b);
-        return {samples:ordered.length,medianMs:ordered[Math.floor(ordered.length*.5)]??0,
-          p95Ms:ordered[Math.floor(ordered.length*.95)]??0};};
-      return {interval:summarize(frameIntervals),cpuRender:summarize(renderDurations),
-        totalFrames,zeroIntervals,elapsedMs:lastFrameAt-start};
-    },
+    /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. */
+    frameTiming: () => scheduler.stats(),
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape,
     eyeShapeOptions,
@@ -756,13 +682,14 @@ async function assembleScene(
     setHair,
     setCharacterDetails,
     detailContext,
-    characterDetailsEvidence,
+    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay }),
     piercingManifest,
     prcManifest,
     piercingStyles,
     piercingSelection,
     setPiercings,
     setPiercingPreview,
+    /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */
     idle,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
@@ -835,4 +762,9 @@ async function assembleScene(
       );
     },
   };
+  // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
+  return { ...api, ...invalidating(api, ["onFrame", "resize", "front", "updateLayer", "setLayerCanvases", "reconcileLayerCanvases",
+    "setLayerCanvas", "eyeShape", "applySavedV", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings", "setPiercingPreview",
+    "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail", "setBlink", "animateBlink", "setWire",
+    "setNormals", "setExposure", "setStage", "setLightAngle"], invalidate) };
 }

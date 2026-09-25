@@ -6,18 +6,20 @@
  *       [--repeat <second game frame.png>]
  *
  * The Studio render must use the Creator lighting preset and a creator camera page at the screenshot's
- * resolution. `patches.json` holds `{ "game": { name: [x, y, w, h], … }, "studio": { … } }` (the `studio`
- * boxes default to the `game` boxes; values ≤ 1 are fractions of the image). Patch names follow the
+ * resolution. `patches.json` holds `{ "units": "pixels" | "fractions", "game": { name: [x, y, w, h], … },
+ * "studio": { … } }` (the `studio` boxes default to the `game` boxes; `units` is required, so a box is never
+ * read in the wrong units). Patch names follow the
  * protocol: forehead, cheek_left, cheek_right, chin, hair_* (front-lit), hair_rim_*, brow_*, lash_*,
  * sclera, background. `--lut` is the decoded cube the host served (the private preview cache's
  * `grading-lut/files/<sha256>.bin`); without it the neutral grade is assumed and the fit is only indicative.
+ * `--k` is the exposure the Studio render used; without it the preset's default is assumed and printed.
  *
  * It fits the single exposure scalar on the forehead and prints the pass marks. It reads the images and
  * writes nothing; screenshots stay private and are never committed.
  */
 import { readFileSync } from "node:fs";
 import { decodePng } from "../src/png";
-import { passMarks, patchMean, type PatchBox, type PatchMean, type Rgba8Image } from "../src/creator-calibration";
+import { passMarks, patchMean, PATCH_UNITS, type PatchBox, type PatchMean, type PatchUnits, type Rgba8Image } from "../src/creator-calibration";
 import { DEFAULT_CREATOR_EXPOSURE } from "../src/creator-lighting";
 import { decodeGradingLutBinary, neutralGradingLut } from "../src/grading-lut";
 
@@ -27,10 +29,12 @@ const usage = "Usage: bun tools/calibrate-creator-capture.ts --game <png> --stud
 if (!args.get("game") || !args.get("studio") || !args.get("patches")) { console.error(usage); process.exit(2); }
 
 const image = (path: string): Rgba8Image => decodePng(new Uint8Array(readFileSync(path)));
-const spec = JSON.parse(readFileSync(args.get("patches")!, "utf8")) as { game?: Record<string, PatchBox>; studio?: Record<string, PatchBox> };
+const spec = JSON.parse(readFileSync(args.get("patches")!, "utf8")) as { units?: PatchUnits; game?: Record<string, PatchBox>; studio?: Record<string, PatchBox> };
 if (!spec.game || typeof spec.game !== "object") throw Error("patches.json needs a `game` object of named boxes.");
+if (!spec.units || !PATCH_UNITS.includes(spec.units)) throw Error(`patches.json needs "units": ${PATCH_UNITS.map(unit => `"${unit}"`).join(" or ")}.`);
+const units = spec.units;
 const measure = (img: Rgba8Image, boxes: Record<string, PatchBox>) =>
-  Object.fromEntries(Object.entries(boxes).map(([name, box]) => [name, patchMean(img, box)])) as Record<string, PatchMean>;
+  Object.fromEntries(Object.entries(boxes).map(([name, box]) => [name, patchMean(img, box, units)])) as Record<string, PatchMean>;
 
 const gameImage = image(args.get("game")!), studioImage = image(args.get("studio")!);
 if (gameImage.width !== studioImage.width || gameImage.height !== studioImage.height)
@@ -41,6 +45,7 @@ const lut = args.get("lut") ? decodeGradingLutBinary(new Uint8Array(readFileSync
 if (!args.get("lut")) console.warn("Note: no --lut given; the neutral grade is assumed, so the exposure fit is only indicative.");
 const k = args.get("k") ? Number(args.get("k")) : DEFAULT_CREATOR_EXPOSURE;
 if (!Number.isFinite(k) || k <= 0) throw Error("--k must be a positive number.");
+if (!args.get("k")) console.warn(`Note: no --k given; the Studio render is assumed to use the preset's default exposure k = ${k}.`);
 
 const byte = (p: PatchMean) => p.srgb.map(v => Math.round(v * 255)).join(", ");
 console.log("Patch means (display sRGB 8-bit)");

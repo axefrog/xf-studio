@@ -5,6 +5,9 @@ import type { PreviewPort } from "../src/preview-actions";
 import type { MotionPort } from "../src/motion-actions";
 import type { SavedV } from "../src/save-reader";
 import { freshWorkspace } from "../src/workspace-state";
+import { bodySexOf, SavedAppearanceActions } from "../src/saved-appearance-actions";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 test("preview bootstrap restores saved V, scene, motion and camera in order without controls", () => {
   const calls: string[] = [], workspace = freshWorkspace();
@@ -83,4 +86,57 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   });
   const retained = withoutAssets.finish().preview.snapshot();
   expect(retained).toMatchObject({ hair: true, piercings: true });
+});
+
+const savedV = (isMale: boolean): SavedV => ({ schema: "eye-artistry/saved-v-1", saveVersion: 1, gameVersion: 2310,
+  presetVersion: 1, isMale, brainIsMale: isMale,
+  groups: { head: [{ name: "TPP", appearances: [], morphs: [] }], arms: [], body: [] },
+  perspectives: [], tags: [], evidence: { nodeName: "appearance", nodeBytes: 1, bytesRead: 1, trailingBytes: 0, chunks: 1, decompressedBytes: 1 } });
+const applied = { applied: [], appearanceReferences: 0, matchedPiercing: false, eyeAppearance: { message: "" } };
+
+test("the creator rig's body follows the applied save, derived by the saved-appearance service (CORE-25)", () => {
+  const calls: string[] = [];
+  const actions = new SavedAppearanceActions({ apply: saved => { calls.push(`apply:${saved.isMale}`); return applied; },
+    setBodySex: sex => calls.push(`body:${sex}`) });
+  actions.dispatch({ kind: "savedV.restore", value: savedV(false) });
+  actions.dispatch({ kind: "savedV.restore", value: savedV(true) });
+  expect(calls).toEqual(["apply:false", "body:female", "apply:true", "body:male"]);
+  expect([bodySexOf(undefined), bodySexOf(savedV(false)), bodySexOf(savedV(true))]).toEqual(["female", "female", "male"]);
+  // A save the preview refuses leaves the rig as it was.
+  const refusing = new SavedAppearanceActions({ apply: () => { throw Error("Male head assets are still needed."); },
+    setBodySex: sex => calls.push(`body:${sex}`) });
+  expect(() => refusing.dispatch({ kind: "savedV.restore", value: savedV(true) })).toThrow("Male head");
+  expect(calls.length).toBe(4);
+  // The browser port only forwards the derived value to the lighting device; it decides nothing itself.
+  const source = readFileSync(resolve(import.meta.dir, "..", "src", "browser-scene-preview-ports.ts"), "utf8");
+  expect(source).toContain("setBodySex: sex => scene.lighting.setBodySex(sex)");
+  expect(source).not.toContain("isMale");
+});
+
+test("restoring the preview never changes the caller's workspace (CORE-25)", () => {
+  const workspace = freshWorkspace();
+  workspace.preview.brows = true;
+  workspace.preview.piercingStyle = "missing";
+  workspace.preview.eyeShape = 99;
+  workspace.preview.camera = { position: [0, 0, 1], target: [0, 0, 0], fov: 42 };
+  const before = structuredClone(workspace);
+  // Frozen all the way down: any write to the caller's objects, nested ones included, throws.
+  const freeze = (value: unknown) => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } };
+  freeze(workspace);
+  const noop = () => {};
+  const preview: PreviewPort = {
+    cameraState: () => workspace.preview.camera!, front: () => false, setFov: () => false, endFovGesture: noop, restoreCamera: noop,
+    setExposure: noop, setLightAngle: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
+    setHair: noop, setEyeShape: noop, setPiercings: noop, setPiercingPreview: noop, setDetail: noop,
+    piercingOptions: () => [], availability: target => target === "brows" ? "Unavailable" : undefined,
+    eyeShapeOptions: () => ({ choices: [], eyesFollow: false, eyeSource: null }),
+    setLightingPreset: noop, setCreatorLighting: noop,
+  };
+  const motion: MotionPort = { available: false, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const services = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion });
+  const { preview: actions } = services.finish();
+  actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 1.5 });
+  // The restored state applied its fallbacks (brows off, no piercing style, base eye shape) to its own copy only.
+  expect(actions.snapshot()).toMatchObject({ brows: false, piercingStyle: "" });
+  expect(workspace).toEqual(before);
 });

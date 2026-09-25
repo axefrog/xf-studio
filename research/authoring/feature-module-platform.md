@@ -252,6 +252,8 @@ export interface FeatureRenderer {
 }
 ```
 
+**Built so far** (`scene.ts` is not split yet): render on demand in `src/render-scheduler.ts`, with the scene's `requestRender` and `onFrame` as the future port's `requestFrame` and `onFrame`; the skin placement adapter in `src/head-skin-placement.ts`, which returns limit codes (`src/detail-limits.ts`) that the presentation words; and the scene's evidence projections in `src/scene-evidence.ts`.
+
 **Detail-loading port.** The resolver runs on the host, and devices load its output:
 
 ```ts

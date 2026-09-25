@@ -10,12 +10,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
   setSurfaceControls(enabled: boolean): void;
 }): { savedAppearance: SavedAppearancePort; preview: PreviewPort; motion: MotionPort } {
   return {
-    savedAppearance: { apply: savedV => {
-      const result = scene.applySavedV(savedV);
-      // The creator rig follows V's body, as the game's preview controller does.
-      scene.lighting.setBodySex(savedV.isMale ? "male" : "female");
-      return result;
-    } },
+    savedAppearance: { apply: savedV => scene.applySavedV(savedV), setBodySex: sex => scene.lighting.setBodySex(sex) },
     preview: {
       cameraState: scene.cameraState, front: scene.front, setFov: scene.setFov,
       endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera,
