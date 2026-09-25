@@ -41,8 +41,16 @@ export type ActionTable<A extends { kind: string }, Scope extends string = strin
 export type FeatureActionSpec<P, E, A extends { kind: string } = { kind: string }, Scope extends string = string, X = unknown> =
   ActionSpec<A, Scope> & {
     capability(state: FeatureState<P, E>, action: A): Capability;
-    /** Throws when the capability refuses; never mutates `state`. */
+    /**
+     * Throws when the capability refuses; never mutates `state`. Deterministic: the same state and
+     * action always give the same result, so an action that creates an item must carry its ID.
+     */
     apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X>;
+    /**
+     * The action with the IDs of the items it creates filled in from the host's ID source, for the
+     * actions that create any (the host calls it before `apply`; existing IDs are kept).
+     */
+    assignIds?(action: A, newId: () => string): A;
   };
 export type FeatureActionTable<P, E, A extends { kind: string }, Scope extends string = string, X = unknown> =
   { readonly [K in A["kind"]]: FeatureActionSpec<P, E, Extract<A, { kind: K }>, Scope, X> };
@@ -86,11 +94,13 @@ export function featureActionTable<P, E, A extends { kind: string }, Scope exten
   descriptors: { readonly [K in A["kind"]]: ActionDescriptor<Scope> },
   kinds: Readonly<Record<A["kind"], true>>,
   behaviour: { capability(state: FeatureState<P, E>, action: A): Capability;
-    apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X> }): FeatureActionTable<P, E, A, Scope, X> {
+    apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X>;
+    assignIds?(action: A, newId: () => string): A }): FeatureActionTable<P, E, A, Scope, X> {
   const base = actionTable<A, Scope>(descriptors, kinds) as Readonly<Record<string, ActionSpec<A, Scope>>>;
   const table: Record<string, FeatureActionSpec<P, E, A, Scope, X>> = {};
   for (const [kind, spec] of Object.entries(base)) table[kind] = Object.freeze({ descriptor: spec.descriptor,
     capability: (state: FeatureState<P, E>, action: A) => behaviour.capability(state, action),
-    apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action) });
+    apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action),
+    ...(behaviour.assignIds ? { assignIds: behaviour.assignIds } : {}) });
   return Object.freeze(table) as unknown as FeatureActionTable<P, E, A, Scope, X>;
 }

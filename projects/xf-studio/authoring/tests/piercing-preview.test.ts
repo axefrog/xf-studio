@@ -5,6 +5,7 @@ import { piercingPaletteColor } from "../src/piercing-palette";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import type { SavedV } from "../src/save-reader";
 import { storedWorkspace } from "./fixtures/looks";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 const source = { schema: "xfs/local-vanilla-piercings-2", source: "current game resources",
   assets: [{ id: "i1_000_pwa__morphs_earring_01", url: "/assets/piercings/part.glb", sha256: "a".repeat(64) }],
@@ -78,8 +79,8 @@ test("PRC aggregate shares one colour across all resolved slots and preserves di
   const state = freshWorkspace();
   state.preview.piercingStyle = aggregate.id;
   state.preview.piercingDefinition = aggregate.choices[1]!.definition;
-  expect(parseWorkspace(storedWorkspace(state)).preview.piercingStyle).toBe("prc_active_bank");
-  expect(parseWorkspace(storedWorkspace(state)).preview.piercingDefinition).toBe(colours[1]!.definition);
+  expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.piercingStyle).toBe("prc_active_bank");
+  expect(parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS).preview.piercingDefinition).toBe(colours[1]!.definition);
   const divergent = structuredClone(diagnostics);
   divergent[1]!.choices[1]!.previewColor = "#000000";
   expect(() => aggregatePrcStyle(divergent)).toThrow("one verified appearance and colour");
@@ -123,12 +124,12 @@ test("viewport-only piercing selection and visibility persist without changing s
   state.preview.piercings = false;
   state.preview.piercingStyle = "piercings_01";
   state.preview.piercingDefinition = "i0_000_pwa__earring__01_silver";
-  const restored = parseWorkspace(storedWorkspace(state));
+  const restored = parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS);
   expect(restored.preview.piercings).toBe(false);
   expect(restored.preview.piercingStyle).toBe("piercings_01");
   expect(restored.preview.piercingDefinition).toBe("i0_000_pwa__earring__01_silver");
   const old = storedWorkspace(state);
   delete old.preview.piercings; delete old.preview.piercingStyle; delete old.preview.piercingDefinition;
-  expect(parseWorkspace(old).preview.piercingStyle).toBe("");
-  expect(parseWorkspace(old).preview.piercings).toBe(true);
+  expect(parseWorkspace(old, STUDIO_DOCUMENTS).preview.piercingStyle).toBe("");
+  expect(parseWorkspace(old, STUDIO_DOCUMENTS).preview.piercings).toBe(true);
 });

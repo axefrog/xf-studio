@@ -68,7 +68,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       return setup.view.readiness.build.ready ? "ready" : "needs-setup";
     }),
   });
-  collection = new CollectionApplication(workspace.collections, workspace.library,
+  collection = new CollectionApplication(core.documents, workspace.collections, workspace.library,
     core.document, options.onEditorRestored, options.transport, core.app, files);
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,

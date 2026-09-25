@@ -16,6 +16,9 @@ export function layerCapability(recipe: Recipe, action: LayerAction): CodedCapab
   if (action.kind === "layer.edit") {
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
       return refuse({ code: "range", message: `This preview currently supports up to ${MAX_LAYERS} layers.` });
+    if ((command.kind === "add" || command.kind === "duplicate") && command.newId !== undefined &&
+        (typeof command.newId !== "string" || !command.newId || recipe.layers.some(layer => layer.id === command.newId)))
+      return refusal("invalid_value", "The new layer needs an unused ID.");
     // Layers are stored bottom-to-top: index 0 is the back, the last index the front.
     const issue = command.kind === "move" ? positionIssue(command.to, recipe.layers.length,
       { below: "This layer is already at the back.", above: "This layer is already at the front." }) :

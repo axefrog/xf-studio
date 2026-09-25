@@ -409,7 +409,9 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
   if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
     h("ul", { class: "result-list" }, r.omissions.map(item => h("li", {}, icon("warning"),
-      h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` : `Whole preset “${item.presetName}” — ${item.reason}` }))))));
+      h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` :
+        item.kind === "part" ? `The ${item.feature} part of “${item.presetName}” — ${item.reason}` :
+        `Whole preset “${item.presetName}” — ${item.reason}` }))))));
   if (isBuild) {
     const b = build;
     card.append(h("dl", { class: "facts" },

@@ -3,6 +3,19 @@ import { readFileSync } from "node:fs";
 
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 const imports = (text: string) => [...text.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map(match => match[1]);
+/**
+ * Browser globals that DOM-free code must not read: the window and its storage, the navigator,
+ * network access, `globalThis` (a way around the others) and the document. Comments and strings
+ * are not stripped, so keep these words out of such modules' prose.
+ */
+const BROWSER_GLOBALS = /\b(?:window|localStorage|sessionStorage|navigator|globalThis)\b|(?<![.\w])fetch\s*\(|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/;
+
+test("the browser-globals check catches every global it names (CORE-37)", () => {
+  for (const code of ["window.x", "localStorage.getItem('k')", "sessionStorage.setItem('k', 'v')", "navigator.userAgent",
+    "globalThis.localStorage", "await fetch('/api')", "document.body"]) expect(code).toMatch(BROWSER_GLOBALS);
+  for (const code of ["this.fetcher.fetch(x)", "request.document.body", "prefetch(x)", "const windowed = 1"])
+    expect(code).not.toMatch(BROWSER_GLOBALS);
+});
 
 test("trusted application and presentation services keep browser devices outside their import boundary", () => {
   const trusted = ["studio-application", "studio-presentation", "trusted-authoring-core",
@@ -13,8 +26,7 @@ test("trusted application and presentation services keep browser devices outside
     for (const dependency of imports(code))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(
         /^(three(?:\/|$)|\.\/(?:studio-main|studio-startup|browser-|scene|uv-editor|surface-editor|raster-client|collection-transport))/);
-    expect(code, `${name} reads browser globals`).not.toMatch(
-      /\b(?:window|localStorage)\.|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/);
+    expect(code, `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
   }
 });
 
@@ -150,8 +162,7 @@ test("platform code imports only the platform: nothing from features, engines, c
   const violations = platform.flatMap(name => resolved(name)
     .filter(path => !path.startsWith("platform/")).map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
-  for (const name of platform) expect(source(name), `${name} reads browser globals`).not.toMatch(
-    /\b(?:window|localStorage)\.|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/);
+  for (const name of platform) expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
 });
 
 test("feature modules import the platform only through platform/api and never another feature, the UI or compose", () => {
@@ -168,8 +179,34 @@ test("feature modules import the platform only through platform/api and never an
   expect(violations).toEqual([]);
 });
 
-test("only composition roots import feature entries", () => {
-  const violations = every().filter(name => !name.startsWith("compose/") && !name.startsWith("features/"))
-    .flatMap(name => resolved(name).filter(path => path.startsWith("features/")).map(path => `${name} -> ${path}`));
+/** Composition roots: the browser entry points. Hosts outside `src/` (servers, desktop, tools, tests) are roots too. */
+const roots = new Set(["studio-main", "studio-startup"]);
+/** Every src module a module reaches through its imports (type-only imports included), itself excluded. */
+const reach = (start: string): Set<string> => {
+  const modules = new Set(every()), seen = new Set<string>(), queue = [start];
+  while (queue.length) {
+    for (const path of resolved(queue.pop()!)) {
+      const name = modules.has(path) ? path : modules.has(`${path}/index`) ? `${path}/index` : undefined;
+      if (name && !seen.has(name)) { seen.add(name); queue.push(name); }
+    }
+  }
+  return seen;
+};
+
+test("only composition roots import compose/: every other module receives the registries as arguments (CORE-29)", () => {
+  const violations = every().filter(name => !name.startsWith("compose/") && !roots.has(name))
+    .flatMap(name => resolved(name).filter(path => path.startsWith("compose/")).map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
+  // The roots do import it: the composition reaches the app only through them.
+  expect(resolved("studio-startup")).toContain("compose/studio-registry");
+});
+
+test("no module outside the composition reaches a feature, directly or through other modules", () => {
+  const violations = every().filter(name => !name.startsWith("compose/") && !name.startsWith("features/") && !roots.has(name))
+    .flatMap(name => [...reach(name)].filter(path => path.startsWith("features/") || path.startsWith("compose/"))
+      .map(path => `${name} ->* ${path}`));
+  expect(violations).toEqual([]);
+  // The walk is transitive: the root reaches the feature through compose/, the application never does.
+  expect(reach("studio-startup")).toContain("features/eye-makeup/index");
+  expect(reach("studio-application")).not.toContain("compose/studio-registry");
 });

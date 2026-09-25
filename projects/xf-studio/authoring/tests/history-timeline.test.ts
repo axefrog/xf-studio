@@ -6,13 +6,14 @@ import { RECIPE_HISTORY_LIMIT, RecipeHistory } from "../src/editor-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 // The History panel's read model and its single jump action (history.jumpTo).
 
 function fixture(history = freshWorkspace().history) {
   const workspace = { ...freshWorkspace(), history };
   let resets = 0;
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   return { ...core, resets: () => resets };
 }
 /** Three labelled edits: Colour, Opacity, Rename layer. Returns the look after each one. */
@@ -173,12 +174,12 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
   const base = freshWorkspace(), recipe = base.recipe;
   const history = Array.from({ length: 12 }, (_, i) => { const r = structuredClone(recipe); r.layers[0].opacity = (i + 1) / 20; return r; });
   const draft = collectionDraft({ schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Looks",
-    presets: ["A", "B"].map(name => ({ id: crypto.randomUUID(), name, revision: 1, recipe })) });
+    presets: ["A", "B"].map(name => ({ id: crypto.randomUUID(), name, revision: 1, recipe })) }, STUDIO_DOCUMENTS);
   const [a, b] = draft.collection.presets;
   draft.selected = a.id;
-  draft.memory[a.id] = withLiveMemory(undefined, { active: 0, selected: 0, history });
-  draft.memory[b.id] = withLiveMemory(undefined, { active: 0, selected: 0, history });
-  const restored = parseWorkspace(JSON.parse(encodeWorkspaceForStorage({ ...base, history, collections: draft }).encoded));
+  draft.memory[a.id] = withLiveMemory(undefined, { active: 0, selected: 0, history }, STUDIO_DOCUMENTS);
+  draft.memory[b.id] = withLiveMemory(undefined, { active: 0, selected: 0, history }, STUDIO_DOCUMENTS);
+  const restored = parseWorkspace(JSON.parse(encodeWorkspaceForStorage({ ...base, history, collections: draft }, STUDIO_DOCUMENTS).encoded), STUDIO_DOCUMENTS);
   // The selected preset keeps everything; the other keeps the latest few and says so.
   expect(restored.historyTrimmed).toBeUndefined();
   expect(memoryOf(restored.collections!, a.id)).not.toHaveProperty("historyTrimmed");
@@ -191,7 +192,7 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
   // The flag is tolerant: anything but true reads as not trimmed.
   const eye = draft.memory[a.id]["eye-makeup"];
   const parsed = parseCollectionWorkspace({ ...draft, memory: { [a.id]: { "eye-makeup": { ...eye, historyTrimmed: "yes" } },
-    [b.id]: draft.memory[b.id] } });
+    [b.id]: draft.memory[b.id] } }, STUDIO_DOCUMENTS);
   expect(memoryOf(parsed, a.id)).not.toHaveProperty("historyTrimmed");
 });
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { STUDIO_OWNERS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { MotionActions } from "../src/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
@@ -13,7 +13,7 @@ import { freshWorkspace } from "../src/workspace-state";
 
 function fixture() {
   const workspace = freshWorkspace();
-  return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 }
 
 test("the registry reproduces the pre-platform catalogue exactly (golden snapshot)", () => {

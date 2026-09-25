@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { AuthoringDocument } from "../src/authoring-document";
 import { WorkspacePersistence } from "../src/workspace-persistence";
 import { freshWorkspace, workspaceKeys } from "../src/workspace-state";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("authoring document owns selection and Undo, and exposes detached snapshots", () => {
   const workspace = freshWorkspace();
@@ -46,7 +47,7 @@ test("workspace writer debounces the latest snapshot and keeps verify storage is
   const workspace = freshWorkspace();
   const key = workspaceKeys(true).workspace;
   const writer = new WorkspacePersistence({ storage: { setItem(k, v) { storage.set(k, v); } },
-    key, writable: true, capture: () => workspace, delayMs: 5 });
+    key, writable: true, capture: () => workspace, delayMs: 5, model: STUDIO_DOCUMENTS });
   writer.request();
   expect(storage.size).toBe(0);
   writer.activate();
@@ -63,12 +64,12 @@ test("workspace writer protects unreadable storage and reports write failure", (
   let writes = 0;
   const options = { key: "workspace", capture: freshWorkspace,
     storage: { setItem() { writes++; throw Error("blocked"); } } };
-  const protectedWriter = new WorkspacePersistence({ ...options, writable: false, restoreError: "Unreadable" });
+  const protectedWriter = new WorkspacePersistence({ ...options, writable: false, restoreError: "Unreadable", model: STUDIO_DOCUMENTS });
   protectedWriter.activate(); protectedWriter.flush();
   expect(writes).toBe(0);
   expect(protectedWriter.snapshot()).toEqual({ kind: "protected",
     message: "Unreadable. Original storage kept; export your recipe before closing." });
-  const failedWriter = new WorkspacePersistence({ ...options, writable: true });
+  const failedWriter = new WorkspacePersistence({ ...options, writable: true, model: STUDIO_DOCUMENTS });
   failedWriter.activate(); failedWriter.flush();
   expect(writes).toBe(1);
   expect(failedWriter.snapshot().kind).toBe("unavailable");

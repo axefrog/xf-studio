@@ -9,6 +9,7 @@ import { CollectionActions } from "../../src/collection-actions";
 import type { EditorSnapshot } from "../../src/collection-session";
 import { encodeWorkspaceAt } from "../../src/workspace-budget";
 import { loadWorkspace, type WorkspaceState } from "../../src/workspace-state";
+import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 
 /** Canonical JSON (object keys sorted): key order is not observable, so it is not compared. */
 export const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" &&
@@ -17,7 +18,7 @@ export const digest = (value: unknown) => createHash("sha256").update(canonical(
 
 export function restore(stored: unknown) {
   const text = typeof stored === "string" ? stored : JSON.stringify(stored);
-  return loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? text : null }, false);
+  return loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? text : null }, false, STUDIO_DOCUMENTS);
 }
 
 /** Every observable fact of one restored workspace, as plain data. */
@@ -28,7 +29,7 @@ export function observe(state: WorkspaceState) {
     previewSetup: state.previewSetup ?? null, savedV: state.savedV ?? null };
   if (!state.collections) return { top, collection: null };
   let shown: EditorSnapshot | undefined;
-  const actions = new CollectionActions(structuredClone(state.collections), () => structuredClone(shown!),
+  const actions = new CollectionActions(STUDIO_DOCUMENTS, structuredClone(state.collections), () => structuredClone(shown!),
     editor => { shown = structuredClone(editor); });
   // The restored editor is the selected preset's memory, which parseWorkspace copied to the top level.
   shown = { recipe: state.recipe, active: state.active, selected: state.selected, fieldSelection: state.fieldSelection,
@@ -61,7 +62,7 @@ export function observeRoundTrips(stored: unknown) {
   if (!loaded.writable) throw Error(loaded.error);
   const first = observe(loaded.state);
   const levels = [0, 1, 2, 3].map(level => {
-    const again = restore(encodeWorkspaceAt(loaded.state, level).encoded);
+    const again = restore(encodeWorkspaceAt(loaded.state, level, STUDIO_DOCUMENTS).encoded);
     if (!again.writable) throw Error(again.error);
     return observe(again.state);
   });

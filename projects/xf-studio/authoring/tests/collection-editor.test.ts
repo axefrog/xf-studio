@@ -11,11 +11,12 @@ import { initialRecipe } from "../src/recipe";
 import { parseCollection, planCollection } from "../src/preset-collection";
 import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { recipeOf } from "./fixtures/looks";
+import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 
 test("preset switching retains unsaved recipes, selections and Undo; structural operations preserve export identity", () => {
   const id = crypto.randomUUID(), original = { id: crypto.randomUUID(), name: "Original", revision: 1, recipe: initialRecipe() };
   let editor: EditorSnapshot = { recipe: original.recipe, active: 2, selected: 3, history: [initialRecipe()] };
-  const session = new CollectionSession(collectionDraft({ schema: "xfas/collection-1", id, name: "Looks", presets: [original] }),
+  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft({ schema: "xfas/collection-1", id, name: "Looks", presets: [original] }, STUDIO_DOCUMENTS),
     () => editor, e => editor = e);
   editor.recipe.layers[0].color = "#123456";
   session.edit({ kind: "copy", id: original.id });
@@ -34,13 +35,13 @@ test("preset switching retains unsaved recipes, selections and Undo; structural 
   expect(() => planCollection(session.state.collection)).toThrow();
   const workspace = freshWorkspace(); workspace.collections = session.snapshot();
   // Sidebar-shell disclosure state saved by earlier builds is ignored on restore.
-  const stored = serializeWorkspace(workspace);
+  const stored = serializeWorkspace(workspace, STUDIO_DOCUMENTS);
   const restored = parseWorkspace(JSON.parse(JSON.stringify({ ...stored,
-    collections: { ...stored.collections, filesOpen: true, expanded: false } })));
+    collections: { ...stored.collections, filesOpen: true, expanded: false } })), STUDIO_DOCUMENTS);
   expect(restored.collections!.removed).toHaveLength(2); expect(restored.recipe.layers).toHaveLength(0);
   expect(restored.collections).not.toHaveProperty("filesOpen");
   expect(restored.collections).not.toHaveProperty("expanded");
-  const resumed = new CollectionSession(restored.collections!, () => editor, e => editor = e);
+  const resumed = new CollectionSession(STUDIO_DOCUMENTS, restored.collections!, () => editor, e => editor = e);
   resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#aabbcc");
   resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#123456"); expect(editor.active).toBe(2);
   expect(resumed.state.selected).toBe(original.id);
@@ -50,7 +51,7 @@ test("opening collections is recoverable and save completion never overwrites ed
   const a = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "A", presets: [
     { id: crypto.randomUUID(), name: "A1", revision: 1, recipe: initialRecipe() }] };
   let editor: EditorSnapshot = { recipe: a.presets[0].recipe, ...emptyMemory() };
-  const session = new CollectionSession(collectionDraft(a), () => editor, e => editor = e);
+  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft(a, STUDIO_DOCUMENTS), () => editor, e => editor = e);
   const sent = session.snapshot().collection;
   editor.recipe.layers[0].color = "#ffeedd";
   session.saved({ collection: { ...sent, id: crypto.randomUUID() }, revision: 1, updatedAt: "now" }, a.id);
@@ -59,8 +60,8 @@ test("opening collections is recoverable and save completion never overwrites ed
   session.open({ ...a, id: crypto.randomUUID(), presets: [] });
   expect(editor.recipe.layers).toHaveLength(0);
   const ws = freshWorkspace(); ws.collections = session.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(ws))));
-  const next = new CollectionSession(restored.collections!, () => editor, e => editor = e);
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(ws, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  const next = new CollectionSession(STUDIO_DOCUMENTS, restored.collections!, () => editor, e => editor = e);
   next.undoOpen(); expect(editor.recipe.layers[0].color).toBe("#ffeedd"); expect(next.state.collection.id).toBe(priorId);
   next.importRecipe(initialRecipe(), "Portable"); expect(next.state.collection.presets).toHaveLength(2);
   expect(next.state.collection.presets[1].name).toBe("Portable");
@@ -71,7 +72,7 @@ test("recovery is bounded and follows the opened drafts in order", () => {
     id: crypto.randomUUID(), name, presets: [] });
   const first = collection("First");
   let editor: EditorSnapshot = { recipe: emptyRecipe(), ...emptyMemory() };
-  const session = new CollectionSession(collectionDraft(first), () => editor, value => editor = value);
+  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft(first, STUDIO_DOCUMENTS), () => editor, value => editor = value);
   for (let n = 0; n < COLLECTION_RECOVERY_LIMIT + 1; n++) session.open(collection(`Open ${n}`));
   expect(session.state.previous?.collection.name).toBe(`Open ${COLLECTION_RECOVERY_LIMIT - 1}`);
   expect(session.state.older?.map(draft => draft.collection.name)).toEqual(
@@ -90,7 +91,7 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
   try {
     const old = looks.save({ name: "Old look", recipe: initialRecipe() });
     const raw = new Database(path), originalRows = raw.query("SELECT * FROM look_revisions").all();
-    db = new CollectionLibrary(path);
+    db = new CollectionLibrary(path, STUDIO_PARTS);
     const initial = db.get(db.list()[0].id);
     expect(initial.collection.presets[0].id).toBe(old.id); expect(initial.revision).toBe(1);
     expect(raw.query("SELECT * FROM look_revisions").all()).toEqual(originalRows);
@@ -109,7 +110,7 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
     expect(recovered.collection.presets[0].revision).toBe(3); // Never reuse revision 1 after removal and older restoration.
     expect(db.get(initial.collection.id, 2)).toEqual(second);
     raw.close(); db.close(); looks.close();
-    looks = new LookLibrary(path); db = new CollectionLibrary(path);
+    looks = new LookLibrary(path); db = new CollectionLibrary(path, STUDIO_PARTS);
     expect(looks.get(old.id)).toEqual(old); expect(db.get(initial.collection.id)).toEqual(recovered);
     const separate = db.save({ collection: { ...edited, id: crypto.randomUUID() } });
     expect(separate.revision).toBe(1); expect(db.list()).toHaveLength(2);
@@ -121,7 +122,7 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
 
 test("collection API preserves legacy looks and rejects foreign, stale and destructive requests", async () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-collection-api-")), path = join(dir, "test.sqlite");
-  const looks = new LookLibrary(path), db = new CollectionLibrary(path);
+  const looks = new LookLibrary(path), db = new CollectionLibrary(path, STUDIO_PARTS);
   const prefix = "/api/verification/collections", origin = "http://127.0.0.1:4317";
   const request = (suffix: string, method = "GET", value?: unknown, source = origin) => new Request(origin + prefix + suffix,
     { method, headers: { Origin: source, "Content-Type": "application/json" }, body: value ? JSON.stringify(value) : undefined });

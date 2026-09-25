@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCollection } from "./preset-collection";
-import { packagePresetIdentities, preparePackageCollection } from "./package-filter";
+import { originalPresetCount, packagePresetIdentities, preparePackageCollection } from "./package-filter";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
@@ -194,7 +194,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
         const checked = result as PackageCheck;
         if (checked.ready !== true || checked.collectionId !== collection.id || checked.namespace !== plan.namespace ||
             checked.modName !== plan.modName || checked.selectorLabel !== plan.selectorLabel ||
-            checked.originalPresetCount !== collection.presets.length || checked.packagedCollectionSha256 !== packagedHash ||
+            checked.originalPresetCount !== originalPresetCount(prepared.source) || checked.packagedCollectionSha256 !== packagedHash ||
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
             JSON.stringify(checked.presets) !== JSON.stringify(packagePresetIdentities(plan)) ||

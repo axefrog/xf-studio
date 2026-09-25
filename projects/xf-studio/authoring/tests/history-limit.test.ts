@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { RECIPE_HISTORY_LIMIT } from "../src/editor-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 // Transactions identify the Undo entry their checkpoint added. At the limit a new entry
 // displaces the oldest, so the depth no longer grows; depth-based detection used to
@@ -14,7 +15,7 @@ function fullHistory() {
     recipe.layers[0].opacity = (i + 1) / 200;
     return recipe;
   });
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   expect(core.document.undoDepth).toBe(RECIPE_HISTORY_LIMIT);
   return core;
 }

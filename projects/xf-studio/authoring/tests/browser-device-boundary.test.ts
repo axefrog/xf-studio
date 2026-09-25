@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createBrowserFileDevice } from "../src/browser-file-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../src/browser-workspace-device";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 class Picker extends EventTarget {
   files?: File[];
@@ -30,7 +31,7 @@ test("workspace browser adapter keeps verification storage isolated and captures
   const stored = new Map<string, string>();
   const storage = { getItem: (key: string) => stored.get(key) ?? null,
     setItem: (key: string, value: string) => { stored.set(key, value); } };
-  const restored = loadBrowserWorkspace(storage, true), workspace = restored.state;
+  const restored = loadBrowserWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
   const windowEvents = new EventTarget(), documentEvents = Object.assign(new EventTarget(), { hidden: false });
   const statuses: string[] = [];
   const session = createBrowserWorkspaceSession({
@@ -39,7 +40,7 @@ test("workspace browser adapter keeps verification storage isolated and captures
       uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined,
       quality: () => 512, preview: () => ({ ...workspace.preview, wire: true,
         camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } }), motion: () => undefined },
-    sources: [], window: windowEvents, document: documentEvents, onStatus: s => statuses.push(s.kind),
+    sources: [], window: windowEvents, document: documentEvents, onStatus: s => statuses.push(s.kind), model: STUDIO_DOCUMENTS,
   });
   documentEvents.dispatchEvent(new Event("input")); session.flush();
   expect(stored.size).toBe(0);

@@ -34,16 +34,26 @@ export interface SystemFamily<A extends { kind: string } = { kind: string }, Sco
 }
 
 /**
- * A feature module's pure core registration: its part codec, its editor-memory codecs and its
- * action table with pure capability and apply (migration steps 1–2). Targets, context,
- * gestures, the character contribution and the exporter join it in later steps
+ * A feature's pointer gestures (feature-module platform §1): one proposed edit applied to the live
+ * part in place, which keeps the live objects' identity for pointer performance and stale-pointer
+ * checks. It returns what changed, or undefined when the edit is stale or invalid (nothing then
+ * changed). The host owns the gesture's Undo transaction and publishes the result.
+ */
+export interface GestureProvider<P = unknown, G = unknown, R = unknown> {
+  apply(part: P, edit: G): R | undefined;
+}
+
+/**
+ * A feature module's pure core registration: its part codec, its editor-memory codecs, its
+ * action table with pure capability and apply (migration steps 1–2) and its gestures. Targets,
+ * context, the character contribution and the exporter join it in later steps
  * (feature-module platform §8).
  *
  * `E` is the editor state the actions read: the per-look editor memory (`editor`) plus
  * whatever the host adds from the feature-wide memory (`memory`) for that look.
  */
 export interface FeatureModule<A extends { kind: string } = { kind: string }, Scope extends string = string,
-  Id extends FeatureId = FeatureId, P = unknown, E = unknown, X = unknown> {
+  Id extends FeatureId = FeatureId, P = unknown, E = unknown, X = unknown, G = unknown, R = unknown> {
   readonly owner: "feature";
   readonly id: Id;
   readonly api: 1;
@@ -53,6 +63,7 @@ export interface FeatureModule<A extends { kind: string } = { kind: string }, Sc
   readonly editor: EditorCodec<unknown, P>;
   readonly memory?: MemoryCodec<unknown>;
   readonly actions: FeatureActionTable<P, E, A, Scope, X>;
+  readonly gestures?: GestureProvider<P, G, R>;
 }
 
 export type ActionOwner<A extends { kind: string } = { kind: string }, Scope extends string = string> =

@@ -29,6 +29,8 @@ import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { MotionActions } from "./motion-actions";
 import type { PreviewActions } from "./preview-actions";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
+// The composition root: the one browser module that imports the composition list (CORE-29).
+import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { UIPreferenceActions } from "./ui-preferences";
 
 export type StudioHost = {
@@ -73,7 +75,7 @@ export function startStudio(host: StudioHost): Promise<void> {
 async function start(host: StudioHost, root: HTMLElement) {
   const verification = new URLSearchParams(location.search).has("verify");
   const storage = host.storage;
-  const restored = loadBrowserWorkspace(storage, verification), workspace = restored.state;
+  const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const localSetup = host.localSetup ?? createBrowserLocalSetup();
   const installDetection = createBrowserInstallDetection();
@@ -109,11 +111,11 @@ async function start(host: StudioHost, root: HTMLElement) {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
-  });
+  }, STUDIO_COMPOSITION);
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
   const session = createBrowserWorkspaceSession({
-    workspace, restored, verification, storage, budget: host.storageBudget,
+    workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     capture: {
       editor: () => core.document.export(),
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,

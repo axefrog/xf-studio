@@ -1,13 +1,14 @@
 import { WorkspaceComposer, type WorkspaceCapturePorts } from "./workspace-composer";
 import { WorkspacePersistence, type WorkspaceSaveStatus } from "./workspace-persistence";
+import type { DocumentModel } from "./collection-workspace";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 
 type Observable = { subscribe(listener: () => void): () => void };
 type EventSource = { addEventListener(type: string, listener: EventListener): void };
 
 /** The key is selected before services are built so the verification draft stays isolated. */
-export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean) {
-  return loadWorkspace(storage, verification);
+export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel) {
+  return loadWorkspace(storage, verification, model);
 }
 
 /** Own the browser write transport and coarse event triggers; policy remains in the services. */
@@ -27,12 +28,14 @@ export function createBrowserWorkspaceSession(options: {
   onStatus(status: WorkspaceSaveStatus): void;
   /** Serialized size budget; the desktop host file allows more than browser storage. */
   budget?: number;
+  /** The document model the workspace is stored with (from the composition root). */
+  model: DocumentModel;
 }) {
   const composer = new WorkspaceComposer(options.workspace, options.capture);
   const persistence = new WorkspacePersistence({ storage: options.storage,
     key: workspaceKeys(options.verification).workspace, writable: options.restored.writable,
     restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture(),
-    budget: options.budget });
+    budget: options.budget, model: options.model });
   persistence.subscribe(options.onStatus);
   for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();

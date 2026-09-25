@@ -82,6 +82,17 @@ export type FeatureState<P, E> = { readonly part: P; readonly editor: E };
  */
 export type FeatureResult<P, E, X = unknown> = { part: P; editor: E; effect: X; changed: boolean };
 
+/**
+ * Data written by a newer XF Studio than this build: a part schema its feature does not accept yet,
+ * or (inside a part) a model this build does not register. Readers never treat it as damage: a
+ * store holding it is never overwritten, and nothing in it is dropped (feature-module platform §2).
+ */
+export class NewerDataError extends Error {
+  readonly code = "newer_data";
+  constructor(message: string) { super(message); this.name = "NewerDataError"; }
+}
+export const isNewerData = (error: unknown): error is NewerDataError => error instanceof NewerDataError;
+
 /** Deterministic JSON with object keys sorted: the canonical text two equal parts share. */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)

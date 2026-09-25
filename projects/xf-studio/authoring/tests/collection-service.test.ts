@@ -8,6 +8,7 @@ import type { PresetCollection } from "../src/preset-collection";
 import type { LookCollection } from "../src/platform/api";
 import { looks, memoryOf, recipeOf } from "./fixtures/looks";
 import { recipeFile } from "../src/recipe-schema";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 function fixture() {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
@@ -23,14 +24,14 @@ function fixture() {
       namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "test",
       presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }] }; },
   };
-  const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
   return { service, collection, saved, transport, editor: () => editor, saves: () => saves,
     packageInput: () => packageInput };
 }
 
 test("an empty library initializes a saveable starter draft from the loaded workspace", async () => {
-  const workspace = loadWorkspace({ getItem: () => null }, false).state;
+  const workspace = loadWorkspace({ getItem: () => null }, false, STUDIO_DOCUMENTS).state;
   let editor: EditorSnapshot = { recipe: workspace.recipe, ...emptyMemory() };
   let saved: LookCollection | undefined;
   const transport: CollectionTransport = {
@@ -39,7 +40,7 @@ test("an empty library initializes a saveable starter draft from the loaded work
     save: async value => { saved = structuredClone(value); return { collection: value, revision: 1, updatedAt: "now" }; },
     package: async () => { throw Error("Unused"); },
   };
-  const service = new CollectionService(undefined, workspace.library, () => editor, value => editor = value, transport);
+  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, workspace.library, () => editor, value => editor = value, transport);
   expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
   expect(service.snapshot()?.revision).toBeUndefined();
   expect(service.snapshot()?.collection.presets).toHaveLength(1);
@@ -129,10 +130,10 @@ test("opening two saved collections keeps the earlier unsaved draft recoverable 
   expect(source.service.summary().draft?.recoveryCount).toBe(2);
 
   const workspace = freshWorkspace(); workspace.collections = source.service.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(workspace))));
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
   let editor: EditorSnapshot = { recipe: restored.recipe, active: restored.active, selected: restored.selected,
     history: restored.history };
-  const resumed = new CollectionService(restored.collections, { selected: "", name: "" },
+  const resumed = new CollectionService(STUDIO_DOCUMENTS, restored.collections, { selected: "", name: "" },
     () => editor, value => editor = value, source.transport);
   await resumed.execute({ kind: "initialize" });
   resumed.dispatch({ kind: "collection.undoOpen" });
@@ -168,7 +169,7 @@ test("the first collection keeps every editor-memory field of the legacy workspa
   const f = fixture(), recipe = initialRecipe();
   let editor: EditorSnapshot = { recipe, ...emptyMemory(), history: [structuredClone(recipe)], historyTrimmed: true };
   const transport: CollectionTransport = { ...f.transport, list: async () => [] };
-  const service = new CollectionService(undefined, { selected: "", name: "Look" }, () => editor, value => editor = value, transport);
+  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, { selected: "", name: "Look" }, () => editor, value => editor = value, transport);
   expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
   const draft = service.view().draft!, memory = memoryOf(draft, draft.selected!);
   expect(memory).toMatchObject({ historyTrimmed: true, active: 0, selected: 0 });

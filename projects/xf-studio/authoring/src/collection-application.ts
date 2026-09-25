@@ -3,7 +3,7 @@ import type { CollectionAction } from "./collection-actions";
 import { CollectionService, type CollectionOutcome, type CollectionRequest,
   type CollectionServiceState, type CollectionServiceSummary, type CollectionTransport,
   type DraftPersistence } from "./collection-service";
-import type { CollectionWorkspace } from "./collection-workspace";
+import type { CollectionWorkspace, DocumentModel } from "./collection-workspace";
 import type { ReadonlyDeep } from "./read-only";
 import type { Recipe } from "./recipe";
 import type { StudioApplication } from "./studio-application";
@@ -29,11 +29,11 @@ export type CollectionViewPort = {
 /** Trusted collection/editor composition. The view receives only CollectionViewPort. */
 export class CollectionApplication implements CollectionViewPort {
   private service: CollectionService;
-  constructor(restored: CollectionWorkspace | undefined, legacy: LibraryState,
+  constructor(model: DocumentModel, restored: CollectionWorkspace | undefined, legacy: LibraryState,
     private document: AuthoringDocument, onEditorRestored: () => void,
     transport: CollectionTransport, private app: StudioApplication,
     private files: StudioFileOperations) {
-    this.service = new CollectionService(restored, legacy,
+    this.service = new CollectionService(model, restored, legacy,
       () => document.export(), editor => {
         document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
         onEditorRestored();

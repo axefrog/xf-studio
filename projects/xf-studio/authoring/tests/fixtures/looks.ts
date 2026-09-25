@@ -1,6 +1,6 @@
 /** Small helpers for tests written against the look/part model (feature-module platform §2). */
 import { liveMemory, type CollectionDraft } from "../../src/collection-workspace";
-import { LIVE_FEATURE, STUDIO_PARTS } from "../../src/compose/studio-registry";
+import { LIVE_FEATURE, STUDIO_PARTS, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import type { Look } from "../../src/platform/api";
 import type { Recipe } from "../../src/recipe";
 import { serializeWorkspace, type WorkspaceState } from "../../src/workspace-state";
@@ -12,6 +12,6 @@ export const recipeOf = (look: Pick<Look, "parts"> | { readonly parts: Readonly<
   look.parts[LIVE_FEATURE]!.body as Recipe;
 /** The live editor's memory of one preset of a draft. */
 export const memoryOf = (draft: { readonly memory: object }, id: string) =>
-  liveMemory((draft.memory as CollectionDraft["memory"])[id]);
+  liveMemory((draft.memory as CollectionDraft["memory"])[id], STUDIO_DOCUMENTS);
 /** A live workspace as storage holds it (`xfs/workspace-2`, through JSON), for restore tests. */
-export const storedWorkspace = (state: WorkspaceState) => JSON.parse(JSON.stringify(serializeWorkspace(state)));
+export const storedWorkspace = (state: WorkspaceState) => JSON.parse(JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS)));

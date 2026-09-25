@@ -4,6 +4,7 @@ import { freshWorkspace, loadWorkspace, parseWorkspace, workspaceKeys } from "..
 import { defaultUIPreferences, effectiveTheme, parseDockLayout, parseUIPreferences,
   recoverDockLayout, UIPreferenceActions, type DockLayout } from "../src/ui-preferences";
 import { storedWorkspace } from "./fixtures/looks";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 const layout: DockLayout = { format: "xfs/dock", version: 1,
   state: { panels: [{ id: "viewport", x: 40, y: 10 }, { id: "layers", x: 500, y: 10 }] } };
@@ -16,21 +17,21 @@ test("theme preference defaults to system and stays separate from recipe/library
   expect(effectiveTheme("light", true)).toBe("light");
   expect(effectiveTheme("dark", false)).toBe("dark");
   state.uiPreferences = { schema: "xfs/ui-preferences-1", theme: "dark", inputHints: false, layout };
-  const restored = parseWorkspace(storedWorkspace(state));
+  const restored = parseWorkspace(storedWorkspace(state), STUDIO_DOCUMENTS);
   expect(restored.uiPreferences).toEqual(state.uiPreferences);
   expect(restored.recipe).toEqual(recipe);
   expect(restored.library).toEqual(library);
   const legacy = storedWorkspace(state);
   delete legacy.uiPreferences;
-  expect(parseWorkspace(legacy).uiPreferences).toEqual(defaultUIPreferences());
-  expect(parseWorkspace({ ...storedWorkspace(state), uiPreferences: { schema: "future", theme: "dark", layout } }).uiPreferences)
+  expect(parseWorkspace(legacy, STUDIO_DOCUMENTS).uiPreferences).toEqual(defaultUIPreferences());
+  expect(parseWorkspace({ ...storedWorkspace(state), uiPreferences: { schema: "future", theme: "dark", layout } }, STUDIO_DOCUMENTS).uiPreferences)
     .toEqual(defaultUIPreferences());
-  expect(parseWorkspace({ ...storedWorkspace(state), uiPreferences: { schema: "xfs/ui-preferences-1", theme: "neon", layout } })
+  expect(parseWorkspace({ ...storedWorkspace(state), uiPreferences: { schema: "xfs/ui-preferences-1", theme: "neon", layout } }, STUDIO_DOCUMENTS)
     .uiPreferences).toMatchObject({ theme: "system", layout });
   const damaged = { ...storedWorkspace(state), uiPreferences: { schema: "xfs/ui-preferences-1", theme: "dark",
     layout: { ...layout, format: "<bad>" } } };
   const loaded = loadWorkspace({ getItem: key => key === workspaceKeys(true).workspace
-    ? JSON.stringify(damaged) : null }, true);
+    ? JSON.stringify(damaged) : null }, true, STUDIO_DOCUMENTS);
   expect(loaded.writable).toBe(true);
   expect(loaded.state.recipe).toEqual(recipe);
   expect(loaded.state.uiPreferences).toEqual({ schema: "xfs/ui-preferences-1", theme: "dark", inputHints: true });

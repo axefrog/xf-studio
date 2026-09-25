@@ -14,6 +14,7 @@ import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.
@@ -94,7 +95,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
       return { applied: scene.morphs, appearanceReferences: tpp.appearances.length, matchedPiercing: scene.piercing };
     } });
     const workspace = freshWorkspace();
-    const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+    const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
     const draftBefore = JSON.stringify(core.document.export()), libraryBefore = JSON.stringify(workspace.collections);
 
     const details = new CharacterDetailActions(port);

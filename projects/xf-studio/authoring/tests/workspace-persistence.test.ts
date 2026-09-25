@@ -11,6 +11,7 @@ import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STOR
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/workspace-persistence";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
 import { looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 afterEach(() => { jest.useRealTimers(); });
 
@@ -23,8 +24,8 @@ function memoryStorage() {
 
 /** The shape the composition root builds, including the status feedback that used to loop. */
 function studioSession(storage: ReturnType<typeof memoryStorage>, options: { watchStatus?: boolean } = {}) {
-  const restored = loadWorkspace(storage, true), workspace = restored.state;
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   let status = emptyPresentationStatus(true);
   const statusSource = new PresentationStatusSource(() => status);
   const events = Object.assign(new EventTarget(), { hidden: false });
@@ -33,7 +34,7 @@ function studioSession(storage: ReturnType<typeof memoryStorage>, options: { wat
       collections: () => workspace.collections, quality: () => workspace.preview.textureSize,
       preview: () => undefined, motion: () => undefined },
     sources: [core.document], window: new EventTarget(), document: events,
-    onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); } });
+    onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); }, model: STUDIO_DOCUMENTS });
   // A presentation-wide subscription also sees status changes; it must not keep saving.
   if (options.watchStatus) session.watch(statusSource);
   return { core, session, statusSource, status: () => status };
@@ -66,7 +67,7 @@ test("autosave stops when idle: a save's own status never schedules another writ
 
 test("save status is published only when it changes", () => {
   const storage = memoryStorage(), workspace = freshWorkspace();
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace });
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace, model: STUDIO_DOCUMENTS });
   const seen: string[] = [];
   writer.subscribe(s => seen.push(s.kind));
   writer.activate();
@@ -94,13 +95,13 @@ function fullHistory(recipe: Recipe) {
 function busyDraft(presets: number, recipe: Recipe): CollectionDraft {
   const draft = collectionDraft({ schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Looks",
     presets: Array.from({ length: presets }, (_, i) => ({ id: crypto.randomUUID(), name: `Look ${i + 1}`, revision: 1,
-      recipe: variant(recipe, i) })) });
+      recipe: variant(recipe, i) })) }, STUDIO_DOCUMENTS);
   for (const preset of draft.collection.presets)
-    draft.memory[preset.id] = withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) });
+    draft.memory[preset.id] = withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) }, STUDIO_DOCUMENTS);
   draft.removed = Array.from({ length: REMOVED_PRESET_LIMIT }, (_, i) => ({ index: 0,
     preset: looks({ schema: "xfas/collection-1", id: draft.collection.id, name: "Looks", presets: [
       { id: crypto.randomUUID(), name: `Removed ${i + 1}`, revision: 1, recipe: variant(recipe, i) }] }).presets[0],
-    memory: withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) }) }));
+    memory: withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) }, STUDIO_DOCUMENTS) }));
   draft.selected = draft.collection.presets[Math.min(2, presets - 1)].id;
   return draft;
 }
@@ -123,12 +124,12 @@ test("a realistic workspace fits the storage budget with the standard policy and
   const state = realisticWorkspace();
   expect(JSON.stringify(state.recipe).length).toBeGreaterThan(11_000);
   // Stored verbatim this exceeded the ~5M code-unit browser quota and autosave silently stopped.
-  expect(JSON.stringify(serializeWorkspace(state)).length).toBeGreaterThan(5_000_000);
-  const stored = encodeWorkspaceForStorage(state);
+  expect(JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS)).length).toBeGreaterThan(5_000_000);
+  const stored = encodeWorkspaceForStorage(state, STUDIO_DOCUMENTS);
   expect(stored.level).toBe(0);
   expect(stored.size).toBeLessThanOrEqual(WORKSPACE_STORAGE_BUDGET);
 
-  const restored = parseWorkspace(JSON.parse(stored.encoded));
+  const restored = parseWorkspace(JSON.parse(stored.encoded), STUDIO_DOCUMENTS);
   const collections = restored.collections!, selected = collections.selected!;
   // The selected preset keeps its full Undo history and is the editor recipe.
   expect(restored.recipe).toEqual(recipeOf(state.collections!.collection.presets.find(p => p.id === selected)!));
@@ -147,12 +148,12 @@ test("a realistic workspace fits the storage budget with the standard policy and
 test("an oversized workspace trims further and says so instead of silently failing", () => {
   jest.useFakeTimers();
   const state = realisticWorkspace(16), storage = memoryStorage();
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state });
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
   writer.activate(); writer.flush();
   expect(storage.writes()).toBe(1);
   expect(writer.storedSize()).toBeLessThanOrEqual(WORKSPACE_STORAGE_BUDGET);
   expect(writer.snapshot()).toEqual({ kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull });
-  const restored = parseWorkspace(JSON.parse(storage.stored.get(key)!));
+  const restored = parseWorkspace(JSON.parse(storage.stored.get(key)!), STUDIO_DOCUMENTS);
   expect(restored.collections!.collection.presets).toHaveLength(16);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
 
@@ -161,7 +162,7 @@ test("a storage quota refusal falls back to smaller forms, then reports that aut
   let limit = 400_000;
   const quota = () => Object.assign(Error("The quota has been exceeded."), { name: "QuotaExceededError" });
   const storage = { setItem: (k: string, v: string) => { if (v.length > limit) throw quota(); stored.set(k, v); } };
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state });
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
   writer.activate(); writer.flush();
   expect(stored.get(key)!.length).toBeLessThanOrEqual(limit);
   expect(writer.snapshot().kind).toBe("nearly-full");
@@ -169,7 +170,7 @@ test("a storage quota refusal falls back to smaller forms, then reports that aut
   writer.flush();
   expect(writer.snapshot()).toEqual({ kind: "full", message: SAVE_MESSAGES.full });
   const blocked = new WorkspacePersistence({ storage: { setItem() { throw Error("SecurityError"); } }, key, writable: true,
-    capture: () => state });
+    capture: () => state, model: STUDIO_DOCUMENTS });
   blocked.activate(); blocked.flush();
   expect(blocked.snapshot().kind).toBe("unavailable");
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
@@ -184,7 +185,7 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   raw.collections.previous.collection.presets[0].parts["eye-makeup"].body = { schema: "nope" };
   raw.collections.removed[3].preset.parts["eye-makeup"].body.layers = "broken";
   const storage = memoryStorage(); storage.stored.set(key, JSON.stringify(raw));
-  const loaded = loadWorkspace(storage, true);
+  const loaded = loadWorkspace(storage, true, STUDIO_DOCUMENTS);
   expect(loaded.writable).toBe(true);
   expect(loaded.error).toBeUndefined();
   expect(loaded.warning).toContain("could not be restored");
@@ -196,7 +197,7 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   expect(collections.older).toEqual([]);
 
   const writer = new WorkspacePersistence({ storage, key, writable: loaded.writable, restoreWarning: loaded.warning,
-    capture: () => loaded.state });
+    capture: () => loaded.state, model: STUDIO_DOCUMENTS });
   writer.activate(); writer.flush();
   expect(writer.snapshot().kind).toBe("repaired");
   expect(writer.snapshot().message).toContain("Draft autosaved.");
@@ -204,7 +205,7 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   // The current draft itself must parse: a damaged one keeps storage protected.
   raw.collections.collection.presets[0].parts["eye-makeup"].body = { schema: "nope" };
   storage.stored.set(key, JSON.stringify(raw));
-  const damaged = loadWorkspace(storage, true);
+  const damaged = loadWorkspace(storage, true, STUDIO_DOCUMENTS);
   expect(damaged.writable).toBe(false);
   expect(damaged.error).toContain("Workspace could not be restored");
 }, HEAVY_WORKSPACE_TIMEOUT_MS);

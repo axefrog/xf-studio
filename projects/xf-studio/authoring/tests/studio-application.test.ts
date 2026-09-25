@@ -7,10 +7,11 @@ import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { RECIPE_ACTION_KINDS } from "../src/recipe-actions";
 import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/studio-action-descriptors";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 function fixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   return { workspace, document: core.document, app: core.app, core };
 }
 
@@ -119,7 +120,7 @@ test("facade exposes collection target capabilities and typed async outcomes", a
   const { app, document, workspace } = fixture(), presetId = crypto.randomUUID();
   const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
     name: "Draft", presets: [{ id: presetId, name: "One", revision: 1, recipe: document.export().recipe }] };
-  const service = new CollectionService(collectionDraft(collection), workspace.library,
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
     () => document.export(), editor => document.restore({ ...editor,
       fieldSelection: editor.fieldSelection ?? {} }), {
       list: async () => [], get: async () => { throw Error("not used"); },
@@ -247,7 +248,7 @@ test("hit-context commands recheck field, layer and collection identity at invoc
   const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
     name: "Draft", presets: [{ id: presetId, name: "One", revision: 1,
       recipe: document.export().recipe }] };
-  const service = new CollectionService(collectionDraft(collection), workspace.library,
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
     () => document.export(), editor => document.restore({ ...editor,
       fieldSelection: editor.fieldSelection ?? {} }), {
       list: async () => [], get: async () => { throw Error("not used"); },

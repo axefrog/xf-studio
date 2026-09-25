@@ -68,6 +68,17 @@ type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
 export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
 
+/**
+ * One gesture frame on a live recipe (eye makeup's gesture provider): the edit's layer must still
+ * be the live one (stable identities until pointer release, so a stale gesture cannot edit a new
+ * preset), then it is validated and applied in place. Returns the changed layer, or undefined.
+ */
+export function applyRecipeGesture(recipe: Recipe, action: GestureEdit): { layerIndex: number; kind: GestureEdit["kind"] } | undefined {
+  const layerIndex = recipe.layers.findIndex(layer => layer.id === action.layerId);
+  if (layerIndex < 0 || recipe.layers[layerIndex] !== action.expectedLayer) return undefined;
+  return applyGestureEdit(action) ? { layerIndex, kind: action.kind } : undefined;
+}
+
 /** Validate a gesture proposal before changing its live target, preserving point/field identity. */
 export function applyGestureEdit(action: GestureEdit): boolean {
   const layer = action.expectedLayer;
@@ -113,6 +124,9 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refusal("missing_target", "That control point no longer exists.");
   if (action.kind === "point.remove" && layer.points.length <= 3)
     return refuse({ code: "range", field: "points", message: "A closed contour needs at least three points." });
+  if (action.kind === "field.add" && action.fieldId !== undefined &&
+      (typeof action.fieldId !== "string" || !action.fieldId || layer.fields.some(field => field.id === action.fieldId)))
+    return refusal("invalid_value", "The new warp control needs an unused ID.");
   if (action.kind === "field.add" && layer.fields.length >= MAX_FIELDS)
     return refuse({ code: "range", field: "fields", message: `A layer supports up to ${MAX_FIELDS} warp controls.` });
   if ((action.kind === "field.select" || action.kind === "field.remove" || action.kind === "field.setOrigin" ||
@@ -168,7 +182,8 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     next.active = index; next.fieldSelection[layer.id] = action.fieldId!; effect = "selection";
   } else if (action.kind === "field.add") {
     const i = layer.fields.length, n = layer.points.length;
-    const field: WarpField = { id: crypto.randomUUID(),
+    // The registered apply always receives the new ID from its host (deterministic replay).
+    const field: WarpField = { id: action.fieldId ?? crypto.randomUUID(),
       u: clamp(layer.points.reduce((sum, point) => sum + point.u, 0) / n + .008 * i),
       v: clamp(layer.points.reduce((sum, point) => sum + point.v, 0) / n), du: 0, dv: 0, radius: .03 };
     changed.fields = [...layer.fields, field]; next.fieldSelection[layer.id] = field.id;
@@ -297,16 +312,13 @@ export class RecipeActions {
     this.write(next, effect);
     for (const listener of this.listeners) listener(effect);
   }
-  /** Pointer adapters calculate coordinates; the application validates and applies the result in place.
-   * Stable target identities are required until pointer release so a stale gesture cannot edit a new preset. */
-  applyGesture(action: GestureEdit): boolean {
-    const state = this.read(), index = state.recipe.layers.findIndex(layer => layer.id === action.layerId);
-    const layer = state.recipe.layers[index];
-    if (!layer || layer !== action.expectedLayer) return false;
-    if (!applyGestureEdit(action)) return false;
-    this.gestureChanged?.(index, action.kind);
-    const effect: RecipeActionEffect = { kind: "scheduled", layerIndex: index };
+  /**
+   * Publish a gesture edit eye makeup's registered gesture provider applied in place: the changed
+   * layer is scheduled for the preview, as every gesture frame always was.
+   */
+  publishGesture(layerIndex: number, kind: GestureEdit["kind"]) {
+    this.gestureChanged?.(layerIndex, kind);
+    const effect: RecipeActionEffect = { kind: "scheduled", layerIndex };
     for (const listener of this.listeners) listener(effect);
-    return true;
   }
 }

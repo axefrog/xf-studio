@@ -6,6 +6,7 @@ import { createTrustedStudioBootstrap } from "../src/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");
@@ -14,7 +15,7 @@ test("a presentation mounts from trusted services without any page controls", as
   let resets = 0, imports = 0;
   core = createTrustedAuthoringCore(workspace, {
     resetStack: () => { resets++; }, selectedCollection: () => "draft",
-  });
+  }, STUDIO_COMPOSITION);
   core.app.attach({ quality: new PreviewQualityActions(512,
     { assess: () => ({ accepted: true }), replace: () => {} }) });
   const viewport = new ViewportAttachment<string>({

@@ -9,8 +9,8 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
-import { EYE_MAKEUP_FEATURE, STUDIO_PARTS } from "../src/compose/studio-registry";
+import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
+import { STUDIO_PARTS, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/direct-glint-settings";
 import { EYE_MAKEUP, EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, eyeMakeupPartCodec } from "../src/features/eye-makeup";
 import { defaultFlakes } from "../src/finish";
@@ -24,7 +24,7 @@ import { eyeMakeupCollection } from "../src/preset-collection";
 import { initialRecipe, newLayerTemplate, parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE,
   type Layer, type Recipe, type RecipeFile } from "../src/recipe";
 import { applyRecipeAction, type RecipeAction } from "../src/recipe-actions";
-import { portableRecipe, readPortableRecipe, recipeFile } from "../src/recipe-schema";
+import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/recipe-schema";
 import { loadWorkspace } from "../src/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf, storedWorkspace } from "./fixtures/looks";
@@ -171,7 +171,7 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
   new Database(path, { create: true }).exec(`CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
     CREATE TABLE look_revisions (look_id TEXT NOT NULL, revision INTEGER NOT NULL, name TEXT NOT NULL, recipe_json TEXT NOT NULL,
       created_at TEXT NOT NULL, PRIMARY KEY (look_id, revision)); PRAGMA user_version=1;`);
-  let library = new CollectionLibrary(path), raw: Database | undefined;
+  let library = new CollectionLibrary(path, STUDIO_PARTS), raw: Database | undefined;
   try {
     // Rows as the step-2 build wrote them: collection-1 with a pinned recipe-11, and collection-2 with a part-1 body.
     const file = readFixture("016-finish-board/finish-board.collection.json");
@@ -190,26 +190,29 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
     const count = () => (raw!.query("SELECT COUNT(*) AS n FROM collection_preset_versions").get() as { n: number }).n;
     const rowsBefore = raw.query("SELECT * FROM collection_preset_versions ORDER BY rowid").all();
     const before = count();
-    library = new CollectionLibrary(path);
-    for (const id of [file.id, v2.id]) {
-      const current = library.get(id);
-      const saved = library.save({ collection: current.collection, revision: current.revision });
-      expect(saved.collection.presets.map(p => p.revision)).toEqual(current.collection.presets.map(p => p.revision));
-    }
+    library = new CollectionLibrary(path, STUDIO_PARTS);
+    const current = library.get(file.id);
+    const saved = library.save({ collection: current.collection, revision: current.revision });
+    expect(saved.collection.presets.map(p => p.revision)).toEqual(current.collection.presets.map(p => p.revision));
     expect(count()).toBe(before);
-    // An edit adds exactly one version, in the oldest schema that holds it.
-    const current = library.get(v2.id), edited = structuredClone(current.collection);
+    // The step-2 collection-2 revision reads, but saving a collection that needs collection-2 (the hair part) is
+    // refused: 0.1.0-alpha.1 lists the library only while every collection's latest row is collection-1 (CORE-30).
+    const mixed = library.get(v2.id);
+    expect(mixed.collection.presets[0].parts.hair).toEqual(hair);
+    expect(() => library.save({ collection: mixed.collection, revision: mixed.revision })).toThrow(COLLECTION_2_LIBRARY_MESSAGE);
+    expect(count()).toBe(before);
+    // Without that part, an edit adds exactly one version, in the oldest schema that holds it: collection-1 again.
+    const edited = structuredClone(mixed.collection);
+    delete edited.presets[0].parts.hair;
     recipeOf(edited.presets[0]).layers[0].opacity = 0.25;
-    library.save({ collection: edited, revision: current.revision });
+    library.save({ collection: edited, revision: mixed.revision });
     expect(count()).toBe(before + 1);
     const row = JSON.parse((raw.query("SELECT preset_json FROM collection_preset_versions ORDER BY rowid DESC LIMIT 1").get() as { preset_json: string }).preset_json);
-    expect(row.parts.hair).toEqual(hair);
-    expect(row.parts[EYE].schema).toBe(EYE_MAKEUP_PART_1);
-    expect(row.parts[EYE].body.schema).toBe(recipeFile(recipeOf(edited.presets[0]))!.schema);
+    expect(row.parts).toBeUndefined();
+    expect(row.recipe.schema).toBe(recipeFile(recipeOf(edited.presets[0]))!.schema);
     const collectionRow = JSON.parse((raw.query("SELECT collection_json FROM collection_revisions WHERE collection_id=? ORDER BY revision DESC LIMIT 1")
       .get(v2.id) as { collection_json: string }).collection_json);
-    expect(collectionRow.schema).toBe(COLLECTION_2);
-    expect(Object.values(collectionRow.presets).every((p: any) => p.parts[EYE].schema === EYE_MAKEUP_PART_1)).toBe(true);
+    expect(collectionRow.schema).toBe(COLLECTION_1);
     // Old rows are never rewritten.
     expect(raw.query("SELECT * FROM collection_preset_versions ORDER BY rowid").all().slice(0, rowsBefore.length)).toEqual(rowsBefore);
   } finally { library.close(); raw?.close(); try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing on Windows. */ } }
@@ -331,7 +334,7 @@ test("a newer eye-makeup part schema or unknown layer model is refused on read a
   for (const envelope of envelopes) {
     const value = clone(state);
     value.collections.collection.presets[0].parts[EYE] = envelope;
-    const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false);
+    const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false, STUDIO_DOCUMENTS);
     expect(loaded.writable).toBe(false);
   }
   // A library still lists such a collection by identity.

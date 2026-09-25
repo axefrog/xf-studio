@@ -1,5 +1,5 @@
 import type { AuthoringDocument } from "./authoring-document";
-import type { GestureEdit, RecipeActions } from "./recipe-actions";
+import type { GestureEdit } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import { gestureHistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
@@ -11,7 +11,8 @@ export class AuthoringGestures {
   /** `checkpoint` is the Undo entry this gesture added (undefined when the top entry already matched). */
   private active?: { source: GestureSource; layer: Layer; changed: boolean;
     checkpoint?: HistoryEntryId; baseline: string };
-  constructor(private document: AuthoringDocument, private actions: Pick<RecipeActions, "applyGesture">,
+  /** `actions.applyGesture` applies one frame through the feature's registered gestures (the eye-makeup port). */
+  constructor(private document: AuthoringDocument, private actions: { applyGesture(edit: GestureEdit): boolean },
     private restoreUndo: () => void) {}
   begin(source: GestureSource, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;

@@ -18,6 +18,7 @@
 import { isDirectGlint } from "./direct-glint-settings";
 import type { Finish } from "./finish";
 import { hasGameOptics } from "./finish-export";
+import { NewerDataError } from "./platform/api";
 import { validStudioIrregularSettings } from "./flake-field";
 
 /** Every recipe file schema, oldest first. */
@@ -100,7 +101,7 @@ export class LayerModelRegistry {
     if (schema === undefined) for (const slot of ["flakes", "optics"] as const) {
       const value = layer[slot];
       if (record(value) && typeof value.model === "string" && value.model && !this.of(slot, value))
-        throw Error(`This look uses a finish model from a newer version of XF Studio (${value.model}).`);
+        throw new NewerDataError(`This look uses a finish model from a newer version of XF Studio (${value.model}).`);
     }
     if (layer.flakes !== undefined) {
       const f = layer.flakes;

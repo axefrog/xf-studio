@@ -13,6 +13,8 @@ import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+// A composition root: the part registry and document model are built once and injected (CORE-29).
+import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
@@ -58,12 +60,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
-  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
-  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
+  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
+  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
-  const workspaceStore = new DesktopWorkspaceStore(dataRoot);
+  const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };

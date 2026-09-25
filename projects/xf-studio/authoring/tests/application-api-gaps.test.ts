@@ -5,10 +5,11 @@ import { cancelsGesture } from "../src/gesture-cancel";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 export function coreFixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" });
+  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   return { workspace, core, app: core.app, document: core.document };
 }
 const unusedTransport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
@@ -17,7 +18,7 @@ export function withCollection(transport: CollectionTransport = unusedTransport)
   const fixture = coreFixture(), { document, workspace, app } = fixture, presetId = crypto.randomUUID();
   const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Draft",
     presets: [{ id: presetId, name: "One", revision: 1, recipe: document.export().recipe }] };
-  const service = new CollectionService(collectionDraft(collection), workspace.library, () => document.export(),
+  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library, () => document.export(),
     editor => document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport);
   app.attach({ collection: service });
   return { ...fixture, service, presetId };
@@ -210,7 +211,7 @@ test("draft persistence compares the live draft with the library revision it was
 
   // After a reload the restored draft knows only its revision until initialize loads that revision once.
   const restored = coreFixture();
-  const reloaded = new CollectionService(service.snapshot(), restored.workspace.library, () => restored.document.export(),
+  const reloaded = new CollectionService(STUDIO_DOCUMENTS, service.snapshot(), restored.workspace.library, () => restored.document.export(),
     editor => restored.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
     () => ({ recipe: restored.document.recipe, revision: restored.document.geometryVersion.revision }));
   expect(reloaded.persistence()).toMatchObject({ baseline: "unknown", savedRevision: 1 });
@@ -222,7 +223,7 @@ test("draft persistence compares the live draft with the library revision it was
 test("an empty saved collection initializes with a known baseline", async () => {
   const empty = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Makeup collection", presets: [] };
   const fixture = coreFixture();
-  const service = new CollectionService(undefined, fixture.workspace.library, () => fixture.document.export(),
+  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, fixture.workspace.library, () => fixture.document.export(),
     editor => fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), {
       list: async () => [{ id: empty.id, name: empty.name, revision: 1 }] as never,
       get: async () => ({ collection: structuredClone(empty), revision: 1 }) as never,
