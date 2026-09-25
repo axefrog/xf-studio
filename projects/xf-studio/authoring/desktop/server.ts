@@ -19,9 +19,23 @@ import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
+import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
+import type { LocalSettings } from "../src/local-settings";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
+/** Tools XF Studio downloads with the user's consent (WolvenKit CLI) live in the app's own data folder. */
+export const desktopToolsRoot = (dataRoot: string) => resolve(dataRoot, "tools");
+const OPEN_LINKS: readonly WolvenKitLink[] = ["wolvenkit-licence", "wolvenkit-release", "runtime-installer", "runtime-page"];
+
+export type DesktopHostOptions = {
+  /** Test seams for WolvenKit setup (fixture release, fetch, .NET detection). */
+  wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
+  /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
+  openExternal?: (url: string) => boolean;
+};
 
 /**
  * The Studio page loads only its own scripts, styles, workers and data from this loopback
@@ -36,7 +50,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
   updateTrial?: { native: NativeUpdater; trust: UpdateTrust;
     requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
-  previewExporter?: (cli: string | null) => GameAssetExporter) {
+  previewExporter?: (cli: string | null) => GameAssetExporter, hostOptions: DesktopHostOptions = {}) {
   mkdirSync(dataRoot, { recursive: true });
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
@@ -58,25 +72,36 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     buildHash: version.buildHash }, updateTrial?.native ?? null,
     updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false },
     updateGuard || null);
+  const savedSettings = () => { try { return settingsStore.load().settings; } catch { return null; } };
+  // WolvenKit: a CLI path in Build setup wins; otherwise XF Studio's own copy, downloaded with consent.
+  const wolvenKit = new WolvenKitSetupHost({ root: desktopToolsRoot(dataRoot), configured: () => savedSettings()?.wolvenKitCli ?? null,
+    log: message => report(message), ...hostOptions.wolvenKit });
+  const withWolvenKit = (settings: LocalSettings): LocalSettings =>
+    ({ ...settings, wolvenKitCli: settings.wolvenKitCli ?? wolvenKit.managedExecutable() });
   // Readiness requests never run external tools inline: cached answers, background checks.
   const readinessProbes: [WolvenKitProbe, typeof probeBun] = wolvenKitProbe ? [wolvenKitProbe, probeBun] : [cachedWolvenKitProbe, cachedBunProbe];
   const buildReady = () => {
-    try { return desktopBuildIssue(settingsStore.load().settings, dataRoot, toolsRoot, ...readinessProbes) === null; }
+    try { return desktopBuildIssue(withWolvenKit(settingsStore.load().settings), dataRoot, toolsRoot, ...readinessProbes) === null; }
     catch { return false; }
   };
+  // The settings view passes effective settings: its own path, or XF Studio's WolvenKit.
   const localSettings = createLocalSettingsHandler(settingsStore, {},
-    settings => ({ updater: false, installer: false, packageCheck: true,
-      packageBuild: desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes) === null,
-      eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
-      frameworks: hostFrameworkCheck(settings) }));
+    settings => {
+      const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
+      return { updater: false, installer: false, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
+        wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
+        eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
+        frameworks: hostFrameworkCheck(settings) };
+    }, () => wolvenKit.managedExecutable());
+  const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   const token = randomBytes(32).toString("hex");
   const assetRoot = resolve(dataRoot, "preview-assets");
   const coreAssetsReady = createCoreAssetReadiness(dataRoot);
   // Community path: the core preview is derived from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
-    settings: () => { try { const { gameRoot, wolvenKitCli } = settingsStore.load().settings; return { gameRoot, wolvenKitCli }; }
-      catch { return { gameRoot: null, wolvenKitCli: null }; } },
+    // The preview runs WolvenKit only once it is ready to run (present, verified, with its .NET runtime).
+    settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, wolvenKitCli: wolvenKit.usable() }),
     log: message => report(message) });
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
   /** Prepared developer files win; otherwise the derived preview; otherwise what is missing. */
@@ -118,6 +143,18 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
+      if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
+      if (url.pathname === "/api/desktop/open-link") {
+        // Only named official pages from the host's own state; the view never supplies a URL.
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        let body: any;
+        try { body = await routedRequest.json(); } catch { return new Response("Invalid link", { status: 400 }); }
+        if (!body || typeof body !== "object" || Object.keys(body).join() !== "link" || !OPEN_LINKS.includes(body.link))
+          return new Response("Invalid link", { status: 400 });
+        const target = wolvenKitLinkUrl(wolvenKit.snapshot(), body.link);
+        if (!target || !hostOptions.openExternal) return new Response("Link unavailable", { status: 409 });
+        return new Response(null, { status: hostOptions.openExternal(target) === false ? 502 : 204 });
+      }
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
           { headers: { "Cache-Control": "no-store" } });
@@ -171,7 +208,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
-        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: message => report(message) }, activity);
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: message => report(message),
+          managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
@@ -218,6 +256,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     beginInstallTransaction() { return activity.begin("install"); },
     /** The derived 3D preview's host service (tests and shutdown). */
     previewCore,
-    stop() { shutdown.abort(); previewCore.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    /** WolvenKit setup (tests and shutdown). */
+    wolvenKit,
+    stop() { shutdown.abort(); previewCore.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
   };
 }

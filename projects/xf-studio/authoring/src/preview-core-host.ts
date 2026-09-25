@@ -2,8 +2,8 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { PREVIEW_CORE_FILES } from "./preview-core-recipe";
 import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
-import { createGameAssetExporter, type GameAssetExporter } from "./game-asset-export";
-import { createWolvenKitUncook } from "./game-asset-export-wolvenkit";
+import type { GameAssetExporter } from "./game-asset-export";
+import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
 
 /**
  * Host application service that owns one derivation of the 3D preview at a time: it reads
@@ -41,7 +41,7 @@ const MESSAGES = {
   ready: "The 3D preview is ready.",
   idle: "XF Studio can build the 3D head preview from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
   game: "Choose your Cyberpunk 2077 game folder so XF Studio can build the 3D head preview from your own game files.",
-  wolvenkit: "XF Studio needs WolvenKit CLI to read your game files, and it isn't set up yet. Add its location in Build setup to turn on the 3D preview. The UV editor, library and Check keep working without it.",
+  wolvenkit: "XF Studio needs WolvenKit to read your game files, and it isn't ready yet. XF Studio can download it for you. The UV editor, library and Check keep working without it.",
   cancelled: "Preparing the 3D preview was cancelled. You can start it again at any time.",
 } as const;
 
@@ -94,7 +94,7 @@ export class PreviewCoreHost {
     const controller = new AbortController();
     const started = (this.options.now ?? Date.now)();
     const exporter = this.options.exporter?.(settings.wolvenKitCli) ??
-      createGameAssetExporter(join(this.options.cacheRoot, "exports"), createWolvenKitUncook(settings.wolvenKitCli));
+      createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), settings.wolvenKitCli);
     this.progress = { index: 0, total: PREVIEW_CORE_STEPS.length, label: PREVIEW_CORE_STEPS[0]!.label };
     this.lastFailure = null;
     const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, exporter, signal: controller.signal,

@@ -43,26 +43,26 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
-| PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | Fixing: claude/wolvenkit-fetch |
-| PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | Fixing: claude/wolvenkit-fetch |
+| PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
+| PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives | Open (platform step 7) |
-| PREV-04 | Med | Preview export | Catch-all blames WolvenKit for cache/disk/JSON errors | Fixing: claude/wolvenkit-fetch |
-| PREV-05 | Med | Preview export | 'Head missing' inferred from missing outputs; tool failure misreported as blocked | Fixing: claude/wolvenkit-fetch |
-| PREV-06 | Med | Preview export | Duplicated WolvenKit runner (sixth invocation path) with preview-specific errors | Fixing: claude/wolvenkit-fetch |
+| PREV-04 | Med | Preview export | Catch-all blames WolvenKit for cache/disk/JSON errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
+| PREV-05 | Med | Preview export | 'Head missing' inferred from missing outputs; tool failure misreported as blocked | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
+| PREV-06 | Med | Preview export | Duplicated WolvenKit runner (sixth invocation path) with preview-specific errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
 | PIPE-04 | Med | Resolver | Resolver WolvenKit runner: no timeout/exit check, poisoned promise chain, non-atomic cache, cache not keyed by WolvenKit version | Open |
 | PIPE-05 | Med | Pipeline | Readiness and diagnostic tools hard-code MO2 mods/profiles dirs | Open |
 | PIPE-06 | Med | Resolver | Five implementations of virtual-file precedence with different semantics | Open |
-| PIPE-07 | Med | Pipeline | Five WolvenKit invocation paths; version not recorded in manifest | Open |
+| PIPE-07 | Med | Pipeline | Five WolvenKit invocation paths; version not recorded in manifest | Partly fixed: Build, eye plate and preview share `wolvenkit-cli.ts`, and the preview records the WolvenKit version; the verifier's unbundle and the resolver fetcher still spawn directly, and the package manifest does not record the version |
 | PIPE-08 | Med | Pipeline | Eight inconsistent path-containment helpers | Open |
 | PIPE-09 | Med | Pipeline | No single typed package manifest schema/parser | Open |
 | PIPE-10 | Med | Pipeline | Two MO2 journal/rollback engines and four modlist parsers | Open |
 | PIPE-11 | Med | Resolver | Per-mod intake paths/manifests bypass the resolver (PRC, lash, hair, brow, eyes) | Open (follows UI-02) |
 | PIPE-12 | Med | Pipeline (design) | Build, inventory and verifier shaped for one product; need a mod-product descriptor before a second exporter | Open |
 | PIPE-13 | Med | CI | Authoring suite not run in CI on pushes to main; oracle/integration tests skip silently | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
-| PIPE-14 | Med | Pipeline | process-tree and WolvenKit error paths untested | Open |
+| PIPE-14 | Med | Pipeline | process-tree and WolvenKit error paths untested | Partly fixed: the shared WolvenKit runner's success policy, runtime detection and identity are tested (`tests/wolvenkit-cli.test.ts`); process-tree itself is still untested |
 | UI-03 | Med | Presentation | Two setup forms with separate settings state (stale Build availability, conflicting revisions) | Open (settings v2 track) |
 | UI-04 | Med | Desktop | Desktop bootstrap is a second untyped, untested UI | Open |
 | UI-05 | Med | Presentation | Startup wiring duplicated in studio-main, port-smoke and main | Open |
@@ -109,7 +109,16 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-None since `f3f7147`.
+- **Managed tool download** (claude/wolvenkit-fetch, 25 Sep): `wolvenkit-setup-host.ts` (service), `tool-download.ts`, `zip-extract.ts`, `dotnet-runtime.ts` (adapters), `wolvenkit-release.ts` (pin), `wolvenkit-setup.ts` (renderer actions and views), endpoints `/api/desktop/wolvenkit`, `/api/wolvenkit` and `/api/desktop/open-link`. First code that downloads and unpacks executables; review with the next deep review.
+- **Shared WolvenKit runner** (`wolvenkit-cli.ts`, same branch): the one place Build, the eye plate and the preview start WolvenKit.
+
+## Fixed in claude/wolvenkit-fetch
+
+- **PREV-01:** `game-asset-export.ts` publishes an entry only when every output for its kind exists (mesh: raw, GLB, materials; morph target: raw, GLB); a partial export is returned uncached and the next request reruns WolvenKit. Regression test on one shared export cache in `tests/preview-core.test.ts`.
+- **PREV-02:** export cache keys include the WolvenKit identity (PE version plus launcher/entry-DLL hash); the preview key covers the exported GLBs (head, eye, eye morph) and material exports and the tool key; manifest and render record name the tool (deriver version 3).
+- **PREV-04:** `ensurePreviewCore` routes failures by type: `GameAssetExportError` codes (tool missing, runtime missing, tool failed, cancelled), storage errno codes to `preview_cache_unavailable` with plain disk/permission wording, anything else to `preview_failed`, never blaming WolvenKit.
+- **PREV-05:** a resource is reported missing (and blocks until the game changes) only when the game's own RDAR archive index lacks it (`rdar-index-fs.ts`); a tool that exported nothing, or an unreadable index, is a retryable `preview_tool_failed`.
+- **PREV-06:** `wolvenkit-cli.ts` owns the process, the success policy (exit code, timeout, cancellation, `Unhandled exception`, per-command accept/failure rules), missing-.NET detection, identity and the sync/async version probe; `eye-plate-wolvenkit.ts`, `game-asset-export-wolvenkit.ts` and `package-build-wolvenkit.ts` map its typed errors to their own codes. The boundary test requires every adapter to go through it.
 
 ## Fixed in claude/cleanup-core
 

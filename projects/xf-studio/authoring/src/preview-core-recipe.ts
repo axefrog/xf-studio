@@ -10,7 +10,8 @@ import type { CoreTextureSlot } from "./render-detail";
  */
 export const PREVIEW_CORE_RECIPE_SCHEMA = "xfs/preview-core-recipe-1" as const;
 /** Bump whenever assembly, map adapters or the manifest change output bytes for the same sources. */
-export const PREVIEW_CORE_DERIVER_VERSION = 2;
+/** 3: the key also covers the exported GLBs, material exports and the exporting tool; the record names the tool. */
+export const PREVIEW_CORE_DERIVER_VERSION = 3;
 
 export type MapAdapter = "colour-copy" | "packed-normal" | "red-to-grey";
 export type PreviewCoreMap = {
@@ -69,6 +70,10 @@ export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate: EyePla
 
 export type PreviewCoreSourceHashes = {
   headMeshSha256: string; headMorphSha256: string; eyeMeshSha256: string; eyeMorphSha256: string;
+  /** The exported head (with its facial shapes) and eye GLBs, and both meshes' material exports. */
+  headGlbSha256: string; eyeGlbSha256: string; eyeMorphGlbSha256: string; headMaterialsSha256: string; eyeMaterialsSha256: string;
+  /** Identity key of the exporting tool (e.g. WolvenKit version and content hash). */
+  tool: string;
   /** Decoded source texture PNG hashes by output file. */
   textures: Record<string, string>;
 };

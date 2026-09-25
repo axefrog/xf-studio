@@ -11,7 +11,14 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- **No WolvenKit setup needed.** If you don't have WolvenKit, XF Studio offers to download it for you the first time it needs it. Before anything is downloaded it tells you what WolvenKit is, why it's needed, how big it is (45 MB), where it comes from (WolvenKit's official release on GitHub) and its licence (GPL-3.0), and you choose. The download shows its progress, can be cancelled, is retried if the connection drops, and is checked against the official release before it's used. It goes into XF Studio's own folder; nothing is installed in Windows or your game. Once it's there, the 3D head preview and **Build** set themselves up. Checked end to end on one PC with game version 2.31: from a fresh start to the 3D head in about a minute, and a Build of a look with the downloaded WolvenKit passed its checks.
+- **Help getting Microsoft .NET.** WolvenKit needs Microsoft's free .NET 10 Runtime. If your PC doesn't have it, XF Studio says so plainly and offers one button that gets Microsoft's own installer, then picks it up when you come back.
+- If you already use WolvenKit CLI 8.17.4 or 9.0.1, you can still choose your own copy under **About → Build setup**; it always takes priority.
+
 ### Fixes and under the hood
+
+- The 3D preview no longer gets stuck when WolvenKit only partly exports the game files: incomplete results are never kept, so trying again really retries. It is also re-prepared when WolvenKit changes, and it says "can't find the head" only when the head is truly missing from your game files.
+- Problems saving the 3D preview (for example a full disk) now say so in plain words instead of blaming WolvenKit.
 
 ## 0.1.0-alpha.1
 

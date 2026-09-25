@@ -11,9 +11,9 @@
 export const NO_3D_PREVIEW_IN_ALPHA =
   "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
 
-/** Shown for Build when the host's Build setup is incomplete; the setup view lists the missing paths. */
+/** Shown for Build when the host's Build setup is incomplete; the setup view lists what is missing. */
 export const BUILD_NEEDS_SETUP =
-  "Building mod files needs your game folder and the WolvenKit CLI. Set them up under Build setup; Check works without them.";
+  "Building mod files needs your Cyberpunk 2077 game folder and WolvenKit, which XF Studio sets up with the 3D preview. Check works without them.";
 
 /** Developer and evidence vocabulary that must not appear in a reason or label a community user sees. */
 export const USER_FACING_JARGON =

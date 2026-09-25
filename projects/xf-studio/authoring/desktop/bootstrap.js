@@ -125,7 +125,7 @@ aboutButton.textContent = "About";
 aboutButton.setAttribute("aria-label", "About XF Studio");
 const about = document.createElement("dialog");
 about.id = "desktop-about";
-about.innerHTML = '<h2>About XF Studio</h2><p>Customise Cyberpunk 2077. Eye makeup is the first supported feature.</p><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button></div><form method="dialog"><button type="submit">Close</button></form>';
+about.innerHTML = '<h2>About XF Studio</h2><p>Customise Cyberpunk 2077. Eye makeup is the first supported feature.</p><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-wolvenkit-note"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button><button id="desktop-wolvenkit-licence" type="button">WolvenKit licence</button></div><form method="dialog"><button type="submit">Close</button></form>';
 about.querySelector("#desktop-version").textContent = capabilities.metadataStatus === "ready" ?
   `Version ${capabilities.version}` : "Installed version unavailable";
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
@@ -133,6 +133,24 @@ about.querySelector("#desktop-build").textContent = capabilities.metadataStatus 
 about.querySelector("#desktop-preview-note").textContent = capabilities.previewAssets === "ready" ? "" :
   "The 3D head preview is built from your own Cyberpunk 2077 files. The UV editor, library and Check work without it.";
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
+// WolvenKit is a separate program XF Studio downloads (with consent) and runs; it is not shipped.
+async function openLink(link) {
+  const response = await fetch("/api/desktop/open-link", { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ link }) });
+  if (!response.ok) throw Error("XF Studio couldn't open that page in your browser. Try again.");
+}
+const wolvenKitNote = about.querySelector("#desktop-wolvenkit-note");
+async function refreshWolvenKitNote() {
+  let status = "";
+  try {
+    const state = await fetch("/api/desktop/wolvenkit", { cache: "no-store" }).then(response => response.json());
+    if (state.schema === "xfs/wolvenkit-setup-1") status = ` ${state.message}`;
+  } catch { /* The note still explains the tool. */ }
+  wolvenKitNote.textContent = "The 3D preview and Build use WolvenKit CLI, a separate free program (GPL-3.0) by the WolvenKit team. " +
+    "XF Studio downloads it from WolvenKit's official release only when you allow it; it isn't part of XF Studio." + status;
+}
+about.querySelector("#desktop-wolvenkit-licence").addEventListener("click", () => void openLink("wolvenkit-licence").catch(error => {
+  wolvenKitNote.textContent = error.message; }));
 const updateStatus = about.querySelector("#desktop-update");
 const updateActions = about.querySelector("#desktop-update-actions");
 async function refreshUpdate() {
@@ -187,13 +205,16 @@ about.querySelector("#desktop-licences-open").addEventListener("click", () => {
   about.close(); licences.showModal(); void showLicence("LICENSE.txt");
 });
 document.body.append(aboutButton, about, licences);
-aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
+aboutButton.addEventListener("click", () => {
+  about.showModal(); void refreshUpdate(); void refreshWolvenKitNote();
+  void setupAction({ kind: "setup.refresh" }).catch(() => {});
+});
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files needs your game folder and the WolvenKit CLI. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files uses your Cyberpunk 2077 game folder and WolvenKit. XF Studio finds the game and downloads WolvenKit for you from the 3D preview card; fill these in only to use your own. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
 const welcome = document.createElement("dialog");
 welcome.id = "desktop-welcome";
-welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files needs your game folder and the WolvenKit CLI. You can set them up later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D preview is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files. XF Studio asks before it downloads anything.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
 document.body.append(setup, welcome);
 const descriptors = [
   ["gameRoot", "Cyberpunk 2077 game folder"],
@@ -201,7 +222,7 @@ const descriptors = [
   ["manualModRoot", "Optional direct mod folder"],
   ["mo2Root", "Mod Organizer 2 instance folder"],
   ["mo2ProfileId", "Mod Organizer 2 profile"],
-  ["wolvenKitCli", "WolvenKit CLI executable"],
+  ["wolvenKitCli", "Your own WolvenKit CLI (optional)"],
   ["bunExecutable", "Optional Bun executable"],
 ];
 const fieldsRoot = setup.querySelector("#desktop-setup-fields");
@@ -253,9 +274,10 @@ function showSetup(view) {
   const buildReady = view.readiness.build.ready;
   const pathStatus = pathIssues.length ? pathIssues.join(" ") : "The game folder was found.";
   setupStatus.textContent = recovery ? "Your settings file is damaged. Restore the previous copy before editing." :
-    `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." : "isn't set up yet."}`;
+    `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." :
+      `isn't ready yet: ${view.readiness.build.issues.find(issue => !pathIssues.includes(issue.reason))?.reason ?? "see above."}`}`;
   aboutReadiness.textContent = recovery ? "Build settings need repair: open Build setup." :
-    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet: it needs your game folder and the WolvenKit CLI."}`;
+    `Check is ready. Build ${buildReady ? "is set up." : `isn't set up yet: ${view.readiness.build.issues[0]?.reason ?? "open Build setup."}`}`;
 }
 async function setupAction(action) {
   const result = await setupActions.dispatch(action);
@@ -372,7 +394,12 @@ if (!(capabilities.previewIntake && capabilities.previewAssets !== "ready")) mou
   useGameFolder: async path => {
     await initialSetup.catch(() => {});
     await setupAction({ kind: "setup.save", fields: { ...setupView.fields, gameRoot: path } });
-  } });
+  },
+  useWolvenKit: async path => {
+    await initialSetup.catch(() => {});
+    await setupAction({ kind: "setup.save", fields: { ...setupView.fields, wolvenKitCli: path } });
+  },
+  openLink });
 document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
 document.documentElement.dataset.desktopPreviewIntake = capabilities.previewIntake ? "enabled" : "disabled";
 void import("/build/studio-main.js").catch(error => {

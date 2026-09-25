@@ -11,6 +11,7 @@ import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateResul
 import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { runProcessTree } from "../src/process-tree";
+import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
 export const buildDeadlineMs = 40 * 60_000;
 /** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
@@ -37,7 +38,6 @@ export type WolvenKitProbe = (path: string) => string | null;
 export type BunProbe = (path: string) => string | null;
 /** Shown while the first tool check runs in the background; readiness requests never wait for it. */
 export const PROBE_PENDING = "XF Studio is still checking your build tools. Try again in a moment.";
-const wolvenKitCache = new Map<string, { issue: string | null; until: number }>();
 const bunCache = new Map<string, { issue: string | null; until: number }>();
 /** Execute code, rather than trusting a filename or the Electrobun main path. */
 export function probeBun(path: string): string | null {
@@ -54,24 +54,10 @@ export function probeBun(path: string): string | null {
     return issue;
   } catch { return "The selected Bun executable could not be checked."; }
 }
+/** Run the CLI's version and command checks through the shared WolvenKit runner; a failure is retried after a short interval. */
 export const probeWolvenKit: WolvenKitProbe = path => {
-  const stamp = statSync(path);
-  const key = `${path}|${stamp.size}|${stamp.mtimeMs}`;
-  const cached = wolvenKitCache.get(key);
-  if (cached && Date.now() < cached.until) return cached.issue;
-  const version = spawnSync(path, ["--version"], { encoding: "utf8", timeout: 15_000, windowsHide: true });
-  let issue: string | null = null;
-  if (version.error || version.status !== 0 || !/\b(?:8\.17\.4|9\.0\.1)\b/.test(version.stdout + version.stderr))
-    issue = "WolvenKit CLI must be a validated 8.17.4 or 9.0.1 installation.";
-  else {
-    const help = spawnSync(path, ["--help"], { encoding: "utf8", timeout: 15_000, windowsHide: true });
-    const commands = help.stdout + help.stderr;
-    if (help.error || help.status !== 0 ||
-        !["import", "export", "convert", "pack", "extract"].every(name => new RegExp(`\\b${name}\\b`, "i").test(commands)))
-      issue = "WolvenKit CLI does not expose the required build and verification commands.";
-  }
-  wolvenKitCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
-  return issue;
+  const probe = probeWolvenKitCli(path);
+  return probe.ok ? null : probe.issue;
 };
 const stampKey = (path: string) => { const stamp = statSync(path); return `${path}|${stamp.size}|${stamp.mtimeMs}`; };
 async function run(path: string, args: string[], timeoutMs: number) {
@@ -91,25 +77,8 @@ function once(key: string, work: () => Promise<void>): Promise<void> {
 /** The same checks as probeWolvenKit/probeBun without blocking the event loop; one shared run per tool. */
 export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
   const jobs: Promise<void>[] = [];
-  if (settings.wolvenKitCli && file(settings.wolvenKitCli)) {
-    const path = settings.wolvenKitCli, key = stampKey(path);
-    const cached = wolvenKitCache.get(key);
-    if (!cached || Date.now() >= cached.until) jobs.push(once(`wk:${key}`, async () => {
-      let issue: string | null = null;
-      try {
-        const version = await run(path, ["--version"], 15_000);
-        if (version.code !== 0 || !/\b(?:8\.17\.4|9\.0\.1)\b/.test(version.stdout + version.stderr))
-          issue = "WolvenKit CLI must be a validated 8.17.4 or 9.0.1 installation.";
-        else {
-          const help = await run(path, ["--help"], 15_000);
-          const commands = help.stdout + help.stderr;
-          if (help.code !== 0 || !["import", "export", "convert", "pack", "extract"].every(name => new RegExp(`\\b${name}\\b`, "i").test(commands)))
-            issue = "WolvenKit CLI does not expose the required build and verification commands.";
-        }
-      } catch { issue = "WolvenKit CLI could not complete its version and command checks."; }
-      wolvenKitCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
-    }));
-  }
+  // WolvenKit is checked by the shared runner, which keeps one cache and one run per file.
+  if (settings.wolvenKitCli && file(settings.wolvenKitCli)) jobs.push(probeWolvenKitCliAsync(settings.wolvenKitCli).then(() => {}));
   const bun = settings.bunExecutable || process.execPath;
   if (file(bun)) {
     const key = stampKey(bun), cached = bunCache.get(key);
@@ -126,9 +95,9 @@ export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
 }
 /** Readiness-path probes: answer from the cache, or start a background check and say so. */
 export const cachedWolvenKitProbe: WolvenKitProbe = path => {
-  const cached = wolvenKitCache.get(stampKey(path));
-  if (cached && Date.now() < cached.until) return cached.issue;
-  void warmBuildProbes({ wolvenKitCli: path } as LocalSettings).catch(() => {});
+  const cached = cachedWolvenKitProbeResult(path);
+  if (cached) return cached.ok ? null : cached.issue;
+  void probeWolvenKitCliAsync(path).catch(() => {});
   return PROBE_PENDING;
 };
 export const cachedBunProbe: BunProbe = path => {
@@ -180,7 +149,8 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
         return "The packaged build tools failed integrity checks.";
     }
   } catch { return "The packaged build tools are unavailable."; }
-  if (!settings.wolvenKitCli || !file(settings.wolvenKitCli)) return "Select a WolvenKit CLI executable for Build.";
+  if (!settings.wolvenKitCli || !file(settings.wolvenKitCli))
+    return "WolvenKit isn't set up yet. XF Studio can download it for you from the 3D preview card.";
   if (!signature(settings.wolvenKitCli, "MZ")) return "The selected WolvenKit CLI is not a Windows executable.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
   catch { return "WolvenKit CLI could not complete its version and command checks."; }

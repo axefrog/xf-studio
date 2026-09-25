@@ -4,8 +4,15 @@
  * cancel, polls while it runs, and turns the state into plain-language view facts.
  * The desktop bootstrap renders them; Studio listens for the two window events below.
  */
+import { wolvenKitCard, type WolvenKitCardAction, type WolvenKitLink, type WolvenKitSetupState } from "./wolvenkit-setup";
+
 export const PREVIEW_STATUS_EVENT = "xfs-desktop-preview-status";
 export const PREVIEW_READY_EVENT = "xfs-desktop-preview-ready";
+/**
+ * The host's setup changed outside Studio's own setup panel (a game folder or WolvenKit chosen,
+ * WolvenKit downloaded, the preview prepared): Studio re-reads its setup, so Build availability follows.
+ */
+export const HOST_SETUP_CHANGED_EVENT = "xfs-host-setup-changed";
 export type PreviewStatusDetail = { message: string };
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";
@@ -31,23 +38,35 @@ export function isPreviewState(value: unknown): value is PreviewState {
     typeof state.message === "string" && Array.isArray(state.needs) && typeof state.canPrepare === "boolean" && typeof state.canCancel === "boolean";
 }
 
+export type PreviewCardAction = "prepare" | "cancel" | "setup" | "use-game" | "retry" | WolvenKitCardAction;
 export type PreviewView = {
   title: string;
   body: string;
-  /** 0–1 while preparing, null otherwise. */
+  /** 0–1 while preparing or downloading, null otherwise. */
   progress: number | null;
   step: string | null;
-  primary: { label: string; action: "prepare" | "cancel" | "setup" | "use-game" | "retry" } | null;
+  primary: { label: string; action: PreviewCardAction } | null;
+  secondary: { label: string; action: PreviewCardAction } | null;
+  /** Official pages the card offers (opened by the host). */
+  links: { label: string; link: WolvenKitLink }[];
   /** Show the card at all (hidden when the preview is ready). */
   visible: boolean;
   /** One short sentence for the head viewport while the preview is unavailable. */
   viewport: string;
 };
 
-/** Pure: the plain-language card for one host state, plus an optional detected game folder. */
-export function previewView(state: PreviewState, detectedGame: string | null = null): PreviewView {
+/**
+ * Pure: the plain-language card for one host state, plus an optional detected game folder and the
+ * WolvenKit setup state. While the preview waits only for WolvenKit, WolvenKit's own card is shown.
+ */
+export function previewView(state: PreviewState, detectedGame: string | null = null, wolvenKit: WolvenKitSetupState | null = null): PreviewView {
+  if (state.phase === "needs-setup" && !state.needs.includes("game") && state.needs.includes("wolvenkit") && wolvenKit && wolvenKit.phase !== "ready") {
+    const card = wolvenKitCard(wolvenKit);
+    return { title: card.title, body: card.body, progress: card.progress, step: card.step, primary: card.primary, secondary: card.secondary,
+      links: card.links, visible: card.visible, viewport: card.viewport };
+  }
   const view = previewCard(state, detectedGame);
-  return { ...view, viewport: viewportMessage(state) };
+  return { secondary: null, links: [], ...view, viewport: viewportMessage(state) };
 }
 
 function viewportMessage(state: PreviewState): string {
@@ -55,7 +74,7 @@ function viewportMessage(state: PreviewState): string {
     case "ready": return "";
     case "preparing": return "Preparing the 3D preview from your Cyberpunk 2077 files…";
     case "needs-setup": return state.needs.includes("game") ? "The 3D preview needs your Cyberpunk 2077 game folder."
-      : "The 3D preview needs WolvenKit CLI. Add it in Build setup.";
+      : "The 3D preview needs WolvenKit.";
     case "blocked": return "The 3D preview can't be built for this game version yet.";
     case "failed": return state.code === "preview_cancelled" ? "The 3D preview wasn't prepared. You can start it again at any time."
       : "The 3D preview couldn't be prepared. Try again from the card below.";
@@ -63,7 +82,7 @@ function viewportMessage(state: PreviewState): string {
   }
 }
 
-function previewCard(state: PreviewState, detectedGame: string | null): Omit<PreviewView, "viewport"> {
+function previewCard(state: PreviewState, detectedGame: string | null): Omit<PreviewView, "viewport" | "secondary" | "links"> {
   const hidden = { title: "", body: "", progress: null, step: null, primary: null, visible: false };
   switch (state.phase) {
     case "ready": return hidden;
@@ -79,7 +98,7 @@ function previewCard(state: PreviewState, detectedGame: string | null): Omit<Pre
           ? { title: "Turn on the 3D preview", body: `We found Cyberpunk 2077 at ${detectedGame}. XF Studio builds the 3D head from your own game files and changes nothing in your game.`,
             progress: null, step: null, primary: { label: "Use this folder", action: "use-game" }, visible: true }
           : { title: "Turn on the 3D preview", body: state.message, progress: null, step: null, primary: { label: "Choose game folder", action: "setup" }, visible: true };
-      return { title: "The 3D preview needs WolvenKit", body: state.message, progress: null, step: null, primary: { label: "Open Build setup", action: "setup" }, visible: true };
+      return { title: "The 3D preview needs WolvenKit", body: state.message, progress: null, step: null, primary: { label: "Set up WolvenKit…", action: "wolvenkit-consent" }, visible: true };
     case "blocked":
       return { title: "The 3D preview can't be built for this game version", body: state.message, progress: null, step: null,
         primary: { label: "Try again", action: "retry" }, visible: true };
