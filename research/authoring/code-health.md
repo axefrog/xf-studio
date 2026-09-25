@@ -43,3 +43,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - Built-in eye plate derivation (`eye-plate-*.ts`), 25 September 2026.
 - Install/MO2 detection and framework version check, 25 September 2026.
 - Input bindings, hints and cursors (`input-bindings.ts`, `studio-ui/input-hints.ts`), 25 September 2026.
+
+## Fixed in claude/cleanup-pipeline
+
+- **PIPE-13:** a new Authoring workflow runs `bun test`, `bun run check` and `bun run build` on Ubuntu and the desktop typecheck (Electrobun devkit) and `bun test tests` on Windows for pushes to `main` and pull requests touching the authoring source. `XFS_REQUIRE_ORACLES=1` turns oracle, game-integration and declared private-asset skips into failures for release runs.
+- **PIPE-02, PIPE-16:** the independent verifier unbundles its own copy of the archive, checks every member hash, then runs its own WolvenKit serialize and texture export on those members and the plate inputs; it parses the `.archive.xl` structurally, re-hashes plate inputs at the end, and takes the morph target count from the plate recipe. The builder no longer writes the round trip or texture export.
+- **PIPE-01:** the built-in plate is cut from the head the launch route loads (generic resolver plus `.xl` patches), with topology gates, provenance in the plate and package manifests, a cache key over that provenance, a named `plate_source_modded` stop and the `XFS_EYE_PLATE_HEAD=base-game` escape hatch.

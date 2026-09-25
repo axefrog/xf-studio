@@ -144,6 +144,9 @@ export function verifyEyePlate(recipe: EyePlateRecipe, headMesh: Doc, headMorph:
   const plateTargets = diffs(plateMorph.Data.RootChunk.blob.Data);
   const names = (doc: Doc) => doc.Data.RootChunk.targets.map((target: Doc) => `${target.name.$value}_${target.regionName.$value}`);
   check(JSON.stringify(names(plateMorph)) === JSON.stringify(names(headMorph)), "morph target names or order differ");
+  // Target metadata (bone names, regions) must be the head's own, e.g. a morph fix that renames target bones.
+  check(JSON.stringify(plateMorph.Data.RootChunk.targets) === JSON.stringify(headMorph.Data.RootChunk.targets),
+    "morph target metadata differs from the source head");
   check(plateTargets.targets.length === recipe.selection.morphTargetCount, "morph target count differs");
   check(JSON.stringify(plateTargets.quantization) === JSON.stringify(headTargets.quantization), "morph delta quantization differs");
   const plateOf = new Map(vertexIds.map((id, index) => [id, index]));

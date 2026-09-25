@@ -78,3 +78,15 @@ test("the character resolver keeps its rules pure and all host access in resolve
     expect(code, `${name} reaches the host`).not.toMatch(/\bBun\.(?:spawn|file|write)|\bprocess\.env\b/);
   }
 });
+
+test("the eye plate reaches the launch route only through its head-source port", () => {
+  // The head-source policy is pure: resolver rules in, JSON documents in, no host access.
+  for (const dependency of imports(source("eye-plate-head-source")))
+    expect(dependency, `eye-plate-head-source imports ${dependency}`).not.toMatch(
+      /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|process-tree|eye-plate-wolvenkit|eye-plate-head-resolver))$/);
+  // The application service owns the policy; discovery, indexes and WolvenKit stay in adapters.
+  for (const dependency of imports(source("eye-plate-service")))
+    expect(dependency, `eye-plate-service imports ${dependency}`).not.toMatch(
+      /^(node:child_process|\.\/(?:resolver-host|source-discovery|process-tree|eye-plate-wolvenkit|eye-plate-head-resolver))$/);
+  expect(imports(source("eye-plate-head-resolver"))).toContain("./resolver-host");
+});

@@ -11,8 +11,11 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- The built-in eye plate is now cut from the head your game actually loads for the launch route in Local setup, including a head supplied or adjusted by an installed mod, so the makeup follows that head. If a head mod changes the head in a way XF Eye Artistry does not support yet, Build stops and names the mod; the message explains how to build anyway.
+
 ### Fixes and under the hood
 
+- Build's independent check now unpacks and converts the finished archive itself instead of reusing the builder's own conversions, and checks the ArchiveXL file line by line, so fewer kinds of faulty output can slip through.
 - **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
 
 ## 0.1.0-alpha.1

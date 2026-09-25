@@ -7,7 +7,8 @@ import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild } from "../src/package-action";
 import type { LocalSettings } from "../src/local-settings";
-import { EyePlateError, ensureEyePlate, type EyePlateResult } from "../src/eye-plate-service";
+import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateResult } from "../src/eye-plate-service";
+import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
 import { runProcessTree } from "../src/process-tree";
 
@@ -139,8 +140,16 @@ type BuildOutcome = { kind: "success"; result: PackageBuild } |
 
 /** Prepares the verified built-in eye plate for one Build; injectable for host tests. */
 export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, signal: AbortSignal) => Promise<EyePlateResult>;
+/**
+ * The plate is cut from the head the saved launch route loads (base game, or a mod's head when its topology
+ * matches). XFS_EYE_PLATE_HEAD=base-game in the app's environment is the documented escape hatch.
+ */
 export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
-  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal });
+  gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal,
+  headSource: createInstalledHeadSource({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli! },
+  resolve(cacheRoot, "resolver")),
+  headOverride: eyePlateHeadOverride(process.env) });
 
 /** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,
