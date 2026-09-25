@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `4afea26` | 2026-09-26 | Platform step 5: facades, live features, `app.transaction`, view contributions, renames, locked looks, spec limits | 0 High, 2 Medium, 9 Low (CORE-45..49, PIPE-44..45, UI-52..55). No performance regression. Fixes in claude/cleanup-platform3 |
 | `90b8602` | 2026-09-26 | Layered material and resolver-fed piercings (rendering, resolver, presentation) | 1 High (PIPE-40), 6 Medium, 8 Low (PIPE-40..43, PREV-62..68, UI-48..51). UI-02 and PIPE-11's piercing part confirmed fixed. Open Highs 2. Fixes in claude/cleanup-layered |
 | `4bf688a` | 2026-09-26 | Authored plate blend and skin light (rendering) | 0 High, 1 Medium, 4 Low (PREV-57..61). Matches the export plan and the game model otherwise; idle draws nothing. Fixes in claude/cleanup-render3 |
 | `4bf688a` | 2026-09-26 | Platform steps 3–4 and the platform cleanup (core); plate blend and skin light reviewed separately | Core: 0 High, 2 Medium, 5 Low (CORE-38..44). All fixed in claude/cleanup-platform2 |
@@ -93,6 +94,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-29 | Med | Core (design) | Nine non-root modules import `compose/studio-registry` as a service locator; the boundary test only checks direct `features/` imports | **Fixed** (claude/cleanup-platform, 26 Sep): registry, part registry and live feature injected from the startup and server roots; only `compose/` and roots import `compose/`; the feature-import test is transitive |
 | CORE-38 | Med | Core | Export and Build plan save to the library first, which the CORE-30 guard refuses for any collection needing `xfs/collection-2`, so the export fails too and its message says to export to a file (`collection-service.ts:324-325`). Every multi-feature collection will hit this | **Fixed** (claude/cleanup-platform2, 26 Sep): the draft is saved first only when the library takes it; otherwise its snapshot is exported unsaved, with a plain message; test with the real library |
 | CORE-39 | Med | Core (data) | A one-feature history is always stored as whole parts (12–17× the `xfs/look-history-1` form), so `fitWorkspace` drops steps instead of switching form: a heavy 32-layer look keeps 4 of 80 steps, below the floor of 10 (`document.ts:380`, `workspace-budget.ts:98-144`) | **Fixed** (claude/cleanup-platform2, 26 Sep): `fitWorkspace` stores every history look-level before dropping steps (whole parts kept whenever they fit); the heavy look keeps all 80; the desktop host keeps that form |
+| CORE-45 | Med | Core (data) | Reading with `keep` sends any preset with a truthy `locked` key straight to `keepLook`, skipping part validation, and import reads untrusted files that way (`platform/core/document.ts:200`, `collection-service.ts:374`): an imported file with `"locked": "x"` and a garbage body is accepted, and after autosave the workspace no longer restores | Open (claude/cleanup-platform3) |
+| CORE-46 | Med | Core | `redoValid()` trusts the eye-makeup geometry revision alone, so a feature change with Undo policy `none` leaves Redo offered and Redo then silently overwrites it (`authoring-history.ts:165`, `studio-application.ts:479`) | Open (claude/cleanup-platform3) |
 | PREV-50 | Med | Rendering | Decal colour is solved for the game's square-root blend in linear light, but the Studio stage draws straight to the sRGB canvas, so the curve is applied twice (dark liner 115 → 73; lipstick 119 → 97 green); only the Creator preset is linear (`face-decal-material.ts:227-236`, brow path) | Fixed in claude/cleanup-render2 (see below) |
 | PREV-57 | Med | Rendering | The plate composite stores the facet moment per layer, not per merged texel, so a faceted layer over another partial layer widens roughness even at mip 0, which the export never does; lower mips weight by coverage where the export box-averages (`plate-blend.ts:189-190, 305, 312-314`). Shimmer 50 % over Glossy 50 %: export roughness 0.253, preview 0.33–0.37 | **Fixed** (claude/cleanup-render3, 26 Sep) |
 | PIPE-41 | Med | Resolver | `LAYERED_SLOTS` (only piercings and eyes draw layered chunks) guesses where each chunk's `renderMask` answers: shadow-only chunks carry `MCF_RenderInShadows` alone; a visible layered chunk on CCXL hair or an accessory is dropped with no limit code (`character-detail-plan.ts:166,178`) | Open (claude/cleanup-layered) |
@@ -188,6 +191,16 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 - **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
+- **CORE-47..49, PIPE-44..45, UI-52..55** (platform step 5 review at `4afea26`), Open (claude/cleanup-platform3):
+  - **CORE-47:** a locked look's kept memory (its whole stored Undo history) is written whole in every copy, including pinned recovery drafts and removed entries, and `trimLook` can't reduce it: an over-budget workspace stays over budget.
+  - **CORE-48:** `app.transaction` accepts an async body and commits before its awaited edits run.
+  - **CORE-49:** discarding a draft from the recovery queue doesn't say it holds a locked look that exists nowhere else (it can't be saved to the library).
+  - **PIPE-44:** `hasPackageableLook` counts locked looks, so an all-locked draft offers Check, Build and Export plan, which then fail with a bare error.
+  - **PIPE-45:** the Export plan message says the locked look "is exported exactly as it came" though the plan omits it, and the plan file has no `omitted` list.
+  - **UI-52:** facade isolation is not used or enforced (every view dispatches through `port.authoring`); `featureStateOf` hard-codes `"eye-makeup"`.
+  - **UI-53:** views infer "locked" from `editable().code === "unavailable"`; any future `unavailable` refusal would show the newer-version notice.
+  - **UI-54 (extends UI-10):** hard-coded 0–1 ranges for shift strength, size variation and orientation spread, the flake density `/5000` scale, `irregularFailure` and the Satin alias in `target-menus.ts` remain in the UI.
+  - **UI-55:** "recipe" wording survives the Undo rename in user text ("Undo the last recipe change") and in two design docs.
 - **PREV-65..68, PIPE-43, UI-49..51** (layered material review at `90b8602`), Open (claude/cleanup-layered):
   - **PREV-65:** a failed bake is detected only by a thrown exception; three.js logs compile errors and incomplete framebuffers, so a bad GPU reports `baked` with black maps.
   - **PREV-66:** the bake materials are created and disposed per chunk, so every bake recompiles 3 programs (15 compiles for five piercing chunks per V switch).
@@ -204,9 +217,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- **View contributions** (`src/studio-ui/views/`, claude/platform-step5): the shell's and eye makeup's panel catalogues, slots and activity sources, and the panel factories; the shell's layouts derive from them.
-- **Live feature documents and look transactions** (`src/platform/core/live-features.ts`, the generic feature handlers and `transaction` in `studio-application.ts`, the live-feature plumbing in `authoring-document.ts`, `collection-session.ts`, `collection-workspace.ts` and `workspace-state.ts`; claude/platform-step5).
-- **Per-look locking of newer data** (NewerPolicy `keep`, `Look.locked`, `KEPT_MEMORY` in `platform/core/document.ts`, with its readers and writers across the collection, workspace, budget, library and desktop store; claude/platform-step5).
+- None.
 
 ## Fixed in claude/platform-step5
 
