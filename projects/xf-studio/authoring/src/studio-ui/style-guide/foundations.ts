@@ -24,7 +24,7 @@ export function foundations(css: string) {
       specimen: `<ol class="principles">
         <li><strong>Truth before polish.</strong> Never show stale, partial, unverified or preview-only results as ready, packaged or game-tested. Status words come from the application, not from the control.</li>
         <li><strong>One accent, one meaning.</strong> Yellow marks commitment and focus (primary action, active tab, keyboard focus). Cyan marks what is live or selected. Everything else is graphite.</li>
-        <li><strong>The stage is neutral.</strong> The 3D head and UV map sit on the same neutral surround in both themes so colour judgement never shifts with the chrome.</li>
+        <li><strong>The stage is neutral.</strong> The 3D head and UV map sit on a near-achromatic grey surround, light in the light theme and dark in the dark theme, so colour judgement isn't skewed by coloured chrome.</li>
         <li><strong>Every affordance is an action.</strong> Buttons, menus, shortcuts, drags and the command palette call the same typed application action and show the same disabled reason.</li>
         <li><strong>Panels are tools, not places.</strong> Any panel can dock, float, tab or join a magnetic composite; nothing depends on a fixed sidebar.</li>
         <li><strong>Density with air.</strong> Compact 28 px controls and 32 px rows, but generous section spacing and one idea per section.</li>
@@ -43,7 +43,7 @@ export function foundations(css: string) {
       what: "WCAG contrast ratios computed from the tokens in studio.css each time this guide is generated. Text needs 4.5:1; control boundaries, selection and focus need 3:1.",
       when: "Check this table after any token change; the guide build fails the style-guide test if a pair drops below its minimum.",
       combine: "State colours are always paired with words or icons, so contrast is never the only carrier of meaning.",
-      adapt: "Both themes are listed; the stage keeps its own fixed palette for overlays.",
+      adapt: "Both themes are listed; stage overlays use the theme-aware --stage-* tokens.",
       drives: "Parsed light-dark(oklch…) token values; the conversion is OKLCH → linear sRGB → relative luminance." }),
     pattern({ id: "f-type", title: "Typography", status: "implemented",
       specimen: `<div class="type-specimen">
