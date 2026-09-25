@@ -3,11 +3,13 @@ import { InstallDetectionActions, type InstallDetectionTransport } from "../src/
 import { createInstallDetectionHandler } from "../src/install-detection-server";
 import type { DetectionHostPort } from "../src/install-detection";
 import { DETECTION_DESCRIPTORS } from "../src/studio-action-descriptors";
+import type { FrameworkHostPort, FrameworkVersionCheck } from "../src/framework-versions";
 
 const games = { schema: "xfs/game-install-detection-1", supported: true, candidates: [], rejected: [], issues: [], limitations: [] };
 
 test("detection actions are catalogued read-only host requests", () => {
-  expect(Object.keys(DETECTION_DESCRIPTORS).sort()).toEqual(["detect.gameInstalls", "detect.mo2Instances"]);
+  expect(Object.keys(DETECTION_DESCRIPTORS).sort()).toEqual(["detect.frameworkVersions", "detect.gameInstalls",
+    "detect.mo2Instances"]);
   for (const descriptor of Object.values(DETECTION_DESCRIPTORS))
     expect(descriptor).toEqual({ scope: ["host"], effect: "read", payload: {}, async: true, cancellable: false });
   const actions = new InstallDetectionActions(null);
@@ -52,4 +54,32 @@ test("host endpoint is GET-only, same-origin and accepts only fixed targets", as
   expect((await at("/api/install-detection?target=games", { method: "POST" })).status).toBe(405);
   expect((await at("/api/install-detection?target=games", { headers: { Origin: "http://evil.example" } })).status).toBe(403);
   expect((await handle(new Request("http://localhost:4317/api/install-detection?target=games"))).status).toBe(403);
+  // Without a settings source the host cannot check frameworks, and the browser never supplies paths.
+  expect(await (await at("/api/install-detection?target=frameworks")).json()).toMatchObject({ code: "unavailable" });
+  expect((await at("/api/install-detection?target=frameworks&gameRoot=C:\\")).status).toBe(400);
+});
+
+test("the framework check reads host-owned settings only and publishes a detached report", async () => {
+  const port: FrameworkHostPort = { readText: () => null, isFile: path => path.endsWith("Cyberpunk2077.exe"),
+    readBytes: () => null };
+  const reads: string[] = [];
+  const handle = createInstallDetectionHandler(undefined, { port: () => port, settings: () => {
+    reads.push("settings");
+    return { gameRoot: "C:\\Game", launchRoute: "direct", mo2Root: null, mo2ProfileId: null };
+  } });
+  const response = await handle(new Request("http://127.0.0.1:4317/api/install-detection?target=frameworks"));
+  const report = await response.json() as FrameworkVersionCheck;
+  expect(report).toMatchObject({ schema: "xfs/framework-version-check-1", selectedRoute: "direct" });
+  expect(report.routes.map(route => route.route)).toEqual(["direct"]);
+  expect(report.routes[0]!.verdicts.find(row => row.framework === "archivexl")?.status).toBe("missing");
+  expect(JSON.stringify(report)).not.toContain("C:\\\\Game");
+  expect(reads).toEqual(["settings"]);
+
+  const actions = new InstallDetectionActions(async target => ({ ok: true, status: 200,
+    data: target === "frameworks" ? report : games as any }));
+  expect(actions.capability({ kind: "detect.frameworkVersions" })).toEqual({ available: true });
+  expect(await actions.dispatch({ kind: "detect.frameworkVersions" })).toEqual({ ok: true });
+  const snapshot = actions.snapshot();
+  (snapshot.frameworks as any).routes.length = 0;
+  expect(actions.snapshot().frameworks?.routes).toHaveLength(1);
 });

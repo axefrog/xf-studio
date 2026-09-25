@@ -1,15 +1,17 @@
 import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { FrameworkVersionCheck } from "./framework-versions";
 import type { LocalSettings } from "./local-settings";
 
-export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" | "install" | "updates";
+export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" |
+  "frameworks" | "install" | "updates";
 export type ReadinessIssue = { code: string; reason: string };
 export type CapabilityReadiness = { ready: boolean; issues: ReadinessIssue[]; limits: string[] };
 export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
 /** Last recorded built-in eye plate outcome for this game folder (see `eyePlateReadiness`). */
 export type EyePlateHostReadiness = { issue: ReadinessIssue | null; limit: string };
 export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean;
-  eyePlate?: EyePlateHostReadiness };
+  eyePlate?: EyePlateHostReadiness; frameworks?: FrameworkVersionCheck };
 const available = (path: string | null, kind: "file" | "directory") => {
   if (!path) return false;
   try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); }
@@ -27,6 +29,17 @@ const writableDirectory = (path: string) => {
     return true;
   } catch { return false; }
 };
+
+/** Framework guidance for the route the user launches with. Advisory: it never blocks Check or Build. */
+function frameworkReadiness(check: FrameworkVersionCheck | undefined): CapabilityReadiness {
+  if (!check) return item([issue("framework_check_unavailable", "This host can't check frameworks.")]);
+  const route = check.routes.find(row => row.route === check.selectedRoute) ?? check.routes[0];
+  if (!route) return item([issue("framework_check_unavailable", "This host can't check frameworks.")]);
+  if (!route.available) return item([issue("framework_route_unavailable", route.problem ?? "Frameworks couldn't be checked.")],
+    [...check.limitations]);
+  return item(route.verdicts.filter(row => row.message).map(row => issue(`framework_${row.status.replace("-", "_")}`, row.message!)),
+    [...route.frameworks.flatMap(row => row.notes), ...check.limitations]);
+}
 
 /** Advisory host readiness. Operations must revalidate paths and versions immediately before acting. */
 export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatures = { updater: false, installer: false }): LocalReadiness {
@@ -97,6 +110,7 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
     previewStorage: item(previewIssues, ["An unset location uses the host's private default once preview storage is connected."]),
     build: item(buildIssues, ["Path presence does not prove tool-version compatibility or game rendering.",
       ...(host.eyePlate ? [host.eyePlate.limit] : [])]),
+    frameworks: frameworkReadiness(host.frameworks),
     install: item(installIssues, ["A verified package and conflict/receipt validation are still required."]),
     updates: item(host.updater ? [] : [issue("updater_unavailable", "This host does not provide desktop updates.")]),
   };
