@@ -148,7 +148,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### Alliekat
 
-[Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787). Supplies the saved character's brow colour gradient; comparing it with the base game's version taught us that an installed override need not change the visible colour. Private local reference only.
+[Natural Hair Tones](https://www.nexusmods.com/cyberpunk2077/mods/15787). Supplies the saved character's brow colour gradient; comparing it with the base game's version taught us that an installed override need not change the visible colour. Its replacements of the shared hair colour profiles showed how one profile colours both V and every NPC wearing that colour, and how a replacement that keeps the base game's stop positions changes where the light and dark parts of a strand fall. Private local reference only.
 
 ### Appearance Menu Mod
 
