@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
-    <img src="docs/images/readme/banner-light.svg" width="720" alt="XF Studio: make Cyberpunk 2077 your own">
+    <img src="docs/images/readme/banner-light.svg" width="720" alt="XF Studio">
   </picture>
 </h1>
 
