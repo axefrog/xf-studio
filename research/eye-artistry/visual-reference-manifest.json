@@ -4,7 +4,7 @@
   "description": "User-provided current in-game V comparison references; inspected locally without changing originals.",
   "images": [
     {
-      "path": "F:\\Media\\Other\\Cyberpunk 2077\\AI\\photographs\\1\\prompt\\1.jpg",
+      "path": "a supplied local photograph (personal path withheld): 1.jpg",
       "sha256": "13094bfdb54bf4ce984b41eaf2aa37aedb1b6d6c5dee2f230da48deb22776747",
       "bytes": 508432,
       "lastWriteTimeUtc": "2026-09-11T03:53:27.4318434Z",
@@ -12,7 +12,7 @@
       "height": 1600
     },
     {
-      "path": "F:\\Media\\Other\\Cyberpunk 2077\\AI\\photographs\\1\\prompt\\6.jpg",
+      "path": "a supplied local photograph (personal path withheld): 6.jpg",
       "sha256": "69f8f334444260f7ebab70d4e9556903967944e6e10002b940aaeafb5a649340",
       "bytes": 263430,
       "lastWriteTimeUtc": "2026-09-11T05:47:48.7589607Z",

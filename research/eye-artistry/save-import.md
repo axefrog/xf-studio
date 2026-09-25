@@ -6,7 +6,7 @@ The saved Arkhe brow style 18 and Soft Natural lashes have now been traced into 
 
 ## User-provided visual references
 
-Two supplied views show the reference V's current in-game appearance: [close view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/1.jpg) and [wider view](F:/Media/Other/Cyberpunk%202077/AI/photographs/1/prompt/6.jpg). Both are 2000×1600. Original paths, hashes and file metadata are recorded in [reference manifest](visual-reference-manifest.json); originals were not altered.
+Two supplied views show the reference V's current in-game appearance: a close view and a wider view (private local photographs). Both are 2000×1600. Original paths, hashes and file metadata are recorded in [reference manifest](visual-reference-manifest.json); originals were not altered.
 
 Visible comparison targets: long dark cool-toned hair, muted gray/green irises, relatively narrow dark brows, pronounced upper/lower lashes, dark teal/charcoal eye makeup, soft pale skin and subdued mauve lips. These are image observations under the photographed lighting, not decoded material values. The current preview has conspicuously warmer/yellower study eyes, different skin detail/specularity and no hair; it should not be presented as the finished likeness. Brow thickness/coverage also needs comparison after implementing the actual material channels, rather than editing geometry to compensate prematurely.
 
