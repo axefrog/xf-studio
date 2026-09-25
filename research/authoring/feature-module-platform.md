@@ -351,6 +351,26 @@ Saves store `.app` depot-path hash, definition and option name, none of which de
 - (c) a saved choice survives a product or folder rename;
 - (d) selector position changes after a move are cosmetic.
 
+## 6a. Guidance: tours, spotlights and help (planned)
+
+A data-driven guidance system serves first-run onboarding, on-demand "show me how" tours and per-release "what's new" tours.
+
+- **Anchors.** Panels, controls and commands register stable named anchors (e.g. `uv.canvas`, `eye-makeup.finish.picker`, `layers.add`) through the same registry as panels and actions. Tours target anchors, never CSS selectors, so docking and layout changes don't break them. A missing anchor means the step is skipped, never a crash.
+- **Tours as data.**
+
+```ts
+type TourStep = { anchor?: AnchorId; spotlight?: "anchor" | "none"; placement?: "auto" | Side;
+  content: HelpContent;                 // markdown-lite, localisable later
+  buttons: { label: string; action?: StudioCommand | "next" | "back" | "skip" | "finish" }[];
+  advanceWhen?: AppCondition };          // typed event/capability predicate, e.g. { event: "layer.added" }
+type Tour = { id: string; title: string; version?: string /* what's-new */; audience: "onboarding" | "howto" | "whats-new";
+  steps: TourStep[] };
+```
+
+- **Contributions.** Feature modules contribute `tours` and `help` topics alongside panels and actions. The platform owns the spotlight overlay (theme-aware dimming or lightening), the callout component, the tour runner, the Help view, and progress kept in UI preferences.
+- **Help view.** Searchable topics, the keyboard and mouse reference generated from input bindings, and the list of available tours. "What's new" tours are keyed to release versions and the changelog, shown once after an update and replayable from Help.
+- **Actions.** Tour buttons dispatch ordinary typed actions ("Do it for me"), so tours never bypass validation or Undo.
+
 ## 7. Boundary enforcement
 
 Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walker:
