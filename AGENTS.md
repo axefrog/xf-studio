@@ -115,9 +115,9 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 ## Expanded eye plate
 
 - **Repairs are authorised.** The maintainer is an amateur Blender user. Inspect topology, normals, UVs, skin clearance and facial/eyelid deformation, and fix the owned master with evidence. Preserve the historical source and design intent.
-- **Provenance.** The maintainer cut the plate from the larger head mesh, and exact head-surface correspondence is verified. Preserve inherited deformation and shading. Future sculpting or offsets must revalidate that correspondence.
+- **Provenance.** The maintainer cut the plate from the larger head mesh, and exact head-surface correspondence is verified. Preserve inherited deformation and shading. Future sculpting or offsets beyond the uniform decal lift must revalidate that correspondence.
 - **Skin bytes.** For head-cut geometry, preserve native skin bytes in **both** the mesh and the morph resource's embedded base buffer through the verified vertex mapping. Normalised GLB weights can quantise differently on reimport, and retaining eight influences alone does not prove identical deformation. Keep all morphs and independent clearance checks.
-- **Clearance work is paused pending in-game evidence.** Offline candidates, including morph-aware and subframe-checked ones, have not passed every gate; see [experiment 012](experiments/012-native-plate-bootstrap/README.md). Any new candidate must be morph-aware and finite-contact-aware and must preserve the skin-byte rule.
+- **Lift like vanilla decals.** In game (25 September) a plate coincident with the head broke up at close range. Every vanilla face decal is the head surface pushed out 0.40 mm along the head's normals, morph targets included, so Build lifts the plate the same way: positions only, skin bytes untouched. The cached plate stays the exact head cut, and the preview is unchanged. The 0.4 mm default awaits the [experiment 017](experiments/017-plate-depth/README.md) session, and the eyelid-contact gates from experiments 006/012 are still open. Any new candidate must be morph-aware and finite-contact-aware and must preserve the skin-byte rule.
 
 ## Technical contracts
 
