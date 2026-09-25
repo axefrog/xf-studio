@@ -160,3 +160,15 @@ test("a revision conflict reports its code without replacing the local draft", a
   expect(f.service.snapshot()!.revision).toBe(1);
   expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#13579b");
 });
+
+test("the first collection keeps every editor-memory field of the legacy workspace (historyTrimmed included)", async () => {
+  const f = fixture(), recipe = initialRecipe();
+  let editor: EditorSnapshot = { recipe, ...emptyMemory(), history: [structuredClone(recipe)], historyTrimmed: true };
+  const transport: CollectionTransport = { ...f.transport, list: async () => [] };
+  const service = new CollectionService(undefined, { selected: "", name: "Look" }, () => editor, value => editor = value, transport);
+  expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
+  const draft = service.view().draft!, memory = draft.editors[draft.selected!];
+  expect(memory).toMatchObject({ historyTrimmed: true, active: 0, selected: 0 });
+  expect(memory.history).toHaveLength(1);
+  expect("recipe" in memory).toBe(false);
+});

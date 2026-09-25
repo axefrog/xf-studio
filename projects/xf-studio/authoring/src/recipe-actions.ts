@@ -3,10 +3,12 @@ import { insertPathPoint } from "./path-edit";
 import { transformLayer } from "./shape-transform";
 import { isDirectGlint } from "./direct-glint-settings";
 import type { FieldSelection } from "./field-selection";
-import { defaultFlakes, isIrregular, type Flakes } from "./finish";
-import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, type GlitterModel } from "./glitter-model";
+import { canonicalFinish, defaultFlakes, isIrregular, type Flakes } from "./finish";
+import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
+  type GlitterChoices, type GlitterModel } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { clamp, DEFAULT_SHIFT, GAME_OPTICS_FINISHES, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
+import { requiredRecipeSchema } from "./recipe-schema";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "./validation-issues";
 
@@ -37,6 +39,17 @@ export type RecipeAction =
   | { kind: "shape.transform"; layerId: string; command: ShapeCommand; pivotIndex?: number }
   | { kind: "field.setOrigin"; layerId: string; fieldId: string; u: number; v: number }
   | { kind: "field.setVector"; layerId: string; fieldId: string; du: number; dv: number };
+/** Every recipe action kind. Typed as a record over the union so the compiler rejects a missing
+ * or unknown kind; the application routes and labels recipe actions from this list. */
+const RECIPE_ACTION_KIND_TABLE: Record<RecipeAction["kind"], true> = {
+  "layer.select": true, "point.select": true, "point.remove": true, "path.edit": true, "field.select": true,
+  "field.add": true, "field.remove": true, "field.clear": true, "field.setReach": true, "pigment.edit": true,
+  "softness.edit": true, "layer.setColor": true, "layer.setOpacity": true, "layer.setSymmetry": true,
+  "layer.setFinish": true, "layer.useGameOptics": true, "layer.setShift": true, "glitter.selectModel": true,
+  "glitter.setClassic": true, "glitter.setIrregular": true, "glitter.setDirect": true, "point.move": true,
+  "point.insert": true, "point.setTangent": true, "shape.transform": true, "field.setOrigin": true, "field.setVector": true,
+};
+export const RECIPE_ACTION_KINDS: ReadonlySet<string> = new Set(Object.keys(RECIPE_ACTION_KIND_TABLE));
 /** Whole-shape transform about a contour point (the selected point unless `pivotIndex` is given). */
 export type ShapeCommand = { kind: "translate"; du: number; dv: number } | { kind: "rotate"; radians: number } |
   { kind: "scale"; factor: number };
@@ -122,8 +135,10 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
   return { available: true };
 }
 
-const gameOptics = (finish: Layer["finish"]): GameOptics =>
-  finish === "iridescent" ? { model: "game-matched-1", shift: { ...DEFAULT_SHIFT } } : { model: "game-matched-1" };
+const gameOptics = (finish: Layer["finish"], shift: GameOptics["shift"] = DEFAULT_SHIFT): GameOptics =>
+  finish === "iridescent" ? { model: "game-matched-1", shift: { ...shift! } } : { model: "game-matched-1" };
+/** Actions that read or write per-layer editor memory (inactive Glitter models, Colour-shift settings). */
+const remembers = (kind: RecipeAction["kind"]) => kind === "glitter.selectModel" || kind === "layer.setFinish";
 
 /** Applies a single validated document/selection command without DOM or renderer access. */
 export function applyRecipeAction(state: RecipeActionState, action: RecipeAction,
@@ -135,7 +150,8 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   const next: RecipeActionState = { ...state, fieldSelection: { ...state.fieldSelection } };
   let changed: Layer = { ...layer };
   let effect: RecipeActionEffect["kind"] = "scheduled";
-  const nextChoices = action.kind === "glitter.selectModel" ? structuredClone(choices) : choices;
+  const nextChoices = remembers(action.kind) ? structuredClone(choices) : choices;
+  const unchanged = () => ({ state, choices, effect: { kind: "selection" as const, layerIndex: index }, changed: false });
   if (action.kind === "layer.select") {
     next.active = index; next.selected = 0; effect = "selection";
   } else if (action.kind === "point.select") {
@@ -171,17 +187,30 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   else if (action.kind === "layer.setOpacity") changed.opacity = action.opacity;
   else if (action.kind === "layer.setSymmetry") { changed.symmetry = action.symmetry; effect = "immediate"; }
   else if (action.kind === "layer.setFinish") {
-    if (action.finish !== "glitter" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes))) changed.flakes = defaultFlakes();
+    // Re-selecting the current finish keeps the layer exactly as it is (its optical model and
+    // Colour-shift settings included) and records no Undo step; only layer.useGameOptics
+    // moves an earlier-model layer to the game-matched model.
+    if (canonicalFinish(action.finish) === canonicalFinish(layer.finish)) return unchanged();
+    const key = `${presetId}/${layer.id}`, memory = { ...nextChoices[key] };
+    if (layer.optics?.shift) memory.shift = { ...layer.optics.shift };
+    if (action.finish !== "glitter" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes))) {
+      // Leaving Glitter keeps the active model's settings for when that model is chosen again.
+      const model = glitterModel(layer.flakes);
+      if (validGlitterSettings(model, layer.flakes)) memory[model] = structuredClone(layer.flakes!);
+      changed.flakes = defaultFlakes();
+    }
+    if (Object.keys(memory).length) nextChoices[key] = memory;
     changed.finish = action.finish; effect = "immediate";
     // Choosing a finish that has a game-matched model uses it; older layers keep theirs until switched.
     delete changed.optics;
-    if (GAME_OPTICS_FINISHES.includes(action.finish)) { changed.optics = gameOptics(action.finish); next.recipe = { ...next.recipe, schema: "xfs/recipe-11" }; }
+    if (GAME_OPTICS_FINISHES.includes(action.finish))
+      changed.optics = gameOptics(action.finish, validShiftSettings(memory.shift) ? memory.shift : DEFAULT_SHIFT);
   } else if (action.kind === "layer.useGameOptics") {
-    changed.optics = gameOptics(layer.finish); next.recipe = { ...next.recipe, schema: "xfs/recipe-11" }; effect = "immediate";
+    changed.optics = gameOptics(layer.finish); effect = "immediate";
   } else if (action.kind === "layer.setShift") {
     changed.optics = { ...layer.optics!, shift: { ...layer.optics!.shift!, [action.key]: action.value } };
   } else if (action.kind === "glitter.selectModel") {
-    if (glitterModel(layer.flakes) === action.model) return { state, choices, effect: { kind: "selection" as const, layerIndex: index }, changed: false };
+    if (glitterModel(layer.flakes) === action.model) return unchanged();
     next.recipe = parseRecipe(selectGlitterModel(state.recipe, layer.id, action.model, nextChoices, presetId));
     changed = next.recipe.layers[index];
     effect = "immediate";
@@ -214,8 +243,9 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     changed.fields = layer.fields.map(field => field.id === action.fieldId ? { ...field, du: action.du, dv: action.dv } : field);
   }
   if (effect !== "selection") {
-    const validated = parseRecipe({ ...next.recipe,
-      layers: next.recipe.layers.map((entry, i) => i === index ? changed : entry) });
+    const layers = next.recipe.layers.map((entry, i) => i === index ? changed : entry);
+    // One schema rule for every edit: the recipe moves up to what all its layers need, never down.
+    const validated = parseRecipe({ ...next.recipe, schema: requiredRecipeSchema({ schema: next.recipe.schema, layers }), layers });
     // Deferred layer renders use object identity; keep untouched layers' live identities.
     next.recipe = { ...validated, layers: state.recipe.layers.map((entry, i) => i === index ? validated.layers[i] : entry) };
   }
@@ -234,10 +264,10 @@ export class RecipeActions {
   subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   dispatch(action: RecipeAction, record = false) {
     const before = this.read(), result = applyRecipeAction(before, action, this.choices,
-      action.kind === "glitter.selectModel" ? this.presetId() : "draft");
+      remembers(action.kind) ? this.presetId() : "draft");
     if (!result.changed) return false;
     if (record && result.effect.kind !== "selection") this.history.checkpoint(before.recipe);
-    if (action.kind === "glitter.selectModel") Object.assign(this.choices, result.choices);
+    if (remembers(action.kind)) Object.assign(this.choices, result.choices);
     this.write(result.state, result.effect);
     for (const listener of this.listeners) listener(result.effect);
     return true;

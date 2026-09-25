@@ -11,7 +11,7 @@ const layerCommand: Record<string, string> = { add: "Add layer", duplicate: "Dup
 const simple: Record<string, string> = {
   "point.remove": "Remove point", "field.add": "Add warp", "field.remove": "Remove warp", "field.clear": "Reset warp pull",
   "field.setReach": "Warp reach", "layer.setColor": "Colour", "layer.setOpacity": "Opacity", "layer.setSymmetry": "Mirroring",
-  "layer.setFinish": "Finish", "layer.useGameOptics": "Game-matched finish", "layer.setShift": "Shift colour", "glitter.selectModel": "Glitter model", "glitter.setClassic": "Flake setting",
+  "layer.setFinish": "Finish", "layer.useGameOptics": "Game-matched finish", "glitter.selectModel": "Glitter model", "glitter.setClassic": "Flake setting",
   "glitter.setIrregular": "Flake setting", "glitter.setDirect": "Glint setting",
   "point.move": "Move point", "point.insert": "Add point", "point.setTangent": "Tangent",
   "field.setOrigin": "Move warp", "field.setVector": "Warp pull",
@@ -29,6 +29,8 @@ export function historyLabel(action: RecipeAction | LayerAction): HistoryLabel {
     actionKind: `layer.edit.${action.command.kind}`, ...("id" in action.command ? { layerId: action.command.id } : {}) };
   if (action.kind === "layer.setEnabled") return { label: action.enabled ? "Show layer" : "Hide layer",
     actionKind: action.kind, layerId: action.id };
+  if (action.kind === "layer.setShift") return { label: action.key === "strength" ? "Shift strength" : "Shift colour",
+    actionKind: action.kind, layerId: action.layerId };
   const command = "command" in action ? action.command.kind : undefined;
   return { label: (command && nested[command]) ?? simple[action.kind] ?? "Recipe change",
     actionKind: command ? `${action.kind}.${command}` : action.kind, layerId: action.layerId };

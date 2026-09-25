@@ -46,6 +46,21 @@ type RedoEntry = { encoded: string; label: HistoryLabel; id: HistoryEntryId; at?
 const stepId = (id: HistoryEntryId) => `step-${id}`;
 
 /**
+ * The one mapper from kept Undo entries (and redo-able steps, in Redo order) to a timeline.
+ * A host without `AuthoringHistory` has no Redo and passes none.
+ */
+export function historyTimeline(document: Pick<AuthoringDocument, "historyEntries" | "historyTrimmed">,
+  redo: readonly Pick<RedoEntry, "label" | "id" | "at">[] = []): HistorySnapshot {
+  const done: HistoryStep[] = document.historyEntries().map(entry => ({
+    ...(entry.label ?? UNKNOWN_HISTORY_LABEL), id: stepId(entry.id),
+    ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" }));
+  const undone: HistoryStep[] = redo.map(entry => ({
+    ...entry.label, id: stepId(entry.id), ...(entry.at === undefined ? {} : { at: entry.at }), state: "undone" }));
+  return { startId: HISTORY_START_ID, steps: [...done, ...undone], current: done.length - 1,
+    redoCount: undone.length, trimmed: document.historyTrimmed };
+}
+
+/**
  * User-level recipe Undo/Redo over the document's bounded Undo history.
  *
  * `revert` is the internal path for a cancelled gesture or form transaction and never
@@ -82,13 +97,7 @@ export class AuthoringHistory {
   }
   /** Detached timeline of kept and redo-able steps; see `HistorySnapshot`. */
   snapshot(): HistorySnapshot {
-    const done: HistoryStep[] = this.document.historyEntries().map(entry => ({
-      ...(entry.label ?? UNKNOWN_HISTORY_LABEL), id: stepId(entry.id),
-      ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" }));
-    const undone: HistoryStep[] = (this.canRedo() ? [...this.redoStack].reverse() : []).map(entry => ({
-      ...entry.label, id: stepId(entry.id), ...(entry.at === undefined ? {} : { at: entry.at }), state: "undone" }));
-    return { startId: HISTORY_START_ID, steps: [...done, ...undone], current: done.length - 1,
-      redoCount: undone.length, trimmed: this.document.historyTrimmed };
+    return historyTimeline(this.document, this.canRedo() ? [...this.redoStack].reverse() : []);
   }
   /** How many Undo or Redo steps reach `id`, or undefined when it is not a jump target now. */
   plan(id: string): HistoryJumpPlan | undefined {

@@ -3,10 +3,17 @@ import {defaultStudioIrregularFlakes, validStudioIrregularSettings, type Irregul
 import {defaultDirectGlintFlakes, defaultClusteredGlintFlakes, defaultFineSpeckleFlakes,
   isDirectGlint, type DirectGlintFlakes} from "./direct-glint-settings";
 import type {Layer, Recipe} from "./recipe";
+import {requiredRecipeSchema} from "./recipe-schema";
 
 export type GlitterModel = "classic" | "irregular" | "direct" | "clustered" | "fine";
 export type GlitterSettings = Flakes | IrregularFlakes | DirectGlintFlakes;
-export type GlitterChoices = Record<string, Partial<Record<GlitterModel, GlitterSettings>>>;
+/** Colour-shift settings of a game-matched Colour-shifting layer. */
+export type ShiftSettings = { color: string; strength: number };
+/** Editor memory for one layer (`<preset>/<layer>`): each inactive Glitter model's settings and the
+ * last Colour-shift settings, so switching away and back restores them. Never part of the recipe;
+ * stored in the workspace under its historical `glitterChoices` key. */
+export type LayerChoices = Partial<Record<GlitterModel, GlitterSettings>> & { shift?: ShiftSettings };
+export type GlitterChoices = Record<string, LayerChoices>;
 export const glitterModels: readonly GlitterModel[] = ["classic", "irregular", "direct", "clustered", "fine"];
 
 export function glitterModel(flakes: Layer["flakes"]): GlitterModel {
@@ -27,16 +34,25 @@ export function validGlitterSettings(model: GlitterModel, value: unknown): value
     Number.isInteger(f.seed) && f.seed >= 0 && f.seed <= 2147483647;
 }
 
+export function validShiftSettings(value: unknown): value is ShiftSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const s = value as ShiftSettings;
+  return Object.keys(s).sort().join() === "color,strength" && typeof s.color === "string" && /^#[0-9a-f]{6}$/i.test(s.color) &&
+    typeof s.strength === "number" && Number.isFinite(s.strength) && s.strength >= 0 && s.strength <= 1;
+}
+
 export function parseGlitterChoices(value: unknown): GlitterChoices {
   const result: GlitterChoices = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return result;
   for (const [key, choices] of Object.entries(value).slice(0, 256)) {
     if (key.length > 180 || !choices || typeof choices !== "object" || Array.isArray(choices)) continue;
-    const parsed: Partial<Record<GlitterModel, GlitterSettings>> = {};
+    const parsed: LayerChoices = {};
     for (const model of glitterModels) {
       const candidate = (choices as Record<string, unknown>)[model];
       if (validGlitterSettings(model, candidate)) parsed[model] = structuredClone(candidate);
     }
+    const shift = (choices as Record<string, unknown>).shift;
+    if (validShiftSettings(shift)) parsed.shift = { color: shift.color, strength: shift.strength };
     if (Object.keys(parsed).length) result[key] = parsed;
   }
   return result;
@@ -59,9 +75,6 @@ export function selectGlitterModel(recipe: Recipe, layerId: string, model: Glitt
   remembered[previous] = structuredClone(layer.flakes ?? defaultFlakes());
   const saved = remembered[model];
   const flakes = saved && validGlitterSettings(model, saved) ? structuredClone(saved) : defaults(model);
-  const schema = model === "fine" ? "xfs/recipe-10" : model === "clustered" ?
-    (recipe.schema === "xfs/recipe-10" ? recipe.schema : "xfs/recipe-9") : model === "direct" ?
-    (["xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10"].includes(recipe.schema) ? recipe.schema : "xfs/recipe-8") : model === "irregular" ?
-    (recipe.schema === "xfs/recipe-6" ? "xfs/recipe-7" : recipe.schema) : recipe.schema;
-  return {...recipe, schema, layers: recipe.layers.map((entry, i) => i === index ? {...entry, flakes} : entry)};
+  const layers = recipe.layers.map((entry, i) => i === index ? {...entry, flakes} : entry);
+  return {...recipe, schema: requiredRecipeSchema({schema: recipe.schema, layers}), layers};
 }

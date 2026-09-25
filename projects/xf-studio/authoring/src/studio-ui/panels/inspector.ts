@@ -167,8 +167,9 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       const status = port.authoring.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
       if (exportLine.dataset.finish !== key) {
         exportLine.dataset.finish = key;
-        const earlier = !!status && !status.exportable && descriptor?.exportAdapter === "experimental";
-        exportLine.replaceChildren(!status?.exportable ? badge(earlier ? "Earlier preview model" : "Preview only", "warning")
+        const earlier = !!status && !status.exportable && status.blockedBy === "layer" && descriptor?.exportAdapter === "experimental";
+        const byPreset = !!status && !status.exportable && status.blockedBy === "preset";
+        exportLine.replaceChildren(!status?.exportable ? badge(earlier ? "Earlier preview model" : byPreset ? "Left out of this preset" : "Preview only", "warning")
           : status.experimental ? badge("Experimental", "warning") : badge("Can be built", "success"),
           h("span", { class: "small", text: status ? (status.exportable ? status.note : status.reason) : descriptor?.exportNote ?? "" }),
           ...(earlier ? [useGame] : []), openPackage);
