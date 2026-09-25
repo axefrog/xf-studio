@@ -1,8 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
-import { HISTORY_START_ID, type AuthoringHistory, type HistorySnapshot, type HistoryState } from "./authoring-history";
-import { UNKNOWN_HISTORY_LABEL } from "./history-labels";
+import { historyTimeline, type AuthoringHistory, type HistorySnapshot, type HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue, type ValidationIssue } from "./validation-issues";
@@ -16,7 +15,7 @@ import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { QualityAction, PreviewQualityActions } from "./preview-quality-actions";
 import type { Layer, Point, WarpField } from "./recipe";
-import type { GestureEdit, RecipeAction, RecipeActions } from "./recipe-actions";
+import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction, type RecipeActions } from "./recipe-actions";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import { ACTION_DESCRIPTORS, actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
@@ -24,10 +23,14 @@ import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
-import { layerExport, type LayerExport } from "./finish-export";
+import { layerExport, planPresetExport, type LayerExport } from "./finish-export";
 
 export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
+/** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
+ * or the rest of the preset ("preset") keeps it out of the mod. */
+export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
+  { exportable: false; reason: string; blockedBy: "layer" | "preset" };
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
   { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
@@ -53,17 +56,15 @@ type Services = { document: AuthoringDocument; recipe: RecipeActions;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
-const selection = new Set<StudioAction["kind"]>(["layer.select", "point.select", "field.select"]);
-const recipeKinds = new Set<StudioAction["kind"]>([
-  "layer.select", "point.select", "point.remove", "path.edit", "field.select", "field.add",
-  "field.remove", "field.clear", "field.setReach", "pigment.edit", "softness.edit",
-  "layer.setColor", "layer.setOpacity", "layer.setSymmetry", "layer.setFinish", "layer.useGameOptics", "layer.setShift",
-  "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect",
-  "point.move", "point.insert", "point.setTangent", "shape.transform", "field.setOrigin", "field.setVector"]);
-const collectionKinds = new Set<StudioAction["kind"]>([
-  "preset.edit", "preset.select", "preset.expand", "collection.rename", "collection.filesOpen",
-  "collection.open", "collection.undoOpen", "collection.importRecipe"]);
-const recovery = new Set<StudioAction["kind"]>(["collection.undoOpen"]);
+// Routing sets come from the typed action lists and the descriptor table, never a third hand-kept copy.
+const recipeKinds: ReadonlySet<string> = RECIPE_ACTION_KINDS;
+/** Recipe actions that only move the selection (descriptor effect "selection"): no Undo entry. */
+const selection: ReadonlySet<string> = new Set([...recipeKinds].filter(kind =>
+  ACTION_DESCRIPTORS[kind as RecipeAction["kind"]].effect === "selection"));
+const COLLECTION_KIND_TABLE: Record<Exclude<CollectionAction, { kind: "collection.saved" }>["kind"], true> = {
+  "preset.edit": true, "preset.select": true, "preset.expand": true, "collection.rename": true,
+  "collection.filesOpen": true, "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true };
+const collectionKinds: ReadonlySet<string> = new Set(Object.keys(COLLECTION_KIND_TABLE));
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -289,18 +290,24 @@ export class StudioApplication {
    * from a saved workspace read "Earlier change". It exposes no recipes.
    */
   historyTimeline(): HistorySnapshot {
-    const s = this.services;
-    if (s.history) return s.history.snapshot();
-    const steps = s.document.historyEntries().map(entry => ({ ...(entry.label ?? UNKNOWN_HISTORY_LABEL),
-      id: `step-${entry.id}`, ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" as const }));
-    return { startId: HISTORY_START_ID, steps, current: steps.length - 1, redoCount: 0, trimmed: s.document.historyTrimmed };
+    return this.services.history?.snapshot() ?? historyTimeline(this.services.document);
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(); }
-  /** Game-export status of one layer in the current recipe (route, experimental note or omission reason). Check decides. */
-  layerExport(layerId: string): LayerExport | undefined {
-    const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
-    return layer && layerExport(layer);
+  /**
+   * Game-export status of one layer in the current preset, from the same preset-level plan
+   * Check uses: a layer whose finish exports on its own can still be left out because of the
+   * other layers (a Colour-shifting layer beside Matte). A hidden layer is judged as if shown.
+   */
+  layerExport(layerId: string): LayerExportStatus | undefined {
+    const layers = this.services.document.recipe.layers, layer = layers.find(item => item.id === layerId);
+    if (!layer) return undefined;
+    const alone = layerExport(layer);
+    if (!alone.exportable) return { ...alone, blockedBy: "layer" };
+    const shown: Layer = { ...layer, enabled: true, opacity: layer.opacity > 0 ? layer.opacity : 1 };
+    const plan = planPresetExport({ layers: layers.map(item => item === layer ? shown : item) });
+    const excluded = plan.excluded.find(item => item.layer === shown);
+    return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
   }
   glitterModelCatalogue() { return glitterModelCatalogue(); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
@@ -580,12 +587,11 @@ function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
   if (reason.includes("unavailable")) return "unavailable";
   return "invalid_value";
 }
+/** Undo policy of a concrete action, read from the descriptor table (its command or key variant first). */
 function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
-  if (action.kind === "recipe.undo" || action.kind === "recipe.redo" || action.kind === "history.jumpTo" || selection.has(action.kind) || action.kind.startsWith("preview.") ||
-    action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
-    action.kind.startsWith("quality.") || action.kind.startsWith("savedV.")) return "none";
-  if (action.kind === "preset.edit" && action.command.kind === "remove" ||
-    recovery.has(action.kind) || action.kind === "collection.open") return "recovery";
-  if (collectionKinds.has(action.kind)) return "none";
-  return "recipe";
+  const descriptor: ActionDescriptor = ACTION_DESCRIPTORS[action.kind];
+  const payload = action as unknown as Record<string, unknown>;
+  const variant = payload.command && typeof payload.command === "object"
+    ? (payload.command as { kind?: unknown }).kind : payload.key;
+  return (typeof variant === "string" ? descriptor.variants?.[variant]?.undo : undefined) ?? descriptor.undo;
 }

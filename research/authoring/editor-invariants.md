@@ -18,13 +18,14 @@ New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src
 | `xfs/recipe-8` | Direct-light UV-cell Glitter | Pinned |
 | `xfs/recipe-9` | Clustered direct Glitter | Pinned |
 | `xfs/recipe-10` | Denser fine-speckle direct Glitter | Pinned |
-| `xfs/recipe-11` | Per-layer game-matched `optics` for Glossy, Shimmer and Colour-shifting (with shift colour and strength); accepts every recipe-10 layer | Pinned. Setting one of these finishes adds `optics` and moves the recipe to 11; existing layers keep their earlier study until **Use game-matched model** (`layer.useGameOptics`) |
+| `xfs/recipe-11` | Per-layer game-matched `optics` for Glossy, Shimmer and Colour-shifting (with shift colour and strength); accepts every recipe-10 layer | Pinned. Changing a layer to one of these finishes adds `optics` and moves the recipe to 11; existing layers keep their earlier study until **Use game-matched model** (`layer.useGameOptics`) |
 
 Rules:
 
 - **Version the model whenever appearance changes.** Older recipes must keep their original look, so never silently upgrade existing pigment, softness, path or optical fields.
 - **Never rewrite stored revisions.** Old SQLite revisions stay unchanged; migration happens on read only.
 - **Share one evaluator.** Preview, PNG export, the raster worker and the compiler all use the same mask evaluator and adaptive Bézier tessellation. Raster bounds include every warp displacement and the maximum softness width.
+- **One schema rule for layer edits.** `requiredRecipeSchema()` ([`recipe-schema.ts`](../../projects/xf-studio/authoring/src/recipe-schema.ts)) takes the newest schema any layer's stored form needs (irregular Glitter 7, Direct 8, Clustered 9, Fine 10, game-matched optics 11) and never goes below the recipe's current schema. Every recipe action and Glitter-model change goes through it, so a per-layer choice never downgrades the recipe or invalidates another layer, and removing the layer that needed a newer schema does not move the recipe back. Capability and dispatch agree: every finish and Glitter model the application offers is applied.
 - **Keep editor state out of portable recipes.** Field selection, UV view state and similar editor memory belong in editor/workspace state, not in the portable recipe.
 
 ## Layers, presets and collections
@@ -92,6 +93,8 @@ Tests: `tests/uv-viewport.test.ts` (fit at several pane shapes and insets, curso
 - **Preview jobs.** Jobs snapshot recipes, yield cooperatively and acknowledge cancellation without publishing partial masks. Versions stay monotonic across preset resets, with one pending snapshot per layer. The active layer has priority without starving other layers. Worker recovery is lazy and never loops on a broken worker script.
 - **Worker yields** use bounded MessageChannel/timer fairness, never microtask-only yielding. Cooperative work budgets count paired writes individually. The exact raster keeps the independent scalar coverage oracle, conservative pre/post-warp bounds, the original edge/tie arithmetic and power-of-two-only mirrored pixel reuse. See [raster performance](raster-performance.md).
 - **Preview quality.** Settings (512/1K/2K/4K) are persistent preferences, independent of recipe, history and export. Disabled slots use 1 px placeholders. Failures stay visible until cancelled work is recovered, and stale layers are never reported as ready. See the [preview quality contract](preview-quality-contract.md).
+- **Finish choices.** Choosing a different finish gives Glossy, Shimmer and Colour-shifting the game-matched model. Re-selecting the current finish (Satin and its stored alias included) changes nothing and records no Undo step; in particular it never switches an earlier-model layer, which only `layer.useGameOptics` does. Inactive settings are editor memory per preset and layer, never recipe content: each Glitter model's settings (kept when switching models or leaving Glitter) and the last Colour-shift shift colour and strength (restored when the layer becomes Colour-shifting again). They are stored in the workspace under the historical `glitterChoices` key, with Colour-shift settings as an optional `shift` entry that older builds ignore.
+- **Export status is preset-level.** `StudioApplication.layerExport()` reports a layer's status from the same `planPresetExport` plan Check uses, with `blockedBy: "layer"` (its own finish) or `"preset"` (the rest of the preset, e.g. Colour-shifting beside Matte). A hidden layer is judged as if shown. The Inspector and the Layers flag show that status, never a per-layer guess.
 - **Glitter models** use direct-light rendering with a complete mask-worker result and no optical map bake. A generated candidate count is not a visible sparkle count. No Glitter model has a proven REDengine mapping, so game export of Glitter stays guarded.
 
 ## Saved-V preview inputs
