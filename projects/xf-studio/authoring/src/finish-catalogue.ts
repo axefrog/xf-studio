@@ -36,7 +36,7 @@ export function finishCatalogue(): FinishDescriptor[] {
       exportAdapter: exportable ? "flat-provisional" : "none",
       exportNote: exportable
         ? "Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet."
-        : "Preview only in this alpha. Check and Build leave out layers with this finish and tell you which.",
+        : "Preview only for now. Check and Build leave out layers with this finish and tell you which.",
     };
   });
 }

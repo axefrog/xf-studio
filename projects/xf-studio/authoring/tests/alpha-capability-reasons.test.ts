@@ -38,7 +38,7 @@ test("every target-offered action is available or explains itself in plain words
   expect(checked).toBeGreaterThan(20);
 });
 
-test("every head, camera, motion and saved-V action says the 3D preview is not in this alpha", () => {
+test("every head, camera, motion and saved-V action says why the 3D preview is not available yet", () => {
   const { app } = uvOnlyApp();
   const kinds = Object.keys(ACTION_DESCRIPTORS).filter(kind => /^(preview|camera|motion|savedV)\./.test(kind));
   expect(kinds.length).toBeGreaterThan(10);

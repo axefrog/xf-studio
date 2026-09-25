@@ -9,5 +9,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["main.ts", "trial-main.ts", "server.ts", "host.ts", "asset-intake.ts", "workspace-store.ts", "workspace-close.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "release.ts", "notices.ts", "host-log.ts", "webview2.ts", "startup-watchdog.ts", "verify-canary.ts", "tools/sandbox-trial.ts", "tests/*.ts"]
+  "include": ["main.ts", "trial-main.ts", "server.ts", "host.ts", "asset-intake.ts", "workspace-store.ts", "workspace-close.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "release.ts", "notices.ts", "host-log.ts", "webview2.ts", "startup-watchdog.ts", "prepare-webview2.ts", "webview2-install.ts", "verify-canary.ts", "tools/sandbox-trial.ts", "tests/*.ts"]
 }

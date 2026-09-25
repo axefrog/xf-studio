@@ -75,6 +75,8 @@ async function start() {
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage,
+    // The desktop host file (16 MB limit) holds more than browser storage.
+    ...(storage === localStorage ? {} : { budget: 12_000_000 }),
     capture: {
       editor: () => core.document.export(),
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
