@@ -375,12 +375,10 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
 
   progress("exporting");
   const slots = new Map<DetailSlot, DetailSlotState>(plan.slots.map(slot => [slot.slot, { ...slot }]));
-  // Face details are many independent parts: one that can't be read leaves the others shown (decided after export).
+  // A slot is many independent parts (face details; a hair and its extra parts; a piercing style's parts): one that can't be read
+  // leaves the others shown, and the slot is unavailable only when none of its parts could be served (decided after export).
   const partial = new Map<DetailSlot, "export" | "tool">();
-  const failSlot = (slot: DetailSlot, why: "export" | "tool") => {
-    if (slot === "face") { partial.set(slot, partial.get(slot) === "tool" ? "tool" : why); return; }
-    unavailable(slot, why);
-  };
+  const failSlot = (slot: DetailSlot, why: "export" | "tool") => { partial.set(slot, partial.get(slot) === "tool" ? "tool" : why); };
   const unavailable = (slot: DetailSlot, why: "export" | "tool") => {
     const current = slots.get(slot)!;
     const { noun, not, pronoun } = SLOT_WORDS[slot];
@@ -673,9 +671,10 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   if (cache.components.size > 2048) for (const key of [...cache.components.keys()].slice(0, 512)) cache.components.delete(key);
   if (overBudget) notes.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
   for (const [slot, why] of partial) {
-    const current = slots.get(slot)!, { noun } = SLOT_WORDS[slot];
+    const current = slots.get(slot)!, { noun, pronoun } = SLOT_WORDS[slot];
+    const all = pronoun === "it" ? "not all of it is" : "not all of them are";
     if (components.some(item => item.slot === slot))
-      slots.set(slot, { ...current, message: `Some of your V's ${noun} couldn't be read from your game files, so not all of them are shown.` });
+      slots.set(slot, { ...current, message: `Some of your V's ${noun} couldn't be read from your game files, so ${all} shown.` });
     else unavailable(slot, why);
   }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.

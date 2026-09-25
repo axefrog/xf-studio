@@ -310,7 +310,7 @@ const LIMITS = RECORD_LIMITS;
  * value (a tile of 1e38 makes the sampling coordinate NaN) is clamped by the host's readers and again by the bake.
  */
 export const LAYER_RANGES = Object.freeze({ opacity: [0, 1], tile: [-256, 256], offset: [-256, 256], contrast: [0, 16], normal: [-16, 16],
-  colour: [0, 16], levels: [-64, 64], ratio: [1 / 64, 64], tableEntries: [0, 256] } as const);
+  colour: [0, 16], levels: [-64, 64], ratio: [1 / 64, 64], tableEntries: [0, 4096] } as const);
 /** A finite number clamped to one of `LAYER_RANGES`, or the fallback when it is not a finite number. */
 export function clampLayer(value: unknown, range: keyof typeof LAYER_RANGES, fallback: number): number {
   const [low, high] = LAYER_RANGES[range];

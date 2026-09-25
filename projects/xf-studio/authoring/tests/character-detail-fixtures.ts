@@ -133,10 +133,10 @@ const toneAppearances = (suffix: string) => [TONES.pale, TONES.ivory, TONES.senn
  * A mesh whose render chunks all carry one `renderMask`: `MCF_RenderInShadows` alone is a shadow-only proxy (every vanilla hair
  * `*_shadow` mesh), which the scene never draws.
  */
-const maskedMesh = (spec: Parameters<typeof mesh>[0], count: number, renderMask: string) => {
+const maskedMesh = (spec: Parameters<typeof mesh>[0], count: number, renderMask: string, lodMask = 1) => {
   const doc = mesh({ ...spec, chunks: null }) as { Data: { RootChunk: Record<string, unknown> } };
   doc.Data.RootChunk.renderResourceBlob = handle({ $type: "rendRenderMeshBlob", header: { $type: "rendRenderMeshBlobHeader",
-    renderChunkInfos: Array.from({ length: count }, () => ({ $type: "rendChunk", lodMask: 1, renderMask })) } });
+    renderChunkInfos: Array.from({ length: count }, () => ({ $type: "rendChunk", lodMask, renderMask })) } });
   return doc;
 };
 /** A mesh whose render chunks carry LOD masks. */
@@ -183,7 +183,7 @@ const MESH_DECAL_PARAMS = () => [tParam("DiffuseTexture", P.grey), cParam("Diffu
   tParam("NormalAlphaTex", P.white), sParam("UseNormalAlphaTex", 0), sParam("NormalsBlendingMode", 0), tParam("RoughnessTexture", P.white),
   tParam("MetalnessTexture", P.black), sParam("RoughnessMetalnessAlpha", 0)];
 
-export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolean; shadowsInScene?: boolean } = {}): { archives: FixtureArchive[]; installation: () => Installation } {
+export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolean; shadowsInScene?: boolean; shadowLod?: number } = {}): { archives: FixtureArchive[]; installation: () => Installation } {
   const base: FixtureArchive = { virtualPath: "archive/pc/content/basegame_fixture.archive", files: {
     [P.cco]: cco([
       switcherOption("skin_type", [["01", ["skin_type_01"]], ["03", ["skin_type_03"]]]),
@@ -338,7 +338,7 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
     [P.shadowMesh]: maskedMesh({ appearances: [{ name: "default", chunkMaterials: ["glass", "shadow_layer"] }],
       entries: [{ name: "glass", local: true, index: 0 }, { name: "shadow_layer", local: true, index: 1 }],
       local: [instance(P.glassMt), instance(P.layeredMt, [setupRef(P.silverSetup), maskRef(P.earringMask)])] }, 2,
-      options.shadowsInScene ? "MCF_RenderInScene" : "MCF_RenderInShadows"),
+      options.shadowsInScene ? "MCF_RenderInScene" : "MCF_RenderInShadows", options.shadowLod ?? 1),
     [P.hairMt]: template([tParam("Strand_ID", P.grey), tParam("Strand_Gradient", P.grey), tParam("Strand_Alpha", P.grey),
       sParam("AlphaCutoff", 0.33), sParam("RoughnessScale", 1), hParam("HairProfile", P.hp)]),
     [P.decalMt]: template([tParam("DiffuseTexture", P.white), sParam("UseGradientMap", 0), sParam("GradientMapIntensity", 1),

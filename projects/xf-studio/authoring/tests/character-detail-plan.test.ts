@@ -65,6 +65,10 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(drawn[1]!.materials[0]!.layered?.setup).toBeDefined();
     expect(drawn[1]!.skippedChunks).toBe(1);
     expect(inScene.slots.find(s => s.slot === "hair")).toMatchObject({ state: "shown" });
+    // A chunk whose LOD mask is 0 is in no level of detail and is never drawn, whatever its render mask (the real CCXL proxy stores 0).
+    const { plan: noLod, resolved: noLodResolved } = await plan(REQUEST_A, detailFixture({ shadowsInScene: true, shadowLod: 0 }));
+    expect(noLodResolved.appearances.flatMap(entry => entry.components).find(c => c.name === "hair_shadow")!.geometry!.chunkLods).toEqual([0, 0]);
+    expect(noLod.components.filter(c => c.component === "hair_shadow")).toEqual([]);
   });
 
   test("chunk inputs are the instance chain first, then the template's defaults, limited to what the adapter reads", async () => {

@@ -124,6 +124,16 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(probe.errors).toEqual([]);
   });
 
+  test("the lit material reads roughness and metalness from the packed maps' alpha: it matches a plain material of the same surface", () => {
+    const { lit } = probe.layered!;
+    expect(lit).toBeDefined();
+    expect(Math.max(...lit!.plain)).toBeGreaterThan(0.01);
+    // Close to the plain material (8-bit maps and the normal map's shading frame account for a few per cent)...
+    expect(relative(lit!.baked, lit!.plain)).toBeLessThanOrEqual(0.08);
+    // ...and far from the same maps read the default way (roughness from G, metalness from B), which is what the packing must avoid.
+    expect(relative(lit!.naive, lit!.plain)).toBeGreaterThan(0.25);
+  });
+
   test("with non-constant maps the bake reads them where the game does: tiling, offset, the mask orientation, sRGB colour", () => {
     const { parity } = probe.layered!;
     expect(parity.error).toBeUndefined();

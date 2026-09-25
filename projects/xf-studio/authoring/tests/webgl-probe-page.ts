@@ -40,7 +40,9 @@ type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[];
  * reference of the same constant stack, and the largest byte gap over every texel of a stack of non-constant maps.
  */
 export type LayeredProbe = { state: string; error?: string; gpu: { colour: number[]; normal: number[] }; cpu: { colour: number[]; normal: number[] };
-  drawn: number[]; bytes: number; parity: { texels: number; colour: number; normal: number; error?: string } };
+  drawn: number[]; bytes: number; parity: { texels: number; colour: number; normal: number; error?: string };
+  /** A flat baked part and a plain standard material with the same colour, roughness and metalness, each lit and read back. */
+  lit?: { baked: number[]; plain: number[]; naive: number[] } };
 /** The authored plate's measurements (section 4). */
 export type PlateProbe = { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
   routes: string[]; once: { name: string; preview: number[]; truth: number[]; metalness: number; skinLight: boolean }[];
@@ -456,6 +458,38 @@ try {
       }
       probe.layered.parity = { texels, colour: colourGap, normal: normalGap, ...(ok ? {} : { error: tiled.handle.evidence().error ?? "not baked" }) };
       tiled.material.dispose();
+    }
+    // The lit material reads the packed maps as the stack says: drawn beside a plain standard material with the stack's own colour,
+    // roughness and metalness (flat normal), the two agree. A material that read roughness from G or metalness from B would not.
+    {
+      const flatLayer = stackLayer({ normalStrength: 0 });
+      const surface = { colour: [q(0.2), q(0.1), q(0.05)], rough: q(0.35), metal: q(0.8) };
+      const baked = createLayeredMaterial({ layers: [{ parameters: layerBakeParameters(flatLayer, 0), textures: { color: data([...surface.colour, 1]),
+        roughness: data([surface.rough, surface.rough, surface.rough, 1]), metalness: data([surface.metal, surface.metal, surface.metal, 1]) } }],
+        domain: { min: [0, 0], max: [1, 1] }, size: 8, globals: { ratio: 1, normalIntensity: 1, normalUvScale: [1, 1], normalUvBias: [0, 0] } });
+      // Only where half-float targets render (the page also runs with them hidden, where the bake is refused).
+      if (baked.handle.bake(renderer)) {
+      const plain = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(surface.colour[0]!, surface.colour[1]!, surface.colour[2]!, THREE.LinearSRGBColorSpace),
+        roughness: surface.rough, metalness: surface.metal });
+      const drawn = (material: THREE.Material) => {
+        const lit = new THREE.Scene();
+        lit.environment = scene.environment;
+        const key = new THREE.DirectionalLight(0xffffff, 2); key.position.set(0.3, 0.4, 1); lit.add(key);
+        lit.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+        const target = new THREE.WebGLRenderTarget(8, 8, { type: THREE.HalfFloatType });
+        renderer.setRenderTarget(target); renderer.render(lit, camera);
+        const pixel = new Uint16Array(4);
+        renderer.readRenderTargetPixels(target, 4, 4, 1, 1, pixel);
+        renderer.setRenderTarget(null); target.dispose();
+        return [...pixel].slice(0, 3).map(value => THREE.DataUtils.fromHalfFloat(value));
+      };
+      // The control: the same maps read as three.js reads them by default (roughness G, metalness B), which is not the stack.
+      const naive = new THREE.MeshStandardMaterial({ map: baked.material.map, normalMap: baked.material.normalMap, roughnessMap: baked.material.map,
+        metalnessMap: baked.material.normalMap, normalScale: new THREE.Vector2(1, -1) });
+      probe.layered.lit = { baked: drawn(baked.material), plain: drawn(plain), naive: drawn(naive) };
+      naive.dispose(); plain.dispose();
+      }
+      baked.material.dispose();
     }
     // The lit material compiles and draws (standard light, environment, key light).
     const litScene = new THREE.Scene();

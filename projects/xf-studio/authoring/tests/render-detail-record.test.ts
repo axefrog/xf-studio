@@ -251,6 +251,12 @@ describe("rendering boundary", () => {
       "piercing-palette.ts"]) expect(files).not.toContain(gone);
     const tools = readdirSync(new URL("../tools/", import.meta.url));
     for (const gone of ["intake_prc.ts", "intake_piercings.ts"]) expect(tools).not.toContain(gone);
+    // An old checkout may still hold the retired payloads in its ignored public/assets: the localhost host never serves them (UI-50).
+    const server = readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+    const retired = new RegExp(/const RETIRED_ASSET_DIRS = \/(.+)\/i;/.exec(server)![1]!, "i");
+    for (const name of ["prc\\manifest.json", "piercings/i0_000__earring_14.glb", "PRC"]) expect(retired.test(name)).toBe(true);
+    for (const name of ["prcx.json", "brows.glb", "eyes/manifest.json"]) expect(retired.test(name)).toBe(false);
+    expect(server).toContain("RETIRED_ASSET_DIRS.test(assetName)) return new Response(\"Not found\", { status: 404 })");
     for (const name of RENDERING_PATH) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8"))
       .not.toMatch(/local-(?:prc|vanilla)-piercings|\/assets\/(?:prc|piercings)\b|aggregatePrcStyle|prc_active_bank|prcError|prcAvailable|matchedPiercing/);
     for (const name of RENDERING_PATH)

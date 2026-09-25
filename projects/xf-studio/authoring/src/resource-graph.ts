@@ -170,8 +170,10 @@ const chunkLodMasks = (blob: unknown, scope: HandleScope): number[] | null => {
   const header = data && isObject(data.header) ? data.header : null;
   if (!header) return null;
   return asArray(header.renderChunkInfos).map(info => {
-    const mask = isObject(info) ? Number(info.lodMask) : NaN;
-    return Number.isInteger(mask) && mask > 0 ? mask : 1;
+    // An explicit 0 puts the chunk in no level of detail, so it is never drawn (a CCXL hair's one-triangle shadow proxy stores it)
+    // [resource: the value; hypothesis: that the engine skips such a chunk]. A missing or unreadable mask counts as the top level.
+    const mask = isObject(info) && info.lodMask !== undefined && info.lodMask !== null ? Number(info.lodMask) : NaN;
+    return Number.isInteger(mask) && mask >= 0 ? mask : 1;
   });
 };
 /**

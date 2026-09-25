@@ -640,6 +640,14 @@ async function assembleScene(
     makeupDiagnostics: makeup.diagnostics,
     /** How the authored plate is drawn: the export plan's layers in one lit plate, its light, the skin underlay's source and the composite. */
     plateBlendEvidence: () => ({ ...makeup.blendDiagnostics(), source: plateUnderlay }),
+    /** Developer evidence: each baked layered part's packed maps read back at their centre texel (colour + roughness, normal + metalness). */
+    layeredSamples: () => (characterDetails?.components ?? []).flatMap(item => (item.layered ?? []).map(({ mesh, handle }) => {
+      const target = handle.target;
+      if (!target) return { mesh: mesh.name, state: handle.state };
+      const read = (index: number) => { const pixel = new Uint8Array(4);
+        renderer.readRenderTargetPixels(target, target.width >> 1, target.height >> 1, 1, 1, pixel, undefined, index); return [...pixel]; };
+      return { mesh: mesh.name, state: handle.state, colour: read(0), normal: read(1) };
+    })),
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
     maxTextureSize: renderer.capabilities.maxTextureSize,
@@ -651,8 +659,9 @@ async function assembleScene(
     setHair,
     setCharacterDetails,
     detailContext,
-    characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
-      eyes: { core: eyes, appearance: eyeAppearance() } }),
+    // With the renderer's live geometry and texture counts, so a V switch or a tried style can be measured (PREV-63).
+    characterDetailsEvidence: () => ({ ...characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
+      eyes: { core: eyes, appearance: eyeAppearance() } }), memory: { ...renderer.info.memory } }),
     setPiercings,
     /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */
     idle,

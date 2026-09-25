@@ -308,6 +308,20 @@ describe("layer masks through the real exporter", () => {
   });
 });
 
+describe("a slot is its parts", () => {
+  test("one part of a slot that can't be served leaves the others shown, with one plain line; none served makes it unavailable", async () => {
+    // The hair's extra part draws in the scene here (like a CCXL hair's proxy); its mesh can't be exported, the hair itself can.
+    const exporter = fakeExporter();
+    const geometry = exporter.open.bind(exporter);
+    exporter.open = (source, signal) => { const session = geometry(source, signal); return { ...session,
+      geometry: async paths => { const out = await session.geometry(paths); out.delete(P.shadowMesh); return out; } }; };
+    const { record } = await prepare(REQUEST_A, exporter, detailFixture({ shadowsInScene: true }));
+    expect(record.components.filter(c => c.slot === "hair").map(c => c.component)).toEqual(["hair"]);
+    expect(record.slots.find(slot => slot.slot === "hair")).toEqual({ slot: "hair", state: "shown", label: "brown",
+      message: "Some of your V's hair couldn't be read from your game files, so not all of it is shown." });
+  });
+});
+
 describe("what the host writes is what the page reads (PIPE-40)", () => {
   test("the written record is the browser reader's own output: parsing it again changes nothing", async () => {
     const { record, recordFile } = await prepare(REQUEST_A);

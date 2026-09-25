@@ -292,12 +292,14 @@ describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () 
     expect(setup.layers[0]).toMatchObject({ opacity: 1, matTile: 256, mbTile: -256, offsetU: 0, microblendContrast: 0 });
     const entry = (n: string, v: number | { Elements: number[] }) => ({ n: { $value: n }, v });
     const template = readTemplate({ $type: "Multilayer_LayerTemplate", tilingMultiplier: 1e38, colorMaskLevelsIn: { Elements: [1e9, 0] },
-      overrides: { colorScale: [...Array.from({ length: 1000 }, (_, i) => entry(`c${i}`, { Elements: [1e9, 0.5, -1] })), entry("late", { Elements: [1, 1, 1] })],
+      overrides: { colorScale: [...Array.from({ length: 5000 }, (_, i) => entry(`c${i}`, { Elements: [1e9, 0.5, -1] })), entry("late", { Elements: [1, 1, 1] })],
         normalStrength: [entry("n", 1e9)], roughLevelsOut: [entry("r", { Elements: [1e9, -1e9] })] } })!;
     expect(template.tilingMultiplier).toBe(256);
     expect(template.colorMaskLevelsIn).toEqual([64, 0]);
     expect(template.colorScale.size).toBe(MAX_TABLE_ENTRIES);
     expect(template.colorScale.has("late")).toBe(false);
+    // A vanilla-sized table (a paint template holds 906 colours) is read whole.
+    expect(template.colorScale.has("c905")).toBe(true);
     expect(template.colorScale.get("c0")).toEqual([16, 0.5, 0]);
     expect(template.normalStrength.get("n")).toBe(16);
     expect(template.levels.roughLevelsOut.get("r")).toEqual([64, -64]);

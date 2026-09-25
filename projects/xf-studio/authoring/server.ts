@@ -74,6 +74,8 @@ const gradingLutRequest = createGradingLutHandler(gradingLut);
 const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
+/** Retired piercing intake payloads (vanilla and PRC manifests and their files), never served. */
+const RETIRED_ASSET_DIRS = /^(?:prc|piercings)(?:[\\/]|$)/i;
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
@@ -124,6 +126,9 @@ const server = Bun.serve({
       return new Response("Not found", { status: 404 });
     let file = Bun.file(path);
     const assetName = path.startsWith(resolve(root, "assets") + sep) ? path.slice(resolve(root, "assets").length + 1) : null;
+    // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
+    // resolver now, so nothing serves them (UI-50).
+    if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
     if (!research && assetName !== null && coreFiles.has(assetName)) {
       // The core preview has one source: the derivation from the player's own game files.
       const derived = previewCore.assetPath(assetName);

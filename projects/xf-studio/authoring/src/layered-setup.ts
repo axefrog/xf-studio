@@ -42,7 +42,7 @@ export type TemplateValues = {
 
 /** The engine's layer limit [wiki: `multilayered/README.md`]; a longer stack is cut. */
 export const MAX_SETUP_LAYERS = 20;
-/** Entries kept per template override table; vanilla tables hold a few dozen. */
+/** Entries kept per template override table; the largest vanilla table (a paint template's colours) holds 906. */
 export const MAX_TABLE_ENTRIES = LAYER_RANGES.tableEntries[1];
 
 const elements = (value: unknown): number[] => isObject(value) ? asArray(value.Elements).slice(0, 8).map(item => Number(item))

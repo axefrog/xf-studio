@@ -489,6 +489,17 @@ function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material): st
   return error !== gl.NO_ERROR ? `WebGL error 0x${error.toString(16)} while baking` : null;
 }
 
+/** three.js's roughness and metalness map chunks, reading the packed maps' alpha instead of G and B. */
+export const PACKED_ROUGHNESS_GLSL = /* glsl */`
+float roughnessFactor = roughness;
+#ifdef USE_ROUGHNESSMAP
+	roughnessFactor *= texture2D( roughnessMap, vRoughnessMapUv ).a;
+#endif`;
+export const PACKED_METALNESS_GLSL = /* glsl */`
+float metalnessFactor = metalness;
+#ifdef USE_METALNESSMAP
+	metalnessFactor *= texture2D( metalnessMap, vMetalnessMapUv ).a;
+#endif`;
 /** Bytes the two packed 8-bit maps take with their mips. */
 const keptBytes = (size: number) => Math.round(size * size * 8 * 4 / 3);
 /**
@@ -516,10 +527,11 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
   material.name = "xfs_layered";
   material.normalScale.set(1, -1);
   // Roughness in the colour map's alpha, metalness in the normal map's alpha (the packed bake), instead of G and B of their own maps.
+  // (The chunks are still `#include` directives when this runs, so the includes themselves are replaced.)
   material.onBeforeCompile = shader => {
     shader.fragmentShader = shader.fragmentShader
-      .replace("roughnessFactor *= texelRoughness.g;", "roughnessFactor *= texelRoughness.a;")
-      .replace("metalnessFactor *= texelMetalness.b;", "metalnessFactor *= texelMetalness.a;");
+      .replace("#include <roughnessmap_fragment>", PACKED_ROUGHNESS_GLSL)
+      .replace("#include <metalnessmap_fragment>", PACKED_METALNESS_GLSL);
   };
   material.customProgramCacheKey = () => "xfs_layered_packed";
   let state: "pending" | "baked" | "failed" = "pending", error: string | undefined;
