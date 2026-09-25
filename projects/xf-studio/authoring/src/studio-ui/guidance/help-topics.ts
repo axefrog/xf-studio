@@ -1,6 +1,7 @@
 import { bindingReference, type ReferenceSection } from "../../input-bindings";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import { plainText } from "./content";
+import { FINISH_EXPORT_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import type { HelpTopic, Tour } from "./types";
 
 /**
@@ -17,7 +18,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   { id: "head", title: "The 3D head view", keywords: "head 3d preview camera orbit zoom pan front view wolvenkit setup",
     body: "The head shows your makeup on V. Drag off the makeup to turn the view, use the wheel to zoom and right-drag to pan; [[key:head.front]] returns to the front view.\n\nThe 3D preview is built from your own Cyberpunk 2077 files the first time. If it isn't ready, the head pane shows the one next step. The UV map, library and Check all work without it." },
   { id: "finishes", title: "Colours and finishes", keywords: "colour color finish matte satin metallic shimmer glossy glitter colour-shift duochrome export preview only",
-    body: "Each layer has a colour, an opacity and a finish. **Matte**, **Satin** and **Metallic** can go into your mod. **Glossy**, **Shimmer** and **Colour-shifting** can be built as experiments. **Glitter** is preview only for now: Check and Build leave those layers out and say so.",
+    body: `Each layer has a colour, an opacity and a finish. ${FINISH_EXPORT_TOKEN}`,
     tours: ["onboarding"] },
   { id: "undo", title: "Undo, Redo and History", keywords: "undo redo history back step mistake",
     body: "Every change can be undone. [[key:shell.undo]] undoes, and [[key:shell.redo]] redoes. The **History** panel lists your recent changes to the current preset; click any step to go back to it.",
@@ -34,6 +35,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   { id: "layout", title: "Panels and layout", keywords: "panel dock float tab layout reset move window",
     body: "Drag a panel's tab to dock it beside another, or onto a floating spot. The **Panels** button in the header opens or closes any panel and resets the layout. [[key:shell.regions]] moves the keyboard focus between regions." },
 ];
+
+/** The topics with the finish catalogue's words filled in (UI-44); the Help view shows and searches these. */
+export function helpTopicsFor(finishes: readonly FinishSummary[]): readonly HelpTopic[] {
+  return HELP_TOPICS.map(topic => ({ ...topic, body: withFinishText(topic.body, finishes) }));
+}
 
 /** Public pages the Help view links to; the host opens them in the person's browser. */
 export const HELP_LINKS = [

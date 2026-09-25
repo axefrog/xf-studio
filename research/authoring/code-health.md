@@ -181,6 +181,20 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 (Guidance, the host, render and window cleanups were reviewed at `84cb39d`.)
 
+## Fixed in claude/cleanup-polish
+
+Low findings from the `84cb39d` review, plus two render-review nits.
+
+- **PREV-48:** `lighting-preset-stage.ts` notifies whenever the cube changes (`file` differs), not only when the source description does, so the scene's lighting subscription asks for a frame. Test in `tests/lighting-preset.test.ts`: an updated LUT file with an identical source notifies once; the same cube again stays quiet.
+- **UI-45:** `render-scheduler.ts` keeps an in-frame flag: a request made while a frame runs (the controls' `change` inside `controls.update()`) only marks the scheduler dirty, and no longer resets `previous`, so the next dt covers the whole interval. Test: a frame that requests another 5 ms in has each dt equal to the time between frame starts (it failed before). Measured in headless Chrome with the idle playing and three orbit drags per window: the idle advanced at 0.966-0.976 × wall time before, 1.0015-1.0021 × after.
+- **UI-46:** `src/device-pixel-ratio.ts` (`viewportPixelRatio`, capped at 2; `watchDevicePixelRatio`) re-arms a `(resolution: Ndppx)` query after each change. `scene.ts` applies the new ratio, resizes and invalidates, and releases the watch with the scene. Tests in `tests/device-pixel-ratio.test.ts`. Not confirmed in a browser: headless Chrome's device-metrics emulation fires no media-query `change` events (a plain listener stayed silent too).
+- **UI-47:** `surface-editor.ts`'s `rehover` ends with `viewer.requestRender?.()`: the release is stopped before the viewport's own pointer trigger sees it. Test: `tests/surface-rehover.test.ts` (after a shape drag released over the interior, the hover highlight is gone without another move).
+- **UI-41:** F6 and Shift+F6 include the visible `.guidance-callout` regions (tour card, onboarding offer), after the status bar; focus lands on the callout's primary action, never its close button. Checked in headless Chrome `?verify=1`: F6 from the status bar reached the tour card's Next, and the offer's "Show me around".
+- **UI-42:** the controller reads the step index before awaiting `runCommand`, so `then: "next"` cannot advance a second time after a paint moved the tour on.
+- **UI-43:** `guidance.startTour` ends a running tour through `end(…, "skipped")` first, so the outcome is recorded and readers see it end. The controller keys the shown step by tour and index, so a new tour starting at step 1 is announced. Test in `tests/guidance.test.ts`. In `?verify=1`, starting What's new on onboarding's second step recorded onboarding as skipped and announced What's new step 1 of 4.
+- **UI-44:** the Help topic and the onboarding finish step carry tokens (`{{finishes.export}}`, `{{finishes.mod}}`) that `guidance/finish-text.ts` fills from the catalogue the port publishes (`rt.finishes`, from `authoring.finishCatalogue()`), through `helpTopicsFor` and `toursFor`; the presentation's value-import allowlist did not grow. Test: the data names no finish, the filled text has no token left, each finish appears once in the sentence of its export status, and moving Glitter to experimental changes the words.
+- **Render-review nits:** `detail-limits.ts`'s comment no longer claims no device writes user sentences: it says the codes cover partial drawing only, and that the character-detail loader still words its load failures (the wording itself stays in the loader for now). The name-based "every scene mutator is wrapped" source test documents its limits (name prefixes, layout-dependent key reading, wrapping versus effect).
+
 ## Fixed in claude/platform-step2
 
 - **CORE-03 (data), CORE-05:** step 2 of the [feature-module platform](feature-module-platform.md#step-2-status). New `platform/api/document.ts` (part, editor and memory codecs, looks, `FeatureState`/`FeatureResult`), `platform/core/document.ts` (`PartRegistry`: collection-1/-2 reading, minimal writing, canonical comparison, per-feature memory), the eye-makeup part-1 codec and pure core in `features/eye-makeup/`, and `STUDIO_PARTS` in `compose/`. `CollectionSession`, `CollectionActions`, `CollectionService` and the SQLite store work on looks; `save()` and the service baselines compare canonically, which also fixes the step-1 store giving every migrated preset a new revision on its next save. The workspace is `xfs/workspace-2` (per-feature memory; workspace-1 read losslessly; desktop `.bak`). Library rows and exported files use `xfas/collection-1` whenever it holds the looks exactly, so 0.1.0-alpha.1 still reads them (checked by running that release's readers). CORE-05: `targetCapability`, `contextFor`/`contextQuery`, `requestCapability` and the Glitter-model preset lookup no longer clone or stash the draft (`targetCapability(preset)` 240 ms → 1 µs, `contextQuery(preset)` 1.56 s → 6 µs on a 6 × 16-layer draft with 80-step histories). Tests: `tests/look-model.test.ts` (golden workspace-1 restores from the step-1 code, recipe and collection parity at 512/1K/2K and compiled maps, a step-1 SQLite library, unregistered features, downgrade, pure apply, CORE-05), `desktop/tests/workspace-store.test.ts`; the four-preset Build's archive members are byte-identical before and after.
@@ -229,17 +243,17 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - Tests are in `plate-reach`, `package-build-service`, `package-server`, `eye-plate` and desktop `check-runner`/`build`. A real Check and Build of the finish board with an added off-plate preset both omitted it and agreed on the packaged snapshot hash.
 - **PIPE-34:** `bakeCollection` without a window (the Experiment 005 oracle's `tools/bake_collection.ts`) writes a plan whose every preset has `uvSpace: "head"`, matching its maps. Tested.
 - **PIPE-35:** `mappingOffset` in `mod-verifier/uv-window.ts` gives a signed offset estimate. It runs a joint search over shifts of the map lookup (±8 window texels, refined 1 → 1/4 → 1/16) for the least total difference from the reference at the plate samples, using only samples near content. The gate bounds the estimate to 1 texel per axis (`MAPPING_LIMITS.offsetTexels`), and the verification report records it per window preset. Tests shift a real bake by ±2 and ±4 texels in each axis: the estimate recovers each shift with its sign, and at 2 texels the mean and far-off limits alone pass. On the real session-2 and finish-board builds every window preset's estimate is 0 on both axes, except 0.06 texel in V on the sharpest line pattern. `tools/uv-window-probe.ts` reports it.
-- **PREV-48:** a changed LUT with identical source metadata swaps the grade without requesting a frame (`lighting-preset-stage.ts:68-72`).
+- **PREV-48:** a changed LUT with identical source metadata swaps the grade without requesting a frame (`lighting-preset-stage.ts:68-72`). Fixed in claude/cleanup-polish (see its section).
 - **PREV-49:** a failed atomic cache write drops already-extracted documents for the whole batch; cancelling a superseded LUT preparation can't stop discovery or graph loading.
 - **PIPE-38:** the mapping gate accepts an all-empty window map for very faint makeup (offset null is accepted).
 - **PIPE-39:** the shift estimate is unreliable for presets that barely reach the plate (0.6-0.8 texel on lossless data).
-- **UI-41:** F6 region cycling skips the tour card and onboarding offer.
-- **UI-42:** a tour button's `then: "next"` can double-advance after an async command (latent).
-- **UI-43:** starting a tour while one runs replaces it without recording how it ended.
-- **UI-44:** help and tour text restate which finishes export (extends UI-10).
-- **UI-45:** idle playback runs 5-20 % slow while orbiting (scheduler resets its clock mid-frame).
-- **UI-46:** a device-pixel-ratio change (monitor move, zoom) isn't picked up until reload (pre-existing).
-- **UI-47:** the hover highlight stays after a drag ends until the mouse moves.
+- **UI-41:** F6 region cycling skips the tour card and onboarding offer. Fixed in claude/cleanup-polish (see its section).
+- **UI-42:** a tour button's `then: "next"` can double-advance after an async command (latent). Fixed in claude/cleanup-polish (see its section).
+- **UI-43:** starting a tour while one runs replaces it without recording how it ended. Fixed in claude/cleanup-polish (see its section).
+- **UI-44:** help and tour text restate which finishes export (extends UI-10). Fixed in claude/cleanup-polish (see its section).
+- **UI-45:** idle playback runs 5-20 % slow while orbiting (scheduler resets its clock mid-frame). Fixed in claude/cleanup-polish (see its section).
+- **UI-46:** a device-pixel-ratio change (monitor move, zoom) isn't picked up until reload (pre-existing). Fixed in claude/cleanup-polish (see its section).
+- **UI-47:** the hover highlight stays after a drag ends until the mouse moves. Fixed in claude/cleanup-polish (see its section).
 
 ## Fixed in claude/cleanup-hygiene
 

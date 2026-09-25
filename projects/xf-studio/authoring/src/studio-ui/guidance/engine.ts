@@ -124,6 +124,8 @@ export class GuidanceService {
     switch (action.kind) {
       case "guidance.startTour": {
         const tour = this.tours.find(item => item.id === action.tourId)!;
+        // A tour started while another runs ends that one first, so its outcome is recorded (UI-43).
+        if (this.active) this.end(this.active.tour.id, "skipped");
         const index = this.nearest(tour, 0, 1);
         if (index === undefined) { this.end(tour.id, "completed"); return { ok: true }; }
         this.active = { tour, index, baseline: this.env.facts() };

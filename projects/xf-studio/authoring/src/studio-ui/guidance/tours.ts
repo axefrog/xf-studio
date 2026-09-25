@@ -1,3 +1,4 @@
+import { FINISH_MOD_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import type { Tour } from "./types";
 
 /**
@@ -23,7 +24,7 @@ export const TOURS: readonly Tour[] = [
         body: "Your changes appear on the 3D head as you work. Drag to turn the view, use the wheel to zoom and right-drag to pan. [[key:head.front]] returns to the front view.\n\nIf the 3D preview isn't set up yet, this pane shows the one next step. The UV map works without it." },
         buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
       { anchor: "finish.picker", content: { title: "Choose a colour and a finish",
-        body: "Pick the layer's colour, then its finish: Matte, Satin, Metallic and more. The picker groups finishes by what can go into your mod today; preview-only finishes are marked." },
+        body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go, and preview-only finishes are marked.` },
         buttons: [{ label: "Try Metallic", action: { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: "metallic" } } }],
         advanceWhen: { any: [{ event: "finish.changed" }, { event: "color.changed" }] } },
       { anchor: "presets.list", content: { title: "Presets are complete looks",
@@ -56,3 +57,8 @@ export const TOURS: readonly Tour[] = [
 ];
 
 export const tourById = (id: string) => TOURS.find(tour => tour.id === id);
+
+/** The tours with the finish catalogue's words filled in (UI-44); the runner shows these. */
+export function toursFor(finishes: readonly FinishSummary[]): readonly Tour[] {
+  return TOURS.map(tour => ({ ...tour, steps: tour.steps.map(step => ({ ...step, content: { ...step.content, body: withFinishText(step.content.body, finishes) } })) }));
+}

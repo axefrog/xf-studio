@@ -9,6 +9,8 @@ function manualClock() {
   return {
     clock: { request(callback: () => void) { pending = callback; return ++handle; }, cancel() { pending = undefined; cancelled++; }, now: () => time },
     step(ms = 16) { time += ms; const run = pending; pending = undefined; run?.(); return !!run; },
+    /** Let time pass without a refresh (work done inside a frame). */
+    advance(ms: number) { time += ms; },
     /** Run frames until the loop stops (at most `limit`); returns how many ran. */
     drain(limit = 100) { let n = 0; while (n < limit && this.step()) n++; return n; },
     get pending() { return !!pending; },
@@ -47,6 +49,27 @@ test("a request made while a frame runs (a damped orbit step) draws the next fra
   expect(clock.drain()).toBe(6);
   expect(frames.length).toBe(6);
   expect(scheduler.running).toBe(false);
+});
+
+test("a request made inside a frame never shortens the next frame's dt, so playback keeps real time while orbiting (UI-45)", () => {
+  const clock = manualClock(), frames: number[] = [], starts: number[] = [];
+  let playing = true, orbiting = true;
+  const scheduler = createRenderScheduler({ clock: clock.clock, animating: () => playing,
+    // The controls update 5 ms into the frame and report a change, as a damped orbit step does.
+    frame: (dt, now) => { frames.push(dt); starts.push(now); clock.advance(5); if (orbiting) scheduler.invalidate(); } });
+  scheduler.invalidate();
+  for (let i = 0; i < 10; i++) clock.step(16);
+  // Each frame's dt is the whole time since the previous frame began (21 ms here), so the idle advances by exactly
+  // the time that passed; before the fix it counted only from the request, losing the 5 ms spent before it.
+  for (let i = 1; i < frames.length; i++) expect(frames[i]!).toBeCloseTo((starts[i]! - starts[i - 1]!) / 1000, 9);
+  expect(frames.slice(1).reduce((sum, dt) => sum + dt, 0)).toBeCloseTo((starts.at(-1)! - starts[0]!) / 1000, 9);
+  playing = false;
+  clock.step(16);
+  // The request inside the last frame still draws one more; then the orbit settles and the loop stops.
+  expect(clock.pending).toBe(true);
+  orbiting = false;
+  clock.step(16);
+  expect(clock.pending).toBe(false);
 });
 
 test("while something animates (idle, blink study) every refresh draws; it stops when the animation does", () => {
@@ -156,6 +179,18 @@ test("the idle reports every change other than playback: enable, pause, seek, co
   expect(changes).toEqual(["enable", "pause", "seek", "parts", "attach", "detach", "disable"]);
 });
 
+/**
+ * A source check, not a behavioural one, so its reach is limited:
+ * - It decides what is a mutator by name (a `set`/`apply`/`animate`/`restore`/`update`/`reconcile` prefix, or the
+ *   listed exceptions). A new method that changes the picture under another name (say `toggleX` or `loadY`) is not
+ *   caught; add it to the exception list, or name it with one of the prefixes.
+ * - It reads the `api` object literal's keys by indentation and layout, so a reformatted `scene.ts` (a nested
+ *   object, a spread, a key on the same line as another) can hide keys from it. The count floor catches only a
+ *   wholesale miss.
+ * - It proves a mutator is wrapped, not that the wrapped call changes anything or that a change made elsewhere
+ *   (a closure, an event handler, an async continuation) requests a frame. Those are covered by the trigger tests
+ *   above and the browser check.
+ */
 test("every scene method that changes what is drawn is wrapped to request a frame; readers are not", () => {
   const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "scene.ts"), "utf8") as string;
   const body = source.slice(source.indexOf("  const api = {"), source.indexOf("  // Every call that changes what is drawn"));

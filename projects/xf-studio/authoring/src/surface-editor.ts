@@ -671,6 +671,9 @@ export function createSurfaceEditor(
     const resolved = targetAt(e.clientX, e.clientY);
     hovered = resolved.handle; hoverTarget = resolved.target;
     publishInput();
+    // The release stops the event before the viewport's own pointer trigger sees it, and the head draws on
+    // demand: ask for the frame that shows the new hover highlight (UI-47).
+    viewer.requestRender?.();
   }
   canvas.addEventListener("pointerleave", () => {
     hovered = undefined; hoverTarget = undefined; publishInput();

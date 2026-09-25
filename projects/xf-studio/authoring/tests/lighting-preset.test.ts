@@ -187,3 +187,36 @@ test("the creator preset re-asks the host on activation and swaps the grade only
   expect(loads).toBe(4);
   stage.dispose();
 });
+
+test("a changed cube with the same source description still notifies, so the viewport draws the new grade (PREV-48)", async () => {
+  const scene = new THREE.Scene();
+  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  const source = { kind: "installed" as const, depotPath: null, archive: "lut-a.archive", group: null, provider: null, alternatives: [], rule: null,
+    size: null, note: "Colour grading: your LUT mod.", skipped: [] };
+  const cube = (level: number) => ({ size: 2, data: new Float32Array(32).fill(level) }) as never;
+  const answers = [
+    { lut: cube(0.25), file: "a".repeat(64) + ".bin", source },
+    // The LUT mod's file was updated in place: same archive and note, a different decoded cube.
+    { lut: cube(0.5), file: "b".repeat(64) + ".bin", source: structuredClone(source) },
+    // The same cube again changes nothing and stays quiet.
+    { lut: cube(0.5), file: "b".repeat(64) + ".bin", source: structuredClone(source) },
+  ];
+  let loads = 0;
+  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: async () => answers[loads++]! });
+  const applied: unknown[] = [];
+  const setLut = stage.display.setLut.bind(stage.display);
+  stage.display.setLut = next => { applied.push(next); setLut(next); };
+  const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+  stage.setPreset("creator"); await settle();
+  let notices = 0; stage.subscribe(() => notices++);
+  stage.setPreset("studio"); stage.setPreset("creator");
+  notices = 0; await settle();
+  expect(applied).toHaveLength(2);
+  expect(notices).toBe(1);
+  stage.setPreset("studio"); stage.setPreset("creator");
+  notices = 0; await settle();
+  expect(applied).toHaveLength(2);
+  expect(notices).toBe(0);
+  stage.dispose();
+});

@@ -305,12 +305,20 @@ function statusBar(rt: StudioRuntime) {
   };
 }
 
+/**
+ * F6 / Shift+F6: move focus between the shell's regions. The visible guidance callouts (the tour card and the
+ * onboarding offer) are regions too (UI-41); in one, focus lands on its primary action, never its close button.
+ */
 function cycleRegions(root: HTMLElement, backwards: boolean) {
+  const callouts = [...root.querySelectorAll<HTMLElement>(".guidance-callout")].filter(node => !node.hidden && !node.closest("[hidden]"));
   const regions = [root.querySelector<HTMLElement>(".shell-header"), ...root.querySelectorAll<HTMLElement>(".dock-group"),
-    root.querySelector<HTMLElement>(".status-bar")].filter((node): node is HTMLElement => !!node);
+    root.querySelector<HTMLElement>(".status-bar"), ...callouts].filter((node): node is HTMLElement => !!node);
   const current = regions.findIndex(region => region.contains(document.activeElement));
   const next = regions[(current + (backwards ? -1 : 1) + regions.length) % regions.length];
-  const target = next.querySelector<HTMLElement>(".dock-tab[aria-selected=true], button:not(:disabled), [tabindex='0']");
+  const target = next.classList.contains("guidance-callout")
+    ? next.querySelector<HTMLElement>(".guidance-actions .btn.primary:not(:disabled)") ?? next.querySelector<HTMLElement>(".guidance-actions .btn:not(:disabled)")
+      ?? next.querySelector<HTMLElement>(".guidance-title")
+    : next.querySelector<HTMLElement>(".dock-tab[aria-selected=true], button:not(:disabled), [tabindex='0']");
   (target ?? next).focus();
 }
 

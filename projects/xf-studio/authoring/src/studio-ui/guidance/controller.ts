@@ -7,7 +7,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { panelAnchor } from "./anchors";
 import { GuidanceService, type GuidanceAction, type GuidanceCapability, type GuidanceEnvironment, type StepButton } from "./engine";
 import { Callout, TourOverlay } from "./overlay";
-import { ONBOARDING_TOUR_ID, TOURS } from "./tours";
+import { ONBOARDING_TOUR_ID, toursFor } from "./tours";
 import type { GuidanceFacts, TourCommand, TourNavigation } from "./types";
 
 /** Read-only facts for `advanceWhen`, from the port's snapshots and the dock. */
@@ -79,7 +79,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     capability: command => commandCapability(rt, command),
     record,
   };
-  const service = new GuidanceService(TOURS, env);
+  const service = new GuidanceService(toursFor(rt.finishes), env);
   const overlay = new TourOverlay({
     rect: target => target.kind === "anchor" ? rt.anchors.rect(target.anchor) : target.kind === "panel" ? rt.anchors.rect(panelAnchor(target.panel)) : undefined,
     press: button => void press(button),
@@ -87,7 +87,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     // Dock changes (tab switches, floating, closing) don't touch the port; re-check anchors a few times a second.
     refresh: () => { service.observe(); paint(false); },
   });
-  let invoker: HTMLElement | null = null, shown = -1, running = false;
+  let invoker: HTMLElement | null = null, shown = "", running = false;
 
   /** Repaint; `focus` moves focus into the card (a person's own navigation), never on an automatic advance. */
   function paint(focus: boolean) {
@@ -95,18 +95,20 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     overlay.render(active);
     if (active) {
       running = true;
-      if (active.index !== shown || snapshot.revision !== lastRevision) {
-        if (active.index !== shown) {
+      // A step is identified by its tour too: starting another tour at the same index still announces it.
+      const step = `${active.tour.id}:${active.index}`;
+      if (step !== shown || snapshot.revision !== lastRevision) {
+        if (step !== shown) {
           rt.feedback.announce(`${active.tour.title}, step ${active.index + 1} of ${active.count}: ${active.content.title}`);
           // Bring an anchor scrolled out of its panel into view (the panel scrolls, never the page).
           const target = active.target;
           if (target.kind === "anchor" || target.kind === "panel") rt.anchors.element(target.anchor)?.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
-        shown = active.index;
+        shown = step;
         if (focus) requestAnimationFrame(() => overlay.callout.focusTitle());
       }
     } else if (running) {
-      running = false; shown = -1;
+      running = false; shown = "";
       const last = snapshot.last;
       rt.feedback.announce(last?.outcome === "completed" ? "Tour finished. Replay it any time from Help." : "Tour closed. Replay it any time from Help.");
       // Back to where the person was; if that has gone (the offer card), to Help, where tours live.
@@ -126,8 +128,10 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
   function navigate(action: TourNavigation) { dispatch(NAV_ACTIONS[action]); }
   async function press(button: StepButton) {
     if (typeof button.action === "string") { navigate(button.action); return; }
-    const ok = await runCommand(rt, button.action);
+    // Read the step before the command runs: a shell paint during an async command can already have advanced
+    // the tour on its `advanceWhen`, and `then: "next"` must not move it a second time (UI-42).
     const before = service.snapshot().active?.index;
+    const ok = await runCommand(rt, button.action);
     // A satisfied `advanceWhen` moves on by itself; `then: "next"` covers commands without one.
     if (ok && !service.observe() && button.then === "next" && service.snapshot().active?.index === before) dispatch({ kind: "guidance.next" });
     else paint(true);
