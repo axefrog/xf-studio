@@ -21,7 +21,7 @@ import { refFromPath } from "./depot-path";
 import { CREATOR_ENVIRONMENT, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_FILE, GRADING_LUT_STATE_SCHEMA, decodeGradingLut, decodeGradingLutBinary, encodeGradingLut, GradingLutError, readEnvironmentGrading, selectGradingLut,
   supportedMapping, type GradingLut, type GradingLutSource } from "./grading-lut";
 import type { Installation, InstallationOptions } from "./resolver-host";
-import { ResourceGraph } from "./resource-graph";
+import { InstallationRegistry, installations } from "./installation-registry";
 import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 
 export { GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT } from "./grading-lut";
@@ -114,8 +114,6 @@ type Attempt = { source: GradingLutSource; file: string | null; failure: unknown
 type Preparation = { key: string; state: GradingLutState; promise: Promise<void>; controller: AbortController;
   /** Transient failures so far, and when the next retry is due (null when none is). */
   failures: number; retryAt: number | null };
-/** The installation opened for one fingerprint, kept for retries; `environmentRead` once the creator environment loaded. */
-type Opened = { key: string; installation: Installation; graph: ResourceGraph; environmentRead: boolean };
 class Superseded extends Error {}
 
 /**
@@ -126,17 +124,21 @@ class Superseded extends Error {}
  *
  * Failures (PREV-45). A transient failure (time limit, missing .NET, a process that could not start, a disk
  * error) answers with the neutral grade and is tried again on a request after `GRADING_LUT_RETRY_MS`, doubling
- * each time, at most `GRADING_LUT_MAX_RETRIES` times. A retry keeps the installation opened for the same
- * fingerprint (no second discovery) and re-extracts only what failed: decoded LUTs are cached on disk and failures
+ * each time, at most `GRADING_LUT_MAX_RETRIES` times. A retry reuses the installation the registry keeps open for the
+ * route (installation-registry.ts: no second discovery while the mod setup is unchanged, and a fresh resource graph
+ * when a read failed in a way that may not repeat) and re-extracts only what failed: decoded LUTs are cached on disk and failures
  * that repeat are remembered. While it runs, the answer already given stands. A lasting failure (see
  * `lastingFailure`) is not tried again until its archive or WolvenKit changes or the host restarts.
  */
 export class GradingLutHost {
   private current: Preparation | null = null;
-  private opened: Opened | null = null;
+  /** The shared registry, or a private one over the `open` test seam. */
+  private readonly installations: InstallationRegistry;
   /** Extractions that failed in a way that repeats, by decoded-LUT cache key: not tried again while the key holds. */
   private readonly lasting = new Map<string, string>();
-  constructor(private readonly options: GradingLutHostOptions) {}
+  constructor(private readonly options: GradingLutHostOptions) {
+    this.installations = options.open ? new InstallationRegistry({ open: options.open }) : installations;
+  }
 
   private get root() { return join(this.options.cacheRoot, "grading-lut"); }
   private now() { return this.options.now?.() ?? Date.now(); }
@@ -187,21 +189,6 @@ export class GradingLutHost {
     return true;
   }
 
-  /** The installation for `key`: opened once, then kept for retries. */
-  private async installationFor(settings: CharacterDetailSettings, key: string, cli: string): Promise<Opened> {
-    const known = this.opened;
-    if (known?.key === key) {
-      // The graph remembers a failed load, so a retry reads the environment through a fresh graph over the same indexes.
-      if (!known.environmentRead && known.installation.fetcher && known.installation.xl)
-        known.graph = new ResourceGraph(known.installation.depot, known.installation.xl, known.installation.fetcher);
-      return known;
-    }
-    const open = this.options.open ?? (await import("./resolver-host")).openInstallation;
-    const installation = open({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
-      mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: cli, cacheDir: this.options.resolverCache, log: this.options.log });
-    return this.opened = { key, installation, graph: installation.graph, environmentRead: false };
-  }
-
   /** The decoded LUT a cache index names, or null when it names none or its file is missing or damaged. */
   private cachedLut(index: string): { lut: GradingLut; name: string } | null {
     try {
@@ -217,14 +204,14 @@ export class GradingLutHost {
       return { source: neutralSource(NOT_SET_UP), file: null, failure: null };
     const cli = settings.wolvenKitCli;
     const superseded = () => { if (signal.aborted) throw new Superseded(); };
-    const opened = await this.installationFor(settings, key, cli);
+    const installation = await this.installations.acquire({ gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+      mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: cli, cacheDir: this.options.resolverCache, log: this.options.log });
     superseded();
-    const graph = opened.graph;
+    const graph = installation.graph;
     // The environment names the LUT; a mod that edits the environment to name another LUT is followed too.
     let environmentPath: string | null = null, environmentNote: string | undefined;
     const env = await graph.load(refFromPath(CREATOR_ENVIRONMENT), "env");
     superseded();
-    if (env) opened.environmentRead = true;
     const grading = env ? readEnvironmentGrading(env.root) : null;
     if (!grading?.ldr?.path) environmentNote = "The creator environment could not be read; the vanilla LUT path is used.";
     else if (!supportedMapping(grading.ldr)) environmentNote = `The environment's LUT uses ${grading.ldr.inputMapping} → ${grading.ldr.outputMapping}, which the preview does not implement; the vanilla LUT path is used.`;

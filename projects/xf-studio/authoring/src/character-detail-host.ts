@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
 import { CharacterDetailError, CHARACTER_DETAIL_STEPS, prepareCharacterDetails, STORE_FILE,
@@ -7,7 +7,9 @@ import { CharacterDetailError, CHARACTER_DETAIL_STEPS, prepareCharacterDetails, 
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
+import { installations, type InstallationRegistry } from "./installation-registry";
 import type { LaunchRoute } from "./local-settings";
+import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 /**
@@ -18,10 +20,12 @@ import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
  * request supersedes (cancels) an older one, so switching between Vs never finishes the previous V.
  *
  * The key covers the request and the installation it is prepared from (launch route, game and mod
- * folders, MO2 profile, WolvenKit identity, and the modification stamps of the mod lists and folders),
- * so a changed profile, a newly installed mod or another WolvenKit prepares again instead of reusing an
- * answer for a different mod set. Preparations share one on-disk cache, so they run one at a time: a new
- * one starts only after a cancelled one has stopped.
+ * folders, MO2 profile, WolvenKit identity, the modification stamps of the mod lists and folders, and the
+ * route's generation in the installation registry), so a changed profile, a newly installed mod, a file
+ * changed inside a mod folder or another WolvenKit prepares again instead of reusing an answer for a
+ * different mod set. Preparations read the process's shared, long-lived installation (installation-registry.ts),
+ * checked against the mod setup before each use. They share one on-disk cache, so they run one at a time: a
+ * new one starts only after a cancelled one has stopped.
  */
 export const CHARACTER_DETAIL_STATE_SCHEMA = "xfs/character-detail-state-1" as const;
 export type CharacterDetailPhase = "preparing" | "ready" | "failed" | "unknown";
@@ -57,25 +61,20 @@ const FAILED = "Something went wrong while preparing your V's skin, face details
 export const characterRequestKey = (request: CharacterRequest, installation = "") =>
   createHash("sha256").update(canonicalJson(request)).update("\n" + installation).digest("hex").slice(0, 32);
 
-const stamp = (path: string | null) => {
-  if (!path) return "-";
-  try { const s = statSync(path); return `${s.size}|${s.mtimeMs}`; } catch { return "missing"; }
-};
 /**
- * What the preparation reads besides the request: the launch route's settings, WolvenKit's identity and
- * cheap modification stamps of the places that change when mods are installed, removed or reordered
- * (the game's mod folder and load-order list, the MO2 profile's mod list and overwrite folder, and a
- * manual mod folder). Updating files inside an existing MO2 mod's folder in place is not detected; a
- * restart, or any change to the profile's mod list, prepares again.
+ * What the preparation reads besides the request: the launch route's settings, WolvenKit's identity, the shared cheap
+ * route stamps (route-fingerprint.ts: the places that change when mods are installed, removed or reordered) and the
+ * route's generation in the installation registry, which moves on whenever the registry finds the opened installation
+ * out of date (a file added, removed or edited inside a mod folder too). `CharacterDetailHost.refresh` runs that check
+ * before a request is answered from an earlier preparation.
  */
-export function installationFingerprint(settings: CharacterDetailSettings): string {
-  const game = settings.gameRoot, mods = game ? join(game, "archive", "pc", "mod") : null;
-  const profile = settings.mo2Root && settings.mo2ProfileId ? join(settings.mo2Root, "profiles", settings.mo2ProfileId) : null;
+export function installationFingerprint(settings: CharacterDetailSettings, registry: InstallationRegistry = installations): string {
+  const route = settings.gameRoot ? { ...settings, gameRoot: settings.gameRoot } : null;
   return canonicalJson({
-    route: [settings.gameRoot, settings.launchRoute, settings.mo2Root, settings.mo2ProfileId, settings.manualModRoot, settings.wolvenKitCli],
+    route: route ? [...routeIdentity(route), settings.wolvenKitCli] : [null, settings.launchRoute, settings.mo2Root, settings.mo2ProfileId, settings.manualModRoot, settings.wolvenKitCli],
     wolvenKit: settings.wolvenKitCli ? wolvenKitIdentityKey(wolvenKitIdentity(settings.wolvenKitCli)) : null,
-    stamps: [stamp(mods), stamp(mods && join(mods, "modlist.txt")),
-      stamp(profile && join(profile, "modlist.txt")), stamp(settings.mo2Root && join(settings.mo2Root, "overwrite")), stamp(settings.manualModRoot)],
+    stamps: route ? routeStamps(route) : [],
+    generation: route && settings.wolvenKitCli ? registry.generation({ ...route, wolvenKitCli: settings.wolvenKitCli }) : 0,
   });
 }
 
@@ -150,6 +149,18 @@ export class CharacterDetailHost {
       .finally(() => { if (this.running?.controller === controller) this.running = null; });
     this.running = { key, controller, promise };
     return this.states.get(key)!;
+  }
+
+  /**
+   * Check the current route's opened installation (installation-registry.ts) before a request is answered: when the mod
+   * setup changed since it was opened, the route's generation moves on, so the request key changes and the V is
+   * prepared again from the new setup instead of reusing an answer for the old one. Cheap: one `lstat` per watched path.
+   */
+  async refresh(): Promise<void> {
+    const settings = this.options.settings();
+    if (!settings.gameRoot || !settings.wolvenKitCli) return;
+    try { await installations.revalidate({ ...settings, gameRoot: settings.gameRoot, wolvenKitCli: settings.wolvenKitCli }); }
+    catch { /* The preparation checks again, and reports what it cannot read. */ }
   }
 
   /** The state for a request key; `unknown` when this host has not seen it (the page asks again). */

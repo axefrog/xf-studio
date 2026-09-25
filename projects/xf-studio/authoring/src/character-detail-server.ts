@@ -34,6 +34,8 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
       if (text.length > MAX_BODY) return json({ code: "too_large", error: "Request is too large." }, 413);
       body = parseCharacterRequest(JSON.parse(text));
     } catch { return json({ code: "invalid", error: "Invalid character request." }, 400); }
+    // An answer prepared earlier is reused only while the mod setup it came from is unchanged.
+    await host.refresh();
     return json(host.request(body as ReturnType<typeof parseCharacterRequest>));
   };
 }

@@ -8,14 +8,17 @@
  * file does not count), or an unreadable archive index that the game searches before the head's winning
  * archive (it could hide a head mod).
  *
- * Read-only towards the game and MO2. Archive index caches are written only below `cacheDir`, which hosts
- * place inside their private plate cache.
+ * Read-only towards the game and MO2. The route is opened through the process's installation registry
+ * (installation-registry.ts), which reuses an installation the preview already opened while every folder and file it
+ * read is unchanged, and opens it again otherwise. Archive index caches are written only below a host-private cache
+ * folder: `cacheDir` here, or the preview's resolver cache when the preview opened the route first.
  */
 import { settleDepotAdditions } from "./archivexl-config";
 import { planHeadSource, type HeadSourcePlan } from "./eye-plate-head-source";
 import { EyePlateError, type EyePlateHeadSourcePort } from "./eye-plate-service";
 import type { LaunchRoute } from "./local-settings";
-import { openInstallation, type UnreadIndex } from "./resolver-host";
+import { installations } from "./installation-registry";
+import type { UnreadIndex } from "./resolver-host";
 
 export interface InstalledHeadRoute {
   readonly gameRoot: string;
@@ -56,7 +59,8 @@ export function incompleteHeadSource(scan: { scanGaps: readonly string[]; unread
 export function createInstalledHeadSource(route: InstalledHeadRoute, cacheDir: string): EyePlateHeadSourcePort {
   return {
     async resolve({ meshDepotPath, morphDepotPath }) {
-      const installation = openInstallation({ gameRoot: route.gameRoot, launchRoute: route.launchRoute, mo2Root: route.mo2Root ?? null,
+      // The process's shared installation for the route, checked against the mod setup before it is reused.
+      const installation = await installations.acquire({ gameRoot: route.gameRoot, launchRoute: route.launchRoute, mo2Root: route.mo2Root ?? null,
         mo2ProfileId: route.mo2ProfileId ?? null, manualModRoot: route.manualModRoot ?? null, wolvenKitCli: route.wolvenKitCli, cacheDir });
       const { depot, xl, summary } = installation;
       const additions = settleDepotAdditions(xl, hash => depot.lookup(hash).winner !== null);
