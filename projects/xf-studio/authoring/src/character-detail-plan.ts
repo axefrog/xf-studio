@@ -1,11 +1,13 @@
 /**
  * Pure selection step between the generic resolver and the character render record: which resolved
- * drawing components are the V's brows, lashes and hair, which of their chunks the preview can draw,
+ * drawing components are the V's head skin, brows, lashes and hair, which of their chunks the preview can draw,
  * and each chunk's effective material inputs (instance chain first, then the template's defaults).
  *
  * Everything is decided from the game's own data, never from mod identities:
  * - **Slot** comes from the character-creator option's `uiSlot` in the effective (merged) CCO. Vanilla and
- *   CCXL options share the vanilla slots (`eyebrows_color`, `eyelash_color`, `hair_color`) [resource].
+ *   CCXL options share the vanilla slots (`skin_type`, `eyebrows_color`, `eyelash_color`, `hair_color`)
+ *   [resource]. The skin type's appearance draws the head itself: its morph-target component carries the
+ *   `skin.mt` chunk whose instance chain holds the tone (knowledge/head-cc-rendering.md §2).
  * - **Consumer** is the third-person head: only choices listed in the `TPP` or `hairs` groups draw on the
  *   third-person puppet (the FPP hair twins sit in `FPP_hairs`) [resource; consumer wiring hypothesis].
  * - **Level of detail**: the preview draws the highest-detail level (chunks whose LOD mask has bit 0), as a
@@ -24,14 +26,14 @@ import type { Provenance } from "./resource-graph";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
-  eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair" });
+  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
 
 export type PlannedChunk = {
   chunk: number; name: string; template: string | null; drawn: boolean;
   scalars: Record<string, number>; colours: Record<string, RenderRgba>;
-  textures: Record<string, Provenance>; profiles: Record<string, Provenance>;
+  textures: Record<string, Provenance>; profiles: Record<string, Provenance>; skinProfiles: Record<string, Provenance>;
 };
 export type PlannedComponent = {
   slot: DetailSlot; option: string; definition: string; component: string;
@@ -47,7 +49,7 @@ export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 
 /** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
-  brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
+  skin: { noun: "skin", not: "isn't", pronoun: "it" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
   hair: { noun: "hair", not: "isn't", pronoun: "it" } });
 
 /** A plain colour or style label from a definition name (`female__05_brown_liquorice` → `brown liquorice`). */
@@ -55,6 +57,18 @@ export function choiceLabel(definition: string): string {
   const tail = definition.split("__").pop() ?? definition;
   const words = tail.replace(/^[0-9]+_/, "").replace(/_/g, " ").trim();
   return words || definition;
+}
+
+/**
+ * A plain skin label from the tone definition and the skin-type option (`h0_000_pwa__basehead__03_ca_senna`,
+ * `skin_type_03` → `senna, skin type 3`). Index numbers and the short group code before the tone name are dropped.
+ */
+export function skinLabel(option: string, definition: string): string {
+  const tail = (definition.split("__").pop() ?? definition).split("_").filter(word => word && !/^[0-9]+$/.test(word));
+  if (tail.length > 1 && tail[0]!.length <= 2) tail.shift();
+  const type = option.replace(/_0*([0-9]+)$/, " $1").replace(/_/g, " ").trim();
+  const tone = tail.join(" ");
+  return tone ? `${tone}, ${type}` : type;
 }
 
 function parseScalar(param: ResolvedParam): number | RenderRgba | null {
@@ -82,7 +96,7 @@ function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults):
   const template = material.template ? refLabel(material.template.ref) : null;
   const inputs = renderTemplate(template);
   const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, drawn: !!inputs,
-    scalars: {}, colours: {}, textures: {}, profiles: {} };
+    scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {} };
   if (!inputs) return chunk;
   for (const param of effectiveParams(material, defaults)) {
     const scalar = parseScalar(param);
@@ -91,6 +105,7 @@ function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults):
     else if (param.kind === "resource" && param.resource?.ref.path) {
       if (inputs.textures.includes(param.name) && /\.xbm$/i.test(param.resource.ref.path)) chunk.textures[param.name] = param.resource;
       if (inputs.profiles.includes(param.name) && /\.hp$/i.test(param.resource.ref.path)) chunk.profiles[param.name] = param.resource;
+      if (inputs.skinProfiles.includes(param.name) && /\.sp$/i.test(param.resource.ref.path)) chunk.skinProfiles[param.name] = param.resource;
     }
   }
   return chunk;
@@ -112,7 +127,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
 }
 
 /**
- * Select the brows, lashes and hair of a resolved character. Each slot reports one outcome: shown, none
+ * Select the head skin, brows, lashes and hair of a resolved character. Each slot reports one outcome: shown, none
  * (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map()): CharacterPlan {
@@ -125,7 +140,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     if (!entries.length) { slots.push({ slot, state: "none", label: "None" }); continue; }
     const planned = entries.flatMap(entry => entry.components.map(component => planComponent(slot, entry, component, defaults))
       .filter((item): item is PlannedComponent => !!item));
-    const label = [...new Set(entries.map(entry => choiceLabel(entry.definition)))].join(", ");
+    const label = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition) : choiceLabel(entry.definition)))].join(", ");
     if (!planned.length) {
       const missing = entries.some(entry => entry.appearance.status === "missing");
       const { noun, not, pronoun } = SLOT_WORDS[slot];

@@ -22,6 +22,8 @@ export function templateDefaults(root: JsonObject): [string, MaterialParamValue]
         value = { kind: "resource", type: "rRef:ITexture", ref: depotRef(data.texture), text: depotText(data.texture) }; break;
       case "CMaterialParameterHairParameters":
         value = { kind: "resource", type: "rRef:CHairProfile", ref: depotRef(data.hairProfile), text: depotText(data.hairProfile) }; break;
+      case "CMaterialParameterSkinParameters":
+        value = { kind: "resource", type: "rRef:CSkinProfile", ref: depotRef(data.skinProfile), text: depotText(data.skinProfile) }; break;
       case "CMaterialParameterScalar": value = { kind: "scalar", type: "Float", value: data.scalar ?? 0 }; break;
       case "CMaterialParameterColor": value = { kind: "scalar", type: "Color", value: data.color ?? null }; break;
       case "CMaterialParameterVector": value = { kind: "scalar", type: "Vector4", value: data.vector ?? null }; break;

@@ -1,5 +1,5 @@
 /**
- * Application service for the preview's resolved character details (brows, lashes and hair). DOM-free:
+ * Application service for the preview's resolved character details (head skin, brows, lashes and hair). DOM-free:
  * it asks the host to prepare the current V (the creator default, or the loaded save), follows the
  * preparation, has the renderer device swap the result in, and publishes a read-only status.
  *
@@ -39,7 +39,7 @@ export type CharacterDetailStatus = {
 };
 
 const POLL_MS = 600;
-const FAILED = "Brows, lashes and hair couldn't be prepared, so they aren't shown. The head still works.";
+const FAILED = "Your V's own skin, brows, lashes and hair couldn't be prepared, so they aren't shown. The head still works.";
 const pending = (): CharacterSlotStatus[] => DETAIL_SLOTS.map(slot => ({ slot, state: "pending", label: "" }));
 
 export class CharacterDetailActions {
@@ -96,7 +96,9 @@ export class CharacterDetailActions {
     const shown = await this.port.show(state.record, signal);
     if (signal.aborted) return;
     const slots = DETAIL_SLOTS.map(slot => shown.slots.find(entry => entry.slot === slot) ?? { slot, state: "none" as const, label: "None" });
-    const lines = slots.filter(slot => slot.state === "unavailable" && slot.message).map(slot => slot.message!);
+    // Unavailable slots first, then shown slots with a part the preview can't draw yet.
+    const lines = [...slots.filter(slot => slot.state === "unavailable" && slot.message), ...slots.filter(slot => slot.state === "shown" && slot.message)]
+      .map(slot => slot.message!);
     this.publish({ phase: "ready", source: request.source, message: lines.join(" "), progress: null, slots });
   }
 

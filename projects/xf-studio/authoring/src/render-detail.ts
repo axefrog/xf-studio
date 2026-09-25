@@ -8,10 +8,12 @@
  * - `xfs/render-detail-1`: the core head (`detail: "core-head"`: head, plate, eyes and four maps),
  *   derived from the base game's files. Still what the core preview writes.
  * - `xfs/render-detail-2`: adds the character record (`detail: "character"`): per resolved drawing
- *   component (brows, lashes, hair), its geometry, visible chunks and, per chunk, the material
- *   template with its scalars, colours, textures (raw channels plus `isGamma`) and hair profiles,
- *   exactly as the generic resolver found them for the player's own installation. The record never
- *   interprets channels; the renderer's material adapters do. A v2 reader also accepts a v2 core head.
+ *   component (the head's skin, brows, lashes, hair), its geometry, visible chunks and, per chunk, the
+ *   material template with its scalars, colours, textures (raw channels plus `isGamma`), hair profiles
+ *   and skin profiles, exactly as the generic resolver found them for the player's own installation on
+ *   the launch route. The record never interprets channels; the renderer's material adapters do. A v2
+ *   reader also accepts a v2 core head. The `skin` slot (the head component with its `skin.mt` chunk)
+ *   joined v2 with step P1; a v2 record written before it has no skin outcome and is refused.
  */
 export const RENDER_DETAIL_SCHEMA = "xfs/render-detail-1" as const;
 export const CHARACTER_DETAIL_SCHEMA = "xfs/render-detail-2" as const;
@@ -97,10 +99,11 @@ export function parseCoreDetail(value: unknown): CoreDetail {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Version 2: the character record (resolved brows, lashes and hair of the player's own game).
+// Version 2: the character record (the resolved head skin, brows, lashes and hair of the player's own game).
 
-export type DetailSlot = "brows" | "lashes" | "hair";
-export const DETAIL_SLOTS: readonly DetailSlot[] = ["brows", "lashes", "hair"];
+export type DetailSlot = "skin" | "brows" | "lashes" | "hair";
+/** Record and load order: the skin first, so decals over it can blend against the resolved skin colour. */
+export const DETAIL_SLOTS: readonly DetailSlot[] = ["skin", "brows", "lashes", "hair"];
 /** A texture as the game stores it: raw decoded channels, plus the resource's own colour flag. */
 export type RenderTexture = RenderResource & { depotPath: string; width: number; height: number; isGamma: boolean };
 export type RenderProfileStop = { value: number; color: [number, number, number] };
@@ -108,6 +111,13 @@ export type RenderProfileStop = { value: number; color: [number, number, number]
 export type RenderProfile = { depotPath: string; archive: string | null; sha256: string | null; sampleCount: number;
   id: RenderProfileStop[]; rootToTip: RenderProfileStop[] };
 export type RenderRgba = [number, number, number, number];
+/**
+ * A `CSkinProfile` (`.sp`) as serialized: the dual specular lobe (roughness scales and mix) and the
+ * subsurface blur inputs (size, diffuse and falloff colours in stored 8-bit values).
+ */
+export type RenderSkinProfile = { depotPath: string; archive: string | null; sha256: string | null;
+  roughness0: number; roughness1: number; lobeMix: number; blurSize: number;
+  diffuse: [number, number, number]; falloff: [number, number, number] };
 export type RenderChunkMaterial = {
   chunk: number;
   /** The mesh appearance's material name for this chunk. */
@@ -121,6 +131,8 @@ export type RenderChunkMaterial = {
   /** Only the inputs the renderer's adapter for this template reads (see render-templates.ts). */
   textures: Record<string, RenderTexture>;
   profiles: Record<string, RenderProfile>;
+  /** Skin profiles the template's skin parameters bind (`skin.mt` `SkinProfile`). */
+  skinProfiles: Record<string, RenderSkinProfile>;
 };
 export type RenderComponent = {
   /** Stable within the record: slot, component name and geometry hash. */
@@ -188,6 +200,19 @@ function profile(value: unknown, what: string): RenderProfile {
     id: stops(item?.id, `${what} ID`), rootToTip: stops(item?.rootToTip, `${what} root-to-tip`) };
 }
 
+const rgb = (value: unknown, what: string): [number, number, number] => {
+  if (!Array.isArray(value) || value.length !== 3) return fail(`${what} is not RGB.`);
+  return value.map((c, k) => int(c, `${what} ${k}`, 0, 255)) as [number, number, number];
+};
+function skinProfile(value: unknown, what: string): RenderSkinProfile {
+  const item = value as RenderSkinProfile;
+  const ranged = (v: unknown, name: string, max: number) => { const n = finite(v, `${what} ${name}`); return n >= 0 && n <= max ? n : fail(`${what} ${name} is out of range.`); };
+  return { depotPath: text(item?.depotPath, `${what} depot path`), archive: item?.archive === null ? null : text(item?.archive, `${what} archive`),
+    sha256: optionalSha(item?.sha256 ?? null, what), roughness0: ranged(item?.roughness0, "roughness0", 16), roughness1: ranged(item?.roughness1, "roughness1", 16),
+    lobeMix: ranged(item?.lobeMix, "lobe mix", 16), blurSize: ranged(item?.blurSize, "blur size", 64),
+    diffuse: rgb(item?.diffuse, `${what} diffuse`), falloff: rgb(item?.falloff, `${what} falloff`) };
+}
+
 function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
   const item = value as RenderChunkMaterial;
   return { chunk: int(item?.chunk, `${what} chunk`, 0, 63),
@@ -199,7 +224,8 @@ function chunkMaterial(value: unknown, what: string): RenderChunkMaterial {
       return (v as number[]).map((c, k) => int(c, `${label} ${k}`, 0, 255)) as RenderRgba;
     }),
     textures: entries(item?.textures, `${what} textures`, LIMITS.textures, texture),
-    profiles: entries(item?.profiles, `${what} profiles`, 4, profile) };
+    profiles: entries(item?.profiles, `${what} profiles`, 4, profile),
+    skinProfiles: entries(item?.skinProfiles, `${what} skin profiles`, 4, skinProfile) };
 }
 
 function component(value: unknown, index: number): RenderComponent {

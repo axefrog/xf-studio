@@ -9,6 +9,10 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ## Unreleased
 
+### New and improved
+
+- **Your V's own skin in the 3D preview.** The head now shows your V's skin type and skin tone, read from the same game and mod setup your Build uses, including installed complexion and skin-texture mods. Without a save it shows the character creator's default V; loading another save changes the skin with the rest of the character. Tone, skin detail and shine follow the game's own skin material; lighting under the skin is approximated, and it hasn't been compared with the game yet.
+
 ## 0.1.0-alpha.1
 
 ### New and improved

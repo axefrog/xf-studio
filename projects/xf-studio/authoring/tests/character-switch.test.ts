@@ -13,7 +13,7 @@ import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved
 import type { SavedV } from "../src/save-reader";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
-import { detailFixture, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { detailFixture, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.
@@ -55,14 +55,14 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(characterRequestFromSave(A)).toMatchObject({ appearances: REQUEST_A.source === "save" ? REQUEST_A.appearances : [] });
 
     // The scene: what is drawn for the character right now.
-    const scene = { details: [] as string[], morphs: [] as string[], eyes: "", piercing: false };
+    const scene = { details: [] as string[], skin: "", morphs: [] as string[], eyes: "", piercing: false };
     let holdB: (() => void) | null = null;
     const port: CharacterDetailPort = {
       async request(request, signal) {
         const record = await prepare(request);
         const key = JSON.stringify(request);
         // B's preparation can be held open to test superseding.
-        if (holdB && request.source === "save" && request.appearances[0]?.option === "eyebrows_color2") {
+        if (holdB && request.source === "save" && request.appearances.some(a => a.option === "eyebrows_color2")) {
           await new Promise<void>(resolve => { holdB = resolve; signal.addEventListener("abort", () => resolve()); });
         }
         return { key, phase: "ready", message: "", progress: null, record } satisfies HostCharacterState;
@@ -71,9 +71,12 @@ test("switching A → B → A replaces the whole character, and the makeup draft
       async show(file) {
         const record = records.get(file)!;
         scene.details = record.components.map(c => `${c.slot}:${c.option}:${c.geometry.depotPath}`);
+        // The skin the head shows: its chunk material, tone tint and albedo.
+        const skin = record.components.find(c => c.slot === "skin")?.materials[0];
+        scene.skin = skin ? `${skin.name}|${skin.colours.TintColor?.join(",")}|${skin.textures.Albedo?.depotPath}` : "";
         return { slots: record.slots };
       },
-      clear() { scene.details = []; },
+      clear() { scene.details = []; scene.skin = ""; },
       async wait() {},
     };
     const saved = new SavedAppearanceActions({ apply(v): SavedAppearanceResult {
@@ -97,15 +100,20 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     const shownA = [...scene.details];
-    expect(shownA.map(d => d.split(":")[0])).toEqual(["brows", "lashes", "hair"]);
+    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "brows", "lashes", "hair"]);
+    const skinA = scene.skin;
+    expect(skinA).toBe(`pale|171,155,150,255|${P.skinD1}`);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
 
     saved.dispatch({ kind: "savedV.restore", value: B });
-    // A's details leave the scene at once, before B has been prepared.
+    // A's details, its skin included, leave the scene at once, before B has been prepared.
     expect(scene.details).toEqual([]);
+    expect(scene.skin).toBe("");
     expect(details.snapshot().phase).toBe("preparing");
     await settle();
-    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["brows:eyebrows_color2", "lashes:eyelash_color"]);
+    expect(scene.details.map(d => d.split(":").slice(0, 2).join(":"))).toEqual(["skin:skin_type_03", "brows:eyebrows_color2", "lashes:eyelash_color"]);
+    // B's own skin type and tone: nothing of A's skin lingers.
+    expect(scene.skin).toBe(`senna_d03|202,177,153,255|${P.skinD3}`);
     expect(scene.morphs).toEqual(["h113_mouth"]);
     const b = details.snapshot();
     expect(b.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
@@ -114,6 +122,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     expect(scene.details).toEqual(shownA);
+    expect(scene.skin).toBe(skinA);
     expect(scene.morphs).toEqual(["h091_eyes", "h012_nose"]);
 
     // A slow B superseded by A never lands.
@@ -123,7 +132,8 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     expect(scene.details).toEqual(shownA);
-    expect(details.snapshot().slots.map(s => s.label)).toEqual(["brown", "brown", "brown"]);
+    expect(scene.skin).toBe(skinA);
+    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "brown", "brown", "brown"]);
 
     // A reload restores the last-loaded V: the workspace keeps it, and the shown character follows it.
     expect(characterRequestFor(saved.snapshot().savedV)).toEqual(characterRequestFromSave(A));

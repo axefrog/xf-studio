@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterDetailError, hairProfileStops, pngSize, prepareCharacterDetails, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailError, hairProfileStops, pngSize, prepareCharacterDetails, skinProfileValues, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail } from "../src/render-detail";
-import { detailFixture, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { detailFixture, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -43,8 +43,8 @@ function fakeExporter(options: { failArchive?: string; calls?: string[] } = {}):
 }
 
 const route = { gameRoot: join(root, "game"), launchRoute: "mo2" as const, wolvenKitCli: "wk.exe" };
-const prepare = (request = REQUEST_A, exporter = fakeExporter()) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"),
-  resolverCache: join(root, "resolver"), exporter, open: () => detailFixture().installation() });
+const prepare = (request = REQUEST_A, exporter = fakeExporter(), fixture = detailFixture()) => prepareCharacterDetails({ request, route,
+  storeRoot: join(root, "store"), resolverCache: join(root, "resolver"), exporter, open: () => fixture.installation() });
 
 describe("character record from the resolver", () => {
   test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
@@ -53,7 +53,7 @@ describe("character record from the resolver", () => {
     expect(record.schema).toBe("xfs/render-detail-2");
     expect(recordFile).toBe(`${record.identity}.json`);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
-    expect(record.components.map(c => c.slot)).toEqual(["brows", "lashes", "hair"]);
+    expect(record.components.map(c => c.slot)).toEqual(["skin", "brows", "lashes", "hair"]);
     const hair = record.components.find(c => c.slot === "hair")!;
     expect(hair.chunks).toEqual([0, 1]);
     expect(hair.geometry.depotPath).toBe(P.hairMesh);
@@ -75,10 +75,39 @@ describe("character record from the resolver", () => {
   test("an export failure empties only the affected slot, with one plain line", async () => {
     const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
     expect(record.components).toEqual([]);
-    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable"]);
-    expect(record.slots[2]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
+    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable", "unavailable"]);
+    expect(record.slots[0]!.message).toBe("WolvenKit couldn't read your V's skin from your game files, so it isn't shown.");
+    expect(record.slots[3]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
     const b = await prepare(REQUEST_B);
     expect(b.record.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
+  });
+
+  test("the head skin: the resolved chain's inputs, the winning skin profile's values, and the tone per V", async () => {
+    const a = (await prepare(REQUEST_A)).record, b = (await prepare(REQUEST_B)).record;
+    const skinOf = (record: typeof a) => record.components.find(c => c.slot === "skin")!;
+    const skinA = skinOf(a);
+    // The head's geometry is the winning morph target, exported with its facial shapes like every morph component.
+    expect(skinA.geometry).toMatchObject({ depotPath: P.headMorph, morphTargets: true });
+    expect(skinA.definition).toBe(TONES.pale);
+    const chunk = skinA.materials[0]!;
+    expect(chunk.template).toBe(P.skinMt);
+    expect(Object.keys(chunk.textures).sort()).toEqual(["Albedo", "DetailNormal", "EmissiveMask", "MicroDetail", "Normal", "Roughness",
+      "SecondaryAlbedo", "TintColorMask"]);
+    expect(chunk.textures.Albedo).toMatchObject({ depotPath: P.skinD1, isGamma: true });
+    expect(chunk.textures.Normal).toMatchObject({ depotPath: P.skinN, isGamma: false });
+    // The template-default profile from the archive that wins its path (a complexion mod here), with its values.
+    expect(chunk.skinProfiles.SkinProfile).toEqual({ depotPath: P.defaultSp, archive: "fixture_mod.archive", sha256: null,
+      roughness0: 1, roughness1: 1.6, lobeMix: 0.6, blurSize: 2.5, diffuse: [255, 255, 255], falloff: [255, 155, 119] });
+    // Another V: another type's albedo (replaced by the mod) and another tone.
+    const chunkB = skinOf(b).materials[0]!;
+    expect(chunkB.colours.TintColor).toEqual([202, 177, 153, 255]);
+    expect(chunkB.textures.Albedo!.sources[0]).toMatchObject({ depotPath: P.skinD3, archive: "fixture_mod.archive" });
+    expect(a.slots[0]).toEqual({ slot: "skin", state: "shown", label: "pale, skin type 1" });
+    expect(b.slots[0]).toEqual({ slot: "skin", state: "shown", label: "senna, skin type 3" });
+    // A texture framework's patch adds its overlay, read from the framework's archive.
+    const patched = skinOf((await prepare(REQUEST_B, fakeExporter(), detailFixture({ skinPatch: true }))).record).materials[0]!;
+    expect(patched.textures.SecondaryAlbedo!.sources[0]).toMatchObject({ depotPath: P.overlay, archive: "fixture_framework.archive" });
+    expect(patched.scalars.SecondaryAlbedoInfluence).toBe(1);
   });
 
   test("small readers: PNG size, texture colour flag and hair profiles", () => {
@@ -91,6 +120,10 @@ describe("character record from the resolver", () => {
       gradientEntriesRootToTip: [{ value: 2, color: { Red: 300, Green: 0, Blue: 0 } }] })).toEqual(
       { sampleCount: 127, id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 1, color: [255, 0, 0] }] });
     expect(hairProfileStops({ $type: "CHairProfile", sampleCount: 1, gradientEntriesID: [], gradientEntriesRootToTip: [] })).toBeNull();
+    expect(skinProfileValues({ $type: "CSkinProfile", roughness0: 0.966365993, roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998,
+      diffuse: { Red: 255, Green: 255, Blue: 255 }, falloff: { Red: 255, Green: 178, Blue: 165 } })).toEqual({ roughness0: 0.966365993,
+      roughness1: 1.59684002, lobeMix: 1, blurSize: 1.39999998, diffuse: [255, 255, 255], falloff: [255, 178, 165] });
+    expect(skinProfileValues({ $type: "CHairProfile" })).toBeNull();
   });
 });
 
@@ -157,7 +190,7 @@ describe("host preparation", () => {
     expect(host.filePath(ready.record!)).not.toBeNull();
     expect(host.filePath("../secret.json")).toBeNull();
     expect(host.filePath("records/x.json")).toBeNull();
-    expect(started).toEqual(["eyebrows_color1", "eyebrows_color2"]);
+    expect(started).toEqual(["skin_type_01", "skin_type_03"]);
   });
 
   // PREV-26: the answer belongs to the installation it was prepared from.
@@ -228,6 +261,6 @@ describe("host preparation", () => {
   test("without a game folder or WolvenKit the host says what's needed", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
       mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
-    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Your V's own skin, brows, lashes and hair appear once your game folder and WolvenKit are set up." });
   });
 });
