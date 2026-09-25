@@ -8,7 +8,7 @@ The project requires familiar categories rather than arbitrary legacy labels. Cu
 | Satin | Gentle sheen without distinct sparkle | Flat decal, roughness 0.38; internal `regular` | Same values |
 | Shimmer / pearl | Fine reflective sheen that sparkles close up | **Experimental**: facet normal map composed with the skin normal, variance-widened roughness mips ([design](finish-designs/shimmer.md)) | Game-matched model follows the route; earlier layers keep the fine-facet study |
 | Metallic / foil | Strong continuous reflective finish | Flat decal, roughness 0.27, metalness 0.65; never an alias for shimmer | Same values |
-| Glitter | Individually visible reflective flecks | **None**: preview only ([design](finish-designs/glitter.md)) | Opt-in glitter studies (recipes 7–10) |
+| Glitter | Individually visible reflective flecks | **None**: preview only; resolved glint-flake route proposed ([design](finish-designs/glitter.md)) | Opt-in glitter studies (recipes 7–10) |
 | Glossy / wet look | Smooth wet-looking reflection over colour | **Experimental**: one low-roughness dielectric lobe (0.12), no clear coat ([design](finish-designs/glossy.md)) | Game-matched model: the same single lobe; earlier layers keep the clear-coat study |
 | Colour-shifting | Angle-dependent hues; includes duochrome and multichrome | **Experimental** duochrome only: one additive Fresnel shift colour per preset ([design](finish-designs/colour-shifting.md)) | Game-matched model: the same Fresnel term with a chosen shift colour and strength; earlier layers keep the thin-film study |
 

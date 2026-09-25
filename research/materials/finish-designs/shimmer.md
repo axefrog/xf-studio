@@ -31,6 +31,7 @@ The game-matched model uses the same flake bake but uploads route-filtered mip c
 - Normal alpha follows the colour-map alpha (square-root coverage), so partly covered edges carry slightly more normal than colour.
 - BC5 compression and mip selection at face distance: the fine pattern has no strong tilts left from the 256 level down, so at face framing Shimmer may look like a slightly broader Satin.
 - The facet bake is a UV-cell lattice; see the Glitter page for its known visual weaknesses.
+- **Facet size is set by the plate's texel density, not by the look.** The plate keeps the head's UVs, so a packaged 1024 texel is about 0.56 × 0.40 mm on the lids. The default facets (256 effective cells, radius 0.39 cell) are about **1.4 mm** wide; *Shimmer · strong* makes 2.8 mm and Board 2's coarse stripe about 5.6 mm, all tilted at most 15–23°. That is far coarser than pearl pigment, and it fits session 1's "diffused gloss". A plate-local UV window (`UVScale`/`UVOffset`, non-square texture) would make fine facets possible ([Glitter in game](../../../knowledge/glitter-in-game.md#1-from-flake-texture-to-screen-pixel), [experiment 018](../../../experiments/018-glitter-route/README.md#texel-density)).
 
 ## Single most informative in-game test
 
