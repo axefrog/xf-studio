@@ -119,6 +119,10 @@ export async function createScene(
   });
   head.material = skin;
   extendSkin(head, skin);
+  // The game's eye UV0 spans several tiles (the texture repeats across the eyeball), so every
+  // eye texture repeats. Older prepared eyes were folded into one tile, where this is a no-op.
+  const repeatEyeTexture = (t: THREE.Texture) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.needsUpdate = true; return t; };
+  repeatEyeTexture(eyeColor);
   const eyeMat = new THREE.MeshStandardMaterial({
     map: eyeColor,
     roughness: 0.18,
@@ -134,11 +138,12 @@ export async function createScene(
         t.dispose(); throw Error("Local eye image dimensions do not match its manifest");
       }
       if (role === "roughness") {
-        const map = eyeRoughnessMap(t.image as HTMLImageElement, renderer.capabilities.getMaxAnisotropy());
+        const map = repeatEyeTexture(eyeRoughnessMap(t.image as HTMLImageElement, renderer.capabilities.getMaxAnisotropy()));
         t.dispose();
         return map;
       }
-      // Existing eye UV0 is already folded to one tile. Do not crop/translate it again.
+      // Eye UV0 addresses the texture directly (repeating across tiles). Do not crop/translate it.
+      repeatEyeTexture(t);
       t.flipY = false;
       t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();
