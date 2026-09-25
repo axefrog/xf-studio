@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
 | `b9597bd` | 2026-09-25 | First deep review: core, pipeline/resolver/adapters, presentation/desktop (three parallel reviewers) | 7 High, 30 Medium, 18 Low. Over the High budget, so feature merges are paused except critical-path work. |
 
@@ -43,6 +44,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
+| CORE-16 | High | Core | `selectGlitterModel` doesn't know `xfs/recipe-11`: choosing Fine/Clustered/Direct Glitter beside a game-matched Glossy/Shimmer layer is offered then refused, or silently downgrades the schema (`glitter-model.ts:62-65`, `recipe-actions.ts:178-180`). CORE-09 made worse | Open |
 | PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives. Worse since PIPE-01: Build cuts the plate from the head the launch route loads, while the preview still reads only `archive/pc/content` (`preview-core-recipe.ts:32` comment claims they share one head) | Open (platform step 7); fix the comment and add a preview notice meanwhile |
@@ -82,6 +84,10 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-07 | Med | Core | Optical-bake and range rules duplicated across core, workers and descriptors | Open |
 | CORE-08 | Med | Core | Duplicate action catalogues and Undo policies; finish choices not from the catalogue | Open |
 | CORE-09 | Med | Core (design) | One layer's glitter model bumps the whole recipe schema; nested schema conditionals | Open |
+| CORE-17 | Med | Core | `layer.setFinish` always replaces optics: re-selecting Colour-shift resets shift colour/strength and adds an Undo step; re-selecting Glossy silently upgrades an earlier-model layer; shift settings aren't remembered like Glitter's | Open |
+| CORE-18 | Med | Core | `layerExport(layerId)` judges layers alone, but Colour-shift eligibility is preset-wide: the Inspector says Experimental while Check omits the layer | Open |
+| CORE-19 | Med | Core | Same defect as PIPE-23 (Fresnel rule counts unexportable layers) | Open (with PIPE-23) |
+| CORE-20 | Med | Core | Finish/route rules in five places (`finish-export.ts` two tables, `recipe.ts` `GAME_OPTICS_FINISHES`, verifier `resource-checks.ts:61`, `makeup-stack.ts:184-187`); extends CORE-07/UI-10 | Open |
 | CORE-10 | Med | Core | One damaged recovery draft blocks the whole workspace restore | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-11 | Med | Tests | Core test gaps (startup wiring, history limit, workspace size, routing) | Partly fixed (claude/cleanup-core); routing tests remain |
 
@@ -115,11 +121,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-17:** the WolvenKit post-install probe ignores the cancel signal (`wolvenkit-setup-host.ts:314`); Cancel does nothing for up to 30 s.
 - **PREV-18:** WolvenKit unpacking runs synchronously on the server, and the .NET registry check re-runs every 3 s while the card polls every 500 ms.
 - **PREV-19:** test gaps: `tool-download.ts` stall/redirect/length/oversize paths, `createInstalledHeadSource`, the PIPE-23 and PIPE-24 cases, and `process-tree`.
+- **CORE-21:** `layer.setShift` is always labelled "Shift colour", also for strength edits (`history-labels.ts:14`).
+- **CORE-22:** dead eligibility exports `SUPPORTED_FLAT_FINISHES`, `unsupportedFlatLayers` (`preset-compiler.ts`) and `presetRoute` (`finish-export.ts`).
+- **CORE-23:** unreachable `historyTimeline()` fallback duplicates `AuthoringHistory.snapshot()` (`studio-application.ts:291-297`).
+- **CORE-24:** first collection created from a legacy workspace drops `historyTrimmed` from editor memory (`collection-service.ts:235-236`).
+- **CORE-08/CORE-15 (extended):** new actions were added to both the descriptor table and the hand-kept `recipeKinds`/`undoPolicy()` sets; new refusals come back as `invalid_value` instead of `incompatible_mode`.
 
 ## New subsystems since last review
 
-- **Managed tool download** (claude/wolvenkit-fetch, 25 Sep): `wolvenkit-setup-host.ts` (service), `tool-download.ts`, `zip-extract.ts`, `dotnet-runtime.ts` (adapters), `wolvenkit-release.ts` (pin), `wolvenkit-setup.ts` (renderer actions and views), endpoints `/api/desktop/wolvenkit`, `/api/wolvenkit` and `/api/desktop/open-link`. First code that downloads and unpacks executables; review with the next deep review.
-- **Shared WolvenKit runner** (`wolvenkit-cli.ts`, same branch): the one place Build, the eye plate and the preview start WolvenKit.
+None. (The managed tool download and the shared WolvenKit runner were reviewed at `19bf84c`; the presentation layer's review follows the legacy-shell removal.)
 
 ## Fixed in claude/wolvenkit-fetch
 
