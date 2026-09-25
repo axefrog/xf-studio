@@ -12,18 +12,23 @@ import { componentId, sameJson } from "../src/mod-verifier/resource-checks";
 import { errorStats, expectedChain } from "../src/mod-verifier/texture-checks";
 import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
 import { oracleTest } from "./optional-oracles";
+// Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
+// which the verifier's own decoder must accept (and reject when tampered).
+import { derivePlateDocuments } from "../src/eye-plate-cut";
+import { liftPlate } from "../src/plate-lift";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 
 const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
 
 
 test("the verifier imports nothing from the compiler or other Studio modules", () => {
   const files = readdirSync(verifierDir).filter(name => name.endsWith(".ts"));
-  expect(files.sort()).toEqual(["dds-reader.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "verify-build.ts"]);
+  expect(files.sort()).toEqual(["dds-reader.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "verify-build.ts"]);
   for (const name of files) {
     const code = readFileSync(join(verifierDir, name), "utf8");
     const specifiers = [...code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(m => m[1]);
     for (const specifier of specifiers)
-      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|resource-checks|resource-inventory|texture-checks|verify-build))$/);
+      expect(specifier, `${name} imports ${specifier}`).toMatch(/^(?:node:[a-z_]+|\.\/(?:dds-reader|plate-geometry|resource-checks|resource-inventory|texture-checks|verify-build))$/);
     expect(code, `${name} uses require()`).not.toMatch(/\brequire\s*\(/);
   }
 });
@@ -36,7 +41,7 @@ const SIZE = 16;
 const depot = "xfs/test/collection";
 const presets = ["a1", "b2"].map((id, i) => ({
   id, name: `Look ${id}`, revision: 1, index: i + 1, appearance: `xfs_p${id}`, appAppearance: `xfs_cns__xfs_p${id}`,
-  route: "flat", material: "@preset",
+  route: "flat", material: "@preset", plateChunk: 0,
   // Only the fields the verifier's route rules read; a Matte and a Metallic look are both flat.
   recipe: { layers: [{ id: `l${i}`, enabled: true, opacity: 1, finish: i ? "metallic" : "matte", color: "#406080" }] },
   textures: {
@@ -48,7 +53,12 @@ const plan = {
   component: "xfs_cns_makeup", offAppearance: "xfs_off", templateAppearance: "xfs_cns__xfs_template",
   app: `${depot}/xfs_collection.app`, customization: `${depot}/xfs_collection.inkcharcustomization`,
   mesh: `${depot}/models/xfs_eye_plate.mesh`, morph: `${depot}/models/xfs_eye_plate.morphtarget`, presets,
+  plate: { liftsMm: [0.4] },
 };
+/** A real single-chunk plate cut from the synthetic head, and its lifted form for the given lifts. */
+const PLATE = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
+const PLATE_TARGETS = PLATE.morph.Data.RootChunk.targets.length;
+const liftedPlate = (liftsMm: number[]) => liftPlate(PLATE.mesh, PLATE.morph, liftsMm);
 const cname = (s: string) => ({ $type: "CName", $storage: "string", $value: s });
 const ref = (s: string, soft = false) => ({ DepotPath: { $type: "ResourcePath", $storage: "string", $value: s.replaceAll("/", "\\") }, Flags: soft ? "Soft" : "Default" });
 const doc = (root: unknown) => ({ Header: { WolvenKitVersion: "test" }, Data: { Version: 195, RootChunk: root } });
@@ -81,12 +91,11 @@ type Fixture = { build: string; dds: Map<string, Uint8Array>; plate: { mesh: str
 function makeBuild(mutate?: Mutation): Fixture {
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-"));
   const p = structuredClone(plan);
-  const blob = { renderResourceBlob: { HandleId: "1", Data: { vertices: [1, 2, 3] } }, boneNames: [cname("root")],
-    boneRigMatrices: [{ a: 1 }], boundingBox: { Min: 0, Max: 1 } };
-  const sourceMesh = { ...structuredClone(blob), appearances: [], materialEntries: [] };
-  const targets = Array.from({ length: 105 }, (_, i) => ({ name: cname(`t${i}`) }));
-  const sourceMorph = { blob: { BufferId: "7", Data: { deltas: [0] } }, targets };
-  const mesh = { ...structuredClone(blob), renderResourceBlob: { HandleId: "99", Data: { vertices: [1, 2, 3] } },
+  const blob = { boneNames: [cname("root")], boneRigMatrices: [{ a: 1 }], boundingBox: { Min: 0, Max: 1 } };
+  const plateRoot = PLATE.mesh.Data.RootChunk, lifted = liftedPlate(p.plate.liftsMm);
+  const sourceMesh = { ...structuredClone(blob), renderResourceBlob: structuredClone(plateRoot.renderResourceBlob), appearances: [], materialEntries: [] };
+  const sourceMorph = structuredClone(PLATE.morph.Data.RootChunk);
+  const mesh = { ...structuredClone(blob), renderResourceBlob: { ...lifted.mesh.Data.RootChunk.renderResourceBlob, HandleId: "99" },
     appearances: p.presets.map((preset, i) => ({ HandleId: String(10 + i), Data: { $type: "meshMeshAppearance", name: cname(preset.appearance),
       chunkMaterials: i ? [] : [cname(p.presets[0].appearance + "@preset")] } })),
     materialEntries: [{ $type: "CMeshMaterialEntry", index: 0, isLocalInstance: 1, name: cname("@preset") }],
@@ -96,7 +105,7 @@ function makeBuild(mutate?: Mutation): Fixture {
       ...Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
         RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }).map(([name, value]) => ({ $type: "Float", [name]: value })),
       { $type: "Color", DiffuseColor: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 } }] }] } };
-  const morph = { ...structuredClone(sourceMorph), blob: { BufferId: "8", Data: { deltas: [0] } }, baseMesh: ref(p.mesh) };
+  const morph = { ...structuredClone(lifted.morph.Data.RootChunk), baseMesh: ref(p.mesh) };
   const id = componentId(p.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(p.component), id, isEnabled: 1,
     meshAppearance: cname(p.presets[0].appearance), morphResource: ref(p.morph),
@@ -205,12 +214,13 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     const report = run(fixture, {}, calls);
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
-      "unpackedFilesVerified", "preservedMorphs", "modelBuffersUnchanged", "resolvedDynamicPaths", "decodedPixelChecks",
+      "unpackedFilesVerified", "preservedMorphs", "plateGeometry", "resolvedDynamicPaths", "decodedPixelChecks",
       "decodedMipChecks", "presetRoutes", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
     expect(report).toMatchObject({ presetCount: 2, selectorOptionCount: 3, meshAppearances: 2, materialTemplates: 1, textureCount: 6,
-      unpackedFilesVerified: 10, preservedMorphs: 105, installed: false, gameRenderingVerified: false,
+      unpackedFilesVerified: 10, preservedMorphs: PLATE_TARGETS, installed: false, gameRenderingVerified: false,
       archiveXlSha256: sha(declaration(plan)),
       plateInputs: { mesh: sha(readFileSync(fixture.plate.mesh)), morph: sha(readFileSync(fixture.plate.morph)) } });
+    expect(report.plateGeometry).toMatchObject({ liftsMm: [0.4], chunks: 1, nonPositionBytesExact: true, meshMorphBaseIdentical: true });
     expect(report.resolvedDynamicPaths[1]).toEqual({ appearance: "xfs_cns__xfs_pb2", chunkMaterial: "xfs_pb2@preset", textures: presets[1].textures });
     expect(report.decodedPixelChecks[0].coverageError).toEqual({ mean: 0, p95: 0, max: 0 });
     expect(report.decodedMipChecks[0].levels).toHaveLength(5);
@@ -264,7 +274,8 @@ test("resource failures: names, links, buffers, component id, morph count and XB
   expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.at(-1).DiffuseColor.Alpha = 0; });
   expectFailure(/Only the seed appearance/, (_b, d) => { d.mesh.appearances[1].Data.chunkMaterials = [cname("x")]; });
   // The expected morph count comes from the plate recipe, not a constant.
-  expectFailure(/Morph target count is 105, not the plate recipe's 104/, undefined, undefined, { options: { morphTargets: 104 } });
+  expectFailure(new RegExp(`Morph target count is ${PLATE_TARGETS}, not the plate recipe's ${PLATE_TARGETS + 1}`), undefined, undefined,
+    { options: { morphTargets: PLATE_TARGETS + 1 } });
   expectFailure(/did not serialize/, undefined, undefined, { serialize: () => ok() });
 }, 30_000);
 
@@ -384,3 +395,86 @@ print(json.dumps(out))`, dir], { stdout: "pipe", stderr: "pipe" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+
+test("plate geometry: the packaged plate must be the input lifted along its normals, every other byte exact", () => {
+  const bytesOf = (blob: any) => Buffer.from(blob.renderBuffer.Bytes, "base64");
+  const setBytes = (blob: any, data: Buffer) => { blob.renderBuffer.Bytes = data.toString("base64"); };
+  // The unlifted cut where the plan says 0.4 mm.
+  expectFailure(/is not lifted 0.4 mm along its normal/, (_b, d) => {
+    const flat = liftedPlate([0]);
+    d.mesh.renderResourceBlob.Data = flat.mesh.Data.RootChunk.renderResourceBlob.Data;
+    d.morph.blob = flat.morph.Data.RootChunk.blob;
+  });
+  // A skin weight byte (stream 0, after position and indices) changed in both buffers.
+  expectFailure(/PS_SkinWeights:0 bytes differ from the input/, (_b, d) => {
+    for (const blob of [d.mesh.renderResourceBlob.Data, d.morph.blob.Data.baseBlob.Data]) {
+      const data = bytesOf(blob); data[16] ^= 1; setBytes(blob, data);
+    }
+  });
+  expectFailure(/mesh and morph base differ/, (_b, d) => {
+    const blob = d.morph.blob.Data.baseBlob.Data, data = bytesOf(blob); data[16] ^= 1; setBytes(blob, data);
+  });
+  expectFailure(/shading deltas differ/, (_b, d) => {
+    const data = Buffer.from(d.morph.blob.Data.diffsBuffer.Bytes, "base64"); data[5] ^= 1;
+    d.morph.blob.Data.diffsBuffer.Bytes = data.toString("base64");
+  });
+  expectFailure(/delta is not the lifted input delta/, (_b, d) => {
+    const data = Buffer.from(d.morph.blob.Data.diffsBuffer.Bytes, "base64");
+    data.writeUInt32LE((data.readUInt32LE(0) & 0xc0000000) | ((data.readUInt32LE(0) + 40) & 0x3fffffff), 0);
+    d.morph.blob.Data.diffsBuffer.Bytes = data.toString("base64");
+  });
+  expectFailure(/Plan plate lifts \[0.2\] differ from the presets' lifts \[0.4\]/, (_b, d) => { d.plan.plate.liftsMm = [0.2]; });
+});
+
+/** Two lifts and a diagnostic surface: look a1 on the unlifted chunk with skin roughness kept, b2 on the production lift. */
+const SURFACE = { RoughnessMetalnessAlpha: 0 };
+const DIAG_ENTRY = "@flat_" + (() => {
+  let hash = 0x811c9dc5;
+  for (const c of JSON.stringify([["RoughnessMetalnessAlpha", 0]])) hash = Math.imul(hash ^ c.charCodeAt(0), 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+})();
+const twoChunks: Mutation = (_b, d) => {
+  const lifted = liftedPlate([0, 0.4]);
+  d.plan.plate.liftsMm = [0, 0.4];
+  Object.assign(d.plan.presets[0], { plateChunk: 0, material: DIAG_ENTRY, diagnostics: { plateLiftMm: 0, surface: SURFACE } });
+  Object.assign(d.plan.presets[1], { plateChunk: 1 });
+  d.mesh.renderResourceBlob.Data = lifted.mesh.Data.RootChunk.renderResourceBlob.Data;
+  d.morph.blob = lifted.morph.Data.RootChunk.blob;
+  d.mesh.appearances[0].Data.chunkMaterials = [cname(`xfs_pa1${DIAG_ENTRY}`), cname("xfs_hidden")];
+  d.mesh.appearances[1].Data.chunkMaterials = [cname("xfs_hidden"), cname("xfs_pb2@preset")];
+  const flat = d.mesh.localMaterialBuffer.materials[0], diag = structuredClone(flat);
+  for (const item of diag.values) if ("RoughnessMetalnessAlpha" in item) item.RoughnessMetalnessAlpha = 0;
+  d.mesh.materialEntries = [DIAG_ENTRY, "@preset", "xfs_hidden"].map((name, index) => ({ $type: "CMeshMaterialEntry", index, isLocalInstance: 1, name: cname(name) }));
+  d.mesh.localMaterialBuffer.materials = [diag, flat, { $type: "CMaterialInstance", baseMaterial: ref("base/materials/mesh_decal.mt"),
+    values: Object.entries({ DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 }).map(([name, value]) => ({ $type: "Float", [name]: value })) }];
+};
+
+test("diagnostic lifts and surfaces: one chunk per lift, hidden chunks write nothing, overrides are restated", () => {
+  const fixture = makeBuild(twoChunks);
+  try {
+    const collection = { presets: presets.map(p => ({ id: p.id, recipe: p.recipe })),
+      diagnostics: { schema: "xfs/export-diagnostics-1", presets: { a1: { plateLiftMm: 0, surface: SURFACE } } } };
+    const report = run(fixture, { options: { packagedCollection: collection } });
+    expect(report.plateGeometry).toMatchObject({ liftsMm: [0, 0.4], chunks: 2 });
+    expect(report.materialTemplates).toBe(3);
+    expect(report.resolvedDynamicPaths[0].chunkMaterial).toBe(`xfs_pa1${DIAG_ENTRY}`);
+    rmSync(join(fixture.build, "verify"), { recursive: true, force: true });
+    // The host's packaged collection must carry exactly the same knobs.
+    expect(() => run(fixture, { options: { packagedCollection: { ...collection, diagnostics: undefined } } }))
+      .toThrow("diagnostics for preset Look a1 differ from the packaged collection");
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+  expectFailure(/Hidden chunk material must write nothing/, (b, d) => {
+    twoChunks(b, d);
+    d.mesh.localMaterialBuffer.materials[2].values[0].DiffuseAlpha = 1;
+  });
+  expectFailure(/Appearance xfs_pb2 must name @preset/, (b, d) => {
+    twoChunks(b, d);
+    d.mesh.appearances[1].Data.chunkMaterials = [cname("xfs_pb2@preset"), cname("xfs_hidden")];
+  });
+  expectFailure(/RoughnessMetalnessAlpha is 1, expected 0/, (b, d) => {
+    twoChunks(b, d);
+    for (const item of d.mesh.localMaterialBuffer.materials[0].values) if ("RoughnessMetalnessAlpha" in item) item.RoughnessMetalnessAlpha = 1;
+  });
+  expectFailure(/does not draw its lift's plate chunk/, (b, d) => { twoChunks(b, d); d.plan.presets[1].plateChunk = 0; });
+  expectFailure(/2 chunks for 1 planned lifts|Plan plate lifts/, (b, d) => { twoChunks(b, d); d.plan.plate.liftsMm = [0.4]; });
+});

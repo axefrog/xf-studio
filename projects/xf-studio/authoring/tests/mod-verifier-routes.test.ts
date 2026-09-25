@@ -14,6 +14,9 @@ import { archiveXlDeclaration, HandleCounter, rewritePlateMesh } from "../src/pa
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
 import { componentId, VERIFIER_FINISHES } from "../src/mod-verifier/resource-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
+import { derivePlateDocuments } from "../src/eye-plate-cut";
+import { liftPlate } from "../src/plate-lift";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 
 // Synthetic, asset-free fixture in the style of mod-verifier.test.ts: archive members and plate inputs
 // hold their WolvenKit JSON as text, the fake `serialize` derives documents from the hash-checked bytes
@@ -69,12 +72,14 @@ function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => vo
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-routes-"));
   const plan = planCollection(collection);
   replan?.(plan);
-  const blob = { renderResourceBlob: { Data: { v: 1 } }, boneNames: [cname("root")], boneRigMatrices: [], boundingBox: {} };
-  const targets = Array.from({ length: 105 }, (_, i) => ({ name: cname(`t${i}`) }));
+  // A real single-chunk plate cut from the synthetic head, lifted as the builder lifts it.
+  const cut = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
+  const blob = { renderResourceBlob: cut.mesh.Data.RootChunk.renderResourceBlob, boneNames: [cname("root")], boneRigMatrices: [], boundingBox: {} };
   const sourceMesh = { ...structuredClone(blob), appearances: [], materialEntries: [], localMaterialBuffer: {} };
-  const sourceMorph = { blob: { Data: {} }, targets };
-  const mesh = rewritePlateMesh(doc(structuredClone(sourceMesh)), plan, new HandleCounter()).Data.RootChunk;
-  const morph = { ...structuredClone(sourceMorph), baseMesh: ref(plan.mesh) };
+  const sourceMorph = cut.morph.Data.RootChunk;
+  const lifted = liftPlate(doc(structuredClone(sourceMesh)), cut.morph, plan.plate.liftsMm);
+  const mesh = rewritePlateMesh(lifted.mesh, plan, new HandleCounter()).Data.RootChunk;
+  const morph = { ...lifted.morph.Data.RootChunk, baseMesh: ref(plan.mesh) };
   const id = componentId(plan.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(plan.component), id, isEnabled: 1,
     meshAppearance: cname(plan.presets[0].appearance), morphResource: ref(plan.morph), localTransform: { Orientation: { i: 0, j: 0, k: 0, r: 1 } },

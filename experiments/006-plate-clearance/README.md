@@ -1,6 +1,6 @@
 # Plate clearance under facial deformation
 
-**Status:** superseded by [Experiment 012](../012-native-plate-bootstrap/README.md) — offset and morph-aware corrections of the owned cut reduced eyelid contacts but never removed them (the last post-packing candidate failed the dense 664-frame idle gate). Clearance work continued on the native-head reconstruction in 012, which is itself paused pending in-game evidence of whether the contacts are visible. The sections below are the historical record, oldest first; their "next" steps were carried into 012.
+**Status:** superseded by [Experiment 012](../012-native-plate-bootstrap/README.md) — offset and morph-aware corrections of the owned cut reduced eyelid contacts but never removed them (the last post-packing candidate failed the dense 664-frame idle gate). Clearance work continued on the native-head reconstruction in 012. In-game evidence then showed the coincident plate breaking up close up, and packaging now lifts the plate 0.4 mm like the vanilla face decals ([experiment 017](../017-plate-depth/README.md)); the fitted candidates here were not adopted. The sections below are the historical record, oldest first; their "next" steps were carried into 012.
 
 **Result: useful candidates and a repeatable contact test, but no release offset selected.** The unchanged cut-out has packing-related overlaps. Offsets improve it greatly, yet small eyelid folds/corners still contact the head. A positive distance at every corresponding vertex does not prove that the triangles between them stay outside the skin.
 

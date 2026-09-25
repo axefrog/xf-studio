@@ -10,6 +10,10 @@ import { preparePackageCollection } from "../src/package-filter";
 import { verifyPackageBuildResult } from "../src/package-result-verifier";
 import type { PackageBuild } from "../src/package-action";
 import type { EyePlateManifest } from "../src/eye-plate-service";
+import { derivePlateDocuments } from "../src/eye-plate-cut";
+import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
+
+const PLATE = derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh");
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -28,9 +32,9 @@ function fakeTools(calls: string[]): PackageResourceTools {
     async serialize(input, output) {
       if (readdirSync(input).some(name => name.endsWith(".mesh") && !name.includes("collection"))) {
         const stem = readdirSync(input).find(name => name.endsWith(".mesh"))!.replace(/\.mesh$/, "");
-        writeFileSync(join(output, stem + ".mesh.json"), JSON.stringify({ Header: {}, Data: { RootChunk: {
-          appearances: [], materialEntries: [], localMaterialBuffer: { materials: [], rawData: "x", rawDataHeaders: [1] } } } }));
-        writeFileSync(join(output, stem + ".morphtarget.json"), JSON.stringify({ Header: {}, Data: { RootChunk: {} } }));
+        // A real single-chunk plate cut from the synthetic head, which the builder lifts.
+        writeFileSync(join(output, stem + ".mesh.json"), JSON.stringify(PLATE.mesh));
+        writeFileSync(join(output, stem + ".morphtarget.json"), JSON.stringify(PLATE.morph));
       }
       return step("serialize");
     },

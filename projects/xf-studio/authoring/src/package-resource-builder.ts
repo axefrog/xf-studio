@@ -14,6 +14,7 @@ import { archiveInventory } from "./archive-inventory-fs";
 import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
 import { encodeDds, flatMipChain } from "./flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./route-mip-chains";
+import { liftPlate, type PlateLiftReport } from "./plate-lift";
 import type { TextureChannel } from "./finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
@@ -39,6 +40,8 @@ export interface ResourceBuildOptions {
 export interface BuildRecord {
   plan: CollectionPlan; compiled: BakedRecord[]; steps: { name: string; exitCode: number }[];
   plateStem: string; plateInputs: { path: string; sha256: string }[];
+  /** The decal lift applied to the plate geometry (one render chunk per lift). */
+  plateLift: PlateLiftReport;
   artifacts: ReturnType<typeof archiveInventory>; archiveSha256: string;
   installed: false; gameRenderingVerified: false;
 }
@@ -142,12 +145,16 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   for (const [group, settings] of TEXTURE_GROUPS)
     if (groupsUsed.has(group)) await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
 
-  // 3. Rewrite the plate's appearances/material and the morph's base mesh; geometry is not touched.
+  // 3. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
+  //    then rewrite its appearances/materials and the morph's base mesh.
   await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
   const handles = new HandleCounter();
-  const mesh = rewritePlateMesh(readJson(join(out, "source-json", stem + ".mesh.json")), plan, handles);
+  const lifted = liftPlate(readJson(join(out, "source-json", stem + ".mesh.json")), readJson(join(out, "source-json", stem + ".morphtarget.json")),
+    plan.plate.liftsMm);
+  writeFileSync(join(out, "logs", "plate-lift.log"), JSON.stringify(lifted.report) + "\n", "utf8");
+  const mesh = rewritePlateMesh(lifted.mesh, plan, handles);
   writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
-  const morph = rewritePlateMorph(readJson(join(out, "source-json", stem + ".morphtarget.json")), plan);
+  const morph = rewritePlateMorph(lifted.morph, plan);
   writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
   await step("deserialize-models", () => options.tools.deserialize(join(out, "models-json"), modelDir));
 
@@ -170,7 +177,7 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   writeFileSync(join(packageDir, plan.namespace + ".archive.xl"), archiveXlDeclaration(plan), "utf8");
   const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
     .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
-  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, artifacts,
+  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, artifacts,
     archiveSha256: sha256(readFileSync(archiveFile)), installed: false, gameRenderingVerified: false };
   writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
   log(`BUILD ${out}`);

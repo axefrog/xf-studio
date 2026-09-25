@@ -1,6 +1,6 @@
 # Materials and shaders (REDengine 4, game 2.31)
 
-**Maturity: Draft.** The resource model, template catalogue, G-buffer layout and deferred BRDF are consolidated from source, installed resources and compiled programs. Runtime confirmation is still missing (see [in-game test asks](#in-game-test-asks)).
+**Maturity: Draft.** The resource model, template catalogue, G-buffer layout and deferred BRDF are consolidated from source, installed resources and compiled programs. Runtime evidence is partial: the first photo-mode session (25 September) showed the colour shift working, distinct coverage steps, close-up breakup of a skin-coincident plate and uniformly glossy flat finishes (see [in-game test asks](#in-game-test-asks) and [experiment 017](../experiments/017-plate-depth/README.md)).
 
 This page explains how Cyberpunk 2077 materials work well enough to:
 
@@ -164,13 +164,13 @@ The layout below is decoded from the tiled deferred light (`m_shaderLightsComput
 |---|---|---|
 | **GBuffer0** | `sqrt(linear base colour)`. The light squares it. | Class-specific payload (bits of the eye's second vector). Skin writes 1. |
 | **GBuffer1** | World normal `n / max(|n|) × 0.5 + 0.5`. The light uses `normalize(rgb − 0.5)`. | Class-specific: skin-profile slot high bits (skin); tangent-axis selector (hair); octahedral bits (eye). 0 for metal_base. |
-| **GBuffer2** | **x = metalness, y = roughness** (the light clamps it to [0.04, 1]), **z = "translucency" term**: neutral 1/3 for Standard materials, `0.4 + 0.6·(vertex colour G)` for skin. | Class-specific: skin-profile low bit, an emissive flag and 6 bits (skin); the eye's second vector (eye). Standard emissive writers (metal_base family, `mesh_decal_emissive`) store bit 7 = emissive flag and 7 bits = `sqrt(EV/10)`. |
+| **GBuffer2** | **x = metalness, y = roughness** (the light clamps it to [0.04, 1]), **z = a transmission weight** read only by the Foliage class: neutral 1/3 for Standard materials, `0.4 + 0.6·(vertex colour G)` for skin (which the Subsurface lighting ignores). | Class-specific: skin-profile low bit, an emissive flag and 6 bits (skin); the eye's second vector (eye). Standard emissive writers (metal_base family, `mesh_decal_emissive`) store bit 7 = emissive flag and 7 bits = `sqrt(EV/10)`. |
 | **Stencil** (bits 5+) | Lighting class = `ERenderMaterialType`: Standard 0, Subsurface 1, Cloth 2, Eye 3, Hair 4, Foliage 5. The value is set per material template (`materialType`). | — |
 
 **Grades for the less certain rows:**
 
 - Stencil-class identity: the enum values match the light's class switch and the templates' `materialType` → [source]/[resource] match. The actual stencil write was not traced → [hypothesis].
-- "Translucency" as the meaning of GBuffer2.z: [hypothesis]. It is supported by the engine debug-view enum `EEnvManagerModifier`, which lists Albedo, Specularity, Metalness, Roughness, Translucency, HairDirection and MaterialID (`G/EEnvManagerModifier.hpp:24-40`).
+- GBuffer2.z: the all-classes global light (`…_11111111`, `6606735909222169407`) forms `saturate((z − 1/3) × 1.5)` (`%85`–`%87`) and uses it only in the **Foliage** branch (class 5, block `%1051`), as the weight of a back-lit transmission lobe added to diffuse (`%1186`–`%1204`); Eye forces it to 0. The Subsurface branch, the local-light path and the SSS passes never read it [source] ([experiment 017](../experiments/017-plate-depth/README.md#2-uniform-gloss-the-roughness-reaches-the-lighting-the-finish-values-are-glossier-than-skin)). The debug-view enum `EEnvManagerModifier` still lists a "Translucency" view (`G/EEnvManagerModifier.hpp:24-40`); whether that view shows this channel is [hypothesis].
 
 Which templates carry which class [resource]:
 
@@ -194,7 +194,7 @@ Decoded from the global-light compute shader [source]:
 | Diffuse | Renormalized Burley (Disney) diffuse: `fd90 = 0.5·r + 2·LdotH²·r`, energy factor `1/π·(1 − 0.338·r)`. This is Frostbite's formulation (Lagarde & de Rousiers 2014). | Three.js `MeshStandard/Physical` uses Lambert. Rough skin and makeup darken or brighten differently at grazing angles. |
 | Specular | GGX with α = roughness², height-correlated Smith visibility, Schlick Fresnel with F90 = 1 | Three uses the same α = r² convention. Roughness values transfer directly. |
 | Sun / moon | A disk light, using the representative-point method | A small area light, not a point. Highlights on glossy makeup are slightly larger than a point light's. |
-| Classes | Hair builds an anisotropic tangent frame. Eye uses a second (iris) normal and switches off the GBuffer2.z term. Subsurface keeps the diffuse term separate: albedo is set to 1 when metalness < 0.1 and a global flag is on. It also fetches a per-profile colour from a table of **8 skin-profile slots**. | Skin SSS is a screen-space pipeline (`m_postfx_SubsurfaceScattering_Setup/Blur/Combine`) driven by `CSkinProfile` blur and colours. The shader and pipeline names are [source]; how it works is [hypothesis]. |
+| Classes | Hair builds an anisotropic tangent frame. Eye uses a second (iris) normal and switches off the GBuffer2.z term. **Subsurface** keeps diffuse and specular in separate outputs: albedo is set to 1 when metalness < 0.1 and a global flag is on, diffuse is Burley at the G-buffer roughness, and specular is **two GGX lobes** at roughness × `roughness0` and × `roughness1` from the pixel's skin-profile kernel (one of **8 slots**, `cb6` registers 4–11, `SKernelDualSpecular`), summed and scaled by (1 + `lobeMix`)/2. The default profile (`roughness0` 0.966, `roughness1` 1.597, `lobeMix` 1) gives skin up to twice a Standard lobe's specular. Local lights can also shift roughness per light: r′ = saturate(r + k·(byte/127.5 − 1)), from a byte of the light's parameters. [source] (`…_11111111` `%575`–`%751`, `%2766` onward) | Skin roughness written by a decal **does** reach skin's specular. The SSS combine (`7703933925853799832`) blurs diffuse with the profile colour and **adds specular unchanged**; a pixel whose metalness exceeds 0.1 skips SSS entirely (diffuse unblurred). Setup `18323727242039837728` and horizontal blur `13638945895069409584` read only GBuffer2.x/.w [source]. The global light has no probe term; reflection passes (probes, SSR, ray tracing) are not traced. |
 
 **Consequence (the central fact for makeup).** The G-buffer stores **one surface per pixel**: one base colour, one normal, one metalness and one roughness. There is no clear-coat, sheen, second normal (except Eye), anisotropy (except Hair) or specular-tint channel. Anything that needs a second reflection lobe must come from a **separate forward pass** drawn after lighting. The stock examples are `multilayered_clear_coat`'s `unlit` pass (dual-source blend `One/Src1Color`) and `eye_shadow`'s `transparent_back_face` pass (`One/SrcAlpha`) [resource] [source].
 
@@ -204,9 +204,10 @@ All [source]/[resource] ([mesh-decal contract](../research/materials/mesh-decal-
 
 1. **What it blends, and in what space.** It blends base colour, normal and metalness/roughness into GBuffer0–2 with `SrcAlpha/InvSrcAlpha`. Each target gets its own alpha (colour, normal and surface coverage). Colour is written as `sqrt(colour)`, so **decal colour blending happens in square-root (gamma-2) space**, not linear.
 2. **Write mask RGB, stencil disabled.** The decal never changes the lighting class, skin-profile slot or `.w` payloads. **Makeup on skin is still lit as Subsurface skin.** Metalness ≥ 0.1 on a Subsurface pixel takes the class's non-SSS albedo path (§2.3).
-3. **Translucency is diluted.** GBuffer2.z is written as 1/3, so where surface coverage is non-zero the decal blends skin's translucency term toward "none". The arithmetic is [source]; the visible effect is [hypothesis].
+3. **GBuffer2.z has no effect on skin.** The decal writes 1/3, so where surface coverage is non-zero it blends skin's `0.4 + 0.6·G` toward 1/3, but only the Foliage class reads that channel [source]. (An earlier reading here, that this dilutes skin translucency, was wrong.)
 4. **Opacity curve.** Coverage is `saturate((a−0.5)·tan((c+1)·π/4)+0.5)² · (1 − influence·secondaryMask)`. Each target's alpha multiplies it by `DiffuseAlpha`, `NormalAlpha` or `RoughnessMetalnessAlpha`. **All three default to 0**, so an instance must enable them.
-5. **Placement.** Rasterizer state is front-face cull with CCW winding, which is equivalent to back-face cull with CW. `OFFSET_DecalBias` adds a depth bias.
+5. **Placement and depth.** Rasterizer state is front-face cull with CCW winding, which is equivalent to back-face cull with CW. The pass tests depth `GreaterEqual` without writing it, and `offsetMode` `OFFSET_DecalBias` (value 3 of `PSODescRasterizerModeOffsetMode`) adds a depth bias whose values are engine-side and unknown. `DepthThreshold` (default 0.5) discards decal pixels farther than that from the scene depth; it does not settle coincident surfaces [source].
+6. **Vanilla face decals do not rely on the bias.** The 2.31 female eye-makeup, lip, freckle and pimple meshes are the head's vertices pushed **0.40 mm** out along the head's normals (median residual 5 µm), and their morph targets keep the offset along each target's normal; they have one LOD like the head. A plate coincident with the head broke into skin-coloured patches close up in photo mode, and was clean at medium distance [resource] [runtime]. XF Studio now lifts its packaged plate 0.4 mm the same way ([experiment 017](../experiments/017-plate-depth/README.md)); the close-up-only mechanism (a depth bias that absorbs less world-space mismatch near the camera) is [hypothesis].
 
 ---
 
@@ -284,6 +285,7 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `mesh_decal_blendable` `post_gbuffer` | `3004271728282315156` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_wet_character` `post_gbuffer` | `17388524518779931857` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_gradientmap_recolor_blendable` `post_gbuffer` | `3456408455936683438` | [colour-shift design](../research/materials/finish-designs/colour-shifting.md), [feasibility](../research/materials/colour-shift-game-feasibility.md) |
+| static `m_postfx_SubsurfaceScattering` Setup / Blur_Horizontal / Combine | `18323727242039837728` / `13638945895069409584` / `7703933925853799832` | [experiment 017](../experiments/017-plate-depth/README.md) |
 | `mesh_decal_gradientmap_recolor_blendable` vertex (Fresnel distance fade) | `7066617541061519457` (DXBC SHA-256 `77e887ec…cb3`) | [colour-shift design](../research/materials/finish-designs/colour-shifting.md) |
 | `mesh_decal_particles` `post_gbuffer` / `highlights` | `1688064767334184205` / `10861674281505605668` | [particle-decal audit](../experiments/009-glitter-game-fixture/particle-decal-audit.md) |
 | `mesh_decal_emissive` `post_gbuffer` (target 2 is additive on B/A, so over skin it would add into GBuffer2.z/.w [hypothesis for the visible effect]) | `9453098283293843067` | [annotation results](../research/materials/shader-system/annotation-results.md#basematerialsmesh_decal_emissivemt) |
@@ -322,7 +324,9 @@ Parameters and registers below are from the serialized 2.31 templates [resource]
 | `EmissiveMask` (18), `EmissiveEV` (19) | Mask **R** × EV. If this exceeds 0.001, GBuffer2.w gets an emissive flag plus 6-bit intensity. | [source] |
 | `CavityIntensity` (7), `Detailmap_Stretch/Squash` (20/21), `Bloodflow` (22), `BloodColor` (23) | Wrinkle maps (RG normals); the other roles are unmapped | [source] (wrinkle RG) / [hypothesis] |
 
-**Vertex colour.** The wiki reads vertex colour as R = AO, G = SSS mask and B = "improved facial lighting" [wiki] (`shader-docs.md` L47-51). The skin writer stores GBuffer2.z = `0.4 + 0.6·G`: its vertex program passes `COLOR.y` straight through to the interpolator the pixel program reads [source] ([annotation results](../research/materials/shader-system/annotation-results.md#basematerialsskinmt)). That fits G being the SSS mask. What GBuffer2.z means to the lighting is still [hypothesis] (§2.2).
+**Vertex colour.** The wiki reads vertex colour as R = AO, G = SSS mask and B = "improved facial lighting" [wiki] (`shader-docs.md` L47-51). The skin writer stores GBuffer2.z = `0.4 + 0.6·G`: its vertex program passes `COLOR.y` straight through to the interpolator the pixel program reads [source] ([annotation results](../research/materials/shader-system/annotation-results.md#basematerialsskinmt)). The deferred light ignores GBuffer2.z for skin (only Foliage reads it, §2.2), so what that value does for Subsurface pixels, if anything, is unknown.
+
+**Roughness under eye makeup.** On the pale default head the `Roughness` map's R channel reads about 0.57–0.66 at the vanilla eye-makeup vertices (`h0_000_wa_c__basehead_rm01.xbm`, before the detail bias) [resource] ([experiment 017](../experiments/017-plate-depth/README.md)).
 
 **Gotcha.** The Blender add-on maps Roughness G to Metallic and marks its microdetail masking as uncertain (`material_types/skin.py:341,626`). It uses Principled random-walk SSS, which is an approximation, not the engine path.
 
@@ -472,13 +476,17 @@ The Studio exports each preset as **one decal draw**, so per-texel inputs can va
 
 | Finish | Export route (current) | Why / limits | Grade | Single confirming in-game test |
 |---|---|---|---|---|
-| **Matte** | Flat `mesh_decal` (`@preset`): roughness 0.88, metal 0, colour and surface alpha on, normal off | Replaces skin roughness under the mark; skin SSS still applies. Translucency is diluted where surface alpha > 0. | [source] route; [runtime] untested | Board 1: the highlight vanishes on the Matte stripe only |
-| **Satin** | Same, roughness 0.38 | Soft single GGX lobe; no sparkle by construction | [source] | Board 1: a broad, soft highlight that tracks the light |
-| **Metallic / foil** | Same, roughness 0.27, metal 0.65 | At metal ≥ 0.1 the Subsurface class leaves its SSS albedo path. Reflections come from probes/SSR/RT, so metallic looks dark in dim or probe-poor scenes. | [source] | Board 1 in bright and dim places; Board 6 for the 0.1 seam |
-| **Glossy / wet** | **Experimental.** Flat `mesh_decal`, one dielectric lobe at roughness 0.12 (game-matched model only) | One G-buffer lobe: no clear coat, same F0 as skin, only sharper. The `eye_shadow` forward shell (`Intensity` 0, wet highlight from `Mask` G/B) remains the only stock way to add a second lobe; not built. | [source]; look [hypothesis] | Board 1: Glossy's highlight sharper than Satin's without looking metallic |
-| **Shimmer / pearl** | **Experimental.** `mesh_decal` + the classic facet normal map in `NormalsBlendingMode` 1 (`@faceted`), per-texel roughness/metal from the bake, roughness mips widened by lost facet variance | Mode 1 keeps skin normals where facets are flat and fades tilts under about 11.5°; averaged facets fade out at distance and become a broader lobe. Random facet azimuths make the untested green sign irrelevant statistically. | [source]; look [hypothesis] | Board 2: close-up light sweep, then face framing against the Satin control |
+| **Matte** | Flat `mesh_decal` (`@preset`): roughness 0.88, metal 0, colour and surface alpha on, normal off | Replaces skin roughness under the mark (bare lid skin ≈ 0.6); skin SSS and skin's dual-lobe specular still apply. | [source] route; [runtime] read glossy on the first board (with close-up breakup) | Experiment 017 *Gloss A–D* |
+| **Satin** | Same, roughness 0.38 | Glossier than bare lid skin (≈ 0.6) and than vanilla eye makeup (0.50), and skin doubles the lobe; a calibrated 0.50 is on the next candidate | [source]; look [hypothesis] | Experiment 017 *Gloss D* against *Gloss A* |
+| **Metallic / foil** | Same, roughness 0.27, metal 0.65 | At metal ≥ 0.1 the Subsurface class leaves its SSS albedo path. Reflections come from probes/SSR/RT, so metallic looks dark in dim or probe-poor scenes. Losing SSS also makes the skin under it read hard. | [source]; [runtime] part of the uniformly glossy first board | Experiment 017 *Gloss A–D* (right outer stripe); *Metal ramp · lifted* for the 0.1 seam |
+| **Glossy / wet** | **Experimental.** Flat `mesh_decal`, one dielectric lobe at roughness 0.12 (game-matched model only) | One G-buffer lobe: no clear coat, same F0 as skin, only sharper. The `eye_shadow` forward shell (`Intensity` 0, wet highlight from `Mask` G/B) remains the only stock way to add a second lobe; not built. | [source]; look [hypothesis]; [runtime] not distinct from Satin on the first board | Experiment 017 *Gloss A* against *Gloss D* (0.24) |
+| **Shimmer / pearl** | **Experimental.** `mesh_decal` + the classic facet normal map in `NormalsBlendingMode` 1 (`@faceted`), per-texel roughness/metal from the bake, roughness mips widened by lost facet variance | Mode 1 keeps skin normals where facets are flat and fades tilts under about 11.5°; averaged facets fade out at distance and become a broader lobe. Random facet azimuths make the untested green sign irrelevant statistically. | [source]; [runtime] the default (128 cells, tilt 0.65) read as a diffuse gloss, not sparkle | Experiment 017 *Shimmer · strong* (64 cells, tilt 1.0) beside Board 2's fine stripe |
 | **Glitter** | **None** (preview only) | No stock glint BRDF; one normal per pixel. Coarse resolved facets (Board 2's coarse Shimmer stripe) are the next candidate; emissive flecks ignore light. | [source] | Board 2 coarse stripe: do distinct flakes flash and go dark? |
 | **Colour-shifting** | **Experimental.** Per-preset `mesh_decal_gradientmap_recolor_blendable` (`@fresnel_<preset>`): uniform base-colour gradient, linear coverage mask, roughness 0.32 and metal 0.25 via bias, `FresnelColor` from the chosen shift colour, exponent 2, distance fade pushed away | One additive secondary hue by view angle, lit like base colour; not thin-film or multichrome. One constant per draw, so a colour-shift preset must be one pigment. The `Color` parameter encoding (byte/255 assumed) and `MaterialModifiersConsts[2].x` are unconfirmed. | [source]; encoding and look [hypothesis] | Boards 3 and 4: teal at the lid edges that follows the camera, not the light |
+
+**Plate depth.** Every route draws on the plate lifted 0.4 mm off the skin, like the vanilla face decals (§2.4 item 6).
+
+**Calibration against skin.** Finish roughness sits on top of skin, not a Standard surface: skin's own roughness under the lids is about 0.6, vanilla eye makeup writes 0.50 at full surface alpha (and breaks its coverage with a ×30 noise mask), and the Subsurface class sums two GGX lobes at 0.97× and 1.6× the written roughness. On the first in-game board, Matte, Satin, Glossy and Metallic read uniformly glossy; experiment 017 separates "values too glossy" (*Gloss D*: all +0.12) from "written roughness not what you see" (*Gloss B*: surface alpha 0; *Gloss C*: roughness forced to 1) [hypothesis until that session].
 
 **Cross-cutting guidance for the browser preview:**
 
@@ -494,10 +502,10 @@ The Studio exports each preset as **one decal draw**, so per-texel inputs can va
 
 These become [backlog](../research/backlog/materials-shader-re.md) items.
 
-1. **GBuffer2.z.** What is it exactly: translucency, specular occlusion or something else? What does the `%1201` term add? Trace the `…_11111111` variant further and the SSS `Setup_UseTranslucency` program.
+1. **GBuffer2.z for skin.** The deferred light reads it only for Foliage (transmission). Does anything else (a debug view, the two "Setup_UseTranslucency"-named programs, which actually hold a sun-only light using GBuffer2.w bits) consume skin's `0.4 + 0.6·G`?
 2. **Stencil write.** Confirm that the engine writes `materialType` into stencil bits 5–7, via a runtime capture or the pass stencil setup code.
-3. **Skin-profile table.** The table holds 8 slots per frame. What happens with more than 8 distinct `.sp` on screen? How are `blurSize`, `diffuse`, `falloff`, `roughness0/1` and `lobeMix` used? `lobeMix` suggests a dual-lobe skin specular that the global light program did not show; trace the SSS combine and local-light variants.
-4. **Metal ≥ 0.1 threshold.** The flag controlling the Subsurface class's albedo = 1 path is unknown. Does metallic makeup over skin break SSS continuity at soft edges?
+3. **Skin-profile table.** The table holds 8 slots per frame; `roughness0/1` and `lobeMix` form the dual-lobe specular kernel (§2.3). What happens with more than 8 distinct `.sp` on screen, and how do `blurSize`, `diffuse` and `falloff` drive the blur? Which lights set the per-light roughness byte, and to what (photo-mode lights in particular)?
+4. **Metal ≥ 0.1 threshold.** The SSS blur and combine skip pixels whose blended metalness exceeds 0.1 [source]; the flag controlling the light's albedo = 1 path is unknown. Does metallic makeup over skin show a visible SSS seam at soft edges (the lifted metal ramp on the next candidate)?
 5. **Eye second vector.** What exactly is the octahedral vector the Eye class stores, and how does the light use it? What consumes `Blick`, `SubsurfaceFactor` and `AntiLightbleed*`?
 6. **`eye_shadow` as a gloss shell.** Is it usable as a glossy-makeup shell (sorting, `transparent_back_face` stage semantics, blink, cost)? (Its vanilla user is the eye mesh's wetness chunk.)
 7. **Runtime gradient atlases.** Recover the atlas construction for `.gradient` and `.hp` (row assignment, colour space, filtering). This affects eyes, brows, lashes and hair.
@@ -506,20 +514,20 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 10. **Multilayer levels.** Confirm the multilayer levels semantics (`roughLevelsIn/Out` pairs) against the `m_surfaceCache_GenerateMultilayer` program.
 11. **`Color` parameter encoding.** Do `CMaterialParameterColor` values reach shaders as byte/255 (as `eye_shadow`'s in-shader 2.2 linearisation suggests) or sRGB-decoded? This sets the in-game strength of the Colour-shifting tint. What is `MaterialModifiersConsts[2].x` on the player head?
 12. **Debug views.** Can the engine's `EEnvManagerModifier` debug views (G-buffer, Roughness, Metalness, Translucency, MaterialID) be enabled from CET or RED4ext? That would turn most questions here into one capture session.
+13. **Decal depth bias.** What depth bias does `OFFSET_DecalBias` apply, and does it explain why a coincident decal failed only close up?
 
 ## In-game test asks
 
 Batch these into one prepared session with fixed camera, FOV and light, and record game and framework versions.
 
-1. **Finish board (built, not installed).** The [finish board](../experiments/016-finish-board/README.md) packages asks 1–3 as six selector presets through the production pipeline, with its own test card: flat finishes and single-lobe Glossy (Board 1), faceted Shimmer and a coarse glitter proxy (Board 2), and the Fresnel colour shift with its strength-0 control (Boards 3 and 4).
+1. **Finish board (first photo-mode session held 25 September).** The [finish board](../experiments/016-finish-board/README.md#runtime-results) packaged asks 1–3 as six selector presets through the production pipeline, with its own test card: flat finishes and single-lobe Glossy (Board 1), faceted Shimmer and a coarse glitter proxy (Board 2), and the Fresnel colour shift with its strength-0 control (Boards 3 and 4).
    - Capture a camera orbit under fixed light, then a light sweep under a fixed camera, at close and face framing, with a blink.
    - The `eye_shadow` gloss shell (Glossy route 2) is not on the board; it needs a second component.
 2. **Sqrt-space blend check.** Board 5: black Matte patches at 25/50/75 % coverage under the eyes, contrast 0, captured in photo mode with fixed exposure.
    - Compare measured luminance with linear and sqrt-space predictions.
 3. **Metal threshold edge.** Board 6: a metalness ramp 0 → 0.3 and five steps (0.05–0.3) over Satin.
    - Look for a visible seam at 0.1.
-4. **Backlit translucency.** Ear or eyelid backlit, with a decal `RoughnessMetalnessAlpha` of 1 vs 0 over identical pigment.
-   - Checks the GBuffer2.z dilution hypothesis.
+4. **Plate depth and gloss (built, not installed).** [Experiment 017](../experiments/017-plate-depth/README.md) packages the depth comparison (0, 0.1, 0.2 and 0.4 mm lifts), the gloss controls (surface off, roughness forced to 1, roughness +0.12) and a stronger Shimmer, with its own test card. It replaces the earlier backlit-translucency ask: GBuffer2.z does not reach skin lighting.
 5. **Debug views.** If a debug-view toggle is found (open question 11), capture Albedo, Roughness, Metalness, Translucency and MaterialID views of the plate once.
 
 ---
