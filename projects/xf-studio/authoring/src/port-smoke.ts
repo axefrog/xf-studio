@@ -5,7 +5,6 @@ import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
 import { collectionTransport } from "./collection-transport";
-import type { RecipeAction } from "./recipe-actions";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioAction } from "./studio-application";
 import type { StudioFileAction } from "./studio-file-operations";
@@ -115,8 +114,9 @@ async function start() {
   });
   // This is the only object passed into the replaceable presentation.
   bootstrap.mount(publicPort => { port = publicPort; mount(publicPort, schedulePaint); });
-  // Async library and preview events persist even when no DOM event initiated them.
-  port!.subscribe(persist);
+  // Async library events persist even when no DOM event initiated them. The whole port is
+  // not watched: it also publishes save status and preview readiness.
+  session.watch(bootstrap.collection);
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });

@@ -97,3 +97,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 None since `b9597bd`.
+
+## Fixed in claude/cleanup-core
+
+- **CORE-01:** save status is published only on change, autosave watches content sources (`session.watch(bootstrap.collection)`) instead of the whole presentation port, and identical content is never rewritten. Test: `tests/workspace-persistence.test.ts` (fake timers, zero idle writes, resumes on edit).
+- **CORE-02:** `workspace-budget.ts` bounds the stored workspace (2,000,000 code units per key; selected preset stored once with full Undo, others 5 entries, removed and recovery entries without histories, progressive trimming) and publishes `nearly-full`/`full`. A worst-case realistic workspace (6 eight-layer presets, 80 Undo entries each, 20 removed presets and 4 recovery drafts all with histories, 123M code units verbatim) stores in 1.81M at the standard level. Desktop follow-up: the storage shim should save the host file independently of `localStorage` quota errors, and may pass a larger budget.
+- **CORE-10:** damaged recovery drafts and removed presets are dropped with a warning (`repaired` status); only the current draft must parse.
+- **CORE-04:** checkpoints return the entry they added; transactions label and discard that entry, and the displaced oldest entry returns when an entry is discarded or undone. Test: `tests/history-limit.test.ts`.
+- **CORE-06:** `capability()` applies descriptor payload ranges, `controlEdit` runs the same gate and returns a typed result, exceptions are classified by source, and control dispatch is wired inside `createTrustedAuthoringCore`. Test: `tests/control-edit-validation.test.ts`.
+- **CORE-11 (partial):** the tests above, plus touched fixtures (`studio-application`, `alpha-capability-reasons`, `application-boundary-fixture`) now build through `createTrustedAuthoringCore`.

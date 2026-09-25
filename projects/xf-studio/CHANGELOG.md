@@ -13,6 +13,11 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- **Autosave rests when you do.** Your draft used to be saved again several times a second even when nothing had changed. It is now saved only after you change something.
+- **Your work no longer stops autosaving when you have lots of Undo history.** A big collection with long Undo histories could outgrow the browser's storage, and autosave then stopped without telling you. Saved drafts now keep full Undo for the preset you are working on and the last few steps for the others, so they stay well within the limit. If storage still runs short, the status bar tells you and suggests saving to the library.
+- **One damaged backup no longer loses your whole draft.** If an earlier draft kept for recovery, or a removed preset kept for Restore, was damaged, the Studio used to refuse to restore anything. It now drops just the damaged entry, restores the rest and tells you.
+- **Undo stays accurate after very long editing sessions.** Once the 80-step Undo limit was reached, some steps were named wrongly and some did nothing. Each step now keeps its own name, and a slider you touch without changing no longer uses up a step.
+- **Sliders and switches report problems clearly.** An out-of-range or rejected value from a panel control is now refused with a plain message and leaves your look unchanged.
 - **Build no longer needs Python.** Building your XF Eye Artistry mod files now needs only your game folder and WolvenKit CLI. The Python, NumPy and Pillow setup is gone, and so is the Python field in Local setup; a Python path you saved earlier is simply ignored. The new builder was checked offline on two test collections: every file inside the finished mod came out byte-for-byte identical to the previous builder's. This has not yet been tried in an installed copy of the app or in the game.
 
 ## 0.1.0-alpha.1

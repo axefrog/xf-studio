@@ -145,7 +145,9 @@ async function start() {
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root); });
   if (verification) Object.assign(window, { xfStudioPresentation: port });
-  port!.subscribe(persist);
+  // Library content (preset edits, switches, saves) persists; the whole port is not watched,
+  // because it also publishes the save status and preview readiness (CORE-01).
+  session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();

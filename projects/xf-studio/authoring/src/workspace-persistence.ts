@@ -1,7 +1,27 @@
+import { encodeWorkspaceAt, WORKSPACE_LEVELS, WORKSPACE_STORAGE_BUDGET } from "./workspace-budget";
 import type { WorkspaceState } from "./workspace-state";
 
-export type WorkspaceSaveStatus = { kind: "idle" | "saved" | "protected" | "unavailable"; message: string };
+/**
+ * Browser autosave state for the presentation.
+ * - `saved`: the latest draft is stored.
+ * - `nearly-full`: stored, but only by dropping older Undo steps or recovery copies.
+ * - `full`: browser storage refused the draft; recent changes are not autosaved.
+ * - `repaired`: stored, after damaged recovery entries were dropped at restore.
+ * - `protected`: the stored workspace could not be read, so it is never overwritten.
+ * - `unavailable`: browser storage cannot be used at all.
+ */
+export type WorkspaceSaveStatus = {
+  kind: "idle" | "saved" | "nearly-full" | "full" | "repaired" | "protected" | "unavailable";
+  message: string;
+};
 export type WorkspacePersistencePort = { setItem(key: string, value: string): void };
+
+export const SAVE_MESSAGES = {
+  saved: "Workspace saved in this browser",
+  nearlyFull: "Draft autosaved, but browser storage is nearly full, so older Undo steps were not kept. Save to library to keep a revision.",
+  full: "Browser storage is full, so recent changes are not being autosaved. Save to library or export your collection to keep them.",
+  unavailable: "Browser storage unavailable — save a recipe",
+} as const;
 
 /** One explicit debounce/flush policy for the isolated workspace key. */
 export class WorkspacePersistence {
@@ -9,12 +29,17 @@ export class WorkspacePersistence {
   private timer?: ReturnType<typeof setTimeout>;
   private status: WorkspaceSaveStatus = { kind: "idle", message: "" };
   private listeners = new Set<(status: WorkspaceSaveStatus) => void>();
+  /** The exact text last written; an unchanged workspace is never rewritten. */
+  private written?: string;
+  private lastSize = 0;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
-    restoreError?: string; capture(): WorkspaceState; delayMs?: number }) {}
+    restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number }) {}
   subscribe(listener: (status: WorkspaceSaveStatus) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   snapshot() { return { ...this.status }; }
+  /** Encoded length (UTF-16 code units) of the last stored workspace, for diagnostics and tests. */
+  storedSize() { return this.lastSize; }
   activate() { this.active = true; }
   request() {
     if (!this.active) return;
@@ -28,15 +53,41 @@ export class WorkspacePersistence {
       this.publish({ kind: "protected", message: `${this.options.restoreError ?? "Workspace could not be restored"}. Original storage kept; export your recipe before closing.` });
       return;
     }
-    try {
-      this.options.storage.setItem(this.options.key, JSON.stringify(this.options.capture()));
-      this.publish({ kind: "saved", message: "Workspace saved in this browser" });
-    } catch {
-      this.publish({ kind: "unavailable", message: "Browser storage unavailable — save a recipe" });
+    let state: WorkspaceState;
+    try { state = this.options.capture(); }
+    catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
+    // Write the least-trimmed form that fits the budget. If the browser still refuses it
+    // (other keys share the quota), keep trimming before reporting that autosave stopped.
+    let quota = false;
+    for (let level = 0; level < WORKSPACE_LEVELS; level++) {
+      const candidate = encodeWorkspaceAt(state, level, this.options.budget ?? WORKSPACE_STORAGE_BUDGET);
+      if (candidate.overBudget && level < WORKSPACE_LEVELS - 1) continue;
+      // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
+      if (candidate.encoded === this.written) return;
+      try {
+        this.options.storage.setItem(this.options.key, candidate.encoded);
+      } catch (error) {
+        if (!isQuotaError(error)) { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
+        quota = true; continue;
+      }
+      this.written = candidate.encoded; this.lastSize = candidate.size;
+      this.publish(candidate.level > 0 || candidate.overBudget
+        ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
+        : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
+        : { kind: "saved", message: SAVE_MESSAGES.saved });
+      return;
     }
+    if (quota) this.publish({ kind: "full", message: SAVE_MESSAGES.full });
   }
+  /** Publish only real changes, so a listener that reacts to status cannot loop. */
   private publish(status: WorkspaceSaveStatus) {
+    if (status.kind === this.status.kind && status.message === this.status.message) return;
     this.status = status;
     for (const listener of this.listeners) listener(this.snapshot());
   }
+}
+
+function isQuotaError(error: unknown) {
+  const e = error as { name?: string; code?: number } | undefined;
+  return e?.name === "QuotaExceededError" || e?.name === "NS_ERROR_DOM_QUOTA_REACHED" || e?.code === 22 || e?.code === 1014;
 }
