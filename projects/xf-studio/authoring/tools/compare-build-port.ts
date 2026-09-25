@@ -189,16 +189,17 @@ for preset,record in zip(b['plan']['presets'],b['compiled']):
 print(json.dumps({'textures':checked,'inputPngEqualsRawAndExportPngEqualsDdsLevel0':same}))
 `, build));
   const { verifyBuild } = await import("../src/mod-verifier/verify-build");
+  const { createWolvenKitVerifierTools } = await import("../src/verifier-wolvenkit");
   const workDir = resolve(build, "verify-ts");
   rmSync(workDir, { recursive: true, force: true });
   started = performance.now();
-  const tsReport = await verifyBuild({ build, wolvenkit, gamepath: option(args, "--gamepath"), workDir });
+  const tsReport = await verifyBuild({ build, tools: createWolvenKitVerifierTools(wolvenkit, option(args, "--gamepath")), workDir });
   const tsSeconds = (performance.now() - started) / 1000;
   writeFileSync(resolve(build, "verification-ts.json"), JSON.stringify(tsReport, null, 2) + "\n");
   const differences: { path: string; python: Json; typescript: Json; relative?: number }[] = [];
   diffJson(pyReport, tsReport as unknown as Json, "$", differences);
-  // The TypeScript report adds the checked declaration and plate input hashes; verify.py has neither.
-  const added = new Set(["$.archiveXlSha256", "$.plateInputs"]);
+  // The TypeScript report adds the checked declaration, plate input hashes and re-derived routes; verify.py has none.
+  const added = new Set(["$.archiveXlSha256", "$.plateInputs", "$.presetRoutes"]);
   const numeric = differences.filter(d => d.relative !== undefined);
   const other = differences.filter(d => d.relative === undefined && !added.has(d.path));
   const maxRelative = Math.max(0, ...numeric.map(d => d.relative!));

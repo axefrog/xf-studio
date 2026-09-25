@@ -8,9 +8,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { encodeDds, flatMipChain } from "../src/flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/route-mip-chains";
 import { planCollection } from "../src/preset-collection";
+import { preparePackageCollection } from "../src/package-filter";
+import { FINISH_EXPORT } from "../src/finish-export";
 import { archiveXlDeclaration, HandleCounter, rewritePlateMesh } from "../src/package-resources";
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
-import { componentId } from "../src/mod-verifier/resource-checks";
+import { componentId, VERIFIER_FINISHES } from "../src/mod-verifier/resource-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
 
 // Synthetic, asset-free fixture in the style of mod-verifier.test.ts: archive members and plate inputs
@@ -32,6 +34,8 @@ const collection = { schema: "xfas/collection-1", id: "11111111-2222-4333-8444-5
       optics: { ...game, shift: { color: "#3fd4c2", strength: .8 } } })] } },
 ] };
 type Plan = ReturnType<typeof planCollection>;
+/** The packaged collection the host prepared, after its JSON round trip to the builder. */
+const packaged = JSON.parse(JSON.stringify(preparePackageCollection(collection).packaged));
 const cname = (s: string) => ({ $type: "CName", $storage: "string", $value: s });
 const ref = (s: string, soft = false) => ({ DepotPath: { $type: "ResourcePath", $storage: "string", $value: s.replaceAll("/", "\\") }, Flags: soft ? "Soft" : "Default" });
 const doc = (root: unknown) => ({ Header: {}, Data: { Version: 195, RootChunk: root } });
@@ -61,9 +65,10 @@ function rg8(levels: readonly Uint8Array[], side: number) {
 }
 
 type Mutation = (data: { mesh: any; xbm: Record<string, any>; plan: Plan }) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
-function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => void) {
+function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => void, replan?: (plan: Plan) => void) {
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-routes-"));
   const plan = planCollection(collection);
+  replan?.(plan);
   const blob = { renderResourceBlob: { Data: { v: 1 } }, boneNames: [cname("root")], boneRigMatrices: [], boundingBox: {} };
   const targets = Array.from({ length: 105 }, (_, i) => ({ name: cname(`t${i}`) }));
   const sourceMesh = { ...structuredClone(blob), appearances: [], materialEntries: [], localMaterialBuffer: {} };
@@ -127,7 +132,7 @@ function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => vo
 }
 
 const ok = (): ToolResult => ({ exitCode: 0, stdout: "ok", stderr: "" });
-function run({ build, dds }: ReturnType<typeof makeBuild>) {
+function run({ build, dds }: ReturnType<typeof makeBuild>, packagedCollection: unknown = packaged) {
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
     .flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
   const tools: VerifierTools = {
@@ -138,7 +143,8 @@ function run({ build, dds }: ReturnType<typeof makeBuild>) {
       return ok();
     },
   };
-  return verifyBuild({ build, wolvenkit: "unused", tools });
+  // null runs without the host's collection: the verifier's own rules alone.
+  return verifyBuild({ build, tools, ...(packagedCollection === null ? {} : { packagedCollection }) });
 }
 
 test("flat, faceted and Fresnel presets pass the self-sourcing verifier with route-aware checks", () => {
@@ -151,6 +157,7 @@ test("flat, faceted and Fresnel presets pass the self-sourcing verifier with rou
     expect(report.decodedPixelChecks[1]).toMatchObject({ route: "faceted" });
     expect(report.decodedPixelChecks[2]).toMatchObject({ route: "fresnel", outsideCoverageMax: 0 });
     expect(report.decodedMipChecks[1].levels.some(level => level.widenedRoughness)).toBe(true);
+    expect(report.presetRoutes.map(item => item.route)).toEqual(["flat", "faceted", "fresnel"]);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 });
 
@@ -175,4 +182,45 @@ test("route-specific tampering fails: widened roughness, normal chain, mask chai
     const fixture = makeBuild(mutate, tamper);
     try { expect(() => run(fixture)).toThrow(message); } finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
+});
+
+const editBuild = (build: string, edit: (record: any) => void) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const record = JSON.parse(readFileSync(join(build, "build.json"), "utf8"));
+  edit(record);
+  writeFileSync(join(build, "build.json"), JSON.stringify(record));
+};
+
+test("PIPE-24: the verifier re-derives each route from the recipe and fails on any disagreement", () => {
+  const cases: [RegExp, ((build: string, plan: Plan) => void) | undefined, ((plan: Plan) => void) | undefined, unknown?][] = [
+    // A Shimmer preset compiled, packed and declared consistently as flat: every resource check would pass.
+    [/Faceted was built for the flat route, but its recipe needs the faceted route/, undefined, plan => {
+      const shimmer = plan.presets[1];
+      Object.assign(shimmer, { route: "flat", material: "@preset" });
+      delete (shimmer.textures as Record<string, string>).normal;
+    }],
+    // The builder's route edited in build.json, or missing (which no longer counts as flat).
+    [/Shift was built for the faceted route, but its recipe needs the fresnel route/, b => editBuild(b, r => { r.plan.presets[2].route = "faceted"; }), undefined],
+    [/names no export route for preset Flat/, b => editBuild(b, r => { delete r.plan.presets[0].route; }), undefined],
+    [/Compiled record for .* is missing its route, but its recipe needs the flat route/, b => editBuild(b, r => { delete r.compiled[0].route; }), undefined],
+    [/Compiled record for .* is flat, but its recipe needs the faceted route/, b => editBuild(b, r => { r.compiled[1].route = "flat"; }), undefined],
+    // A recipe edited to match a tampered route differs from the collection the host prepared.
+    [/recipe for preset Faceted differs from the packaged collection/, b => editBuild(b, r => {
+      r.plan.presets[1].recipe.layers[0].finish = "matte"; r.plan.presets[1].route = "flat"; }), undefined],
+    // Without the host's collection, the verifier's own rules still refuse what no route can carry.
+    [/packages a glitter layer, which no export route can draw/, b => editBuild(b, r => { r.plan.presets[0].recipe.layers[0].finish = "glitter"; }), undefined, null],
+    [/packages a glossy layer without its game-matched model/, b => editBuild(b, r => { delete r.plan.presets[0].recipe.layers[1].optics; }), undefined, null],
+    [/Shift is not one colour-shift pigment/, b => editBuild(b, r => { r.plan.presets[2].recipe.layers.push({ ...r.plan.presets[1].recipe.layers[0] }); }), undefined, null],
+  ];
+  for (const [message, tamper, replan, source] of cases) {
+    const fixture = makeBuild(undefined, tamper, replan);
+    try { expect(() => run(fixture, source === undefined ? packaged : source)).toThrow(message); }
+    finally { rmSync(fixture.build, { recursive: true, force: true }); }
+  }
+});
+
+test("CORE-20: the verifier's restated finish rules agree with the builder's finish table", () => {
+  const builder = Object.fromEntries(Object.entries(FINISH_EXPORT).map(([id, rule]) => [id, { route: rule.route, gameOptics: rule.gameOptics }]));
+  const { satin, ...restated } = VERIFIER_FINISHES;
+  expect(restated).toEqual(builder);
+  expect(satin).toEqual(builder.regular);
 });

@@ -169,7 +169,7 @@ test("a matching staged result is promoted with partial-export identities and no
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex"),
     originalPresetCount: parsed.presets.length, omissions: prepared.omissions, namespace,
     modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
-    presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
+    presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })),
     verifiedPresetCount: prepared.packaged.presets.length,
     files: files.map(([name, bytes]) => ({ path: `archive/pc/mod/${name}`, bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex") })),

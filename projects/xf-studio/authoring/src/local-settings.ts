@@ -1,9 +1,11 @@
 import { isAbsolute, normalize, resolve } from "node:path";
+import { EYE_PLATE_HEAD_CHOICES, type EyePlateHead } from "./eye-plate-head-choice";
 
 export const LOCAL_SETTINGS_SCHEMA = "xfs/local-settings-1" as const;
 export type LaunchRoute = "direct" | "mo2";
 export type InstallMode = "none" | "direct" | "mo2";
 export type UpdateChannel = "stable" | "canary";
+export type { EyePlateHead } from "./eye-plate-head-choice";
 
 /** Private host configuration. Never embed this object in a recipe, collection or package manifest. */
 export interface LocalSettings {
@@ -20,6 +22,8 @@ export interface LocalSettings {
   preview: { cacheDirectory: string | null; outputDirectory: string | null };
   installMode: InstallMode;
   updates: { channel: UpdateChannel; checkAutomatically: boolean };
+  /** "base-game" builds with the unmodified head when an installed head mod isn't supported yet. */
+  eyePlateHead: EyePlateHead;
 }
 
 export type LocalSettingsDraft = Omit<LocalSettings, "schema" | "revision">;
@@ -37,6 +41,7 @@ export const defaultLocalSettings = (): LocalSettings => ({
   preview: { cacheDirectory: null, outputDirectory: null },
   installMode: "none",
   updates: { channel: "stable", checkAutomatically: false },
+  eyePlateHead: "installed",
 });
 
 const object = (value: unknown, name: string): Record<string, unknown> => {
@@ -76,7 +81,7 @@ const RETIRED_FIELDS = ["plateInput", "pythonExecutable"] as const;
 export function parseLocalSettings(value: unknown): LocalSettings {
   const root = object(value, "Settings");
   keys(root, ["schema", "revision", "gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-    "wolvenKitCli", "bunExecutable", "sourceCache", "preview", "installMode", "updates"], "Settings");
+    "wolvenKitCli", "bunExecutable", "sourceCache", "preview", "installMode", "updates", "eyePlateHead"], "Settings");
   if (root.schema !== LOCAL_SETTINGS_SCHEMA) throw Error("Unsupported local settings version.");
   if (!Number.isSafeInteger(root.revision) || (root.revision as number) < 0) throw Error("Settings revision is invalid.");
   const cache = object(root.sourceCache, "Source cache");
@@ -104,6 +109,8 @@ export function parseLocalSettings(value: unknown): LocalSettings {
     installMode: choice(root.installMode, ["none", "direct", "mo2"], "Install mode"),
     updates: { channel: choice(updates.channel, ["stable", "canary"], "Update channel"),
       checkAutomatically: updates.checkAutomatically as boolean },
+    // Settings saved before this choice existed use the head the game loads.
+    eyePlateHead: root.eyePlateHead === undefined ? "installed" : choice(root.eyePlateHead, EYE_PLATE_HEAD_CHOICES, "Eye plate head"),
   };
 }
 

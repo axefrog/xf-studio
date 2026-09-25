@@ -39,7 +39,8 @@ export function verifyPackageBuildResult(
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const sourceHash = createHash("sha256").update(sourceJson).digest("hex");
   const packagedHash = createHash("sha256").update(JSON.stringify(prepared.packaged)).digest("hex");
-  const identities = prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance }));
+  // Identities and the export route of each preset, as the host's own filter planned them.
+  const identities = prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }));
   const names = [prepared.plan.namespace + ".archive", prepared.plan.namespace + ".archive.xl"];
   const expectedFiles = names.map(name => `archive/pc/mod/${name}`);
   if (!Array.isArray(manifest.files) || manifest.files.length !== 2 ||

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readArchiveXlConfig, settleDepotAdditions, type XlDocument } from "../src/archivexl-config";
@@ -159,11 +159,19 @@ test("a mod's morph target with the audited topology is cut from, with provenanc
   const plateMorph = JSON.parse(readFileSync(derived.morphFile, "utf8"));
   expect(plateMorph.Data.RootChunk.targets[0].boneNames).toEqual([{ $value: "jaw_unused" }]);
   expect(packagePlateRecord(derived.manifest)).toMatchObject({ sourceRevision: "installed-mods", head: { kind: "installed-mods" } });
-  // A cache hit only re-extracts and hashes; an unpatched head is not serialized again.
+  // PIPE-25: unchanged inputs reuse the plate without extracting, serializing or hashing the head again.
   calls.length = 0;
   const again = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: tools(contents, calls),
     headSource: { resolve: async () => ({ plan: planOf(baseGame.mesh, resource("morph", mod), baseGame), notes: [] }) } });
   expect(again.reused).toBe(true);
+  expect(calls).toEqual([]);
+  // A changed mod archive (new size or time) is read again; the cached plate still matches its content.
+  writeFileSync(mod.file, readFileSync(mod.file));
+  utimesSync(mod.file, new Date(), new Date(Date.now() + 60_000));
+  const touched = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: tools(contents, calls),
+    headSource: { resolve: async () => ({ plan: planOf(baseGame.mesh, resource("morph", mod), baseGame), notes: [] }) } });
+  expect(touched.reused).toBe(true);
+  expect(calls.filter(call => call.startsWith("extract")).sort()).toEqual(["extract basegame_4_appearance.archive", "extract zz_rig_fix.archive"]);
   expect(calls.filter(call => call === "serialize")).toEqual([]);
 }));
 
@@ -185,17 +193,22 @@ test("a mod that changes the head's topology blocks Build with a named, actionab
   expect(blocked).toBeInstanceOf(EyePlateError);
   expect(blocked.code).toBe("plate_source_modded");
   expect(blocked.message).toContain("Your installed head mod Head Sculpt changes the head's shape data in a way XF Eye Artistry doesn't support yet");
-  expect(blocked.message).toContain("XFS_EYE_PLATE_HEAD=base-game");
+  // The way round is a named Local setup choice, not an environment variable.
+  expect(blocked.message).toContain("set “Head used for the eye plate” to “The unmodified game head” under Game & tools");
+  expect(blocked.message).not.toContain("XFS_EYE_PLATE_HEAD");
   expect(blocked.detail).toContain("audited selection");
   expect(readdirSync(cacheRoot).filter(name => !name.startsWith("status"))).toEqual([]);
   // The escape hatch cuts from the base-game head and says so in the manifest.
   const override = await ensureEyePlate({ gameRoot: join(dir, "game"), cacheRoot, recipe, tools: tools(contents), headSource,
-    headOverride: eyePlateHeadOverride({ XFS_EYE_PLATE_HEAD: "Base-Game " }) });
+    headOverride: eyePlateHeadOverride({}, "base-game") });
   expect(override.manifest.head?.kind).toBe("base-game-override");
   expect(override.manifest.head?.resources.map(item => item.archive)).toEqual(["basegame_4_appearance.archive", "basegame_4_appearance.archive"]);
   expect(override.manifest.source.revisionId).toBe("fixture-1");
-  expect(override.manifest.limits.some(limit => limit.includes("XFS_EYE_PLATE_HEAD=base-game"))).toBe(true);
+  expect(override.manifest.limits.some(limit => limit.includes("set to cut the plate from the unmodified game head"))).toBe(true);
   expect(eyePlateHeadOverride({})).toBeUndefined();
+  expect(eyePlateHeadOverride({}, "installed")).toBeUndefined();
+  // The developer environment override still works.
+  expect(eyePlateHeadOverride({ XFS_EYE_PLATE_HEAD: "Base-Game " })).toBe("base-game");
 }));
 
 test("an .xl render-blob patch is applied before the cut, and a patch that reshapes the head is refused", () => withDirectory(async dir => {
@@ -224,3 +237,28 @@ test("an .xl render-blob patch is applied before the cut, and a patch that resha
   expect(refused.code).toBe("plate_source_modded");
   expect(refused.message).toContain("UV Framework");
 }));
+
+test("PIPE-26: an incomplete scan or an unread index the game searches before the head stops Build plainly", async () => {
+  const { incompleteHeadSource, INCOMPLETE_SCAN_MESSAGE } = await import("../src/eye-plate-head-resolver");
+  const content: HeadArchive = { name: "basegame_4_appearance.archive", group: "content", provider: "Installed game", file: "content" };
+  const base = { mesh: resource("mesh", content), morph: resource("morph", content) };
+  const plan = planOf(base.mesh, base.morph, base);
+  const ranks = new Map([["content", 40]]);
+  const unread = (name: string, rank: number) => ({ id: name, name, providerName: `Mod ${name}`, rank, error: "RDAR magic mismatch" });
+  const complete = { scanGaps: [] as string[], unreadIndexes: [] };
+  expect(incompleteHeadSource(complete, plan, file => ranks.get(file))).toBeNull();
+  const scan = incompleteHeadSource({ ...complete, scanGaps: ["directory_unreadable: mo2 directory could not be read."] },
+    plan, file => ranks.get(file))!;
+  expect(scan).toMatchObject({ code: "plate_source_incomplete", message: INCOMPLETE_SCAN_MESSAGE, detail: expect.stringContaining("directory_unreadable") });
+  // A broken archive searched before the winning head could hide a head mod; one searched after cannot.
+  const before = incompleteHeadSource({ ...complete, unreadIndexes: [unread("broken.archive", 3), unread("late.archive", 90)] }, plan, file => ranks.get(file))!;
+  expect(before.code).toBe("plate_source_incomplete");
+  expect(before.message).toContain("couldn't read the mod archive “broken.archive” (Mod broken.archive)");
+  expect(before.message).toContain("Reinstall or remove that mod, then build again.");
+  expect(before.message).not.toContain("late.archive");
+  expect(incompleteHeadSource({ ...complete, unreadIndexes: [unread("late.archive", 90)] }, plan, file => ranks.get(file))).toBeNull();
+  // With a head resource or a plate-relevant patch source found nowhere, every unread archive matters.
+  const missing = { ...plan, ignoredPatches: [{ target: "mesh" as const, sourcePath: "p.mesh", declaredBy: "p.xl", reason: "missing", sourceMissing: true }] };
+  expect(incompleteHeadSource({ ...complete, unreadIndexes: [unread("late.archive", 90)] }, missing, file => ranks.get(file))?.code)
+    .toBe("plate_source_incomplete");
+});

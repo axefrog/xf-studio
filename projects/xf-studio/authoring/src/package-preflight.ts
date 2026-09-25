@@ -19,7 +19,7 @@ export function preflightPackageCollection(value: unknown): PackageCheck & { pac
     omissions,
     experimental,
     packagedCollectionSha256: createHash("sha256").update(packagedCollectionJson).digest("hex"),
-    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
+    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })),
     packagedCollectionJson,
   };
 }

@@ -5,9 +5,11 @@ import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeu
 import type { Layer } from "./recipe";
 import {installProceduralGlintStudy} from "./direct-glint";
 import {isDirectGlint} from "./direct-glint-settings";
-import {FLAT_SURFACE,FRESNEL_SURFACE} from "./finish-export";
+import {flatSurface,FRESNEL_SURFACE} from "./finish-export";
 import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "./route-mip-chains";
+/** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
+const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 
 export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> };
 export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
@@ -181,10 +183,11 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     material.roughnessMap = material.metalnessMap = maps?.surface ?? null;
     const finish = canonicalFinish(layer.finish), game = !!layer.optics;
     // Game-matched models follow the export surfaces; earlier layers keep their original study values.
-    material.roughness = directSettings ? .55 : useMaps ? 1 : game && finish === "glossy" ? FLAT_SURFACE.glossy.roughness
-      : game && finish === "iridescent" ? FRESNEL_SURFACE.roughness
-      : finish === "matte" ? .88 : finish === "metallic" || finish === "iridescent" ? .27 : finish === "glossy" ? .16 : .38;
-    material.metalness = useMaps ? 1 : game && finish === "iridescent" ? FRESNEL_SURFACE.metalness : finish === "metallic" || finish === "iridescent" ? .65 : 0;
+    // Earlier Colour-shifting used the Metallic surface and earlier Glossy a softer base under its clear coat.
+    const surface = game && finish === "iridescent" ? FRESNEL_SURFACE : !game && finish === "glossy" ? EARLIER_GLOSSY_BASE
+      : !game && finish === "iridescent" ? flatSurface("metallic")! : flatSurface(finish) ?? flatSurface("regular")!;
+    material.roughness = directSettings ? .55 : useMaps ? 1 : surface.roughness;
+    material.metalness = useMaps ? 1 : surface.metalness;
     // The G-buffer holds one lobe: the game-matched Glossy has no clear coat.
     material.clearcoat = directSettings ? .4 : finish === "glossy" && !game ? 1 : 0; material.clearcoatRoughness = directSettings ? .24 : .08;
     material.iridescence = finish === "iridescent" && !game ? 1 : 0; material.iridescenceIOR = 1.3;

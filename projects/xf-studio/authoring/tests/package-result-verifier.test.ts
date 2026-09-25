@@ -33,7 +33,7 @@ test("final package identity verification works under a relocated host-owned dis
       collectionSha256: sha(source), packagedCollectionSha256: packagedHash,
       originalPresetCount: collection.presets.length, omissions, namespace: prepared.plan.namespace,
       modName: prepared.plan.modName, selectorLabel: prepared.plan.selectorLabel,
-      presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })),
+      presets: prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })),
       verifiedPresetCount: prepared.packaged.presets.length, files: [
         { path: `archive/pc/mod/${archiveName}`, bytes: 15, sha256: archiveHash },
         { path: `archive/pc/mod/${xlName}`, bytes: 10, sha256: sha("xl fixture") }],
@@ -62,5 +62,11 @@ test("final package identity verification works under a relocated host-owned dis
     }
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, installed: true }));
     expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).toThrow("does not match");
+    // PIPE-24: the manifest must record each preset's route as the host's own filter planned it.
+    for (const presets of [manifest.presets.map(({ route: _route, ...rest }) => rest),
+      manifest.presets.map((p, i) => i ? p : { ...p, route: p.route === "flat" ? "faceted" : "flat" })]) {
+      writeFileSync(manifestPath, JSON.stringify({ ...manifest, presets }));
+      expect(() => verifyPackageBuildResult(built, collection, prepared, source, dist)).toThrow("does not match");
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

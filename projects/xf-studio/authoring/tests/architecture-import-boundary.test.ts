@@ -64,7 +64,7 @@ test("the package builder keeps resource definitions pure and external processes
     for (const dependency of imports(source(name)))
       expect(dependency, `${name} imports ${dependency}`).not.toMatch(/^(node:child_process|\.\/process-tree)$/);
   // Every WolvenKit command runs through the one shared runner, which alone starts the process.
-  for (const name of ["package-build-wolvenkit", "eye-plate-wolvenkit", "game-asset-export-wolvenkit"]) {
+  for (const name of ["package-build-wolvenkit", "eye-plate-wolvenkit", "game-asset-export-wolvenkit", "verifier-wolvenkit"]) {
     expect(imports(source(name))).toContain("./wolvenkit-cli");
     expect(imports(source(name))).not.toContain("./process-tree");
   }

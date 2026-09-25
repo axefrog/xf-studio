@@ -21,7 +21,7 @@ const summary = (collection: unknown = fixture): PackageCheck => {
   return { ready: true, collectionId: plan.collectionId, namespace: plan.namespace,
     modName: plan.modName, selectorLabel: plan.selectorLabel, originalPresetCount: source.presets.length, omissions,
     packagedCollectionSha256: createHash("sha256").update(JSON.stringify(packaged)).digest("hex"),
-    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance })) };
+    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })) };
 };
 
 test("package boundary accepts only same-origin validated collection snapshots and ignores browser paths", async () => {

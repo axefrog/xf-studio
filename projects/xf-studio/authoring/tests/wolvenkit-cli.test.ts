@@ -2,7 +2,9 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classifyWolvenKitRun, isRuntimeMissing, runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "../src/wolvenkit-cli";
+import { classifyWolvenKitRun, isRuntimeMissing, runWolvenKit, runWolvenKitSync, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity,
+  wolvenKitIdentityKey, WolvenKitRunError } from "../src/wolvenkit-cli";
+import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
 import type { ProcessTreeResult } from "../src/process-tree";
 
 const roots: string[] = [];
@@ -55,3 +57,18 @@ test("a missing CLI is typed before any process starts, and identity is read fro
   expect(wolvenKitIdentity(cli)!.sha256).not.toBe(first.sha256);
   expect(wolvenKitIdentityKey(null)).toBe("wolvenkit:none");
 });
+
+test("the blocking runner applies the same policy, so the verifier gets the shared .NET-missing message", () => {
+  // Bun stands in for WolvenKit: the arguments are a script, so each case controls output and exit code.
+  const bun = process.execPath;
+  expect(runWolvenKitSync(bun, ["-e", "console.log('Unbundled 3/3')"], { timeoutMs: 30_000 })).toMatchObject({ exitCode: 0, stdout: expect.stringContaining("Unbundled 3/3") });
+  const dotnet = "console.error('You must install .NET to run this application.'); process.exit(131)";
+  expect(failure(() => runWolvenKitSync(bun, ["-e", dotnet], { timeoutMs: 30_000 }))).toMatchObject({ code: "runtime_missing" });
+  expect(failure(() => runWolvenKitSync(bun, ["-e", "process.exit(2)"], { timeoutMs: 30_000 }))).toMatchObject({ code: "tool_failed", exitCode: 2 });
+  expect(failure(() => runWolvenKitSync(bun, ["-e", "setTimeout(() => {}, 60_000)"], { timeoutMs: 300 }))).toMatchObject({ code: "tool_timeout" });
+  expect(failure(() => runWolvenKitSync(join(tmpdir(), "no-such-wolvenkit.exe"), ["unbundle"], { timeoutMs: 1000 }))).toMatchObject({ code: "tool_missing" });
+  // The verifier's adapter maps them to plain messages and leaves exit-code judgement to the verifier.
+  expect(() => createWolvenKitVerifierTools(join(tmpdir(), "no-such-wolvenkit.exe"), undefined).unbundle("a", "b")).toThrow("WolvenKit CLI isn't available");
+  expect(() => createWolvenKitVerifierTools(bun, undefined).exportTextures("a", "b")).toThrow("Cyberpunk 2077 folder");
+  expect(WOLVENKIT_RUNTIME_MISSING_MESSAGE).toContain(".NET runtime");
+}, 60_000);

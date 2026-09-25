@@ -55,6 +55,8 @@ export interface HeadPatchSource {
 }
 export interface IgnoredHeadPatch {
   readonly target: HeadRole; readonly sourcePath: string; readonly declaredBy: string; readonly reason: string;
+  /** No readable mounted archive provides the patch resource. */
+  readonly sourceMissing?: boolean;
 }
 export interface HeadSourcePlan {
   readonly mesh: HeadResourceSource | null;
@@ -154,7 +156,7 @@ export function planHeadSource(paths: { meshDepotPath: string; morphDepotPath: s
       const found = locate(depot, additions, knownPaths, patch.sourcePath);
       if (!found.lookup.winner || !found.entryPath) {
         ignoredPatches.push({ target: role, sourcePath: patch.sourcePath, declaredBy: patch.declaredBy,
-          reason: "its patch resource is not provided by any mounted archive" });
+          reason: "its patch resource is not provided by any mounted archive", sourceMissing: true });
         continue;
       }
       patches.push({ target: role, sourcePath: patch.sourcePath, entryPath: found.entryPath, archive: archiveOf(found.lookup.winner),

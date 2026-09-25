@@ -60,14 +60,6 @@ export const probeWolvenKit: WolvenKitProbe = path => {
   return probe.ok ? null : probe.issue;
 };
 const stampKey = (path: string) => { const stamp = statSync(path); return `${path}|${stamp.size}|${stamp.mtimeMs}`; };
-async function run(path: string, args: string[], timeoutMs: number) {
-  const child = Bun.spawn([path, ...args], { stdout: "pipe", stderr: "pipe", windowsHide: true });
-  const timer = setTimeout(() => child.kill(), timeoutMs);
-  try {
-    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-    return { stdout, stderr, code };
-  } finally { clearTimeout(timer); }
-}
 const inFlight = new Map<string, Promise<void>>();
 function once(key: string, work: () => Promise<void>): Promise<void> {
   let pending = inFlight.get(key);
@@ -85,8 +77,9 @@ export async function warmBuildProbes(settings: LocalSettings): Promise<void> {
     if (!cached || Date.now() >= cached.until) jobs.push(once(`bun:${key}`, async () => {
       let issue: string | null = null;
       try {
-        const result = await run(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], 5000);
-        if (result.code !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "The selected Bun executable cannot run the packaged compiler scripts.";
+        // The shared process runner stops the whole tree when the probe overruns.
+        const result = await runProcessTree(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], { timeoutMs: 5000, keep: 4096 });
+        if (result.exitCode !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "The selected Bun executable cannot run the packaged compiler scripts.";
       } catch { issue = "The selected Bun executable could not be checked."; }
       bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
     }));
@@ -188,14 +181,15 @@ type BuildOutcome = { kind: "success"; result: PackageBuild } |
 export type DesktopPlatePreparer = (settings: LocalSettings, cacheRoot: string, signal: AbortSignal) => Promise<EyePlateResult>;
 /**
  * The plate is cut from the head the saved launch route loads (base game, or a mod's head when its topology
- * matches). XFS_EYE_PLATE_HEAD=base-game in the app's environment is the documented escape hatch.
+ * matches). The Local setup choice `eyePlateHead: "base-game"` (or XFS_EYE_PLATE_HEAD=base-game for developers)
+ * cuts it from the unmodified game head instead.
  */
 export const prepareDesktopPlate: DesktopPlatePreparer = (settings, cacheRoot, signal) => ensureEyePlate({
   gameRoot: settings.gameRoot!, cacheRoot, tools: createWolvenKitEyePlateTools(settings.wolvenKitCli!), signal,
   headSource: createInstalledHeadSource({ gameRoot: settings.gameRoot!, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
     mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli! },
   resolve(cacheRoot, "resolver")),
-  headOverride: eyePlateHeadOverride(process.env) });
+  headOverride: eyePlateHeadOverride(process.env, settings.eyePlateHead) });
 
 /** Prepare the built-in eye plate, then run the packaged builder as one bounded process tree; publish only the shared verified result. */
 export async function runDesktopBuild(value: unknown, settings: LocalSettings, dataRoot: string, toolsRoot: string,

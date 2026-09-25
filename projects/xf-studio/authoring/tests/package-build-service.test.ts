@@ -50,6 +50,7 @@ function fakeVerify(overrides: Partial<VerificationReport> = {}, seen: VerifyBui
     return { presetCount: build.plan.presets.length, archiveSha256: build.archiveSha256, archiveXlSha256: sha(xl),
       plateInputs: { mesh: sha(readFileSync(options.plate!.mesh)), morph: sha(readFileSync(options.plate!.morph)) },
       unpackedFilesVerified: build.artifacts.length, limits: [...VERIFICATION_LIMITS], installed: false,
+      presetRoutes: build.plan.presets.map((p: { id: string; route: string }) => ({ id: p.id, route: p.route })),
       gameRenderingVerified: false, ...overrides } as VerificationReport;
   };
 }
@@ -89,6 +90,8 @@ test("Build promotes only a verified candidate with the full local-package manif
     collectionSha256: sha(source), originalPresetCount: 4, verifiedPresetCount: 3, verifiedUnpackedFiles: 13,
     omissions: prepared.omissions, installed: false, gameRenderingVerified: false,
     plate: { source: "derived", cacheKey: "c".repeat(64), sourceRevision: "cp2077-2.31" } });
+  // Each packaged preset records the route the verifier re-derived from its recipe.
+  expect(written.presets).toEqual(prepared.plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })));
   expect(written.limits).toEqual([...VERIFICATION_LIMITS]);
   expect(readdirSync(join(result.package, "archive", "pc", "mod")).sort())
     .toEqual([`${prepared.plan.namespace}.archive`, `${prepared.plan.namespace}.archive.xl`]);
@@ -100,9 +103,11 @@ test("Build promotes only a verified candidate with the full local-package manif
     expect(existsSync(join(intermediate, ...folder))).toBe(false);
   expect(JSON.parse(readFileSync(join(intermediate, "build.json"), "utf8")).plateStem).toBe("xfs_eye_plate");
   expect(calls).toEqual(["import", "import", "serialize", "deserialize", "deserialize", "deserialize", "pack"]);
-  // The verifier receives the host's plate files and hashes, the game folder and the recipe's morph count.
+  // The verifier receives WolvenKit tools, the packaged collection, the host's plate files and hashes and the recipe's morph count.
   expect(verified).toHaveLength(1);
-  expect(verified[0]).toMatchObject({ gamepath: options.gamepath, morphTargets: 105, plate: {
+  expect(typeof verified[0].tools.exportTextures).toBe("function");
+  expect(verified[0].packagedCollection).toEqual(JSON.parse(JSON.stringify(prepared.packaged)));
+  expect(verified[0]).toMatchObject({ morphTargets: 105, plate: {
     mesh: join(options.plate!, "xfs_eye_plate.mesh"), morph: join(options.plate!, "xfs_eye_plate.morphtarget"),
     meshSha256: sha("mesh fixture"), morphSha256: sha("morph fixture") } });
   expect(readdirSync(join(dir, "build")).filter(name => name.startsWith("source-"))).toEqual([]);
@@ -125,6 +130,9 @@ test("a failed or mismatched independent verification publishes no candidate", a
   const plateError = await runPackageCommand({ ...otherPlate.options,
     verify: fakeVerify({ plateInputs: { mesh: "0".repeat(64), morph: "0".repeat(64) } }) }).catch(e => e);
   expect(plateError.message).toContain("does not match the build");
+  const otherRoute = setup();
+  const routeError = await runPackageCommand({ ...otherRoute.options, verify: fakeVerify({ presetRoutes: [] }) }).catch(e => e);
+  expect(routeError.message).toContain("does not match the build");
   const otherXl = setup();
   const xlError = await runPackageCommand({ ...otherXl.options, verify: fakeVerify({ archiveXlSha256: "0".repeat(64) }) }).catch(e => e);
   expect(xlError.message).toContain("differs from the verified files");

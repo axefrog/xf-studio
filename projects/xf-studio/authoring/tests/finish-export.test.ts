@@ -58,6 +58,28 @@ test("a colour-shift preset must be one pigment; otherwise only its colour-shift
   expect(() => compileFlatPreset(recipe({ finish: "matte" }, cs), 32)).toThrow(UnsupportedMaterialError);
 });
 
+test("PIPE-23: the one-pigment rule counts exportable layers only, so Glitter beside a colour shift is left out alone", () => {
+  const cs = { finish: "iridescent" as const, optics: { ...game, shift }, color: "#3a2350" };
+  const withGlitter = planPresetExport(recipe({ finish: "glitter" }, cs, { finish: "glossy" }));
+  expect(withGlitter.route).toBe("fresnel");
+  expect(withGlitter.included.map(l => l.id)).toEqual(["l1"]);
+  // Glitter and the earlier-model Glossy are reported with their own reasons, in recipe order.
+  expect(withGlitter.excluded.map(item => item.layer.id)).toEqual(["l0", "l2"]);
+  expect(withGlitter.excluded[0].reason).toContain("Glitter");
+  expect(withGlitter.excluded[1].reason).toContain("clear coat");
+  expect(withGlitter.excluded.some(item => item.reason === FRESNEL_PRESET_RULE)).toBe(false);
+  // Partial export keeps the colour-shift preset and names only the omitted layers.
+  const collection = structuredClone(board);
+  collection.presets = [{ ...collection.presets[2], recipe: recipe(cs, { finish: "glitter" }) }];
+  const prepared = preparePackageCollection(collection);
+  expect(prepared.omissions.map(item => item.kind === "layer" ? [item.layerId, item.finish] : item.kind)).toEqual([["l1", "glitter"]]);
+  expect(planCollection(prepared.packaged).presets.map(p => p.route)).toEqual(["fresnel"]);
+  // An exportable non-colour-shift layer still breaks the one-pigment rule.
+  const mixed = planPresetExport(recipe({ finish: "glitter" }, cs, { finish: "matte" }));
+  expect(mixed.route).toBe("flat");
+  expect(mixed.excluded.map(item => [item.layer.id, item.reason === FRESNEL_PRESET_RULE])).toEqual([["l0", false], ["l1", true]]);
+});
+
 test("glossy is a flat low-roughness dielectric and flat-only output is unchanged by the new routes", () => {
   const flat = recipe({ finish: "glossy", optics: game });
   const baked = compileFlatPreset(flat, 64), mask = raster(flat.layers[0], 64);

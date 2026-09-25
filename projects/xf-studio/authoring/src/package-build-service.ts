@@ -16,6 +16,7 @@ import { preflightPackageCollection } from "./package-preflight";
 import { buildPackageResources, plateStem, type BuildRecord } from "./package-resource-builder";
 import { createWolvenKitPackageTools, PackageToolError, type PackageResourceTools } from "./package-build-wolvenkit";
 import { verifyBuild, type VerificationReport, type VerifyBuildOptions } from "./mod-verifier/verify-build";
+import { createWolvenKitVerifierTools } from "./verifier-wolvenkit";
 import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "./eye-plate-service";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;
@@ -207,8 +208,8 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   cancelled();
   let verification: VerificationReport;
   try {
-    verification = (options.verify ?? verifyBuild)({ build: intermediate, wolvenkit, gamepath,
-      plate: { mesh: join(plate, stem + ".mesh"), morph: join(plate, stem + ".morphtarget"),
+    verification = (options.verify ?? verifyBuild)({ build: intermediate, tools: createWolvenKitVerifierTools(wolvenkit, gamepath),
+      packagedCollection: JSON.parse(packagedCollectionJson), plate: { mesh: join(plate, stem + ".mesh"), morph: join(plate, stem + ".morphtarget"),
         meshSha256: plateRecord.meshSha256, morphSha256: plateRecord.morphSha256 },
       morphTargets: plateMorphTargets });
   }
@@ -216,12 +217,13 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   writeFileSync(join(intermediate, "verification.json"), JSON.stringify(verification, null, 2) + "\n", "utf8");
   log("independent verification complete");
   if (verification.archiveSha256 !== record.archiveSha256 || verification.presetCount !== check.presets.length ||
-      verification.plateInputs?.mesh !== plateRecord.meshSha256 || verification.plateInputs?.morph !== plateRecord.morphSha256)
+      verification.plateInputs?.mesh !== plateRecord.meshSha256 || verification.plateInputs?.morph !== plateRecord.morphSha256 ||
+      JSON.stringify(verification.presetRoutes) !== JSON.stringify(check.presets.map(p => ({ id: p.id, route: p.route }))))
     fail("package_verification_failed", "Independent verification does not match the build.");
   const built = record.plan;
   if (built.collectionId !== check.collectionId || built.namespace !== check.namespace ||
       built.modName !== check.modName || built.selectorLabel !== check.selectorLabel ||
-      JSON.stringify(built.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance }))) !== JSON.stringify(check.presets))
+      JSON.stringify(built.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }))) !== JSON.stringify(check.presets))
     fail("package_identity_mismatch", "Compiled collection identities differ from preflight.");
 
   cancelled();

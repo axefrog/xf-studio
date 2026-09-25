@@ -1,6 +1,6 @@
 // Process adapter: the package builder's WolvenKit command lines and how WolvenKit reports success
 // for them; the shared WolvenKit runner owns the process. The builder decides what to convert.
-import { runWolvenKit, WolvenKitRunError } from "./wolvenkit-cli";
+import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, WolvenKitRunError } from "./wolvenkit-cli";
 
 export type PackageToolCode = "package_tool_failed" | "package_build_cancelled" | "package_build_timeout";
 export class PackageToolError extends Error {
@@ -42,7 +42,7 @@ async function runStep(cli: string, args: string[], options: { signal?: AbortSig
     if (!(error instanceof WolvenKitRunError)) throw error;
     if (error.code === "cancelled") throw new PackageToolError("package_build_cancelled", "Package Build was cancelled.", error.output);
     if (error.code === "tool_timeout") throw new PackageToolError("package_build_timeout", error.message, error.output);
-    const reason = error.code === "runtime_missing" ? "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer." : error.message;
+    const reason = error.code === "runtime_missing" ? WOLVENKIT_RUNTIME_MISSING_MESSAGE : error.message;
     throw new PackageToolError("package_tool_failed", `${reason}${error.output ? `: ${tail(error.output)}` : ""}`, error.output);
   }
 }

@@ -36,6 +36,9 @@ const SIZE = 16;
 const depot = "xfs/test/collection";
 const presets = ["a1", "b2"].map((id, i) => ({
   id, name: `Look ${id}`, revision: 1, index: i + 1, appearance: `xfs_p${id}`, appAppearance: `xfs_cns__xfs_p${id}`,
+  route: "flat", material: "@preset",
+  // Only the fields the verifier's route rules read; a Matte and a Metallic look are both flat.
+  recipe: { layers: [{ id: `l${i}`, enabled: true, opacity: 1, finish: i ? "metallic" : "matte", color: "#406080" }] },
   textures: {
     diffuse: `${depot}/textures/xfs_p${id}_diffuse.xbm`, roughness: `${depot}/textures/xfs_p${id}_roughness.xbm`,
     metalness: `${depot}/textures/xfs_p${id}_metalness.xbm` },
@@ -127,7 +130,7 @@ function makeBuild(mutate?: Mutation): Fixture {
       dds.set(`${preset.appearance}_${channel}.dds`, encoded); // a lossless "decode"
       return { channel, file, bytes: m[channel].length, sha256: sha(m[channel]) };
     });
-    return { id: preset.id, revision: 1, size: SIZE, maps: records };
+    return { id: preset.id, revision: 1, size: SIZE, route: "flat", maps: records };
   });
   const plate = { mesh: join(build, "plate", "xfs_eye_plate.mesh"), morph: join(build, "plate", "xfs_eye_plate.morphtarget") };
   writeFile(plate.mesh, JSON.stringify(doc(sourceMesh)));
@@ -180,7 +183,7 @@ function fakeTools(fixture: Fixture, hooks: Hooks, calls: string[]): VerifierToo
 }
 
 function run(fixture: Fixture, hooks: Hooks = {}, calls: string[] = []) {
-  return verifyBuild({ build: fixture.build, wolvenkit: "unused", tools: fakeTools(fixture, hooks, calls), ...hooks.options });
+  return verifyBuild({ build: fixture.build, tools: fakeTools(fixture, hooks, calls), ...hooks.options });
 }
 
 function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks) {
@@ -203,7 +206,7 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
       "unpackedFilesVerified", "preservedMorphs", "modelBuffersUnchanged", "resolvedDynamicPaths", "decodedPixelChecks",
-      "decodedMipChecks", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
+      "decodedMipChecks", "presetRoutes", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
     expect(report).toMatchObject({ presetCount: 2, selectorOptionCount: 3, meshAppearances: 2, materialTemplates: 1, textureCount: 6,
       unpackedFilesVerified: 10, preservedMorphs: 105, installed: false, gameRenderingVerified: false,
       archiveXlSha256: sha(declaration(plan)),
