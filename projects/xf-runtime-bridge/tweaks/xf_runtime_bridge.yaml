@@ -1,0 +1,8 @@
+# XF Runtime Bridge: TweakXL data-only layer.
+#
+# One record-less TweakDB flat. The redscript layer reads it with
+# TweakDBInterface.GetInt(t"XFRuntimeBridge.Meta.protocolVersion", -1) and announces the value to
+# the plugin, so `layers.status` shows whether TweakXL data reached TweakDB (-1 = not loaded).
+# An unquoted integer is inferred as Int32 by TweakXL's YAML reader (v1.11.4
+# src/App/Tweaks/Declarative/Yaml/YamlReader.Values.cpp:499-523).
+XFRuntimeBridge.Meta.protocolVersion: 1

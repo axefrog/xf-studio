@@ -30,7 +30,7 @@ dest=HQ/'captures'/(dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'-'+args.labe
 dest.mkdir(parents=True,exist_ok=False)
 sources=[]
 for prefix,root in [('game',GAME),('mo2-overwrite',MO2/'overwrite'),('mo2-legacy-overwrite',MO2/'_overwrite_')]:
-    for group,folder,pattern in [('red4ext','red4ext/logs','red4ext*.log'),('archivexl','red4ext/plugins/ArchiveXL','*.log'),('tweakxl','red4ext/plugins/TweakXL','*.log'),('codeware','red4ext/plugins/Codeware','*.log'),('redscript','r6/logs','redscript*.log')]:
+    for group,folder,pattern in [('red4ext','red4ext/logs','red4ext*.log'),('archivexl','red4ext/plugins/ArchiveXL','*.log'),('tweakxl','red4ext/plugins/TweakXL','*.log'),('codeware','red4ext/plugins/Codeware','*.log'),('redscript','r6/logs','redscript*.log'),('xf-runtime-bridge','red4ext/logs','xfruntimebridge-*.log'),('xf-runtime-bridge-cet','bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge','*.log')]:
         candidates=list((root/folder).glob(pattern))
         if candidates: sources.append((f'{prefix}/{group}',max(candidates,key=lambda p:p.stat().st_mtime)))
     for name in ['cyber_engine_tweaks.log','scripting.log','gamelog.log']:

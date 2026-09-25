@@ -1,0 +1,81 @@
+# Runtime access: RED4ext, redscript, CET and the XF bridge
+
+**Maturity: Draft.** This page covers how each Cyberpunk 2077 mod type gets code into the running game, where each one logs, and how XF Studio's local bridge reaches the game. It is consolidated from source reading of RED4ext 1.30.0, RED4ext.SDK 1.0.0, redscript 0.5.31, CET 1.37.1, TweakXL 1.11.4 and psiberx's plugins, plus the offline build and self-test of [`projects/xf-runtime-bridge`](../projects/xf-runtime-bridge/README.md). **No claim here has runtime evidence yet**; the [test card](../research/runtime/runtime-bridge-test-card.md) collects it. The full citations, capability matrix and phase-2 plan are in the [runtime bridge design](../research/runtime/runtime-bridge-design.md).
+
+## 1. Load order and entry points
+
+| Mod type | How the game picks it up | Entry point | Grade |
+|---|---|---|---|
+| RED4ext plugin | Found at `red4ext/plugins/<dir>/<name>.dll` (at most one folder deep). Needs the exports `Supports` (API version), `Query` (name, version, runtime, SDK) and `Main(Load/Unload)`. Refused if its runtime doesn't match the game build, or its SDK is older than 0.5.0-compat. | `Main(Load)` runs before the game starts, and the plugin registers RTTI callbacks there | [source] RED4ext `PluginSystem.cpp:89-154, 223-321` |
+| Global natives for scripts | `CRTTISystem::AddPostRegisterCallback`, then `CGlobalFunction::Create` with flags `{isNative, isStatic}`, then `RegisterFunction` | Called by redscript as a declared `native func`, and by CET as `Game.Name(...)` | [source] SDK `examples/native_globals_redscript/Main.cpp:60-83`; CET `RTTIHelper.cpp:305-354` |
+| redscript | `r6/scripts/**.reds`, plus any path a plugin adds with `sdk->scripts->Add` (resolved against the plugin folder) | Class bodies, `@wrapMethod`/`@addMethod`, `ScriptableSystem` callbacks | [source] RED4ext `v1/Funcs.cpp:123-139`, `ScriptCompilationSystem.cpp:101-134`; redscript `unit.rs` |
+| TweakXL data | `r6/tweaks/**.yaml|.yml|.tweak`, imported right after TweakDB loads | none (data) | [source] TweakXL `Environment.hpp:13-16`, `TweakService.cpp:25-59` |
+| CET mod | `bin/x64/plugins/cyber_engine_tweaks/mods/<name>/init.lua` | `registerForEvent` at top level only; `Game` and `Observe` are available from `onInit` | [source] CET `ScriptStore.cpp:31-64`, `ScriptContext.cpp:46-65, 194-196` |
+
+## 2. Rules learned the hard way (from source)
+
+- **Declare natives outside a module.** Redscript prefixes the module onto global natives (`XFRuntimeBridge.XFBridge_Ping`), but the plugin registers the plain name. Declare them in a module-less file, as Codeware does [source] redscript `unit.rs:1023`, `symbol.rs:222-246`.
+- **Ship `.reds` that declare natives through the plugin (`scripts->Add`), not `r6/scripts`.** A redscript compile error blocks every mod's scripts behind a message box, and a declared native without its DLL is such an error [source] `scc/lib/src/lib.rs:86-94`.
+- **Return `false` from a Running `OnUpdate`.** RED4ext removes a state callback that returns `true`, even though the SDK comment says the Running result does not matter [source] `StateSystem.cpp:128-160`.
+- **Include `RED4ext/RED4ext.hpp` before any `RED4ext/Api` header.** The SDK becomes header-only only when `Common.hpp` is included first; otherwise `CreateSemVer`/`CreateFileVer` fail to link [offline].
+- **CET cannot open network connections.** Its sandbox exposes no sockets, HTTP, `ffi` or process spawning, and file access is confined to the mod folder [source] CET `LuaSandbox.cpp:10-79, 152-161, 695-719`. Any external link must be native.
+- **CET API details:** CET has `spdlog.warning`, not `spdlog.warn`; its Lua is LuaJIT (5.1), so use `unpack`; `onDraw` runs every frame even with the overlay closed [source] CET `LuaSandbox.cpp:641-666`, `LuaVM.cpp:50-56`.
+- **Retail `Log`/`LogChannel` print nowhere** unless CET (`gamelog.log`, `scripting.log`) or Red Hot Tools hooks them. Route script logs through a plugin native instead [source] CET `LuaVM_Hooks.cpp:192-250`.
+- **`redscript-cli lint` exits 0 even on errors,** so parse its output for them. It also doesn't check `@wrapMethod` parameter lists on `cb` methods [offline].
+
+## 3. Logging locations
+
+| Layer | File (MO2 writes new files to `overwrite/`) | Bound |
+|---|---|---|
+| RED4ext and its plugins | `red4ext/logs/red4ext-<ts>.log`, `red4ext/logs/<dll stem>-<ts>.log` | `max_file_size` (10 MB) × `max_files` (5) per plugin, older ones pruned [source] RED4ext `Utils.cpp:62-76`, `Config.hpp:24-27` |
+| psiberx plugins (ArchiveXL, TweakXL, Codeware) | Their own `red4ext/plugins/<Name>/<Name>-<ts>.log` | 100 MiB × 2, 10 logs (ArchiveXL 5) [source] `SpdlogProvider.hpp:61-63` |
+| redscript compiler | `r6/logs/redscript_rCURRENT.log` | daily, 4 kept [source] `scc/lib/src/lib.rs:242-250` |
+| CET mod | `…/mods/<name>/<name>.log` | 5 MiB × 3, appended; info lines flushed only on warnings or at exit [source] CET `Utils.cpp:105-118` |
+| XF bridge (all layers) | `red4ext/logs/xfruntimebridge-<ts>.log`, `sid= lvl= layer= cid= evt=` lines | RED4ext's bound |
+
+## 4. The XF bridge
+
+- **Transport:** a Windows named pipe owned by the RED4ext plugin, off unless `[bridge] enabled = true`. It is local only (`PIPE_REJECT_REMOTE_CLIENTS`, user-only DACL, first-instance flag, random name), and uses newline-delimited JSON, protocol 1.
+- **Security:**
+  - A 256-bit token per session, published in `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json`.
+  - Only allowlisted methods exist, and writes are gated by `allow_writes`.
+  - A rate limit applies, and a kill switch covers the CET hotkey, `bridge.kill` and a `KILL` file.
+  - Every request is logged with a correlation ID.
+  - A named pipe was chosen over loopback HTTP because browsers and other network clients cannot reach it ([design §3.1](../research/runtime/runtime-bridge-design.md#31-choosing-the-external-transport)).
+- **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick). A task not started before its timeout is cancelled and never runs.
+- **Game access:** by RTTI name at run time, so a renamed function fails with `rtti_missing` instead of crashing. Two routes are in use:
+  - `GetPlayer;GameInstance` → `entEntity.GetWorldPosition`;
+  - `ScriptGameInstance.GetPhotoModeSystem` → `gamePhotoModeSystem.IsPhotoModeActive`.
+
+  These names come from the pre-2.3 `red-dump-json`, so they are [source] for existence and [unverified] on 2.31.
+- **Clients:** Bun (`node:net` opens `\\.\pipe\…`, [offline] Bun 1.4.2) and PowerShell 7 (`NamedPipeClientStream`, which also checks the server PID).
+
+## 5. What agents can and cannot do yet
+
+- **Verified to exist (still untested in game):**
+  - reading photo-mode state, camera transform and FOV;
+  - time of day, pause and dilation, teleport;
+  - weather (with Codeware);
+  - listing and loading saves by ID;
+  - the character-customisation system calls;
+  - quitting through `ExitGame`.
+- **No API found:**
+  - taking a game screenshot to a chosen file;
+  - opening photo mode without input;
+  - opening the mirror screen from gameplay;
+  - saving to a chosen slot.
+- **Capture paths:** capture is external for now (window capture after post-processing). The lossless, before-effects route is an optional ReShade add-on (6.7.x headers, full add-on build only), which must never change the user's preset.
+
+Details and citations: [design §7](../research/runtime/runtime-bridge-design.md#7-autonomy-capability-matrix).
+
+## Open questions
+
+1. Is running scripts from RED4ext's Running `OnUpdate` safe at the main menu, while loading and in photo mode?
+2. Can CET call a redscript class that a plugin added with `scripts->Add`, as the Lua global `Module_Class`?
+3. When does a `ScriptableSystem`'s `OnAttach` first run: at the main menu or on the first save load?
+4. Do the RTTI names from the pre-2.3 dump still match on 2.31? Settle this with a fresh RTTIDumper run.
+5. Does GDI window capture return the game image in its fullscreen mode, or only in borderless windowed mode?
+
+## Related pages
+
+[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Mod loading](mod-loading.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
