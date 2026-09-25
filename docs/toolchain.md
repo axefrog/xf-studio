@@ -66,6 +66,6 @@ The selected MO2 profile is `2025 (again)` (920 enabled actual mods). Game-root 
 
 ## Nexus connection
 
-A personal API key was supplied via `temp.txt`. It was extracted, saved using Windows CurrentUser DPAPI at `%LOCALAPPDATA%/CP2077ModdingHQ/credentials/nexus-api-key.dpapi`, verified by local readback and the official `https://api.nexusmods.com/v1/users/validate.json` endpoint, then `temp.txt` was deleted. The validation response confirmed a premium account. [Non-secret connection record](../inventory/nexus-connection.json) (local-only).
+A personal Nexus API key was once stored with Windows CurrentUser DPAPI at `%LOCALAPPDATA%/CP2077ModdingHQ/credentials/nexus-api-key.dpapi`. As of 25 September that file is no longer present, and no current tool needs it: downloads use official public release pages. If Nexus API access is needed again, ask the maintainer to supply a key and store it the same way; never print or record it.
 
 Do not display the decrypted key or write it into project files. Future download helpers can decrypt it in-process for requests to the official Nexus API. Prefer official public GitHub assets for frameworks that publish them. Check version, game compatibility, selected optional files and rollback manifests before updating a mod; a valid key alone does not select the right archive variant.

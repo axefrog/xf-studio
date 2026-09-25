@@ -110,7 +110,7 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 - **Framework versions.** Target current stable releases and do not design around outdated installed mods. Tell the maintainer which installed versions need updating before runtime tests. Keep source revisions, installed metadata and runtime-log versions distinct. Beta features need an explicit reason.
 - **Downloading tools is authorised.** Download whatever development tools the work needs, from official sources only (releases, SDK installers, source builds). Keep acquisitions organised: every downloaded tool goes in `D:/Dev/tools/<tool>/<version>/` with a row in `D:/Dev/tools/README.md` (source URL, version, SHA-256, licence, date, purpose). Never create folders in drive roots or scatter tools elsewhere. Record tools the project depends on in [docs/toolchain.md](docs/toolchain.md).
 - **Blender** upgrades are authorised if needed. Headless scripts work without Blender MCP.
-- **MO2 and Nexus.** The maintainer's MO2 collection (profiles and overwrite overlays) is a research source. MO2 has a user-confirmed Nexus connection. A validated Nexus API credential is stored locally; see [docs/toolchain.md](docs/toolchain.md) for its DPAPI location. Never print or store credentials in research records, and prefer official public release downloads.
+- **MO2 and Nexus.** The maintainer's MO2 collection (profiles and overwrite overlays) is a research source. MO2 has a user-confirmed Nexus connection. No Nexus API credential is currently stored (see [docs/toolchain.md](docs/toolchain.md)); ask for one if API access is needed. Never print or store credentials in research records, and prefer official public release downloads.
 
 ## Expanded eye plate
 
