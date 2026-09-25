@@ -40,7 +40,7 @@ export type FrameState = Frame;
 
 const sources: [RegExp, string][] = [
   [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
-  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|glitter\.)/, "Colour & finish"],
+  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
   [/^collection\./, "Library"], [/^savedV\./, "Saved V"],
 ];

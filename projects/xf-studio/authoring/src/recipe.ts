@@ -23,6 +23,10 @@ export type Strength = { mode: "legacy-nearest" } | { mode: "smooth-boundary"; b
 export const DEFAULT_STRENGTH_BLEND = 0.0005;
 export const MIN_STRENGTH_BLEND = 0.000125;
 export const MAX_STRENGTH_BLEND = 0.02;
+/** Game-matched optical model (`xfs/recipe-11`): the preview follows the export route's
+ * engine arithmetic instead of the earlier browser study. Colour-shifting adds its
+ * Fresnel shift colour and strength. Absent on layers that keep an older preview. */
+export type GameOptics = { model: "game-matched-1"; shift?: { color: string; strength: number } };
 export type Layer = {
   id: string;
   name: string;
@@ -30,6 +34,7 @@ export type Layer = {
   color: string;
   finish: Finish;
   flakes?: Flakes | IrregularFlakes | DirectGlintFlakes;
+  optics?: GameOptics;
   opacity: number;
   feather: number;
   symmetry: boolean;
@@ -40,7 +45,7 @@ export type Layer = {
   softness: Softness;
 };
 export type Recipe = {
-  schema: "xfs/recipe-6" | "xfs/recipe-7" | "xfs/recipe-8" | "xfs/recipe-9" | "xfs/recipe-10";
+  schema: "xfs/recipe-6" | "xfs/recipe-7" | "xfs/recipe-8" | "xfs/recipe-9" | "xfs/recipe-10" | "xfs/recipe-11";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
@@ -110,13 +115,26 @@ export function starterRecipe(): Recipe {
     { ...layer, id: "layer-1", name: "Eye makeup" },
   ] };
 }
+/** Finishes whose preview and export follow the game-matched model when `optics` is present. */
+export const GAME_OPTICS_FINISHES: readonly Finish[] = ["glossy", "shimmer", "iridescent"];
+export const DEFAULT_SHIFT = { color: "#3fd4c2", strength: 0.6 } as const;
+function validGameOptics(value: unknown, finish: Finish, schema: string): value is GameOptics {
+  if (schema !== "xfs/recipe-11" || !value || typeof value !== "object" || Array.isArray(value)) return false;
+  const o = value as GameOptics, keys = Object.keys(o).sort().join();
+  if (o.model !== "game-matched-1" || !GAME_OPTICS_FINISHES.includes(finish)) return false;
+  if (finish !== "iridescent") return keys === "model";
+  const s = o.shift as { color?: unknown; strength?: unknown } | undefined;
+  return keys === "model,shift" && !!s && typeof s === "object" && !Array.isArray(s) &&
+    Object.keys(s).sort().join() === "color,strength" && typeof s.color === "string" && /^#[0-9a-f]{6}$/i.test(s.color) &&
+    typeof s.strength === "number" && Number.isFinite(s.strength) && s.strength >= 0 && s.strength <= 1;
+}
 // Bound imported work before it reaches raster loops; imports are atomic.
 export function parseRecipe(value: unknown): Recipe {
   type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };
   const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10"].includes(r.schema) ||
+    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"].includes(r.schema) ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
@@ -155,9 +173,9 @@ export function parseRecipe(value: unknown): Recipe {
       const f = l.flakes;
       if (!f || typeof f !== "object" || Array.isArray(f)) throw Error("Invalid flake settings.");
       if ("model" in f) {
-        const raster = (r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10") && validStudioIrregularSettings(f);
-        const direct = (r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10") && isDirectGlint(f) &&
-          (f.model === "uv-cell-direct-1" || (f.model === "uv-cell-direct-2" && r.schema !== "xfs/recipe-8") || r.schema === "xfs/recipe-10");
+        const raster = (r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11") && validStudioIrregularSettings(f);
+        const direct = (r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11") && isDirectGlint(f) &&
+          (f.model === "uv-cell-direct-1" || (f.model === "uv-cell-direct-2" && r.schema !== "xfs/recipe-8") || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11");
         if (l.finish !== "glitter" || !(raster || direct))
           throw Error("Invalid experimental Glitter settings.");
       } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) ||
@@ -165,6 +183,7 @@ export function parseRecipe(value: unknown): Recipe {
         !Number.isInteger(f.seed) || !num(f.seed, 0, 2147483647))
         throw Error("Invalid flake settings.");
     }
+    if (l.optics !== undefined && !validGameOptics(l.optics, l.finish, r.schema)) throw Error("Invalid game-matched finish settings.");
     if (
       !Array.isArray(l.points) ||
       l.points.length < 3 ||
@@ -174,7 +193,7 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10";
+    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11";
     if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
       throw Error("Ambiguous edge softness format.");
     let softness: Softness = {mode: "uniform"};
@@ -252,7 +271,7 @@ export function parseRecipe(value: unknown): Recipe {
     const { field: _legacyField, fields: _fields, ...settings } = l;
     layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  return structuredClone({ ...r, schema: r.schema === "xfs/recipe-10" ? "xfs/recipe-10" : r.schema === "xfs/recipe-9" ? "xfs/recipe-9" : r.schema === "xfs/recipe-8" ? "xfs/recipe-8" : "xfs/recipe-7", layers });
+  return structuredClone({ ...r, schema: r.schema === "xfs/recipe-11" ? "xfs/recipe-11" : r.schema === "xfs/recipe-10" ? "xfs/recipe-10" : r.schema === "xfs/recipe-9" ? "xfs/recipe-9" : r.schema === "xfs/recipe-8" ? "xfs/recipe-8" : "xfs/recipe-7", layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);

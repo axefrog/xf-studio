@@ -9,20 +9,20 @@ Finish menu: [seven familiar families](../materials/makeup-finish-taxonomy.md) �
 | Finish | Browser preview | Game export (Check/Build) | In-game |
 |---|---|---|---|
 | Matte, Satin, Metallic | Provisional studies | **Supported** by the flat `mesh-decal-flat-v1` compiler; independently verified private candidates | **Not tested.** First smoke test prepared ([card](../authoring/first-makeup-runtime-preflight-2026-09-25.md)); Satin only if the five-preset candidate is staged |
-| Shimmer | Fine facet study | Omitted with a warning (partial export) | Offline decal fixtures only: [010](../../experiments/010-shimmer-game-adapter/README.md), [011 on-plate package](../../experiments/011-shimmer-plate-comparison/README.md) (verified offline, not staged) |
-| Glitter | Opt-in models: `xfs/recipe-7` irregular raster, `recipe-8` direct-light UV-cell, `recipe-9` clustered, `recipe-10` denser fine speckle | **Guarded** — omitted with a warning | Explicitly lossy recipe-driven decal fixture ([009](../../experiments/009-glitter-game-fixture/README.md)); stock particle decal rejected as facet shading |
-| Glossy | Colour + clearcoat study | Omitted with a warning | Offline [decal study 008](../../experiments/008-glossy-decal/README.md); stock wet decal not a safe shortcut ([feasibility](../materials/glossy-decal-feasibility.md)) |
-| Colour-shifting | Preview candidate | Omitted with a warning | [2.31 stock-material feasibility](../materials/colour-shift-game-feasibility.md) only |
+| Shimmer | Game-matched model follows the export route; earlier layers keep the fine-facet study | **Experimental** `mesh-decal-faceted-v1` for game-matched layers ([design](../materials/finish-designs/shimmer.md)); earlier-model layers omitted with a reason | Not tested. [Finish board](../../experiments/016-finish-board/README.md) Board 2 prepared (verified offline, not installed); earlier fixtures [010](../../experiments/010-shimmer-game-adapter/README.md), [011](../../experiments/011-shimmer-plate-comparison/README.md) |
+| Glitter | Opt-in models: `xfs/recipe-7` irregular raster, `recipe-8` direct-light UV-cell, `recipe-9` clustered, `recipe-10` denser fine speckle | **Guarded** — omitted with a warning ([design](../materials/finish-designs/glitter.md)) | Explicitly lossy recipe-driven decal fixture ([009](../../experiments/009-glitter-game-fixture/README.md)); stock particle decal rejected as facet shading. The finish board's coarse Shimmer stripe is a resolved-facet proxy |
+| Glossy | Game-matched model: one lobe, no clear coat; earlier layers keep the clear-coat study | **Experimental** flat single lobe for game-matched layers ([design](../materials/finish-designs/glossy.md)) | Not tested; finish board Boards 1–2 |
+| Colour-shifting | Game-matched model: Fresnel shift colour and strength; earlier layers keep the thin-film study | **Experimental** `mesh-decal-fresnel-v1`, one colour-shift pigment per preset ([design](../materials/finish-designs/colour-shifting.md)) | Not tested; finish board Boards 3–4 |
 
 No glitter model has a proven REDengine mapping or photographic match. Recipe-10 increases visible close and face-scale glints but can look frosty. A generated candidate count is not a visible sparkle count.
 
 ### Open
 
-1. Ground each remaining finish in the actual game shaders (track 4) before building its export adapter; then add Shimmer, Glitter, Glossy and Colour-shifting adapters with the same package filter/verifier gates.
+1. Run the [finish board](../../experiments/016-finish-board/README.md) session, then tune or withdraw the experimental Glossy, Shimmer and Colour-shifting adapters from its evidence. Glitter's next candidate is the faceted route with coarse, independently coloured flakes ([design](../materials/finish-designs/glitter.md)).
 2. Prove mixed-finish presets: flattening, real multilayered materials or coordinated components, without losing coverage or reflection behaviour ([multilayered assessment](../materials/multilayered-makeup-assessment.md)).
 3. Glitter: continue browser/photo acceptance against the supplied references (irregular fine flakes, varied sizes, pigment visible between glints, stable filtering at editing distances, no unrelated flicker); then a bounded stock-material game candidate in a batched runtime comparison. **Do not lift the export guard on browser sparkle alone.**
 4. Test island_dancer's full conceptual sequence (below) in an independently authored study.
-5. Selectable duochrome/multichrome pigments for Colour-shifting remain research.
+5. Multichrome, and colour shift inside mixed presets (a second component), remain research.
 
 ## Rules
 

@@ -350,13 +350,20 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .layer-strip .swatch { width: 12px; height: 12px; }
 
 /* Finish chooser */
-.finish-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: var(--sp-2); }
-.finish-option { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line); background: var(--bg-raised); text-align: left; border-radius: 0 var(--bevel-sm) 0 0; min-height: 44px; }
+/* Finish chooser: one row group per export status. Three equal columns (one column in narrow panels,
+   where three would clip "Colour-shift") keep every card the same
+   width at all panel widths (a lone Glitter is the whole "Preview only" row, by design); cards
+   are one line tall, and names never wrap. */
+.finish-groups { display: grid; gap: var(--sp-3); container-type: inline-size; }
+.finish-group { display: grid; gap: var(--sp-1); }
+.finish-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
+@container (max-width: 329px) { .finish-grid { grid-template-columns: minmax(0, 1fr); } }
+.finish-option { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-3); align-items: center; padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line); background: var(--bg-raised); text-align: left; border-radius: 0 var(--bevel-sm) 0 0; height: 40px; min-width: 0; }
 .finish-option:hover:not(:disabled) { background: var(--bg-hover); }
 .finish-option[aria-pressed="true"] { border-color: var(--signal); background: var(--signal-bg); box-shadow: inset 0 -2px 0 var(--signal); }
 .finish-option:disabled { opacity: .45; cursor: not-allowed; }
-.finish-chip { grid-row: 1 / 3; width: 18px; height: 18px; border: 1px solid var(--line-strong); background: var(--text-faint); }
+.finish-chip { width: 18px; height: 18px; border: 1px solid var(--line-strong); background: var(--text-faint); }
 .finish-option[data-finish="matte"] .finish-chip { background: color-mix(in oklab, var(--text-muted) 70%, var(--bg-panel)); }
 .finish-option[data-finish="regular"] .finish-chip { background: linear-gradient(160deg, color-mix(in oklab, var(--text-muted), white 30%), var(--text-faint)); }
 .finish-option[data-finish="metallic"] .finish-chip { background: linear-gradient(135deg, #f4f4f4, #8a8f96 45%, #d8dade 70%, #6b7077); }
@@ -364,7 +371,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .finish-option[data-finish="glitter"] .finish-chip { background: radial-gradient(circle at 25% 30%, #fff 0 1.2px, transparent 1.8px), radial-gradient(circle at 70% 25%, #fff 0 1px, transparent 1.6px), radial-gradient(circle at 55% 72%, #fff 0 1.2px, transparent 1.8px), #7c6a8a; }
 .finish-option[data-finish="glossy"] .finish-chip { background: radial-gradient(ellipse at 35% 25%, #fff 0 18%, transparent 30%), #7d4a58; }
 .finish-option[data-finish="iridescent"] .finish-chip { background: linear-gradient(135deg, #4fd6e3, #b07ce0 50%, #e8c14a); }
-.finish-name { font-weight: 600; font-size: var(--fs-sm); }
+.finish-name { font-weight: 600; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .finish-tag { font: 600 var(--fs-2xs)/1.3 var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
 .finish-tag.ok { color: var(--success); } .finish-tag.warn { color: var(--warning); }
 .finish-description { margin: 0; font-size: var(--fs-sm); }

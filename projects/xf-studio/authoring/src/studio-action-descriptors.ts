@@ -60,6 +60,9 @@ export const ACTION_DESCRIPTORS = {
   "layer.setOpacity": desc("layer", "content", "transaction", { layerId: target("string"), opacity: input("number", 0, 1) }),
   "layer.setSymmetry": desc("layer", "content", "recipe", { layerId: target("string"), symmetry: input("boolean") }),
   "layer.setFinish": desc("layer", "content", "recipe", { layerId: target("string"), finish: enumerated(["matte", "regular", "satin", "metallic", "shimmer", "glitter", "glossy", "iridescent"]) }),
+  "layer.useGameOptics": desc("layer", "content", "recipe", { layerId: target("string") }),
+  "layer.setShift": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["color", "strength"]), value: input("number|string") }, {
+    color: { value: inputText(7, 7) }, strength: { value: input("number", 0, 1) } }),
   "glitter.selectModel": desc("layer", "content", "recipe", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
   "glitter.setClassic": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["cells", "density", "tilt"]), value: input("number") }, {
     cells: { value: input("integer", 32, 256) }, density: { value: input("number", 0, 1) },

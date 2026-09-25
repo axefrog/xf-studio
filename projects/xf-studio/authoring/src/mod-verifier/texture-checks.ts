@@ -131,3 +131,77 @@ export function errorStats(values: Float64Array): ErrorStats {
   const p95 = t >= .5 ? b - difference * (1 - t) : a + difference * t;
   return { mean: pairwiseSum(values, 0, n) / n, p95, max: sorted[n - 1] };
 }
+
+// ---- Faceted and Fresnel routes (the published specification, restated independently) ----
+//
+// Faceted: diffuse and metalness follow the flat chain above. Normal X/Y bytes decode as
+// byte/255*2-1; each lower level is the plain 2x2 mean of the finer level's floats, encoded as
+// unitByte(x*.5+.5). The supplied RGBA input adds B = unitByte(sqrt(max(0,1-x²-y²))*.5+.5) and A = 255.
+// Roughness level 0 is verbatim; lower levels are unitByte(clip01(r̄⁴ + v)^¼) where coverage > 0,
+// r̄ the flat chain's coverage-weighted mean and v = max(0, E[x²+y²] − E[x]² − E[y]²) from plain
+// means of base-level moments. Fresnel: mask levels are plain means of byte/255; the gradient is uniform.
+
+const unorm = (b: number) => b / 255 * 2 - 1;
+const clip = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+function meanHalf(planes: readonly Float64Array<ArrayBufferLike>[], side: number): Float64Array<ArrayBufferLike>[] {
+  const half = side / 2;
+  return planes.map(source => {
+    const target = new Float64Array(half * half);
+    for (let row = 0; row < half; row++) {
+      const top = 2 * row * side, bottom = top + side;
+      for (let column = 0; column < half; column++) {
+        const left = 2 * column;
+        target[row * half + column] = (((source[top + left] + source[top + left + 1]) + source[bottom + left]) + source[bottom + left + 1]) / 4;
+      }
+    }
+    return target;
+  });
+}
+
+/** Expected faceted roughness chain, normal X/Y chain and the RGBA normal import chain. */
+export function facetedReference(diffuse: Uint8Array, roughness: Uint8Array, metalness: Uint8Array, normalXY: Uint8Array, side: number) {
+  const n = side * side;
+  if (normalXY.length !== n * 2) throw new Error(`Normal byte length does not match a ${side}x${side} level`);
+  const x = new Float64Array(n), y = new Float64Array(n), m2 = new Float64Array(n);
+  for (let t = 0; t < n; t++) { x[t] = unorm(normalXY[2 * t]); y[t] = unorm(normalXY[2 * t + 1]); m2[t] = x[t] * x[t] + y[t] * y[t]; }
+  let moments: Float64Array<ArrayBufferLike>[] = [x, y, m2], level = contributionsOf(diffuse, roughness, metalness, side), s = side;
+  const roughChain: Uint8Array[] = [roughness.slice()], xyChain: Uint8Array[] = [normalXY.slice()];
+  while (s > 1) {
+    level = halve(level); moments = meanHalf(moments, s); s /= 2;
+    const count = s * s, r = new Uint8Array(count), xy = new Uint8Array(count * 2);
+    const [mx, my, mm] = moments, cover = level.planes[5], rough = level.planes[3];
+    for (let t = 0; t < count; t++) {
+      xy[2 * t] = unitByte(mx[t] * .5 + .5); xy[2 * t + 1] = unitByte(my[t] * .5 + .5);
+      if (cover[t] > 0) {
+        const mean = clip(rough[t] / cover[t]), variance = Math.max(0, mm[t] - (mx[t] * mx[t] + my[t] * my[t]));
+        r[t] = unitByte(Math.pow((mean * mean) * (mean * mean) + variance, .25));
+      }
+    }
+    roughChain.push(r); xyChain.push(xy);
+  }
+  const rgba = xyChain.map(level => {
+    const out = new Uint8Array(level.length * 2);
+    for (let t = 0; t < level.length / 2; t++) {
+      const a = unorm(level[2 * t]), b = unorm(level[2 * t + 1]);
+      out.set([level[2 * t], level[2 * t + 1], unitByte(Math.sqrt(Math.max(0, 1 - a * a - b * b)) * .5 + .5), 255], 4 * t);
+    }
+    return out;
+  });
+  return { roughness: roughChain, normalXY: xyChain, normalInput: rgba };
+}
+
+/** Expected linear coverage mask chain. */
+export function maskReference(mask: Uint8Array, side: number): Uint8Array[] {
+  let plane: Float64Array<ArrayBufferLike>[] = [Float64Array.from(mask, b => b / 255)], s = side;
+  const chain: Uint8Array[] = [mask.slice()];
+  while (s > 1) { plane = meanHalf(plane, s); s /= 2; chain.push(Uint8Array.from(plane[0], unitByte)); }
+  return chain;
+}
+
+/** Expected uniform RGBA chain of one colour. */
+export function uniformReference(rgba: readonly number[], side: number): Uint8Array[] {
+  const chain: Uint8Array[] = [];
+  for (let s = side; s >= 1; s >>= 1) { const level = new Uint8Array(s * s * 4); for (let t = 0; t < s * s; t++) level.set(rgba, 4 * t); chain.push(level); }
+  return chain;
+}

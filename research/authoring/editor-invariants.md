@@ -4,7 +4,7 @@ Consolidated 25 September 2026 from the dated checkpoint paragraphs that previou
 
 ## Recipe schema versions
 
-New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src/recipe.ts`). Validation accepts `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-10`. Older schemas migrate **on read** to the current in-memory form. Recipes 8–10 keep their own schema so their optical model stays pinned.
+New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src/recipe.ts`). Validation accepts `eye-artistry/recipe-1` and `xfs/recipe-2`…`xfs/recipe-11`. Older schemas migrate **on read** to the current in-memory form. Recipes 8–11 keep their own schema so their optical model stays pinned.
 
 | Schema | Introduced | Migration rule for older input |
 |---|---|---|
@@ -18,6 +18,7 @@ New recipes are created as **`xfs/recipe-7`** (`projects/xf-studio/authoring/src
 | `xfs/recipe-8` | Direct-light UV-cell Glitter | Pinned |
 | `xfs/recipe-9` | Clustered direct Glitter | Pinned |
 | `xfs/recipe-10` | Denser fine-speckle direct Glitter | Pinned |
+| `xfs/recipe-11` | Per-layer game-matched `optics` for Glossy, Shimmer and Colour-shifting (with shift colour and strength); accepts every recipe-10 layer | Pinned. Setting one of these finishes adds `optics` and moves the recipe to 11; existing layers keep their earlier study until **Use game-matched model** (`layer.useGameOptics`) |
 
 Rules:
 

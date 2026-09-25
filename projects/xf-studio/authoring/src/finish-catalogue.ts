@@ -1,17 +1,23 @@
 import { canonicalFinish, finishDescription, type Finish } from "./finish";
 import type { GlitterModel } from "./glitter-model";
-import { SUPPORTED_FLAT_FINISHES } from "./preset-compiler";
+import { finishExportSummary } from "./finish-export";
 
 /** Canonical finish IDs offered for new edits; `satin` is a legacy alias of `regular`. */
 export type FinishId = ReturnType<typeof canonicalFinish>;
 export type FinishDescriptor = {
   id: FinishId;
+  /** Full name for menus and search, e.g. "Glossy / wet look". */
   label: string;
+  /** One-word card name, e.g. "Glossy"; synonyms move to `aliases`. */
+  shortLabel: string;
+  /** Other names people use for this family (foil, pearl, wet look, duochrome). */
+  aliases: string[];
   description: string;
   /** Browser preview maturity, not a claim about in-game appearance. */
   preview: "working" | "preview-study";
-  /** Mirrors the compiler's finish gate. A package Check remains authoritative. */
-  exportAdapter: "flat-provisional" | "none";
+  /** Mirrors the export route policy (finish-export.ts). A package Check remains authoritative:
+   * experimental finishes export only in their game-matched model. */
+  exportAdapter: "flat-provisional" | "experimental" | "none";
   exportNote: string;
 };
 export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary: string };
@@ -20,23 +26,24 @@ const labels: Record<FinishId, string> = {
   matte: "Matte", regular: "Satin", metallic: "Metallic / foil", shimmer: "Shimmer / pearl",
   glitter: "Glitter", glossy: "Glossy / wet look", iridescent: "Colour-shifting",
 };
+const short: Record<FinishId, [string, string[]]> = {
+  matte: ["Matte", []], regular: ["Satin", []], metallic: ["Metallic", ["foil"]], shimmer: ["Shimmer", ["pearl"]],
+  glitter: ["Glitter", []], glossy: ["Glossy", ["wet look"]], iridescent: ["Colour-shift", ["duochrome"]],
+};
 const order: FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
 
 /**
- * Read-only finish taxonomy for presentations. Export status derives from the same
- * `SUPPORTED_FLAT_FINISHES` list the package filter and compiler use, so a UI never
- * keeps its own copy of eligibility. Descriptors are informational: Check decides.
+ * Read-only finish taxonomy for presentations. Export status derives from the same route
+ * policy the package filter and compiler use, so a UI never keeps its own copy of
+ * eligibility. Descriptors are informational: Check decides.
  */
 export function finishCatalogue(): FinishDescriptor[] {
   return order.map(id => {
-    const exportable = SUPPORTED_FLAT_FINISHES.includes(id);
+    const summary = finishExportSummary(id as Finish);
     return {
-      id, label: labels[id], description: finishDescription(id as Finish),
-      preview: exportable ? "working" : "preview-study",
-      exportAdapter: exportable ? "flat-provisional" : "none",
-      exportNote: exportable
-        ? "Can be built into your mod as a flat colour. How it looks in game hasn't been tested yet."
-        : "Preview only for now. Check and Build leave out layers with this finish and tell you which.",
+      id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1], description: finishDescription(id as Finish),
+      preview: summary.adapter === "none" ? "preview-study" : "working",
+      exportAdapter: summary.adapter, exportNote: summary.note,
     };
   });
 }

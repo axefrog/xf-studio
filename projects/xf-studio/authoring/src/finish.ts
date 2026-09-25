@@ -38,9 +38,9 @@ export function finishDescription(finish: Finish) {
     matte: "Soft colour with little shine.",
     regular: "A smooth, gentle sheen without individual sparkles.",
     metallic: "A continuous metallic sheen without separate flakes.",
-    glossy: "A smooth, wet-looking shine over colour — experimental gloss preview.",
-    iridescent: "Colour changes with viewing and lighting angle. Experimental preview for the duochrome / multichrome family; specific colour shifts are still to come.",
-    shimmer: "Fine reflective texture — an experimental shimmer approximation.",
+    glossy: "A smooth, wet-looking shine over colour. In game this is one sharp reflection; there is no separate clear coat.",
+    iridescent: "A duochrome: the colour turns toward a chosen shift colour as the lid curves away from view. Multichrome is still to come.",
+    shimmer: "Fine reflective facets that sparkle close up and merge into a soft sheen at a distance.",
     glitter:
       "Distinct reflective flakes — an experimental glitter approximation.",
   }[canonicalFinish(finish)];

@@ -57,8 +57,9 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       swatch.dataset.finish = layer.finish === "satin" ? "regular" : layer.finish;
       const descriptor = rt.finishes.find(finish => finish.id === (layer.finish === "satin" ? "regular" : layer.finish));
       const flag = row.trailing.querySelector<HTMLElement>(".finish-flag")!;
-      flag.hidden = descriptor?.exportAdapter !== "none";
-      flag.title = "Preview-study finish: omitted from mod packages";
+      const status = rt.port.authoring.layerExport(layer.id);
+      flag.hidden = status ? status.exportable : descriptor?.exportAdapter !== "none";
+      flag.title = status && !status.exportable ? `Omitted from mod packages: ${status.reason}` : "Preview-study finish: omitted from mod packages";
       if (!flag.childElementCount) flag.append(icon("warning"));
       row.element.classList.toggle("hidden-layer", !layer.enabled);
       const menu = row.trailing.querySelector<HTMLButtonElement>("button")!;
