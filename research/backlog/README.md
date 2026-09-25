@@ -18,6 +18,18 @@
 
 Supporting research that sits under a track rather than being ranked on its own: [wgpu/ray-tracing assessment](wgpu-renderer-assessment.md) (under track 2/4; current recommendation is to keep the browser renderer), [hair, piercings and jewellery context](jewellery-and-customization.md) (preview context under track 2; jewellery *authoring* is a later feature), and the [portable mod-source resolver](jewellery-and-customization.md#portable-mod-source-discovery) (shared by tracks 2, 3 and 5).
 
+## Standing direction (set 25 September 2026)
+
+1. **First goal: a fully working XF Eye Artistry export.** Prove the supported finishes (Matte, Satin, Metallic) in game, then design and prove game materials for every finish the editor offers (Shimmer, Glitter, Glossy, Colour-shifting). Shader decompilation and R&D are approved where they're needed to do this properly.
+2. **Rendering grows outward from the head:**
+   1. Face and head as the seed.
+   2. All face/head character-creator options.
+   3. Correct rendering and shading.
+   4. The vanilla body, since many options are body-related.
+   5. The character's full in-game appearance, including worn clothing read from the save.
+
+   Every step goes through the generic resolver, and independent work runs in parallel.
+
 ## Queued R&D and background work
 
 - **Runtime access baseline** (early mod R&D, start when a research slot frees, ideally after the first in-game test): minimal, heavily logged base mods per type (RED4ext C++, redscript, CET Lua, ArchiveXL/TweakXL) plus a loopback bridge so agents can read and change live game state while the maintainer plays. See [runtime access baseline](runtime-access-baseline.md).
