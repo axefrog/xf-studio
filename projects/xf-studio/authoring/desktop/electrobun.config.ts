@@ -24,7 +24,7 @@ export default {
   build: {
     mainProcess: "bun",
     bun: { entrypoint: trialSuffix ? "trial-main.ts" : "main.ts" },
-    copy: { "static": "views/studio", "build-tools": "build-tools" },
+    copy: { "static": "views/studio", "build-tools": "build-tools", "webview2/MicrosoftEdgeWebview2Setup.exe": "webview2/MicrosoftEdgeWebview2Setup.exe" },
     win: { defaultRenderer: "native", autoGrantPermissions: [], icon: "icon/icon.ico" },
   },
 } satisfies ElectrobunConfig;

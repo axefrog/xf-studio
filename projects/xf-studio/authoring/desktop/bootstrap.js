@@ -4,6 +4,7 @@
 // Community installs never see the intake: the host reports previewIntake=false.
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+import { NO_3D_PREVIEW_YET } from "../src/alpha-availability";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -76,13 +77,13 @@ aboutButton.textContent = "About";
 aboutButton.setAttribute("aria-label", "About XF Studio");
 const about = document.createElement("dialog");
 about.id = "desktop-about";
-about.innerHTML = '<h2>About XF Studio</h2><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button></div><form method="dialog"><button type="submit">Close</button></form>';
+about.innerHTML = '<h2>About XF Studio</h2><p>Customise Cyberpunk 2077. Eye makeup is the first supported feature.</p><p id="desktop-version"></p><p id="desktop-build"></p><p id="desktop-preview-note"></p><p>Your library and settings are saved in:</p><code id="desktop-data-path"></code><p id="desktop-setup-readiness"></p><p id="desktop-update" role="status"></p><div id="desktop-update-actions" hidden><button type="button" data-update-action="check">Check for update</button><button type="button" data-update-action="download">Download update</button><button type="button" data-update-action="applyAndRestart">Apply and restart</button></div><div class="desktop-about-actions"><button id="desktop-setup-open" type="button">Build setup</button><button id="desktop-licences-open" type="button">Licences</button></div><form method="dialog"><button type="submit">Close</button></form>';
 about.querySelector("#desktop-version").textContent = capabilities.metadataStatus === "ready" ?
   `Version ${capabilities.version}` : "Installed version unavailable";
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
   `Build ${capabilities.buildHash}` : "This installation looks damaged. Reinstall XF Studio to repair it.";
 about.querySelector("#desktop-preview-note").textContent = capabilities.previewAssets === "ready" ? "" :
-  "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully.";
+  NO_3D_PREVIEW_YET;
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
 const updateStatus = about.querySelector("#desktop-update");
 const updateActions = about.querySelector("#desktop-update-actions");
@@ -141,10 +142,10 @@ document.body.append(aboutButton, about, licences);
 aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); });
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
-setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup in this alpha. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
+setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup for now. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
 const welcome = document.createElement("dialog");
 welcome.id = "desktop-welcome";
-welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>Design eye makeup on the flat UV map, keep your looks in your library, and run Check to see which looks can become mod files.</p><p><strong>The 3D head preview isn&#39;t available in this alpha.</strong> The UV editor, library and Check work fully. A 3D preview built from your own game files is planned.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup. You can find it later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers on the UV map, keep them in your library, and run Check to see which can become mod files.</p><p><strong>The 3D head preview is built from your own Cyberpunk 2077 installation, and XF Studio can&#39;t do that yet.</strong> For now, design in the UV map; everything else works.</p><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files still needs a developer setup. You can find it later under About → Build setup.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Build setup</button></div></div>';
 document.body.append(setup, welcome);
 const descriptors = [
   ["gameRoot", "Cyberpunk 2077 game folder"],
@@ -207,7 +208,7 @@ function showSetup(view) {
   setupStatus.textContent = recovery ? "Your settings file is damaged. Restore the previous copy before editing." :
     `${pathStatus} Check works without any of these. Build ${buildReady ? "is ready." : "isn't set up yet."}`;
   aboutReadiness.textContent = recovery ? "Build settings need repair: open Build setup." :
-    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet; it needs a developer setup in this alpha."}`;
+    `Check is ready. Build ${buildReady ? "is set up." : "isn't set up yet; it needs a developer setup for now."}`;
 }
 async function setupAction(action) {
   const result = await setupActions.dispatch(action);

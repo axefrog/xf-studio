@@ -1,11 +1,12 @@
 import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createDesktopServer } from "./server";
 import { desktopVersionFromMetadata } from "./host";
 import { DesktopWorkspaceClose, desktopFlushScript } from "./workspace-close";
 import { createHostLog } from "./host-log";
 import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
+import { ensureWebView2 } from "./webview2-install";
 import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS } from "./startup-watchdog";
 
 // The packaged app has no console: startup facts and failures go to desktop.log
@@ -15,9 +16,32 @@ let metadata: unknown;
 try { metadata = JSON.parse(readFileSync(resolve(PATHS.RESOURCES_FOLDER, "version.json"), "utf8")); }
 catch { log.write("Packaged XF Studio version metadata could not be read."); }
 const version = desktopVersionFromMetadata(metadata);
-const webView2 = detectWebView2();
-log.write(`Starting XF Studio ${version.version} (${version.channel}, build ${version.buildHash}); ` +
-  `Windows ${process.platform}/${process.arch}; WebView2 ${webView2.installed ? `${webView2.version ?? "fixed"} via ${webView2.source}` : "not detected"}.`);
+log.write(`Starting XF Studio ${version.version} (${version.channel}, build ${version.buildHash}); Windows ${process.platform}/${process.arch}.`);
+
+// Before any window: a missing WebView2 Runtime is installed with one consent click using
+// Microsoft's bootstrapper packaged with the app, instead of showing an empty window.
+const bootstrapper = resolve(PATHS.RESOURCES_FOLDER, "app", "webview2", "MicrosoftEdgeWebview2Setup.exe");
+const runtime = await ensureWebView2({
+  detect: () => detectWebView2(),
+  ask: async options => (await Utils.showMessageBox({ ...options, title: "XF Studio", defaultId: 0,
+    cancelId: options.buttons.length - 1 })).response,
+  notify: (title, body) => { try { Utils.showNotification({ title, body }); } catch { /* Optional. */ } },
+  bootstrapperAvailable: () => existsSync(bootstrapper),
+  runBootstrapper: async () => {
+    try {
+      const child = Bun.spawn([bootstrapper, "/silent", "/install"], { stdio: ["ignore", "ignore", "ignore"], windowsHide: true });
+      const timer = setTimeout(() => child.kill(), 10 * 60_000);
+      const code = await child.exited;
+      clearTimeout(timer);
+      return code;
+    } catch (error) { log.write(`WebView2 bootstrapper could not start: ${error}`); return null; }
+  },
+  openDownloadPage: () => { Utils.openExternal(WEBVIEW2_DOWNLOAD_URL); },
+  log: message => log.write(message),
+});
+if (!runtime.ready) { Utils.quit(runtime.reason === "declined" ? 0 : 1); await new Promise(() => {}); }
+const webView2 = runtime.ready ? runtime.status : detectWebView2();
+log.write(`WebView2 ${webView2.version ?? "fixed"} via ${webView2.source}${runtime.ready && runtime.installed ? " (installed just now)" : ""}.`);
 
 async function fatal(message: string, detail: string, error?: unknown) {
   log.write(`${message} ${error instanceof Error ? error.stack ?? error.message : error ?? ""}`);

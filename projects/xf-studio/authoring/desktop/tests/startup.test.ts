@@ -1,4 +1,5 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_PROMPT } from "../webview2-install";
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -73,4 +74,46 @@ test("the host records when the WebView loads the page and the bootstrap reaches
     expect(app.renderer()).toMatchObject({ pageServed: true, bootstrapped: true });
     expect(reports).toEqual(["WebView requested the Studio page.", "Renderer bootstrap loaded the workspace."]);
   } finally { app.stop(); }
+});
+
+describe("missing WebView2 is installed with one consent click", () => {
+  const port = (options: { installedAfter: boolean; choose: number[]; bootstrapper?: boolean; initially?: boolean }) => {
+    const calls: string[] = [];
+    let ran = false;
+    const choices = [...options.choose];
+    return { calls, port: {
+      detect: () => (options.initially || (ran && options.installedAfter))
+        ? { installed: true, version: "141.0.1.2", source: "HKCU" } : { installed: false, version: null, source: null },
+      ask: async (prompt: { message: string; buttons: string[] }) => { calls.push(`ask:${prompt.buttons[0]}`); return choices.shift() ?? 1; },
+      notify: (title: string) => { calls.push(`notify:${title}`); },
+      bootstrapperAvailable: () => options.bootstrapper !== false,
+      runBootstrapper: async () => { ran = true; calls.push("run"); return 0; },
+      openDownloadPage: () => { calls.push("download"); },
+      log: () => {},
+    } };
+  };
+
+  test("an installed runtime asks nothing", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [], initially: true });
+    expect(await ensureWebView2(p)).toMatchObject({ ready: true, installed: false });
+    expect(calls).toEqual([]);
+  });
+  test("consent runs Microsoft's bootstrapper and continues when the runtime appears", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [0] });
+    expect(await ensureWebView2(p)).toMatchObject({ ready: true, installed: true, status: { version: "141.0.1.2" } });
+    expect(calls).toEqual(["ask:Install it now", "notify:Installing WebView2", "run"]);
+  });
+  test("declining quits without installing anything", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [1] });
+    expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "declined" });
+    expect(calls).toEqual(["ask:Install it now"]);
+  });
+  test("a failed install explains it and offers Microsoft's page", async () => {
+    const { calls, port: p } = port({ installedAfter: false, choose: [0, 0] });
+    expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "failed" });
+    expect(calls).toEqual(["ask:Install it now", "notify:Installing WebView2", "run", "ask:Open the Microsoft download page", "download"]);
+  });
+  test("prompts follow the wording policy", () => {
+    for (const text of [WEBVIEW2_PROMPT, WEBVIEW2_FAILED]) expect(USER_FACING_JARGON.test(`${text.message} ${text.detail}`)).toBe(false);
+  });
 });

@@ -154,48 +154,99 @@ if ($version) { $report.packagedVersion = Get-Content $version.FullName -Raw | C
 Save
 
 if ($launcher) {
-  # The installer's Close starts the app itself; restart it here so the debugging port applies.
-  Start-Sleep -Seconds 3
-  Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
-  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
-  Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
-  Start-Sleep -Seconds 25
-  $report.windows = @(Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): $($_.MainWindowTitle)" })
-  $bun = @(Get-Process bun -ErrorAction SilentlyContinue)
-  $ports = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $bun.Id -contains $_.OwningProcess } | ForEach-Object { $_.LocalPort })
-  $report.loopback = @($ports | ForEach-Object {
-    try { $r = Invoke-WebRequest "http://127.0.0.1:$_/" -UseBasicParsing -TimeoutSec 5; "$_ -> $($r.StatusCode)" }
-    catch { "$_ -> $($_.Exception.Response.StatusCode.value__)" } })
-  $report.webview2Processes = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count
-  $report.recentAppErrors = @(Get-WinEvent -FilterHashtable @{ LogName = "Application"; Level = 2; StartTime = $t } -MaxEvents 5 -ErrorAction SilentlyContinue |
-    ForEach-Object { $_.Message.Substring(0, [Math]::Min(300, $_.Message.Length)) })
-  $report.pageFirstRun = PageState 9222 $state
-  Shot "first-run"
-  Save
-  # The welcome's first button (Start designing) has focus, so Enter dismisses it.
-  $app = Get-Process | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
-  if ($app) {
-    [void]$shell.AppActivate($app.Id); Start-Sleep -Seconds 1; $shell.SendKeys("{ENTER}"); Start-Sleep -Seconds 4
-    $report.pageAfterWelcome = PageState 9222 $state
-    Shot "after-welcome"
-    # Close and reopen: the welcome must not return, and the draft must come back.
-    [void]$app.CloseMainWindow(); Start-Sleep -Seconds 12
-    $report.closedCleanly = -not (Get-Process -Id $app.Id -ErrorAction SilentlyContinue)
-    Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  $bunExe = Join-Path $launcher.DirectoryName "bun.exe"
+  $driver = Join-Path $in "sandbox-drive.ts"
+  $fixture = Join-Path $in "fixture-collection.json"
+  function StopApp { Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+  # The launcher does not pass this process's environment through, so open the debugging port
+  # with WebView2's documented per-app policy for bun.exe (disposable sandbox only).
+  $policy = "HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+  New-Item -Path $policy -Force | Out-Null
+  Set-ItemProperty -Path $policy -Name "bun.exe" -Value "--remote-debugging-port=9222"
+  [Environment]::SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--remote-debugging-port=9222", "User")
+  function StartApp {
+    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
     Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
-    Start-Sleep -Seconds 25
-    $report.pageRelaunch = PageState 9222 $state
-    Shot "relaunch"
   }
+  # The driver runs with the installed app's own bun.exe; a separate copy avoids the app's process name.
+  $driverBun = Join-Path $env:TEMP "xfs-driver-bun.exe"
+  Copy-Item $bunExe $driverBun -Force
+  function Drive([string[]]$extra) {
+    $p = Start-Process $driverBun -ArgumentList (@("`"$driver`"", "`"$out`"", "`"$fixture`"") + $extra) -PassThru -WindowStyle Hidden `
+      -RedirectStandardError (Join-Path $out "driver-stderr$($extra -join '').txt")
+    if (-not $p.WaitForExit(300000)) { $p.Kill(); return "timed out" }
+    $p.WaitForExit(); return "exit $($p.ExitCode)"
+  }
+  function WaitAppWindow([int]$seconds) {
+    $end = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $end) {
+      $w = Get-Process bun -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq "XF Studio" } | Select-Object -First 1
+      if ($w) { return $w }
+      Start-Sleep -Seconds 1
+    }
+  }
+  # The installer's Close starts the app itself; restart it so the debugging port applies.
+  Start-Sleep -Seconds 3; StopApp
+  StartApp
+  $window = WaitAppWindow 30
+  Start-Sleep -Seconds 4
+  $report.webview2BeforeApp = [bool](Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client") -or [bool](Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$client")
+  if (-not $report.webview2BeforeApp -and $window) {
+    # Expect XF Studio's own consent prompt; accept it with its default button, the one click a user makes.
+    [void]$shell.AppActivate($window.Id); Start-Sleep -Milliseconds 800
+    ShotWindow ([IntPtr]::Zero) "00-webview2-consent"
+    $report.consentText = (Get-Process -Id $window.Id).MainWindowTitle
+    $shell.SendKeys("{ENTER}")
+    $report.consentClicked = (Get-Date).ToString("o")
+    Save
+    $end = (Get-Date).AddMinutes(10)
+    while ((Get-Date) -lt $end -and -not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 3 }
+    $report.webview2InstallSeconds = [int]((Get-Date) - [datetime]$report.consentClicked).TotalSeconds
+  }
+  $report.webview2After = [ordered]@{
+    hklmWow64 = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$client"
+    hkcu = Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$client"
+    processes = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count }
+  Save
+  if ($report.webview2After.processes -gt 0) {
+    Start-Sleep -Seconds 5
+    [void](AppWindow)
+    $report.debugPort = [ordered]@{
+      listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq 9222 } | ForEach-Object { "$($_.LocalAddress):$($_.LocalPort)" })
+      commandLines = @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object -First 2 | ForEach-Object { $_.CommandLine.Substring(0, [Math]::Min(400, $_.CommandLine.Length)) })
+      bunEnv = "$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" }
+    try { $report.debugPort.version = (Invoke-RestMethod "http://127.0.0.1:9222/json/version" -TimeoutSec 5).Browser } catch { $report.debugPort.error = $_.Exception.Message }
+    Save
+    $report.driveFirstRun = Drive @()
+    ShotWindow ((AppWindow).MainWindowHandle) "09-app-window"
+    # Close normally (the save handshake runs), then relaunch: no welcome, same collection.
+    $app = AppWindow
+    if ($app) { [void]$app.CloseMainWindow(); $gone = $app.WaitForExit(20000); $report.closedCleanly = $gone }
+    StopApp
+    StartApp
+    [void](WaitAppWindow 30); Start-Sleep -Seconds 6; [void](AppWindow)
+    $report.driveRelaunch = Drive @("--relaunch")
+    $app = AppWindow
+    if ($app) { [void]$app.CloseMainWindow(); [void]$app.WaitForExit(20000) }
+  } else {
+    Shot "no-webview2"
+  }
+  StopApp
   $dataRoot = Join-Path $env:LOCALAPPDATA "dev.axefrog.xf-studio\canary"
-  $report.dataRoot = [ordered]@{ exists = Test-Path $dataRoot
-    files = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-    webViewFolder = @(Get-ChildItem $dataRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) }
   $log = Join-Path $dataRoot "desktop.log"
   if (Test-Path $log) { Copy-Item $log (Join-Path $out "desktop.log") }
+  $report.dataRootBeforeUninstall = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  # Default App uninstall: removes the app, keeps the library and settings.
+  $uninstaller = Join-Path $dataRoot "uninstall.exe"
+  if (Test-Path $uninstaller) {
+    $u = Start-Process $uninstaller -ArgumentList "--quiet" -PassThru; [void]$u.WaitForExit(120000)
+    Start-Sleep -Seconds 5
+    $report.uninstall = [ordered]@{ exit = $u.ExitCode
+      launcherRemains = [bool](Get-ChildItem $dataRoot -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue)
+      kept = @(Get-ChildItem $dataRoot -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) }
+  } else { $report.uninstall = "uninstall.exe not found" }
 }
 $report.finished = (Get-Date).ToString("o")
 Save
-Write-Host "Finished. report.json, desktop.log and screenshots are in the results folder."
+Write-Host "Finished. report.json, drive*.json, desktop.log and screenshots are in the results folder."
 if ($AutoClose) { Start-Sleep -Seconds 3; Stop-Computer -Force }

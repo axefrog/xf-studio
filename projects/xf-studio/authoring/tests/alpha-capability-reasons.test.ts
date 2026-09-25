@@ -7,7 +7,7 @@ import { RecipeActions } from "../src/recipe-actions";
 import { StudioApplication, type StudioAction, type StudioTarget } from "../src/studio-application";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { freshWorkspace } from "../src/workspace-state";
-import { BUILD_NEEDS_SETUP, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/alpha-availability";
+import { BUILD_NEEDS_SETUP, NO_3D_PREVIEW_YET, USER_FACING_JARGON } from "../src/alpha-availability";
 
 // Release gate for the community alpha: every catalogued action a user can reach
 // is either available or explains itself in plain words. Nothing is silently
@@ -27,7 +27,7 @@ function uvOnlyApp() {
       const next = applyLayerAction(document.recipe, document.recipe.layers[document.active]?.id, action);
       document.checkpoint(); document.recipe = next.recipe;
     } });
-  app.setPreviewUnavailable(NO_3D_PREVIEW_IN_ALPHA);
+  app.setPreviewUnavailable(NO_3D_PREVIEW_YET);
   return { app, document };
 }
 
@@ -54,13 +54,13 @@ test("every target-offered action is available or explains itself in plain words
   expect(checked).toBeGreaterThan(20);
 });
 
-test("every head, camera, motion and saved-V action says the 3D preview is not in this alpha", () => {
+test("every head, camera, motion and saved-V action says why the 3D preview is not available yet", () => {
   const { app } = uvOnlyApp();
   const kinds = Object.keys(ACTION_DESCRIPTORS).filter(kind => /^(preview|camera|motion|savedV)\./.test(kind));
   expect(kinds.length).toBeGreaterThan(10);
   for (const kind of kinds) {
     const capability = app.capability({ kind } as StudioAction);
-    expect({ kind, capability }).toEqual({ kind, capability: { available: false, code: "asset_unavailable", reason: NO_3D_PREVIEW_IN_ALPHA } });
+    expect({ kind, capability }).toEqual({ kind, capability: { available: false, code: "asset_unavailable", reason: NO_3D_PREVIEW_YET } });
   }
 });
 
@@ -75,5 +75,5 @@ test("layer order limits say where the layer already is", () => {
 });
 
 test("the alpha reasons themselves follow the wording policy", () => {
-  for (const reason of [NO_3D_PREVIEW_IN_ALPHA, BUILD_NEEDS_SETUP]) expect(USER_FACING_JARGON.test(reason)).toBe(false);
+  for (const reason of [NO_3D_PREVIEW_YET, BUILD_NEEDS_SETUP]) expect(USER_FACING_JARGON.test(reason)).toBe(false);
 });

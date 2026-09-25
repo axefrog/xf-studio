@@ -125,7 +125,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
       if (idle.dataset.playing !== String(playing)) { idle.dataset.playing = String(playing); idle.replaceChildren(icon(playing ? "pause" : "play")); }
       setAttr(idle, "aria-label", !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle");
       idle.hidden = !motion?.available;
-      // Each control shows its own application reason (for example, no 3D preview in this alpha).
+      // Each control shows its own application reason (for example, no 3D preview yet).
       applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
       applyCapability(surface, port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }));
       applyCapability(wire, port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }));

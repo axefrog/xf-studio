@@ -46,7 +46,7 @@ ${[
   step("01 · Where", "On GitHub", "Each version is listed on the project’s GitHub Releases page and marked as a pre-release while in alpha, with a plain-language changelog."),
   step("02 · Trust", "Checkable files", "Every file comes with its SHA-256 checksum and a GitHub build-provenance attestation, so you can confirm it is exactly what the project’s automated build produced from the public source."),
   step("03 · Install", "Unsigned at first", "The installer is not code-signed yet, so Windows SmartScreen warns before it runs. This section will show how to check the file first and then continue."),
-  step("04 · Your game", "No game files included", "The flat UV editor, your library and export Check work without any game files. The 3D head preview isn't in the first alpha, and building the XF Eye Artistry mod files still needs a developer setup."),
+  step("04 · Your game", "No game files included", "The flat UV editor, your library and export Check work without any game files. The 3D head preview is built from your own Cyberpunk 2077 installation, which XF Studio can't do yet, and building the XF Eye Artistry mod files still needs a developer setup."),
 ].join("\n")}
     </ol>
 ${fromSource(blob)}
@@ -87,7 +87,7 @@ ${[
   step("01 · Download", "Get the setup ZIP", `On the release page, download <code>${setup}</code> and the <code>SHA256SUMS.txt</code> beside it.`),
   step("02 · Check", "Confirm the file", `In PowerShell, run <code>(Get-FileHash .\\${setup} -Algorithm SHA256).Hash.ToLower()</code> and compare the result with <code>SHA256SUMS.txt</code>. With the GitHub CLI you can also run <code>gh attestation verify ${setup} --repo ${escape(new URL(repo).pathname.slice(1))}</code>.`),
   step("03 · Install", "Get past SmartScreen", "Extract the whole ZIP and run the setup program. Because it is not code-signed yet, Windows may show <em>Windows protected your PC</em>: only if the checksum matched, choose <strong>More info</strong>, then <strong>Run anyway</strong>. If Smart App Control is on, Windows blocks unsigned apps and has no per-app override."),
-  step("04 · First run", "Start designing", "Choose <strong>Start designing</strong> to go straight to the flat UV editor, your library and export Check; nothing from the game is included. The 3D head preview isn't in this alpha (a preview built from your own game files is planned), and building the mod files still needs a developer setup."),
+  step("04 · First run", "Start designing", "Choose <strong>Start designing</strong> to go straight to the flat UV editor, your library and export Check; nothing from the game is included. The 3D head preview is built from your own Cyberpunk 2077 installation, which XF Studio can't do yet, and building the mod files still needs a developer setup."),
 ].join("\n")}
     </ol>
 ${fromSource(blob)}
