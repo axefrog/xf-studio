@@ -10,39 +10,35 @@ import { packageToolPaths } from "./local-settings-readiness";
 import { verifyPackageBuildResult } from "./package-result-verifier";
 import { EyePlateError, ensureEyePlate, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
+import { runProcessTree } from "./process-tree";
 
 const app = resolve(import.meta.dir, "..");
 const hq = resolve(app, "../../..");
 const project = resolve(app, "..");
 const dist = resolve(project, "dist");
-const script = resolve(app, "tools/build_collection_package.py");
+/** The TypeScript package CLI; Bun runs it as a child so compiling and verifying never block this server. */
+const script = resolve(app, "tools/build_collection_package.ts");
+export const localCheckDeadlineMs = 120_000;
+export const localBuildDeadlineMs = 40 * 60_000;
 const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 /**
  * `plate` is empty unless the hidden `XFS_PACKAGE_PLATE` developer override names a plate directory;
  * otherwise Build derives the built-in eye plate into `plateCache` (host-owned, ignored storage).
  */
-export type PackageTools = { python: string; bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string };
+export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string };
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
 export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env): PackageTools {
   const configured = packageToolPaths(settings, env);
   return {
-    python: configured.python || (process.platform === "win32" ? "python" : "python3"),
     bun: configured.bun || process.execPath,
     plate: configured.plate || "",
     plateCache: localPlateCache(env),
     wolvenkit: configured.wolvenkit || "",
     gamepath: configured.gamepath || "",
   };
-}
-
-async function tail(stream: ReadableStream<Uint8Array> | null, limit = 64_000): Promise<string> {
-  if (!stream) return "";
-  let result = "";
-  for await (const chunk of stream) result = (result + new TextDecoder().decode(chunk)).slice(-limit);
-  return result;
 }
 
 export type PlateToolsFactory = (wolvenkit: string) => EyePlateTools;
@@ -64,8 +60,9 @@ async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): P
   }
 }
 
+/** Run the TypeScript package CLI as a bounded child process; the host keeps its own identity gates. */
 export async function runLocalPackage(action: PackageAction, file: string, tools: PackageTools,
-  plateTools: PlateToolsFactory = createWolvenKitEyePlateTools): Promise<PackageCheck | PackageBuild> {
+  plateTools: PlateToolsFactory = createWolvenKitEyePlateTools, signal?: AbortSignal): Promise<PackageCheck | PackageBuild> {
   if (action === "build") {
     for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
       let valid = false;
@@ -78,22 +75,24 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
       catch { /* Missing game input. */ }
       throw Error(`The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Local setup.`);
     }
-    for (const [name, path] of [["Python", tools.python], ["Bun", tools.bun]] as const) {
-      if (!path.includes("/") && !path.includes("\\")) continue; // Host PATH command, checked by spawn.
-      try { if (statSync(path).isFile()) continue; } catch { /* Missing executable. */ }
-      throw Error(`The configured ${name} executable is unavailable. Check Local setup.`);
+    if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
+      let valid = false;
+      try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
+      if (!valid) throw Error("The configured Bun executable is unavailable. Check Local setup.");
     }
   }
   const plate = action === "build" ? await localPlate(tools, plateTools) : { args: [] as string[] } as { args: string[]; manifest?: EyePlateManifest };
-  const args = [tools.python, script, "--collection", file, "--bun", tools.bun, "--machine-result",
+  const args = [script, "--collection", file, "--machine-result",
     ...(action === "check" ? ["--check"] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
-  const process = Bun.spawn(args, { cwd: hq, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([tail(process.stdout), tail(process.stderr), process.exited]);
-  if (code !== 0) {
-    console.error(`Local package ${action} tool failed (exit ${code}):`, stderr.trim().slice(-64_000));
+  const run = await runProcessTree(tools.bun, args, { cwd: hq, signal,
+    timeoutMs: action === "check" ? localCheckDeadlineMs : localBuildDeadlineMs });
+  if (run.stopped) throw Error(`Package ${action} ${run.stopped === "timeout" ? "exceeded its time limit and was stopped" : "was cancelled"}. ` +
+    "Your draft is unchanged; no package was installed.");
+  if (run.exitCode !== 0) {
+    console.error(`Local package ${action} tool failed (exit ${run.exitCode}):`, (run.error?.message ?? run.stderr.trim()).slice(-64_000));
     throw Error(`Package ${action} failed in the local build tool. See the studio server log for details. Your draft is unchanged; no package was installed.`);
   }
-  const line = stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
+  const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
   if (!line) throw Error("Package tool completed without a result.");
   const result = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageCheck | PackageBuild;
   if (action === "build" && plate.manifest) {

@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const hq = resolve(import.meta.dir, "../../../..");
-const script = resolve(import.meta.dir, "../tools/build_collection_package.py");
+const script = resolve(import.meta.dir, "../tools/build_collection_package.ts");
 const fixture = resolve(hq, "experiments/005-preset-collection/editor-collection.json");
 const run = (collection: string, outputRoot?: string) => Bun.spawnSync([
-  "python", script, "--collection", collection, "--check",
+  process.execPath, script, "--collection", collection, "--check",
   ...(outputRoot ? ["--output-root", outputRoot] : []),
 ], { cwd: hq, stdout: "pipe", stderr: "pipe" });
 

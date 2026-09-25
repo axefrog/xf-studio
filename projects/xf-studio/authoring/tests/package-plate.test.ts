@@ -19,14 +19,14 @@ test("localhost Build prepares the built-in plate before starting the builder", 
     mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
     writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "");
     writeFileSync(cli, "");
-    const tools: PackageTools = { python: join(dir, "never-started", "python.exe"), bun: process.execPath, plate: "",
+    const tools: PackageTools = { bun: join(dir, "never-started", "bun.exe"), plate: "",
       plateCache: join(dir, "cache"), wolvenkit: cli, gamepath: game };
-    // Python is checked first; with a real one configured, plate preparation fails before any builder process starts.
-    await expect(runLocalPackage("build", join(dir, "collection.json"), tools, () => noHead)).rejects.toThrow("Python executable");
-    const missing = await runLocalPackage("build", join(dir, "collection.json"), { ...tools, python: "python" }, () => noHead).catch(error => error);
+    // Bun runs the builder and is checked first; with a real one, plate preparation fails before any builder process starts.
+    await expect(runLocalPackage("build", join(dir, "collection.json"), tools, () => noHead)).rejects.toThrow("Bun executable");
+    const missing = await runLocalPackage("build", join(dir, "collection.json"), { ...tools, bun: process.execPath }, () => noHead).catch(error => error);
     expect(missing.code).toBe("plate_source_missing");
     expect(missing.message).toContain("verify the game files");
-    await expect(runLocalPackage("build", join(dir, "collection.json"), { ...tools, python: "python", plate: join(dir, "absent") }, () => noHead))
+    await expect(runLocalPackage("build", join(dir, "collection.json"), { ...tools, bun: process.execPath, plate: join(dir, "absent") }, () => noHead))
       .rejects.toThrow("XFS_PACKAGE_PLATE developer override");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

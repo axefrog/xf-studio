@@ -58,17 +58,19 @@ test("the selector label, Check result and MO2 install folder all come from the 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("the Python builder and verifiers read branding from the plan instead of keeping a copy", () => {
+test("the builders, service and verifiers read branding from the plan instead of keeping a copy", () => {
   const sources = {
     build: readFileSync(resolve(hq, "experiments/005-preset-collection/build.py"), "utf8"),
     verify: readFileSync(resolve(hq, "experiments/005-preset-collection/verify.py"), "utf8"),
     shimmer: readFileSync(resolve(hq, "experiments/011-shimmer-plate-comparison/build.py"), "utf8"),
-    wrapper: readFileSync(resolve(authoring, "tools/build_collection_package.py"), "utf8"),
+    resources: readFileSync(resolve(authoring, "src/package-resources.ts"), "utf8"),
+    service: readFileSync(resolve(authoring, "src/package-build-service.ts"), "utf8"),
   };
   expect(sources.build).toContain("'localizedName':plan['selectorLabel']");
   expect(sources.verify).toContain("option['localizedName']==plan['selectorLabel']");
   expect(sources.shimmer).toContain("{plan['modName']} Shimmer diagnostic");
-  expect(sources.wrapper).toContain("'modName': summary['modName'], 'selectorLabel': summary['selectorLabel']");
+  expect(sources.resources).toContain("localizedName: plan.selectorLabel");
+  expect(sources.service).toContain("modName: check.modName, selectorLabel: check.selectorLabel");
   for (const [name, source] of Object.entries(sources))
     expect({ name, literal: /XF (?:Studio|Eye Artistry)['"\s·]/.test(source.replace(/"""[\s\S]*?"""/g, "")) })
       .toEqual({ name, literal: false });

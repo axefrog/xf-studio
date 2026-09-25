@@ -74,8 +74,6 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
     buildIssues.push(issue("package_host_unavailable", "This host does not provide mod package builds."));
   if (!settings.wolvenKitCli) buildIssues.push(issue("wolvenkit_unset", "Select the WolvenKit CLI executable."));
   else if (!available(settings.wolvenKitCli, "file")) buildIssues.push(issue("wolvenkit_missing", "The selected WolvenKit CLI executable is unavailable."));
-  if (settings.pythonExecutable && !available(settings.pythonExecutable, "file"))
-    buildIssues.push(issue("python_missing", "The selected Python executable is unavailable."));
   if (settings.bunExecutable && !available(settings.bunExecutable, "file"))
     buildIssues.push(issue("bun_missing", "The selected Bun executable is unavailable."));
   buildIssues.push(...gameIssues);
@@ -125,7 +123,6 @@ export function packageToolPaths(settings: LocalSettings, env: Record<string, st
     plate: env.XFS_PACKAGE_PLATE || null,
     wolvenkit: env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli,
     gamepath: env.XFS_PACKAGE_GAMEPATH || settings.gameRoot,
-    python: env.XFS_PACKAGE_PYTHON || settings.pythonExecutable,
     bun: settings.bunExecutable,
   };
 }
