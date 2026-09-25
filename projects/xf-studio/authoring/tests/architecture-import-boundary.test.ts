@@ -121,3 +121,55 @@ test("the eye plate reaches the launch route only through its head-source port",
       /^(node:child_process|\.\/(?:resolver-host|source-discovery|process-tree|eye-plate-wolvenkit|eye-plate-head-resolver))$/);
   expect(imports(source("eye-plate-head-resolver"))).toContain("./resolver-host");
 });
+
+// Feature-module platform §7, as far as migration step 1 has built it: `platform/`, `features/`
+// and `compose/` exist; the eye-makeup files stay in `src/` until step 5 moves them.
+const walk = (dir: string): string[] => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  return readdirSync(new URL(`../src/${dir}/`, import.meta.url), { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? walk(`${dir}/${entry.name}`) : entry.name.endsWith(".ts") ? [`${dir}/${entry.name.slice(0, -3)}`] : []);
+};
+/** A module's imports as src-relative module names (`platform/api`, `recipe-actions`), or bare package names. */
+const resolved = (name: string) => imports(source(name)).map(path => {
+  if (!path.startsWith(".")) return path;
+  const parts = name.split("/").slice(0, -1);
+  for (const part of path.split("/")) part === ".." ? parts.pop() : part !== "." && parts.push(part);
+  return parts.join("/");
+});
+const every = () => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  const top = readdirSync(new URL("../src/", import.meta.url), { withFileTypes: true });
+  return top.flatMap(entry => entry.isDirectory() ? walk(entry.name)
+    : entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts") ? [entry.name.slice(0, -3)] : []);
+};
+
+test("platform code imports only the platform: nothing from features, engines, compose or legacy src", () => {
+  const platform = walk("platform");
+  expect(platform).toContain("platform/api/index");
+  expect(platform).toContain("platform/core/registry");
+  const violations = platform.flatMap(name => resolved(name)
+    .filter(path => !path.startsWith("platform/")).map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
+  for (const name of platform) expect(source(name), `${name} reads browser globals`).not.toMatch(
+    /\b(?:window|localStorage)\.|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/);
+});
+
+test("feature modules import the platform only through platform/api and never another feature, the UI or compose", () => {
+  const features = walk("features");
+  expect(features).toContain("features/eye-makeup/index");
+  const presentationOrEntry = (path: string) => /^(?:studio-ui\/|context-menu$|[\w-]+-ui$|studio-(?:main|startup)$|browser-|scene$|three(?:\/|$))/.test(path);
+  const violations = features.flatMap(name => {
+    const own = name.split("/").slice(0, 2).join("/");
+    return resolved(name).filter(path =>
+      path.startsWith("platform/") && !path.startsWith("platform/api") ||
+      path.startsWith("features/") && !path.startsWith(`${own}/`) && path !== own ||
+      path.startsWith("compose/") || presentationOrEntry(path) || /^node:/.test(path)).map(path => `${name} -> ${path}`);
+  });
+  expect(violations).toEqual([]);
+});
+
+test("only composition roots import feature entries", () => {
+  const violations = every().filter(name => !name.startsWith("compose/") && !name.startsWith("features/"))
+    .flatMap(name => resolved(name).filter(path => path.startsWith("features/")).map(path => `${name} -> ${path}`));
+  expect(violations).toEqual([]);
+});

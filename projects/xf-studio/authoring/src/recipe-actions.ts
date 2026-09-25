@@ -12,6 +12,7 @@ import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type La
 import { requiredRecipeSchema } from "./recipe-schema";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "./validation-issues";
+import { refusal, type ReasonCode } from "./platform/api";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =
@@ -57,7 +58,7 @@ export type ShapeCommand = { kind: "translate"; du: number; dv: number } | { kin
 /** Contour point limit shared with pointer insertion. */
 export const MAX_CONTOUR_POINTS = 24;
 
-export type RecipeActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
+export type RecipeActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue; code?: ReasonCode };
 export type RecipeActionEffect = { kind: "selection" | "scheduled" | "immediate"; layerIndex: number };
 export type GestureEdit =
   | { kind: "shape.replace"; layerId: string; expectedLayer: Layer; next: Layer }
@@ -93,12 +94,12 @@ export function applyGestureEdit(action: GestureEdit, schema: Recipe["schema"] =
 
 export function recipeActionCapability(state: RecipeActionState, action: RecipeAction): RecipeActionCapability {
   const layer = state.recipe.layers.find(l => l.id === action.layerId);
-  if (!layer) return { available: false, reason: "That layer no longer exists." };
+  if (!layer) return refusal("missing_target", "That layer no longer exists.");
   if (action.kind.startsWith("glitter.") && action.kind !== "glitter.setClassic" && layer.finish !== "glitter")
     return refuse({ code: "mode", field: "finish", message: "Select a Glitter layer first." });
   if ((action.kind === "point.move" || action.kind === "point.setTangent") &&
       (!Number.isInteger(action.index) || !layer.points[action.index]))
-    return { available: false, reason: "That control point no longer exists." };
+    return refusal("missing_target", "That control point no longer exists.");
   if (action.kind === "point.setTangent" && (layer.pathMode !== "bezier" || !layer.points[action.index]?.handles))
     return refuse({ code: "mode", field: "pathMode", message: "Enable Bézier handles before editing a tangent." });
   if (action.kind === "point.insert" && layer.points.length >= MAX_CONTOUR_POINTS)
@@ -110,7 +111,7 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
   }
   if ((action.kind === "point.select" || action.kind === "point.remove") &&
       (!Number.isInteger(action.index) || !layer.points[action.index]))
-    return { available: false, reason: "That control point no longer exists." };
+    return refusal("missing_target", "That control point no longer exists.");
   if (action.kind === "point.remove" && layer.points.length <= 3)
     return refuse({ code: "range", field: "points", message: "A closed contour needs at least three points." });
   if (action.kind === "field.add" && layer.fields.length >= MAX_FIELDS)
@@ -118,7 +119,7 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
   if ((action.kind === "field.select" || action.kind === "field.remove" || action.kind === "field.setOrigin" ||
        action.kind === "field.setVector" || action.kind === "field.clear" || action.kind === "field.setReach") &&
       !layer.fields.some(field => field.id === action.fieldId))
-    return { available: false, reason: "That warp control no longer exists." };
+    return refusal("missing_target", "That warp control no longer exists.");
   if (action.kind === "glitter.setIrregular" && !isIrregular(layer.flakes))
     return refuse({ code: "mode", field: "model", message: "Select the irregular Glitter model first." });
   if (action.kind === "glitter.setDirect" && !isDirectGlint(layer.flakes))

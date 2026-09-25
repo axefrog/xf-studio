@@ -4,29 +4,31 @@ import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import { historyTimeline, type AuthoringHistory, type HistorySnapshot, type HistoryState } from "./authoring-history";
 import { historyLabel } from "./history-labels";
 import { actionLimits, type FieldLimit } from "./action-limits";
-import { nameIssue, type ValidationIssue } from "./validation-issues";
+import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
-import type { CollectionAction } from "./collection-actions";
 import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
 import { layerCapability, type LayerAction } from "./editor-actions";
-import type { MotionAction, MotionActions } from "./motion-actions";
-import type { PreviewAction, PreviewActions } from "./preview-actions";
-import type { QualityAction, PreviewQualityActions } from "./preview-quality-actions";
+import type { MotionActions } from "./motion-actions";
+import type { PreviewActions } from "./preview-actions";
+import type { PreviewQualityActions } from "./preview-quality-actions";
 import type { Layer, Point, WarpField } from "./recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction, type RecipeActions } from "./recipe-actions";
-import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
-import { ACTION_DESCRIPTORS, actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
+import type { SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
+import { actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
+import { coded, refusal, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability, type ReasonCode, type ValidationIssue } from "./platform/api";
+import type { Registry } from "./platform/core/registry";
+import { STUDIO_REGISTRY, type StudioOwnerActions, type StudioOwnerId } from "./compose/studio-registry";
 import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
 import { layerExport, planPresetExport, type LayerExport } from "./finish-export";
 
-export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
-  MotionAction | QualityAction | SavedAppearanceAction;
+/** Every action a presentation may dispatch: the union of the registered owners' actions. */
+export type StudioAction = StudioOwnerActions[StudioOwnerId];
 /** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
  * or the rest of the preset ("preset") keeps it out of the mod. */
 export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
@@ -34,11 +36,9 @@ export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
 export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
   { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
   { kind: "field"; layerId: string; id: string } | { kind: "viewport" } | { kind: "file" } | { kind: "workspace" };
-export type StudioReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
-  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
-export type StudioCapability = { available: boolean; reason?: string; code?: StudioReasonCode;
-  /** Structured validation detail when the refusal concerns one input value or mode. */
-  issue?: ValidationIssue };
+/** The platform's reason codes and capability shape (`platform/api`). */
+export type StudioReasonCode = ReasonCode;
+export type StudioCapability = Capability;
 /** Every synchronous action entry point (dispatch, context dispatch, form control edits) returns this. */
 export type StudioDispatchResult = { ok: true; result?: unknown } | { ok: false; code: string; message: string };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
@@ -49,6 +49,7 @@ export type StudioGestureProposal =
   | { kind: "field.replace"; fieldId: string; next: Partial<WarpField> }
   | { kind: "path.replacePoints"; points: Point[] };
 
+type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerActions[O]> };
 type Services = { document: AuthoringDocument; recipe: RecipeActions;
   layer: (action: LayerAction) => void; undo: () => boolean;
   /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
@@ -56,15 +57,6 @@ type Services = { document: AuthoringDocument; recipe: RecipeActions;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions };
-// Routing sets come from the typed action lists and the descriptor table, never a third hand-kept copy.
-const recipeKinds: ReadonlySet<string> = RECIPE_ACTION_KINDS;
-/** Recipe actions that only move the selection (descriptor effect "selection"): no Undo entry. */
-const selection: ReadonlySet<string> = new Set([...recipeKinds].filter(kind =>
-  ACTION_DESCRIPTORS[kind as RecipeAction["kind"]].effect === "selection"));
-const COLLECTION_KIND_TABLE: Record<Exclude<CollectionAction, { kind: "collection.saved" }>["kind"], true> = {
-  "preset.edit": true, "preset.select": true, "collection.rename": true,
-  "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true };
-const collectionKinds: ReadonlySet<string> = new Set(Object.keys(COLLECTION_KIND_TABLE));
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -75,7 +67,18 @@ export class StudioApplication {
   private seenContent?: number;
   private previewUnavailable?: string;
   private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
-  constructor(services: Services) { this.services = services; this.subscribeSources(); }
+  /** The action registry: owners, descriptors, Undo policy and routes. */
+  private readonly routes: Registry;
+  /** One handler per registered owner: the compiler requires every owner in the composition list. */
+  private readonly handlers: Handlers;
+  constructor(services: Services, registry: Registry = STUDIO_REGISTRY) {
+    this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
+    // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
+    const owners = registry.owners().map(owner => owner.id).sort(), bound = Object.keys(this.handlers).sort();
+    if (owners.join() !== bound.join())
+      throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
+    this.subscribeSources();
+  }
   attach(next: Partial<Omit<Services, "document" | "recipe" | "layer" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
@@ -99,20 +102,20 @@ export class StudioApplication {
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
-  actionKinds() { return Object.keys(ACTION_DESCRIPTORS) as StudioAction["kind"][]; }
+  actionKinds() { return [...this.routes.kinds()] as StudioAction["kind"][]; }
   requestKinds() { return Object.keys(REQUEST_DESCRIPTORS) as CollectionRequest["kind"][]; }
-  actionDescriptors() { return structuredClone(ACTION_DESCRIPTORS); }
+  actionDescriptors() { return structuredClone(this.routes.descriptors()) as Record<StudioAction["kind"], ActionDescriptor>; }
   requestDescriptors() { return structuredClone(REQUEST_DESCRIPTORS); }
   gestureDescriptors() { return structuredClone(GESTURE_DESCRIPTORS); }
   /** File workflow IDs (dispatched through `StudioFileOperations`) share the registry. */
   fileKinds() { return Object.keys(FILE_DESCRIPTORS) as StudioFileAction["kind"][]; }
   fileDescriptors() { return structuredClone(FILE_DESCRIPTORS); }
   /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
-  registry() { return actionRegistry(); }
+  registry() { return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>); }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
     const targetCapability = this.targetCapability(target);
-    return Object.entries(ACTION_DESCRIPTORS).filter(([, descriptor]) =>
+    return Object.entries(this.routes.descriptors() as Record<string, ActionDescriptor>).filter(([, descriptor]) =>
       (descriptor.scope as readonly string[]).includes(target.kind)).map(([id, descriptor]) => ({
       id: id as StudioAction["kind"], ...structuredClone(descriptor),
       targetCapability, requiresInput: Object.values(descriptor.payload).some(field => field.from === "input"),
@@ -135,7 +138,8 @@ export class StudioApplication {
   }
   /** Validate a concrete target/payload pair before a menu, shortcut or form dispatches it. */
   contextCapability(target: StudioTarget, action: StudioAction): StudioCapability {
-    const descriptor = ACTION_DESCRIPTORS[action.kind];
+    const descriptor = this.routes.descriptor(action.kind);
+    if (!descriptor) return unknownCommand();
     if (!(descriptor.scope as readonly string[]).includes(target.kind))
       return { available: false, code: "invalid_value", reason: "This command does not apply to that target." };
     const exists = this.targetCapability(target);
@@ -165,7 +169,7 @@ export class StudioApplication {
   /** Enumerated values and their live capability for a concrete target. */
   choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
     base: Record<string, unknown> = {}) {
-    const schema = ACTION_DESCRIPTORS[kind].payload[field];
+    const schema = this.routes.descriptor(kind)?.payload[field];
     if (!schema?.values) return [];
     const targetPayload = target.kind === "layer" ? { layerId: target.id, id: target.id } :
       target.kind === "point" ? { layerId: target.layerId, index: target.index } :
@@ -211,7 +215,7 @@ export class StudioApplication {
     return contextCandidates(context.hit, this.services.document.recipe).map(candidate => {
       if ("action" in candidate) return { ...candidate, requiresInput: false as const,
         capability: bound.available && target ? this.contextCapability(target, candidate.action) : bound,
-        undo: undoPolicy(candidate.action) };
+        undo: this.routes.undoPolicy(candidate.action) };
       let capability = bound;
       if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
         if (candidate.id === "point.softness" &&
@@ -219,7 +223,7 @@ export class StudioApplication {
           capability = { available: false, code: "incompatible_mode",
             reason: "Enable point edge softness before editing an individual edge." };
       }
-      return { ...candidate, capability, undo: ACTION_DESCRIPTORS[candidate.actionKind].undo };
+      return { ...candidate, capability, undo: this.routes.descriptor(candidate.actionKind)!.undo };
     });
   }
   contextQuery(hit: StudioContextHit) {
@@ -315,53 +319,87 @@ export class StudioApplication {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
   }
   capability(action: StudioAction): StudioCapability {
-    const s = this.services;
+    const s = this.services, route = this.routes.route(action.kind);
+    if (!route.ok) return unknownCommand();
     // With a loaded collection but no selected preset the editor shows an empty recipe no
     // preset owns; content written there would be discarded at the next preset switch.
-    if (ACTION_DESCRIPTORS[action.kind].effect === "content" && this.unowned())
+    if (route.spec.descriptor.effect === "content" && this.unowned())
       return { available: false, code: "missing_target", reason: NO_PRESET };
-    if (this.previewUnavailable && (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") ||
-      action.kind.startsWith("motion.") || action.kind.startsWith("savedV.")))
+    if (this.previewUnavailable && route.owner.owner === "system" && route.owner.needsScene)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if ((action.kind === "recipe.undo" || action.kind === "recipe.redo" || action.kind === "history.jumpTo") &&
-      (s.gestures.snapshot() || s.controls.snapshot()))
+    if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     // Descriptor payload types and ranges gate every entry point, not only context menus.
-    const payload = payloadIssue(action);
+    const payload = payloadIssue(route.spec.descriptor, action);
     if (payload && payload.code !== "limit") return payload;
-    const domain = this.domainCapability(action);
+    // The owning module decides, with a structured code (CORE-15).
+    const domain = coded(this.handler(route.owner.id).capability(action));
     // A range limit is generic; when the domain can say why in the user's terms
     // (for example "already at the front"), show that instead.
     if (!domain.available) return domain;
     return payload ?? domain;
   }
-  private domainCapability(action: StudioAction): StudioCapability {
-    const s = this.services;
-    let raw: { available: boolean; reason?: string; issue?: ValidationIssue };
-    if (action.kind === "recipe.undo") raw = s.document.canUndo ? { available: true } :
-      { available: false, reason: "There is no recipe change to undo." };
-    else if (action.kind === "recipe.redo") raw = !s.history ? { available: false, reason: "Redo is not available in this host." } :
-      s.history.canRedo() ? { available: true } : { available: false, reason: "There is no undone change to redo." };
-    else if (action.kind === "history.jumpTo") {
-      const plan = s.history?.plan(action.entryId);
-      raw = !s.history ? { available: false, reason: "History steps are not available in this host." } :
-        !plan ? { available: false, reason: "That history step no longer exists." } :
-        plan.direction === "none" ? { available: false, reason: "This is already the current step." } :
-        { available: true };
-    }
-    else if (recipeKinds.has(action.kind)) raw = s.recipe.capability(action as RecipeAction);
-    else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
-      raw = layerCapability(s.document.recipe, action);
-    else if (collectionKinds.has(action.kind)) raw = s.collection?.actionCapability(action as CollectionAction)
-      ?? missing("Collection is still loading.");
-    else if (action.kind.startsWith("preview.") || action.kind.startsWith("camera."))
-      raw = s.preview?.capability(action as PreviewAction) ?? missing("Preview is still loading.");
-    else if (action.kind.startsWith("motion."))
-      raw = s.motion?.capability(action as MotionAction) ?? missing("Motion preview is still loading.");
-    else if (action.kind.startsWith("quality."))
-      raw = s.quality?.capability(action as QualityAction) ?? missing("Preview quality is still loading.");
-    else raw = s.savedV?.capability(action as SavedAppearanceAction) ?? missing("Saved appearance preview is still loading.");
-    return raw.available ? { available: true } : { ...raw, code: raw.issue ? issueCode(raw.issue) : reasonCode(action, raw.reason ?? "") };
+  private handler(owner: string) { return this.handlers[owner as StudioOwnerId] as ActionHandler<StudioAction>; }
+  /**
+   * Each owner's live behaviour over today's services. The eye-makeup handler routes inside
+   * its own closed action union; no kind falls through to another owner's service.
+   */
+  private bindHandlers(): Handlers {
+    const app = this;
+    const selection = (kind: string) => this.routes.descriptor(kind)?.effect === "selection";
+    return {
+      history: {
+        capability: action => {
+          const s = app.services;
+          if (action.kind === "history.jumpTo") {
+            const plan = s.history?.plan(action.entryId);
+            return !s.history ? refusal("invalid_value", "History steps are not available in this host.") :
+              !plan ? refusal("missing_target", "That history step no longer exists.") :
+              plan.direction === "none" ? refusal("invalid_value", "This is already the current step.") : { available: true };
+          }
+          if (action.kind === "recipe.undo") return s.document.canUndo ? { available: true } :
+            refusal("invalid_value", "There is no recipe change to undo.");
+          return !s.history ? refusal("invalid_value", "Redo is not available in this host.") :
+            s.history.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone change to redo.");
+        },
+        dispatch: action => {
+          const s = app.services;
+          return action.kind === "history.jumpTo" ? s.history!.jumpTo(action.entryId) :
+            action.kind === "recipe.undo" ? s.undo() : s.history!.redo();
+        },
+      },
+      "eye-makeup": {
+        capability: action => action.kind === "layer.edit" || action.kind === "layer.setEnabled"
+          ? layerCapability(app.services.document.recipe, action) : app.services.recipe.capability(action),
+        dispatch: action => {
+          const s = app.services;
+          if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
+            s.document.withHistoryLabel(historyLabel(action), () => s.layer(action));
+          else s.document.withHistoryLabel(historyLabel(action), () => s.recipe.dispatch(action, !selection(action.kind)));
+          return undefined;
+        },
+      },
+      collection: {
+        capability: action => app.services.collection?.actionCapability(action) ?? missing("Collection is still loading."),
+        dispatch: action => { app.services.collection!.dispatch(action); return undefined; },
+      },
+      preview: {
+        capability: action => app.services.preview?.check(action) ?? missing("Preview is still loading."),
+        dispatch: action => app.services.preview!.dispatch(action),
+      },
+      motion: {
+        capability: action => app.services.motion?.capability(action) ?? missing("Motion preview is still loading."),
+        dispatch: action => app.services.motion!.dispatch(action),
+      },
+      quality: {
+        capability: action => app.services.quality?.capability(action) ?? missing("Preview quality is still loading."),
+        dispatch: action => app.services.quality!.dispatch(action),
+      },
+      savedV: {
+        capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
+        dispatch: action => app.services.savedV!.dispatch(action),
+      },
+    };
   }
   /** Candidate actions use the hit target, never the currently selected row. */
   actionsFor(target: StudioTarget): StudioActionInfo[] {
@@ -389,28 +427,16 @@ export class StudioApplication {
       { kind: "field.remove", layerId: target.layerId, fieldId: target.id }];
     if (target.kind === "viewport") actions = [{ kind: "camera.front" }, { kind: "quality.rebuild" }];
     return actions.map(action => ({ action, capability: this.capability(action),
-      undo: undoPolicy(action), async: false }));
+      undo: this.routes.undoPolicy(action), async: false }));
   }
   dispatch(action: StudioAction): StudioDispatchResult {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
-    try {
-      const s = this.services;
-      let result: unknown;
-      if (action.kind === "recipe.undo") result = s.undo();
-      else if (action.kind === "recipe.redo") result = s.history!.redo();
-      else if (action.kind === "history.jumpTo") result = s.history!.jumpTo(action.entryId);
-      else if (recipeKinds.has(action.kind)) s.document.withHistoryLabel(historyLabel(action as RecipeAction),
-        () => s.recipe.dispatch(action as RecipeAction, !selection.has(action.kind)));
-      else if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
-        s.document.withHistoryLabel(historyLabel(action), () => s.layer(action));
-      else if (collectionKinds.has(action.kind)) s.collection!.dispatch(action as CollectionAction);
-      else if (action.kind.startsWith("preview.") || action.kind.startsWith("camera.")) result = s.preview!.dispatch(action as PreviewAction);
-      else if (action.kind.startsWith("motion.")) result = s.motion!.dispatch(action as MotionAction);
-      else if (action.kind.startsWith("quality.")) result = s.quality!.dispatch(action as QualityAction);
-      else result = s.savedV!.dispatch(action as SavedAppearanceAction);
-      return { ok: true, result };
-    } catch (error) { return { ok: false, ...failure(action, error) }; }
+    // capability() refuses unknown kinds, so the route is known here.
+    const route = this.routes.route(action.kind);
+    if (!route.ok) return { ok: false, code: "invalid_value", message: "Unknown command." };
+    try { return { ok: true, result: this.handler(route.owner.id).dispatch(action) }; }
+    catch (error) { return { ok: false, ...failure(route.owner.owner === "system" ? route.owner.thrown : undefined, error) }; }
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
@@ -426,7 +452,8 @@ export class StudioApplication {
    */
   controlEdit(id: string, action: RecipeAction): StudioDispatchResult {
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
-    if (!recipeKinds.has(action.kind) || selection.has(action.kind))
+    // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
+    if (!RECIPE_ACTION_KINDS.has(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
       return { ok: false, code: "invalid_value", message: "That command cannot be adjusted by a form control." };
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
@@ -435,15 +462,12 @@ export class StudioApplication {
       if (outcome === "stale") return { ok: false, code: "missing_target",
         message: "That layer changed while you were adjusting it; the edit was not applied." };
       return { ok: true, result: outcome === "changed" };
-    } catch (error) { return { ok: false, ...failure(action, error) }; }
+    } catch (error) { return { ok: false, ...failure(undefined, error) }; }
   }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
   requestCapability(request: CollectionRequest): StudioCapability {
-    const raw = this.services.collection?.capability(request) ?? missing("Collection is still loading.");
-    return raw.available ? { available: true } : { ...raw,
-      code: raw.reason?.includes("in progress") ? "busy" : raw.reason?.includes("loading") ? "not_ready" :
-        raw.reason?.includes("budget") ? "limit" : "invalid_value" };
+    return coded(this.services.collection?.capability(request) ?? missing("Collection is still loading."));
   }
   async execute(request: CollectionRequest) { return this.services.collection?.execute(request)
     ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." }; }
@@ -509,9 +533,7 @@ export class StudioApplication {
   }
 }
 /** Descriptor payload check for a concrete action: top-level fields, then its command/key variant. */
-function payloadIssue(action: StudioAction): StudioCapability | undefined {
-  const descriptor = ACTION_DESCRIPTORS[action.kind] as ActionDescriptor | undefined;
-  if (!descriptor) return { available: false, code: "invalid_value", reason: "Unknown command." };
+function payloadIssue(descriptor: PlatformDescriptor, action: StudioAction): StudioCapability | undefined {
   const payload = action as unknown as Record<string, unknown>;
   const command = payload.command && typeof payload.command === "object"
     ? payload.command as Record<string, unknown> : undefined;
@@ -529,18 +551,16 @@ function payloadIssue(action: StudioAction): StudioCapability | undefined {
 }
 /**
  * Classify an exception thrown after the capability gate passed, by where it came from:
- * a collection service error keeps its own code; device-backed preview, camera, motion and
- * quality services report "unavailable"; a programming fault is "internal"; anything else
- * is the domain rejecting the resulting content ("invalid_value").
+ * a collection service error keeps its own code; a programming fault is "internal"; a
+ * device-backed family (preview, camera, motion, quality) reports its declared `thrown`
+ * code, "unavailable"; anything else is the domain rejecting the resulting content ("invalid_value").
  */
-function failure(action: StudioAction, error: unknown): { code: string; message: string } {
+function failure(thrown: ReasonCode | undefined, error: unknown): { code: string; message: string } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof CollectionServiceError) return { code: error.code, message };
   if (error instanceof TypeError || error instanceof ReferenceError)
     return { code: "internal", message: `That change could not be applied because of an internal error (${message}). Nothing was changed.` };
-  if (action.kind.startsWith("preview.") || action.kind.startsWith("camera.") || action.kind.startsWith("motion.") ||
-    action.kind.startsWith("quality.")) return { code: "unavailable", message };
-  return { code: "invalid_value", message };
+  return { code: thrown ?? "invalid_value", message };
 }
 function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioCapability | undefined {
   const refused = (code: StudioReasonCode, issue: ValidationIssue): StudioCapability =>
@@ -567,31 +587,7 @@ function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioC
     schema.maxLength !== undefined && value.length > schema.maxLength))
     return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
 }
-function issueCode(issue: ValidationIssue): StudioReasonCode {
-  return issue.code === "range" ? "limit" : issue.code === "mode" ? "incompatible_mode" :
-    issue.code === "required" ? "needs_input" : "invalid_value";
-}
 const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
-function reasonCode(action: StudioAction, reason: string): StudioReasonCode {
-  if (reason.includes("loading")) return "not_ready";
-  if (reason.includes("in progress")) return "busy";
-  if (reason.includes("no longer exists") || reason.includes("not found")) return "missing_target";
-  if (reason.includes("supports up to") || reason.includes("at least") || reason.includes("larger than") ||
-    reason.includes("budget")) return "limit";
-  if (action.kind.startsWith("glitter.") && reason.includes("Select")) return "incompatible_mode";
-  if ((action.kind === "preview.setHair" || action.kind === "preview.setDetail" ||
-    action.kind === "preview.setPiercings" || action.kind.startsWith("motion.")) &&
-    reason.includes("unavailable")) return "asset_unavailable";
-  if (reason.includes("unavailable")) return "unavailable";
-  return "invalid_value";
-}
-/** Undo policy of a concrete action, read from the descriptor table (its command or key variant first). */
-function undoPolicy(action: StudioAction): StudioActionInfo["undo"] {
-  const descriptor: ActionDescriptor = ACTION_DESCRIPTORS[action.kind];
-  const payload = action as unknown as Record<string, unknown>;
-  const variant = payload.command && typeof payload.command === "object"
-    ? (payload.command as { kind?: unknown }).kind : payload.key;
-  return (typeof variant === "string" ? descriptor.variants?.[variant]?.undo : undefined) ?? descriptor.undo;
-}
+function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }

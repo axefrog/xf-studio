@@ -7,6 +7,7 @@ import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 import { describePackageExperimental, describePackageOmissions } from "./package-filter";
+import { refusal, type Capability } from "./platform/api";
 
 export type CollectionRequest =
   | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportCollection" | "exportPlan" }
@@ -152,23 +153,25 @@ export class CollectionService {
     try { return this.packageSource === JSON.stringify(parseCollection(this.actions.snapshot().collection)); }
     catch { return false; }
   }
-  capability(request: CollectionRequest): { available: boolean; reason?: string } {
-    if (this.busy) return { available: false, reason: "Another collection request is in progress." };
+  /** Request capability with a structured reason code. */
+  capability(request: CollectionRequest): Capability {
+    if (this.busy) return refusal("busy", "Another collection request is in progress.");
     if (request.kind === "initialize") return { available: true };
-    if (!this.actions) return { available: false, reason: "Collection is still loading." };
+    if (!this.actions) return refusal("not_ready", "Collection is still loading.");
     if (request.kind === "open" && !this.summaries.some(item => item.id === request.id))
-      return { available: false, reason: "Saved collection is no longer in this list. Refresh it first." };
+      return refusal("invalid_value", "Saved collection is no longer in this list. Refresh it first.");
     if (request.kind === "import" && (!Number.isSafeInteger(request.bytes) || request.bytes < 0 || request.bytes > 16_000_000))
-      return { available: false, reason: "Collection exceeds the current 16 MB import budget." };
+      return refusal("limit", "Collection exceeds the current 16 MB import budget.");
     if (request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") {
       try { parseCollection(this.actions.snapshot().collection); }
-      catch (error) { return { available: false, reason: (error as Error).message }; }
+      catch (error) { return refusal("invalid_value", (error as Error).message); }
     }
     return { available: true };
   }
-  actionCapability(action: CollectionAction) {
-    if (this.busy) return { available: false, reason: "A collection request is in progress." };
-    return this.actions?.capability(action) ?? { available: false, reason: "Collection is still loading." };
+  /** Draft action capability with a structured reason code. */
+  actionCapability(action: CollectionAction): Capability {
+    if (this.busy) return refusal("busy", "A collection request is in progress.");
+    return this.actions?.check(action) ?? refusal("not_ready", "Collection is still loading.");
   }
   dispatch(action: CollectionAction) {
     const allowed = this.actionCapability(action);

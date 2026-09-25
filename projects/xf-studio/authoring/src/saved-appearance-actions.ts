@@ -1,5 +1,6 @@
 import { parseSavedV, readSavedV, type SavedV } from "./save-reader";
 import type { BodySex } from "./creator-lighting";
+import { refusal, type Capability } from "./platform/api";
 
 /**
  * What applying a save changed at once (facial shapes, eye colour, piercings). Brows, lashes and hair
@@ -29,9 +30,9 @@ export class SavedAppearanceActions {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   hasSavedV() { return !!this.state.savedV; }
   snapshot(): Readonly<SavedAppearanceState> { return structuredClone(this.state); }
-  capability(action: SavedAppearanceAction): { available: boolean; reason?: string } {
+  capability(action: SavedAppearanceAction): Capability {
     if (action.kind === "savedV.load" && action.bytes.byteLength > 128 * 1024 * 1024)
-      return { available: false, reason: "Save is larger than the supported limit." };
+      return refusal("limit", "Save is larger than the supported limit.");
     return { available: true };
   }
   dispatch(action: SavedAppearanceAction): Readonly<SavedAppearanceState> {

@@ -4,6 +4,7 @@ import type { FaceMorphChoice } from "./face-morphs";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
+import { refusal, type ReasonCode } from "./platform/api";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "piercingStyle" | "piercingDefinition" |
@@ -92,48 +93,54 @@ export class PreviewActions {
     return status ? structuredClone(status) : null;
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  /** The existing uncoded capability shape; the application reads the coded `check()`. */
   capability(action: PreviewAction): PreviewCapability {
+    const { code: _code, ...capability } = this.check(action);
+    return capability;
+  }
+  /** Capability with the reason code chosen at each refusal. */
+  check(action: PreviewAction): PreviewCapability & { code?: ReasonCode } {
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
-      return { available: false, reason: "Field of view must be between 10° and 90°." };
+      return refusal("invalid_value", "Field of view must be between 10° and 90°.");
     if (action.kind === "camera.navigate") {
       const invalid = validNavigation(action.command);
-      if (invalid) return { available: false, reason: invalid };
+      if (invalid) return refusal("invalid_value", invalid);
     }
     if (action.kind === "preview.setExposure" && (!Number.isFinite(action.value) || action.value < .5 || action.value > 2))
-      return { available: false, reason: "Exposure must be between 0.5 and 2." };
+      return refusal("invalid_value", "Exposure must be between 0.5 and 2.");
     if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
-      return { available: false, reason: "Key light angle must be between 0° and 360°." };
+      return refusal("invalid_value", "Key light angle must be between 0° and 360°.");
     if ((action.kind === "preview.setExposure" || action.kind === "preview.setKeyAngle") && this.state.lightingPreset === "creator")
-      return { available: false, reason: CREATOR_FIXED };
+      return refusal("invalid_value", CREATOR_FIXED);
     if (action.kind === "preview.setLightingPreset") {
-      if (!LIGHTING_PRESETS.includes(action.preset)) return { available: false, reason: "That lighting preset does not exist." };
-      if (action.preset === "creator" && !this.port.setLightingPreset) return { available: false, reason: NO_CREATOR };
+      if (!LIGHTING_PRESETS.includes(action.preset)) return refusal("invalid_value", "That lighting preset does not exist.");
+      if (action.preset === "creator" && !this.port.setLightingPreset) return refusal("unavailable", NO_CREATOR);
     }
     if (action.kind === "preview.setCreatorLighting") {
-      if (!this.port.setCreatorLighting) return { available: false, reason: NO_CREATOR };
+      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
       const valid = action.key === "intensity" ? INTENSITY_FORMS.includes(action.value)
         : action.key === "cone" ? CONE_READINGS.includes(action.value)
           : action.key === "exposure" && Number.isFinite(action.value) && action.value >= CREATOR_EXPOSURE_RANGE.min && action.value <= CREATOR_EXPOSURE_RANGE.max;
-      if (!valid) return { available: false, reason: action.key === "exposure"
-        ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist." };
+      if (!valid) return refusal("invalid_value", action.key === "exposure"
+        ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
     }
     if (action.kind === "camera.creatorFraming") {
-      if (!this.port.creatorCamera) return { available: false, reason: NO_CREATOR };
-      if (action.page !== "face" && action.page !== "hair") return { available: false, reason: "That creator page does not exist." };
+      if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
+      if (action.page !== "face" && action.page !== "hair") return refusal("invalid_value", "That creator page does not exist.");
     }
     if (action.kind === "preview.setEyeShape" && !this.validEyeShape(action.index))
-      return { available: false, reason: "That eye shape is not offered by this head." };
+      return refusal("invalid_value", "That eye shape is not offered by this head.");
     if (action.kind === "preview.setPiercingPreview" && action.style) {
       const option = this.port.piercingOptions?.().find(item => item.id === action.style);
       if (!option || !option.choices.some(choice => choice.definition === action.definition))
-        return { available: false, reason: "That piercing style or colour is unavailable." };
+        return refusal("unavailable", "That piercing style or colour is unavailable.");
     }
     if (action.kind === "preview.setPiercings" && action.enabled && !this.port.piercingOptions?.().length)
-      return { available: false, reason: "Piercing preview assets are unavailable." };
+      return refusal("asset_unavailable", "Piercing preview assets are unavailable.");
     const target = action.kind === "preview.setDetail" ? action.detail : action.kind === "preview.setHair" ? "hair" : undefined;
     const requested = action.kind === "preview.setDetail" || action.kind === "preview.setHair" ? action.enabled : false;
     const unavailable = target && requested && this.port.availability?.(target);
-    if (unavailable) return { available: false, reason: unavailable };
+    if (unavailable) return refusal("asset_unavailable", unavailable);
     return { available: true };
   }
   dispatch(action: PreviewAction): PreviewActionResult {

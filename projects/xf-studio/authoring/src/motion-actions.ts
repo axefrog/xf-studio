@@ -1,4 +1,5 @@
 import type { PreviewState } from "./workspace-state";
+import { refusal, type Capability } from "./platform/api";
 
 export type MotionState = Pick<PreviewState,
   "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying"> &
@@ -36,16 +37,17 @@ export class MotionActions {
       idleFace: idle?.faceEnabled ?? this.initial.idleFace,
       blink: this.blink, blinkPlaying: this.blinkPlaying };
   }
-  capability(action: MotionAction): { available: boolean; reason?: string } {
+  capability(action: MotionAction): Capability {
     if (action.kind === "motion.setBlink" && (!Number.isFinite(action.value) || action.value < 0 || action.value > 1))
-      return { available: false, reason: "Eyelid closure must be between 0 and 1." };
+      return refusal("invalid_value", "Eyelid closure must be between 0 and 1.");
     if ((action.kind === "motion.setIdle" && action.enabled || action.kind === "motion.setPaused" ||
       action.kind === "motion.setContributions") && !this.port.available)
-      return { available: false, reason: this.port.error ?? "Game idle is unavailable." };
+      return refusal("asset_unavailable", this.port.error ?? "Game idle is unavailable.");
     if (action.kind === "motion.setPaused" && !this.snapshot().idle)
-      return { available: false, reason: "Enable the game idle before pausing it." };
+      return refusal("invalid_value", "Enable the game idle before pausing it.");
+    // Kept as the code the facade gave this refusal before codes were structured (see the code-health ledger).
     if ((action.kind === "motion.setBlink" || action.kind === "motion.playBlink") && this.snapshot().idle)
-      return { available: false, reason: "Blink study is unavailable while the game idle is active." };
+      return refusal("asset_unavailable", "Blink study is unavailable while the game idle is active.");
     return { available: true };
   }
   /** Restore composition before clock and camera; pause never passes through the reset path. */

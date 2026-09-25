@@ -1,17 +1,18 @@
 import { editLayers, type LayerCommand } from "./layer-stack";
 import { MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
-import type { ActionCapability } from "./collection-actions";
+import type { CodedCapability } from "./collection-actions";
 import { nameIssue, positionIssue, refuse } from "./validation-issues";
+import { refusal } from "./platform/api";
 import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 
 export type LayerAction =
   | { kind: "layer.edit"; command: LayerCommand }
   | { kind: "layer.setEnabled"; id: string; enabled: boolean };
 
-export function layerCapability(recipe: Recipe, action: LayerAction): ActionCapability {
+export function layerCapability(recipe: Recipe, action: LayerAction): CodedCapability {
   const command = action.kind === "layer.edit" ? action.command : action;
   if ("id" in command && !recipe.layers.some(layer => layer.id === command.id))
-    return { available: false, reason: "That layer no longer exists." };
+    return refusal("missing_target", "That layer no longer exists.");
   if (action.kind === "layer.edit") {
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
       return refuse({ code: "range", message: `This preview currently supports up to ${MAX_LAYERS} layers.` });
