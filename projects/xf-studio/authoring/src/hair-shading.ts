@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { HairStop } from "./hair-preview";
-import { bakeHairProfile, HAIR_LIGHTING_VANILLA, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
+import { bakeHairProfile, HAIR_DITHER, HAIR_LIGHTING_VANILLA, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
   type ProfileEncoding } from "./hair-colour-model";
 
 /** Renderer adapter for the hair.mt colour model in hair-colour-model.ts.
@@ -41,7 +41,11 @@ export function attachHairVertexRed(geometry: THREE.BufferGeometry): boolean {
   return !!color;
 }
 
-/** Coverage only (for flat-coloured strands such as lashes): Strand_Alpha.r remapped by AlphaCutoff. */
+/**
+ * Coverage only (for flat-coloured strands such as lashes): Strand_Alpha.r remapped by AlphaCutoff,
+ * then stretched over the game's dither range (hairResolvedCoverage). Pair it with an opaque
+ * alpha-to-coverage material (STRAND_COVERAGE_MATERIAL or its over-makeup variant), not alpha blending.
+ */
 export function attachStrandCoverage(material: THREE.MeshStandardMaterial, alphaCutoff: number) {
   const prior = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
@@ -51,14 +55,49 @@ export function attachStrandCoverage(material: THREE.MeshStandardMaterial, alpha
         uniform float xfsAlphaCutoff;`).replace("#include <alphamap_fragment>", STRAND_COVERAGE_GLSL);
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-strand-coverage-1`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-strand-coverage-2`;
 }
 
+const glslFloat = (value: number) => value.toPrecision(9);
+/**
+ * Strand_Alpha.r remapped by AlphaCutoff, then the game's TAA-resolved dither coverage
+ * (hairResolvedCoverage): every layer in a pixel meets the same threshold, uniform on
+ * [offset, offset + 5·step). MSAA alpha-to-coverage keeps that nesting: its sample masks
+ * grow with alpha, so overlapping layers cover about as much as the most opaque one.
+ */
 const STRAND_COVERAGE_GLSL = `
-        // Strand_Alpha.r remapped by AlphaCutoff (the game dithers with this probability).
         float strandAlpha = texture2D(alphaMap, vAlphaMapUv).r;
-        diffuseColor.a *= xfsAlphaCutoff >= 1.0 ? 0.0 :
-          clamp(max(strandAlpha - xfsAlphaCutoff, 0.0) / (1.0 - xfsAlphaCutoff), 0.0, 1.0);`;
+        float strandRemapped = xfsAlphaCutoff >= 1.0 ? 0.0 :
+          clamp(max(strandAlpha - xfsAlphaCutoff, 0.0) / (1.0 - xfsAlphaCutoff), 0.0, 1.0);
+        diffuseColor.a *= clamp((strandRemapped - ${glslFloat(HAIR_DITHER.offset)}) / ${glslFloat(5 * HAIR_DITHER.step)}, 0.0, 1.0);`;
+
+/**
+ * Material flags for hair.mt strands: opaque, depth-writing, alpha-to-coverage with no alpha
+ * test, like the game's dithered G-buffer write. Alpha blending would instead combine layers
+ * independently (denser than the game where layers overlap) and depend on draw order.
+ */
+export const STRAND_COVERAGE_MATERIAL = Object.freeze({
+  transparent: false, depthWrite: true, alphaToCoverage: true, alphaTest: 0,
+} satisfies Partial<THREE.MeshStandardMaterialParameters>);
+
+/**
+ * The same coverage for strands that must draw after the transparent makeup layers (the lashes,
+ * kept above the editable stack by renderOrder): in Three's transparent queue, but unblended.
+ */
+export const STRAND_COVERAGE_OVER_MAKEUP_MATERIAL = Object.freeze({
+  ...STRAND_COVERAGE_MATERIAL, transparent: true, blending: THREE.NoBlending,
+} satisfies Partial<THREE.MeshStandardMaterialParameters>);
+
+/**
+ * Material flags for the hair cap. In game it is `mesh_decal_gradientmap_recolor.mt`, a
+ * post-G-buffer decal alpha-blended by its mask over the scalp with no depth write [resource].
+ * An opaque alpha-tested cap instead left a hard, jagged edge along the parting and wrote its
+ * partial mask into the canvas alpha. The engine blends in sqrt(albedo) space; this linear
+ * "over" blend is lighter at partial coverage (knowledge/hair-shading.md, preview mapping).
+ */
+export const HAIR_CAP_DECAL_MATERIAL = Object.freeze({
+  transparent: true, depthWrite: false, alphaTest: 0,
+} satisfies Partial<THREE.MeshStandardMaterialParameters>);
 
 /**
  * Direct light for strands, mirroring hairDirectLight (hair-colour-model.ts): the
@@ -237,5 +276,5 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
     }
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-5`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-6`;
 }

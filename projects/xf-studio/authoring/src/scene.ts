@@ -12,30 +12,40 @@ import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceA
 import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
 import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
-import { attachHairColor, attachHairLighting, attachHairVertexRed, attachStrandCoverage, hairProfileTexture } from "./hair-shading";
+import { attachHairColor, attachHairLighting, attachHairVertexRed, attachStrandCoverage, hairProfileTexture,
+  HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL, STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
 import { resolveHairMaterial, type ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
 import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
+import { createViewportBackdrop } from "./viewport-backdrop";
+import type { StageTheme } from "./stage-backdrop";
 
 export async function createScene(
   host: HTMLElement,
   canvases: HTMLCanvasElement[],
+  stage: StageTheme = "dark",
 ) {
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    alpha: true,
-    preserveDrawingBuffer: true,
+  // Opaque canvas: the stage is drawn in the scene (viewport-backdrop.ts), and the drawing buffer
+  // has no alpha channel, so fragments that write alpha below one (alpha-to-coverage hair, decals)
+  // cannot reveal the page behind the canvas. Three always requests an alpha channel for its own
+  // context (its `alpha: false` only clears alpha to one), so the context is created here.
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("webgl2", {
+    alpha: false, antialias: true, depth: true, stencil: false, preserveDrawingBuffer: true,
   });
+  if (!context) throw Error("WebGL 2 is unavailable");
+  const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setClearColor(0x14181c, 0);
+  renderer.setClearColor(0x14181c, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
   host.prepend(renderer.domElement);
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
+  const backdrop = createViewportBackdrop(scene, stage);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = MIN_CAMERA_DISTANCE;
@@ -76,7 +86,7 @@ export async function createScene(
   try { core = await loadCoreDetail(renderer); }
   catch (error) {
     // Release the WebGL context and canvas a failed first load would otherwise leak.
-    env.dispose(); controls.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
+    env.dispose(); backdrop.dispose(); controls.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     throw error;
   }
   const { gltf, meshes, head, plate } = core;
@@ -242,9 +252,8 @@ export async function createScene(
           ...(lash ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
           color: lash ? lash.color : color,
           alphaMap: alpha,
-          transparent: true,
-          depthWrite: false,
-          alphaTest: 0.01,
+          // Saved lashes are hair.mt: dithered coverage like the hair cards, drawn after the makeup stack.
+          ...(lash ? STRAND_COVERAGE_OVER_MAKEUP_MATERIAL : { transparent: true, depthWrite: false, alphaTest: 0.01 }),
           // Lash .mi chain: RoughnessScale 0, RoughnessBias 1. Three's GGX is not the game's hair BRDF.
           roughness: lash ? lash.roughness : 0.8,
           side: THREE.DoubleSide,
@@ -352,10 +361,10 @@ export async function createScene(
               ...(index && strand ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
               color: strand ? 0xffffff : 0x342c29,
               roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
-              // Strands: no alpha test, so MSAA alpha-to-coverage keeps coverage proportional to the
-              // remapped Strand_Alpha, like the game's dithered (TAA-resolved) coverage.
-              ...(index ? { alphaMap: alpha, alphaToCoverage: true, ...(strand ? {} : { alphaTest: 0.12 }) } :
-                cap ? { alphaMap: cap.mask, alphaTest: 0.08 } : {}),
+              // Strands: MSAA alpha-to-coverage with no alpha test, like the game's dithered
+              // (TAA-resolved) coverage; the cap is a mask-blended decal over the scalp.
+              ...(index ? { alphaMap: alpha, ...(strand ? STRAND_COVERAGE_MATERIAL : { alphaToCoverage: true, alphaTest: 0.12 }) } :
+                cap ? { alphaMap: cap.mask, ...HAIR_CAP_DECAL_MATERIAL } : {}),
             });
             // Source textures and CCXL profile stops, rendered with approximate Three lighting.
             o.material = mat;
@@ -870,6 +879,8 @@ export async function createScene(
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
     },
     setExposure: (v: number) => (renderer.toneMappingExposure = v),
+    /** Typed theme input for the stage backdrop; it never changes lighting. */
+    setStage: (theme: StageTheme) => backdrop.setTheme(theme),
     setLightAngle: (degrees: number) => {
       const a = (degrees * Math.PI) / 180;
       key.position.set(

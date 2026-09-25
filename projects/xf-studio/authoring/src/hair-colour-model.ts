@@ -153,6 +153,41 @@ export function hairCoverage(strandAlpha: number, alphaCutoff: number): number {
   return saturate(Math.max(strandAlpha - alphaCutoff, 0) / (1 - alphaCutoff));
 }
 
+/**
+ * The 2.31 hair dither, identical in `hair_alpha_accum` and `hair_gbuffer_solid` apart from its
+ * offset. The threshold depends only on the pixel centre (x, y) and a per-frame counter:
+ *   t = step · (5·frac(0.2·(x + 2y − 1.5 + frame)) + frac(2.4084506·x + 3.2535212·y)) + offset
+ * and a fragment survives when its remapped alpha exceeds t [source]. Because every layer in a
+ * pixel meets the same t, the layers' coverage is nested, not independent: a pixel is covered
+ * when its most opaque layer survives. t is close to uniform on [offset, offset + 5·step), so the
+ * five-frame cycle (resolved by TAA) covers `hairResolvedCoverage(max layer alpha)` of the pixel.
+ */
+export const HAIR_DITHER = Object.freeze({
+  step: 0.16535948,
+  /** `hair_gbuffer_solid`, the pass that writes the visible G-buffer. */
+  offset: 0.008843138,
+  /** `hair_alpha_accum` (k-buffer insertion): 2/255. */
+  accumOffset: 2 / 255,
+});
+
+const fract = (x: number) => x - Math.floor(x);
+
+/** Per-pixel, per-frame dither threshold (pixel centres at integer + 0.5, as SV_Position). */
+export function hairDitherThreshold(x: number, y: number, frame: number, offset = HAIR_DITHER.offset): number {
+  const coarse = fract(0.2 * (x + 2 * y - 1.5 + frame)), fine = fract(2.4084506 * x + 3.2535212 * y);
+  return HAIR_DITHER.step * (5 * coarse + fine) + offset;
+}
+
+/** Time-resolved coverage of one layer: the fraction of the dither range its alpha exceeds. Opaque from ~0.835. */
+export function hairResolvedCoverage(alpha: number): number {
+  return saturate((alpha - HAIR_DITHER.offset) / (5 * HAIR_DITHER.step));
+}
+
+/** Time-resolved coverage of a pixel crossed by several layers: the shared threshold makes it the most opaque layer's. */
+export function hairPixelCoverage(layerAlphas: readonly number[]): number {
+  return hairResolvedCoverage(layerAlphas.reduce((a, b) => Math.max(a, b), 0));
+}
+
 /** G-buffer roughness: ID-scaled roughness pulled toward ShadowRoughness by the shadow term. */
 export function hairRoughness(idSample: number, shadowFactor: number,
                               material: Pick<HairMaterialParameters, "roughnessScale" | "roughnessBias" | "shadowRoughness" | "shadowStrength">): number {

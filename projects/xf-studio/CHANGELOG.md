@@ -16,6 +16,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- **Hair looks the same in light and dark mode and is closer to how dense it looks in game.** The page behind the 3D view used to show through the hair, so hair looked much lighter in light mode and darker in dark mode. The 3D view now draws its own background, and hair and lashes cover the scalp the way the game's hair shader works it out, which makes them a little denser. The jagged dark edge at the hair parting is gone. Checked by measuring the same views in both themes in a browser run of the app; not yet compared with the game.
 - **Autosave rests when you do.** Your draft used to be saved again several times a second even when nothing had changed. It is now saved only after you change something.
 - **Your work no longer stops autosaving when you have lots of Undo history.** A big collection with long Undo histories could outgrow the browser's storage, and autosave then stopped without telling you. Saved drafts now keep full Undo for the preset you are working on and the last few steps for the others, so they stay well within the limit. If storage still runs short, the status bar tells you and suggests saving to the library.
 - **One damaged backup no longer loses your whole draft.** If an earlier draft kept for recovery, or a removed preset kept for Restore, was damaged, the Studio used to refuse to restore anything. It now drops just the damaged entry, restores the rest and tells you.

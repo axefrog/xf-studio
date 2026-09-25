@@ -18,6 +18,7 @@ import { emptyPresentationStatus, PresentationStatusSource } from "./presentatio
 import type { Layer } from "./recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
+import { bindStageTheme } from "./stage-theme-binding";
 import { mountStudio } from "./studio-ui/app";
 import { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import { createTrustedPreviewServices } from "./trusted-preview-services";
@@ -187,6 +188,8 @@ async function start() {
   async function attachHead() {
     try {
       scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
+      // The stage backdrop follows the resolved UI theme through the renderer's typed input.
+      bindStageTheme(scene, preferences, matchMedia("(prefers-color-scheme: dark)"));
       let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
       const services = createTrustedPreviewServices(workspace, createBrowserScenePreviewPorts(scene, {
         setSurfaceControls: enabled => surface?.setEnabled(enabled),
