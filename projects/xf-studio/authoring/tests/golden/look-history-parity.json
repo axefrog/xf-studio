@@ -1,0 +1,53 @@
+{
+ "capturedFrom": "0885ba6",
+ "small": {
+  "histories": "c7d6a14e495f4ebc4b37c5a732043f327d3e5a085b358974aaa856ea7abf6e14",
+  "stored": {
+   "size": 49879,
+   "text": "358726c6dc994c421c1ba5fdb1f568ff3c599c2e3551539b9610d6be24b1a8af",
+   "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
+  },
+  "session": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586",
+  "sessionFromStored": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586"
+ },
+ "loose": {
+  "histories": "a8c472f6064a1a896fe663f4b2109c12b04aa6aad629b51a113f69a2f44f9aa0",
+  "stored": {
+   "size": 18613,
+   "text": "44f759b5a25e8dbbabf9ab2f1e682db3fc9f05f610022ae84110d6bba2fadf36",
+   "histories": "a8c472f6064a1a896fe663f4b2109c12b04aa6aad629b51a113f69a2f44f9aa0"
+  },
+  "session": "df9248cac89247c6d518d0f29b58294035bcea3a596869c0c0ac585f9280087a",
+  "sessionFromStored": "df9248cac89247c6d518d0f29b58294035bcea3a596869c0c0ac585f9280087a"
+ },
+ "large": {
+  "histories": "a83cecf94060c00afada1a177a569feaf3d06e7a851b1f8956039b5f5a0dbec6",
+  "stored": {
+   "size": 1721484,
+   "text": "a4885a701c9b73ff62829ae10a864059d06bb0c4c2393eafc304f8bba6b2f971",
+   "histories": "7af0d42da5b785f5bedb1261010823bcd5f54b1fce24e137d531ecf4c416e561"
+  },
+  "session": "ec043086a6d00eefa536afeec902b26f251e1fc4399210c261fd2e3f3cf6d3ec",
+  "sessionFromStored": "ec043086a6d00eefa536afeec902b26f251e1fc4399210c261fd2e3f3cf6d3ec"
+ },
+ "damaged": {
+  "histories": "c7d6a14e495f4ebc4b37c5a732043f327d3e5a085b358974aaa856ea7abf6e14",
+  "stored": {
+   "size": 49879,
+   "text": "358726c6dc994c421c1ba5fdb1f568ff3c599c2e3551539b9610d6be24b1a8af",
+   "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
+  },
+  "session": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586",
+  "sessionFromStored": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586"
+ },
+ "preferences": {
+  "histories": "c7d6a14e495f4ebc4b37c5a732043f327d3e5a085b358974aaa856ea7abf6e14",
+  "stored": {
+   "size": 50103,
+   "text": "cb03516eee44b7fee72a8ae06ec498052eb8506e28927297e7eb861a3fecf9a5",
+   "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
+  },
+  "session": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586",
+  "sessionFromStored": "595b5f52b6bc4f6cde7af119f7a48c676021e26258ca53ce83261d1904c0b586"
+ }
+}
