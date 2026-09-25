@@ -45,10 +45,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
 | PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
-| PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives | Open (platform step 7) |
+| PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives. Worse since PIPE-01: Build cuts the plate from the head the launch route loads, while the preview still reads only `archive/pc/content` (`preview-core-recipe.ts:32` comment claims they share one head) | Open (platform step 7); fix the comment and add a preview notice meanwhile |
 | PREV-04 | Med | Preview export | Catch-all blames WolvenKit for cache/disk/JSON errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-05 | Med | Preview export | 'Head missing' inferred from missing outputs; tool failure misreported as blocked | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-06 | Med | Preview export | Duplicated WolvenKit runner (sixth invocation path) with preview-specific errors | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
+| PIPE-23 | Med | Pipeline | Colour-shift "one pigment" rule compares against all active layers, not exportable ones (`finish-export.ts:104`): a Colour-shifting layer plus a Glitter layer omits the whole preset | Open |
+| PIPE-24 | Med | Verifier | Verifier takes each preset's route from the builder's `build.json` (missing counts as flat); a Shimmer preset compiled flat would pass every gate. Route isn't in the manifest | Open |
+| PIPE-25 | Med | Pipeline/hosts | Every Build runs the full head-source resolver (source discovery, archive indexes, `.xl` files, head-archive hash) synchronously on the host, even when the plate is cached; extends PIPE-20 | Open |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -87,7 +90,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-09..16** (preview export, 25 Sep focused review): silent fallback to unhashed prepared files; host precedence drift; non-atomic cache write; no cache eviction or work-folder sweep; duplicate fingerprints; synchronous hashing on the request path; readiness passed via data attributes; test gaps (loader, error mapping, cache reuse).
 
 - **PIPE-15:** a candidate that fails the second result gate stays in `package-candidates/` (`desktop/build.ts:206-212`).
-- **PIPE-16:** plate input hashes aren't compared start vs end, and the verifier hard-codes 105 morphs. Being fixed in cleanup-pipeline.
+- **PIPE-16:** Fixed (plate inputs hashed at start and end; morph count comes from the plate recipe).
 - **PIPE-17:** `reg.exe` output is decoded as UTF-8, and process output is decoded per chunk (multi-byte splits).
 - **PIPE-18:** error codes are mapped by matching message prefixes; needs a typed `PackageFilterError`.
 - **PIPE-19:** stale comments in `mod-branding.ts` and `eye-plate-cache.ts` (the publish race comment).
@@ -106,6 +109,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-15:** preview reports ready for one frame after an edit; geometry cache recopies on double updates; reason codes come from matching message text.
 - **UI-19:** the header "Authoring category" drop-down still has a section that only says more categories are planned, with no action (`src/studio-ui/app.ts`). It breaks the actionable-menus rule.
 - **UI-20:** when the 3D preview is unavailable, the head view's input hints overlap the "3D preview unavailable" message.
+- **PIPE-26:** an incomplete source scan or unreadable archive index only becomes a progress note (`eye-plate-head-resolver.ts:32-34`), so a missed head mod silently yields a vanilla plate.
+- **PIPE-27:** the `plate_source_modded` message tells desktop users to set `XFS_EYE_PLATE_HEAD=base-game`; needs a setting or one-click action.
+- **PIPE-07/PIPE-17 (extended):** the verifier makes three blocking WolvenKit calls outside `wolvenkit-cli.ts` (no .NET-missing message), `desktop/build.ts` has its own spawn helper that kills only the process; `dotnet-runtime.ts` adds another UTF-8-decoded `reg.exe` reader duplicating `install-detection-host.ts`.
+- **PREV-17:** the WolvenKit post-install probe ignores the cancel signal (`wolvenkit-setup-host.ts:314`); Cancel does nothing for up to 30 s.
+- **PREV-18:** WolvenKit unpacking runs synchronously on the server, and the .NET registry check re-runs every 3 s while the card polls every 500 ms.
+- **PREV-19:** test gaps: `tool-download.ts` stall/redirect/length/oversize paths, `createInstalledHeadSource`, the PIPE-23 and PIPE-24 cases, and `process-tree`.
 
 ## New subsystems since last review
 
