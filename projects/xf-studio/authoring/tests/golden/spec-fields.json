@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1",
+ "capturedFrom": "a0aa2b1; studio lighting actions and exposure range added on claude/studio-lighting",
  "states": {
   "starter": {
    "modes": {
@@ -350,8 +350,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -360,6 +360,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -725,8 +768,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -735,6 +778,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -1097,8 +1183,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -1107,6 +1193,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -1469,8 +1598,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -1479,6 +1608,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -1841,8 +2013,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -1851,6 +2023,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -2411,8 +2626,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -2421,6 +2636,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -2793,8 +3051,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -2803,6 +3061,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -3165,8 +3466,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -3175,6 +3476,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -3537,8 +3881,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -3547,6 +3891,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -3909,8 +4296,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -3919,6 +4306,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -4480,8 +4910,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -4490,6 +4920,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -4863,8 +5336,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -4873,6 +5346,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -5235,8 +5751,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -5245,6 +5761,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -5607,8 +6166,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -5617,6 +6176,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -5979,8 +6581,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -5989,6 +6591,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -6549,8 +7194,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -6559,6 +7204,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -6931,8 +7619,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -6941,6 +7629,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -7303,8 +8034,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -7313,6 +8044,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -7675,8 +8449,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -7685,6 +8459,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -8047,8 +8864,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -8057,6 +8874,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -8617,8 +9477,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -8627,6 +9487,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -8999,8 +9902,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -9009,6 +9912,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -9371,8 +10317,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -9381,6 +10327,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -9743,8 +10732,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -9753,6 +10742,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -10115,8 +11147,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -10125,6 +11157,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -10688,8 +11763,8 @@
     },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "layer/preview.setKeyAngle": {
@@ -10698,6 +11773,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "layer/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "layer/preview.applyStudioSetup": {
+     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -11073,8 +12191,8 @@
     },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "point/preview.setKeyAngle": {
@@ -11083,6 +12201,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "point/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "point/preview.applyStudioSetup": {
+     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -11445,8 +12606,8 @@
     },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "viewport/preview.setKeyAngle": {
@@ -11455,6 +12616,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "viewport/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "viewport/preview.applyStudioSetup": {
+     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -11817,8 +13021,8 @@
     },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "collection/preview.setKeyAngle": {
@@ -11827,6 +13031,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "collection/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "collection/preview.applyStudioSetup": {
+     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -12189,8 +13436,8 @@
     },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.5,
-      "max": 2
+      "min": 0.125,
+      "max": 8
      }
     },
     "preset/preview.setKeyAngle": {
@@ -12199,6 +13446,49 @@
       "max": 360,
       "unit": "degrees"
      }
+    },
+    "preset/preview.setStudioLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setStudioLight/environment": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setStudioLight/key": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -30,
+      "max": 80,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setStudioLight/fill": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.setStudioLight/rim": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 4
+     }
+    },
+    "preset/preview.applyStudioSetup": {
+     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {

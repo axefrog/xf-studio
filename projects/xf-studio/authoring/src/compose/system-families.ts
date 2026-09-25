@@ -48,10 +48,12 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
     "camera.front": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
     "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
+    "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
     "preview.setEyeShape": true, "preview.setPiercingPreview": true, "preview.setPiercings": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
-    { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" } }),
+    { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },
+      "preview.setStudioLight": { "elevation.value": "degrees" } }),
 });
 
 export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTION_ID> = Object.freeze({

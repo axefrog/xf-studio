@@ -75,9 +75,12 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // preview is resolved on the same V. It starts following once the preview services have restored the workspace.
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
-    const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
+    const scenePorts = createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled), piercings: characterDetails,
-    }));
+    });
+    // The studio stage's adjustable rig (studio-light-rig.ts) joins the scene's preview port here.
+    const services = createTrustedPreviewServices(ports.workspace, { ...scenePorts,
+      preview: { ...scenePorts.preview, setStudioLights: lights => scene.setStudioLights(lights) } });
     savedAppearance = services.savedAppearance;
     ports.attach({ savedV: savedAppearance });
     releases.push(() => ports.attach({ savedV: undefined }));

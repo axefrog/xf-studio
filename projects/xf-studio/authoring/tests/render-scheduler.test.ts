@@ -237,7 +237,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
   // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
-  expect(source).toContain("const restored = () => { environment.restore(); makeup.contextRestored(); };");
+  expect(source).toContain("const restored = () => { studio.restore(); makeup.contextRestored(); };");
   expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
   // Behaviour: a skin-light change needs no composite pass, and an unchanged stack draws nothing more.
   const { createMakeupStack } = await import("../src/makeup-stack");

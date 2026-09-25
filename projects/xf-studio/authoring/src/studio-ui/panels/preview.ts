@@ -8,6 +8,7 @@ import { PANEL_META } from "../panel-meta";
 import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
 import type { LightingStatus } from "../../preview-actions";
 import type { DetailLimit } from "../../detail-limits";
+import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
@@ -122,7 +123,7 @@ function fact(mark: Element, title: string, detail: string) {
 
 /** One plain line about the lighting preset and where its colour grade came from. */
 export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
-  if (preset !== "creator") return "The Studio's own soft lighting, for authoring.";
+  if (preset !== "creator") return "The Studio's own lighting, for authoring. Pick a setup, then adjust it as you like.";
   const lut = status?.lut;
   const grade = !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
   return [`The game's character-creator lights (${status?.sex === "male" ? "male" : "female"} rig) on black, with fixed exposure.`, grade,
@@ -173,10 +174,35 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
     if (limited) setText(fovNote, "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV.");
   } });
-  const exposure = new Slider({ label: "Exposure", ...rt.range("preview.setExposure", "value"), step: .05, format: value => value.toFixed(2),
-    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setExposure", value }); } } });
-  const angle = new Slider({ label: "Key light angle", ...rt.range("preview.setKeyAngle", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
+  // Studio stage: named setups, then each control on its own (studio-lighting.ts). Exposure is in stops, on a log scale.
+  // The setups arrive with the preview's read model (StudioApplication.previewState().studioSetups).
+  let setupButtons: { id: StudioSetupId; button: HTMLButtonElement }[] = [];
+  const setupReadout = h("output", { class: "readout" });
+  const setupRow = h("div", { class: "chip-row", role: "group", "aria-label": "Studio lighting setup" });
+  const setups = h("div", { class: "control" }, h("span", { class: "control-label" }, h("span", { text: "Setup" }), setupReadout), setupRow);
+  const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
+  const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
+    format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
+    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); } } });
+  const angle = new Slider({ label: "Key light direction", ...rt.range("preview.setKeyAngle", "degrees"), step: 1,
+    format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
+      : degrees < 180 ? "from V's right" : "from V's left"}`; },
     transaction: { edit: degrees => { port.authoring.dispatch({ kind: "preview.setKeyAngle", degrees }); } } });
+  const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number) => new Slider({ label,
+    ...rt.range("preview.setStudioLight", "value", key), step, format,
+    transaction: { edit: value => { port.authoring.dispatch({ kind: "preview.setStudioLight", key, value }); } } });
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
+  const keyStrength = studioSlider("key", "Key light strength", percent, .05);
+  const environmentStrength = studioSlider("environment", "Room light (ambient and reflections)", percent, .05);
+  const fillStrength = studioSlider("fill", "Fill light strength", percent, .05);
+  const rimStrength = studioSlider("rim", "Rim light strength", percent, .05);
+  const neutral = new Toggle({ label: "Untinted lights", onChange: enabled => rt.dispatch({ kind: "preview.setStudioNeutral", enabled }) });
+  const resetStudio = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
+    title: "Put every studio light and the exposure back to Soft studio",
+    onClick: () => rt.dispatch({ kind: "preview.resetStudioLighting" }) });
+  const studioControls = h("div", { class: "section" }, setups, exposure.element, angle.element, elevation.element, keyStrength.element,
+    environmentStrength.element, fillStrength.element, rimStrength.element, neutral.element, h("div", { class: "row" }, resetStudio));
   const normals = new Toggle({ label: "Preview normal map", onChange: enabled => rt.dispatch({ kind: "preview.setNormals", enabled }) });
   const surface = new Toggle({ label: "Surface controls on the head", onChange: enabled => rt.dispatch({ kind: "preview.setSurfaceControls", enabled }) });
   const wire = new Toggle({ label: "Plate wireframe", onChange: enabled => rt.dispatch({ kind: "preview.setWire", enabled }) });
@@ -184,7 +210,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
     section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, creatorFace, creatorHair)),
-    section("Light", preset.element, presetNote, exposure.element, angle.element),
+    section("Light", preset.element, presetNote, studioControls),
     diagnostics,
     section("Display", surface.element, wire.element, normals.element, optics.element, opticsNote),
     note("Camera and light are workspace preferences: they persist locally and never enter recipes, Undo or export."));
@@ -198,8 +224,30 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
         const allowed = port.authoring.capability(action);
         return ready ? { disabled: !allowed.available, reason: allowed.reason } : loading;
       };
-      exposure.update(preview?.exposure, studioOnly({ kind: "preview.setExposure", value: preview?.exposure ?? 1.2 }));
+      // The studio controls belong to the studio stage: while the creator rig shows, only the switch back is offered.
+      studioControls.hidden = preview?.lightingPreset === "creator";
+      exposure.update(preview ? Math.log2(preview.exposure) : undefined, studioOnly({ kind: "preview.setExposure", value: preview?.exposure ?? 1.2 }));
       angle.update(preview?.lightAngle, studioOnly({ kind: "preview.setKeyAngle", degrees: preview?.lightAngle ?? 0 }));
+      const lights = preview?.studioLights;
+      for (const [slider, key] of [[elevation, "elevation"], [keyStrength, "key"], [environmentStrength, "environment"], [fillStrength, "fill"],
+        [rimStrength, "rim"]] as const) slider.update(lights?.[key], studioOnly({ kind: "preview.setStudioLight", key, value: lights?.[key] ?? 0 }));
+      neutral.update(!!lights?.neutral, { ...studioOnly({ kind: "preview.setStudioNeutral", enabled: !lights?.neutral }),
+        note: "Grey lights of the same brightness instead of the warm key and cool fill, for judging colour." });
+      const offered = frame.preview.studioSetups, matched = offered?.active ?? null;
+      const setupKey = JSON.stringify(offered?.setups ?? []);
+      if (setupRow.dataset.key !== setupKey) {
+        setupRow.dataset.key = setupKey;
+        setupButtons = (offered?.setups ?? []).map(entry => ({ id: entry.id, button: h("button", { class: "chip-button", type: "button",
+          "aria-pressed": "false", title: entry.title, "data-title": entry.title,
+          onclick: () => rt.dispatch({ kind: "preview.applyStudioSetup", setup: entry.id }) }, h("span", { text: entry.label })) }));
+        setupRow.replaceChildren(...setupButtons.map(item => item.button));
+      }
+      for (const { id, button: control } of setupButtons) {
+        control.setAttribute("aria-pressed", String(id === matched));
+        applyCapability(control, ready ? port.authoring.capability({ kind: "preview.applyStudioSetup", setup: id }) : { available: false, reason: loading.reason });
+      }
+      setText(setupReadout, !preview ? "" : offered?.setups.find(entry => entry.id === matched)?.label ?? "Adjusted");
+      applyCapability(resetStudio, ready ? port.authoring.capability({ kind: "preview.resetStudioLighting" }) : { available: false, reason: loading.reason });
       preset.update(preview?.lightingPreset, value => ready ? port.authoring.capability({ kind: "preview.setLightingPreset", preset: value }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
       applyCapability(creatorFace, port.authoring.capability({ kind: "camera.creatorFraming", page: "face" }));

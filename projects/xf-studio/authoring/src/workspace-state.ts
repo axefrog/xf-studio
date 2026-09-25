@@ -16,6 +16,7 @@ import {parseGlitterChoices, type GlitterChoices} from "./glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
+import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -26,8 +27,13 @@ export type PreviewState = {
   surface: boolean; wire: boolean; brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; normals: boolean; eyeOptics: boolean;
   piercingStyle: string; piercingDefinition: string;
   exposure: number; lightAngle: number; blink: number; blinkPlaying: boolean;
-  /** Viewport lighting preset; the studio stage is the default. `exposure` and `lightAngle` belong to it. */
+  /** Viewport lighting preset; the studio stage is the default. `exposure`, `lightAngle` and `studioLights` belong to it. */
   lightingPreset: LightingPreset;
+  /**
+   * The studio stage's strengths, key elevation and tint (studio-lighting.ts). Stored only when it differs from the original rig,
+   * so a workspace that never adjusts it keeps its stored bytes, and one saved before these controls loads the original rig.
+   */
+  studioLights: StudioLights;
   /** The creator preset's diagnostic switches and its exposure scalar. */
   creatorLighting: CreatorLightingOptions;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
@@ -83,8 +89,10 @@ export type WorkspaceState = {
  * look's memory is kept by feature beside it. View state (camera, UV view, preferences) is as in workspace-1.
  */
 export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active" | "selected" | "history" | "historyTrimmed" |
-  "fieldSelection" | "glitterChoices" | "collections" | "otherFeatures"> & {
+  "fieldSelection" | "glitterChoices" | "collections" | "otherFeatures" | "preview"> & {
   schema: typeof WORKSPACE_2;
+  /** The preview state; `studioLights` only when it differs from the original rig. */
+  preview: Omit<PreviewState, "studioLights"> & { studioLights?: StudioLights };
   look?: { parts: Record<string, PartEnvelope>; memory: Record<string, unknown> };
   features: Record<string, unknown>;
   collections?: ReturnType<typeof writeCollectionWorkspace>;
@@ -96,7 +104,8 @@ export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
       normals: true, eyeOptics: false, exposure: 1.2, lightAngle: 329, blink: 0, blinkPlaying: false,
-      lightingPreset: DEFAULT_LIGHTING_PRESET, creatorLighting: { ...DEFAULT_CREATOR_LIGHTING }, idle: false, idleTime: 0,
+      lightingPreset: DEFAULT_LIGHTING_PRESET, creatorLighting: { ...DEFAULT_CREATOR_LIGHTING },
+      studioLights: { ...DEFAULT_STUDIO_LIGHTS }, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
     library: { selected: "", name: "Untitled look" },
     uiPreferences: defaultUIPreferences(),
@@ -136,13 +145,17 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       if (typeof p[key] === "boolean") state.preview[key] = p[key];
     if (typeof p.piercingStyle === "string" && p.piercingStyle.length <= 128) state.preview.piercingStyle = p.piercingStyle;
     if (typeof p.piercingDefinition === "string" && p.piercingDefinition.length <= 128) state.preview.piercingDefinition = p.piercingDefinition;
-    for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", .5, 2], ["lightAngle", 0, 360],
+    for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max], ["lightAngle", 0, 360],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
     if (LIGHTING_PRESETS.includes(p.lightingPreset)) state.preview.lightingPreset = p.lightingPreset;
     if (validCreatorLighting(p.creatorLighting)) state.preview.creatorLighting = { intensity: p.creatorLighting.intensity,
       cone: p.creatorLighting.cone, exposure: p.creatorLighting.exposure };
+    // All or nothing: a damaged or partial rig falls back to the original one.
+    const lights = (p as { studioLights?: unknown }).studioLights;
+    if (validStudioLights(lights)) state.preview.studioLights = { environment: lights.environment, key: lights.key,
+      elevation: lights.elevation, fill: lights.fill, rim: lights.rim, neutral: lights.neutral };
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }
     else state.preview.idlePaused = false;
     const c = p.camera, vector = (x: unknown): x is number[] =>
@@ -251,7 +264,10 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
   const look = loose && {
     parts: registry.minimalLook({ id: "", name: "", revision: 1, parts: loose.parts }, false).parts,
     memory: registry.writeMemory(loose.memory, options) };
-  return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
+  // The studio rig is stored only when adjusted: workspaces that never touch it keep their bytes (studio-lighting.ts).
+  const { studioLights, ...preview } = view.preview;
+  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : view.preview;
+  return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view, preview: storedPreview,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
 }
 

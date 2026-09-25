@@ -2,6 +2,7 @@ import type { CollectionRequest } from "./collection-service";
 import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
@@ -111,8 +112,13 @@ export const ACTION_DESCRIPTORS = {
     intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
   "preview.resetCreatorLighting": desc("viewport", "workspace", "none"),
-  "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
-  "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
+  "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
+  "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
+  "preview.setStudioLight": desc("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },
+    Object.fromEntries(STUDIO_LIGHT_KEYS.map(key => [key, { value: input("number", STUDIO_LIGHT_RANGES[key].min, STUDIO_LIGHT_RANGES[key].max) }]))),
+  "preview.setStudioNeutral": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.applyStudioSetup": desc("viewport", "workspace", "none", { setup: enumerated(STUDIO_SETUP_IDS) }),
+  "preview.resetStudioLighting": desc("viewport", "workspace", "none"),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercingPreview": desc("viewport", "workspace", "none", { style: input("string"), definition: input("string") }),
   "preview.setPiercings": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
