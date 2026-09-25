@@ -34,7 +34,7 @@ const wolvenKitState = (phase: WolvenKitSetupState["phase"], patch: Partial<Wolv
 
 /** A scripted host: preparation and WolvenKit states, a switch to drop contact, and the settings it saved. */
 function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupState; autostart?: boolean; hostSetup?: boolean;
-  games?: string[]; unsupported?: string[]; loadHead?: () => Promise<void> } = {}) {
+  games?: string[]; unsupported?: string[]; issues?: { source: string; code: string; detail: string }[]; loadHead?: () => Promise<void> } = {}) {
   const host = { preview: options.preview ?? previewState({}), wolvenKit: options.wolvenKit ?? wolvenKitState("ready"),
     down: false, requests: [] as string[], preparing: 0, head: options.loadHead ?? (async () => {}) };
   const preparation = new PreviewPreparationActions(async action => {
@@ -68,7 +68,8 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
   });
   const detection = { dispatch: async () => ({ ok: true as const }),
     snapshot: () => ({ games: { candidates: (options.games ?? []).map(root => ({ root })),
-      unsupported: (options.unsupported ?? []).map(message => ({ source: "xbox", root: null, detail: "", message })) } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
+      unsupported: (options.unsupported ?? []).map(message => ({ source: "xbox", root: null, detail: "", message })),
+      issues: options.issues ?? [] } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
   let autostart = options.autostart ?? true, hostSetupOpened = 0;
   const links: string[] = [];
   const setup = new PreviewSetupActions({ preparation, wolvenKit, detection, localSetup, setupPlace: "Game & tools",
@@ -242,6 +243,34 @@ test("a recognised but unusable copy (the Xbox app's) explains itself on the gam
   await both.setup.start();
   await until(() => both.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
   expect(both.setup.snapshot().card.body).not.toMatch(/Xbox/);
+});
+
+test("with no game folder found, the card names the first thing the person can act on (PREV-33)", async () => {
+  const needsGame = () => previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, code: "preview_game_missing",
+    message: "Choose your Cyberpunk 2077 game folder." });
+  const epic = { source: "epic", code: "install_incomplete", detail: "The Epic Games Launcher says a Cyberpunk 2077 install hasn't finished. " +
+    "Let it finish, or verify the game in the launcher, then look again." };
+  const registry = { source: "steam", code: "registry_text_unreadable", detail: "Steam's record of where it installs games uses characters " +
+    "XF Studio can't read, so Cyberpunk 2077 may not have been found automatically. Choose your game folder instead." };
+  const informational = { source: "steam", code: "manifest_invalid", detail: "A Cyberpunk 2077 Steam manifest has no usable installdir." };
+  // An unfinished Epic install comes first, even beside an Xbox copy; informational issues are never the note.
+  const unfinished = harness({ preview: needsGame(), unsupported: [XBOX_UNSUPPORTED_MESSAGE], issues: [informational, registry, epic] });
+  await unfinished.setup.start();
+  await until(() => unfinished.setup.snapshot().card.body === epic.detail);
+  const unreadable = harness({ preview: needsGame(), issues: [informational, registry] });
+  await unreadable.setup.start();
+  await until(() => unreadable.setup.snapshot().card.body === registry.detail);
+  expect(unreadable.setup.snapshot().card.primary).toEqual({ label: "Choose game folder", action: { kind: "previewSetup.openSetup" } });
+  for (const h of [unfinished, unreadable]) for (const text of spoken(h.setup.snapshot())) expect(USER_FACING_JARGON.test(text), text).toBe(false);
+  // Nothing actionable: the card keeps its own wording. A found folder always wins over any note.
+  const quiet = harness({ preview: needsGame(), issues: [informational] });
+  await quiet.setup.start();
+  await until(() => quiet.setup.snapshot().card.body !== undefined);
+  expect(quiet.setup.snapshot().card.body).not.toContain("manifest");
+  const found = harness({ preview: needsGame(), games: ["D:\Games\Cyberpunk 2077"], issues: [epic] });
+  await found.setup.start();
+  await until(() => found.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
+  expect(found.setup.snapshot().card.body).not.toContain("Epic");
 });
 
 test("the WolvenKit consent is a port state, and closing it downloads nothing", async () => {

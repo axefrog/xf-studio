@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
-import { parseMountedDrives, type DetectionHostPort } from "./install-detection";
+import { localDriveRoots, type DetectionHostPort } from "./install-detection";
 import type { FrameworkHostPort } from "./framework-versions";
 import { describeMo2Instance, type Mo2InstanceDescription } from "./mo2-instance";
 
@@ -56,10 +56,22 @@ export function createWindowsDetectionHost(env: NodeJS.ProcessEnv = process.env,
       const buffer = whole(path, maxBytes);
       return buffer ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.length) : null;
     },
-    /** Local volumes Windows has assigned a letter (the mounted-device list), so no network share is probed. */
+    /**
+     * Fixed and removable volumes present now, from `GetLogicalDrives` and `GetDriveTypeW` (no process and
+     * no I/O on the volumes). Network drives are never probed, and stale letters in the registry's
+     * mounted-device list are not used. If the APIs are unavailable there are no drives, and detection
+     * falls back to its other leads.
+     */
     async drives() {
-      const text = await registry("HKLM\\SYSTEM\\MountedDevices");
-      return text ? parseMountedDrives(text) : [];
+      if (platform !== "win32") return [];
+      try {
+        const { dlopen, FFIType } = await import("bun:ffi");
+        const kernel = dlopen("kernel32.dll", { GetLogicalDrives: { args: [], returns: FFIType.u32 },
+          GetDriveTypeW: { args: [FFIType.ptr], returns: FFIType.u32 } });
+        try {
+          return localDriveRoots(kernel.symbols.GetLogicalDrives(), root => kernel.symbols.GetDriveTypeW(Buffer.from(`${root}\0`, "utf16le")));
+        } finally { kernel.close(); }
+      } catch { return []; }
     },
     /** Bounded window of a regular file (the framework check reads PE headers and `.rsrc` only). */
     readBytes(path, offset, length) {

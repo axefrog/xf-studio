@@ -3,7 +3,7 @@ import { join, resolve, sep } from "node:path";
 import { decodeQSettingsValue, describeMo2Instance, parseMo2Modlist, parseNxmHandlerIni,
   parseQSettingsIni } from "../src/mo2-instance";
 import { detectGameInstalls, detectMo2Instances, parseEpicInstallList, parseEpicManifest, parseGamingRoot,
-  parseMountedDrives, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths, XBOX_UNSUPPORTED_MESSAGE,
+  localDriveRoots, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths, XBOX_UNSUPPORTED_MESSAGE,
   type DetectionHostPort } from "../src/install-detection";
 
 // Synthetic, asset-free fixtures. Paths are placeholders under a fake drive, never a real machine.
@@ -139,9 +139,13 @@ test("Xbox, drive, Epic and BOM/CRLF inputs parse the way their writers lay them
   expect(parseGamingRoot(gamingRoot("Games\\GamePass"))).toEqual(["Games\\GamePass"]);
   expect(parseGamingRoot(gamingRoot("..\\escape", "C:\\absolute", "\\rooted", "Ok"))).toEqual(["Ok"]);
   expect(parseGamingRoot(new TextEncoder().encode("not a gaming root"))).toBeNull();
-  expect(parseMountedDrives(["", "HKEY_LOCAL_MACHINE\\SYSTEM\\MountedDevices",
-    "    \\DosDevices\\C:    REG_BINARY    444D494F3A49443A", "    \\??\\Volume{6c1de7f1-04e5}    REG_BINARY    5F003F00",
-    "    \\DosDevices\\f:    REG_BINARY    6E320983", ""].join("\r\n"))).toEqual(["C:\\", "F:\\"]);
+  // Present drives only, and only fixed or removable ones (PREV-32): A: floppy (2), C: fixed (3), D: optical (5),
+  // E: removable (2), N: network (4), R: RAM disk (6), Z: unknown (0). Letters absent from the mask are never asked about.
+  const types: Record<string, number> = { "A:\\": 2, "C:\\": 3, "D:\\": 5, "E:\\": 2, "N:\\": 4, "R:\\": 6, "Z:\\": 0 };
+  const asked: string[] = [];
+  const mask = [0, 2, 3, 4, 13, 17, 25].reduce((bits, bit) => bits | (1 << bit), 0);
+  expect(localDriveRoots(mask, root => { asked.push(root); return types[root] ?? 0; })).toEqual(["C:\\", "E:\\"]);
+  expect(asked).toEqual(["A:\\", "C:\\", "D:\\", "E:\\", "N:\\", "R:\\", "Z:\\"]);
   expect(parseEpicManifest(`${bom}{\r\n\t"InstallLocation": "X:\\\\Epic\\\\Cyberpunk2077",\r\n\t"bIsIncompleteInstall": true\r\n}`))
     .toMatchObject({ installLocation: "X:\\Epic\\Cyberpunk2077", incomplete: true });
   expect(parseEpicManifest('{"InstallLocation": ""}')).toBeNull();

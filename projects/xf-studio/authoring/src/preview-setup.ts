@@ -11,7 +11,7 @@
 import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
 import { headLoadFailureCode, type HeadLoadFailureCode } from "./head-load-error";
 import type { HostConnection } from "./host-state-poller";
-import type { InstallDetectionActions } from "./install-detection-actions";
+import { gameDetectionNote, type InstallDetectionActions } from "./install-detection-actions";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
 import { previewView, shouldAutoStart, type PreviewCardAction, type PreviewPreparationActions, type PreviewState } from "./preview-preparation";
@@ -331,7 +331,7 @@ export class PreviewSetupActions {
       const games = outcome.ok ? this.port.detection.snapshot().games : undefined;
       const candidates = games?.candidates ?? [];
       this.detectedGame = candidates.length === 1 ? candidates[0]!.root : null;
-      this.gameNote = !candidates.length ? games?.unsupported?.[0]?.message ?? null : null;
+      this.gameNote = gameDetectionNote(games);
     } catch { this.detectedGame = null; this.gameNote = null; }
     finally { this.detection = "done"; this.notify(); }
   }

@@ -141,7 +141,7 @@ test("the Three stage hides the studio stage for the creator rig and restores ex
   stage.setBodySex("male");
   expect(spots()).toHaveLength(14);
   stage.setPreset("studio"); stage.setPreset("creator"); stage.setPreset("studio");
-  expect(loads).toBe(1);
+  expect(loads).toBe(2); // each activation asks the host again (PREV-40)
   expect(scene.environment).toBe(environment);
   expect(scene.background).toBe(background);
   expect([key.visible, fill.visible, stage.rig.group.visible]).toEqual([true, false, false]);
@@ -149,5 +149,40 @@ test("the Three stage hides the studio stage for the creator rig and restores ex
   expect(renders).toEqual(["PerspectiveCamera"]);
   expect(changes).toBeGreaterThanOrEqual(5);
   expect(stage.camera("face")).toEqual({ position: [0, 1.67, -1.2], target: [0, 1.67, 0], fov: 15 });
+  stage.dispose();
+});
+
+test("the creator preset re-asks the host on activation and swaps the grade only when the host's cube changed (PREV-40)", async () => {
+  const scene = new THREE.Scene();
+  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  const source = (kind: "neutral" | "installed", note: string) => ({ kind, depotPath: null, archive: kind === "installed" ? "lut-a.archive" : null, group: null,
+    provider: null, alternatives: [], rule: null, size: null, note, skipped: [] });
+  const cube = (level: number) => ({ size: 2, data: new Float32Array(32).fill(level) }) as never;
+  const answers = [
+    { lut: null, file: null, source: source("neutral", "Colour grading: set up WolvenKit.") },
+    { lut: cube(0.25), file: "a".repeat(64) + ".bin", source: source("installed", "Colour grading: your LUT mod.") },
+    { lut: null, file: null, unreachable: true, source: source("neutral", "unreachable") },
+    { lut: cube(0.25), file: "a".repeat(64) + ".bin", source: source("installed", "Colour grading: your LUT mod.") },
+  ];
+  let loads = 0;
+  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: async () => answers[loads++]! });
+  const applied: unknown[] = [];
+  const setLut = stage.display.setLut.bind(stage.display);
+  stage.display.setLut = next => { applied.push(next); setLut(next); };
+  const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+  const reactivate = async () => { stage.setPreset("studio"); stage.setPreset("creator"); await settle(); };
+  stage.setPreset("creator"); await settle();
+  expect(stage.status().lut.source?.kind).toBe("neutral");
+  // WolvenKit became ready (a new installation fingerprint on the host): the next activation shows the LUT.
+  await reactivate();
+  expect(stage.status().lut.source?.note).toBe("Colour grading: your LUT mod.");
+  expect(applied).toHaveLength(2);
+  // A re-check that never reached the host keeps the grade; the same cube again is not re-applied.
+  await reactivate();
+  expect(stage.status().lut.source?.kind).toBe("installed");
+  await reactivate();
+  expect(applied).toHaveLength(2);
+  expect(loads).toBe(4);
   stage.dispose();
 });

@@ -31,7 +31,7 @@ export interface DetectionHostPort {
   files(path: string): readonly string[] | null;
   /** Bounded binary read; null when missing, not a regular file or larger than maxBytes. */
   readBinary(path: string, maxBytes: number): Uint8Array | null;
-  /** Roots of this computer's local drives (for example `C:\`), from the host's mounted-volume list. */
+  /** Roots of this computer's present fixed and removable drives (for example `C:\`); never network drives. */
   drives(): Promise<readonly string[]>;
 }
 
@@ -206,14 +206,21 @@ export function parseGamingRoot(bytes: Uint8Array): string[] | null {
   return new TextDecoder("utf-16le").decode(body).split("\0").map(path => path.trim())
     .filter(path => path && !/^[\\/]|:|(^|[\\/])\.\.([\\/]|$)/.test(path));
 }
-/** Local drive roots from `reg query HKLM\SYSTEM\MountedDevices` (value names such as `\DosDevices\C:`). */
-export function parseMountedDrives(text: string): string[] {
-  const letters = new Set<string>();
-  for (const entry of parseRegQuery(text)) for (const value of entry.values) {
-    const match = /^\\DosDevices\\([A-Z]):$/i.exec(value.name);
-    if (match) letters.add(match[1]!.toUpperCase());
+/** Windows drive types (`GetDriveTypeW`) whose volumes detection may look at. */
+export const DRIVE_REMOVABLE = 2, DRIVE_FIXED = 3;
+/**
+ * Roots of the drives present now (`GetLogicalDrives` bit mask, bit 0 = A:) that are fixed or removable
+ * volumes. Network, optical, RAM and unknown drives are never probed, so a mapped share that is offline
+ * cannot stall detection. A: and B: are skipped when removable (legacy floppy letters).
+ */
+export function localDriveRoots(mask: number, driveType: (root: string) => number): string[] {
+  const roots: string[] = [];
+  for (let bit = 0; bit < 26; bit++) {
+    if (!(mask & (1 << bit))) continue;
+    const root = `${String.fromCharCode(65 + bit)}:\\`, type = driveType(root);
+    if (type === DRIVE_FIXED || (type === DRIVE_REMOVABLE && bit > 1)) roots.push(root);
   }
-  return [...letters].sort().map(letter => `${letter}:\\`);
+  return roots;
 }
 /** What to tell someone whose copy comes from the Xbox app. Sources and limits:
  * research/authoring/source-discovery-foundation.md, "Store coverage". */
@@ -254,7 +261,7 @@ export async function detectGameInstalls(port: DetectionHostPort,
   const readable = (source: string, value: string) => {
     if (!lossy(value)) return true;
     issues.push({ source: source.toLowerCase(), code: "registry_text_unreadable",
-      detail: `A ${source} registry path has characters this check can't read; choose the folder manually if it isn't found.` });
+      detail: `${source}'s record of where it installs games uses characters XF Studio can't read, so Cyberpunk 2077 may not have been found automatically. Choose your game folder instead.` });
     return false;
   };
 
