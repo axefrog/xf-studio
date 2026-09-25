@@ -2,8 +2,9 @@
  * Owners of actions: platform system families and feature modules (feature-module
  * platform §1, §4). Registration is static and happens at composition time.
  */
-import type { ActionTable } from "./actions";
+import type { ActionTable, FeatureActionTable } from "./actions";
 import type { Capability, ReasonCode } from "./capability";
+import type { EditorCodec, MemoryCodec, PartCodec } from "./document";
 
 export type FeatureId = string & { readonly __feature: unique symbol };
 export type FamilyId = string & { readonly __family: unique symbol };
@@ -33,22 +34,32 @@ export interface SystemFamily<A extends { kind: string } = { kind: string }, Sco
 }
 
 /**
- * A feature module's pure core registration. Step 1 of the migration registers its action
- * table; the part and editor codecs, targets, context, gestures, character contribution and
- * exporter join it in later steps (feature-module platform §8).
+ * A feature module's pure core registration: its part codec, its editor-memory codecs and its
+ * action table with pure capability and apply (migration steps 1–2). Targets, context,
+ * gestures, the character contribution and the exporter join it in later steps
+ * (feature-module platform §8).
+ *
+ * `E` is the editor state the actions read: the per-look editor memory (`editor`) plus
+ * whatever the host adds from the feature-wide memory (`memory`) for that look.
  */
 export interface FeatureModule<A extends { kind: string } = { kind: string }, Scope extends string = string,
-  Id extends FeatureId = FeatureId> {
+  Id extends FeatureId = FeatureId, P = unknown, E = unknown, X = unknown> {
   readonly owner: "feature";
   readonly id: Id;
   readonly api: 1;
   readonly label: string;
   readonly stage: "stable" | "preview" | "dev";
-  readonly actions: ActionTable<A, Scope>;
+  readonly part: PartCodec<P>;
+  readonly editor: EditorCodec<unknown, P>;
+  readonly memory?: MemoryCodec<unknown>;
+  readonly actions: FeatureActionTable<P, E, A, Scope, X>;
 }
 
 export type ActionOwner<A extends { kind: string } = { kind: string }, Scope extends string = string> =
   SystemFamily<A, Scope, FamilyId> | FeatureModule<A, Scope, FeatureId>;
+/** A feature module seen by the platform, whatever its part and editor types. */
+export type AnyFeatureModule = Pick<FeatureModule, "id" | "label"> & {
+  readonly part: PartCodec<unknown>; readonly editor: EditorCodec<unknown, unknown>; readonly memory?: MemoryCodec<unknown> };
 
 /** The live behaviour an application binds to one owner: its capability check and dispatch. */
 export interface ActionHandler<A extends { kind: string }> {

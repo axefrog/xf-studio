@@ -1,13 +1,24 @@
 import { Database } from "bun:sqlite";
-import { parseCollection, type PresetCollection } from "./preset-collection";
+import { parseCollection } from "./preset-collection";
 import { parseRecipe } from "./recipe";
 import { LibraryError } from "./library-store";
+import { STUDIO_PARTS } from "./compose/studio-registry";
+import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
+import type { PartRegistry } from "./platform/core/document";
 
-export type StoredCollection = { collection: PresetCollection; revision: number; updatedAt: string };
+/** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
+export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
 export type CollectionSummary = { id: string; name: string; revision: number; count: number; updatedAt: string };
+/**
+ * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
+ * own schema: rows written before the look model hold `xfas/collection-1` JSON and are never
+ * rewritten. A save writes each new row in the oldest schema that holds it exactly, so a
+ * library of eye-makeup looks stays readable by 0.1.0-alpha.1; a look with parts that schema
+ * cannot hold is written as `xfs/collection-2` (feature-module platform §2).
+ */
 export class CollectionLibrary {
   private db: Database;
-  constructor(path: string) {
+  constructor(path: string, private parts: PartRegistry = STUDIO_PARTS) {
     this.db = new Database(path, { create: true, strict: true });
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     const { user_version: version } = this.db.query("PRAGMA user_version").get() as { user_version: number };
@@ -36,8 +47,9 @@ export class CollectionLibrary {
       WHERE revision=(SELECT MAX(revision) FROM collection_revisions WHERE collection_id=r.collection_id)
       ORDER BY (SELECT created_at FROM collections WHERE id=r.collection_id), collection_id`).all() as
       { collection_json: string; revision: number; updatedAt: string }[]).map(row => {
-        const collection = parseCollection(JSON.parse(row.collection_json), true);
-        return { id: collection.id, name: collection.name, count: collection.presets.length, revision: row.revision, updatedAt: row.updatedAt };
+        // Identity only: listing never parses parts, so a collection with a newer build's parts still lists.
+        const collection = this.parts.readIdentity(JSON.parse(row.collection_json));
+        return { id: collection.id, name: collection.name, count: collection.count, revision: row.revision, updatedAt: row.updatedAt };
       });
   }
   get(id: string, revision?: number): StoredCollection {
@@ -45,12 +57,22 @@ export class CollectionLibrary {
       WHERE collection_id=? AND (? IS NULL OR revision=?) ORDER BY revision DESC LIMIT 1`).get(id, revision ?? null, revision ?? null) as
       { collection_json: string; revision: number; updatedAt: string } | null;
     if (!row) throw new LibraryError("Collection not found.", 404);
-    return { collection: parseCollection(JSON.parse(row.collection_json), true), revision: row.revision, updatedAt: row.updatedAt };
+    return { collection: this.parts.readCollection(JSON.parse(row.collection_json), true), revision: row.revision, updatedAt: row.updatedAt };
   }
+  /** One stored preset row of either schema, as a look. */
+  private readPresetRow(json: string): Look {
+    const value = JSON.parse(json) as { parts?: unknown };
+    return this.parts.readPreset(value, value && typeof value === "object" && "parts" in value ? COLLECTION_2 : COLLECTION_1);
+  }
+  /**
+   * Save a new revision. A preset gets a new version only when its name or content changed;
+   * content is compared canonically (parsed and serialized by its codecs, keys sorted), so a
+   * row stored in an older schema or key order never counts as a change.
+   */
   save(value: unknown): StoredCollection {
     const input = value as { collection?: unknown; revision?: number };
-    let collection: PresetCollection;
-    try { collection = parseCollection(input?.collection, true); } catch { throw new LibraryError("Invalid collection; nothing was saved."); }
+    let collection: LookCollection;
+    try { collection = this.parts.readCollection(input?.collection, true); } catch { throw new LibraryError("Invalid collection; nothing was saved."); }
     return this.db.transaction(() => {
       const exists = this.db.query("SELECT id FROM collections WHERE id=?").get(collection.id);
       const previous = exists ? this.get(collection.id) : undefined;
@@ -62,14 +84,15 @@ export class CollectionLibrary {
       collection.presets = collection.presets.map(p => {
         const row = this.db.query(`SELECT preset_json FROM collection_preset_versions WHERE collection_id=? AND preset_id=?
           ORDER BY revision DESC LIMIT 1`).get(collection.id, p.id) as { preset_json: string } | null;
-        const old = row ? JSON.parse(row.preset_json) as PresetCollection["presets"][number] : undefined;
-        const changed = old && (old.name !== p.name || JSON.stringify(old.recipe) !== JSON.stringify(p.recipe));
+        const old = row ? this.readPresetRow(row.preset_json) : undefined;
+        const changed = old && (old.name !== p.name || this.parts.canonicalParts(old.parts) !== this.parts.canonicalParts(p.parts));
         const preset = { ...p, revision: old ? old.revision + (changed ? 1 : 0) : p.revision };
         if (!old || changed) this.db.query("INSERT INTO collection_preset_versions VALUES (?, ?, ?, ?)")
-          .run(collection.id, preset.id, preset.revision, JSON.stringify(preset));
+          .run(collection.id, preset.id, preset.revision, JSON.stringify(this.parts.writePresetMinimal(preset)));
         return preset;
       });
-      this.db.query("INSERT INTO collection_revisions VALUES (?, ?, ?, ?)").run(collection.id, revision, JSON.stringify(collection), updatedAt);
+      this.db.query("INSERT INTO collection_revisions VALUES (?, ?, ?, ?)")
+        .run(collection.id, revision, JSON.stringify(this.parts.writeMinimal(collection)), updatedAt);
       return { collection, revision, updatedAt };
     }).immediate();
   }

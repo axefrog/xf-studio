@@ -3,6 +3,7 @@ import { editPigment } from "../src/pigment-edit";
 import { initialRecipe, parseRecipe, DEFAULT_STRENGTH_BLEND } from "../src/recipe";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { editLayers } from "../src/layer-stack";
+import { storedWorkspace } from "./fixtures/looks";
 
 test("explicit smooth upgrade and pigment edits preserve old draft/history through reload", () => {
   const old = { ...initialRecipe(), schema: "xfs/recipe-3",
@@ -17,7 +18,7 @@ test("explicit smooth upgrade and pigment edits preserve old draft/history throu
   expect(state.recipe.layers[0].strength).toEqual({ mode: "smooth-boundary", blend: DEFAULT_STRENGTH_BLEND });
   state.recipe.layers[0] = editPigment(state.recipe.layers[0], { kind: "strength-blend", value: .004 });
   state.recipe.layers[0] = editPigment(state.recipe.layers[0], { kind: "point-strength", index: 2, value: .3 });
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(state)));
+  const restored = parseWorkspace(storedWorkspace(state));
   expect(restored.recipe).toEqual(state.recipe);
   expect(restored.history.at(-1)).toEqual(legacySnapshot);
   expect(JSON.stringify(old)).toBe(original);

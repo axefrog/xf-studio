@@ -10,6 +10,7 @@ import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
 import {UnsupportedMaterialError,compileFlatPreset} from "../src/preset-compiler";
+import { storedWorkspace } from "./fixtures/looks";
 
 test("recipe-7 opt-in is strict while recipe-6 glitter preserves its legacy model",()=>{
   const recipe=initialRecipe(),layer=recipe.layers[0];layer.finish="glitter";
@@ -30,7 +31,7 @@ test("new settings survive workspace, collection and SQLite while game export st
   const recipe=initialRecipe();recipe.layers[0].finish="glitter";recipe.layers[0].color="#351747";
   recipe.layers[0].flakes={...defaultIrregularFlakes(),color:"#ffe1a3",count:4096};
   const workspace=freshWorkspace(recipe);workspace.history=[initialRecipe()];
-  const restored=parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  const restored=parseWorkspace(storedWorkspace(workspace));
   expect(restored.recipe.layers[0].flakes).toEqual(recipe.layers[0].flakes);
   expect(restored.history[0].layers[0].finish).toBe("matte");
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Study",

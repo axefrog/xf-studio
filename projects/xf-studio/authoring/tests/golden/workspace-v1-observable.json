@@ -1,0 +1,43 @@
+{
+ "capturedFrom": "pre-migration code, commit 9dbf576",
+ "small": {
+  "warning": null,
+  "first": "618f7db21dbb314efcca3e1a65b3a4afd9364acaafcdaf684c1fadde3e4fb87e",
+  "levels": [
+   "a784dd1be0a8175f390042f670567522e3205cb7991bd9e9432287a8ffe03857",
+   "7aa7339a4e3b7049186bf0e2a16952ec2889171915fc54e64599990db37c61a3",
+   "fa4585e43541fb8dbbbad4a3576f76d90814644b542d8d90d47fbec7ea2df664",
+   "3a6e4bbff0af26777704456031437f12a9c35f663495ceaed215694b58d5fd11"
+  ]
+ },
+ "loose": {
+  "warning": null,
+  "first": "8688f0f4e0c197c5687291eb12b75c7af183f36c90e3ac2045e9d372cdb157c8",
+  "levels": [
+   "8688f0f4e0c197c5687291eb12b75c7af183f36c90e3ac2045e9d372cdb157c8",
+   "8688f0f4e0c197c5687291eb12b75c7af183f36c90e3ac2045e9d372cdb157c8",
+   "8688f0f4e0c197c5687291eb12b75c7af183f36c90e3ac2045e9d372cdb157c8",
+   "19f8216a76b7db5702a7882820b112d5a90fcfa80c19d1c22267aab7c2e4ed76"
+  ]
+ },
+ "large": {
+  "warning": null,
+  "first": "2b34f31f5c001ac7bafdb2add8bc8f1a1c8a629db8a5111c1f1e67ffbf4afe4a",
+  "levels": [
+   "56c0d71c10cab50899f920af1dda7b4cfa8cbbe8bb1bc7af40068b05de442517",
+   "86ed1b2b10b465488eaa1a212aff60714de60fca66e564b566fb475870198f2f",
+   "334ede943a1bc6d96e40afefca05e0548aa179684c61e79a7a5ad4a93d917130",
+   "b89ff37b8244355ffcbc3810838aa2bb2b0cf5e1264726b01cceaeb956f05693"
+  ]
+ },
+ "damaged": {
+  "warning": "2 damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.",
+  "first": "618f7db21dbb314efcca3e1a65b3a4afd9364acaafcdaf684c1fadde3e4fb87e",
+  "levels": [
+   "a784dd1be0a8175f390042f670567522e3205cb7991bd9e9432287a8ffe03857",
+   "7aa7339a4e3b7049186bf0e2a16952ec2889171915fc54e64599990db37c61a3",
+   "fa4585e43541fb8dbbbad4a3576f76d90814644b542d8d90d47fbec7ea2df664",
+   "3a6e4bbff0af26777704456031437f12a9c35f663495ceaed215694b58d5fd11"
+  ]
+ }
+}

@@ -9,7 +9,8 @@ import { CollectionSession, type EditorSnapshot } from "../src/collection-sessio
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
 import { parseCollection, planCollection } from "../src/preset-collection";
-import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { recipeOf } from "./fixtures/looks";
 
 test("preset switching retains unsaved recipes, selections and Undo; structural operations preserve export identity", () => {
   const id = crypto.randomUUID(), original = { id: crypto.randomUUID(), name: "Original", revision: 1, recipe: initialRecipe() };
@@ -33,8 +34,9 @@ test("preset switching retains unsaved recipes, selections and Undo; structural 
   expect(() => planCollection(session.state.collection)).toThrow();
   const workspace = freshWorkspace(); workspace.collections = session.snapshot();
   // Sidebar-shell disclosure state saved by earlier builds is ignored on restore.
-  const restored = parseWorkspace(JSON.parse(JSON.stringify({ ...workspace,
-    collections: { ...workspace.collections, filesOpen: true, expanded: false } })));
+  const stored = serializeWorkspace(workspace);
+  const restored = parseWorkspace(JSON.parse(JSON.stringify({ ...stored,
+    collections: { ...stored.collections, filesOpen: true, expanded: false } })));
   expect(restored.collections!.removed).toHaveLength(2); expect(restored.recipe.layers).toHaveLength(0);
   expect(restored.collections).not.toHaveProperty("filesOpen");
   expect(restored.collections).not.toHaveProperty("expanded");
@@ -52,12 +54,12 @@ test("opening collections is recoverable and save completion never overwrites ed
   const sent = session.snapshot().collection;
   editor.recipe.layers[0].color = "#ffeedd";
   session.saved({ collection: { ...sent, id: crypto.randomUUID() }, revision: 1, updatedAt: "now" }, a.id);
-  expect(session.snapshot().collection.presets[0].recipe.layers[0].color).toBe("#ffeedd");
+  expect(recipeOf(session.snapshot().collection.presets[0]).layers[0].color).toBe("#ffeedd");
   const priorId = session.state.collection.id;
   session.open({ ...a, id: crypto.randomUUID(), presets: [] });
   expect(editor.recipe.layers).toHaveLength(0);
   const ws = freshWorkspace(); ws.collections = session.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(ws)));
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(ws))));
   const next = new CollectionSession(restored.collections!, () => editor, e => editor = e);
   next.undoOpen(); expect(editor.recipe.layers[0].color).toBe("#ffeedd"); expect(next.state.collection.id).toBe(priorId);
   next.importRecipe(initialRecipe(), "Portable"); expect(next.state.collection.presets).toHaveLength(2);
@@ -111,7 +113,8 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
     expect(looks.get(old.id)).toEqual(old); expect(db.get(initial.collection.id)).toEqual(recovered);
     const separate = db.save({ collection: { ...edited, id: crypto.randomUUID() } });
     expect(separate.revision).toBe(1); expect(db.list()).toHaveLength(2);
-    expect(() => db!.save({ collection: { ...edited, presets: [{ ...edited.presets[0], recipe: {} }] }, revision: 5 })).toThrow("Invalid");
+    expect(() => db!.save({ collection: { ...edited, presets: [{ ...edited.presets[0],
+      parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: {} } } }] }, revision: 5 })).toThrow("Invalid");
     expect(db.get(initial.collection.id)).toEqual(recovered);
   } finally { db?.close(); looks.close(); rmSync(dir, { recursive: true, force: true }); }
 });

@@ -7,6 +7,7 @@ import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { storedWorkspace } from "./fixtures/looks";
 
 function port(options: { creator?: boolean } = {}) {
   const calls: string[] = [], listeners = new Set<() => void>();
@@ -98,10 +99,10 @@ test("the workspace keeps the preset and diagnostics, and restore applies them",
   const workspace = freshWorkspace();
   workspace.preview.lightingPreset = "creator";
   workspace.preview.creatorLighting = { intensity: "cone", cone: "full", exposure: 1.5 };
-  const parsed = parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  const parsed = parseWorkspace(storedWorkspace(workspace));
   expect(parsed.preview.lightingPreset).toBe("creator");
   expect(parsed.preview.creatorLighting).toEqual({ intensity: "cone", cone: "full", exposure: 1.5 });
-  const damaged = parseWorkspace({ ...JSON.parse(JSON.stringify(workspace)), preview: { ...workspace.preview, lightingPreset: "disco",
+  const damaged = parseWorkspace({ ...storedWorkspace(workspace), preview: { ...workspace.preview, lightingPreset: "disco",
     creatorLighting: { intensity: "cone", cone: "full", exposure: -1 } } });
   expect(damaged.preview.lightingPreset).toBe("studio");
   expect(damaged.preview.creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);

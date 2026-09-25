@@ -4,7 +4,8 @@
  * to `StudioOwnerActions`; the compiler then requires `StudioApplication` to bind a handler.
  */
 import { Registry } from "../platform/core/registry";
-import { EYE_MAKEUP, type EyeMakeupAction } from "../features/eye-makeup";
+import { PartRegistry } from "../platform/core/document";
+import { EYE_MAKEUP, EYE_MAKEUP_ID, type EyeMakeupAction } from "../features/eye-makeup";
 import { COLLECTION_FAMILY, HISTORY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY, SAVED_V_FAMILY,
   type CollectionStudioAction, type HistoryAction } from "./system-families";
 import type { MotionAction } from "../motion-actions";
@@ -35,3 +36,15 @@ const exact: [ListedIds] extends [StudioOwnerId] ? [Unlisted] extends [never] ? 
 void exact;
 
 export const STUDIO_REGISTRY = new Registry<(typeof STUDIO_OWNERS)[number]>(STUDIO_OWNERS);
+
+/** Every registered feature's part and editor codecs: the document model's composition list. */
+export const STUDIO_PARTS = new PartRegistry(STUDIO_OWNERS.filter(owner => owner.owner === "feature"));
+/**
+ * The feature the one live editor document edits. Until the look history (migration step 4)
+ * the authoring document holds eye makeup's part; other parts of a look are carried unchanged.
+ */
+export const LIVE_FEATURE = EYE_MAKEUP_ID;
+/** Eye makeup's feature ID, for the eye-makeup package pipeline's view of a look collection (moves with the exporter, step 8). */
+export const EYE_MAKEUP_FEATURE = EYE_MAKEUP_ID;
+export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
+  EyeMakeupState } from "../features/eye-makeup";

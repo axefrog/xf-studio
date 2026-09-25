@@ -1,18 +1,22 @@
 /**
- * Eye makeup, feature module #1 (feature-module platform §1). Migration step 1 registers its
- * existing action table as-is: the recipe actions and the layer-structure actions, with their
- * descriptors and Undo policies from `studio-action-descriptors.ts`. The eye-makeup files stay
- * where they are until step 5 moves them here and into `engines/layered-makeup`; until then this
- * module imports them from `src/` (recorded in the design's step 1 status).
+ * Eye makeup, feature module #1 (feature-module platform §1). It registers its part codec
+ * (`xfs/eye-makeup-part-1`, the recipe), its editor-memory codecs and its action table: the
+ * existing descriptors and Undo policies from `studio-action-descriptors.ts` with a pure
+ * capability and apply (migration step 2). The eye-makeup files stay where they are until
+ * step 5 moves them here and into `engines/layered-makeup`; until then this module imports
+ * them from `src/` (recorded in the design's step 1 status).
  */
-import { actionTable, featureId, type FeatureModule } from "../../platform/api";
-import type { LayerAction } from "../../editor-actions";
-import type { RecipeAction } from "../../recipe-actions";
+import { featureActionTable, featureId, type FeatureModule } from "../../platform/api";
+import type { Recipe } from "../../recipe";
 import { ACTION_DESCRIPTORS, type ActionScope } from "../../studio-action-descriptors";
+import { applyEyeMakeup, eyeMakeupCapability, type EyeMakeupAction, type EyeMakeupEditorState,
+  type EyeMakeupEffect } from "./core";
+import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";
 
 export const EYE_MAKEUP_ID = featureId("eye-makeup");
-/** Every eye-makeup action: recipe edits and layer structure. Kinds are grandfathered, unqualified. */
-export type EyeMakeupAction = RecipeAction | LayerAction;
+export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./core";
+export type { EyeMakeupEditor, EyeMakeupMemory } from "./part";
+export { EYE_MAKEUP_PART_1, RECIPE_SCHEMAS } from "./part";
 
 /** Registration order is the catalogue order the descriptor table has always had. */
 const KINDS: Record<EyeMakeupAction["kind"], true> = {
@@ -25,7 +29,10 @@ const KINDS: Record<EyeMakeupAction["kind"], true> = {
   "field.setVector": true, "layer.edit": true, "layer.setEnabled": true,
 };
 
-export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, ActionScope, typeof EYE_MAKEUP_ID> = Object.freeze({
+export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, ActionScope, typeof EYE_MAKEUP_ID, Recipe, EyeMakeupEditorState,
+  EyeMakeupEffect> = Object.freeze({
   owner: "feature", id: EYE_MAKEUP_ID, api: 1, label: "Eye makeup", stage: "stable",
-  actions: actionTable<EyeMakeupAction, ActionScope>(ACTION_DESCRIPTORS, KINDS),
+  part: eyeMakeupPart, editor: eyeMakeupEditor, memory: eyeMakeupMemory,
+  actions: featureActionTable<Recipe, EyeMakeupEditorState, EyeMakeupAction, ActionScope, EyeMakeupEffect>(
+    ACTION_DESCRIPTORS, KINDS, { capability: eyeMakeupCapability, apply: applyEyeMakeup }),
 });

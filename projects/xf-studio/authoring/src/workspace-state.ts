@@ -1,7 +1,9 @@
-import { initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
+import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
-import { parseCollectionWorkspace, emptyMemory, emptyRecipe, type CollectionWorkspace,
-  type RestoreWarnings } from "./collection-workspace";
+import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, writeCollectionWorkspace,
+  type CollectionWorkspace, type RestoreWarnings } from "./collection-workspace";
+import { LIVE_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
+import type { LookMemory, PartEnvelope } from "./platform/api";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
@@ -26,8 +28,15 @@ export type PreviewState = {
   creatorLighting: CreatorLightingOptions;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
 };
+export const WORKSPACE_1 = "xfas/workspace-1";
+export const WORKSPACE_2 = "xfs/workspace-2";
+/**
+ * The live workspace. The editor fields (`recipe` … `fieldSelection`) are the one live document's
+ * state (eye makeup's part and editor memory) and `glitterChoices` is eye makeup's feature-wide
+ * memory; `serializeWorkspace` stores them per feature (`xfs/workspace-2`).
+ */
 export type WorkspaceState = {
-  schema: "xfas/workspace-1";
+  schema: typeof WORKSPACE_2;
   recipe: Recipe; active: number; selected: number; history: Recipe[];
   /** Present (true) only when older Undo entries than `history[0]` were dropped. */
   historyTrimmed?: boolean;
@@ -45,10 +54,28 @@ export type WorkspaceState = {
    * follows the verification scope and survives the desktop's changing loopback port.
    */
   previewSetup?: { autostart: boolean };
+  /**
+   * Entries of features this build does not register (from a newer build), carried unchanged:
+   * the loose look's other parts and memory, and other features' workspace memory.
+   */
+  otherFeatures?: { parts?: Record<string, PartEnvelope>; memory?: LookMemory; features?: Record<string, unknown> };
+};
+/**
+ * The stored `xfs/workspace-2` document. Editor memory is per feature: `look` is the editor
+ * when no collection draft owns it (absent when `collections` is present, whose selected look
+ * restores the editor), `features` is each feature's workspace-wide memory, and each collection
+ * look's memory is kept by feature beside it. View state (camera, UV view, preferences) is as in workspace-1.
+ */
+export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active" | "selected" | "history" | "historyTrimmed" |
+  "fieldSelection" | "glitterChoices" | "collections" | "otherFeatures"> & {
+  schema: typeof WORKSPACE_2;
+  look?: { parts: Record<string, PartEnvelope>; memory: Record<string, unknown> };
+  features: Record<string, unknown>;
+  collections?: ReturnType<typeof writeCollectionWorkspace>;
 };
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
-    schema: "xfas/workspace-1", recipe, active: 0, selected: 0, history: [],
+    schema: WORKSPACE_2, recipe, active: 0, selected: 0, history: [],
     uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
@@ -65,23 +92,17 @@ const uuid = (x: unknown): x is string => typeof x === "string" && /^[0-9a-f]{8}
 
 /**
  * A versioned workspace is one atomic document; recipe files remain portable makeup only.
- * With `warnings`, damaged recovery drafts and removed presets are dropped (and noted)
- * instead of failing the restore; the current draft must always parse.
+ * Reads the stored `xfs/workspace-2` and, losslessly, `xfas/workspace-1` (its recipe, editor
+ * memory and Undo histories become eye makeup's part and memory; `glitterChoices` becomes eye
+ * makeup's feature memory). With `warnings`, damaged recovery drafts and removed presets are
+ * dropped (and noted) instead of failing the restore; the current draft must always parse.
  */
 export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): WorkspaceState {
-  const v = value as WorkspaceState;
-  if (!v || v.schema !== "xfas/workspace-1") throw Error("Unsupported workspace version");
-  const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
+  const v = value as Record<string, unknown> & Partial<WorkspaceState>;
+  if (!v || (v.schema as string) !== WORKSPACE_1 && v.schema !== WORKSPACE_2) throw Error("Unsupported workspace version");
+  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v) : readEditorV2(v as unknown as StoredWorkspace);
   state.uiPreferences = parseUIPreferences(v.uiPreferences);
   state.uvView = parseUVView(v.uvView);
-  state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
-  state.glitterChoices = parseGlitterChoices(v.glitterChoices);
-  if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active;
-  if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1)) state.selected = v.selected;
-  if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
-    try { state.history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
-  }
-  if (v.historyTrimmed === true || (Array.isArray(v.history) && v.history.length > 80)) state.historyTrimmed = true;
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
   const p = v.preview;
   if (p && typeof p === "object") {
@@ -119,15 +140,71 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
   // widths, scroll positions, open sections). It is ignored here and not written again; the
   // Studio's dock layout lives in `uiPreferences`.
   if (v.collections !== undefined) {
-    state.collections = parseCollectionWorkspace(v.collections, warnings);
+    state.collections = (v.schema as string) === WORKSPACE_1 ? readCollectionWorkspaceV1(v.collections, warnings)
+      : parseCollectionWorkspace(v.collections, warnings);
+    // The selected look restores the editor; any loose editor copy is ignored.
     const preset = state.collections.collection.presets.find(p => p.id === state.collections!.selected);
-    state.recipe = preset ? structuredClone(preset.recipe) : emptyRecipe();
-    const memory = preset ? state.collections.editors[preset.id] ?? emptyMemory() : emptyMemory();
-    state.active = memory.active; state.selected = memory.selected; state.history = memory.history;
+    const recipe = livePart(preset);
+    state.recipe = recipe ? structuredClone(recipe) : emptyRecipe();
+    const memory = liveMemory(preset ? state.collections.memory[preset.id] : undefined);
+    state.active = memory.active; state.selected = memory.selected; state.history = structuredClone(memory.history);
     if (memory.historyTrimmed) state.historyTrimmed = true; else delete state.historyTrimmed;
-    state.fieldSelection = memory.fieldSelection ?? {};
+    state.fieldSelection = structuredClone(memory.fieldSelection ?? {});
   }
   return state;
+}
+
+/** Workspace-1's top-level editor: the recipe, its selection, Undo history and the Glitter/shift memory. */
+function readEditorV1(v: Record<string, unknown>): WorkspaceState {
+  const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
+  state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
+  state.glitterChoices = parseGlitterChoices(v.glitterChoices);
+  if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active as number;
+  if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1))
+    state.selected = v.selected as number;
+  if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
+    try { state.history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
+  }
+  if (v.historyTrimmed === true || (Array.isArray(v.history) && v.history.length > 80)) state.historyTrimmed = true;
+  return state;
+}
+
+/** Workspace-2's loose look (the editor without a collection) and each feature's workspace memory. */
+function readEditorV2(v: StoredWorkspace): WorkspaceState {
+  const look = v.look && typeof v.look === "object" ? v.look : undefined;
+  const parts: Record<string, PartEnvelope> = {};
+  if (look?.parts && typeof look.parts === "object")
+    for (const [feature, part] of Object.entries(look.parts)) parts[feature] = STUDIO_PARTS.readPart(feature, part);
+  const memory = STUDIO_PARTS.readMemory(look?.memory, { parts });
+  const recipe = livePart({ parts }) ?? emptyRecipe(), state = freshWorkspace(recipe);
+  const live = liveMemory(memory);
+  state.active = live.active; state.selected = live.selected; state.history = live.history;
+  state.fieldSelection = live.fieldSelection ?? {};
+  if (live.historyTrimmed) state.historyTrimmed = true;
+  const features = STUDIO_PARTS.readFeatureWide(v.features);
+  state.glitterChoices = (features[LIVE_FEATURE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
+  delete parts[LIVE_FEATURE]; delete memory[LIVE_FEATURE]; delete features[LIVE_FEATURE];
+  const other = { ...(Object.keys(parts).length ? { parts } : {}), ...(Object.keys(memory).length ? { memory } : {}),
+    ...(Object.keys(features).length ? { features } : {}) };
+  if (Object.keys(other).length) state.otherFeatures = other;
+  return state;
+}
+
+/**
+ * The stored `xfs/workspace-2` form of a live workspace: the editor and its memory per feature,
+ * collection looks with their parts and per-feature memory. Nothing is trimmed here; the
+ * storage budget (`workspace-budget.ts`) decides what is kept before this runs.
+ */
+export function serializeWorkspace(state: WorkspaceState): StoredWorkspace {
+  const { schema: _schema, recipe, active, selected, history, historyTrimmed, fieldSelection, glitterChoices, collections,
+    otherFeatures, ...view } = state;
+  const features = STUDIO_PARTS.writeFeatureWide({ ...otherFeatures?.features, [LIVE_FEATURE]: { choices: glitterChoices } });
+  const look = collections ? undefined : {
+    parts: { ...otherFeatures?.parts, [LIVE_FEATURE]: STUDIO_PARTS.envelope(LIVE_FEATURE, recipe) },
+    memory: STUDIO_PARTS.writeMemory({ ...otherFeatures?.memory, [LIVE_FEATURE]: { editor: { active, selected, fieldSelection },
+      history, ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } }) };
+  return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
+    ...(collections ? { collections: writeCollectionWorkspace(collections) } : {}) };
 }
 
 export function workspaceKeys(verification: boolean) {

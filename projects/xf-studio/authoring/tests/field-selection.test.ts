@@ -4,6 +4,7 @@ import { parseFieldSelection, selectedWarp } from "../src/field-selection";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { collectionDraft } from "../src/collection-workspace";
+import { storedWorkspace } from "./fixtures/looks";
 
 test("field selection follows stable layer/field IDs and safely falls back for empty or removed fields", () => {
   const recipe = initialRecipe(), l = recipe.layers[0], f = { ...l.fields[0], id: "second", du: .02 };
@@ -31,7 +32,7 @@ test("per-preset warp selection survives switches, collection recovery and compl
   session.edit({ kind: "remove", id: preset.id }); session.edit({ kind: "restore" });
   expect(editor.fieldSelection?.[l.id]).toBe("second");
   const workspace = freshWorkspace(); workspace.collections = session.snapshot();
-  const reloaded = parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  const reloaded = parseWorkspace(storedWorkspace(workspace));
   expect(reloaded.fieldSelection[l.id]).toBe("second");
   expect(selectedWarp(reloaded.recipe.layers[0], reloaded.fieldSelection)?.du).toBe(.015);
 });

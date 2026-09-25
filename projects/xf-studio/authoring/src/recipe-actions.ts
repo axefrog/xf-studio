@@ -5,7 +5,7 @@ import { isDirectGlint } from "./direct-glint-settings";
 import type { FieldSelection } from "./field-selection";
 import { canonicalFinish, defaultFlakes, isIrregular, type Flakes } from "./finish";
 import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
-  type GlitterChoices, type GlitterModel } from "./glitter-model";
+  type GlitterChoices, type GlitterModel, type LayerChoices } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
@@ -140,7 +140,7 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
 const gameOptics = (finish: Layer["finish"], shift: GameOptics["shift"] = DEFAULT_SHIFT): GameOptics =>
   finish === "iridescent" ? { model: "game-matched-1", shift: { ...shift! } } : { model: "game-matched-1" };
 /** Actions that read or write per-layer editor memory (inactive Glitter models, Colour-shift settings). */
-const remembers = (kind: RecipeAction["kind"]) => kind === "glitter.selectModel" || kind === "layer.setFinish";
+export const remembers = (kind: RecipeAction["kind"]) => kind === "glitter.selectModel" || kind === "layer.setFinish";
 
 /** Applies a single validated document/selection command without DOM or renderer access. */
 export function applyRecipeAction(state: RecipeActionState, action: RecipeAction,
@@ -273,6 +273,30 @@ export class RecipeActions {
     this.write(result.state, result.effect);
     for (const listener of this.listeners) listener(result.effect);
     return true;
+  }
+  /**
+   * The current preset's per-layer memory (inactive Glitter models, Colour-shift settings),
+   * keyed by layer ID: the editor state eye makeup's pure actions read. Not cloned; read-only.
+   */
+  layerChoices(): Readonly<Record<string, LayerChoices>> {
+    const prefix = `${this.presetId()}/`, result: Record<string, LayerChoices> = {};
+    for (const [key, choices] of Object.entries(this.choices)) if (key.startsWith(prefix)) result[key.slice(prefix.length)] = choices;
+    return result;
+  }
+  /**
+   * Publish a result computed by eye makeup's pure apply, exactly as `dispatch` publishes its own:
+   * one checkpoint when `record` and the result is more than a selection, the per-layer memory
+   * written back for actions that use it, then the state and its effect.
+   */
+  commit(action: RecipeAction, next: RecipeActionState, effect: RecipeActionEffect,
+    choices: Readonly<Record<string, LayerChoices>>, record: boolean) {
+    if (record && effect.kind !== "selection") this.history.checkpoint(this.read().recipe);
+    if (remembers(action.kind)) {
+      const prefix = `${this.presetId()}/`;
+      for (const [layerId, remembered] of Object.entries(choices)) this.choices[prefix + layerId] = remembered;
+    }
+    this.write(next, effect);
+    for (const listener of this.listeners) listener(effect);
   }
   /** Pointer adapters calculate coordinates; the application validates and applies the result in place.
    * Stable target identities are required until pointer release so a stale gesture cannot edit a new preset. */

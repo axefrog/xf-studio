@@ -1,6 +1,6 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import { createBrowserWorkspaceSession } from "../src/browser-workspace-device";
-import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, type CollectionDraft,
+import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, withLiveMemory, type CollectionDraft,
   type CollectionWorkspace } from "../src/collection-workspace";
 import { RECIPE_HISTORY_LIMIT } from "../src/editor-actions";
 import { editLayers } from "../src/layer-stack";
@@ -9,7 +9,8 @@ import { initialRecipe, type Recipe } from "../src/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/workspace-persistence";
-import { freshWorkspace, loadWorkspace, parseWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
+import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
+import { looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
 
 afterEach(() => { jest.useRealTimers(); });
 
@@ -58,7 +59,7 @@ test("autosave stops when idle: a save's own status never schedules another writ
   expect(core.app.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .33 }).ok).toBe(true);
   jest.advanceTimersByTime(200);
   expect(storage.writes()).toBe(2);
-  expect(JSON.parse(storage.stored.get(key)!).recipe.layers[0].opacity).toBe(.33);
+  expect(JSON.parse(storage.stored.get(key)!).look.parts["eye-makeup"].body.layers[0].opacity).toBe(.33);
   jest.advanceTimersByTime(60_000);
   expect(storage.writes()).toBe(2);
 });
@@ -95,10 +96,11 @@ function busyDraft(presets: number, recipe: Recipe): CollectionDraft {
     presets: Array.from({ length: presets }, (_, i) => ({ id: crypto.randomUUID(), name: `Look ${i + 1}`, revision: 1,
       recipe: variant(recipe, i) })) });
   for (const preset of draft.collection.presets)
-    draft.editors[preset.id] = { active: 0, selected: 0, history: fullHistory(recipe) };
+    draft.memory[preset.id] = withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) });
   draft.removed = Array.from({ length: REMOVED_PRESET_LIMIT }, (_, i) => ({ index: 0,
-    preset: { id: crypto.randomUUID(), name: `Removed ${i + 1}`, revision: 1, recipe: variant(recipe, i) },
-    editor: { active: 0, selected: 0, history: fullHistory(recipe) } }));
+    preset: looks({ schema: "xfas/collection-1", id: draft.collection.id, name: "Looks", presets: [
+      { id: crypto.randomUUID(), name: `Removed ${i + 1}`, revision: 1, recipe: variant(recipe, i) }] }).presets[0],
+    memory: withLiveMemory(undefined, { active: 0, selected: 0, history: fullHistory(recipe) }) }));
   draft.selected = draft.collection.presets[Math.min(2, presets - 1)].id;
   return draft;
 }
@@ -110,7 +112,7 @@ function realisticWorkspace(presets = 6): WorkspaceState {
   const collections: CollectionWorkspace = { ...current, previous: recovery[0], older: recovery.slice(1) };
   const selected = current.collection.presets.find(p => p.id === current.selected)!;
   // The live editor (top level) duplicates the selected preset and its history.
-  return { ...freshWorkspace(selected.recipe), history: current.editors[selected.id].history, collections };
+  return { ...freshWorkspace(recipeOf(selected)), history: memoryOf(current, selected.id).history, collections };
 }
 
 // Tests that encode realistic multi-megabyte workspaces take about 1 s each locally; slower CI runners
@@ -121,7 +123,7 @@ test("a realistic workspace fits the storage budget with the standard policy and
   const state = realisticWorkspace();
   expect(JSON.stringify(state.recipe).length).toBeGreaterThan(11_000);
   // Stored verbatim this exceeded the ~5M code-unit browser quota and autosave silently stopped.
-  expect(JSON.stringify(state).length).toBeGreaterThan(5_000_000);
+  expect(JSON.stringify(serializeWorkspace(state)).length).toBeGreaterThan(5_000_000);
   const stored = encodeWorkspaceForStorage(state);
   expect(stored.level).toBe(0);
   expect(stored.size).toBeLessThanOrEqual(WORKSPACE_STORAGE_BUDGET);
@@ -129,15 +131,15 @@ test("a realistic workspace fits the storage budget with the standard policy and
   const restored = parseWorkspace(JSON.parse(stored.encoded));
   const collections = restored.collections!, selected = collections.selected!;
   // The selected preset keeps its full Undo history and is the editor recipe.
-  expect(restored.recipe).toEqual(state.collections!.collection.presets.find(p => p.id === selected)!.recipe);
+  expect(restored.recipe).toEqual(recipeOf(state.collections!.collection.presets.find(p => p.id === selected)!));
   expect(restored.history).toHaveLength(RECIPE_HISTORY_LIMIT);
   for (const preset of collections.collection.presets)
-    expect(collections.editors[preset.id].history).toHaveLength(preset.id === selected ? RECIPE_HISTORY_LIMIT : PERSISTED_BACKGROUND_HISTORY);
+    expect(memoryOf(collections, preset.id).history).toHaveLength(preset.id === selected ? RECIPE_HISTORY_LIMIT : PERSISTED_BACKGROUND_HISTORY);
   // Removed presets and recovery drafts keep their looks, not their Undo histories.
   expect(collections.removed).toHaveLength(REMOVED_PRESET_LIMIT);
-  expect(collections.removed.every(entry => entry.editor.history.length === 0)).toBe(true);
+  expect(collections.removed.every(entry => entry.memory["eye-makeup"].history.length === 0)).toBe(true);
   expect([collections.previous, ...collections.older!]).toHaveLength(COLLECTION_RECOVERY_LIMIT);
-  expect(Object.values(collections.previous!.editors).every(memory => memory.history.length === 0)).toBe(true);
+  expect(Object.values(collections.previous!.memory).every(memory => memory["eye-makeup"].history.length === 0)).toBe(true);
   expect(collections.previous!.collection).toEqual(state.collections!.previous!.collection);
   expect(collections.previous!.removed).toEqual([]);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
@@ -163,7 +165,7 @@ test("a storage quota refusal falls back to smaller forms, then reports that aut
   writer.activate(); writer.flush();
   expect(stored.get(key)!.length).toBeLessThanOrEqual(limit);
   expect(writer.snapshot().kind).toBe("nearly-full");
-  limit = 10; state.recipe.layers[0].opacity = .77; state.collections!.collection.presets[2].recipe.layers[0].opacity = .77;
+  limit = 10; state.recipe.layers[0].opacity = .77; recipeOf(state.collections!.collection.presets[2]).layers[0].opacity = .77;
   writer.flush();
   expect(writer.snapshot()).toEqual({ kind: "full", message: SAVE_MESSAGES.full });
   const blocked = new WorkspacePersistence({ storage: { setItem() { throw Error("SecurityError"); } }, key, writable: true,
@@ -178,9 +180,9 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   const recipe = eightLayerRecipe();
   const current = busyDraft(2, recipe), previous = busyDraft(2, recipe), older = busyDraft(2, recipe);
   const state = { ...freshWorkspace(), collections: { ...current, previous, older: [older] } };
-  const raw = JSON.parse(JSON.stringify(state));
-  raw.collections.previous.collection.presets[0].recipe = { schema: "nope" };
-  raw.collections.removed[3].preset.recipe.layers = "broken";
+  const raw = storedWorkspace(state);
+  raw.collections.previous.collection.presets[0].parts["eye-makeup"].body = { schema: "nope" };
+  raw.collections.removed[3].preset.parts["eye-makeup"].body.layers = "broken";
   const storage = memoryStorage(); storage.stored.set(key, JSON.stringify(raw));
   const loaded = loadWorkspace(storage, true);
   expect(loaded.writable).toBe(true);
@@ -200,7 +202,7 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   expect(writer.snapshot().message).toContain("Draft autosaved.");
 
   // The current draft itself must parse: a damaged one keeps storage protected.
-  raw.collections.collection.presets[0].recipe = { schema: "nope" };
+  raw.collections.collection.presets[0].parts["eye-makeup"].body = { schema: "nope" };
   storage.stored.set(key, JSON.stringify(raw));
   const damaged = loadWorkspace(storage, true);
   expect(damaged.writable).toBe(false);

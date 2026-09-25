@@ -109,6 +109,8 @@ export function newLayerTemplate(): Layer {
     pathMode: "catmull-rom",
   });
 }
+/** A recipe with no layers: the eye-makeup part of a new preset. */
+export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [] });
 /** First-run authored content. Historical initialRecipe remains a sample/test fixture. */
 export function starterRecipe(): Recipe {
   const layer = newLayerTemplate();

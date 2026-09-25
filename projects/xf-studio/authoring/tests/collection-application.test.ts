@@ -5,7 +5,8 @@ import { AuthoringGestures } from "../src/authoring-gestures";
 import { CollectionApplication } from "../src/collection-application";
 import { CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { applyLayerAction } from "../src/editor-actions";
+import { eyeMakeupPort } from "../src/authoring-eye-makeup";
+import { looks } from "./fixtures/looks";
 import type { PresetCollection } from "../src/preset-collection";
 import { RecipeActions } from "../src/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
@@ -21,11 +22,7 @@ function fixture() {
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
   const gestures = new AuthoringGestures(document, recipe, undo);
   const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), undo);
-  const app = new StudioApplication({ document, recipe, gestures, controls, undo,
-    layer: action => {
-      const next = applyLayerAction(document.recipe, document.recipe.layers[document.active]?.id, action);
-      document.checkpoint(); document.recipe = next.recipe;
-    } });
+  const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo });
   const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: structuredClone(document.recipe) }] };
@@ -33,7 +30,7 @@ function fixture() {
   let saves = 0, restored = 0, packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [collection, other].map(c => ({ id: c.id, name: c.name, count: 1, revision: 1, updatedAt: "now" })),
-    get: async id => ({ collection: structuredClone(id === other.id ? other : collection), revision: 1, updatedAt: "now" }),
+    get: async id => ({ collection: looks(id === other.id ? other : collection), revision: 1, updatedAt: "now" }),
     save: async c => { saves++; return { collection: structuredClone(c), revision: 2, updatedAt: "now" }; },
     package: async (_action, c) => { packageInput = c; return { ready: true, collectionId: c.id,
       namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 1, omissions: [], packagedCollectionSha256: "hash",

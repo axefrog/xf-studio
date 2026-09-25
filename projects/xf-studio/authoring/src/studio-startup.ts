@@ -107,7 +107,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   };
   const core = createTrustedAuthoringCore(workspace, {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
-    selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
+    // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
+    selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });

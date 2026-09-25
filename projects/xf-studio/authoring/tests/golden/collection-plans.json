@@ -1,0 +1,35 @@
+{
+ "capturedFrom": "pre-migration code, commit 9dbf576",
+ "fixtures": {
+  "005-preset-collection/collection.json": {
+   "parsed": "3b041e67b224e33f01cc7acaf30f8d2f09face9f8c4c3b0e902057da515c9569",
+   "plan": "b6552922731064084e5e3453e19ad3d4e7456d6dcc3cf079d42c814144555fa1",
+   "packaged": "c69c78018db7511ac3c799a302057202f8b56b94b67e4957d04a0d60441d2c78"
+  },
+  "005-preset-collection/editor-collection.json": {
+   "parsed": "9261539d5e908235a60a0262a5e3b07b198e1f51831814290597fe2813de99e0",
+   "plan": "7709755d7d4dee69c339588dc053e30a5b4126b468179c5c015a3136c8109197",
+   "packaged": "26717afa1f69cad6950c1e40fc18248ad1e9b39354aa88da802128c3e84b79d8"
+  },
+  "016-finish-board/finish-board.collection.json": {
+   "parsed": "d759aa1e56d494f34ca767d1e7eaa44522d940d911bfd7378c84364e2f23bbd7",
+   "plan": "1764298533c38d1f12e81b07596c69b9a59c883f8962be075df6e4eccf527a92",
+   "packaged": "be38f51da97f063c63eacd4f911edd3e236b1e032c4d393bd1ca619e81019dec"
+  },
+  "017-plate-depth/depth-candidate.collection.json": {
+   "parsed": "f31c45e98590fd2bd70924d3b52d884cbe0b869b9cee30acec934b7df0a5078e",
+   "plan": "072fc4801d53da0a4698f96b92ef543c621bb6378e9a197b444fef9c9fdf8134",
+   "packaged": "f196bddcf2b3bd8f3de84f2461808c7e75bc8d287cd116714797b4bdfdad611f"
+  },
+  "019-uv-window/uv-window.collection.json": {
+   "parsed": "eb20e2e7ec3671fe73cff9f8e6f6c7527353d26a6d5daf43917910c7d3f7d597",
+   "plan": "2ddfa990a06ff30ce1bfe60a0a0d2cc9b40bac1bdf4f373f85cade4121bec22a",
+   "packaged": "6ff00031a8caf1a8c22f03acf1e103c6be9774fe490a529d1ac347b3518ad322"
+  },
+  "020-session-2/session-2.collection.json": {
+   "parsed": "3d135518e9fbee17cf622cd841d2809db8ae3df7cd7e53d089b3d55ff4fe068b",
+   "plan": "0a856191142a6d63bdd96b5659fd09d3f332a350cc054127f670b70f25eb35e6",
+   "packaged": "0e7a93ccbdaea70e8eadf4adb5fa512de3ffdbc45d5463a1a29a64be7fc4acbb"
+  }
+ }
+}

@@ -183,7 +183,7 @@ test("save progress and list refreshes keep an open collection menu bound; conte
 });
 
 test("draft persistence compares the live draft with the library revision it was saved or opened from", async () => {
-  const library = new Map<string, { collection: import("../src/preset-collection").PresetCollection; revision: number }>();
+  const library = new Map<string, { collection: import("../src/platform/api").LookCollection; revision: number }>();
   const transport: CollectionTransport = {
     list: async () => [...library.values()].map(item => ({ id: item.collection.id, name: item.collection.name, revision: item.revision,
       presetCount: item.collection.presets.length, updated: "now" })) as never,

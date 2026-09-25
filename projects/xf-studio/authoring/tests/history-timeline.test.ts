@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { HISTORY_START_ID } from "../src/authoring-history";
-import { collectionDraft, parseCollectionWorkspace } from "../src/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/collection-workspace";
+import { memoryOf } from "./fixtures/looks";
 import { RECIPE_HISTORY_LIMIT, RecipeHistory } from "../src/editor-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
@@ -175,21 +176,23 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
     presets: ["A", "B"].map(name => ({ id: crypto.randomUUID(), name, revision: 1, recipe })) });
   const [a, b] = draft.collection.presets;
   draft.selected = a.id;
-  draft.editors[a.id] = { active: 0, selected: 0, history };
-  draft.editors[b.id] = { active: 0, selected: 0, history };
+  draft.memory[a.id] = withLiveMemory(undefined, { active: 0, selected: 0, history });
+  draft.memory[b.id] = withLiveMemory(undefined, { active: 0, selected: 0, history });
   const restored = parseWorkspace(JSON.parse(encodeWorkspaceForStorage({ ...base, history, collections: draft }).encoded));
   // The selected preset keeps everything; the other keeps the latest few and says so.
   expect(restored.historyTrimmed).toBeUndefined();
-  expect(restored.collections!.editors[a.id]).not.toHaveProperty("historyTrimmed");
-  expect(restored.collections!.editors[b.id]).toMatchObject({ historyTrimmed: true });
-  expect(restored.collections!.editors[b.id].history).toHaveLength(PERSISTED_BACKGROUND_HISTORY);
+  expect(memoryOf(restored.collections!, a.id)).not.toHaveProperty("historyTrimmed");
+  expect(memoryOf(restored.collections!, b.id)).toMatchObject({ historyTrimmed: true });
+  expect(memoryOf(restored.collections!, b.id).history).toHaveLength(PERSISTED_BACKGROUND_HISTORY);
   // Switching to it in a new session shows "Older steps were not kept".
   const core = fixture();
-  core.document.restore({ recipe, ...restored.collections!.editors[b.id], fieldSelection: {} });
+  core.document.restore({ recipe, ...memoryOf(restored.collections!, b.id), fieldSelection: {} });
   expect(core.app.historyTimeline()).toMatchObject({ trimmed: true, current: PERSISTED_BACKGROUND_HISTORY - 1 });
   // The flag is tolerant: anything but true reads as not trimmed.
-  const parsed = parseCollectionWorkspace({ ...draft, editors: { [a.id]: { ...draft.editors[a.id], historyTrimmed: "yes" }, [b.id]: draft.editors[b.id] } });
-  expect(parsed.editors[a.id]).not.toHaveProperty("historyTrimmed");
+  const eye = draft.memory[a.id]["eye-makeup"];
+  const parsed = parseCollectionWorkspace({ ...draft, memory: { [a.id]: { "eye-makeup": { ...eye, historyTrimmed: "yes" } },
+    [b.id]: draft.memory[b.id] } });
+  expect(memoryOf(parsed, a.id)).not.toHaveProperty("historyTrimmed");
 });
 
 test("the presentation port publishes the timeline without the live history", async () => {

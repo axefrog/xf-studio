@@ -180,7 +180,7 @@ test("shift edits are labelled by what they change", () => {
 test("a host without user-level history reads the same timeline mapper", () => {
   const f = fixture(), id = f.layer(0).id;
   f.ok({ kind: "layer.setOpacity", layerId: id, opacity: .4 });
-  const { history: _history, ...services } = { document: f.document, recipe: f.recipe, layer: (action: Parameters<typeof f.layers.dispatch>[0]) => f.layers.dispatch(action),
+  const { history: _history, ...services } = { document: f.document, eyeMakeup: f.eyeMakeup,
     undo: f.undo, history: f.history, gestures: f.gestures, controls: f.controls };
   const bare = new StudioApplication(services);
   expect(bare.historyTimeline()).toEqual({ ...f.app.historyTimeline(), redoCount: 0 });

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { initialRecipe } from "../src/recipe";
 import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/uv-view";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
+import { storedWorkspace } from "./fixtures/looks";
 
 test("UV mapping is invertible and isotropic across both crops, pane sizes, insets and mirrored instances", () => {
   for (const mode of ["both", "single"] as const) for (const [width, height] of [[260, 112], [400, 700], [1200, 380], [333.3, 333.3]]) {
@@ -41,8 +42,8 @@ test("single-eye fitting enlarges the shape without mutating it and mirrors the 
 test("view state persists independently of recipe and legacy workspaces have the original crop", () => {
   const workspace = freshWorkspace();
   workspace.uvView = { mode: "single", side: "high", u: .63, v: .24, span: .19 };
-  expect(parseWorkspace(JSON.parse(JSON.stringify(workspace)))).toEqual(workspace);
-  const legacy = JSON.parse(JSON.stringify(workspace)); delete legacy.uvView;
+  expect(parseWorkspace(storedWorkspace(workspace))).toEqual(workspace);
+  const legacy = storedWorkspace(workspace); delete legacy.uvView;
   expect(parseWorkspace(legacy).uvView).toEqual(defaultUVView());
   for (const bad of [null, {}, { ...workspace.uvView, span: 0 }, { ...workspace.uvView, u: Infinity }, { ...workspace.uvView, mode: "future" }])
     expect(parseUVView(bad)).toEqual(defaultUVView());

@@ -2,15 +2,17 @@ import { expect, test } from "bun:test";
 import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
-import { freshWorkspace, loadWorkspace, parseWorkspace } from "../src/workspace-state";
+import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
+import type { LookCollection } from "../src/platform/api";
+import { looks, memoryOf, recipeOf } from "./fixtures/looks";
 
 function fixture() {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
     id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
   let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
-  const saved = { collection: structuredClone(collection), revision: 1, updatedAt: "now" };
+  const saved = { collection: looks(collection), revision: 1, updatedAt: "now" };
   let saves = 0, packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
@@ -29,7 +31,7 @@ function fixture() {
 test("an empty library initializes a saveable starter draft from the loaded workspace", async () => {
   const workspace = loadWorkspace({ getItem: () => null }, false).state;
   let editor: EditorSnapshot = { recipe: workspace.recipe, ...emptyMemory() };
-  let saved: PresetCollection | undefined;
+  let saved: LookCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [],
     get: async () => { throw Error("No saved collection"); },
@@ -40,10 +42,10 @@ test("an empty library initializes a saveable starter draft from the loaded work
   expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
   expect(service.snapshot()?.revision).toBeUndefined();
   expect(service.snapshot()?.collection.presets).toHaveLength(1);
-  expect(service.snapshot()?.collection.presets[0].recipe).toEqual(workspace.recipe);
+  expect(recipeOf(service.snapshot()!.collection.presets[0])).toEqual(workspace.recipe);
   editor.recipe.layers[0].color = "#abcdef";
   expect((await service.execute({ kind: "save" })).ok).toBe(true);
-  expect(saved?.presets[0].recipe.layers[0].color).toBe("#abcdef");
+  expect(recipeOf(saved!.presets[0]).layers[0].color).toBe("#abcdef");
 });
 
 test("async collection service preserves an unsaved draft in package snapshots without a SQLite save", async () => {
@@ -84,9 +86,9 @@ test("save reconciliation retains edits made while the immutable request is in f
   expect(f.service.view().busy).toBe(true);
   expect(f.service.capability({ kind: "package", action: "check" }).available).toBe(false);
   f.editor().recipe.layers[0].color = "#abcdef";
-  release({ collection: structuredClone(f.collection), revision: 2, updatedAt: "now" });
+  release({ collection: looks(f.collection), revision: 2, updatedAt: "now" });
   expect((await pending).ok).toBe(true);
-  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#abcdef");
+  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#abcdef");
   expect(f.service.snapshot()!.revision).toBe(2);
 });
 
@@ -99,14 +101,14 @@ test("no-exportable-content errors retain a stable code and an actionable messag
   expect(outcome).toMatchObject({ ok: false, code: "no_exportable_content" });
   expect(f.service.view().progress?.message).toContain("Your collection is unchanged");
   expect(f.service.view().busy).toBe(false);
-  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].finish).toBe("glitter");
+  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].finish).toBe("glitter");
 });
 
 test("loading a saved list does not replace a restored local draft", async () => {
   const f = fixture(); f.editor().recipe.layers[0].color = "#fedcba";
   const result = await f.service.execute({ kind: "initialize" });
   expect(result.ok).toBe(true);
-  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#fedcba");
+  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#fedcba");
   expect(f.service.view().progress?.message).toContain("without replacing unsaved edits");
 });
 
@@ -114,7 +116,7 @@ test("opening two saved collections keeps the earlier unsaved draft recoverable 
   const source = fixture();
   const draft = source.collection, a = { ...structuredClone(draft), id: crypto.randomUUID(), name: "A" },
     b = { ...structuredClone(draft), id: crypto.randomUUID(), name: "B" };
-  const saved = [a, b].map(collection => ({ collection, revision: 3, updatedAt: "now" }));
+  const saved = [a, b].map(collection => ({ collection: looks(collection), revision: 3, updatedAt: "now" }));
   source.transport.list = async () => saved.map(item => ({ id: item.collection.id,
     name: item.collection.name, count: 1, revision: item.revision, updatedAt: item.updatedAt }));
   source.transport.get = async id => saved.find(item => item.collection.id === id)!;
@@ -126,7 +128,7 @@ test("opening two saved collections keeps the earlier unsaved draft recoverable 
   expect(source.service.summary().draft?.recoveryCount).toBe(2);
 
   const workspace = freshWorkspace(); workspace.collections = source.service.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(workspace))));
   let editor: EditorSnapshot = { recipe: restored.recipe, active: restored.active, selected: restored.selected,
     history: restored.history };
   const resumed = new CollectionService(restored.collections, { selected: "", name: "" },
@@ -140,7 +142,7 @@ test("opening two saved collections keeps the earlier unsaved draft recoverable 
   expect(editor.history).toHaveLength(1);
   let savedColor: string | undefined, savedRevision: number | undefined;
   source.transport.save = async (value, revision) => {
-    savedColor = value.presets[0].recipe.layers[0].color; savedRevision = revision;
+    savedColor = recipeOf(value.presets[0]).layers[0].color; savedRevision = revision;
     return { collection: structuredClone(value), revision: revision! + 1, updatedAt: "now" };
   };
   expect((await resumed.execute({ kind: "save" })).ok).toBe(true);
@@ -158,7 +160,7 @@ test("a revision conflict reports its code without replacing the local draft", a
   const outcome = await f.service.execute({ kind: "save" });
   expect(outcome).toMatchObject({ ok: false, code: "conflict" });
   expect(f.service.snapshot()!.revision).toBe(1);
-  expect(f.service.snapshot()!.collection.presets[0].recipe.layers[0].color).toBe("#13579b");
+  expect(recipeOf(f.service.snapshot()!.collection.presets[0]).layers[0].color).toBe("#13579b");
 });
 
 test("the first collection keeps every editor-memory field of the legacy workspace (historyTrimmed included)", async () => {
@@ -167,8 +169,11 @@ test("the first collection keeps every editor-memory field of the legacy workspa
   const transport: CollectionTransport = { ...f.transport, list: async () => [] };
   const service = new CollectionService(undefined, { selected: "", name: "Look" }, () => editor, value => editor = value, transport);
   expect((await service.execute({ kind: "initialize" })).ok).toBe(true);
-  const draft = service.view().draft!, memory = draft.editors[draft.selected!];
+  const draft = service.view().draft!, memory = memoryOf(draft, draft.selected!);
   expect(memory).toMatchObject({ historyTrimmed: true, active: 0, selected: 0 });
   expect(memory.history).toHaveLength(1);
   expect("recipe" in memory).toBe(false);
+  // The recipe is the look's eye-makeup part; the memory is that feature's editor state and history.
+  expect(Object.keys(draft.memory[draft.selected!])).toEqual(["eye-makeup"]);
+  expect(recipeOf(draft.collection.presets[0])).toEqual(recipe);
 });
