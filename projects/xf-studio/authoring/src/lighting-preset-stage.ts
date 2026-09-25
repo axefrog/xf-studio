@@ -13,7 +13,10 @@ export type LightingPresetStatus = {
   defaultExposure: number;
   lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null };
 };
-export type GradingLutLoader = () => Promise<{ lut: GradingLut | null; source: GradingLutSource }>;
+/** `file` names the host's decoded cube (null for neutral); `unreachable` marks an answer that never reached the host. */
+export type GradingLutLoader = () => Promise<{ lut: GradingLut | null; source: GradingLutSource; file?: string | null; unreachable?: boolean }>;
+/** How often the creator preset asks the host again while it is shown (PREV-40). */
+export const LUT_RECHECK_MS = 20_000;
 
 /**
  * Three adapter that switches the viewport between the studio stage and the creator preset. The studio
@@ -22,8 +25,11 @@ export type GradingLutLoader = () => Promise<{ lut: GradingLut | null; source: G
  * through the creator display pass. Switching is immediate and fully reversible: turning the preset off
  * restores exactly the environment, background and light visibility it found.
  *
- * The LUT is requested from the host the first time the preset turns on; until it arrives the neutral
- * grade is shown.
+ * The LUT is requested from the host each time the preset turns on and re-checked every `LUT_RECHECK_MS`
+ * while it shows. The host keys its answer by the installation fingerprint the character details use, so a
+ * changed route, profile or LUT mod, or WolvenKit becoming ready, is picked up without a restart. Until the
+ * first answer arrives the neutral grade is shown; later answers replace the grade only when the host's
+ * cube changed, and an answer that never reached the host keeps the current grade.
  */
 export function createLightingPresetStage(options: {
   scene: THREE.Scene;
@@ -42,18 +48,29 @@ export function createLightingPresetStage(options: {
   const black = new THREE.Color(0, 0, 0);
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
-  let disposed = false;
+  let disposed = false, lutLoading = false, lutFile: string | null = null;
+  let lutTimer: ReturnType<typeof setTimeout> | null = null;
   rig.apply(sex, creator);
   display.setExposure(creator.exposure);
 
+  const stopRecheck = () => { if (lutTimer) clearTimeout(lutTimer); lutTimer = null; };
   function requestLut() {
-    if (lutStatus.phase !== "idle") return;
-    lutStatus = { phase: "loading", source: null };
+    stopRecheck();
+    if (lutLoading || disposed) return;
+    lutLoading = true;
+    const first = lutStatus.phase !== "ready";
+    if (first) lutStatus = { phase: "loading", source: null };
     void options.loadLut().then(result => {
+      lutLoading = false;
       if (disposed) return;
-      display.setLut(result.lut);
-      lutStatus = { phase: "ready", source: result.source };
-      notify();
+      if (first || !result.unreachable) {
+        const file = result.file ?? null;
+        if (first || file !== lutFile) { display.setLut(result.lut); lutFile = file; }
+        const changed = first || JSON.stringify(result.source) !== JSON.stringify(lutStatus.source);
+        lutStatus = { phase: "ready", source: result.source };
+        if (changed) notify();
+      }
+      if (preset === "creator") lutTimer = setTimeout(requestLut, LUT_RECHECK_MS);
     });
   }
 
@@ -75,6 +92,7 @@ export function createLightingPresetStage(options: {
         options.studioLights.forEach((light, i) => { light.visible = saved!.visible[i] ?? true; });
         rig.group.visible = false;
         saved = null;
+        stopRecheck();
         display.release();
       }
       notify();
@@ -103,7 +121,7 @@ export function createLightingPresetStage(options: {
     /** Test and evidence access. */
     rig,
     display,
-    dispose() { disposed = true; listeners.clear(); rig.dispose(); display.dispose(); },
+    dispose() { disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); },
   };
 }
 export type LightingPresetStage = ReturnType<typeof createLightingPresetStage>;

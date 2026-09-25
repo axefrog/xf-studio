@@ -7,10 +7,12 @@
  * Read-only towards the game and MO2: archives are opened for reading and WolvenKit writes only into the
  * cache directory. Cache entries are keyed by (depot hash, archive path+size+mtime fingerprint) and store
  * the serialized JSON with base64 buffers trimmed, plus the SHA-256 of the extracted resource bytes.
+ * WolvenKit runs through the shared runner (`wolvenkit-cli.ts`: time limit, exit and log rules, missing
+ * .NET), one batch at a time per cache folder, in a unique batch folder.
  */
-import { createHash } from "node:crypto";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
 import { depotHash, type DepotRef } from "./depot-path";
@@ -18,6 +20,7 @@ import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { parseRdarHeader, parseRdarIndexHashes, RDAR_HEADER_BYTES } from "./rdar-index";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, type SourceCandidate } from "./source-discovery";
+import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions } from "./wolvenkit-cli";
 
 export interface InstallationOptions {
   readonly gameRoot: string;
@@ -122,74 +125,135 @@ export function trimBuffers(value: unknown): unknown {
   return out;
 }
 
-interface Pending { ref: DepotRef; extension: string | null; waiters: ((value: FetchedResource | null) => void)[] }
+interface Pending { ref: DepotRef; extension: string | null; resolve: (value: FetchedResource | null) => void }
+type Queue = { archive: MountedArchive; items: Map<string, Pending> };
 
-/** Batched WolvenKit CLI extraction with a persistent JSON cache. */
+/** Time limit of one WolvenKit step (unbundle or convert) of a resolver batch. */
+export const RESOLVER_STEP_TIMEOUT_MS = 10 * 60_000;
+/**
+ * Rule version of the `.failed` markers. A marker is written only when WolvenKit finished a batch cleanly
+ * in the batch's own folder, the extracted resource was still there, and no readable JSON came out.
+ * Markers without this version (written before PREV-29, when a concurrent batch could delete the folder)
+ * are ignored and removed.
+ */
+export const FAILED_MARKER_VERSION = 2;
+
+/**
+ * One extraction lane per cache folder in this process. Every fetcher on that folder (the character
+ * details, the grading LUT, the eye plate head source) runs its WolvenKit batches through it one at a
+ * time, and a resource one fetcher is extracting is awaited by the others instead of extracted again.
+ * Batch folders are unique (`mkdtemp`), so another process on the same cache cannot collide either.
+ */
+interface CacheLane { tail: Promise<void>; inflight: Map<string, Promise<FetchedResource | null>> }
+const lanes = new Map<string, CacheLane>();
+function laneFor(cacheDir: string): CacheLane {
+  const key = process.platform === "win32" ? resolve(cacheDir).toLowerCase() : resolve(cacheDir);
+  let lane = lanes.get(key);
+  if (!lane) { lane = { tail: Promise.resolve(), inflight: new Map() }; lanes.set(key, lane); }
+  return lane;
+}
+
+/** Write through a temporary sibling and rename, so a reader never sees a half-written cache file. */
+function writeAtomic(path: string, text: string): void {
+  const staging = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  try { writeFileSync(staging, text); renameSync(staging, path); }
+  catch (error) { rmSync(staging, { force: true }); throw error; }
+}
+
+/** Batched WolvenKit CLI extraction with a persistent JSON cache, shared safely by every fetcher on one cache folder. */
 export class WolvenKitFetcher implements ResourceFetchPort {
-  private readonly pending = new Map<string, { archive: MountedArchive; items: Map<string, Pending> }>();
+  private readonly pending = new Map<string, Queue>();
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private running: Promise<void> = Promise.resolve();
-  private batch = 0;
-  readonly stats = { cacheHits: 0, extracted: 0, cliCalls: 0, failures: [] as string[] };
+  private readonly lane: CacheLane;
+  readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, failures: [] as string[] };
 
   constructor(private readonly cli: string, private readonly cacheDir: string, private readonly contains: (archiveId: string, hash: string) => boolean,
-    private readonly log: (message: string) => void = () => {}) {}
+    private readonly log: (message: string) => void = () => {}) {
+    this.lane = laneFor(cacheDir);
+  }
 
   private cachePath(archive: MountedArchive, hash: string) { return join(this.cacheDir, "json", `${hash}-${fingerprint(archive.id)}.json`); }
 
-  fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
-    const cached = this.cachePath(archive, ref.hash);
-    // A resource WolvenKit could not convert stays failed until its container changes (the key includes it).
-    if (existsSync(`${cached}.failed`)) { this.stats.cacheHits++; return Promise.resolve(null); }
-    if (existsSync(cached)) {
-      this.stats.cacheHits++;
-      const entry = JSON.parse(readFileSync(cached, "utf8"));
-      return Promise.resolve({ document: entry.document, extractedSha256: entry.meta.extractedSha256, path: entry.meta.path });
+  /** The cached answer: a resource, null for a current `.failed` marker, or undefined when WolvenKit must run. */
+  private cached(path: string): FetchedResource | null | undefined {
+    const marker = `${path}.failed`;
+    if (existsSync(marker)) {
+      // A resource WolvenKit could not convert stays failed until its container changes (the key includes it).
+      try { if (JSON.parse(readFileSync(marker, "utf8")).markerVersion === FAILED_MARKER_VERSION) return null; } catch { /* unreadable: stale */ }
+      rmSync(marker, { force: true });
     }
-    return new Promise(resolve => {
+    if (!existsSync(path)) return undefined;
+    try {
+      const entry = JSON.parse(readFileSync(path, "utf8"));
+      return { document: entry.document, extractedSha256: entry.meta.extractedSha256, path: entry.meta.path };
+    } catch { rmSync(path, { force: true }); return undefined; }
+  }
+
+  fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
+    const path = this.cachePath(archive, ref.hash);
+    const cached = this.cached(path);
+    if (cached !== undefined) { this.stats.cacheHits++; return Promise.resolve(cached); }
+    const inflight = this.lane.inflight.get(path);
+    if (inflight) { this.stats.shared++; return inflight; }
+    const promise = new Promise<FetchedResource | null>(resolve => {
       const queue = this.pending.get(archive.id) ?? { archive, items: new Map<string, Pending>() };
-      const item = queue.items.get(ref.hash) ?? { ref, extension, waiters: [] };
-      item.waiters.push(resolve);
-      queue.items.set(ref.hash, item);
+      queue.items.set(ref.hash, { ref, extension, resolve });
       this.pending.set(archive.id, queue);
-      if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.running = this.running.then(() => this.flush()); }, 30);
+      if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.lane.tail = this.lane.tail.then(() => this.flush()); }, 30);
     });
+    this.lane.inflight.set(path, promise);
+    void promise.finally(() => { if (this.lane.inflight.get(path) === promise) this.lane.inflight.delete(path); });
+    return promise;
   }
 
-  private async run(args: string[]): Promise<string> {
+  private run(args: string[], options: Pick<WolvenKitRunOptions, "accept" | "failure"> = {}): Promise<WolvenKitRun> {
     this.stats.cliCalls++;
-    const child = Bun.spawn([this.cli, ...args], { stdout: "pipe", stderr: "pipe" });
-    const [out, err] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
-    await child.exited;
-    return out + err;
+    return runWolvenKit(this.cli, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
   }
 
+  /** Extract everything queued. Never rejects, so the shared lane is never poisoned; every waiter is answered. */
   private async flush(): Promise<void> {
     const queues = [...this.pending.values()];
     this.pending.clear();
     if (!queues.length) return;
-    // Archives in one CLI call must not both contain a requested hash, or outputs would collide.
-    const batches: (typeof queues)[] = [];
-    for (const queue of queues) {
-      const fits = batches.find(batch => batch.every(other =>
-        ![...queue.items.keys()].some(hash => this.contains(other.archive.id, hash)) &&
-        ![...other.items.keys()].some(hash => this.contains(queue.archive.id, hash))));
-      if (fits) fits.push(queue); else batches.push([queue]);
+    try {
+      // Archives in one CLI call must not both contain a requested hash, or outputs would collide.
+      const batches: Queue[][] = [];
+      for (const queue of queues) {
+        const fits = batches.find(batch => batch.every(other =>
+          ![...queue.items.keys()].some(hash => this.contains(other.archive.id, hash)) &&
+          ![...other.items.keys()].some(hash => this.contains(queue.archive.id, hash))));
+        if (fits) fits.push(queue); else batches.push([queue]);
+      }
+      for (const batch of batches) await this.extract(batch);
+    } catch (error) {
+      this.stats.failures.push(String(error));
+      for (const queue of queues) for (const item of queue.items.values()) item.resolve(null);
     }
-    for (const batch of batches) await this.extract(batch);
     if (this.pending.size) await this.flush();
   }
 
-  private async extract(batch: { archive: MountedArchive; items: Map<string, Pending> }[]): Promise<void> {
-    const dir = join(this.cacheDir, "tmp", `batch-${process.pid}-${++this.batch}`);
+  private async extract(queues: Queue[]): Promise<void> {
+    // Another process may have cached some of these since they were queued.
+    for (const queue of queues) for (const [hash, item] of [...queue.items]) {
+      const cached = this.cached(this.cachePath(queue.archive, hash));
+      if (cached !== undefined) { this.stats.cacheHits++; item.resolve(cached); queue.items.delete(hash); }
+    }
+    const batch = queues.filter(queue => queue.items.size);
+    if (!batch.length) return;
+    mkdirSync(join(this.cacheDir, "tmp"), { recursive: true });
+    const dir = mkdtempSync(join(this.cacheDir, "tmp", `batch-${process.pid}-`));
     const raw = join(dir, "raw");
-    mkdirSync(raw, { recursive: true });
-    const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
-    writeFileSync(join(dir, "hashes.txt"), hashes.join("\n") + "\n");
-    this.log(`WolvenKit: extracting ${hashes.length} resource(s) from ${batch.length} archive(s)`);
+    const answered = new Set<Pending>();
+    const answer = (item: Pending, value: FetchedResource | null) => { answered.add(item); item.resolve(value); };
     try {
-      await this.run(["unbundle", ...batch.map(queue => queue.archive.id), "-o", raw, "--hash", join(dir, "hashes.txt")]);
-      const found = new Map<string, { file: string; path: string | null }>();
+      mkdirSync(raw, { recursive: true });
+      const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
+      writeFileSync(join(dir, "hashes.txt"), hashes.join("\n") + "\n");
+      this.log(`WolvenKit: extracting ${hashes.length} resource(s) from ${batch.length} archive(s)`);
+      // Missing hashes are judged per file below, so any exit is accepted; a crash, time limit or missing .NET throws.
+      await this.run(["unbundle", ...batch.map(queue => queue.archive.id), "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true });
+      const found = new Map<string, { file: string; path: string | null; bytes: number }>();
       const walk = (folder: string) => {
         for (const name of readdirSync(folder)) {
           const full = join(folder, name);
@@ -197,8 +261,8 @@ export class WolvenKitFetcher implements ResourceFetchPort {
           if (name.endsWith(".json")) continue;
           const rel = relative(raw, full).split(sep).join("\\");
           const numeric = /^(\d+)\.[^.\\]+$/.exec(rel);
-          if (numeric) found.set(BigInt(numeric[1]!).toString(), { file: full, path: null });
-          else found.set(depotHash(rel), { file: full, path: rel });
+          if (numeric) found.set(BigInt(numeric[1]!).toString(), { file: full, path: null, bytes: 0 });
+          else found.set(depotHash(rel), { file: full, path: rel, bytes: 0 });
         }
       };
       walk(raw);
@@ -210,11 +274,17 @@ export class WolvenKitFetcher implements ResourceFetchPort {
           renameSync(hit.file, renamed); hit.file = renamed;
         }
       }
-      if (found.size) await this.run(["convert", "s", raw]);
+      for (const hit of found.values()) hit.bytes = statSync(hit.file).size;
+      // The converter's own exit and log decide only whether a missing JSON may be recorded as a lasting failure.
+      let clean = true;
+      if (found.size) {
+        const converted = await this.run(["convert", "s", raw], { accept: () => true, failure: /(?!)/ });
+        clean = converted.exitCode === 0 && !/Unhandled exception/i.test(converted.output);
+        if (!clean) this.stats.failures.push(`WolvenKit convert did not finish cleanly (exit ${converted.exitCode}); unconverted resources are retried next time.`);
+      }
       mkdirSync(join(this.cacheDir, "json"), { recursive: true });
       for (const queue of batch) for (const [hash, item] of queue.items) {
         const hit = found.get(hash);
-        let result: FetchedResource | null = null;
         let document: unknown = null;
         try { if (hit && existsSync(`${hit.file}.json`)) document = trimBuffers(JSON.parse(readFileSync(`${hit.file}.json`, "utf8"))); }
         catch (error) { this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash}: ${(error as Error).message}`); }
@@ -222,20 +292,24 @@ export class WolvenKitFetcher implements ResourceFetchPort {
           const bytes = readFileSync(hit.file);
           const extractedSha256 = createHash("sha256").update(bytes).digest("hex");
           const path = hit.path ?? item.ref.path;
-          writeFileSync(this.cachePath(queue.archive, hash), JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
+          writeAtomic(this.cachePath(queue.archive, hash), JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
             group: queue.archive.group, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document }));
-          result = { document, extractedSha256, path };
           this.stats.extracted++;
-        } else if (!document) {
-          this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash} was not extracted or converted.`);
-          if (hit) writeFileSync(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ hash, path: hit.path ?? item.ref.path,
-            archive: queue.archive.name, reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
+          answer(item, { document, extractedSha256, path });
+          continue;
         }
-        for (const waiter of item.waiters) waiter(result);
+        this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash} was not extracted or converted.`);
+        // Lasting only when the tool genuinely failed on this resource: a clean run, in this batch's own
+        // folder, with the extracted file still there as unbundle wrote it.
+        const intact = hit && existsSync(hit.file) && statSync(hit.file).size === hit.bytes;
+        if (hit && clean && intact) writeAtomic(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION,
+          hash, path: hit.path ?? item.ref.path, archive: queue.archive.name,
+          reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
+        answer(item, null);
       }
     } catch (error) {
-      for (const queue of batch) for (const item of queue.items.values()) for (const waiter of item.waiters) waiter(null);
-      this.stats.failures.push(String(error));
+      this.stats.failures.push(error instanceof WolvenKitRunError ? `${error.code}: ${error.message}` : String(error));
+      for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) item.resolve(null);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
 }

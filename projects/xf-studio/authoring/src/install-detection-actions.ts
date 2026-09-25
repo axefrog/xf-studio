@@ -22,6 +22,24 @@ export type InstallDetectionTransport = (target: InstallDetectionTarget) => Prom
   ok: boolean; status: number; data: GameInstallDetection | Mo2Detection | FrameworkVersionCheck | { code: string; error: string };
 }>;
 
+/**
+ * Detection issues that tell the person what to do when no usable game folder was found, most useful
+ * first. The Xbox app copy's own message sits between an unfinished install (about to become usable) and
+ * text the registry check couldn't read (choose the folder manually).
+ */
+const ACTIONABLE_GAME_ISSUES = ["install_incomplete", "store_unsupported", "registry_text_unreadable"] as const;
+
+/** The one plain note for a setup card when detection offered no game folder (PREV-33); null when one was found. */
+export function gameDetectionNote(games: Pick<GameInstallDetection, "candidates" | "unsupported" | "issues"> | undefined): string | null {
+  if (!games || games.candidates.length) return null;
+  for (const code of ACTIONABLE_GAME_ISSUES) {
+    if (code === "store_unsupported" && games.unsupported?.[0]) return games.unsupported[0].message;
+    const issue = games.issues?.find(item => item.code === code);
+    if (issue) return issue.detail;
+  }
+  return null;
+}
+
 const targets = { "detect.gameInstalls": "games", "detect.mo2Instances": "mo2",
   "detect.frameworkVersions": "frameworks" } as const satisfies Record<InstallDetectionAction["kind"], InstallDetectionTarget>;
 const targetOf = (action: InstallDetectionAction): InstallDetectionTarget => targets[action.kind];

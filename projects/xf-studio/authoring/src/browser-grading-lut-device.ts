@@ -4,12 +4,14 @@ import { decodeGradingLutBinary, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT,
 /**
  * Browser device for the creator preset's grading LUT: asks the host (same endpoint on both hosts) which
  * LUT the installation's environment resolves to, waits while the host extracts it, and downloads the
- * decoded cube. Any failure falls back to the neutral grade with a plain note; it never throws.
+ * decoded cube. Any failure falls back to the neutral grade with a plain note (marked `unreachable`, so a
+ * re-check keeps the grade already shown); it never throws.
  */
 export type GradingLutFetch = (url: string, init?: RequestInit) => Promise<Response>;
-export type LoadedGradingLut = { lut: GradingLut | null; source: GradingLutSource };
+/** `file` is the host's decoded cube name (null for neutral); `unreachable` when no usable answer came from the host. */
+export type LoadedGradingLut = { lut: GradingLut | null; source: GradingLutSource; file: string | null; unreachable?: true };
 
-const neutral = (note: string): LoadedGradingLut => ({ lut: null, source: { kind: "neutral", depotPath: null, archive: null, group: null,
+const neutral = (note: string): LoadedGradingLut => ({ lut: null, file: null, unreachable: true, source: { kind: "neutral", depotPath: null, archive: null, group: null,
   provider: null, alternatives: [], rule: null, size: null, note, skipped: [] } });
 const UNREACHABLE = "Colour grading: the game's LUT couldn't be loaded, so a neutral grade is shown.";
 
@@ -25,10 +27,10 @@ export async function loadGradingLut(fetcher: GradingLutFetch = (url, init) => f
       if (state.phase === "preparing") { await wait(attempt < 10 ? 300 : 1000); continue; }
       const source = parseGradingLutSource(state.source);
       if (state.phase !== "ready" || !source) return neutral(UNREACHABLE);
-      if (typeof state.file !== "string" || !GRADING_LUT_FILE.test(state.file)) return { lut: null, source: source.kind === "neutral" ? source : neutral(UNREACHABLE).source };
+      if (typeof state.file !== "string" || !GRADING_LUT_FILE.test(state.file)) return source.kind === "neutral" ? { lut: null, file: null, source } : neutral(UNREACHABLE);
       const file = await fetcher(`${GRADING_LUT_ASSET_PREFIX}${state.file}`, { signal: options.signal });
       if (!file.ok) return neutral(UNREACHABLE);
-      return { lut: decodeGradingLutBinary(new Uint8Array(await file.arrayBuffer())), source };
+      return { lut: decodeGradingLutBinary(new Uint8Array(await file.arrayBuffer())), file: state.file, source };
     }
     return neutral(UNREACHABLE);
   } catch { return neutral(UNREACHABLE); }

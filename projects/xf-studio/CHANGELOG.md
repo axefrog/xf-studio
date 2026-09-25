@@ -22,6 +22,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 - **A developer tool to calibrate creator lighting against a screenshot.** It measures the same patches in a creator screenshot and a matching preview render, fits the one brightness setting, and reports the pass marks. It only reads the images.
 - **Build checks where every texture lands on the eye-makeup area** before it accepts a mod, by following the game's own texture mapping from the eye plate's shape to the finished texture.
+- **Your V's details and the creator colour grade no longer trip over each other.** Preparing both at once could lose files or wrongly remember a resource as unreadable until the mod changed; they now take turns, and a resource is marked unreadable only when WolvenKit really couldn't read it. Old marks left by this problem are cleared automatically. The colour grade now gives up on a stuck WolvenKit after a time limit, says plainly when .NET is missing, tries again after a failure, and follows a changed mod setup or a newly ready WolvenKit without restarting the app. Checked by automated tests and a run on one PC's mod setup.
+- **Game detection only looks at drives that are there.** It checks fixed and removable drives that are connected now and never touches network drives, so a disconnected mapped drive can't slow it down. When no game folder is found, the setup card now explains an unfinished Epic Games install, or a launcher record XF Studio couldn't read, instead of saying nothing.
 
 ## 0.1.0-alpha.1
 

@@ -9,6 +9,7 @@ import { CREATOR_ENVIRONMENT, decodeGradingLut, decodeGradingLutBinary, displayT
   VANILLA_SDR_LUT, type GradingLut } from "../src/grading-lut";
 import { depotHash } from "../src/depot-path";
 import type { Installation } from "../src/resolver-host";
+import { WolvenKitRunError } from "../src/wolvenkit-cli";
 import { cr2w, fixtureInstallation, rp } from "./resolver-fixtures";
 
 /** A WolvenKit-shaped CBitmapTexture LUT whose texel (r, g, b) holds `value(r, g, b)`, blob in [B][G][R] order. */
@@ -163,6 +164,73 @@ describe("host and browser transport", () => {
       bare.request(); await bare.settled();
       expect(bare.request()).toMatchObject({ phase: "ready", file: null, source: { kind: "neutral" } });
       expect((await loadGradingLut(async () => new Response("no", { status: 500 }))).source.kind).toBe("neutral");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  const lutFixture = () => fixtureInstallation([
+    { virtualPath: "archive/pc/content/basegame_2_mainmenu.archive", files: { [CREATOR_ENVIRONMENT]: environment(VANILLA_SDR_LUT) } },
+    { virtualPath: "archive/pc/content/basegame_3_nightcity.archive", files: { [VANILLA_SDR_LUT]: constantLut(0.1) } },
+    { virtualPath: "archive/pc/mod/lut-a.archive", files: { [VANILLA_SDR_LUT]: constantLut(0.25) } },
+  ]) as unknown as Installation;
+
+  test("a WolvenKit failure answers neutral with a plain note and is retried later (PREV-30, PREV-31)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    writeFileSync(cli, "fake");
+    try {
+      let now = 0, extracted = 0;
+      let failure: WolvenKitRunError | null = new WolvenKitRunError("runtime_missing", "WolvenKit.CLI.exe unbundle needs a .NET runtime that isn't installed.");
+      const fixture = lutFixture();
+      const host = new GradingLutHost({ cacheRoot: root, resolverCache: join(root, "resolver"), now: () => now, retryAfterMs: 1_000,
+        settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
+        open: () => fixture,
+        extract: async (_cli, archive) => { extracted++; if (failure) throw failure; return archive.name === "lut-a.archive" ? constantLut(0.25) : constantLut(0.1); } });
+      host.request(); await host.settled();
+      const failed = host.request();
+      expect(failed).toMatchObject({ phase: "ready", file: null, source: { kind: "neutral" } });
+      expect(failed.source!.note).toContain(".NET runtime");
+      // Within the retry interval the answer stands; after it, the next request prepares again.
+      now = 999;
+      expect(host.request().phase).toBe("ready");
+      now = 1_000; failure = null;
+      expect(host.request().phase).toBe("preparing");
+      await host.settled();
+      expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "installed", archive: "lut-a.archive" } });
+      // A success is not retried; the decoded cube is cached per archive, decoder and WolvenKit identity.
+      const count = extracted;
+      now = 60_000;
+      expect(host.request().phase).toBe("ready");
+      expect(extracted).toBe(count);
+      writeFileSync(cli, "another WolvenKit build");
+      host.request(); await host.settled();
+      expect(extracted).toBe(count + 1);
+      expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "installed", archive: "lut-a.archive" } });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("a changed installation cancels the running LUT preparation; only the newer answer is kept (PREV-30)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    writeFileSync(cli, "fake");
+    try {
+      let route: "direct" | "mo2" = "direct";
+      const signals: AbortSignal[] = [];
+      const fixture = lutFixture();
+      const host = new GradingLutHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
+        settings: () => ({ gameRoot: root, launchRoute: route, mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
+        open: () => fixture,
+        extract: (_cli, _archive, _hash, _dir, signal) => new Promise((resolve, reject) => {
+          signals.push(signal!);
+          if (signals.length > 1) { resolve(constantLut(0.25)); return; }
+          signal!.addEventListener("abort", () => reject(new WolvenKitRunError("cancelled", "WolvenKit.CLI.exe unbundle was cancelled.")), { once: true });
+        }) });
+      expect(host.request().phase).toBe("preparing");
+      for (let i = 0; i < 100 && !signals.length; i++) await new Promise(resolve => setTimeout(resolve, 5));
+      expect(signals).toHaveLength(1);
+      route = "mo2";
+      expect(host.request().phase).toBe("preparing");
+      expect(signals[0]!.aborted).toBe(true);
+      await host.settled();
+      expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "installed", archive: "lut-a.archive" } });
+      expect(signals).toHaveLength(2);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });

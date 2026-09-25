@@ -65,6 +65,13 @@ test("the package builder keeps resource definitions pure and external processes
     expect(imports(source(name))).not.toContain("./process-tree");
   }
   expect(imports(source("wolvenkit-cli"))).toContain("./process-tree");
+  // The resolver fetcher and the grading-LUT host too (PREV-29, PREV-30): no process of their own.
+  for (const name of ["resolver-host", "grading-lut-host"]) {
+    expect(imports(source(name))).toContain("./wolvenkit-cli");
+    expect(imports(source(name))).not.toContain("./process-tree");
+    expect(imports(source(name))).not.toContain("node:child_process");
+    expect(source(name), `${name} starts a process`).not.toMatch(/\bBun\.spawn/);
+  }
 });
 
 test("the character resolver keeps its rules pure and all host access in resolver-host", () => {
