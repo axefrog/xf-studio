@@ -18,14 +18,15 @@ const verification = JSON.parse(readFileSync(join(build, "verification.json"), "
 const meshName = record.plan.mesh.slice(record.plan.mesh.lastIndexOf("/") + 1);
 const mesh = JSON.parse(readFileSync(join(build, "verify", "json", meshName + ".json"), "utf8").replace(/^﻿/, "")).Data.RootChunk;
 const samples = plateUvSamples(mesh), right = verification.plateUvWindow.constants;
-const variants: Record<string, Record<string, number>> = {
+/** The packaged mapping and wrong alternatives, with offsets in texels of the map being probed (2048 × 512, or a glitter preset's 4096 × 1024). */
+const variants = (width: number, height: number): Record<string, Record<string, number>> => ({
   packaged: right,
   "V offset sign flipped": { ...right, UVOffsetY: -right.UVOffsetY },
   "V mirrored in the window": { ...right, UVScaleY: -right.UVScaleY, UVOffsetY: -right.UVOffsetY },
-  "U offset by 2 texels": { ...right, UVOffsetX: right.UVOffsetX + 2 / 2048 },
-  "V offset by 2 texels": { ...right, UVOffsetY: right.UVOffsetY + 2 / 512 },
-  "U offset by 8 texels": { ...right, UVOffsetX: right.UVOffsetX + 8 / 2048 },
-};
+  "U offset by 2 texels": { ...right, UVOffsetX: right.UVOffsetX + 2 / width },
+  "V offset by 2 texels": { ...right, UVOffsetY: right.UVOffsetY + 2 / height },
+  "U offset by 8 texels": { ...right, UVOffsetX: right.UVOffsetX + 8 / width },
+});
 const ddsDirs = join(build, "verify", "dds");
 for (const [i, preset] of record.plan.presets.entries()) {
   const compiled = record.compiled[i];
@@ -40,7 +41,7 @@ for (const [i, preset] of record.plan.presets.entries()) {
   const rows: Record<string, unknown> = {}, crop = compiled.reference;
   const row = (map: Float64Array, constants: Record<string, number>) => ({ ...mappingStats(map, chain.width, chain.height, constants, reference, crop, samples),
     offsetTexels: mappingOffset(map, chain.width, chain.height, constants, reference, crop, samples) });
-  for (const [name, constants] of Object.entries(variants)) rows[name] = row(coverage, constants);
+  for (const [name, constants] of Object.entries(variants(chain.width, chain.height))) rows[name] = row(coverage, constants);
   rows["rows not reversed"] = row(unreversed, right);
   console.log(JSON.stringify({ preset: preset.name, rows }, (_, v) => typeof v === "number" ? Math.round(v * 1e4) / 1e4 : v));
 }

@@ -76,7 +76,21 @@ const TEXTURE_GROUPS: readonly (readonly [string, TextureImportSettings])[] = [
 /** Import group of each texture channel: sRGB colour, linear scalar or tangent normal. */
 export const CHANNEL_GROUP: Record<TextureChannel, "dds-colour" | "dds-scalar" | "dds-normal"> = {
   diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar", mask: "dds-scalar", normal: "dds-normal",
+  flakes: "dds-scalar", accent: "dds-scalar",
 };
+/** Split a diagnostic glitter map's concatenated chain into its levels (each channel's bytes per texel). */
+function chainLevels(data: Uint8Array, width: number, height: number, levels: number, bytesPerTexel: number): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  let offset = 0;
+  for (let level = 0; level < levels; level++) {
+    const length = Math.max(1, width >> level) * Math.max(1, height >> level) * bytesPerTexel;
+    out.push(data.subarray(offset, offset + length));
+    offset += length;
+  }
+  if (offset !== data.length) throw Error("A glitter map's chain does not match its recorded levels.");
+  return out;
+}
+const TEXEL_BYTES: Record<TextureChannel, number> = { diffuse: 4, gradient: 4, normal: 2, roughness: 1, metalness: 1, mask: 1, flakes: 1, accent: 1 };
 const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json",
   "input/dds-colour", "input/dds-scalar", "input/dds-normal", "archive", "package/archive/pc/mod"];
 
@@ -161,7 +175,12 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
       raw[map.channel] = data;
     }
     const chains: Partial<Record<TextureChannel, readonly Uint8Array[]>> = {};
-    if (record.route === "fresnel") {
+    if (record.route === "glitter") {
+      // Nested chains are drawn per level by the compiler (glitter-route.ts), not reduced here.
+      for (const map of record.maps)
+        chains[map.channel] = chainLevels(raw[map.channel]!, map.width, map.height, map.levels!, TEXEL_BYTES[map.channel]);
+      chains.normal = chains.normal!.map(normalRgba);
+    } else if (record.route === "fresnel") {
       chains.mask = maskMipChain(raw.mask!, record.width, record.height);
       chains.gradient = uniformMipChain(raw.gradient!, record.maps.find(m => m.channel === "gradient")!.width);
     } else if (record.route === "faceted") {

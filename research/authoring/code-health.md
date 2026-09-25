@@ -268,7 +268,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- None.
+- **Diagnostic Glitter export route** (claude/glitter-board): `src/glitter-route.ts` (flake catalogue, nested chains, accent mask), the `glitter` knob in `src/export-diagnostics.ts`, the `glitter` route and accent chunk through the planner, bake, resource builder and `package-resources.ts`, and the verifier's `src/mod-verifier/glitter-checks.ts`. Review focus: the knob as the only way in (the finish guard unchanged), normal builds unchanged, and whether the verifier's property checks (instead of re-drawing) are strict enough.
 
 ## Fixed in claude/cleanup-platform3
 

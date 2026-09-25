@@ -1,0 +1,2508 @@
+{
+  "schema": "xfas/collection-1",
+  "id": "0210a5e5-2e55-4c02-9d0b-0000000000b0",
+  "name": "XF glitter board (diagnostic)",
+  "presets": [
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000001",
+      "name": "Glitter A · base",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-1",
+            "name": "Glitter left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-2",
+            "name": "Satin control right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000002",
+      "name": "Glitter B · mips",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-3",
+            "name": "Nested mips left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-4",
+            "name": "BOX mips right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000003",
+      "name": "Glitter C · size",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-5",
+            "name": "0.12 mm left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-6",
+            "name": "0.25 mm left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-7",
+            "name": "0.5 mm left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-8",
+            "name": "0.12 mm right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-9",
+            "name": "0.25 mm right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-10",
+            "name": "0.5 mm right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000004",
+      "name": "Glitter D · surface",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-11",
+            "name": "Roughness 0.12 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-12",
+            "name": "Roughness 0.22 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-13",
+            "name": "Roughness 0.35 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-14",
+            "name": "Metalness 1 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-15",
+            "name": "Metalness 0.6 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-16",
+            "name": "Metalness 0.25 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000005",
+      "name": "Glitter E · accent",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-17",
+            "name": "Glitter + accent left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-18",
+            "name": "Glitter right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0210a5e5-2e55-4c02-9d0b-000000000006",
+      "name": "Glitter F · tilt",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "glitter-19",
+            "name": "Tilt 10/20 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-20",
+            "name": "Tilt 25/50 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-21",
+            "name": "Tilt 40/70 left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-22",
+            "name": "Tilt 10/20 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-23",
+            "name": "Tilt 25/50 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "glitter-24",
+            "name": "Tilt 40/70 right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "diagnostics": {
+    "schema": "xfs/export-diagnostics-1",
+    "presets": {
+      "0210a5e5-2e55-4c02-9d0b-000000000001": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-1",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            }
+          ]
+        }
+      },
+      "0210a5e5-2e55-4c02-9d0b-000000000002": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-3",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            },
+            {
+              "layer": "glitter-4",
+              "mips": "box",
+              "mirrorOf": "glitter-3"
+            }
+          ]
+        }
+      },
+      "0210a5e5-2e55-4c02-9d0b-000000000003": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-5",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.12,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            },
+            {
+              "layer": "glitter-6",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.25,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2078
+              }
+            },
+            {
+              "layer": "glitter-7",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.5,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2079
+              }
+            },
+            {
+              "layer": "glitter-8",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.12,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4242
+              }
+            },
+            {
+              "layer": "glitter-9",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.25,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4243
+              }
+            },
+            {
+              "layer": "glitter-10",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.5,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4244
+              }
+            }
+          ]
+        }
+      },
+      "0210a5e5-2e55-4c02-9d0b-000000000004": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-11",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.12,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            },
+            {
+              "layer": "glitter-12",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2078
+              }
+            },
+            {
+              "layer": "glitter-13",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.35,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2079
+              }
+            },
+            {
+              "layer": "glitter-14",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 1,
+                "color": "#e8c46a",
+                "seed": 4242
+              }
+            },
+            {
+              "layer": "glitter-15",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.6,
+                "color": "#e8c46a",
+                "seed": 4243
+              }
+            },
+            {
+              "layer": "glitter-16",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.25,
+                "color": "#e8c46a",
+                "seed": 4244
+              }
+            }
+          ]
+        }
+      },
+      "0210a5e5-2e55-4c02-9d0b-000000000005": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-17",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            },
+            {
+              "layer": "glitter-18",
+              "mips": "nested",
+              "mirrorOf": "glitter-17"
+            }
+          ],
+          "accent": {
+            "layer": "glitter-17",
+            "share": 0.08,
+            "ev": 0
+          }
+        }
+      },
+      "0210a5e5-2e55-4c02-9d0b-000000000006": {
+        "glitter": {
+          "base": {
+            "roughness": 0.5,
+            "metalness": 0
+          },
+          "regions": [
+            {
+              "layer": "glitter-19",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 10,
+                "tiltMaxDeg": 20,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2077
+              }
+            },
+            {
+              "layer": "glitter-20",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2078
+              }
+            },
+            {
+              "layer": "glitter-21",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 40,
+                "tiltMaxDeg": 70,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 2079
+              }
+            },
+            {
+              "layer": "glitter-22",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 10,
+                "tiltMaxDeg": 20,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4242
+              }
+            },
+            {
+              "layer": "glitter-23",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 25,
+                "tiltMaxDeg": 50,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4243
+              }
+            },
+            {
+              "layer": "glitter-24",
+              "mips": "nested",
+              "flakes": {
+                "sizeMm": 0.2,
+                "sizeSigma": 0.35,
+                "cover": 0.15,
+                "tiltSigmaDeg": 40,
+                "tiltMaxDeg": 70,
+                "roughness": 0.22,
+                "metalness": 0.85,
+                "color": "#e8c46a",
+                "seed": 4244
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

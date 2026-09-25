@@ -1,6 +1,6 @@
 # Glitter game route: evidence, measured map design and a diagnostic board
 
-**Status:** research design, 25 September 2026. The route is traced from compiled programs and installed files; the map design is measured offline with an asset-free generator. **Nothing is built, packaged or staged**, the production Glitter export guard is unchanged, and no glitter route has been seen in game. The consolidated answer is in [Glitter in game](../../knowledge/glitter-in-game.md); this page holds the evidence, the method and the board.
+**Status:** research design, 25 September 2026. The route is traced from compiled programs and installed files; the map design is measured offline with an asset-free generator. The board below is now built through the production pipeline as a diagnostic candidate and verified offline in [experiment 021](../021-glitter-board/README.md); it is not staged, the production Glitter export guard is unchanged, and no glitter route has been seen in game. The consolidated answer is in [Glitter in game](../../knowledge/glitter-in-game.md); this page holds the evidence, the method and the board.
 
 Evidence grades as in the knowledge base: **[source]** compiled programs or tool source; **[resource]** installed game or mod files; **[offline]** measured here; **[runtime]** seen in game; **[hypothesis]** not established.
 
@@ -116,7 +116,7 @@ Six presets plus Off in the XF selector. Names are at most 24 characters (all 16
 | 5 | **Glitter E · accent** | Base recipe plus an emissive accent (8 % of flakes, `mesh_decal_emissive_subsurface`, second chunk) | Base recipe only | Does the accent add readable sparkle at face framing? How does it look in dim light (it will glow)? |
 | 6 | **Glitter F · tilt** | Tilt σ/max 10°/20° · 25°/50° · 40°/70° | Mirrored (another seed) | How glint frequency and orbit behaviour depend on tilt spread |
 
-**Before building it (all offline):**
+**Before building it (all offline; all done in [experiment 021](../021-glitter-board/README.md#offline-checks-before-a-session)):**
 
 - Add the window material entry and non-square maps to a *diagnostic* route. Do not change the production Glitter guard.
 - Check the V sign on one decoded export.

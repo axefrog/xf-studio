@@ -15,8 +15,8 @@ export function ensure(condition: unknown, message: string): asserts condition {
   if (!condition) throw new VerificationError(message);
 }
 
-export type VerifierRoute = "flat" | "faceted" | "fresnel";
-export type VerifierChannel = "diffuse" | "roughness" | "metalness" | "normal" | "mask" | "gradient";
+export type VerifierRoute = "flat" | "faceted" | "fresnel" | "glitter";
+export type VerifierChannel = "diffuse" | "roughness" | "metalness" | "normal" | "mask" | "gradient" | "flakes" | "accent";
 
 export interface VerifierPreset {
   readonly id: string; readonly name: string; readonly index: number;
@@ -29,9 +29,12 @@ export interface VerifierPreset {
   /** Render chunk of the packaged plate this preset draws (its lift's position in `plan.plate.liftsMm`). */
   readonly plateChunk?: number;
   /** Diagnostic-only export knobs copied from the packaged collection (a prepared test candidate). */
-  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>>; readonly uvSpace?: string };
+  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>>; readonly uvSpace?: string;
+    readonly glitter?: Node };
   /** The builder's texture space: the plate-local window or the head atlas; must equal the re-derived one. */
   readonly uvSpace?: string;
+  /** A diagnostic glitter preset's emissive accent entry, bound on the plate's accent chunk. */
+  readonly accentMaterial?: string;
 }
 
 /**
@@ -57,14 +60,60 @@ export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: rea
     textures: [["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"], ["NormalTexture", "normal"]] },
   fresnel: { template: "base/materials/mesh_decal_gradientmap_recolor_blendable.mt",
     textures: [["MaskTexture", "mask"], ["GradientMap", "gradient"]] },
+  // Diagnostic only: resolved flakes with their own normal mask (NormalAlphaTex).
+  glitter: { template: "base/materials/mesh_decal.mt",
+    textures: [["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"], ["NormalTexture", "normal"],
+      ["NormalAlphaTex", "flakes"]] },
 };
+/** A diagnostic glitter preset's emissive accent material, restated: template and its one mask texture. */
+export const ACCENT_SPEC = { template: "base/materials/mesh_decal_emissive_subsurface.mt", textures: [["EmissiveMask", "accent"]] } as const;
+export const ACCENT_PREFIX = "@accent_";
+
+// ---- The diagnostic glitter knob, restated (src/export-diagnostics.ts) ----
+const FLAKE_FIELDS: Readonly<Record<string, readonly [number, number]>> = {
+  sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1], seed: [0, 2147483647],
+};
+const within = (v: unknown, [lo, hi]: readonly [number, number]) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
+export interface VerifierFlakes { sizeMm: number; sizeSigma: number; cover: number; tiltSigmaDeg: number; tiltMaxDeg: number; roughness: number; metalness: number; color: string; seed: number }
+export interface VerifierGlitter {
+  base: { roughness: number; metalness: number };
+  regions: { layer: string; mips: "nested" | "box"; flakes: VerifierFlakes; mirrorOf?: string }[];
+  accent?: { layer: string; share: number; ev: number };
+}
+/** A preset's diagnostic glitter knob, validated under the restated rules; mirrored regions resolve to their source's flakes. */
+export function glitterOf(preset: VerifierPreset): VerifierGlitter | undefined {
+  const knob = preset.diagnostics?.glitter;
+  if (knob === undefined) return undefined;
+  const where = `Preset ${preset.name}'s diagnostic glitter`;
+  ensure(knob && typeof knob === "object" && within(knob.base?.roughness, [0, 1]) && within(knob.base?.metalness, [0, 1]), `${where} has no valid base surface`);
+  ensure(Array.isArray(knob.regions) && knob.regions.length >= 1 && knob.regions.length <= 8, `${where} needs one to eight regions`);
+  const own = new Map<string, VerifierFlakes>();
+  for (const region of knob.regions) if (region?.flakes) {
+    const f = region.flakes;
+    ensure(Object.entries(FLAKE_FIELDS).every(([key, range]) => within(f[key], range)) && Number.isInteger(f.seed) && /^#[0-9a-f]{6}$/.test(f.color),
+      `${where} has flakes outside the diagnostic rules`);
+    own.set(region.layer, f);
+  }
+  const regions = knob.regions.map((region: Node) => {
+    ensure(typeof region?.layer === "string" && (region.mips === "nested" || region.mips === "box"), `${where} has an invalid region`);
+    ensure((region.flakes === undefined) !== (region.mirrorOf === undefined), `${where} region ${region.layer} must set flakes or mirror another region`);
+    const flakes = region.flakes ?? own.get(region.mirrorOf);
+    ensure(flakes, `${where} region ${region.layer} mirrors a region without flakes`);
+    return { layer: region.layer, mips: region.mips, flakes, ...(region.mirrorOf !== undefined ? { mirrorOf: region.mirrorOf } : {}) };
+  });
+  ensure(new Set(regions.map((r: { layer: string }) => r.layer)).size === regions.length, `${where} names a layer twice`);
+  const accent = knob.accent;
+  ensure(accent === undefined || (regions.some((r: { layer: string }) => r.layer === accent.layer) && within(accent.share, [.01, 1]) && within(accent.ev, [-10, 10])),
+    `${where} has an invalid accent`);
+  return { base: knob.base, regions, ...(accent ? { accent } : {}) };
+}
 /**
  * The route a preset's own recipe requires, re-derived with the restated rules: every active layer must
  * have a route (and its game-matched model where the finish has one); a colour shift means the Fresnel
  * route with one pigment and nothing else; otherwise any Shimmer means faceted; otherwise flat.
  */
 export function expectedRoute(preset: VerifierPreset): VerifierRoute {
-  const layers = activeLayers(preset), routes = new Set<VerifierRoute>();
+  const layers = activeLayers(preset), routes = new Set<VerifierRoute>(), glitter = glitterOf(preset);
   ensure(layers.length > 0, `Preset ${preset.name} has no active layer`);
   for (const layer of layers) {
     const rule = finishRule(layer.finish);
@@ -73,6 +122,12 @@ export function expectedRoute(preset: VerifierPreset): VerifierRoute {
     ensure(rule.route !== "faceted" || !(layer.flakes && typeof layer.flakes === "object" && "model" in layer.flakes),
       `Preset ${preset.name} packages a Shimmer layer without the classic flake settings`);
     routes.add(rule.route);
+  }
+  if (glitter) {
+    // The diagnostic glitter route: flat-finish pigment layers only, and every region names one of them.
+    ensure(routes.size === 1 && routes.has("flat"), `Preset ${preset.name} carries diagnostic glitter over layers that are not all flat finishes`);
+    for (const region of glitter.regions) ensure(layers.some(l => l.id === region.layer), `Preset ${preset.name}'s glitter names layer ${region.layer}, which is not active`);
+    return "glitter";
   }
   if (routes.has("fresnel")) { fresnelPigment(preset); return "fresnel"; }
   return routes.has("faceted") ? "faceted" : "flat";
@@ -93,14 +148,18 @@ export const CHANNEL_SETUP: Record<VerifierChannel, { isGamma: 0 | 1; compressio
   diffuse: { isGamma: 1, compression: "TCM_QualityColor" }, gradient: { isGamma: 1, compression: "TCM_QualityColor" },
   roughness: { isGamma: 0, compression: "TCM_QualityR" }, metalness: { isGamma: 0, compression: "TCM_QualityR" },
   mask: { isGamma: 0, compression: "TCM_QualityR" }, normal: { isGamma: 0, compression: "TCM_Normalmap" },
+  flakes: { isGamma: 0, compression: "TCM_QualityR" }, accent: { isGamma: 0, compression: "TCM_QualityR" },
 };
 /** Side of the uniform Fresnel base-colour texture. */
 export const GRADIENT_SIDE = 16;
 /** Restated texture grids: flat and faceted presets use the plate-local window unless a diagnostic keeps them on head UV. */
 export const VERIFIER_WINDOW_TEXTURE = Object.freeze({ width: 2048, height: 512 });
+/** The diagnostic glitter route's window and its accent's head-UV mask side. */
+export const VERIFIER_GLITTER_TEXTURE = Object.freeze({ width: 4096, height: 1024 });
+export const VERIFIER_ACCENT_TEXTURE = 2048;
 export const VERIFIER_HEAD_TEXTURE = 1024;
 /** Routes whose template transforms texture UVs (`mesh_decal`); the gradient-recolour template does not. */
-export const VERIFIER_ROUTE_WINDOW: Readonly<Record<VerifierRoute, boolean>> = { flat: true, faceted: true, fresnel: false };
+export const VERIFIER_ROUTE_WINDOW: Readonly<Record<VerifierRoute, boolean>> = { flat: true, faceted: true, fresnel: false, glitter: true };
 export type VerifierUvSpace = "plate-window" | "head";
 /**
  * The texture space a preset must use, re-derived: the window where the route's template can transform UVs,
@@ -116,6 +175,8 @@ export function uvSpaceOf(preset: VerifierPreset): VerifierUvSpace {
 /** Level-0 size each channel of a preset must have. */
 export function textureDims(preset: VerifierPreset, channel: VerifierChannel): { width: number; height: number } {
   if (channel === "gradient") return { width: GRADIENT_SIDE, height: GRADIENT_SIDE };
+  if (channel === "accent") return { width: VERIFIER_ACCENT_TEXTURE, height: VERIFIER_ACCENT_TEXTURE };
+  if (routeOf(preset) === "glitter") return { ...VERIFIER_GLITTER_TEXTURE };
   return uvSpaceOf(preset) === "plate-window" ? { ...VERIFIER_WINDOW_TEXTURE } : { width: VERIFIER_HEAD_TEXTURE, height: VERIFIER_HEAD_TEXTURE };
 }
 /** The material UV transform parameters, which only window entries carry. */
@@ -186,6 +247,7 @@ export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPre
   const transform = windowed ? Object.fromEntries(UV_PARAMETERS.map(name => [name, uv![name]])) : {};
   if (route === "flat") return { ...flat, ...(surfaceOf(preset) ?? {}), ...transform };
   if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1, ...transform };
+  if (route === "glitter") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 1, NormalsBlendingMode: 1, ...transform };
   const { shift } = fresnelPigment(preset);
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
   const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
@@ -200,8 +262,18 @@ export interface VerifierPlan {
   readonly offAppearance: string; readonly templateAppearance: string;
   readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string;
   readonly presets: readonly VerifierPreset[];
-  /** The packaged plate's lifts in millimetres, one render chunk each. */
-  readonly plate?: { readonly liftsMm: readonly number[] };
+  /** The packaged plate's lifts in millimetres, one render chunk each; a glitter accent's chunk comes last. */
+  readonly plate?: { readonly liftsMm: readonly number[]; readonly accentChunk?: number };
+}
+
+/** Expected constants of a glitter accent (restated): red mask channel, the flake colour's sRGB bytes, the knob's EV, no threshold. */
+export function expectedAccentValues(preset: VerifierPreset): Record<string, Node> {
+  const glitter = glitterOf(preset);
+  ensure(glitter?.accent, `Preset ${preset.name} has no glitter accent`);
+  const color = glitter.regions.find(r => r.layer === glitter.accent!.layer)!.flakes.color;
+  const [Red, Green, Blue] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+  return { EmissiveMaskChannel: { $type: "Vector4", X: 1, Y: 0, Z: 0, W: 0 }, EmissiveColor: { $type: "Color", Red, Green, Blue, Alpha: 255 },
+    EmissiveEV: glitter.accent.ev, AlphaThreshold: 0 };
 }
 
 /**
@@ -215,9 +287,18 @@ export function expectedPlateLifts(plan: VerifierPlan, productionLiftMm: number)
     return lift ?? productionLiftMm;
   };
   const lifts = [...new Set(plan.presets.map(liftOf))].sort((a, b) => a - b);
+  // A diagnostic glitter accent adds one last chunk at the lift its presets share.
+  const accentLifts = [...new Set(plan.presets.filter(preset => glitterOf(preset)?.accent).map(liftOf))];
+  ensure(accentLifts.length <= 1, "Glitter accents must share one plate lift");
+  const accentChunk = accentLifts.length ? lifts.length : undefined;
+  if (accentLifts.length) lifts.push(accentLifts[0]);
   ensure(sameJson(plan.plate?.liftsMm, lifts), `Plan plate lifts ${JSON.stringify(plan.plate?.liftsMm)} differ from the presets' lifts ${JSON.stringify(lifts)}`);
-  for (const preset of plan.presets)
+  ensure(plan.plate?.accentChunk === accentChunk, `Plan accent chunk ${String(plan.plate?.accentChunk)} differs from the expected ${String(accentChunk)}`);
+  for (const preset of plan.presets) {
     ensure(preset.plateChunk === lifts.indexOf(liftOf(preset)), `Preset ${preset.name} does not draw its lift's plate chunk`);
+    const accentEntry = glitterOf(preset)?.accent ? ACCENT_PREFIX + preset.id.replaceAll("-", "") : undefined;
+    ensure(preset.accentMaterial === accentEntry, `Preset ${preset.name} has accent entry ${String(preset.accentMaterial)}, expected ${String(accentEntry)}`);
+  }
   return lifts;
 }
 
@@ -332,6 +413,8 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   // Material entries: one per distinct template entry, in first-use order across presets.
   const entryNames: string[] = [];
   for (const preset of plan.presets) if (!entryNames.includes(materialOf(preset))) entryNames.push(materialOf(preset));
+  const accented = plan.presets.filter(preset => glitterOf(preset)?.accent);
+  for (const preset of accented) entryNames.push(ACCENT_PREFIX + preset.id.replaceAll("-", ""));
   if (chunks > 1) entryNames.push(HIDDEN_ENTRY);
   ensure(mesh.materialEntries?.length === entryNames.length,
     entryNames.length === 1 ? "Mesh must have exactly one material entry" : `Mesh must have exactly ${entryNames.length} material entries`);
@@ -351,12 +434,27 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
         Object.entries(HIDDEN_VALUES).every(([key, want]) => sameFloat32(params[key], want)), "Hidden chunk material must write nothing (all alphas 0)");
       return;
     }
+    const accentPreset = accented.find(p => ACCENT_PREFIX + p.id.replaceAll("-", "") === name);
+    if (accentPreset) {
+      ensure(dep(material.baseMaterial) === ACCENT_SPEC.template, `Accent material ${name} is not based on ${ACCENT_SPEC.template}`);
+      const params: Record<string, Node> = {};
+      for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
+      const expected = expectedAccentValues(accentPreset);
+      for (const [key, want] of Object.entries(expected))
+        ensure(typeof want === "object" ? sameJson(params[key], want) : sameFloat32(params[key], want),
+          `Accent material ${name} ${key} is ${JSON.stringify(params[key])}, expected ${JSON.stringify(want)}`);
+      const extra = Object.keys(params).filter(key => !(key in expected) && key !== "EmissiveMask");
+      ensure(!extra.length, `Accent material ${name} sets unexpected parameters: ${extra.join(", ")}`);
+      paramsByEntry.set(name, params);
+      return;
+    }
     const preset = plan.presets.find(p => materialOf(p) === name)!, route = routeOf(preset);
     ensure(route !== "fresnel" || plan.presets.filter(p => materialOf(p) === name).length === 1, `Fresnel material ${name} is shared`);
     const surface = route === "flat" ? surfaceOf(preset) : undefined;
     ensure(route === "flat" || preset.diagnostics?.surface === undefined, `Preset ${preset.name} carries a diagnostic surface on the ${route} route`);
     const head = route !== "fresnel" && uvSpaceOf(preset) === "head" ? HEAD_ENTRY_SUFFIX : "";
-    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (surface ? diagnosticEntryOf(surface) : route === "flat" ? "@preset" : "@faceted") + head,
+    ensure(route === "fresnel" ? name.startsWith("@fresnel_")
+      : name === (surface ? diagnosticEntryOf(surface) : route === "flat" ? "@preset" : route === "glitter" ? "@glitter" : "@faceted") + head,
       `Material entry ${name} does not match its ${route} route`);
     ensure(plan.presets.filter(p => materialOf(p) === name).every(p => sameJson(p.diagnostics?.surface, preset.diagnostics?.surface) &&
       uvSpaceOf(p) === uvSpaceOf(preset)), `Material entry ${name} is shared by presets with different surfaces or texture spaces`);
@@ -385,7 +483,8 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   const seedPreset = plan.presets[0], seed = mesh.appearances[0].Data;
   // One chunk per lift: with several, every appearance names each chunk, its own with its material and the rest hidden.
   const bound = (preset: VerifierPreset) => chunks > 1
-    ? Array.from({ length: chunks }, (_, chunk) => chunk === preset.plateChunk ? preset.appearance + materialOf(preset) : HIDDEN_ENTRY)
+    ? Array.from({ length: chunks }, (_, chunk) => chunk === preset.plateChunk ? preset.appearance + materialOf(preset)
+      : chunk === plan.plate?.accentChunk && glitterOf(preset)?.accent ? preset.appearance + ACCENT_PREFIX + preset.id.replaceAll("-", "") : HIDDEN_ENTRY)
     : [preset.appearance + materialOf(preset)];
   ensure(sameJson(seed.chunkMaterials.map(value), bound(seedPreset)), `Seed appearance does not use the ${materialOf(seedPreset)} template`);
   // Stubs expand from the seed; a preset on another entry, or any Fresnel preset, names its own.
@@ -467,10 +566,14 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     const entry = explicit(preset) ? materialOf(preset) : materialOf(seedPreset);
     const params = paramsByEntry.get(entry)!, route = routeOf(preset);
     ensure(entry === materialOf(preset), `Preset ${preset.name} would resolve to ${entry}, not its ${materialOf(preset)} material`);
-    const planned = Object.keys(preset.textures).sort(), routed: string[] = ROUTE_SPEC[route].textures.map(([, channel]) => channel).sort();
+    const accentEntry = glitterOf(preset)?.accent ? ACCENT_PREFIX + preset.id.replaceAll("-", "") : undefined;
+    const bindings: (readonly [string, VerifierChannel, Record<string, Node>])[] = [
+      ...ROUTE_SPEC[route].textures.map(([parameter, channel]) => [parameter, channel, params] as const),
+      ...(accentEntry ? ACCENT_SPEC.textures.map(([parameter, channel]) => [parameter, channel as VerifierChannel, paramsByEntry.get(accentEntry)!] as const) : [])];
+    const planned = Object.keys(preset.textures).sort(), routed: string[] = bindings.map(([, channel]) => channel).sort();
     ensure(sameJson(planned, routed), `Preset ${preset.name} plans textures ${planned.join(", ")} for its ${route} route`);
-    for (const [parameter, channel] of ROUTE_SPEC[route].textures) {
-      const reference = params[parameter];
+    for (const [parameter, channel, values] of bindings) {
+      const reference = values[parameter];
       ensure(reference?.Flags === "Soft", `${parameter} is not a Soft reference`);
       const pattern = dep(reference);
       ensure(pattern.startsWith("*"), `${parameter} is not a dynamic path`);

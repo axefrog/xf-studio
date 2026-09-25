@@ -14,17 +14,25 @@
 //             The addition is per draw, not per texel, so a colour-shift preset must consist
 //             of one colour-shift pigment only.
 //
-// Glitter has no route: no stock template can show individual sub-pixel glints.
+// - "glitter" (diagnostic only) the same template with resolved flakes: a flake normal map, a separate flake
+//             mask (NormalAlphaTex) and nested mips (glitter-route.ts), optionally with an emissive accent on a
+//             second plate chunk. Only a collection's diagnostic `glitter` knob selects it (export-diagnostics.ts).
+//
+// The Glitter *finish* has no route: no stock template can show individual sub-pixel glints, so Glitter layers
+// are omitted with a reason. The diagnostic route above draws authored flake fields over flat-finish pigment
+// layers for an in-game test; it does not make the Glitter finish exportable.
 import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import type { GameOptics, Layer, Recipe } from "./recipe";
 
-export type ExportRoute = "flat" | "faceted" | "fresnel";
-export type ExportAdapterId = "mesh-decal-flat-v1" | "mesh-decal-faceted-v1" | "mesh-decal-fresnel-v1";
+export type ExportRoute = "flat" | "faceted" | "fresnel" | "glitter";
+export type ExportAdapterId = "mesh-decal-flat-v1" | "mesh-decal-faceted-v1" | "mesh-decal-fresnel-v1" | "mesh-decal-glitter-diagnostic-v1";
 export const ROUTE_ADAPTER: Record<ExportRoute, ExportAdapterId> = {
-  flat: "mesh-decal-flat-v1", faceted: "mesh-decal-faceted-v1", fresnel: "mesh-decal-fresnel-v1",
+  flat: "mesh-decal-flat-v1", faceted: "mesh-decal-faceted-v1", fresnel: "mesh-decal-fresnel-v1", glitter: "mesh-decal-glitter-diagnostic-v1",
 };
 /** Local material template entry each route's presets bind to (`<appearance>@<entry>`). */
-export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, string> = { flat: "@preset", faceted: "@faceted" };
+export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, string> = { flat: "@preset", faceted: "@faceted", glitter: "@glitter" };
+/** Entry prefix of a diagnostic glitter preset's emissive accent material (one per accent preset, on the accent chunk). */
+export const ACCENT_ENTRY_PREFIX = "@accent_";
 
 /**
  * Texture grid of each route. `mesh_decal` transforms every texture UV by UVScale/UVOffset, so the flat and
@@ -34,8 +42,12 @@ export const ROUTE_MATERIAL_ENTRY: Record<Exclude<ExportRoute, "fresnel">, strin
  * is the flipbook), so it stays on the 1024 head atlas.
  */
 export const WINDOW_TEXTURE = { width: 2048, height: 512 } as const;
+/** The diagnostic Glitter route's window: 4096 × 1024, about 0.064 × 0.060 mm per texel on the lids (experiment 018). */
+export const GLITTER_WINDOW_TEXTURE = { width: 4096, height: 1024 } as const;
+/** The emissive accent's head-UV mask side (its template has no UV transform): about 0.28 × 0.20 mm per texel. */
+export const ACCENT_TEXTURE_SIZE = 2048;
 export const HEAD_TEXTURE_SIZE = 1024;
-export const ROUTE_UV_WINDOW: Record<ExportRoute, boolean> = { flat: true, faceted: true, fresnel: false };
+export const ROUTE_UV_WINDOW: Record<ExportRoute, boolean> = { flat: true, faceted: true, fresnel: false, glitter: true };
 /** Entry suffix of a flat or faceted preset that a diagnostic keeps on head UV (no UV transform). */
 export const HEAD_UV_ENTRY_SUFFIX = "_head";
 
@@ -171,8 +183,10 @@ export const ROUTE_CHANNELS = {
   flat: ["diffuse", "roughness", "metalness"],
   faceted: ["diffuse", "roughness", "metalness", "normal"],
   fresnel: ["mask", "gradient"],
+  // `flakes` is the NormalAlphaTex flake mask; a preset with an emissive accent adds `accent` (its head-UV mask).
+  glitter: ["diffuse", "roughness", "metalness", "normal", "flakes"],
 } as const satisfies Record<ExportRoute, readonly string[]>;
-export type TextureChannel = "diffuse" | "roughness" | "metalness" | "normal" | "mask" | "gradient";
+export type TextureChannel = "diffuse" | "roughness" | "metalness" | "normal" | "mask" | "gradient" | "flakes" | "accent";
 
 const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
 const srgbDecode = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
