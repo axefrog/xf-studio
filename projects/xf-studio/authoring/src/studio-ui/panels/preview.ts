@@ -292,15 +292,15 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const head = new Toggle({ label: "Head movement", onChange: value => setContributions(value, undefined) });
   const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
   const idleNote = note("");
-  const blink = new Slider({ label: "Eyelid closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
+  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
     transaction: { edit: value => { port.authoring.dispatch({ kind: "motion.setBlink", value }); } } });
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.playBlink", playing: !motion?.blinkPlaying });
   } });
+  const blinkNote = note("");
   const element = h("div", { class: "panel-content" },
     section("Game idle", idle.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
-    section("Eyelid study", blink.element, h("div", { class: "row" }, play),
-      note("A separate synthetic study for checking makeup on closed lids. It is unavailable while the game idle plays.")));
+    section("Blink", blink.element, h("div", { class: "row" }, play), blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
@@ -319,6 +319,9 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
+      setText(blinkNote, !motion ? "" : !motion.blinkAvailable
+        ? `${motion.blinkError ?? "The game's blink hasn't been prepared on this computer yet."} It is made once from your own game files, like the idle; the idle guide shows how.`
+        : "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; Play blink plays it at the game's speed, repeated every 2.45 s (the idle's average spacing). Off while the idle plays, which blinks on its own.");
     },
   };
 }

@@ -11,7 +11,7 @@ test("motion service restores composition before clock, preserves pause phase an
   preview.idleBody = false; preview.idleFace = true;
   const idle = { enabled: false, time: 0, paused: false, bodyEnabled: true, faceEnabled: true,
     seek(time: number) { this.time = time; calls.push(`seek:${time}`); } };
-  const port: MotionPort = { available: true, idle,
+  const port: MotionPort = { available: true, blink: { available: true }, idle,
     setIdle: enabled => { idle.enabled = enabled; calls.push(`idle:${enabled}`); },
     setIdlePaused: paused => { idle.paused = paused; calls.push(`pause:${paused}`); },
     setIdleContributions: (body, face) => { idle.bodyEnabled = body; idle.faceEnabled = face; calls.push(`parts:${body}:${face}`); },

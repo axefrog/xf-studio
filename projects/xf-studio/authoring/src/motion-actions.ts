@@ -3,7 +3,7 @@ import { refusal, type Capability } from "./platform/api";
 
 export type MotionState = Pick<PreviewState,
   "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying"> &
-  { available: boolean; error?: string };
+  { available: boolean; error?: string; blinkAvailable: boolean; blinkError?: string };
 export type MotionAction =
   | { kind: "motion.setIdle"; enabled: boolean }
   | { kind: "motion.setPaused"; paused: boolean }
@@ -12,6 +12,8 @@ export type MotionAction =
   | { kind: "motion.playBlink"; playing: boolean };
 export type MotionPort = {
   available: boolean; error?: string;
+  /** The game's blink (game-blink.ts): whether it was prepared on this computer, and the plain reason when not. */
+  blink: { available: boolean; error?: string };
   idle?: { enabled: boolean; time: number; paused: boolean; bodyEnabled: boolean; faceEnabled: boolean; seek(time: number): void };
   setIdle(enabled: boolean): void; setIdlePaused(paused: boolean): void;
   setIdleContributions(body: boolean, face: boolean): void;
@@ -35,7 +37,8 @@ export class MotionActions {
       idlePaused: idle?.paused ?? this.initial.idlePaused,
       idleBody: idle?.bodyEnabled ?? this.initial.idleBody,
       idleFace: idle?.faceEnabled ?? this.initial.idleFace,
-      blink: this.blink, blinkPlaying: this.blinkPlaying };
+      blink: this.blink, blinkPlaying: this.blinkPlaying,
+      blinkAvailable: this.port.blink.available, blinkError: this.port.blink.error };
   }
   capability(action: MotionAction): Capability {
     if (action.kind === "motion.setBlink" && (!Number.isFinite(action.value) || action.value < 0 || action.value > 1))
@@ -45,9 +48,12 @@ export class MotionActions {
       return refusal("asset_unavailable", this.port.error ?? "Game idle is unavailable.");
     if (action.kind === "motion.setPaused" && !this.snapshot().idle)
       return refusal("invalid_value", "Enable the game idle before pausing it.");
+    const blinking = action.kind === "motion.setBlink" || action.kind === "motion.playBlink";
+    if (blinking && !this.port.blink.available)
+      return refusal("asset_unavailable", this.port.blink.error ?? "The game's blink hasn't been prepared on this computer yet.");
     // Kept as the code the facade gave this refusal before codes were structured (see the code-health ledger).
-    if ((action.kind === "motion.setBlink" || action.kind === "motion.playBlink") && this.snapshot().idle)
-      return refusal("asset_unavailable", "Blink study is unavailable while the game idle is active.");
+    if (blinking && this.snapshot().idle)
+      return refusal("asset_unavailable", "Blink is off while the game idle plays: the idle blinks on its own.");
     return { available: true };
   }
   /** Restore composition before clock and camera; pause never passes through the reset path. */
@@ -58,10 +64,10 @@ export class MotionActions {
       this.port.idle.seek(this.initial.idleTime);
       this.port.setIdlePaused(this.initial.idlePaused);
       this.blink = 0; this.blinkPlaying = false;
-    } else {
+    } else if (this.port.blink.available) {
       this.port.setBlink(this.initial.blink);
       this.port.animateBlink(this.initial.blinkPlaying);
-    }
+    } else { this.blink = 0; this.blinkPlaying = false; }
     this.notify();
   }
   dispatch(action: MotionAction) {

@@ -5,6 +5,7 @@ import { extendSkin } from "./skin";
 import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
+import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "./game-blink";
 import type { CameraState } from "./workspace-state";
 import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
@@ -255,40 +256,6 @@ async function assembleScene(
     });
   }
   refreshPlateUnderlay();
-  const bones: {
-    bone: THREE.Bone;
-    base: THREE.Vector3;
-    delta: THREE.Vector3;
-  }[] = [];
-  scene.updateMatrixWorld(true);
-  scene.traverse((o) => {
-    if (
-      !(o instanceof THREE.Bone) ||
-      !/eye_lid_(?:lashes_)?(up|dn)_row/.test(o.name)
-    )
-      return;
-    const up = o.name.includes("_up_"),
-      row = o.name.match(/row([A-D])/)?.[1] ?? "A";
-    const world = o.getWorldPosition(new THREE.Vector3());
-    const x = Math.abs(world.x),
-      edge = Math.max(0, 1 - Math.abs((x - 0.032) / 0.023));
-    const strength = (
-      { A: 1, B: 0.75, C: 0.55, D: 0.3 } as Record<string, number>
-    )[row];
-    // Explicit exploratory pose. These distances are not extracted game animation.
-    const delta = new THREE.Vector3(
-      0,
-      (up ? -0.0095 : 0.003) * edge * strength,
-      -0.001 * edge * strength,
-    );
-    const inv = o.parent!.matrixWorld.clone().invert();
-    delta.add(world).applyMatrix4(inv).sub(world.clone().applyMatrix4(inv));
-    bones.push({ bone: o, base: o.position.clone(), delta });
-  });
-  function blink(value: number) {
-    for (const b of bones)
-      b.bone.position.copy(b.base).addScaledVector(b.delta, value);
-  }
   let idle: IdleAnimation | undefined, idleError = "";
   try {
     const [motion, facial, binding] = await Promise.all([
@@ -347,6 +314,18 @@ async function assembleScene(
   } catch (error) {
     idle = undefined; idleError = (error as Error).message;
   }
+  // The game's own blink (game-blink.ts), bound by name to every rig bone present now (the eyeball joints above included);
+  // each V's details join it with the idle. Without the local asset the blink controls stay off with plain guidance.
+  let blink: GameBlink | undefined, blinkError = "";
+  try {
+    const targets: THREE.Object3D[] = [];
+    scene.updateMatrixWorld(true);
+    scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
+    blink = await loadGameBlink(targets);
+    if (!blink.bindings.length) throw Error(GAME_BLINK_MISSING);
+  } catch (error) {
+    blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
+  }
   function frameIdle() {
     // Stored cameras use neutral space. Always derive the displacement at phase
     // zero so restoring a paused/nonzero phase never adds a different offset.
@@ -382,6 +361,8 @@ async function assembleScene(
       if (!m.morphTargetInfluences) continue;
       for (const [i, weight] of faceMorphWeights(morphTargetNames(m), choice.region, choice.target)) m.morphTargetInfluences[i] = weight;
     }
+    // The blink turns the lids about the eye shape's own joint binds (game-blink.ts).
+    blink?.setShape(activeEyeShape(head));
   }
   function eyeShape(index: number) {
     const choice = eyeShapeChoices[index];
@@ -421,6 +402,7 @@ async function assembleScene(
         if (i !== undefined) mesh.morphTargetInfluences![i] = 1;
       }
     }
+    blink?.setShape(activeEyeShape(head));
     const savedEyes = group.morphs.find(m => m.region === "eyes");
     // No saved `eyes` pair means the base shape (`None`); the save stores only chosen morphs.
     const savedEyeShape = faceMorphChoiceIndex(eyeShapeChoices, savedEyes?.target ?? null);
@@ -451,6 +433,7 @@ async function assembleScene(
     next?.adopt();
     const kept = new Set(next?.components ?? []);
     if (previous) {
+      blink?.detach(drawnBefore.flatMap(item => item.bones));
       idle?.detach(drawnBefore.flatMap(item => item.bones));
       for (const item of previous.components) for (const mesh of item.meshes) {
         const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
@@ -505,6 +488,8 @@ async function assembleScene(
     eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
     applyEyeOptics();
     scene.updateMatrixWorld(true);
+    // The blink binds first: it must capture the details' neutral pose before a playing idle poses them.
+    blink?.attach(drawnDetails().flatMap(item => item.bones));
     idle?.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
@@ -551,21 +536,18 @@ async function assembleScene(
     if (frontPending) front();
     return true;
   };
-  let animation = false,
-    amount = 0;
-  const start = performance.now();
   const frameListeners = new Set<() => void>();
   // Reused every frame: the head centre the clip planes are measured from.
   const centre = new THREE.Vector3();
-  // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or the
-  // blink study plays. The scene's own mutators, the makeup stack, the lighting device, the idle, the
+  // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or
+  // Play blink runs. The scene's own mutators, the makeup stack, the lighting device, the idle, the
   // controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
   const scheduler = createRenderScheduler({
     clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
-    animating: () => idle?.enabled ? !idle.paused : animation,
-    frame(dt, now) {
+    animating: () => idle?.enabled ? !idle.paused : !!blink?.playing,
+    frame(dt) {
       if (idle?.enabled) { if (!idle.paused) idle.update(dt); }
-      else blink(animation ? Math.pow(Math.max(0, Math.cos((now - start) / 1000 * 2.3)), 16) : amount);
+      else blink?.update(dt);
       if (controls.enabled) controls.update();
       // At long orbits, move the near plane in front of a conservative head
       // envelope so the thin makeup plate retains depth precision.
@@ -589,6 +571,7 @@ async function assembleScene(
   // Creator options (exposure, intensity form, cone) don't notify the lighting device's listeners.
   Object.assign(lighting, invalidating(lighting, ["setCreatorOptions"], invalidate));
   if (idle) { const playing = idle; playing.onChange = invalidate; releases.push(() => { playing.onChange = undefined; }); }
+  if (blink) { const blinking = blink; blinking.onChange = invalidate; releases.push(() => { blinking.onChange = undefined; }); }
   const observer = new ResizeObserver(() => { resize(); invalidate(); });
   observer.observe(host);
   releases.push(() => observer.disconnect());
@@ -596,7 +579,7 @@ async function assembleScene(
   releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }));
   resize();
   invalidate();
-  const evidence = coreSceneEvidence({ coreDetail, meshes, blinkBones: bones.length,
+  const evidence = coreSceneEvidence({ coreDetail, meshes, blink, blinkError,
     eyeShape: { choices: eyeShapeChoices.length, eyesFollow: eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     profileEncoding, idle, idleError });
   const api = {
@@ -660,6 +643,8 @@ async function assembleScene(
     setPiercings,
     /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */
     idle,
+    /** The game's blink (game-blink.ts); undefined with `evidence.blink.error` when it isn't prepared. */
+    blink,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): CameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
       target: controls.target.clone().sub(idleFrameOffset).toArray(), fov: camera.fov }),
@@ -696,7 +681,7 @@ async function assembleScene(
     endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => {
       if (!idle || idle.enabled === enabled) return;
-      animation = false; amount = 0; blink(0);
+      blink?.reset();
       idle.setEnabled(enabled);
       frameIdle();
     },
@@ -708,11 +693,8 @@ async function assembleScene(
     setDetail: (name: "brows" | "lashes", v: boolean) => {
       detailVisible[name] = v; refreshDetailVisibility();
     },
-    setBlink: (v: number) => {
-      amount = v;
-      animation = false;
-    },
-    animateBlink: (v: boolean) => (animation = v),
+    setBlink: (v: number) => blink?.setClosure(v),
+    animateBlink: (v: boolean) => blink?.setPlaying(v),
     setWire: makeup.setWire,
     setNormals: (v: boolean) => {
       normalsEnabled = v;

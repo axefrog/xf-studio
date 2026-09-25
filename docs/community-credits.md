@@ -48,7 +48,7 @@ By jac3km4 and contributors. [GitHub](https://github.com/jac3km4/redscript). Its
 
 ### Cyberpunk Blender Add-on (IO Suite)
 
-By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. Its world-sector importer's light conversion showed which local axis a light shines along, and its multilayered material setup was the community reading we compared with the game's compiled layer program when building the preview's layered materials. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
+By its authors and the RED Modding maintainers. [GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on). Its facial solver turns the game's facial animation controls into real deformation; running it offline gave the studio's preview a working character-creator idle with blinks, gaze and mouth movement, and the game's own blink on V's lids, lashes and brows. Its eye material setup also served as a useful precedent for our preview shaders, and its material import code, originally by HitmanHimself building on Turk645's research with shader notes by Jato and current maintenance by DoctorPresto, showed how community tools read each shader template's parameters and texture channels, including its empirical hair-profile colour handling. Its world-sector importer's light conversion showed which local axis a light shines along, and its multilayered material setup was the community reading we compared with the game's compiled layer program when building the preview's layered materials. We run the unmodified solver as an external tool (GPL-3.0-or-later); no add-on code is included in XF Studio.
 
 ### IGCS Connector
 
@@ -228,7 +228,7 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### xBaebsae
 
-[Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179). Its alternative head morph reinforced the need to resolve each file's effective winner, and showed that a head fix can keep the geometry while renaming per-target bone names, which the built-in eye plate now carries over. Studied only.
+[Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179). Its alternative head morph reinforced the need to resolve each file's effective winner, and showed that a head fix can keep the geometry while renaming per-target bone names, which the built-in eye plate now carries over. That fix is also why we read morph targets' own joint binds as active at runtime, which the preview's blink now follows for each eye shape. Studied only.
 
 ## Research papers
 

@@ -56,7 +56,7 @@ test("workspace composer keeps pre-preview restoration safe and later uses typed
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
   const preview = { ...workspace.preview, wire: true,
     camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } };
-  const motion = { ...workspace.preview, available: true, blink: .4, blinkPlaying: false,
+  const motion = { ...workspace.preview, available: true, blinkAvailable: true, blink: .4, blinkPlaying: false,
     idle: false, idleTime: 4, idlePaused: false, idleBody: true, idleFace: false };
   const composer = new WorkspaceComposer(workspace, {
     editor: () => document.export(), uvView: () => workspace.uvView,
