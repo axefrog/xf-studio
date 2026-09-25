@@ -1,6 +1,6 @@
 import { clamp, curve, type Layer, type Recipe } from "./recipe";
 import { cancelsGesture } from "./gesture-cancel";
-import { modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+import { modifierKey, modifiersOf, pointerBinding, pointerInputOf, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
 import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
@@ -285,9 +285,11 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (key !== inputKey) { inputKey = key; hooks.input(state); }
   }
   canvas.onpointerdown = e => {
-    if ((e.button !== 0 && e.button !== 2) || drag) return;
+    // Every press (any button, a second finger) resolves through the catalogue; unbound does nothing.
+    const input = pointerInputOf(e);
+    if (!input || drag) return;
     const p = coordinate(e), resolved = targetAt(p);
-    const binding = pointerBinding("uv", e.button === 2 ? "right-drag" : "drag", resolved.target, modifierKey(modifiersOf(e)));
+    const binding = pointerBinding("uv", input, resolved.target, modifierKey(modifiersOf(e)));
     const effect = binding?.effect ?? "none";
     if (effect === "none") return;
     finishWheel();
