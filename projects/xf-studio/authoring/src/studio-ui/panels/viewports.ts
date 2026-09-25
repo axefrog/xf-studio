@@ -1,12 +1,11 @@
-import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, TARGET_LABELS } from "../../input-bindings";
+import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
 import type { ViewportHostKind } from "../../viewport-attachment";
 import { Segmented, button, applyCapability } from "../controls";
 import { h, setAttr, setText, isTextInput } from "../dom";
 import { icon } from "../icons";
-import { openMenu, type MenuAnchor, type MenuItem } from "../menu";
 import type { Frame, StudioRuntime } from "../runtime";
-import { contextItems } from "../target-menus";
+import { viewportMenu } from "../target-menus";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 
@@ -26,48 +25,6 @@ function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (eve
 /** Accessible viewport description generated from its key bindings. */
 const keyDescription = (scope: "head" | "uv") => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
   .map(binding => `${chordsLabel(binding)} ${binding.label.toLowerCase()}`).join(", ")}. ${shortcutLabel("shell.shortcuts")} lists every mouse and keyboard binding.`;
-
-function viewItems(rt: StudioRuntime, kind: ViewportHostKind): MenuItem[] {
-  const port = rt.port;
-  if (kind === "uv") {
-    const view = port.viewport.snapshot().uv.view;
-    const command = (id: "both" | "single" | "other" | "fit", label: string): MenuItem => ({ kind: "action", label, shortcut: shortcutLabel(`uv.${id}`),
-      capability: port.viewport.uvCommandCapability(id), checked: id === "both" ? view?.mode === "both" : id === "single" ? view?.mode === "single" : undefined,
-      run: () => { port.viewport.uvCommand(id); } });
-    return [{ kind: "heading", label: "UV view", detail: "View changes are not edits" }, command("both", "Both eyes"),
-      command("single", "Single eye"), command("other", "Other eye"), command("fit", "Fit shape")];
-  }
-  const preview = port.authoring.previewState().preview;
-  return [{ kind: "heading", label: "Head view", detail: "View changes are not edits" },
-    { kind: "action", label: "Front view", icon: "front", shortcut: shortcutLabel("head.front"), capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
-    { kind: "action", label: "Surface controls", icon: "handles", checked: !!preview?.surface,
-      capability: port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }),
-      run: () => { rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }); } },
-    { kind: "action", label: "Plate wireframe", icon: "wire", checked: !!preview?.wire,
-      capability: port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }),
-      run: () => { rt.dispatch({ kind: "preview.setWire", enabled: !preview?.wire }); } }];
-}
-
-/** Menu for a viewport position (pointer) or the selected point (keyboard). */
-export function viewportMenu(rt: StudioRuntime, kind: ViewportHostKind, anchor: MenuAnchor, at?: { x: number; y: number }, invoker?: Element) {
-  const port = rt.port, items: MenuItem[] = [];
-  const query = at ? port.viewport.contextAt(kind, at.x, at.y) : undefined;
-  if (at && !query) items.push({ kind: "heading", label: kind === "head" ? "Background" : "Outside the editor", detail: kind === "head" ? "No editable control under the cursor" : undefined });
-  else if (query) {
-    const labels = TARGET_LABELS[kind], hitLabel = query.affordance === "empty" ? TARGET_LABELS.uv.empty : labels[query.affordance];
-    items.push({ kind: "heading", label: hitLabel ?? "Target", detail: query.mirror ? "Mirrored copy · edits the authored side" : undefined });
-    items.push(...contextItems(rt, query, anchor));
-    if (query.affordance === "empty") items.push({ kind: "heading", label: "No shape here", detail: "Double-click near an outline to insert a point" });
-  } else {
-    const layer = port.editor.layer();
-    if (layer) {
-      const selectedQuery = port.authoring.contextQuery({ kind: "point", layerId: layer.id, index: port.editor.selected() });
-      items.push({ kind: "heading", label: `Selected point ${port.editor.selected() + 1}`, detail: layer.name }, ...contextItems(rt, selectedQuery, anchor));
-    }
-  }
-  items.push({ kind: "separator" }, ...viewItems(rt, kind));
-  openMenu(items, anchor, { label: `${kind === "head" ? "Head" : "UV map"} commands`, invoker });
-}
 
 function readinessBadge() {
   // Not a live region: it changes on every raster and would flood assistive technology (audit B-25).

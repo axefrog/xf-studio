@@ -200,7 +200,8 @@ async function start() {
       savedAppearance.subscribe(() => statusSource.changed());
       previewDevice.connectScene(scene);
       surface = viewportDevice.mountSurface({
-        layer: () => core.geometry.layer(), selected: () => core.presentation.selected, ...fieldHooks,
+        layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
+        selected: () => core.presentation.selected, ...fieldHooks,
         begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
         apply: proposal => core.app.applyGesture("surface", proposal),
         cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),

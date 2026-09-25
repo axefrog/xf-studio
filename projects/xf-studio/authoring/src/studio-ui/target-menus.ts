@@ -1,8 +1,9 @@
 import type { StudioAction, StudioCapability, StudioTarget } from "../studio-application";
 import type { StudioBoundContext } from "../studio-context-targets";
-import { chordLabel, keyBindingById, shortcutLabel } from "../input-bindings";
+import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../input-bindings";
+import type { ViewportHostKind } from "../viewport-attachment";
 import type { IconName } from "./icons";
-import { openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "./menu";
+import { menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem, type MenuSection } from "./menu";
 import type { StudioRuntime } from "./runtime";
 
 type Query = ReturnType<StudioRuntime["port"]["authoring"]["contextQuery"]>;
@@ -33,9 +34,8 @@ const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").c
 /** Menu items for an application-bound context. Every dispatch rechecks the binding. */
 export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor): MenuItem[] {
   const port = rt.port, recipe = port.editor.recipe(), hit = query.context.hit;
+  // A stale or missing target needs no heading of its own: each entry is disabled with that reason.
   const items: MenuItem[] = [];
-  if (!query.targetCapability.available)
-    items.push({ kind: "heading", label: "Target changed", detail: query.targetCapability.reason });
   for (const option of query.options) {
     const [label, iconName] = labels[option.id] ?? [option.id];
     if (!option.requiresInput) {
@@ -115,51 +115,114 @@ export function targetAction(rt: StudioRuntime, target: StudioTarget, action: St
   return { kind: "action", label, icon: iconName, capability, ...extra, run: () => { rt.dispatch(action); } };
 }
 
-export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor, invoker?: Element) {
+/*
+ * Context menus are actionable, not informational: every menu below is built from sections, and
+ * `menuFromSections` drops any section with no action. Target-specific actions come first, then
+ * view actions. Nothing here decides availability; each entry carries the application's capability.
+ */
+export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAnchor): MenuSection[] {
   const port = rt.port, recipe = port.editor.recipe(), index = recipe.layers.findIndex(layer => layer.id === layerId);
   const layer = recipe.layers[index];
-  if (!layer) return;
+  if (!layer) return [];
   const query = port.authoring.contextQuery({ kind: "layer", id: layerId });
   const target: StudioTarget = { kind: "layer", id: layerId };
-  const items: MenuItem[] = [{ kind: "heading", label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front` },
-    ...contextItems(rt, query, anchor), { kind: "separator" },
-    targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } }, "Bring forward", "arrowUp",
-      { shortcut: reorderKey(0) }),
-    targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } }, "Send backward", "arrowDown",
-      { shortcut: reorderKey(1) }),
-    targetAction(rt, target, { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry }, "Mirror across the face", "mirror",
-      { checked: layer.symmetry }),
-    { kind: "submenu", label: "Finish", icon: "finish", items: () => port.authoring.choicesFor(target, "layer.setFinish", "finish")
-      .filter(choice => choice.value !== "satin")
-      .map(choice => {
-        const descriptor = rt.finishes.find(item => item.id === choice.value);
-        return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
-          checked: layer.finish === choice.value || (layer.finish === "satin" && choice.value === "regular"),
-          hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod" : undefined,
-          run: () => { rt.dispatch(choice.action); } };
-      }) },
-    targetAction(rt, target, { kind: "layer.edit", command: { kind: "reset", id: layerId } }, "Reset shape and settings", "reset",
-      { hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` }),
-  ];
-  openMenu(items, anchor, { label: `${layer.name} layer actions`, invoker });
+  return [{ label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front`, items: contextItems(rt, query, anchor) },
+    { items: [
+      targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } }, "Bring forward", "arrowUp",
+        { shortcut: reorderKey(0) }),
+      targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } }, "Send backward", "arrowDown",
+        { shortcut: reorderKey(1) }),
+      targetAction(rt, target, { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry }, "Mirror across the face", "mirror",
+        { checked: layer.symmetry }),
+      { kind: "submenu", label: "Finish", icon: "finish", items: () => port.authoring.choicesFor(target, "layer.setFinish", "finish")
+        .filter(choice => choice.value !== "satin")
+        .map(choice => {
+          const descriptor = rt.finishes.find(item => item.id === choice.value);
+          return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
+            checked: layer.finish === choice.value || (layer.finish === "satin" && choice.value === "regular"),
+            hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod" : undefined,
+            run: () => { rt.dispatch(choice.action); } };
+        }) },
+      targetAction(rt, target, { kind: "layer.edit", command: { kind: "reset", id: layerId } }, "Reset shape and settings", "reset",
+        { hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` }),
+    ] }];
+}
+export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor, invoker?: Element) {
+  const layer = rt.port.editor.recipe().layers.find(item => item.id === layerId);
+  if (!layer) return;
+  openMenu(menuFromSections(layerSections(rt, layerId, anchor)), anchor, { label: `${layer.name} layer actions`, invoker });
 }
 
-export function presetMenu(rt: StudioRuntime, presetId: string, anchor: MenuAnchor, invoker?: Element) {
+export function presetSections(rt: StudioRuntime, presetId: string, anchor: MenuAnchor): MenuSection[] {
   const port = rt.port, draft = port.library.summary().draft;
   const presets = draft?.presets ?? [], index = presets.findIndex(preset => preset.id === presetId);
   const preset = presets[index];
-  if (!preset) return;
+  if (!preset) return [];
   const target: StudioTarget = { kind: "preset", id: presetId };
   const query = port.authoring.contextQuery({ kind: "preset", id: presetId });
-  openMenu([{ kind: "heading", label: preset.name, detail: `${preset.layers} ${preset.layers === 1 ? "layer" : "layers"} · preset ${index + 1} of ${presets.length}` },
-    ...contextItems(rt, query, anchor), { kind: "separator" },
+  return [{ label: preset.name, detail: `${preset.layers} ${preset.layers === 1 ? "layer" : "layers"} · preset ${index + 1} of ${presets.length}`,
+    items: contextItems(rt, query, anchor) },
+  { items: [
     targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index - 1 } }, "Move up", "arrowUp", { shortcut: reorderKey(0) }),
     targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index + 1 } }, "Move down", "arrowDown", { shortcut: reorderKey(1) }),
-  ], anchor, { label: `${preset.name} preset actions`, invoker });
+  ] }];
+}
+export function presetMenu(rt: StudioRuntime, presetId: string, anchor: MenuAnchor, invoker?: Element) {
+  const preset = rt.port.library.summary().draft?.presets.find(item => item.id === presetId);
+  if (!preset) return;
+  openMenu(menuFromSections(presetSections(rt, presetId, anchor)), anchor, { label: `${preset.name} preset actions`, invoker });
 }
 
-export function collectionMenu(rt: StudioRuntime, anchor: MenuAnchor, invoker?: Element) {
+export function collectionSections(rt: StudioRuntime, anchor: MenuAnchor): MenuSection[] {
   const query = rt.port.authoring.contextQuery({ kind: "collection" });
-  openMenu([{ kind: "heading", label: rt.port.library.summary().draft?.name ?? "Collection" }, ...contextItems(rt, query, anchor)],
-    anchor, { label: "Collection actions", invoker });
+  return [{ label: rt.port.library.summary().draft?.name ?? "Collection", items: contextItems(rt, query, anchor) }];
+}
+export function collectionMenu(rt: StudioRuntime, anchor: MenuAnchor, invoker?: Element) {
+  openMenu(menuFromSections(collectionSections(rt, anchor)), anchor, { label: "Collection actions", invoker });
+}
+
+/** View commands never edit, so they follow any target section. */
+function viewSection(rt: StudioRuntime, kind: ViewportHostKind): MenuSection {
+  const port = rt.port;
+  if (kind === "uv") {
+    const view = port.viewport.snapshot().uv.view;
+    const command = (id: "both" | "single" | "other" | "fit", label: string): MenuItem => ({ kind: "action", label, shortcut: shortcutLabel(`uv.${id}`),
+      capability: port.viewport.uvCommandCapability(id), checked: id === "both" ? view?.mode === "both" : id === "single" ? view?.mode === "single" : undefined,
+      run: () => { port.viewport.uvCommand(id); } });
+    return { label: "UV view", items: [command("both", "Both eyes"), command("single", "Single eye"), command("other", "Other eye"), command("fit", "Fit shape")] };
+  }
+  const preview = port.authoring.previewState().preview;
+  return { label: "Head view", items: [
+    { kind: "action", label: "Front view", icon: "front", shortcut: shortcutLabel("head.front"), capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
+    { kind: "action", label: "Surface controls", icon: "handles", checked: !!preview?.surface,
+      capability: port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }),
+      run: () => { rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }); } },
+    { kind: "action", label: "Plate wireframe", icon: "wire", checked: !!preview?.wire,
+      capability: port.authoring.capability({ kind: "preview.setWire", enabled: !preview?.wire }),
+      run: () => { rt.dispatch({ kind: "preview.setWire", enabled: !preview?.wire }); } }] };
+}
+
+/**
+ * Sections for a viewport position (pointer) or the selected point (keyboard). The hit section
+ * comes first; bare skin, empty UV space and background have no target actions, so their menu
+ * is the view section alone.
+ */
+export function viewportSections(rt: StudioRuntime, kind: ViewportHostKind, anchor: MenuAnchor, at?: { x: number; y: number }): MenuSection[] {
+  const port = rt.port, sections: MenuSection[] = [];
+  const query = at ? port.viewport.contextAt(kind, at.x, at.y) : undefined;
+  if (query) {
+    const hit = query.context.hit, layerId = "layerId" in hit ? hit.layerId : undefined;
+    const layer = layerId ? port.editor.recipe().layers.find(item => item.id === layerId) : undefined;
+    const detail = [layer?.name, query.mirror ? "mirrored copy" : undefined].filter(Boolean).join(" · ") || undefined;
+    sections.push({ label: TARGET_LABELS[kind][query.affordance], detail, items: contextItems(rt, query, anchor) });
+  } else if (!at) {
+    const layer = port.editor.layer();
+    if (layer) sections.push({ label: `Selected point ${port.editor.selected() + 1}`, detail: layer.name,
+      items: contextItems(rt, port.authoring.contextQuery({ kind: "point", layerId: layer.id, index: port.editor.selected() }), anchor) });
+  }
+  sections.push(viewSection(rt, kind));
+  return sections;
+}
+export function viewportMenu(rt: StudioRuntime, kind: ViewportHostKind, anchor: MenuAnchor, at?: { x: number; y: number }, invoker?: Element) {
+  openMenu(menuFromSections(viewportSections(rt, kind, anchor, at)), anchor, { label: `${kind === "head" ? "Head" : "UV map"} commands`, invoker });
 }

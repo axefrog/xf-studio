@@ -231,7 +231,7 @@ export class StudioApplication {
     if (!bound.available) return bound;
     const target = contextScope(context.hit);
     if (!target) return { available: false, code: "invalid_value",
-      reason: "No standalone edit command applies to empty UV space." };
+      reason: "No standalone edit command applies off the makeup." };
     const variant = "command" in action && action.command && typeof action.command === "object" &&
       "kind" in action.command ? action.command.kind : undefined;
     const candidate = contextCandidates(context.hit, this.services.document.recipe).find(item =>

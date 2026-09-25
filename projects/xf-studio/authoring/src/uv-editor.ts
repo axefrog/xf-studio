@@ -261,9 +261,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       return { hit, mirror: handle.mirror,
         affordance: handle.kind === "origin" ? "warp-origin" : handle.kind === "field" ? "warp-vector" : handle.kind };
     }
-    const shape = shapeHit(layer, p);
-    return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" }
-      : { hit: { kind: "uv-empty" }, affordance: "empty" };
+    // Painted makeup: the selected layer first, then the frontmost other visible layer.
+    const others = [...hooks.recipe().layers].reverse().filter(item => item.id !== layer.id);
+    for (const candidate of [layer, ...others]) {
+      const shape = shapeHit(candidate, p);
+      if (shape) return { hit: { kind: "shape", layerId: candidate.id }, mirror: shape.mirror, affordance: "shape" };
+    }
+    return { hit: { kind: "uv-empty" }, affordance: "empty" };
   }
   /** What is under a UV coordinate. Without a layer everything is empty space. */
   function targetAt(p: UV) {

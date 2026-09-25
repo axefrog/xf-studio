@@ -79,7 +79,8 @@ test("projected tangents cross eye holes while actual surface controls keep head
     // click must still pass through to the camera rather than select makeup.
     const shapeClick = atUV("pointerdown",.3,.4);
     expect(shapeClick.defaultPrevented).toBe(false);
-    expect(editor.hitAt((shapeClick as any).clientX, (shapeClick as any).clientY)).toBeUndefined();
+    // The context hit is the eye (character geometry), never the makeup behind it.
+    expect(editor.hitAt((shapeClick as any).clientX, (shapeClick as any).clientY)).toEqual({ hit: { kind: "head" }, affordance: "empty" });
     expect(editor.diagnostics().dragging).toBe(false);
     expect(controls.enabled).toBe(true);
     expect(editor.diagnostics().handles.find(h=>h.kind==="point"&&h.index===0&&!h.mirror)!.selectable).toBe(true);
