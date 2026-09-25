@@ -95,9 +95,9 @@ body.guide { overflow: auto; height: auto; }
 .demo-uv { height: 170px; margin-top: var(--sp-4); }
 .demo-hints { height: auto; min-height: 58px; }
 .demo-hints .viewport-bottom { position: static; padding: var(--sp-4); }
-.demo-hints-uv { height: auto; min-height: 0; }
 .demo-tip-stage { height: auto; min-width: 240px; }
 .static-tip { position: static; }
+.uv-stage > .uv-well { position: absolute; inset: var(--sp-4) 20% calc(var(--sp-4) + 34px); margin: 0; }
 .uv-well { flex: 1; min-height: 60px; margin: var(--sp-3); background: linear-gradient(90deg, transparent 49.8%, #c4ddca44 50%, transparent 50.2%), radial-gradient(60% 50% at 30% 45%, oklch(.5 .08 350 / .7), transparent 70%), radial-gradient(60% 50% at 70% 45%, oklch(.5 .08 350 / .7), transparent 70%), #253132; border: 1px solid var(--line-strong); }
 .mock-shell { display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr) auto; height: 420px; border: 1px solid var(--line-strong); background: var(--bg-app); overflow: hidden; }
 .mock-shell.compact-mock { max-width: 560px; height: 520px; }

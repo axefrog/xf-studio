@@ -23,10 +23,10 @@ test("UV resize sharpens backing buffer without resetting view or changing CSS-s
   let mediaChanged=()=>{};
   const context=new Proxy({setTransform:(...values:number[])=>transforms.push(values),arc:(_x:number,_y:number,r:number)=>radii.push(r)},
     {get:(target,key)=>Reflect.get(target,key)??(()=>{})});
-  const canvas:any={style:{aspectRatio:""},clientLeft:1,clientTop:1,
+  const canvas:any={style:{},clientLeft:1,clientTop:1,
     get width(){return bufferWidth;},set width(n:number){bufferWidth=n;writes++;},
     get height(){return bufferHeight;},set height(n:number){bufferHeight=n;writes++;},
-    getContext:()=>context,getBoundingClientRect:()=>({left:10,top:20,width:cssWidth+2,height:(cssWidth+2)/(+canvas.style.aspectRatio||720/310)}),
+    getContext:()=>context,getBoundingClientRect:()=>({left:10,top:20,width:cssWidth+2,height:cssWidth/(720/310)+2}),
     addEventListener:(kind:string,fn:(e:any)=>void)=>{listeners[kind]=fn;},
     setPointerCapture(){},hasPointerCapture(){return false;},releasePointerCapture(){}};
   const win:any={devicePixelRatio:2,addEventListener:(kind:string,fn:(e:any)=>void)=>{listeners[kind]=fn;},

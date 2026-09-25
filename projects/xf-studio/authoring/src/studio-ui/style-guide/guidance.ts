@@ -74,7 +74,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "c-strip": { combine: "Sticks to the top of the inspector while its content scrolls.", adapt: "Name truncates; the position text stays.",
     drives: "editor.layer() and editor.recipe()." },
   "c-viewport": { combine: "The Head panel's tools duplicate the most frequent Camera & light and Motion toggles; the full controls stay in those panels.",
-    adapt: "Hint discovery hides below 720 px; the UV canvas keeps its aspect and letterboxes inside any panel shape." },
+    adapt: "Hint discovery hides below 720 px; the UV canvas fills any panel shape, and Fit fits the shape to it." },
   "c-handles": { combine: "Selecting a handle updates the Shape, Pigment & edge and Warp inspectors.",
     adapt: "Handle sizes are fixed in screen pixels; zoom the UV map or the camera for precision." },
   "t-saved": { adapt: "Header chip hides below 720 px; the Presets panel and status bar keep the information." },

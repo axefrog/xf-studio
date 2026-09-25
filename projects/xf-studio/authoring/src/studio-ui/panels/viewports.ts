@@ -1,4 +1,3 @@
-import { uvAspect } from "../../uv-view";
 import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, TARGET_LABELS } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
 import type { ViewportHostKind } from "../../viewport-attachment";
@@ -154,22 +153,17 @@ export function uvPanel(rt: StudioRuntime): PanelController {
     { value: "both", label: "Both eyes" }, { value: "single", label: "Single eye" }], onSelect: mode => { port.viewport.uvCommand(mode); } });
   const other = button({ label: "Other eye", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("other"); } });
   const fit = button({ label: "Fit shape", icon: "target", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("fit"); } });
-  const warning = h("div", { class: "uv-hint", "data-tone": "warning", hidden: true },
+  const warning = h("div", { class: "uv-warning", hidden: true },
     `Selected point is outside this view · ${shortcutLabel("uv.fit")}: fit shape · ${shortcutLabel("uv.other")}: other eye`);
   const element = h("div", { class: "viewport-panel uv", tabindex: "0", "aria-label": `UV map editor. ${keyDescription("uv")}` });
   const hints = new ViewportInputHints(rt, "uv", slot, element);
-  element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), slot, warning, hints.strip, hints.tip);
+  // The canvas fills the stage. Warning and hints are overlays: they never take layout space, so a
+  // hint change can never resize the canvas (the stage's --uv-safe-* insets keep Fit clear of them).
+  const stage = h("div", { class: "uv-stage" }, slot,
+    h("div", { class: "viewport-top" }, warning), h("div", { class: "viewport-bottom" }, hints.strip));
+  element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), stage, hints.tip);
   port.viewport.attach("uv", slot);
-  let mode: string | undefined;
-  const layout = () => {
-    const host = slot.firstElementChild as HTMLElement | null;
-    if (!host) return;
-    const rect = slot.getBoundingClientRect(), aspect = uvAspect(mode === "single" ? "single" : "both");
-    if (rect.width < 2 || rect.height < 2) return;
-    const w = Math.min(rect.width, rect.height * aspect), hgt = w / aspect;
-    host.style.width = `${Math.floor(w)}px`; host.style.height = `${Math.floor(hgt)}px`;
-  };
-  new ResizeObserver(layout).observe(slot);
+  let hintsShown: boolean | undefined;
   contextMenuGate("uv", slot, event => viewportMenu(rt, "uv", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {
     if (event.target !== element) return;
@@ -179,16 +173,21 @@ export function uvPanel(rt: StudioRuntime): PanelController {
   });
   return {
     spec: { id: "uv", ...PANEL_META["uv"], element,
-      visibility: visible => { if (visible) requestAnimationFrame(() => { layout(); port.viewport.resize("uv"); }); } },
+      visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("uv")); } },
     update(frame) {
       const view = frame.viewport.uv.view;
-      if (view?.mode !== mode) { mode = view?.mode; layout(); }
       modes.update(view?.mode, value => port.viewport.uvCommandCapability(value));
       applyCapability(other, port.viewport.uvCommandCapability("other"));
       applyCapability(fit, port.viewport.uvCommandCapability("fit"));
       const selection = frame.viewport.uv.selection;
       warning.hidden = !(selection?.point && !selection.point.visible);
       hints.update(frame);
+      // Hidden hints free their reserved band; the editor reads the new insets on the next draw.
+      if (frame.preferences.inputHints !== hintsShown) {
+        hintsShown = frame.preferences.inputHints;
+        stage.dataset.hints = hintsShown ? "on" : "off";
+        port.viewport.resize("uv");
+      }
     },
   };
 }
