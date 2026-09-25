@@ -4,7 +4,7 @@ Owner doc for **track 2** in the [ranked queue](README.md): character detail ren
 
 ## Status (25 Sep 2026)
 
-**Top feature priority (repeatedly requested):** correct **brow, lash and hair colours**, then render **all** character-customisation details in the viewport. The colour pipeline now follows the decoded 2.31 `hair.mt` and hair-light programs ([hair shading](../../knowledge/hair-shading.md)); parity still waits on the matched capture in the [colour evidence note](../eye-artistry/hair-colour-pipeline-2026-09-25.md#matched-in-game-capture-request).
+**Top feature priority (repeatedly requested):** correct **brow, lash and hair colours**, then render **all** character-customisation details in the viewport. The colour pipeline now follows the decoded 2.31 `hair.mt` and hair-light programs ([hair shading](../../knowledge/hair-shading.md)); its lighting now uses the game's vanilla hair options, and parity still waits on the [refined capture](../eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
 
 | Item | State |
 |---|---|

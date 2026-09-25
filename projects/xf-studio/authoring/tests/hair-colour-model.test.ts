@@ -107,18 +107,47 @@ test("post-G-buffer decals blend sqrt(albedo); the linear-over equivalent reprod
 });
 
 test("hair direct light: white R lobe, albedo-tinted TRT, diffuse proportional to albedo", async () => {
-  const { hairDirectLight, HAIR_LIGHTING_ASSUMED } = await import("../src/hair-colour-model");
+  const { hairDirectLight, HAIR_LIGHTING_VANILLA, HAIR_LIGHTING_KARIS } = await import("../src/hair-colour-model");
   const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
-  const L = [0, Math.sin(0.07), Math.cos(0.07)] as Rgb;   // near the R-lobe peak for this shift
-  const grey = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2);
-  const red = hairDirectLight(L, V, T, N, [0.5, 0.05, 0.05], 0.2);
-  // Diffuse scales with albedo; the R lobe does not depend on it, TRT does.
-  expect(red.diffuse[1] / grey.diffuse[1]).toBeCloseTo(0.1, 9);
-  expect(red.specular[0]).toBeGreaterThan(red.specular[1]);
-  expect(red.specular[1]).toBeGreaterThan(0);
-  // A rougher fibre spreads (lowers) the R peak.
-  expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.6).specular[0]).toBeLessThan(grey.specular[0]);
-  // Scatter and TRT intensities are the option-driven registers ([hypothesis] defaults).
-  const noScatter = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2, { ...HAIR_LIGHTING_ASSUMED, scatter: 0 });
-  expect(noScatter.diffuse).toEqual([0, 0, 0]);
+  for (const options of [HAIR_LIGHTING_VANILLA, HAIR_LIGHTING_KARIS]) {
+    const lighting = { ...options, specularRandomMin: 0, specularRandomMax: 0 };
+    // The R lobe peaks where sinL + sinV = sin(2 * shiftR) for a view along the normal.
+    const L = [0, Math.sin(2 * lighting.shiftR), Math.cos(2 * lighting.shiftR)] as Rgb;
+    const grey = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2, lighting);
+    const red = hairDirectLight(L, V, T, N, [0.5, 0.05, 0.05], 0.2, lighting);
+    // Diffuse scales with albedo; the R lobe does not depend on it, TRT does.
+    expect(red.diffuse[1] / grey.diffuse[1]).toBeCloseTo(0.1, 9);
+    expect(red.specular[0]).toBeGreaterThan(red.specular[1]);
+    expect(red.specular[1]).toBeGreaterThan(0);
+    // A rougher fibre spreads (lowers) the R peak.
+    expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.6, lighting).specular[0]).toBeLessThan(grey.specular[0]);
+    // Scatter is an option-driven register.
+    expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.2, { ...lighting, scatter: 0 }).diffuse).toEqual([0, 0, 0]);
+  }
+});
+
+test("hair direct light: Mask_Intensity gates and diffuse arithmetic follow the 2.31 program", async () => {
+  const { hairDirectLight, hairStrandRandom, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/hair-colour-model");
+  const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
+  const L: Rgb = [0, 0, 1];                                 // sinL = 0, N.L = 1
+  const base = { ...V231, specularRandomMin: 0, specularRandomMax: 0 };
+  // Diffuse = C/pi * lerp(w, 1-|sinL|, DiffuseScatterFactor) * clamp(w + 1 - Mask) * MultiScatter,
+  // w = saturate((N.L + Wrap)/(1+Wrap)^2).
+  const w = (1 + 0.35) / 1.35 ** 2;
+  expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, base).diffuse[0]).toBeCloseTo(0.5 / Math.PI * w * w * 0.47, 9);
+  // Mask_Intensity 0 opens the gate fully (clamp(w + 1) = 1).
+  expect(hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, { ...base, scatterMask: 0 }).diffuse[0])
+    .toBeCloseTo(0.5 / Math.PI * w * 0.47, 9);
+  // A light behind the card closes both gates at Mask_Intensity 1; the R lobe is gated by the specular wrap.
+  const behind: Rgb = [0, 0, -1];
+  expect(hairDirectLight(behind, V, T, N, [0.5, 0.5, 0.5], 0.3, base).diffuse[0]).toBe(0);
+  const open = hairDirectLight(L, V, T, N, [0, 0, 0], 0.3, { ...base, specularMask: 0, intensityTRT: 0 }).specular[0];
+  const gated = hairDirectLight(L, V, T, N, [0, 0, 0], 0.3, { ...base, intensityTRT: 0 }).specular[0];
+  expect(gated / open).toBeCloseTo(Math.min(1, (1 + 0.3) / 1.3 ** 2), 9);
+  // Per-strand random: frac(frac(id * 0.0729477) * 52.98292), mapped into [SpecularRandom_Min, _Max].
+  expect(hairStrandRandom(0)).toBe(0);
+  expect(hairStrandRandom(0.5)).toBeCloseTo((0.5 * 0.07294771 * 52.982918) % 1, 5);
+  const a = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, V231, 0.2).specular[0];
+  const b = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, V231, 0.7).specular[0];
+  expect(a).not.toBeCloseTo(b, 6);
 });

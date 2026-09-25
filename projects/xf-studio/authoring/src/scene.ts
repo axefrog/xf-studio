@@ -249,7 +249,7 @@ export async function createScene(
           roughness: lash ? lash.roughness : 0.8,
           side: THREE.DoubleSide,
         });
-        if (lash) { attachStrandCoverage(mat, lash.alphaCutoff); attachHairLighting(mat, lash.roughness); }
+        if (lash) { attachStrandCoverage(mat, lash.alphaCutoff); attachHairLighting(mat, lash.roughness, lash.strandId); }
         // Geometry is the local game's/mod's source. Hair/decal shading is provisional.
         o.material = mat;
         // Keep context details above the entire editable makeup stack (orders 10–41).

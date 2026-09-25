@@ -87,7 +87,7 @@ The alpha-weighted mean hair albedo under §3 of the knowledge page is sRGB ≈ 
 ## Remaining uncertainty
 
 - The profile bake's colour space and sample positions [hypothesis].
-- The hair-light option values (`HAIR_LIGHTING_ASSUMED` [hypothesis]), and the local-light and environment hair paths.
+- The hair-light option values. The preview now uses vanilla values from a third-party list, per the [calibration note](hair-calibration-2026-09-25.md#3-hair-light-constants). The local-light and environment hair paths are still undecoded.
 - The runtime winner for `brown_liquorice.hp`. The preview uses the mod candidate under the mod-over-base expectation; the base profile would render the lashes golden-tan.
 - Whether the preview's ambient and exposure resemble any game scene.
 
@@ -99,22 +99,7 @@ Mod-specific code that this work touched but did not expand is migration debt:
 
 ## Matched in-game capture request
 
-One session with the reference save's character, current stable ArchiveXL/TweakXL/CET, and the usual MO2 profile. The screenshots in steps 1–4 need only photo mode; the CET steps are optional but most valuable.
-
-1. **Photo mode, Default pose (character-creator neutral if possible), inside a neutral interior** (for example V's apartment bathroom with the lights on). Use a fixed time of day and turn off depth of field, vignette, film grain and camera effects.
-2. Three frames, 4K PNG, HDR off:
-   - (a) face front at head height, roughly 30° vertical FOV, framed like the Studio "face" view;
-   - (b) eye close-up of the left eye;
-   - (c) head three-quarter showing hair roots and lengths.
-   Keep the photo-mode camera unchanged between them if possible.
-3. In the character editor (mirror or new game), frame (a) again twice: once with hair colour `38_ash_brown` and once with vanilla `05_brown_liquorice`, with lashes on `05_brown_liquorice`. This separates profile failure from lighting.
-4. The session's `red4ext/logs/*.log` and `archive_xl/*.log`, plus the game and framework versions as reported in those logs.
-5. **CET console (optional, high value):**
-   - dump `GameOptions.List("Editor/Characters/Hair")` (or `GameOptions.Get`/`GetFloat` for each name under `AlphaShifts`, `Specular`, `MultiScatter`, `TRT_Params`, `HACKS`, `GlobalLight`), and paste the output;
-   - also dump `GameOptions.GetFloat("Editor/Characters/Hair", "AlbedoMultiplier")`.
-6. **Profile winner (optional):** if a resource-request logger or CET/Codeware snippet can be run, record which archive served `base\characters\common\hair\textures\hair_profiles\brown_liquorice.hp`. Otherwise, one frame of the lashes with the mod `Alliekat's Natural Hair.archive` disabled settles it visually. The expected colours are golden-tan with the base profile and dark red-brown with the mod.
-
-These captures settle the lash profile winner, the hair-light constants and the brow/lash darkness, all against the same framing as the Studio captures.
+Superseded by the [refined capture request](hair-calibration-2026-09-25.md#refined-capture-request). It adds a CET dump of the hair GameOptions, a neutral-light photo-mode set and a same-frame colour ladder that separates the profile bake from lighting.
 
 ## Reproduction
 
