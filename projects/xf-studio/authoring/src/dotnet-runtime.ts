@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, win32 } from "node:path";
 
 /**
  * Which .NET runtime a framework-dependent program needs, and whether this computer has it.
@@ -101,6 +101,7 @@ export const hostDotNetPorts = (): DotNetPorts => ({
 export function detectDotNet(ports: DotNetPorts = hostDotNetPorts()): DotNetInstall {
   const none: DotNetInstall = { root: null, source: null, frameworks: {} };
   if (ports.platform !== "win32") return none;
+  // Windows-only probe: build paths with Windows rules so tests on other hosts see the same paths.
   const fromEnv = ports.env.DOTNET_ROOT_X64 ? ["DOTNET_ROOT_X64", ports.env.DOTNET_ROOT_X64] as const
     : ports.env.DOTNET_ROOT ? ["DOTNET_ROOT", ports.env.DOTNET_ROOT] as const : null;
   let root: string | null, source: DotNetInstall["source"];
@@ -108,13 +109,13 @@ export function detectDotNet(ports: DotNetPorts = hostDotNetPorts()): DotNetInst
   else {
     const registered = ports.registeredLocation();
     if (registered && ports.isDirectory(registered)) { root = registered; source = "registry"; }
-    else { root = join(ports.env.ProgramFiles || "C:\\Program Files", "dotnet"); source = "default"; }
+    else { root = win32.join(ports.env.ProgramFiles || "C:\\Program Files", "dotnet"); source = "default"; }
   }
-  if (!root || !ports.isDirectory(join(root, "host", "fxr")) || !ports.list(join(root, "host", "fxr")).length)
+  if (!root || !ports.isDirectory(win32.join(root, "host", "fxr")) || !ports.list(win32.join(root, "host", "fxr")).length)
     return { ...none, root: root && ports.isDirectory(root) ? root : null, source };
   const frameworks: Record<string, string[]> = {};
-  for (const name of ports.list(join(root, "shared")))
-    frameworks[name] = ports.list(join(root, "shared", name)).filter(version => !!parse(version)).sort();
+  for (const name of ports.list(win32.join(root, "shared")))
+    frameworks[name] = ports.list(win32.join(root, "shared", name)).filter(version => !!parse(version)).sort();
   return { root, source, frameworks };
 }
 
