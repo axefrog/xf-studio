@@ -1,8 +1,9 @@
-import { PREVIEW_TEXTURE_SIZES, type PreviewTextureSize } from "./preview-quality";
+import { PREVIEW_TEXTURE_SIZES, type PreviewQualityRefusal, type PreviewTextureSize } from "./preview-quality";
+import { refusal, type Capability } from "./platform/api";
 
 export type QualityState = { size: PreviewTextureSize; error: string; blocked: boolean };
 export type QualityAction = { kind: "quality.set"; size: PreviewTextureSize } | { kind: "quality.rebuild" };
-export type QualityPort = { assess(size: PreviewTextureSize): { accepted: boolean; error?: string };
+export type QualityPort = { assess(size: PreviewTextureSize): { accepted: boolean; error?: string; code?: PreviewQualityRefusal };
   replace(size: PreviewTextureSize): void };
 
 /** Preview resource-tier choices are independent of recipe/history and presentation. */
@@ -15,11 +16,12 @@ export class PreviewQualityActions {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify() { for (const listener of this.listeners) listener(); }
   snapshot(): Readonly<QualityState> { return { ...this.state }; }
-  capability(action: QualityAction): { available: boolean; reason?: string } {
+  capability(action: QualityAction): Capability {
     const size = action.kind === "quality.rebuild" ? this.state.size : action.size;
-    if (!PREVIEW_TEXTURE_SIZES.includes(size)) return { available: false, reason: "Unsupported preview texture size." };
+    if (!PREVIEW_TEXTURE_SIZES.includes(size)) return refusal("invalid_value", "Unsupported preview texture size.");
     const assessment = this.port.assess(size);
-    return assessment.accepted ? { available: true } : { available: false, reason: assessment.error ?? "Preview texture size is unavailable." };
+    return assessment.accepted ? { available: true }
+      : refusal(assessment.code ?? "unavailable", assessment.error ?? "Preview texture size is unavailable.");
   }
   dispatch(action: QualityAction): boolean {
     const allowed = this.capability(action);

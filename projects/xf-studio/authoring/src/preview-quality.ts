@@ -14,9 +14,13 @@ export function parsePreviewTextureSize(value: unknown): PreviewTextureSize {
   return isPreviewTextureSize(value) ? value : DEFAULT_PREVIEW_TEXTURE_SIZE;
 }
 
+/** Why a size is refused: not a supported size, beyond the renderer, or over the generated-texture budget. */
+export type PreviewQualityRefusal = "invalid_value" | "unavailable" | "limit";
 export type PreviewQualityAssessment = {
   accepted: boolean;
   error?: string;
+  /** Present with `error`: the refusal's reason code. */
+  code?: PreviewQualityRefusal;
   textureSize?: PreviewTextureSize;
   estimatedBytes: number;
   cpuBytes: number;
@@ -56,7 +60,7 @@ export function assessPreviewQuality(
     enabledLayers: enabled.length, plainLayers, opticalLayers, irregularLayers, generatedMaps, budgetBytes,
   };
   if (!isPreviewTextureSize(requestedSize))
-    return { ...result, error: "Choose a preview size of 512, 1024, 2048 or 4096 pixels." };
+    return { ...result, code: "invalid_value", error: "Choose a preview size of 512, 1024, 2048 or 4096 pixels." };
   result.textureSize = requestedSize;
   const baseBytes = requestedSize ** 2 * 4;
   // All supported sizes are powers of two; this sums every RGBA8 mip exactly.
@@ -72,12 +76,12 @@ export function assessPreviewQuality(
     : enabled.length ? baseBytes : 0;
   result.estimatedBytes = result.cpuBytes + result.gpuBytes + result.stagingBytes + result.workerBytes;
   if (!Number.isSafeInteger(hardwareMaxTextureSize) || hardwareMaxTextureSize < 1)
-    return { ...result, error: "The renderer's maximum texture size is unavailable." };
+    return { ...result, code: "unavailable", error: "The renderer's maximum texture size is unavailable." };
   if (requestedSize > hardwareMaxTextureSize)
-    return { ...result, error: `This renderer supports textures up to ${hardwareMaxTextureSize} pixels; ${requestedSize} is unavailable.` };
+    return { ...result, code: "unavailable", error: `This renderer supports textures up to ${hardwareMaxTextureSize} pixels; ${requestedSize} is unavailable.` };
   if (!Number.isSafeInteger(budgetBytes) || budgetBytes < 0)
-    return { ...result, error: "The generated-texture memory budget is invalid." };
+    return { ...result, code: "limit", error: "The generated-texture memory budget is invalid." };
   if (result.estimatedBytes > budgetBytes)
-    return { ...result, error: `This preview needs about ${(result.estimatedBytes / 1024 ** 2).toFixed(0)} MiB of generated textures, above the ${(budgetBytes / 1024 ** 2).toFixed(0)} MiB budget. Choose a smaller preview size or disable layers.` };
+    return { ...result, code: "limit", error: `This preview needs about ${(result.estimatedBytes / 1024 ** 2).toFixed(0)} MiB of generated textures, above the ${(budgetBytes / 1024 ** 2).toFixed(0)} MiB budget. Choose a smaller preview size or disable layers.` };
   return { ...result, accepted: true };
 }

@@ -6,19 +6,14 @@ import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
 import type { StudioAction, StudioGestureProposal, StudioTarget } from "./studio-application";
+import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 import type { StudioFileAction } from "./studio-file-operations";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
-export type UndoPolicy = "none" | "recipe" | "transaction" | "recovery";
-export type ValueSchema = { type: "string" | "number" | "number|string" | "integer" | "boolean" | "enum" | "object" | "bytes";
-  required: boolean; from: "target" | "state" | "input"; min?: number; max?: number;
-  minLength?: number; maxLength?: number;
-  values?: readonly (string | number)[] };
-export type PayloadSchema = Record<string, ValueSchema>;
-export type ActionDescriptor = { scope: readonly ActionScope[]; undo: UndoPolicy;
-  payload: PayloadSchema; variants?: Record<string, { payload: PayloadSchema; undo: UndoPolicy }>;
-  effect: "selection" | "content" | "workspace" | "library" | "file" };
+// The descriptor shape is the platform's (feature-module platform §1); this table fixes its scopes.
+export type { PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
+export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
   effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool"; async: true;
   cancellable: boolean };
@@ -195,9 +190,10 @@ export const FILE_DESCRIPTORS = {
 /** One flat index over every family, for palettes, scripts and documentation checks. */
 export type RegistryEntry = { id: string; family: "action" | "request" | "gesture" | "file";
   scope: readonly ActionScope[]; undo: UndoPolicy; async: boolean };
-export function actionRegistry(): RegistryEntry[] {
+/** `actions` is the application's action registry (the union of every owner's table); it defaults to this file's table. */
+export function actionRegistry(actions: Readonly<Record<string, ActionDescriptor>> = ACTION_DESCRIPTORS): RegistryEntry[] {
   return [
-    ...Object.entries(ACTION_DESCRIPTORS).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
+    ...Object.entries(actions).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
     ...Object.entries(REQUEST_DESCRIPTORS).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),
     ...Object.entries(GESTURE_DESCRIPTORS).map(([id, d]) => ({ id, family: "gesture" as const, scope: d.scope, undo: d.undo, async: false })),
     ...Object.entries(FILE_DESCRIPTORS).map(([id, d]) => ({ id, family: "file" as const, scope: d.scope, undo: d.undo, async: true })),

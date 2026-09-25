@@ -1,0 +1,2673 @@
+{
+ "actionKinds": [
+  "recipe.undo",
+  "recipe.redo",
+  "history.jumpTo",
+  "layer.select",
+  "point.select",
+  "point.remove",
+  "path.edit",
+  "field.select",
+  "field.add",
+  "field.remove",
+  "field.clear",
+  "field.setReach",
+  "pigment.edit",
+  "softness.edit",
+  "layer.setColor",
+  "layer.setOpacity",
+  "layer.setSymmetry",
+  "layer.setFinish",
+  "layer.useGameOptics",
+  "layer.setShift",
+  "glitter.selectModel",
+  "glitter.setClassic",
+  "glitter.setIrregular",
+  "glitter.setDirect",
+  "point.move",
+  "point.insert",
+  "point.setTangent",
+  "shape.transform",
+  "field.setOrigin",
+  "field.setVector",
+  "layer.edit",
+  "layer.setEnabled",
+  "preset.edit",
+  "preset.select",
+  "collection.rename",
+  "collection.open",
+  "collection.undoOpen",
+  "collection.importRecipe",
+  "camera.front",
+  "camera.setFov",
+  "camera.endFovGesture",
+  "camera.restore",
+  "camera.navigate",
+  "camera.creatorFraming",
+  "preview.setLightingPreset",
+  "preview.setCreatorLighting",
+  "preview.setExposure",
+  "preview.setKeyAngle",
+  "preview.setEyeShape",
+  "preview.setPiercingPreview",
+  "preview.setPiercings",
+  "preview.setSurfaceControls",
+  "preview.setWire",
+  "preview.setNormals",
+  "preview.setEyeOptics",
+  "preview.setHair",
+  "preview.setDetail",
+  "motion.setIdle",
+  "motion.setPaused",
+  "motion.setContributions",
+  "motion.setBlink",
+  "motion.playBlink",
+  "quality.set",
+  "quality.rebuild",
+  "savedV.load",
+  "savedV.restore"
+ ],
+ "actionDescriptors": {
+  "recipe.undo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "none",
+   "payload": {}
+  },
+  "recipe.redo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "none",
+   "payload": {}
+  },
+  "history.jumpTo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "none",
+   "payload": {
+    "entryId": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "layer.select": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "selection",
+   "undo": "none",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "point.select": {
+   "scope": [
+    "point"
+   ],
+   "effect": "selection",
+   "undo": "none",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "point.remove": {
+   "scope": [
+    "point"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "path.edit": {
+   "scope": [
+    "layer",
+    "point"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "enable-bezier": {
+     "payload": {},
+     "undo": "recipe"
+    },
+    "point-mode": {
+     "payload": {
+      "index": {
+       "type": "integer",
+       "required": true,
+       "from": "target"
+      },
+      "mode": {
+       "type": "enum",
+       "required": true,
+       "from": "input",
+       "values": [
+        "aligned",
+        "symmetric",
+        "corner"
+       ]
+      }
+     },
+     "undo": "recipe"
+    }
+   }
+  },
+  "field.select": {
+   "scope": [
+    "field"
+   ],
+   "effect": "selection",
+   "undo": "none",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "field.add": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "field.remove": {
+   "scope": [
+    "field"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "field.clear": {
+   "scope": [
+    "field"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "field.setReach": {
+   "scope": [
+    "field"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "radius": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0.005,
+     "max": 0.2
+    }
+   }
+  },
+  "pigment.edit": {
+   "scope": [
+    "point",
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "point-strength": {
+     "payload": {
+      "index": {
+       "type": "integer",
+       "required": true,
+       "from": "target"
+      },
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "smooth-strength": {
+     "payload": {
+      "enabled": {
+       "type": "boolean",
+       "required": true,
+       "from": "input"
+      }
+     },
+     "undo": "transaction"
+    },
+    "strength-blend": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.000125,
+       "max": 0.02
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "softness.edit": {
+   "scope": [
+    "point",
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "variable-softness": {
+     "payload": {
+      "enabled": {
+       "type": "boolean",
+       "required": true,
+       "from": "input"
+      }
+     },
+     "undo": "transaction"
+    },
+    "point-softness": {
+     "payload": {
+      "index": {
+       "type": "integer",
+       "required": true,
+       "from": "target"
+      },
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.0005,
+       "max": 0.06
+      }
+     },
+     "undo": "transaction"
+    },
+    "uniform-softness": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.0005,
+       "max": 0.06
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "layer.setColor": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "color": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "layer.setOpacity": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "opacity": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  "layer.setSymmetry": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "symmetry": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "layer.setFinish": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "finish": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "matte",
+      "regular",
+      "metallic",
+      "shimmer",
+      "glitter",
+      "glossy",
+      "iridescent",
+      "satin"
+     ]
+    }
+   }
+  },
+  "layer.useGameOptics": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "layer.setShift": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "color",
+      "strength"
+     ]
+    },
+    "value": {
+     "type": "number|string",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "color": {
+     "payload": {
+      "value": {
+       "type": "string",
+       "required": true,
+       "from": "input",
+       "minLength": 7,
+       "maxLength": 7
+      }
+     },
+     "undo": "transaction"
+    },
+    "strength": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "glitter.selectModel": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "model": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "classic",
+      "irregular",
+      "direct",
+      "clustered",
+      "fine"
+     ]
+    }
+   }
+  },
+  "glitter.setClassic": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "cells",
+      "density",
+      "tilt"
+     ]
+    },
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "cells": {
+     "payload": {
+      "value": {
+       "type": "integer",
+       "required": true,
+       "from": "input",
+       "min": 32,
+       "max": 256
+      }
+     },
+     "undo": "transaction"
+    },
+    "density": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "tilt": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "glitter.setIrregular": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "count",
+      "radius",
+      "spread",
+      "tilt",
+      "color"
+     ]
+    },
+    "value": {
+     "type": "number|string",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "count": {
+     "payload": {
+      "value": {
+       "type": "integer",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 500000
+      }
+     },
+     "undo": "transaction"
+    },
+    "radius": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.00025,
+       "max": 0.003
+      }
+     },
+     "undo": "transaction"
+    },
+    "spread": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "tilt": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "color": {
+     "payload": {
+      "value": {
+       "type": "string",
+       "required": true,
+       "from": "input",
+       "minLength": 7,
+       "maxLength": 7
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "glitter.setDirect": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "density",
+      "fineShare",
+      "strength",
+      "color"
+     ]
+    },
+    "value": {
+     "type": "number|string",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "density": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "fineShare": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "strength": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 32
+      }
+     },
+     "undo": "transaction"
+    },
+    "color": {
+     "payload": {
+      "value": {
+       "type": "string",
+       "required": true,
+       "from": "input",
+       "minLength": 7,
+       "maxLength": 7
+      }
+     },
+     "undo": "transaction"
+    }
+   }
+  },
+  "point.move": {
+   "scope": [
+    "point"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "target"
+    },
+    "u": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    },
+    "v": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  "point.insert": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "u": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    },
+    "v": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  "point.setTangent": {
+   "scope": [
+    "point"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "target"
+    },
+    "side": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "in",
+      "out"
+     ]
+    },
+    "du": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": -1,
+     "max": 1
+    },
+    "dv": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": -1,
+     "max": 1
+    }
+   }
+  },
+  "shape.transform": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "pivotIndex": {
+     "type": "integer",
+     "required": false,
+     "from": "state",
+     "min": 0
+    }
+   },
+   "variants": {
+    "translate": {
+     "payload": {
+      "du": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -1,
+       "max": 1
+      },
+      "dv": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -1,
+       "max": 1
+      }
+     },
+     "undo": "recipe"
+    },
+    "rotate": {
+     "payload": {
+      "radians": {
+       "type": "number",
+       "required": true,
+       "from": "input"
+      }
+     },
+     "undo": "recipe"
+    },
+    "scale": {
+     "payload": {
+      "factor": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.01,
+       "max": 100
+      }
+     },
+     "undo": "recipe"
+    }
+   }
+  },
+  "field.setOrigin": {
+   "scope": [
+    "field"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "u": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    },
+    "v": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  "field.setVector": {
+   "scope": [
+    "field"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "fieldId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "du": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": -0.1,
+     "max": 0.1
+    },
+    "dv": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": -0.1,
+     "max": 0.1
+    }
+   }
+  },
+  "layer.edit": {
+   "scope": [
+    "layer",
+    "collection"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "add": {
+     "payload": {},
+     "undo": "recipe"
+    },
+    "duplicate": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      }
+     },
+     "undo": "recipe"
+    },
+    "remove": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      }
+     },
+     "undo": "recipe"
+    },
+    "reset": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      }
+     },
+     "undo": "recipe"
+    },
+    "rename": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      },
+      "name": {
+       "type": "string",
+       "required": true,
+       "from": "input",
+       "minLength": 1,
+       "maxLength": 80
+      }
+     },
+     "undo": "recipe"
+    },
+    "move": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      },
+      "to": {
+       "type": "integer",
+       "required": true,
+       "from": "input",
+       "min": 0
+      }
+     },
+     "undo": "recipe"
+    }
+   }
+  },
+  "layer.setEnabled": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "recipe",
+   "payload": {
+    "id": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preset.edit": {
+   "scope": [
+    "preset",
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "add": {
+     "payload": {},
+     "undo": "none"
+    },
+    "copy": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      }
+     },
+     "undo": "none"
+    },
+    "remove": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      }
+     },
+     "undo": "recovery"
+    },
+    "restore": {
+     "payload": {},
+     "undo": "recovery"
+    },
+    "rename": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      },
+      "name": {
+       "type": "string",
+       "required": true,
+       "from": "input",
+       "minLength": 1,
+       "maxLength": 120
+      }
+     },
+     "undo": "none"
+    },
+    "move": {
+     "payload": {
+      "id": {
+       "type": "string",
+       "required": true,
+       "from": "target"
+      },
+      "to": {
+       "type": "integer",
+       "required": true,
+       "from": "input",
+       "min": 0
+      }
+     },
+     "undo": "none"
+    }
+   }
+  },
+  "preset.select": {
+   "scope": [
+    "preset"
+   ],
+   "effect": "selection",
+   "undo": "none",
+   "payload": {
+    "id": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "collection.rename": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "name": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "collection.open": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "recovery",
+   "payload": {
+    "collection": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "revision": {
+     "type": "integer",
+     "required": false,
+     "from": "state"
+    }
+   }
+  },
+  "collection.undoOpen": {
+   "scope": [
+    "collection"
+   ],
+   "effect": "library",
+   "undo": "recovery",
+   "payload": {}
+  },
+  "collection.importRecipe": {
+   "scope": [
+    "file"
+   ],
+   "effect": "library",
+   "undo": "none",
+   "payload": {
+    "recipe": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "name": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "camera.front": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "camera.setFov": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "degrees": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 10,
+     "max": 90
+    }
+   }
+  },
+  "camera.endFovGesture": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "camera.restore": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "camera": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "camera.navigate": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "command": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "orbit": {
+     "payload": {
+      "yaw": {
+       "type": "number",
+       "required": true,
+       "from": "input"
+      },
+      "pitch": {
+       "type": "number",
+       "required": true,
+       "from": "input"
+      }
+     },
+     "undo": "none"
+    },
+    "dolly": {
+     "payload": {
+      "factor": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.01,
+       "max": 100
+      }
+     },
+     "undo": "none"
+    },
+    "pan": {
+     "payload": {
+      "dx": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -10,
+       "max": 10
+      },
+      "dy": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -10,
+       "max": 10
+      }
+     },
+     "undo": "none"
+    }
+   }
+  },
+  "camera.creatorFraming": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "page": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "face",
+      "hair"
+     ]
+    }
+   }
+  },
+  "preview.setLightingPreset": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "preset": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "studio",
+      "creator"
+     ]
+    }
+   }
+  },
+  "preview.setCreatorLighting": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "intensity",
+      "cone",
+      "exposure"
+     ]
+    },
+    "value": {
+     "type": "number|string",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "intensity": {
+     "payload": {
+      "value": {
+       "type": "enum",
+       "required": true,
+       "from": "input",
+       "values": [
+        "isotropic",
+        "cone"
+       ]
+      }
+     },
+     "undo": "none"
+    },
+    "cone": {
+     "payload": {
+      "value": {
+       "type": "enum",
+       "required": true,
+       "from": "input",
+       "values": [
+        "full",
+        "half"
+       ]
+      }
+     },
+     "undo": "none"
+    },
+    "exposure": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.01,
+       "max": 20
+      }
+     },
+     "undo": "none"
+    }
+   }
+  },
+  "preview.setExposure": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0.5,
+     "max": 2
+    }
+   }
+  },
+  "preview.setKeyAngle": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "degrees": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 360
+    }
+   }
+  },
+  "preview.setEyeShape": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "index": {
+     "type": "integer",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 21
+    }
+   }
+  },
+  "preview.setPiercingPreview": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "style": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    },
+    "definition": {
+     "type": "string",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setPiercings": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setSurfaceControls": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setWire": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setNormals": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setEyeOptics": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setHair": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.setDetail": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "detail": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "brows",
+      "lashes"
+     ]
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "motion.setIdle": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "motion.setPaused": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "paused": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "motion.setContributions": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "body": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "face": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "motion.setBlink": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  "motion.playBlink": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "playing": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "quality.set": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "size": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      512,
+      1024,
+      2048,
+      4096
+     ]
+    }
+   }
+  },
+  "quality.rebuild": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "savedV.load": {
+   "scope": [
+    "file"
+   ],
+   "effect": "file",
+   "undo": "none",
+   "payload": {
+    "bytes": {
+     "type": "bytes",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 134217728
+    }
+   }
+  },
+  "savedV.restore": {
+   "scope": [
+    "file"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    }
+   }
+  }
+ },
+ "registry": [
+  {
+   "id": "recipe.undo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "recipe.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "history.jumpTo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "layer.select",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "point.select",
+   "family": "action",
+   "scope": [
+    "point"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "point.remove",
+   "family": "action",
+   "scope": [
+    "point"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "path.edit",
+   "family": "action",
+   "scope": [
+    "layer",
+    "point"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.select",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "field.add",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.remove",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.clear",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.setReach",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "pigment.edit",
+   "family": "action",
+   "scope": [
+    "point",
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "softness.edit",
+   "family": "action",
+   "scope": [
+    "point",
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "layer.setColor",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "layer.setOpacity",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "layer.setSymmetry",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "layer.setFinish",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "layer.useGameOptics",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "layer.setShift",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "glitter.selectModel",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "glitter.setClassic",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "glitter.setIrregular",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "glitter.setDirect",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "point.move",
+   "family": "action",
+   "scope": [
+    "point"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "point.insert",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "point.setTangent",
+   "family": "action",
+   "scope": [
+    "point"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "shape.transform",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.setOrigin",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "field.setVector",
+   "family": "action",
+   "scope": [
+    "field"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "layer.edit",
+   "family": "action",
+   "scope": [
+    "layer",
+    "collection"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "layer.setEnabled",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "recipe",
+   "async": false
+  },
+  {
+   "id": "preset.edit",
+   "family": "action",
+   "scope": [
+    "preset",
+    "collection"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preset.select",
+   "family": "action",
+   "scope": [
+    "preset"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "collection.rename",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "collection.open",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "recovery",
+   "async": false
+  },
+  {
+   "id": "collection.undoOpen",
+   "family": "action",
+   "scope": [
+    "collection"
+   ],
+   "undo": "recovery",
+   "async": false
+  },
+  {
+   "id": "collection.importRecipe",
+   "family": "action",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.front",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.setFov",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.endFovGesture",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.restore",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.navigate",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "camera.creatorFraming",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setLightingPreset",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setCreatorLighting",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setExposure",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setKeyAngle",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setEyeShape",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setPiercingPreview",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setPiercings",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setSurfaceControls",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setWire",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setNormals",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setEyeOptics",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setHair",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setDetail",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setIdle",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setPaused",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setContributions",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setBlink",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.playBlink",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "quality.set",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "quality.rebuild",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "savedV.load",
+   "family": "action",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "savedV.restore",
+   "family": "action",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "initialize",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "refresh",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "open",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "save",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "saveCopy",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "exportCollection",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "exportPlan",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "import",
+   "family": "request",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "package",
+   "family": "request",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "shape.replace",
+   "family": "gesture",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "point.replace",
+   "family": "gesture",
+   "scope": [
+    "point"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "field.replace",
+   "family": "gesture",
+   "scope": [
+    "field"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "path.replacePoints",
+   "family": "gesture",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "recipe.import",
+   "family": "file",
+   "scope": [
+    "file",
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "recipe.export",
+   "family": "file",
+   "scope": [
+    "file",
+    "layer"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "mask.export",
+   "family": "file",
+   "scope": [
+    "file",
+    "layer"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "savedV.import",
+   "family": "file",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "savedV.export",
+   "family": "file",
+   "scope": [
+    "file"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "collection.import",
+   "family": "file",
+   "scope": [
+    "file",
+    "collection"
+   ],
+   "undo": "recovery",
+   "async": true
+  },
+  {
+   "id": "collection.export",
+   "family": "file",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "collection.plan",
+   "family": "file",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "package.check",
+   "family": "file",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "package.build",
+   "family": "file",
+   "scope": [
+    "collection"
+   ],
+   "undo": "none",
+   "async": true
+  },
+  {
+   "id": "collection.recover",
+   "family": "file",
+   "scope": [
+    "collection"
+   ],
+   "undo": "recovery",
+   "async": true
+  }
+ ]
+}

@@ -2,8 +2,9 @@
  * Structured validation failures (audit A-8). Capability results carry one next to their
  * human reason so a presentation can mark the right field without parsing message text.
  */
-export type ValidationIssueCode = "required" | "name.blank" | "name.too-long" | "range" | "mode" | "format";
-export type ValidationIssue = { code: ValidationIssueCode; field?: string; message: string };
+import type { ValidationIssue } from "./platform/api";
+// The issue shape is the platform's, so feature modules and system families report the same one.
+export type { ValidationIssue, ValidationIssueCode } from "./platform/api";
 
 export function nameIssue(name: unknown, maxLength: number, field = "name"): ValidationIssue | undefined {
   if (typeof name !== "string") return { code: "format", field, message: "A name must be text." };

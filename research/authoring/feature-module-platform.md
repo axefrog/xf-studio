@@ -1,6 +1,6 @@
 # XF Studio feature-module platform
 
-**Status:** accepted design, 25 September 2026; implementation scheduled per §8. It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
+**Status:** accepted design, 25 September 2026; implementation per §8, with step 1 (registry and routing) built on 26 September. It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
 
 **Why.** XF Studio is a platform. Eye makeup is its first feature module. Planned modules each get a dedicated effort:
 
@@ -419,7 +419,7 @@ This is a cleanup track, so the High-findings merge pause does not block it.
 
 | # | Step | Gate | Effort | Closes |
 |---|---|---|---|---|
-| 1 | `platform/api` types, `Registry`, system families; the eye-makeup core module registers the existing tables moved as-is; `StudioApplication` derives kind sets and Undo policy from the registry, routes by owner with an exhaustive check, removes both fallbacks, returns structured codes | golden registry/descriptor snapshot equals the pre-change one; application tests unchanged | 3 | CORE-08, CORE-15, part of CORE-03 |
+| 1 | `platform/api` types, `Registry`, system families; the eye-makeup core module registers the existing tables moved as-is; `StudioApplication` derives kind sets and Undo policy from the registry, routes by owner with an exhaustive check, removes both fallbacks, returns structured codes. *Done 26 Sep (`claude/platform-step1`); see [step 1 status](#step-1-status).* | golden registry/descriptor snapshot equals the pre-change one; application tests unchanged | 3 | CORE-08, CORE-15, part of CORE-03 |
 | 2 | Look/part model, `collection-2` reader/writer, eye-makeup part-1 codec; `CollectionSession`/`CollectionService`/store on parts; canonical comparison in `save()` and baselines; `workspace-2` with per-feature editor memory | parity gates (§2); SQLite fixture; workspace-1 fixtures restore identical state | 5 | CORE-03 (data), CORE-05 |
 | 3 | Part-2 with the per-layer model registry; `selectGlitterModel` stops touching the schema; minimal-schema recipe export | parity gates; every Glitter fixture renders identically | 2 | CORE-09 |
 | 4 | `LookHistory` (part and look entries, chunk store, Redo), generic gesture and control transactions, `fitWorkspace` budgets | existing Undo/Redo/gesture/control tests; size benchmark under budget; reload keeps ≥10 steps | 4 | CORE-02, part of CORE-11 |
@@ -428,6 +428,49 @@ This is a cleanup track, so the High-findings merge pause does not block it.
 | 7 | Scene-host split, `FeatureRenderer`, `CharacterContextService`, `DetailLoader`, material adapters; eye makeup's renderer wraps `makeup-stack`; brows, lashes, hair and piercings render through resolved components. *Partly ahead (claude/render-resolver, 25 Sep): brows, lashes and hair already load from the resolver's character record through per-template material adapters (`character-detail-loader.ts`, `character-material-adapters.ts`, `character-detail-actions.ts`), inside today's `scene.ts`; the scene-host split, piercings and eye makeup's renderer remain.* | `?verify=1` Ready at 1K/2K; makeup screenshot parity; dispose leak test; idle frame-on-demand test | 7 | UI-02, UI-11, PIPE-11 (preview) |
 | 8 | `FeatureExporter`/`FeatureVerifier`, product planner, `runProductBuild` for both hosts, `local-package-2`, transport reading version 1 and 2, package-plan actions and panel | default-product Build **byte-identical** archive members and identical plan; two-product synthetic test with a stub exporter; namespace-duplication refusal test | 6 | PIPE-12, PIPE-09, PIPE-03 |
 | 9 | Strict boundary tests (§7); update the contract, invariants, catalogue and pipeline guide (with visual diagram review) | link check; diagrams inspected | 2 | — |
+
+### Step 1 status
+
+Built on 26 September in `claude/platform-step1`. Behaviour, action IDs, serialized formats and the presentation port are unchanged.
+
+**What exists.**
+
+- `src/platform/api/`: the action types (`ActionDescriptor`, `ActionSpec`, `ActionTable`, `UndoPolicy`), `ReasonCode`, `Capability` and `ValidationIssue`, the owner types (`SystemFamily`, `FeatureModule`, `ActionHandler`) and small pure helpers (`actionTable`, `coded`, `refusal`, `undoPolicyOf`, `featureId`, `familyId`). The legacy `studio-action-descriptors.ts` and `validation-issues.ts` re-export these types.
+- `src/platform/core/registry.ts`: `Registry` refuses a duplicate owner or a kind owned twice. It gives kinds (all, or one owner's), descriptors in registration order, Undo policy (variant first), a total `route(kind)` and entries with qualified IDs.
+- `src/features/eye-makeup/index.ts`: module #1, registering the 29 recipe and layer actions with their existing descriptors.
+- `src/compose/system-families.ts`: history, collection, preview (camera and viewing), motion, quality and saved V.
+- `src/compose/studio-registry.ts`: the composition list `STUDIO_OWNERS`, `StudioOwnerActions` and `STUDIO_REGISTRY`.
+- `StudioApplication` takes the registry (default `STUDIO_REGISTRY`) and binds one handler per owner. It has no kind sets, prefix checks, fallbacks or message matching.
+
+**Decisions** (open details in §1 and §4, settled the simplest way):
+
+- **Spec contents.** A step-1 `ActionSpec` holds only the existing descriptor: scope, payload, variants, effect and Undo policy. The other fields join in later steps: `label` with the look history (step 4); `units`, `limits` and `consequence` with the presentation facade (step 5). Until then they stay in `history-labels.ts`, `action-limits.ts` and `action-consequences.ts`.
+- **Capability and dispatch are handlers, not pure spec functions yet.** They depend on part and editor state, which arrives in step 2. Meanwhile the application binds an `ActionHandler` per owner over today's services. The handler map is a mapped type over `StudioOwnerActions`, so a registered owner without a handler does not compile, and the constructor also refuses a registry whose owners differ from the handlers. When step 2 lands, the eye-makeup handler becomes the module's `capability` and `apply`.
+- **Family policy replaces prefixes.** A system family declares `needsScene` (refused with `asset_unavailable` while the scene cannot load: preview, motion, saved V) and `thrown` (the code for an exception after the gate: `unavailable` for preview, motion and quality). History's busy check is keyed by the owner.
+- **IDs.** `featureId()` and `familyId()` keep the literal type and accept lower camel or kebab case (`eye-makeup`, `savedV`). A qualified ID is `<owner>/<kind>` (`eye-makeup/layer.setColor`, `history/recipe.undo`). Commands keep their flat, grandfathered kinds. The `{ kind: "feature" }` envelope waits for module #2, because no current action needs it.
+- **Undo policy name.** The policy stays `recipe` rather than `part` until the look history (step 4), so the golden snapshot and the port keep their values.
+- **Unknown kinds.** `route()` answers `unknown_action`. The application refuses with its existing `invalid_value` "Unknown command." (before, `capability()` threw on the missing descriptor). `StudioReasonCode` is unchanged.
+- **Structured codes.** Each refusal in the recipe, layer, collection, preview, motion, quality and saved-V checks states its code; a validation issue implies one (`coded()`). The codes are the ones the old text matching produced, with two corrections to `asset_unavailable`, both idle or hair-asset failures whose text lacked "unavailable". Codes that read oddly but were kept are listed as CORE-26 in the [ledger](code-health.md). `CollectionActions.capability()` and `PreviewActions.capability()` keep their uncoded shape for existing callers, and the application reads their new coded `check()`. The quality assessment carries its own `code`.
+- **Where things live until step 5.** The system families sit in `compose/` because their descriptors are still in `studio-action-descriptors.ts`; they move to `platform/core` when that table splits. The eye-makeup module imports its legacy `src/` files; the step-5 `git mv` turns those imports into own-folder and `engines/` imports.
+
+**Boundary tests** (§7, as far as step 1 goes), in `tests/architecture-import-boundary.test.ts` and `tests/studio-registry.test.ts`:
+
+- `platform/**` imports only `platform/**` and reads no browser globals.
+- Features import the platform only through `platform/api`, never another feature, `compose/`, the UI, entry points, browser devices, Three or `node:`.
+- Only `compose/**` imports features.
+- Every action is owned exactly once, and the owners' union equals the descriptor table in order.
+- The derived kind sets equal the previous hand-kept ones.
+- The golden `tests/golden/studio-registry.json` equals the catalogue captured from the pre-change code.
+
+**Cost.** Measured on the same machine against the pre-change code: no change within noise. Routing costs the same or less; a six-action capability sweep dropped from 0.67 to 0.57 µs. Figures are in the [ledger](code-health.md).
+
+**Step 2 needs:**
+
+- `PartCodec`, `EditorCodec` and the `Look` envelope in `platform/api`.
+- The `xfs/collection-2` reader and writer, and the eye-makeup part-1 codec (a wrapper of `parseRecipe`).
+- `CollectionSession`, `CollectionService` and the store on parts, with canonical comparison in `save()` and in the baselines.
+- `workspace-2` with per-feature editor memory.
+- Replacing the eye-makeup handler's service calls with pure `capability`/`apply` over `FeatureState`, so the registry spec can carry them.
 
 **Parallelism.** Steps 1–4 are the format-changing core. Steps 5–6 and 7 can run in parallel after step 4. Step 8 needs only steps 1–2.
 

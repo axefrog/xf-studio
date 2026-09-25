@@ -5,6 +5,7 @@ import type { PresetCollection } from "./preset-collection";
 import type { StoredCollection } from "./collection-store";
 import type { Recipe } from "./recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
+import { refusal, type ReasonCode } from "./platform/api";
 
 export type CollectionAction =
   | { kind: "preset.edit"; command: PresetCommand }
@@ -16,6 +17,8 @@ export type CollectionAction =
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string };
 
 export type ActionCapability = { available: boolean; reason?: string; issue?: ValidationIssue };
+/** A capability with the reason code chosen where it was refused (`platform/api`). */
+export type CodedCapability = ActionCapability & { code?: ReasonCode };
 /** Primitive-only draft projection; building it never clones recipes or Undo histories. */
 export type CollectionDraftSummary = {
   id: string; name: string; revision?: number; selected?: string;
@@ -66,16 +69,22 @@ export class CollectionActions {
     return () => this.listeners.delete(listener);
   }
 
+  /** The existing uncoded capability shape; the application reads the coded `check()`. */
   capability(action: CollectionAction): ActionCapability {
+    const { code: _code, ...capability } = this.check(action);
+    return capability;
+  }
+  /** Capability with a structured reason code (issues imply theirs; see `platform/api` `coded`). */
+  check(action: CollectionAction): CodedCapability {
     const state = this.session.state;
     if (action.kind === "collection.undoOpen" && !state.previous)
-      return { available: false, reason: "No previous collection draft." };
+      return refusal("invalid_value", "No previous collection draft.");
     if (action.kind === "preset.edit") {
       const command = action.command;
       if (command.kind === "restore" && !state.removed.length)
-        return { available: false, reason: "No removed preset to restore." };
+        return refusal("invalid_value", "No removed preset to restore.");
       if ("id" in command && !state.collection.presets.some(p => p.id === command.id))
-        return { available: false, reason: "That preset no longer exists." };
+        return refusal("missing_target", "That preset no longer exists.");
       const issue = command.kind === "move" ? positionIssue(command.to, state.collection.presets.length,
         { below: "This preset is already first.", above: "This preset is already last." }) :
         command.kind === "rename" ? nameIssue(command.name, 120) : undefined;
@@ -86,7 +95,7 @@ export class CollectionActions {
       if (issue) return refuse(issue);
     }
     if (action.kind === "preset.select" && !state.collection.presets.some(p => p.id === action.id))
-      return { available: false, reason: "Preset not found." };
+      return refusal("missing_target", "Preset not found.");
     return { available: true };
   }
 
