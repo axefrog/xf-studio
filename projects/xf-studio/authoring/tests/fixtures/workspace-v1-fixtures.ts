@@ -181,3 +181,14 @@ export function damagedWorkspaceV1() {
     editors: {}, removed: [] });
   return workspace;
 }
+
+/**
+ * A fixture with real UI preferences as 0.1.0-alpha.1 and later builds store them (schema, theme,
+ * input hints, a dock layout) plus guided-tour progress, which only later builds write. The plain
+ * fixtures keep the unschema'd `{ theme: "dark" }` their golden digests were captured with.
+ */
+export function withPreferences<T extends { uiPreferences?: unknown }>(workspace: T): T {
+  return { ...workspace, uiPreferences: { schema: "xfs/ui-preferences-1", theme: "dark", inputHints: false,
+    layout: { format: "xfs-dock", version: 3, state: { root: { split: "row", sizes: [0.3, 0.7], panels: ["layers", "head"] } } },
+    tours: { "getting-started": "completed", "whats-new-0.1.0-alpha.1": "declined", "show-me.finish": "skipped" } } };
+}

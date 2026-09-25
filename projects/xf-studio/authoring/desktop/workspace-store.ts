@@ -65,11 +65,12 @@ export class DesktopWorkspaceStore {
   }
   save(verification: boolean, raw: string): void {
     if (Buffer.byteLength(raw) > maxWorkspaceBytes) throw Error("Desktop workspace exceeds the size limit.");
-    const parsed = parseWorkspace(JSON.parse(raw), this.model);
     // Refuse to replace an unreadable prior draft. The user can recover its file.
     const previous = this.load(verification);
-    // Never replace a workspace holding a newer build's data; an unchanged copy of it is not a change.
+    // An unchanged copy (the update flush of a read-only workspace) is not a change.
     if (previous !== null && previous === raw) return;
+    const parsed = parseWorkspace(JSON.parse(raw), this.model);
+    // Never replace a workspace holding a newer build's data.
     if (previous !== null && this.inspect(previous).newer)
       throw Error("The saved desktop workspace holds data from a newer XF Studio; it was not replaced.");
     mkdirSync(this.root, { recursive: true, mode: 0o700 });

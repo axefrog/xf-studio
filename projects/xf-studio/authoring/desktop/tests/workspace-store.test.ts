@@ -42,3 +42,20 @@ test("a workspace from a newer build is never replaced; an older page's version-
   expect(readFileSync(file, "utf8")).toBe(newer);
   expect(existsSync(resolve(dir, store.backupName(false)))).toBe(false);
 });
+
+test("the .bak is refreshed whenever an older build wrote a newer version-1 file (CORE-30)", () => {
+  const dir = resolve(root, "refresh"), store = new DesktopWorkspaceStore(dir, STUDIO_DOCUMENTS);
+  const file = resolve(dir, store.fileName(false)), backup = resolve(dir, store.backupName(false));
+  const first = smallWorkspaceV1(), second = { ...smallWorkspaceV1(), library: { selected: "", name: "Written by the alpha again" } };
+  store.save(false, JSON.stringify(first));
+  writeFileSync(file, JSON.stringify(first));
+  const upgrade = () => store.save(false, JSON.stringify(serializeWorkspace(parseWorkspace(JSON.parse(store.load(false)!),
+    STUDIO_DOCUMENTS), STUDIO_DOCUMENTS)));
+  upgrade();
+  expect(readFileSync(backup, "utf8")).toBe(JSON.stringify(first));
+  // The person ran 0.1.0-alpha.1 again, started fresh there and it wrote a new version-1 file.
+  writeFileSync(file, JSON.stringify(second));
+  upgrade();
+  expect(readFileSync(backup, "utf8")).toBe(JSON.stringify(second));
+  expect(JSON.parse(readFileSync(file, "utf8")).schema).toBe("xfs/workspace-2");
+});

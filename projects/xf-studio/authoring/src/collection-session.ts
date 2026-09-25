@@ -1,4 +1,4 @@
-import { COLLECTION_RECOVERY_LIMIT, collectionDraft, editPresets, emptyRecipe, liveMemory, livePart,
+import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets, emptyRecipe, liveMemory, livePart,
   withLiveMemory, withLivePart, type CollectionWorkspace, type DocumentModel, type EditorMemory,
   type PresetCommand } from "./collection-workspace";
 import type { Recipe } from "./recipe";
@@ -20,7 +20,7 @@ export class CollectionSession {
   state: CollectionWorkspace;
   constructor(private model: DocumentModel, state: CollectionWorkspace, private read: () => EditorSnapshot,
     private show: (editor: EditorSnapshot) => void) {
-    this.state = structuredClone(state);
+    this.state = copyWorkspace(state);
   }
   /** Write the live editor into `state`'s selected look (the draft itself, or a copy of it). */
   private stashInto(state: CollectionWorkspace) {
@@ -33,7 +33,7 @@ export class CollectionSession {
   stash() { this.stashInto(this.state); }
   /** A copy of the draft with the live editor's state in its selected look; the draft is not changed. */
   snapshot(): CollectionWorkspace {
-    const copy = structuredClone(this.state);
+    const copy = copyWorkspace(this.state);
     this.stashInto(copy);
     return copy;
   }
