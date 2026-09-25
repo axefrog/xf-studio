@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "xf-studio",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--cwd=projects/xf-studio/authoring", "run", "start"],
+      "port": 4317
+    }
+  ]
+}
