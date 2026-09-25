@@ -20,7 +20,6 @@ export interface PackageResourceTools {
   importTextures(input: string, output: string, settings: TextureImportSettings): Promise<ToolStep>;
   serialize(input: string, output: string): Promise<ToolStep>;
   deserialize(input: string, output: string): Promise<ToolStep>;
-  exportTextures(input: string, output: string, extension: "dds", gameRoot: string): Promise<ToolStep>;
   pack(input: string, output: string): Promise<ToolStep>;
 }
 
@@ -55,8 +54,6 @@ export function createWolvenKitPackageTools(cli: string, options: { signal?: Abo
       env: Object.fromEntries(Object.entries(settings).map(([key, value]) => ["XbmImportArgs__" + key, String(value)])) }),
     serialize: (input, output) => runStep(cli, ["convert", "serialize", input, "-o", output], base),
     deserialize: (input, output) => runStep(cli, ["convert", "deserialize", input, "-o", output], base),
-    exportTextures: (input, output, extension, gameRoot) =>
-      runStep(cli, ["export", input, "-o", output, "--uext", extension, "--gamepath", gameRoot], base),
     pack: (input, output) => runStep(cli, ["pack", input, "-o", output], base),
   };
 }

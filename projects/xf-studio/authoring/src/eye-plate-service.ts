@@ -7,6 +7,7 @@ import {
   supportedEyePlateSource, type EyePlateRecipe,
 } from "./eye-plate-recipe";
 import { verifyEyePlate, type EyePlateVerification } from "./eye-plate-verify";
+import type { PackagePlate } from "./package-action";
 
 /**
  * Application service: make the built-in expanded eye plate available to Build.
@@ -40,6 +41,13 @@ export type EyePlateManifest = {
 export type EyePlateResult = { directory: string; meshFile: string; morphFile: string; manifestFile: string; manifest: EyePlateManifest; reused: boolean };
 export type EnsureEyePlateOptions = { gameRoot: string; cacheRoot: string; tools: EyePlateTools; recipe?: EyePlateRecipe;
   signal?: AbortSignal; progress?: (message: string) => void };
+
+/** The package manifest's record of a derived plate; hosts and the builder compare exactly this value. */
+export function packagePlateRecord(manifest: EyePlateManifest): PackagePlate {
+  return { source: "derived", recipeId: manifest.recipeId, recipeRevision: manifest.recipeRevision,
+    sourceRevision: manifest.source.revisionId, cacheKey: manifest.cacheKey,
+    meshSha256: manifest.files.mesh.sha256, morphSha256: manifest.files.morph.sha256 };
+}
 
 export const EYE_PLATE_RESOURCE_DIRECTORY = "resources";
 export const EYE_PLATE_MANIFEST_FILE = "plate-manifest.json";
