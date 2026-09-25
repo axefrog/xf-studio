@@ -14,7 +14,7 @@ bun run build:dev    # prepare static view + build tools, then Electrobun dev bu
 bun run run:dev      # launch the dev build in a WebView2 window
 ```
 
-**Last verified 25 September 2026:** 48 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 476 with the private preview assets present. `tools/review-first-run.ts` and `tools/review-alpha-inventory.ts` pass against the prepared static view.
+**Last verified 25 September 2026:** 56 desktop tests pass; the desktop and authoring typechecks are clean; the full authoring `bun test` (which includes these tests) passes 656 with 4 opt-in real-install tests skipped, and those pass when `XFS_TEST_GAME_ROOT` and `XFS_TEST_WOLVENKIT` name a 2.31 install and WolvenKit CLI 8.17.4 or 9.0.1. `tools/review-first-run.ts` and `tools/review-alpha-inventory.ts` were last run against the prepared static view before the 3D preview preparation card; `review-first-run.ts` now expects its wording.
 
 **Version.** `package.json` `version` (now `0.1.0-alpha.1`) is the only place the app version is set. `electrobun.config.ts` imports it, and `release.ts` derives the tag (`v0.1.0-alpha.1`), release title, asset name and changelog section from it. Change it together with the **Unreleased** section of the [changelog](../../CHANGELOG.md) when cutting a release.
 
@@ -28,9 +28,9 @@ For an **unsigned Windows installer**, run `bun run build:canary` after the same
 
 | Area | Works (evidence) | Still open |
 |---|---|---|
-| First run | A plain welcome: no 3D head preview in this alpha, the UV editor, library and Check work fully, Build needs a developer setup. **Start designing** stores the untouched Build setup through the validated `setup.save` action, so it does not return ([details](#community-first-run-25-september)) | Standard-user install, uninstall choices |
-| Without preview assets | Full UV editor, Undo, autosave, SQLite library, mask PNG export and Check; head pane reports unavailable ([details](#uv-only-first-run-25-september)) | — |
-| 3D preview | Not offered to community users. A developer-only five-file intake (enabled by a marker file) enables the head for maintainers ([details](#core-preview-intake-25-september)) | A 3D preview built from the user's own game files; general asset discovery and provenance |
+| First run | A plain welcome: the 3D head preview is built from the user's own game files, the UV editor, library and Check work fully, Build needs a developer setup. **Start designing** stores the untouched Build setup through the validated `setup.save` action, so it does not return ([details](#community-first-run-25-september)) | Standard-user install, uninstall choices |
+| Without preview assets | Full UV editor, Undo, autosave, SQLite library, mask PNG export and Check; head pane shows the preparation state ([details](#uv-only-first-run-25-september)) | — |
+| 3D preview | Derived on first run from the user's own Cyberpunk 2077 files with WolvenKit CLI (about 11–16 s on the test PC), with progress, cancel and plain guidance when the game folder or WolvenKit is missing; the head then loads without a restart ([details](#3d-preview-from-the-players-game-files-25-september)). The five-file intake remains a hidden developer path ([details](#core-preview-intake-25-september)) | Not yet run in an installed canary; WolvenKit download; saved-V extras (brows, lashes, hair, piercings, idle); iris gradient and eye optics; effective MO2 winners |
 | Check | Bounded worker, same filtered snapshot/identities as localhost ([details](#package-check-and-build)) | — |
 | Build | Host-gated build with game and WolvenKit inputs; the eye plate is derived from the installed game and cached in user data. Exercised in an installed canary with the earlier private plate ([details](#installed-build-acceptance-25-september)). Without a complete Build setup every Build entry point shows one plain reason | Archive-byte reproducibility; a Build setup a community user can complete |
 | Workspace persistence | Host-owned workspace file survives port changes, full restart ([details](#installed-webview-acceptance-and-restart-repair-25-september)) and native window close ([details](#desktop-close-flush-acceptance-25-september)) | Process kill, OS crash, power loss |
@@ -52,7 +52,7 @@ Disposable Windows installs have exercised the WebView editor, Build, restart an
 
 **Startup failures are never a blank window.** `main.ts` writes a bounded `desktop.log` in the data folder (version, WebView2 detection, loopback port, page load, bootstrap, smoke state, failures). `webview2.ts` follows Microsoft's documented registry check for the Evergreen runtime. If the WebView never requests the Studio page (5 s when no runtime is detected, otherwise 20 s), a native message explains it: without WebView2 it offers Microsoft's download page; otherwise it offers **Copy diagnostics**. Closing a window whose page never loaded closes at once instead of waiting for a workspace save. Inside the page, `boot-watchdog.js` is inlined as a classic script ahead of the module bootstrap: an uncaught script error before mount, or no mounted Studio after 30 s, replaces "Starting…" with a plain explanation, **Try again** and **Copy diagnostics**.
 
-**Alpha wording.** User-facing reasons for things that are not in this alpha come from `src/alpha-availability.ts` (no 3D preview; Build needs a developer setup) and follow its jargon policy. Build readiness is part of the `package.build` file capability, so the command palette, header and Mod package panel all show the same reason.
+**Alpha wording.** User-facing reasons for things that are not in this alpha come from `src/alpha-availability.ts` (3D preview not prepared yet; Build needs a developer setup) and follow its jargon policy. Build readiness is part of the `package.build` file capability, so the command palette, header and Mod package panel all show the same reason.
 
 ### Package Check and Build
 
@@ -81,7 +81,7 @@ A clean data root opens a welcome instead of the path form. It says the 3D head 
 | Library save/open/recover, collection and recipe import/export, mask export, compiler plan | Works | The compiler plan says it is "not a mod" |
 | Check mod export | Works without game files | — |
 | Build mod files (palette, header, panel) | Needs a developer setup | "Building mod files needs a developer setup in this alpha (game folder, WolvenKit and build tools). Check works without it." |
-| Head pane, Front view, surface controls, wireframe, camera and light, motion and idle, eye optics, brows, lashes, hair, piercings, saved-V import and export | Not in this alpha (no 3D preview) | "The 3D head preview isn't available in this alpha. The UV editor, library and Check work fully." Invoking one by shortcut shows the same reason as an information toast |
+| Head pane, Front view, surface controls, wireframe, camera and light, motion and idle, eye optics, brows, lashes, hair, piercings, saved-V import and export | Unavailable until the 3D preview is prepared | The preparation card's one-sentence status (for example "Preparing the 3D preview from your Cyberpunk 2077 files…"), or before it reports: "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully." Invoking one by shortcut shows the same reason as an information toast |
 | Preview quality | Works (sets the UV mask resolution) | — |
 | Automatic updates | Off | About: "Automatic updates are off in this alpha. Download new versions from the XF Studio releases page on GitHub." |
 | Installing into the game or a mod manager | Not offered | The Build result says nothing was installed |
@@ -95,6 +95,22 @@ Superseded by the community welcome above. A clean data root opened Local setup 
 ### UV-only first run, 25 September
 
 Missing or incomplete core preview assets open the full Studio with a clearly unavailable head pane. The starter contour, shape edits and Undo, draft autosave, SQLite library, generated masks and PNG export, and collection-only Check work without a game asset; indicators say **UV masks ready**. Head, surface, camera, motion and saved-V actions report asset unavailability while stored camera and motion choices are kept. **Enable 3D preview** reopens the intake; a successful import reloads into the full head preview. Build keeps its own gates. `tools/review-first-run.ts` (asset-free, isolated `?verify=1`) and `tools/review-ready-assets.ts <prepared-folder>` regressions cover both paths; screenshots were checked at 900×650.
+
+### 3D preview from the player's game files, 25 September
+
+Community users get the 3D head without any prepared files. `desktop/preview-preparation.js` (a device card, separate from the welcome and About) reads the host's state from `GET /api/desktop/preview` and offers exactly one next step:
+
+- **Game folder not set:** runs the read-only game detection; with one confirmed install it offers **Use this folder** (saved through the same revisioned `setup.save` action), otherwise **Choose game folder** opens Build setup.
+- **WolvenKit not set:** says plainly that XF Studio needs WolvenKit CLI to read the game files and opens Build setup; the UV editor keeps working. (Automatic WolvenKit download is a separate task.)
+- **Ready to prepare:** starts automatically on first contact ("Preparing the 3D preview from your Cyberpunk 2077 files…", five named steps, **Cancel**). Cancelling turns automatic start off for that viewer until they start it again.
+- **Unsupported game version or missing head:** the service's plain message stays until the game's content archives change.
+- **Ready:** the card hides, and Studio attaches the head in place (a window event; no reload). The head pane shows a one-sentence status meanwhile.
+
+The host (`src/preview-core-host.ts`, shared with localhost) reads the game folder and WolvenKit path from its own settings, never from the browser; `POST {"action":"prepare"|"cancel"}` is the whole write surface and needs the session cookie and same-origin proof. It runs one derivation at a time in the background and cancels it on shutdown. The derivation (`src/preview-core-service.ts`) asks the generic game asset exporter (`src/game-asset-export.ts`) for the female head morph target, head mesh and eye mesh. One WolvenKit `uncook` with the game path returns the bone-bound head GLB, the eye GLB, both meshes' resolved materials and decoded textures, cached per resource under `userData/preview-cache/exports/`. The service gates the head on the eye plate recipe's audited 2.31 hashes, picks the maps from the head's `default` appearance and the eye's `gradient_brown` appearance, assembles `head.glb` (head, `makeup_plate` cut with the plate recipe, static `eyes`), adapts the maps, verifies everything independently and publishes atomically to `userData/preview-cache/`. The entry also holds `preview-core.json`, the typed render record the renderer loads first: file names, SHA-256s and the game resources, materials and adapters behind each file. The renderer hash-checks each file against it (`src/core-detail-loader.ts`).
+
+Serving: a complete developer intake wins; otherwise `/assets/head.glb`, the four maps and the record come from the derived cache while it verifies for the configured game folder. Capabilities report `previewAssets: "ready"` with `previewSource: "derived" | "prepared"`. A game update, repair or recipe change makes the cache stale and the card offers preparation again; re-deriving from cached exports takes about a second.
+
+Evidence: `tests/preview-core.test.ts`, `tests/preview-preparation.test.ts` and `desktop/tests/server.test.ts` cover the pure assembly, adapters, cache, host states, endpoint and cancellation. The opt-in `tests/preview-core-game.test.ts` (set `XFS_TEST_GAME_ROOT` and `XFS_TEST_WOLVENKIT`) derives from a real 2.31 install with CLI 8.17.4 and 9.0.1 and cancels a real WolvenKit run. A browser run of the desktop host against a fresh data folder (outside Electrobun) went from the welcome through **Use this folder**, a WolvenKit path in Build setup and automatic preparation to an interactive head with makeup on the plate. Parity against the prepared files is recorded in [experiment 013](../../../../experiments/013-native-preview-core/README.md#ported-to-the-studio). Not yet run in an installed canary or WebView2; nothing here is game evidence.
 
 ### Core preview intake, 25 September
 
@@ -162,7 +178,7 @@ Root cause: the Windows Sandbox image does not include the WebView2 Runtime, whi
 
 Windows Sandbox gives a disposable Windows session with no Studio data, Bun, WebView2 Runtime or developer paths; it is enabled on the development machine. `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit and `tools/sandbox-launch.ps1` runs it unattended as described above. After a run with a WebView2 Runtime present, check by hand:
 
-1. The welcome opens; **Start designing** reaches the Studio, and the head pane says the 3D head preview isn't available in this alpha.
+1. The welcome opens; **Start designing** reaches the Studio. With no game folder or WolvenKit, the 3D preview card names the one missing thing and the head pane shows a one-sentence status.
 2. Add a layer, edit its shape, Undo and Redo; save a preset to the library.
 3. Run Check; it reports the collection without needing game files.
 4. Close the window, reopen from the Start menu, and confirm that the preset and selection return and setup does not reappear.

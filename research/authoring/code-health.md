@@ -39,6 +39,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - Generic character resolver (`character-resolver.ts`, `resolver-host.ts` and related), 25 September 2026.
+- Generic game asset export (`game-asset-export*.ts`) and the derived 3D preview core (`preview-core-*.ts`, `render-detail.ts`, `core-detail-loader.ts`, desktop `preview-preparation.js`), 25 September 2026.
 - TypeScript Build pipeline (`package-build-service.ts`, `package-resource-builder.ts` and related), 25 September 2026.
 - Built-in eye plate derivation (`eye-plate-*.ts`), 25 September 2026.
 - Install/MO2 detection and framework version check, 25 September 2026.
