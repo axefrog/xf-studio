@@ -48,7 +48,6 @@ async function start() {
   const core = createTrustedAuthoringCore(workspace, {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
-    controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });
   const viewportDevice = createBrowserViewportDevice({
     headHost: node("port-head-host"), uvHost: node("port-uv-host"),

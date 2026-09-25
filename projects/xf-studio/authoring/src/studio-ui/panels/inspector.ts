@@ -18,7 +18,7 @@ type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
 const canonical = (finish: string) => finish === "satin" ? "regular" : finish;
 
-/** One Undo step per continuous edit; parser failures are reported, never swallowed. */
+/** One Undo step per continuous edit; refused or failed edits are reported, never swallowed. */
 function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined,
   failure?: string): Transaction<T> {
   return {
@@ -26,8 +26,8 @@ function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLaye
     edit: value => {
       const layer = rt.port.editor.layer(); if (!layer) return;
       const action = make(layer, value); if (!action) return;
-      try { rt.port.authoring.controlEdit(id, action); }
-      catch (error) { rt.feedback.toast("warning", "Colour & finish", failure ?? (error as Error).message); rt.changed(); }
+      const outcome = rt.port.authoring.controlEdit(id, action);
+      if (!outcome.ok) { rt.feedback.toast("warning", "Colour & finish", failure ?? outcome.message); rt.changed(); }
     },
     commit: () => rt.port.authoring.controlCommit(id),
     cancel: () => rt.port.authoring.controlCancel(id),
@@ -253,8 +253,8 @@ export function edgePanel(rt: StudioRuntime): PanelController {
   const smooth = new Toggle({ label: "Smooth point gradients", onChange: enabled => {
     const layer = port.editor.layer(); if (!layer) return;
     port.authoring.controlBegin("smooth-strength", layer.id);
-    try { port.authoring.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } }); }
-    catch (error) { rt.feedback.toast("warning", "Pigment", (error as Error).message); }
+    const outcome = port.authoring.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } });
+    if (!outcome.ok) rt.feedback.toast("warning", "Pigment", outcome.message);
     port.authoring.controlCommit("smooth-strength");
   } });
   const blend = new Slider({ label: "Point blend", ...rt.range("pigment.edit", "value", "strength-blend"), step: rt.range("pigment.edit", "value", "strength-blend").min, format: uvPct,
@@ -264,8 +264,8 @@ export function edgePanel(rt: StudioRuntime): PanelController {
   const variable = new Toggle({ label: "Per-point edge softness", onChange: enabled => {
     const layer = port.editor.layer(); if (!layer) return;
     port.authoring.controlBegin("variable-softness", layer.id);
-    try { port.authoring.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } }); }
-    catch (error) { rt.feedback.toast("warning", "Edge", (error as Error).message); }
+    const outcome = port.authoring.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } });
+    if (!outcome.ok) rt.feedback.toast("warning", "Edge", outcome.message);
     port.authoring.controlCommit("variable-softness");
   } });
   const width = new Slider({ label: "Edge softness", ...rt.range("softness.edit", "value", "uniform-softness"), step: .0005, format: uvPct,
@@ -313,8 +313,9 @@ export function warpPanel(rt: StudioRuntime): PanelController {
   const reach = new Slider({ label: "Reach", ...rt.range("field.setReach", "radius"), step: .001, format: uvPct,
     transaction: {
       begin: () => { const layer = port.editor.layer(); if (layer && port.editor.selectedField()) port.authoring.controlBegin("radius", layer.id); },
-      edit: value => { const layer = port.editor.layer(), field = port.editor.selectedField(); if (layer && field)
-        port.authoring.controlEdit("radius", { kind: "field.setReach", layerId: layer.id, fieldId: field.id, radius: value }); },
+      edit: value => { const layer = port.editor.layer(), field = port.editor.selectedField(); if (!layer || !field) return;
+        const outcome = port.authoring.controlEdit("radius", { kind: "field.setReach", layerId: layer.id, fieldId: field.id, radius: value });
+        if (!outcome.ok) { rt.feedback.toast("warning", "Warp", outcome.message); rt.changed(); } },
       commit: () => port.authoring.controlCommit("radius"), cancel: () => port.authoring.controlCancel("radius"),
     } });
   const clear = button({ label: "Reset pull", icon: "reset", small: true, variant: "quiet", onClick: () => {

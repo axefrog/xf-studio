@@ -14,7 +14,6 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import { emptyPresentationStatus, PresentationStatusSource } from "./presentation-status";
-import type { RecipeAction } from "./recipe-actions";
 import type { Layer } from "./recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
@@ -70,7 +69,6 @@ async function start() {
   const core = createTrustedAuthoringCore(workspace, {
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     selectedCollection: () => bootstrap?.collection.workspaceSnapshot()?.selected ?? "draft",
-    controlAction: (action: RecipeAction) => { core.recipe.dispatch(action); },
   });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ headHost, uvHost, queryContext: hit => core.app.contextQuery(hit) });

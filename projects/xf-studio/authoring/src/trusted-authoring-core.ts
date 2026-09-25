@@ -5,7 +5,7 @@ import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
 import { AuthoringLayerActions } from "./authoring-layer-actions";
 import { AuthoringPresentation } from "./authoring-presentation";
-import { RecipeActions, type RecipeAction } from "./recipe-actions";
+import { RecipeActions } from "./recipe-actions";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "./recipe";
 import type { WorkspaceState } from "./workspace-state";
@@ -14,7 +14,6 @@ import type { WorkspaceState } from "./workspace-state";
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   resetStack(previous: Recipe): void;
   selectedCollection(): string;
-  controlAction(action: RecipeAction): void;
 }) {
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
@@ -32,7 +31,9 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // Cancelling a gesture or form transaction restores its checkpoint without creating Redo.
   const revert = () => history.revert();
   const gestures = new AuthoringGestures(document, recipe, revert);
-  const controls = new AuthoringControlEdits(document, ports.controlAction, revert);
+  // Form controls apply validated recipe actions; StudioApplication.controlEdit runs the
+  // capability gate first and reports failures as typed results, so hosts wire nothing here.
+  const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), revert);
   const app = new StudioApplication({ document, recipe, layer: action => layers.dispatch(action),
     undo, history, gestures, controls });
   return { document, geometry, presentation, layers, recipe, gestures, controls, app, undo, history };

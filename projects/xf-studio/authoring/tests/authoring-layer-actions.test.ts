@@ -41,7 +41,7 @@ test("rename, move and Undo preserve the selected point while a reset clamps it"
   const previous = [] as string[];
   const core = createTrustedAuthoringCore(freshWorkspace(), {
     resetStack: recipe => previous.push(recipe.layers.map(layer => layer.id).join(",")),
-    selectedCollection: () => "draft", controlAction: () => {},
+    selectedCollection: () => "draft",
   });
   const id = core.document.recipe.layers[0].id;
   core.document.selected = 3;
