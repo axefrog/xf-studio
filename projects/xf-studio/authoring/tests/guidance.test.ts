@@ -183,7 +183,7 @@ test("advanceWhen moves on only when its event happens after the step starts, or
   const service = new GuidanceService([tour([
     { content, advanceWhen: { event: "layer.added" } },
     { content, advanceWhen: { any: [{ event: "finish.changed" }, { event: "color.changed" }] } },
-    { content, advanceWhen: { capability: { kind: "studio", action: { kind: "recipe.undo" } }, available: true } },
+    { content, advanceWhen: { capability: { kind: "studio", action: { kind: "history.undo" } }, available: true } },
     { content, advanceWhen: { panelVisible: "history" } },
     { content },
   ])], env);
@@ -216,7 +216,7 @@ test("advanceWhen moves on only when its event happens after the step starts, or
 test("a missing anchor offers its panel, lights the panel when only the control is hidden, or is skipped gracefully", () => {
   // The panel is closed: offer to show it through the ordinary panel command, or move on.
   let setup = environment({ anchors: { "history.list": "hidden" }, panels: ["layers"] });
-  let service = new GuidanceService([tour([{ anchor: "history.list", content, buttons: [{ label: "Do it", action: { kind: "studio", action: { kind: "recipe.undo" } } }] }, { content }])], setup.env);
+  let service = new GuidanceService([tour([{ anchor: "history.list", content, buttons: [{ label: "Do it", action: { kind: "studio", action: { kind: "history.undo" } } }] }, { content }])], setup.env);
   service.dispatch({ kind: "guidance.startTour", tourId: "t" });
   let active = service.snapshot().active!;
   expect(active.target).toEqual({ kind: "offer", anchor: "history.list", panel: "history", panelTitle: "History" });
@@ -247,8 +247,8 @@ test("a missing anchor offers its panel, lights the panel when only the control 
   service.dispatch({ kind: "guidance.startTour", tourId: "t" });
   expect(service.snapshot()).toMatchObject({ active: null, last: { outcome: "completed" } });
   // Unavailable commands stay listed, disabled, with their reason.
-  setup = environment({ unavailable: ["recipe.undo"] });
-  service = new GuidanceService([tour([{ content, buttons: [{ label: "Undo it", action: { kind: "studio", action: { kind: "recipe.undo" } } }] }])], setup.env);
+  setup = environment({ unavailable: ["history.undo"] });
+  service = new GuidanceService([tour([{ content, buttons: [{ label: "Undo it", action: { kind: "studio", action: { kind: "history.undo" } } }] }])], setup.env);
   service.dispatch({ kind: "guidance.startTour", tourId: "t" });
   expect(service.snapshot().active!.buttons[0]).toMatchObject({ label: "Undo it", capability: { available: false, reason: "Not now." } });
 });

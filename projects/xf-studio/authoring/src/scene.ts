@@ -31,7 +31,8 @@ import { createLightingPresetStage } from "./lighting-preset-stage";
 import { loadGradingLut } from "./browser-grading-lut-device";
 import { viewportPixelRatio, watchDevicePixelRatio } from "./device-pixel-ratio";
 import { linearTargetSupported } from "./linear-display";
-import { createStudioEnvironment } from "./studio-environment";
+import { createStudioLightRig } from "./studio-light-rig";
+import type { StudioLights } from "./studio-lighting";
 
 /**
  * Draw order of the face's decals, below the editable makeup plates (10 to 41), the eye's wetness shell (99), brows (100) and
@@ -128,18 +129,11 @@ async function assembleScene(
     return requested > distance;
   }
   front();
-  const environment = createStudioEnvironment(renderer, scene);
-  releases.push(() => environment.dispose());
-  const key = new THREE.DirectionalLight(0xfff2e9, 2.5);
-  key.position.set(-0.3, 1.9, -0.5);
-  key.target.position.set(0, 1.67, 0);
-  scene.add(key, key.target);
-  const fill = new THREE.DirectionalLight(0xc6dafa, 1);
-  fill.position.set(0.4, 1.65, -0.2);
-  fill.target.position.set(0, 1.67, 0);
-  scene.add(fill, fill.target);
+  // The studio stage's room environment, key, fill and rim (studio-light-rig.ts).
+  const studio = createStudioLightRig(renderer, scene);
+  releases.push(() => studio.dispose());
   // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
-  const lighting = createLightingPresetStage({ scene, renderer, studioLights: [key, fill, ...environment.lights], loadLut: () => loadGradingLut() });
+  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: () => loadGradingLut() });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await loadCoreDetail(renderer);
@@ -231,9 +225,10 @@ async function assembleScene(
   }
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
-  // The shown V's layered parts are baked again from their stacks (PREV-62): their kept maps died with the context.
+  // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the composite
+  // redraws, and the shown V's layered parts are baked again from their stacks (PREV-62): their kept maps died with the context.
   const restored = () => {
-    environment.restore(); makeup.contextRestored();
+    studio.restore(); makeup.contextRestored();
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     bakeLayered();
@@ -729,18 +724,15 @@ async function assembleScene(
     setExposure: (v: number) => (renderer.toneMappingExposure = v),
     /** Typed theme input for the stage backdrop; it never changes lighting. */
     setStage: (theme: StageTheme) => backdrop.setTheme(theme),
-    setLightAngle: (degrees: number) => {
-      const a = (degrees * Math.PI) / 180;
-      key.position.set(
-        Math.sin(a) * Math.hypot(0.3, 0.5),
-        1.9,
-        -Math.cos(a) * Math.hypot(0.3, 0.5),
-      );
-    },
+    setLightAngle: (degrees: number) => studio.setKeyAngle(degrees),
+    /** The studio stage's environment, key, fill and rim strengths, key elevation and tint (studio-lighting.ts). */
+    setStudioLights: (lights: StudioLights) => studio.setLights(lights),
+    /** Evidence: the studio rig's current settings. */
+    studioLighting: () => studio.state(),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["onFrame", "resize", "front", "updateLayer", "setLayerCanvases", "reconcileLayerCanvases",
     "setLayerCanvas", "eyeShape", "applySavedV", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
     "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail", "setBlink", "animateBlink", "setWire",
-    "setNormals", "setExposure", "setStage", "setLightAngle"], invalidate) };
+    "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

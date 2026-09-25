@@ -102,9 +102,9 @@ const SAMPLES: PlateUvSamples = (() => {
 })();
 const UV = expectedUvConstants(expectedWindow(SAMPLES.bounds));
 
-/** A one-preset collection on the lids, baked into the built-in plate's window; returns the map and reference as the verifier reads them. */
-async function bakeLid(mirror: boolean) {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-plate-reach-")), value = collection(recipe(lid()));
+/** A one-preset collection on the lids (or `layer`), baked into the built-in plate's window; returns the map and reference as the verifier reads them. */
+async function bakeLid(mirror: boolean, layer: Layer = lid()) {
+  const dir = mkdtempSync(join(tmpdir(), "xfs-plate-reach-")), value = collection(recipe(layer));
   try {
     if (mirror) {
       writeFileSync(join(dir, "collection.json"), JSON.stringify(value));
@@ -166,6 +166,29 @@ test("PIPE-33: a window map with no content at the plate, and an empty decoded c
   expect(() => gate(baked, new Float64Array(baked.coverage.length))).toThrow(VerificationError);
   expect(() => errorStats(new Float64Array())).toThrow(VerificationError);
   expect(() => errorStats(new Float64Array())).not.toThrow("No values to summarise");
+}, 60_000);
+
+test("PIPE-38: an empty window map fails the mapping gate wherever the authored makeup reaches the plate, however faint", async () => {
+  const faint = await bakeLid(false, { ...lid(), opacity: .02 } as Layer);
+  const empty = new Float64Array(faint.coverage.length);
+  // The mean error of an empty map stays under the mean limit for makeup this faint, and no shift changes it…
+  const stats = mappingStats(empty, faint.record.width, faint.record.height, UV, faint.reference, faint.record.reference!, SAMPLES);
+  expect(stats.mean).toBeLessThan(MAPPING_LIMITS.mean);
+  expect(stats.drawn).toBe(0);
+  expect(stats.authored).toBeGreaterThan(0);
+  // …so the gate asks for drawn content where the makeup reaches.
+  expect(() => gate(faint, empty)).toThrow(/is empty at the plate's UVs, where its authored makeup reaches/);
+  expect(gate(faint).drawn).toBeGreaterThan(0);
+}, 60_000);
+
+test("PIPE-39: no offset is estimated from too little content or too weak an edge; real content still gets one", async () => {
+  const estimate = (baked: Awaited<ReturnType<typeof bakeLid>>) =>
+    mappingOffset(baked.coverage, baked.record.width, baked.record.height, UV, baked.reference, baked.record.reference!, SAMPLES);
+  // Barely reaching the plate (the lid moved up until a dozen samples remain) and very faint makeup: too little to align.
+  for (const layer of [moved(0, -.078), { ...lid(), opacity: .01 } as Layer, { ...lid(), opacity: .005 } as Layer])
+    expect(estimate(await bakeLid(false, layer))).toEqual({ u: null, v: null });
+  // A preset that reaches the plate with about a hundred samples is still estimated, at 0 on lossless data.
+  expect(estimate(await bakeLid(false, moved(0, -.07)))).toEqual({ u: 0, v: 0 });
 }, 60_000);
 
 test("PIPE-34: a bake without a window plans every preset on head UV, as its maps are", async () => {

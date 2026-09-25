@@ -17,6 +17,7 @@ export type LookOmission = { presetId: string; presetName: string; reason: strin
   feature?: string };
 export const NO_EYE_MAKEUP_REASON = "It has no eye makeup.";
 export const NO_EXPORTER_REASON = "XF Studio can't make mod files for this part yet.";
+export const NEWER_LOOK_REASON = "It was made with a newer version of XF Studio.";
 
 export type PresetCollection = {
   // File-format compatibility ID; product branding does not change existing inputs.
@@ -74,6 +75,8 @@ export function eyeMakeupCollection(collection: LookCollection): PresetCollectio
 function eyeMakeupView(collection: LookCollection, parsed: boolean): PresetCollection {
   const omitted: LookOmission[] = [];
   const presets = collection.presets.flatMap(look => {
+    // A look this build cannot read (kept exactly as it came) cannot become mod files here.
+    if (look.locked) { omitted.push({ presetId: look.id, presetName: look.name, reason: NEWER_LOOK_REASON }); return []; }
     for (const feature of Object.keys(look.parts)) if (feature !== EYE_MAKEUP_FEATURE)
       omitted.push({ presetId: look.id, presetName: look.name, feature, reason: NO_EXPORTER_REASON });
     const envelope = look.parts[EYE_MAKEUP_FEATURE];
@@ -175,5 +178,9 @@ export function planCollection(value: unknown) {
     plate:{ liftsMm },
     presets, requirements:{ArchiveXL:"1.27.3",game:"2.31"},
     limitations:["Appearance names are stable; game save/index persistence across reorder/removal still requires runtime proof.",
-      "One pack creates one selector. Multi-pack aggregation into one global selector is not implemented."] };
+      "One pack creates one selector. Multi-pack aggregation into one global selector is not implemented."],
+    // What the source collection holds that this plan leaves out, and why (PIPE-45). Only a plan exported from a
+    // draft carries it: the package pipeline plans its packaged copy, which never does. An optional addition, so
+    // `xfas/export-plan-1` readers that don't know it are unaffected.
+    ...(collection.omitted ? { omitted:collection.omitted } : {}) };
 }

@@ -11,7 +11,10 @@
  * - `resource.patch`: ResourcePatch/Config.cpp and Configure (targets expanded through scopes, excludes
  *   removed, a patch source may not be a target, patches sorted by `order`);
  * - `resource.copy` / `resource.link`: ResourceLink/Config.cpp and Configure (a copy or link whose path
- *   already exists in the depot is rejected; copies are settled before links).
+ *   already exists in the depot is rejected; copies are settled before links);
+ * - `localization.onscreens`: Localization/Config.cpp (a map of language code → path or list, whose first language is
+ *   the fallback; a bare path or list means English) and Extension.cpp Configure (a unit with `extend` appends its paths
+ *   to the named unit, the `.xl` file name, and is dropped).
  * The installed ArchiveXL may be older than this source; each rule is still read from the installed files.
  */
 import { depotHash } from "./depot-path";
@@ -40,6 +43,19 @@ export interface XlPatch {
   readonly order: number;
   readonly declaredBy: string;
 }
+/** One `.xl` file's `localization.onscreens` declaration (ArchiveXL's config unit is named by the file name). */
+export interface XlLocalization {
+  readonly name: string;
+  readonly declaredBy: string;
+  /** Language code → onscreens `.json` depot paths, in declaration order. */
+  readonly onscreens: ReadonlyMap<string, readonly string[]>;
+  /** The first language declared; its texts fill in keys the player's language lacks. */
+  readonly fallback: string | null;
+}
+/** ArchiveXL's known language codes (Localization/Language.cpp `IsKnown`). */
+export const XL_LANGUAGES: readonly string[] = ["ar-ar", "cz-cz", "de-de", "en-us", "es-es", "es-mx", "fr-fr", "hu-hu", "it-it",
+  "jp-jp", "kr-kr", "pl-pl", "pt-br", "ru-ru", "th-th", "tr-tr", "ua-ua", "zh-cn", "zh-tw"];
+
 export interface ArchiveXlConfig {
   readonly customizations: { readonly female: readonly XlCustomization[]; readonly male: readonly XlCustomization[] };
   /** Flattened scope → leaf members. */
@@ -52,6 +68,8 @@ export interface ArchiveXlConfig {
   readonly links: ReadonlyMap<string, { target: string; declaredBy: string }>;
   /** hash → declared path text, for every path an `.xl` names. */
   readonly paths: ReadonlyMap<string, string>;
+  /** Text declarations in load order, `extend` units already folded into their targets. */
+  readonly localization: readonly XlLocalization[];
   readonly issues: readonly string[];
 }
 
@@ -71,9 +89,26 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   const paths = new Map<string, string>();
   const issues: string[] = [];
   const known = (path: string) => { const hash = depotHash(path); if (hash !== "0") paths.set(hash, path); return hash; };
+  const localization: { name: string; declaredBy: string; onscreens: Map<string, string[]>; fallback: string | null; extend: string | null }[] = [];
 
   for (const { id, document } of documents) {
     if (!isMap(document)) continue;
+    if (isMap(document.localization)) {
+      const unit = { name: id.split(/[\\/]/).pop()!, declaredBy: id, onscreens: new Map<string, string[]>(), fallback: null as string | null,
+        extend: scalar(document.localization.extend) };
+      const node = document.localization.onscreens;
+      const add = (language: string, value: unknown) => {
+        const paths = list(value);
+        if (!paths.length) return;
+        unit.onscreens.set(language, paths);
+        unit.fallback ??= language;
+      };
+      if (isMap(node)) for (const [language, value] of Object.entries(node)) {
+        if (!XL_LANGUAGES.includes(language)) { issues.push(`${id}: unknown language code "${language}".`); continue; }
+        add(language, value);
+      } else if (node !== undefined) add("en-us", node);
+      if (unit.onscreens.size || unit.extend) localization.push(unit);
+    }
     const custom = document.customizations;
     if (custom !== undefined) {
       if (!isMap(custom)) issues.push(`${id}: customizations must be a map.`);
@@ -150,7 +185,15 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
     targets.delete(row.source);
     return { source: row.source, sourcePath: row.sourcePath, targets, props: row.props, order: row.order, declaredBy: row.declaredBy };
   });
-  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, issues };
+  // Localization Configure: an `extend` unit appends its paths to the named unit (by file name) and is removed.
+  for (const unit of localization) {
+    if (!unit.extend) continue;
+    const target = localization.find(other => other.name === unit.extend && !other.extend);
+    if (target) for (const [language, extra] of unit.onscreens) target.onscreens.set(language, [...(target.onscreens.get(language) ?? []), ...extra]);
+  }
+  const texts: XlLocalization[] = localization.filter(unit => !unit.extend && unit.onscreens.size)
+    .map(({ name, declaredBy, onscreens, fallback }) => ({ name, declaredBy, onscreens, fallback }));
+  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, issues };
 }
 
 export const inScope = (config: ArchiveXlConfig, scopePath: string, hash: string) =>

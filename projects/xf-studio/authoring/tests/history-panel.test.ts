@@ -67,6 +67,7 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
   const panel = readFileSync(resolve(root, "src/studio-ui/panels/history.ts"), "utf8");
   expect(panel).toContain(`kind: "history.jumpTo"`);
   expect(panel).not.toMatch(/import (?!type)[^;]*from "\.\.\/\.\.\/(authoring-|editor-actions|studio-application)/);
-  const app = readFileSync(resolve(root, "src/studio-ui/app.ts"), "utf8");
-  expect(app).toContain("historyPanel(rt)");
+  // The shell's view contribution binds it (views/panels.ts); the shell mounts every contributed panel.
+  const factories = readFileSync(resolve(root, "src/studio-ui/views/panels.ts"), "utf8");
+  expect(factories).toContain("history: historyPanel");
 });

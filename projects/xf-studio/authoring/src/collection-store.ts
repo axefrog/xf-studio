@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
 import { parseCollection } from "./preset-collection";
 import { LibraryError } from "./library-store";
-import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
+import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection } from "./platform/api";
+import { NEWER_LOOKS_LIBRARY_MESSAGE } from "./collection-workspace";
 import type { PartRegistry } from "./platform/core/document";
 
 /**
@@ -87,7 +88,11 @@ export class CollectionLibrary {
   save(value: unknown): StoredCollection {
     const input = value as { collection?: unknown; revision?: number };
     let collection: LookCollection;
-    try { collection = this.parts.readCollection(input?.collection, true); } catch { throw new LibraryError("Invalid collection; nothing was saved."); }
+    try { collection = this.parts.readCollection(input?.collection, true); }
+    catch (error) {
+      if (isNewerData(error)) throw new LibraryError(NEWER_LOOKS_LIBRARY_MESSAGE, 422);
+      throw new LibraryError("Invalid collection; nothing was saved.");
+    }
     // Every row this save writes must be one 0.1.0-alpha.1 reads (CORE-30).
     const stored = this.parts.writeMinimal(collection);
     if (stored.schema !== COLLECTION_1) throw new LibraryError(COLLECTION_2_LIBRARY_MESSAGE, 422);

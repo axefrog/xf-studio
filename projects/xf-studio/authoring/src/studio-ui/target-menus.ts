@@ -33,7 +33,7 @@ const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").c
 
 /** Menu items for an application-bound context. Every dispatch rechecks the binding. */
 export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor): MenuItem[] {
-  const port = rt.port, recipe = port.editor.recipe(), hit = query.context.hit;
+  const port = rt.port, recipe = rt.editor.recipe(), hit = query.context.hit;
   // A stale or missing target needs no heading of its own: each entry is disabled with that reason.
   const items: MenuItem[] = [];
   for (const option of query.options) {
@@ -60,7 +60,7 @@ function dispatchBound(rt: StudioRuntime, context: StudioBoundContext, action: S
 }
 
 function openInput(rt: StudioRuntime, context: StudioBoundContext, option: Extract<Option, { requiresInput: true }>, anchor: MenuAnchor) {
-  const port = rt.port, hit = context.hit, recipe = port.editor.recipe();
+  const port = rt.port, hit = context.hit, recipe = rt.editor.recipe();
   const bound = (action: StudioAction) => port.authoring.boundActionCapability(context, action);
   const commit = (action: StudioAction) => dispatchBound(rt, context, action);
   const percent = (value: number) => `${Math.round(value * 100)}%`, uv = (value: number) => `${(value * 100).toFixed(2)}% UV`;
@@ -121,7 +121,7 @@ export function targetAction(rt: StudioRuntime, target: StudioTarget, action: St
  * view actions. Nothing here decides availability; each entry carries the application's capability.
  */
 export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAnchor): MenuSection[] {
-  const port = rt.port, recipe = port.editor.recipe(), index = recipe.layers.findIndex(layer => layer.id === layerId);
+  const port = rt.port, recipe = rt.editor.recipe(), index = recipe.layers.findIndex(layer => layer.id === layerId);
   const layer = recipe.layers[index];
   if (!layer) return [];
   const query = port.authoring.contextQuery({ kind: "layer", id: layerId });
@@ -140,7 +140,7 @@ export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAn
         .map(choice => {
           const descriptor = rt.finishes.find(item => item.id === choice.value);
           return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
-            checked: layer.finish === choice.value || (layer.finish === "satin" && choice.value === "regular"),
+            checked: (rt.finishOf(layer.finish)?.id ?? layer.finish) === choice.value,
             hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod"
               : descriptor?.exportAdapter === "experimental" ? "Experimental export · not yet tested in game" : undefined,
             run: () => { rt.dispatch(choice.action); } };
@@ -150,7 +150,7 @@ export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAn
     ] }];
 }
 export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor, invoker?: Element) {
-  const layer = rt.port.editor.recipe().layers.find(item => item.id === layerId);
+  const layer = rt.editor.recipe().layers.find(item => item.id === layerId);
   if (!layer) return;
   openMenu(menuFromSections(layerSections(rt, layerId, anchor)), anchor, { label: `${layer.name} layer actions`, invoker });
 }
@@ -214,13 +214,13 @@ export function viewportSections(rt: StudioRuntime, kind: ViewportHostKind, anch
   const query = at ? port.viewport.contextAt(kind, at.x, at.y) : undefined;
   if (query) {
     const hit = query.context.hit, layerId = "layerId" in hit ? hit.layerId : undefined;
-    const layer = layerId ? port.editor.recipe().layers.find(item => item.id === layerId) : undefined;
+    const layer = layerId ? rt.editor.recipe().layers.find(item => item.id === layerId) : undefined;
     const detail = [layer?.name, query.mirror ? "mirrored copy" : undefined].filter(Boolean).join(" · ") || undefined;
     sections.push({ label: TARGET_LABELS[kind][query.affordance], detail, items: contextItems(rt, query, anchor) });
   } else if (!at) {
-    const layer = port.editor.layer();
-    if (layer) sections.push({ label: `Selected point ${port.editor.selected() + 1}`, detail: layer.name,
-      items: contextItems(rt, port.authoring.contextQuery({ kind: "point", layerId: layer.id, index: port.editor.selected() }), anchor) });
+    const layer = rt.editor.layer();
+    if (layer) sections.push({ label: `Selected point ${rt.editor.selected() + 1}`, detail: layer.name,
+      items: contextItems(rt, port.authoring.contextQuery({ kind: "point", layerId: layer.id, index: rt.editor.selected() }), anchor) });
   }
   sections.push(viewSection(rt, kind));
   return sections;

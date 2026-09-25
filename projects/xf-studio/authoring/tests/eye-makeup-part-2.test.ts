@@ -18,7 +18,7 @@ import { defaultStudioIrregularFlakes } from "../src/flake-field";
 import { selectGlitterModel } from "../src/glitter-model";
 import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank,
   type RecipeFileSchema } from "../src/layer-models";
-import { canonicalJson, COLLECTION_1, COLLECTION_2, type LookCollection } from "../src/platform/api";
+import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { eyeMakeupCollection } from "../src/preset-collection";
 import { initialRecipe, newLayerTemplate, parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE,
@@ -321,9 +321,9 @@ test("selecting Glitter models and every recipe action leave the recipe without 
   }
 });
 
-// ---- A newer part schema or layer model stays refused (decision recorded in the design) ----
+// ---- A newer part schema or layer model: refused by the strict reader, a locked look in a draft (step 5) ----
 
-test("a newer eye-makeup part schema or unknown layer model is refused on read and the workspace stays protected", () => {
+test("a newer eye-makeup part schema or unknown layer model is refused on read; in a draft it locks only its look", () => {
   const unknownModel = parseRecipe(initialRecipe()) as unknown as { layers: Record<string, unknown>[] };
   unknownModel.layers[0] = { ...unknownModel.layers[0], finish: "glitter", flakes: { model: "uv-cell-direct-9" } };
   const envelopes = [{ schema: "xfs/eye-makeup-part-3", body: parseRecipe(initialRecipe()) },
@@ -335,7 +335,10 @@ test("a newer eye-makeup part schema or unknown layer model is refused on read a
     const value = clone(state);
     value.collections.collection.presets[0].parts[EYE] = envelope;
     const loaded = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? JSON.stringify(value) : null }, false, STUDIO_DOCUMENTS);
-    expect(loaded.writable).toBe(false);
+    expect(loaded.writable).toBe(true);
+    const look = loaded.state.collections!.collection.presets[0];
+    expect([look.locked, look.parts[EYE]]).toEqual([NEWER_LOOK_MESSAGE, envelope]);
+    expect(loaded.state.collections!.collection.presets.slice(1).every(item => !item.locked)).toBe(true);
   }
   // A library still lists such a collection by identity.
   const file = STUDIO_PARTS.write(STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[1])));

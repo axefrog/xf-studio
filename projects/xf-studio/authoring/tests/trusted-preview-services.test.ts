@@ -109,6 +109,9 @@ test("the creator rig's body follows the applied save, derived by the saved-appe
   const source = readFileSync(resolve(import.meta.dir, "..", "src", "browser-scene-preview-ports.ts"), "utf8");
   expect(source).toContain("setBodySex: sex => scene.lighting.setBodySex(sex)");
   expect(source).not.toContain("isMale");
+  // The studio rig is part of the scene preview port, not spread in by the head attachment (PREV-69).
+  expect(source).toContain("setStudioLights: lights => scene.setStudioLights(lights)");
+  expect(readFileSync(resolve(import.meta.dir, "..", "src", "browser-head-attachment.ts"), "utf8")).not.toMatch(/setStudioLights|...scenePorts/);
 });
 
 test("restoring the preview never changes the caller's workspace (CORE-25)", () => {

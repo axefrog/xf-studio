@@ -49,21 +49,21 @@ test("every context-menu candidate has a label, and destructive entries name the
   const ids = new Set(hits.flatMap(hit => contextCandidates(hit, recipe).map(candidate => candidate.id)));
   expect(ids.has("point.mode.corner")).toBe(true);
   expect([...ids].filter(id => !CONTEXT_LABELS[id])).toEqual([]);
-  expect(undoHint("recipe", "layer.remove")).toBe("Undo with Ctrl+Z");
+  expect(undoHint("part", "layer.remove")).toBe("Undo with Ctrl+Z");
   expect(undoHint("recovery", "preset.remove")).toBe("Restorable from the Presets panel");
-  expect(undoHint("recipe", "layer.duplicate")).toBeUndefined();
+  expect(undoHint("part", "layer.duplicate")).toBeUndefined();
 });
 
 test("every action ID has an activity source label", () => {
   expect(Object.keys(ACTION_DESCRIPTORS).filter(kind => sourceLabel(kind) === "Studio")).toEqual([]);
-  expect(sourceLabel("recipe.redo")).toBe("Undo");
+  expect(sourceLabel("history.redo")).toBe("Undo");
   expect(sourceLabel("shape.transform")).toBe("Shape");
   expect(sourceLabel("layer.setOpacity")).toBe("Colour & finish");
 });
 
 test("a paint frame reads each port source at most once", () => {
   let reads = 0;
-  const port = { editor: { recipe: () => (reads++, initialRecipe()) }, library: { summary: () => (reads++, {}) } } as unknown as Port;
+  const port = { feature: () => ({ view: () => ({ recipe: () => (reads++, initialRecipe()) }) }), library: { summary: () => (reads++, {}) } } as unknown as Port;
   const frame = new Frame(port);
   void frame.recipe; void frame.recipe; void frame.library; void frame.library;
   expect(reads).toBe(2);

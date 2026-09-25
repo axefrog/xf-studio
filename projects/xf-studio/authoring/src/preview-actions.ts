@@ -1,14 +1,16 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { FaceMorphChoice } from "./face-morphs";
-import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
+import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "./platform/api";
+import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO_EXPOSURE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES,
+  STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioExposure, validStudioLightValue, type StudioLightKey, type StudioLights, type StudioSetupId } from "./studio-lighting";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" |
-  "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting">;
+  "eyeShape" | "normals" | "eyeOptics" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
 export type PreviewAction =
   | { kind: "camera.front" }
   | { kind: "camera.setFov"; degrees: number }
@@ -20,8 +22,13 @@ export type PreviewAction =
   | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
   | { kind: "preview.setCreatorLighting"; key: "cone"; value: ConeReading }
   | { kind: "preview.setCreatorLighting"; key: "exposure"; value: number }
+  | { kind: "preview.resetCreatorLighting" }
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
+  | { kind: "preview.setStudioLight"; key: StudioLightKey; value: number }
+  | { kind: "preview.setStudioNeutral"; enabled: boolean }
+  | { kind: "preview.applyStudioSetup"; setup: StudioSetupId }
+  | { kind: "preview.resetStudioLighting" }
   | { kind: "preview.setEyeShape"; index: number }
   | { kind: "preview.setPiercings"; enabled: boolean }
   | { kind: "preview.setSurfaceControls" | "preview.setWire" | "preview.setNormals" | "preview.setEyeOptics" | "preview.setHair"; enabled: boolean }
@@ -33,12 +40,16 @@ export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean;
 /** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
 export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExposure: number;
   lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null } };
+/** The studio stage's named setups and the one the current lights match exactly (null once adjusted). Read-only; not persisted. */
+export type StudioSetupsView = { active: StudioSetupId | null; setups: { id: StudioSetupId; label: string; title: string }[] };
 /** Persisted workspace bounds before a head is loaded (the female creator's 22 choices). */
 export const MAX_EYE_SHAPE_INDEX = 21;
 export type PreviewPort = {
   cameraState(): CameraState; front(): boolean; setFov(degrees: number): boolean | undefined; endFovGesture(): void;
   restoreCamera(camera: CameraState): void;
   setExposure(value: number): void; setLightAngle(degrees: number): void;
+  /** The studio stage's strengths, key elevation and tint (studio-lighting.ts). Absent on a preview without the adjustable rig. */
+  setStudioLights?(lights: StudioLights): void;
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
@@ -54,6 +65,11 @@ export type PreviewPort = {
 };
 const NO_CREATOR = "Creator lighting is unavailable in this preview.";
 const CREATOR_FIXED = "Creator lighting uses the game's own lights and fixed exposure. Switch to Studio lighting to adjust this.";
+const NO_STUDIO_RIG = "Studio light controls are unavailable in this preview.";
+const STUDIO_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setKeyAngle", "preview.setStudioLight",
+  "preview.setStudioNeutral", "preview.applyStudioSetup", "preview.resetStudioLighting"]);
+const STUDIO_LIGHT_LABELS: Record<StudioLightKey, string> = { environment: "Environment strength", key: "Key light strength",
+  elevation: "Key light height", fill: "Fill light strength", rim: "Rim light strength" };
 
 /** Preview preferences and camera commands are independent of the DOM and the Three scene type. */
 export class PreviewActions {
@@ -64,7 +80,7 @@ export class PreviewActions {
       lashes: initial.lashes, hair: initial.hair, normals: initial.normals, eyeOptics: initial.eyeOptics,
       eyeShape: initial.eyeShape, piercings: initial.piercings,
       exposure: initial.exposure, lightAngle: initial.lightAngle,
-      lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting } };
+      lightingPreset: initial.lightingPreset, creatorLighting: { ...initial.creatorLighting }, studioLights: { ...initial.studioLights } };
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
     port.onLightingStatus?.(() => { for (const listener of this.listeners) listener(); });
   }
@@ -97,12 +113,31 @@ export class PreviewActions {
       const invalid = validNavigation(action.command);
       if (invalid) return refusal("invalid_value", invalid);
     }
-    if (action.kind === "preview.setExposure" && (!Number.isFinite(action.value) || action.value < .5 || action.value > 2))
-      return refusal("invalid_value", "Exposure must be between 0.5 and 2.");
+    if (action.kind === "preview.setExposure" && !validStudioExposure(action.value))
+      return refusal("invalid_value", `Exposure must be between ${STUDIO_EXPOSURE_RANGE.min} and ${STUDIO_EXPOSURE_RANGE.max}.`);
     if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
       return refusal("invalid_value", "Key light angle must be between 0° and 360°.");
-    if ((action.kind === "preview.setExposure" || action.kind === "preview.setKeyAngle") && this.state.lightingPreset === "creator")
-      return refusal("invalid_value", CREATOR_FIXED);
+    if ((action.kind === "preview.setStudioLight" || action.kind === "preview.setStudioNeutral") && !this.port.setStudioLights)
+      return refusal("unavailable", NO_STUDIO_RIG);
+    if (action.kind === "preview.setStudioNeutral" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+    if (action.kind === "preview.setStudioLight") {
+      if (!STUDIO_LIGHT_KEYS.includes(action.key)) return refusal("invalid_value", "That studio light setting does not exist.");
+      if (!validStudioLightValue(action.key, action.value)) {
+        const range = STUDIO_LIGHT_RANGES[action.key];
+        return refusal("invalid_value", `${STUDIO_LIGHT_LABELS[action.key]} must be between ${range.min} and ${range.max}.`);
+      }
+    }
+    if (action.kind === "preview.applyStudioSetup") {
+      if (!this.port.setStudioLights) return refusal("unavailable", NO_STUDIO_RIG);
+      if (!Object.hasOwn(STUDIO_SETUPS, action.setup)) return refusal("invalid_value", "That lighting setup does not exist.");
+    }
+    if (action.kind === "preview.resetStudioLighting") {
+      if (!this.port.setStudioLights) return refusal("unavailable", NO_STUDIO_RIG);
+      if (isDefaultStudioStage(this.studioStage())) return refusal("unavailable", "The studio lighting is already at its defaults.");
+    }
+    // Under the creator preset these studio controls are not wrong, they belong to the other mode (UI-56).
+    if (STUDIO_ACTIONS.has(action.kind) && this.state.lightingPreset === "creator")
+      return refusal("incompatible_mode", CREATOR_FIXED);
     if (action.kind === "preview.setLightingPreset") {
       if (!LIGHTING_PRESETS.includes(action.preset)) return refusal("invalid_value", "That lighting preset does not exist.");
       if (action.preset === "creator" && !this.port.setLightingPreset) return refusal("unavailable", NO_CREATOR);
@@ -114,6 +149,12 @@ export class PreviewActions {
           : action.key === "exposure" && Number.isFinite(action.value) && action.value >= CREATOR_EXPOSURE_RANGE.min && action.value <= CREATOR_EXPOSURE_RANGE.max;
       if (!valid) return refusal("invalid_value", action.key === "exposure"
         ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
+    }
+    if (action.kind === "preview.resetCreatorLighting") {
+      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
+      const current = this.state.creatorLighting;
+      if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
+        && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
     }
     if (action.kind === "camera.creatorFraming") {
       if (!this.port.creatorCamera) return refusal("unavailable", NO_CREATOR);
@@ -144,8 +185,19 @@ export class PreviewActions {
       case "preview.setCreatorLighting":
         this.state.creatorLighting = { ...this.state.creatorLighting, [action.key]: action.value };
         this.port.setCreatorLighting!(this.state.creatorLighting); break;
+      case "preview.resetCreatorLighting":
+        this.state.creatorLighting = { ...DEFAULT_CREATOR_LIGHTING };
+        this.port.setCreatorLighting!(this.state.creatorLighting); break;
       case "preview.setExposure": this.port.setExposure(action.value); this.state.exposure = action.value; break;
       case "preview.setKeyAngle": this.port.setLightAngle(action.degrees); this.state.lightAngle = action.degrees; break;
+      case "preview.setStudioLight":
+        this.state.studioLights = { ...this.state.studioLights, [action.key]: action.value };
+        this.port.setStudioLights!(this.state.studioLights); break;
+      case "preview.setStudioNeutral":
+        this.state.studioLights = { ...this.state.studioLights, neutral: action.enabled };
+        this.port.setStudioLights!(this.state.studioLights); break;
+      case "preview.applyStudioSetup": this.applyStudioStage(STUDIO_SETUPS[action.setup]); break;
+      case "preview.resetStudioLighting": this.applyStudioStage(DEFAULT_STUDIO_STAGE); break;
       case "preview.setEyeShape": this.port.setEyeShape(action.index); this.state.eyeShape = action.index; break;
       case "preview.setPiercings": this.port.setPiercings(action.enabled); this.state.piercings = action.enabled; break;
       case "preview.setSurfaceControls": this.port.setSurfaceControls(action.enabled); this.state.surface = action.enabled; break;
@@ -157,6 +209,23 @@ export class PreviewActions {
     }
     for (const listener of this.listeners) listener();
     return limited === undefined ? {} : { limited };
+  }
+  /** The named studio setups for the presentation, and which one the stage matches. */
+  studioSetups(): StudioSetupsView {
+    return { active: matchingStudioSetup(this.studioStage()),
+      setups: STUDIO_SETUP_IDS.map(id => ({ id, label: STUDIO_SETUPS[id].label, title: STUDIO_SETUPS[id].title })) };
+  }
+  /** The studio stage as the controls set it: the rig, exposure and key angle. */
+  studioStage() {
+    return { lights: { ...this.state.studioLights }, exposure: this.state.exposure, angle: this.state.lightAngle };
+  }
+  private applyStudioStage(stage: { lights: Readonly<StudioLights>; exposure: number; angle: number }) {
+    this.state.studioLights = { ...stage.lights };
+    this.state.exposure = stage.exposure;
+    this.state.lightAngle = stage.angle;
+    this.port.setStudioLights!(this.state.studioLights);
+    this.port.setExposure(stage.exposure);
+    this.port.setLightAngle(stage.angle);
   }
   /** Saved facial morph application already changed the renderer; only update the persisted selector. */
   rememberEyeShape(index: number) {

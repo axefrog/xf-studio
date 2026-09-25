@@ -85,7 +85,7 @@ test("a head step failing after the scene loaded releases every head connection,
   expect(h.viewport.scene()).toBeUndefined();
   expect(h.viewport.surfaceEditor()).toBeUndefined();
   expect(h.connected).toBeUndefined();
-  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, character: undefined });
+  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined });
   expect(h.preferenceListeners.size).toBe(0);
   expect(h.schemeListeners.size).toBe(0);
   expect(h.scenes[0]!.controls.size).toBe(0);
@@ -96,7 +96,7 @@ test("a head step failing after the scene loaded releases every head connection,
   expect(h.host.canvases).toBe(1);
   expect(h.viewport.scene()).toBe(head.scene);
   expect(h.connected).toBe(head.scene);
-  expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, character: head.characterDetails });
+  expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, characterDetails: head.characterDetails });
   expect(h.preferenceListeners.size).toBe(1);
   expect(h.schemeListeners.size).toBe(1);
   expect(h.scenes[1]!.controls.size).toBe(1);
@@ -109,7 +109,7 @@ test("a head step failing after the scene loaded releases every head connection,
   expect(h.host.canvases).toBe(0);
   expect(h.log).toEqual(["surface:dispose", "scene:dispose", "surface:dispose", "scene:dispose"]);
   expect(h.preferenceListeners.size).toBe(0);
-  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, character: undefined });
+  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined });
 });
 
 test("a scene that fails to load attaches nothing, and the next load starts clean", async () => {

@@ -1,8 +1,10 @@
 /**
- * CORE-27: data from a newer XF Studio (a part schema or layer model this build does not know) is
- * never dropped as damage. Wherever it sits in a workspace (the current draft, recovery drafts,
- * removed presets, Undo histories), the workspace opens read-only and is never written back;
- * Undo histories are written in the oldest part schema that holds them, so older builds read them.
+ * CORE-27 and step 5: data from a newer XF Studio (a part schema or layer model this build does not
+ * know) is never dropped as damage. In a collection draft (the current draft, recovery drafts, removed
+ * presets, Undo histories) it locks only the look holding it, which is kept verbatim and written back
+ * exactly while the rest stays editable; anywhere else (the loose editor, a newer workspace) the
+ * workspace opens read-only and is never written back. Undo histories are written in the oldest part
+ * schema that holds them, so older builds read them.
  */
 import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -12,7 +14,7 @@ import { DesktopWorkspaceStore, desktopWorkspaceStartFresh } from "../desktop/wo
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP, eyeMakeupPartCodec } from "../src/features/eye-makeup";
 import { EYE_MAKEUP_LAYER_MODELS, LayerModelRegistry } from "../src/layer-models";
-import { isNewerData, type PartCodec } from "../src/platform/api";
+import { isNewerData, NEWER_LOOK_MESSAGE, type PartCodec } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { initialRecipe, parseRecipe, type Recipe } from "../src/recipe";
 import { EYE_MAKEUP_PART_1, parseEyeMakeupPart, recipeFile } from "../src/recipe-schema";
@@ -53,37 +55,72 @@ const cases: [string, (value: any) => void][] = [
     draft.memory[id][EYE].partSchema = NEWER_PART; draft.memory[id][EYE].history = [{ from: "newer" }]; }],
 ];
 
-test("newer data anywhere opens the workspace read-only with its current draft, and nothing is dropped as damage", () => {
+/** Where each case's newer data sits: the draft holding it and the locked look's ID (or the removed entry). */
+type Place = { draft: (value: any) => any; look: (draft: any) => string; removed?: true };
+const places: Record<string, Place> = {
+  "a recovery draft's look": { draft: value => value.collections.previous, look: draft => draft.collection.presets[0].id },
+  "a removed preset": { draft: value => value.collections, look: draft => draft.removed[0].preset.id, removed: true },
+  "the selected look's Undo history (newer part schema)": { draft: value => value.collections, look: draft => draft.selected },
+  "another look's Undo history (a newer layer model in one entry)": { draft: value => value.collections, look: () => fixedId(1) },
+  "a recovery draft's history": { draft: value => value.collections.previous, look: draft => draft.collection.presets[0].id },
+};
+/** A look's stored parts and memory in a stored draft (or its removed entry). */
+function storedLook(draft: any, id: string, removed?: true) {
+  if (removed) { const entry = draft.removed.find((item: any) => item.preset.id === id); return { preset: entry.preset, memory: entry.memory }; }
+  return { preset: draft.collection.presets.find((look: any) => look.id === id), memory: draft.memory[id] };
+}
+
+test("newer data in a collection draft locks only that look; the workspace stays writable and writes it back exactly (step 5)", () => {
   const baseline = loadWorkspace(storage(stored()), false, STUDIO_DOCUMENTS);
   expect(baseline).toMatchObject({ writable: true });
   for (const [name, change] of cases) {
     const value = stored(); change(value);
-    // Strict and tolerant reads both refuse it with the typed error; neither treats it as damage.
+    // The strict reader still refuses it with the typed error; it is never treated as damage.
     let error: unknown;
     try { parseWorkspace(structuredClone(value), STUDIO_DOCUMENTS, []); } catch (caught) { error = caught; }
     expect(isNewerData(error), name).toBe(true);
     const loaded = loadWorkspace(storage(value), false, STUDIO_DOCUMENTS);
     expect({ name, writable: loaded.writable, newer: loaded.newer, error: loaded.error, warning: loaded.warning })
-      .toEqual({ name, writable: false, newer: true, error: NEWER_WORKSPACE_MESSAGE, warning: undefined });
-    // The current draft is shown as it was stored.
-    expect(loaded.state.recipe, name).toEqual(baseline.state.recipe);
-    expect(loaded.state.collections!.collection, name).toEqual(baseline.state.collections!.collection);
-    // The read-only state is never written: autosave reports protected and leaves storage alone.
-    let writes = 0;
-    const persistence = new WorkspacePersistence({ storage: { setItem: () => { writes++; } }, key: workspaceKeys(false).workspace,
-      writable: loaded.writable, restoreError: loaded.error, capture: () => loaded.state, model: STUDIO_DOCUMENTS });
-    const statuses: string[] = [];
-    persistence.subscribe(status => statuses.push(status.kind));
-    persistence.activate(); persistence.flush();
-    expect({ name, writes, statuses }).toEqual({ name, writes: 0, statuses: ["protected"] });
+      .toEqual({ name, writable: true, newer: undefined, error: undefined, warning: undefined });
+    // Exactly that look is locked, with the plain reason; every other look reads as before.
+    const place = places[name], id = place.look(place.draft(value));
+    const draft = place.draft({ collections: loaded.state.collections });
+    const look = place.removed ? draft.removed.find((entry: any) => entry.preset.id === id).preset
+      : draft.collection.presets.find((item: any) => item.id === id);
+    expect(look.locked, name).toBe(NEWER_LOOK_MESSAGE);
+    const lockedIds = [loaded.state.collections!, loaded.state.collections!.previous!].flatMap(item => [...item.collection.presets,
+      ...item.removed.map(entry => entry.preset)]).filter(item => item.locked).map(item => item.id);
+    expect(lockedIds, name).toEqual([id]);
+    if (place.draft(value) === value.collections && !place.removed && id === value.collections.selected)
+      expect([loaded.state.liveLocked, loaded.state.recipe.layers.length], name).toEqual([NEWER_LOOK_MESSAGE, 0]);
+    else expect(loaded.state.recipe, name).toEqual(baseline.state.recipe);
+    // Autosave writes, and the look's parts and memory come back exactly as they were stored.
+    const autosave = (state: WorkspaceState) => {
+      let written: string | undefined;
+      const persistence = new WorkspacePersistence({ storage: { setItem: (_key: string, text: string) => { written = text; } },
+        key: workspaceKeys(false).workspace, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
+      persistence.activate(); persistence.flush();
+      return written!;
+    };
+    const written = autosave(loaded.state), again = JSON.parse(written);
+    expect(storedLook(place.draft(again), id, place.removed), name).toEqual(storedLook(place.draft(value), id, place.removed));
+    // Loaded again and autosaved again, it is the same text: a locked look round-trips exactly.
+    const reloaded = loadWorkspace(storage(again), false, STUDIO_DOCUMENTS);
+    expect(reloaded.writable, name).toBe(true);
+    expect(autosave(reloaded.state), name).toBe(written);
   }
 });
 
-test("a newer current draft falls back to a fresh read-only draft; damage elsewhere is still dropped with a note", () => {
+test("a newer look in the current draft opens locked; a newer loose editor still falls back to a fresh read-only draft", () => {
   const value = stored(); newer(value.collections.collection.presets[0]);
   const loaded = loadWorkspace(storage(value), false, STUDIO_DOCUMENTS);
-  expect(loaded).toMatchObject({ writable: false, newer: true, error: NEWER_WORKSPACE_MESSAGE });
-  expect(loaded.state.collections).toBeUndefined();
+  expect(loaded).toMatchObject({ writable: true });
+  expect(loaded.state.collections!.collection.presets[0]).toMatchObject({ locked: NEWER_LOOK_MESSAGE,
+    parts: { [EYE]: { schema: NEWER_PART, body: { anything: true } } } });
+  // The loose editor (no collection draft) cannot hold a locked look: the workspace stays protected as before.
+  const loose = stored(); delete loose.collections;
+  loose.look = { parts: { [EYE]: { schema: NEWER_PART, body: {} } }, memory: {} };
+  expect(loadWorkspace(storage(loose), false, STUDIO_DOCUMENTS)).toMatchObject({ writable: false, newer: true, error: NEWER_WORKSPACE_MESSAGE });
   // Damage (not newer data) keeps the old tolerant behaviour: dropped with a warning, still writable.
   const damaged = stored(); damaged.collections.removed[0].preset.parts[EYE].body = { layers: "broken" };
   const repaired = loadWorkspace(storage(damaged), false, STUDIO_DOCUMENTS);
@@ -91,30 +128,31 @@ test("a newer current draft falls back to a fresh read-only draft; damage elsewh
   expect(repaired.newer).toBeUndefined();
 });
 
-test("desktop loads a workspace whose current draft is readable, never replaces newer data and never sets that draft aside", () => {
+test("desktop saves a workspace with a locked look and keeps it exactly; newer data it cannot keep is never replaced", () => {
   const dir = resolve(root, "desktop"), store = new DesktopWorkspaceStore(dir, STUDIO_DOCUMENTS), file = resolve(dir, store.fileName(false));
   store.save(false, JSON.stringify(stored()));
   const value = stored(); value.collections.memory[value.collections.selected][EYE].partSchema = NEWER_PART;
   const text = JSON.stringify(value);
   writeFileSync(file, text);
-  // GET answers with the file (no 409): the renderer opens it read-only.
   expect(store.load(false)).toBe(text);
-  // A save never replaces it; posting the unchanged text back (the update flush) is not a change.
+  // The renderer opens it with that look locked and writes it back: the store takes it and keeps the look exactly.
+  const loaded = loadWorkspace(storage(value), false, STUDIO_DOCUMENTS);
+  store.save(false, JSON.stringify(serializeWorkspace(loaded.state, STUDIO_DOCUMENTS)));
+  const saved = JSON.parse(readFileSync(file, "utf8")), id = value.collections.selected;
+  expect(storedLook(saved.collections, id)).toEqual(storedLook(value.collections, id));
+  // A workspace whose newer data cannot be kept per look (a newer loose editor) is never replaced.
+  const loose = stored(); delete loose.collections;
+  loose.look = { parts: { [EYE]: { schema: NEWER_PART, body: {} } }, memory: {} };
+  writeFileSync(file, JSON.stringify(loose));
   const fresh = JSON.stringify(serializeWorkspace(restore(smallWorkspaceV1()).state, STUDIO_DOCUMENTS));
-  expect(() => store.save(false, fresh)).toThrow("newer XF Studio");
-  store.save(false, text);
-  expect(readFileSync(file, "utf8")).toBe(text);
-  // Start fresh keeps the good draft in place.
+  expect(() => store.load(false)).toThrow();
+  expect(() => store.save(false, fresh)).toThrow();
+  expect(readFileSync(file, "utf8")).toBe(JSON.stringify(loose));
+  // Start fresh sets that unreadable workspace aside (never deleted).
   const response = desktopWorkspaceStartFresh(new Request("http://127.0.0.1/", { method: "POST" }), store, false);
   return response.json().then(body => {
-    expect(body).toEqual({ keptAs: null });
-    expect(readFileSync(file, "utf8")).toBe(text);
-    // Only a current draft this build cannot show is refused, and then set aside (never deleted).
-    const unreadable = stored(); newer(unreadable.collections.collection.presets[0]);
-    writeFileSync(file, JSON.stringify(unreadable));
-    expect(() => store.load(false)).toThrow();
-    const kept = store.setAside(false)!;
-    expect(existsSync(resolve(dir, kept))).toBe(true);
+    expect(body.keptAs).toBeString();
+    expect(existsSync(resolve(dir, body.keptAs))).toBe(true);
     expect(readdirSync(dir)).not.toContain(store.fileName(false));
   });
 });

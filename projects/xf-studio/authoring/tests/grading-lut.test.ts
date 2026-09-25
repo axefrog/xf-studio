@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadGradingLut } from "../src/browser-grading-lut-device";
@@ -191,8 +191,9 @@ describe("host and browser transport", () => {
       // Within the retry interval the answer stands; after it, the next request prepares again.
       now = 999;
       expect(host.request().phase).toBe("ready");
+      // A due retry runs in the background; the neutral answer stands until it finishes.
       now = 1_000; failure = null;
-      expect(host.request().phase).toBe("preparing");
+      expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "neutral" } });
       await host.settled();
       expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "installed", archive: "lut-a.archive" } });
       // A success is not retried; the decoded cube is cached per archive, decoder and WolvenKit identity.
@@ -204,6 +205,79 @@ describe("host and browser transport", () => {
       host.request(); await host.settled();
       expect(extracted).toBe(count + 1);
       expect(host.request()).toMatchObject({ phase: "ready", source: { kind: "installed", archive: "lut-a.archive" } });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("retries keep the opened installation, back off, stop at the cap, and a WolvenKit exit code is lasting (PREV-45)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    writeFileSync(cli, "fake");
+    try {
+      let now = 0, opened = 0;
+      const extracted: string[] = [];
+      const fixture = lutFixture();
+      const settings = { gameRoot: root, launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli };
+      const host = new GradingLutHost({ cacheRoot: root, resolverCache: join(root, "resolver"), now: () => now, retryAfterMs: 1_000,
+        settings: () => settings, open: () => { opened++; return fixture; },
+        extract: async (_cli, archive) => {
+          extracted.push(archive.name);
+          // The mod's LUT makes WolvenKit exit with an error (lasting); the base copy times out (transient).
+          if (archive.name === "lut-a.archive") throw new WolvenKitRunError("tool_failed", "WolvenKit.CLI.exe unbundle failed (exit 1).", "", 1);
+          throw new WolvenKitRunError("tool_timeout", "WolvenKit.CLI.exe unbundle exceeded its time limit.");
+        } });
+      host.request(); await host.settled();
+      expect(host.request().source!.note).toContain("took too long");
+      expect(host.request().source!.note).toContain("tries again shortly");
+      expect(extracted).toEqual(["lut-a.archive", "basegame_3_nightcity.archive"]);
+      // Retries at 1, 2, 4, 8 and 16 s after each failure; each reads only the base copy again, on the same installation.
+      const due = [1_000, 2_000, 4_000, 8_000, 16_000];
+      for (const delay of due) {
+        now += delay - 1;
+        host.request(); await host.settled();
+        now += 1;
+        host.request(); await host.settled();
+      }
+      expect(opened).toBe(1);
+      expect(extracted).toEqual(["lut-a.archive", ...Array(due.length + 1).fill("basegame_3_nightcity.archive")]);
+      // The retries are used up: the note says when XF Studio tries again, and nothing runs any more.
+      expect(host.request().source!.note).toContain("when your game, mods or WolvenKit change");
+      now += 10 * 60_000;
+      host.request(); await host.settled();
+      expect(extracted).toHaveLength(due.length + 2);
+      // A WolvenKit update changes the fingerprint: the installation is opened again and the mod's LUT retried.
+      writeFileSync(cli, "another WolvenKit build");
+      host.request(); await host.settled();
+      expect(opened).toBe(2);
+      expect(extracted.at(-2)).toBe("lut-a.archive");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("a failed cache write is tried again, and a damaged cached cube is extracted again (PREV-45, PREV-49)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    writeFileSync(cli, "fake");
+    try {
+      let now = 0, extracted = 0;
+      const fixture = lutFixture();
+      const host = new GradingLutHost({ cacheRoot: root, resolverCache: join(root, "resolver"), now: () => now, retryAfterMs: 1_000,
+        settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
+        open: () => fixture, extract: async () => { extracted++; return constantLut(0.25); } });
+      // A file where the cache's folder should be makes the write fail.
+      mkdirSync(join(root, "grading-lut"), { recursive: true });
+      writeFileSync(join(root, "grading-lut", "files"), "not a folder");
+      host.request(); await host.settled();
+      expect(host.request()).toMatchObject({ phase: "ready", file: null });
+      rmSync(join(root, "grading-lut", "files"));
+      now = 1_000; host.request(); await host.settled();
+      const ready = host.request();
+      expect(ready.file).toMatch(/^[a-f0-9]{64}\.bin$/);
+      // A damaged cube behind a key is a miss, not a failure.
+      writeFileSync(host.filePath(ready.file!)!, "damaged");
+      const again = new GradingLutHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
+        settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
+        open: () => fixture, extract: async () => { extracted++; return constantLut(0.25); } });
+      const before = extracted;
+      again.request(); await again.settled();
+      expect(again.request()).toMatchObject({ phase: "ready", file: ready.file, source: { kind: "installed" } });
+      expect(extracted).toBe(before + 1);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 

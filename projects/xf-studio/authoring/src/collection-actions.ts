@@ -1,5 +1,5 @@
 import { CollectionSession, type EditorSnapshot } from "./collection-session";
-import { COLLECTION_RECOVERY_LIMIT } from "./collection-workspace";
+import { COLLECTION_RECOVERY_LIMIT, holdsLocked } from "./collection-workspace";
 import type { CollectionWorkspace, DocumentModel, PresetCommand } from "./collection-workspace";
 import type { StoredCollection } from "./collection-store";
 import type { Look, LookCollection } from "./platform/api";
@@ -25,12 +25,14 @@ export type CodedCapability = ActionCapability & { code?: ReasonCode };
 /** Primitive-only draft projection; building it never clones recipes or Undo histories. */
 export type CollectionDraftSummary = {
   id: string; name: string; revision?: number; selected?: string;
-  presets: { id: string; name: string; revision: number; layers: number }[];
+  /** `locked`: the look holds a newer build's data and is not editable in this version. */
+  presets: { id: string; name: string; revision: number; layers: number; locked?: true }[];
   /** Oldest first; `restore` brings back the last entry. */
   removed: { id: string; name: string; index: number }[];
   previous?: { id: string; name: string; revision?: number };
   recoveryCount: number; recoveryLimit: number;
-  oldestRecoverable?: { id: string; name: string; revision?: number };
+  /** `locked`: it holds a look made with a newer version, which the library can't take, so this draft may be its only copy. */
+  oldestRecoverable?: { id: string; name: string; revision?: number; locked?: true };
 };
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
@@ -55,13 +57,18 @@ export class CollectionActions {
     const oldest = recovery.at(-1);
     return { id: s.collection.id, name: s.collection.name, revision: s.revision, selected: s.selected,
       presets: s.collection.presets.map(p => ({ id: p.id, name: p.name, revision: p.revision,
-        layers: Number(this.model.parts.summary(p, this.model.live)?.layers ?? 0) })),
+        layers: Number(this.model.parts.summary(p, this.model.live)?.layers ?? 0), ...(p.locked ? { locked: true as const } : {}) })),
       removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,
       recoveryCount: recovery.length, recoveryLimit: COLLECTION_RECOVERY_LIMIT,
       oldestRecoverable: oldest ? { id: oldest.collection.id, name: oldest.collection.name,
-        revision: oldest.revision } : undefined };
+        revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined };
+  }
+  /** An earlier draft's collection in the recovery queue, by its ID, uncloned (for the service's own reads). */
+  recoveryCollection(id: string): Readonly<LookCollection> | undefined {
+    const s = this.session.state;
+    return [s.previous, ...(s.older ?? [])].find(draft => draft?.collection.id === id)?.collection;
   }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
   /** Trusted, uncloned look list for the service's own comparisons. Never hand it to a view. */

@@ -55,6 +55,8 @@ In order:
 1. Piercings/earrings design (a [jewellery construction-set proposal](../jewellery/construction-set-design.md) awaits review)
 2. Eyebrows
 3. Cheek makeup
+
+   Research and design options for both, with a recommended default and questions for the maintainer: [brows and cheeks brief](brows-and-cheeks-brief.md).
 4. Hair design
 5. Facial expressions and idles (static/animated; varied idle animations)
 6. Tattoos

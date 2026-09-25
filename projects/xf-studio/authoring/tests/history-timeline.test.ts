@@ -46,10 +46,10 @@ test("the history snapshot lists labelled steps oldest first with stable ids and
   expect(app.historyTimeline().steps[0].label).toBe("Colour");
   // Single Undo/Redo keep each step's identity; undone steps follow the current one.
   const ids = timeline.steps.map(step => step.id);
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(app.historyTimeline()).toMatchObject({ current: 1, redoCount: 1 });
   expect(app.historyTimeline().steps.map(step => [step.id, step.state])).toEqual([[ids[0], "done"], [ids[1], "done"], [ids[2], "undone"]]);
-  expect(app.dispatch({ kind: "recipe.redo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.redo" }).ok).toBe(true);
   expect(app.historyTimeline().steps.map(step => step.id)).toEqual(ids);
   expect(app.historyTimeline().steps[2].at).toBe(timeline.steps[2].at);
 });
@@ -69,7 +69,7 @@ test("jumping to an earlier step undoes the steps after it as one change", () =>
   expect(timeline.steps.map(step => [step.id, step.state])).toEqual([[ids[0], "done"], [ids[1], "undone"], [ids[2], "undone"]]);
   expect(app.history()).toMatchObject({ undo: { label: "Colour" }, redo: { label: "Opacity" }, depth: 1, redoDepth: 2 });
   // Single Redo continues from there.
-  expect(app.dispatch({ kind: "recipe.redo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.redo" }).ok).toBe(true);
   expect(JSON.stringify(document.recipe)).toBe(looks[2]);
 });
 
@@ -79,7 +79,7 @@ test("jumping to a later step redoes up to it, and the start id undoes everythin
   expect(app.dispatch({ kind: "history.jumpTo", entryId: HISTORY_START_ID }).ok).toBe(true);
   expect(JSON.stringify(document.recipe)).toBe(looks[0]);
   expect(app.historyTimeline()).toMatchObject({ current: -1, redoCount: 3 });
-  expect(app.capability({ kind: "recipe.undo" }).available).toBe(false);
+  expect(app.capability({ kind: "history.undo" }).available).toBe(false);
   expect(app.dispatch({ kind: "history.jumpTo", entryId: ids[1] }).ok).toBe(true);
   expect(JSON.stringify(document.recipe)).toBe(looks[2]);
   expect(app.historyTimeline().steps.map(step => [step.id, step.state])).toEqual([[ids[0], "done"], [ids[1], "done"], [ids[2], "undone"]]);
@@ -87,11 +87,11 @@ test("jumping to a later step redoes up to it, and the start id undoes everythin
   expect(JSON.stringify(document.recipe)).toBe(looks[3]);
   expect(app.historyTimeline()).toMatchObject({ current: 2, redoCount: 0 });
   // Undo walks the same steps back in order.
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(JSON.stringify(document.recipe)).toBe(looks[2]);
   expect(app.consequences({ action: { kind: "history.jumpTo", entryId: ids[0] } }))
-    .toEqual({ replaces: "layer-content", discards: [], recoverableBy: "recipe.redo", confirm: false });
-  expect(app.consequences({ action: { kind: "history.jumpTo", entryId: ids[2] } }).recoverableBy).toBe("recipe.undo");
+    .toEqual({ replaces: "layer-content", discards: [], recoverableBy: "history.redo", confirm: false });
+  expect(app.consequences({ action: { kind: "history.jumpTo", entryId: ids[2] } }).recoverableBy).toBe("history.undo");
 });
 
 test("jumps are refused for the current step, unknown ids and during an open adjustment", () => {
@@ -124,14 +124,14 @@ test("a new edit after a jump back discards the undone steps, as Redo does", () 
   expect(timeline.steps.map(step => step.label)).toEqual(["Colour", "Mirroring"]);
   expect(timeline).toMatchObject({ current: 1, redoCount: 0 });
   expect(app.capability({ kind: "history.jumpTo", entryId: ids[2] })).toMatchObject({ available: false, code: "missing_target" });
-  expect(app.capability({ kind: "recipe.redo" }).available).toBe(false);
+  expect(app.capability({ kind: "history.redo" }).available).toBe(false);
 });
 
 test("a preset switch or restore gives a fresh history whose ids never match the old ones", () => {
   const core = fixture(), { app, document } = core;
   threeEdits(core);
   const old = app.historyTimeline().steps.map(step => step.id);
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   document.restore(document.export());
   const fresh = app.historyTimeline();
   // Restored entries have no session labels, times or Redo.
@@ -152,11 +152,11 @@ test("the trimmed flag follows the history limit and survives the workspace's bu
   expect(app.historyTimeline()).toMatchObject({ trimmed: true, current: RECIPE_HISTORY_LIMIT - 1 });
   expect(document.export().historyTrimmed).toBe(true);
   // Undoing the step that pushed the oldest out brings it back.
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(app.historyTimeline().trimmed).toBe(false);
   expect("historyTrimmed" in document.export()).toBe(false);
   // Redo at the limit displaces it again; a multi-step jump behaves like the same single steps.
-  expect(app.dispatch({ kind: "recipe.redo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.redo" }).ok).toBe(true);
   expect(app.historyTimeline().trimmed).toBe(true);
   const steps = app.historyTimeline().steps;
   expect(app.dispatch({ kind: "history.jumpTo", entryId: steps[steps.length - 4].id }).ok).toBe(true);
@@ -225,7 +225,7 @@ test("an adjustment cancelled with Escape keeps the undone steps; reading histor
   expect(app.dispatch({ kind: "history.jumpTo", entryId: ids[2] }).ok).toBe(true);
   expect(JSON.stringify(document.recipe)).toBe(looks[3]);
   // A committed adjustment is a new step and discards them for good.
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(app.controlBegin("opacity", id)).toBe(true);
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .9 });
   app.controlCommit("opacity");

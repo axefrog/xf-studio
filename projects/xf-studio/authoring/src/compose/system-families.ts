@@ -25,21 +25,22 @@ const PREVIEW_ID = familyId("preview");
 const MOTION_ID = familyId("motion");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
-const CHARACTER_ID = familyId("character");
+const CHARACTER_DETAILS_ID = familyId("characterDetails");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
   actions: actionTable<HistoryAction, ActionScope>(ACTION_DESCRIPTORS,
-    { "recipe.undo": true, "recipe.redo": true, "history.jumpTo": true }),
+    { "history.undo": true, "history.redo": true, "history.jumpTo": true }),
 });
 
 export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope, typeof COLLECTION_ID> = Object.freeze({
   owner: "system", id: COLLECTION_ID, label: "Collection",
   actions: actionTable<CollectionStudioAction, ActionScope>(ACTION_DESCRIPTORS, {
     "preset.edit": true, "preset.select": true, "collection.rename": true,
-    "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true }),
+    "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true },
+    { "preset.edit": { "rename.name": "characters", "move.to": "index" } }),
 });
 
 /** Camera and viewing: device-backed, so it needs the scene and a failure after the gate is `unavailable`. */
@@ -48,17 +49,20 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
     "camera.front": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
-    "preview.setCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
+    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
+    "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
     "preview.setEyeShape": true, "preview.setPiercings": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
-    "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true }),
+    "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
+    { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },
+      "preview.setStudioLight": { "elevation.value": "degrees" } }),
 });
 
 export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTION_ID> = Object.freeze({
   owner: "system", id: MOTION_ID, label: "Motion", needsScene: true, thrown: "unavailable",
   actions: actionTable<MotionAction, ActionScope>(ACTION_DESCRIPTORS, {
     "motion.setIdle": true, "motion.setPaused": true, "motion.setContributions": true,
-    "motion.setBlink": true, "motion.playBlink": true }),
+    "motion.setBlink": true, "motion.playBlink": true }, { "motion.setBlink": { value: "fraction" } }),
 });
 
 /** Preview quality works without the scene (it sizes generated textures), but its device failures are `unavailable`. */
@@ -76,8 +80,8 @@ export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, ty
  * The shown V's resolved details (character-detail-actions.ts): trying a creator choice (a piercing style) on the V. Device-backed like
  * the preview: it needs the loaded head, and a failure after the gate is `unavailable` (UI-48).
  */
-export const CHARACTER_FAMILY: SystemFamily<CharacterAction, ActionScope, typeof CHARACTER_ID> = Object.freeze({
-  owner: "system", id: CHARACTER_ID, label: "Character", needsScene: true, thrown: "unavailable",
+export const CHARACTER_DETAILS_FAMILY: SystemFamily<CharacterAction, ActionScope, typeof CHARACTER_DETAILS_ID> = Object.freeze({
+  owner: "system", id: CHARACTER_DETAILS_ID, label: "Character details", needsScene: true, thrown: "unavailable",
   actions: actionTable<CharacterAction, ActionScope>(ACTION_DESCRIPTORS, { "character.tryChoice": true }),
 });
 

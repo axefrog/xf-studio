@@ -9,6 +9,7 @@ import { gestureHistoryLabel } from "./history-labels";
 import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
 import type { AnyOwner, Registry } from "./platform/core/registry";
+import { LiveFeatures } from "./platform/core/live-features";
 import { RecipeActions } from "./recipe-actions";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "./recipe";
@@ -37,9 +38,14 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     return route.spec as EyeMakeupSpec;
   };
   // The live document edits the live feature's part; its look history chunks parts through the part registry.
+  // Every other registered feature has a live document beside it, so one Undo step can span several parts.
+  const others = new LiveFeatures(documents.parts.features().filter(feature => feature !== documents.live)
+    .map(feature => documents.parts.feature(feature)!));
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
-    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) }, { feature: documents.live, parts: documents.parts });
+    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
+    ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}),
+    ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts, others });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(
@@ -63,6 +69,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // gate first and reports failures as typed results, so hosts wire nothing here.
   const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert,
     action => specOf(action.kind).label(action));
-  const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls }, registry);
+  const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls,
+    ...(ports.newId ? { newId: ports.newId } : {}) }, registry);
   return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, undo, history, documents };
 }

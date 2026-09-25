@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCollection } from "./preset-collection";
 import { originalPresetCount, packagePresetIdentities, preparePackageCollection } from "./package-filter";
-import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
+import { packageErrorCode, type PackageAction, type PackageBuild, type PackageCheck } from "./package-action";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { verifyPackageBuildResult } from "./package-result-verifier";
-import { cachedPlateReach, EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
+import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateHeadOverride, eyePlateRouteKey, type EyePlateManifest,
+  type EyePlateTools } from "./eye-plate-service";
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
 import { plateUvFootprint } from "./plate-uv-window";
 import type { PlateReachInput } from "./plate-reach";
@@ -59,6 +60,10 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
 
 export type PlateToolsFactory = (wolvenkit: string) => EyePlateTools;
 
+const localRoute = (tools: PackageTools) => tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null };
+/** The route and head choice a plate prepared for these tools is recorded under (PIPE-36). */
+export const localPlateRouteKey = (tools: PackageTools) => tools.gamepath ? eyePlateRouteKey({ gameRoot: tools.gamepath, ...localRoute(tools) }, tools.headOverride) : null;
+
 /** The override plate's UV footprint, read with the host's own WolvenKit serialize of its mesh. */
 async function overridePlateReach(plate: string, tools: PackageTools, plateTools: PlateToolsFactory): Promise<PlateReachInput> {
   const meshes = ["xfs_eye_plate.mesh", "xfas_eye_plate.mesh"].map(name => join(plate, name)).filter(path => {
@@ -76,7 +81,7 @@ async function overridePlateReach(plate: string, tools: PackageTools, plateTools
  * Resolve the plate for a localhost Build: the developer override, or the verified built-in plate; with the
  * plate's UV footprint, which the host's own filter plans on.
  */
-async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): Promise<{ args: string[]; manifest?: EyePlateManifest; reach: PlateReachInput }> {
+async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): Promise<{ args: string[]; manifest?: EyePlateManifest; manifestFile?: string; reach: PlateReachInput }> {
   if (tools.plate) {
     let valid = false;
     try { valid = statSync(tools.plate).isDirectory(); } catch { /* Missing override. */ }
@@ -84,13 +89,13 @@ async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): P
     return { args: ["--plate", tools.plate], reach: await overridePlateReach(tools.plate, tools, plateTools) };
   }
   try {
-    const route = tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null };
+    const route = localRoute(tools);
     const plate = await ensureEyePlate({ gameRoot: tools.gamepath, cacheRoot: tools.plateCache, tools: plateTools(tools.wolvenkit),
       headSource: createInstalledHeadSource({ gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit, ...route },
-        join(tools.plateCache, "resolver")), headOverride: tools.headOverride });
+        join(tools.plateCache, "resolver")), headOverride: tools.headOverride, routeKey: localPlateRouteKey(tools) ?? undefined });
     const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
     if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
-    return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest, reach };
+    return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest, manifestFile: plate.manifestFile, reach };
   } catch (error) {
     if (error instanceof EyePlateError && error.detail) console.error(`Eye plate preparation failed (${error.code}):`, error.detail.slice(-3000));
     throw error;
@@ -124,30 +129,39 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
       if (!valid) throw Error("The configured Bun executable is unavailable. Check Local setup.");
     }
   }
-  const plate = action === "build" ? await localPlate(tools, plateTools)
-    : { args: tools.checkPlateManifest ? ["--plate-manifest", tools.checkPlateManifest] : [] } as { args: string[]; manifest?: EyePlateManifest };
-  if (action === "build" && "reach" in plate) onPlate?.(plate.reach as PlateReachInput);
-  const args = [script, "--collection", file, "--machine-result",
-    ...(action === "check" ? ["--check", ...plate.args] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
-  const run = await runProcessTree(tools.bun, args, { cwd: hq, signal,
-    timeoutMs: action === "check" ? localCheckDeadlineMs : localBuildDeadlineMs });
-  if (run.stopped) throw Error(`Package ${action} ${run.stopped === "timeout" ? "exceeded its time limit and was stopped" : "was cancelled"}. ` +
-    "Your draft is unchanged; no package was installed.");
-  if (run.exitCode !== 0) {
-    console.error(`Local package ${action} tool failed (exit ${run.exitCode}):`, (run.error?.message ?? run.stderr.trim()).slice(-64_000));
-    throw Error(`Package ${action} failed in the local build tool. See the studio server log for details. Your draft is unchanged; no package was installed.`);
+  const started = Date.now(), deadline = action === "check" ? localCheckDeadlineMs : localBuildDeadlineMs;
+  for (let attempt = 0; ; attempt++) {
+    const plate = action === "build" ? await localPlate(tools, plateTools)
+      : { args: tools.checkPlateManifest ? ["--plate-manifest", tools.checkPlateManifest] : [] } as { args: string[]; manifest?: EyePlateManifest; manifestFile?: string };
+    if (action === "build" && "reach" in plate) onPlate?.(plate.reach as PlateReachInput);
+    const args = [script, "--collection", file, "--machine-result",
+      ...(action === "check" ? ["--check", ...plate.args] : [...plate.args, "--wolvenkit", tools.wolvenkit, "--gamepath", tools.gamepath])];
+    const run = await runProcessTree(tools.bun, args, { cwd: hq, signal, timeoutMs: Math.max(1, deadline - (Date.now() - started)) });
+    if (run.stopped) throw Error(`Package ${action} ${run.stopped === "timeout" ? "exceeded its time limit and was stopped" : "was cancelled"}. ` +
+      "Your draft is unchanged; no package was installed.");
+    if (run.exitCode !== 0) {
+      // The builder found the cached plate's recorded UV footprint stale: discard that entry and build once more on a fresh plate (PIPE-37).
+      if (action === "build" && attempt === 0 && plate.manifestFile && packageErrorCode(run.stderr) === "package_plate_stale") {
+        console.error("Local package build: the cached eye plate's UV footprint was stale; preparing the plate again.");
+        discardCachedPlate(tools.plateCache, plate.manifestFile);
+        continue;
+      }
+      console.error(`Local package ${action} tool failed (exit ${run.exitCode}):`, (run.error?.message ?? run.stderr.trim()).slice(-64_000));
+      throw Error(`Package ${action} failed in the local build tool. See the studio server log for details. Your draft is unchanged; no package was installed.`);
+    }
+    const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
+    if (!line) throw Error("Package tool completed without a result.");
+    const result = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageCheck | PackageBuild;
+    if (action === "build" && plate.manifest) {
+      const built = result as PackageBuild;
+      if (built.plate?.source !== "derived" || built.plate.meshSha256 !== plate.manifest.files.mesh.sha256 ||
+          built.plate.morphSha256 !== plate.manifest.files.morph.sha256)
+        throw Error("Package was not built from the prepared eye plate.");
+    }
+    return result;
   }
-  const line = run.stdout.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_RESULT="));
-  if (!line) throw Error("Package tool completed without a result.");
-  const result = JSON.parse(line.slice("XFS_PACKAGE_RESULT=".length)) as PackageCheck | PackageBuild;
-  if (action === "build" && plate.manifest) {
-    const built = result as PackageBuild;
-    if (built.plate?.source !== "derived" || built.plate.meshSha256 !== plate.manifest.files.mesh.sha256 ||
-        built.plate.morphSha256 !== plate.manifest.files.morph.sha256)
-      throw Error("Package was not built from the prepared eye plate.");
-  }
-  return result;
 }
+
 
 type Runner = (action: PackageAction, file: string, tools: PackageTools, onPlate?: (plate: PlateReachInput) => void) => Promise<PackageCheck | PackageBuild>;
 const defaultRunner: Runner = (action, file, tools, onPlate) => runLocalPackage(action, file, tools, undefined, undefined, onPlate);
@@ -175,7 +189,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
     if (building) return json({ error: "A local package build is already running. Wait for its result before starting another." }, 409);
     let actionTools = typeof tools === "function" ? tools(action) : tools;
     // Check plans on the plate the cache last prepared for this game, if any; Build on the plate it prepares.
-    const cached = action === "check" ? cachedPlateReach(actionTools.plateCache, actionTools.gamepath) : null;
+    const cached = action === "check" ? cachedPlateReach(actionTools.plateCache, actionTools.gamepath, localPlateRouteKey(actionTools)) : null;
     if (cached) actionTools = { ...actionTools, checkPlateManifest: cached.manifestFile };
     let prepared: ReturnType<typeof preparePackageCollection>;
     try { prepared = preparePackageCollection(collection, cached?.plate ?? null); }

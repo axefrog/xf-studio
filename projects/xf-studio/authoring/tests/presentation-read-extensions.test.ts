@@ -45,17 +45,17 @@ function mountFixture() {
 
 test("the editor read view is cached, detached and tracks geometry revisions", () => {
   const { port, core } = mountFixture();
-  const layer = port.editor.layer()!;
-  expect(port.editor.recipe()).toBe(port.editor.recipe());
+  const layer = port.feature("eye-makeup").view().layer()!;
+  expect(port.feature("eye-makeup").view().recipe()).toBe(port.feature("eye-makeup").view().recipe());
   (layer as { name: string }).name = "Tampered";
   expect(core.document.recipe.layers[core.document.active].name).not.toBe("Tampered");
-  const before = port.editor.revision();
+  const before = port.feature("eye-makeup").view().revision();
   expect(port.authoring.dispatch({ kind: "layer.setOpacity", layerId: core.document.recipe.layers[0].id, opacity: .31 }).ok).toBe(true);
-  expect(port.editor.revision()).toBeGreaterThan(before);
-  expect(port.editor.recipe().layers[0].opacity).toBe(.31);
-  expect(port.editor.canUndo()).toBe(true);
-  expect(port.editor.active()).toBe(core.document.active);
-  expect(port.editor.selected()).toBe(core.document.selected);
+  expect(port.feature("eye-makeup").view().revision()).toBeGreaterThan(before);
+  expect(port.feature("eye-makeup").view().recipe().layers[0].opacity).toBe(.31);
+  expect(port.feature("eye-makeup").view().canUndo()).toBe(true);
+  expect(port.feature("eye-makeup").view().active()).toBe(core.document.active);
+  expect(port.feature("eye-makeup").view().selected()).toBe(core.document.selected);
 });
 
 test("library summary is a primitive projection with the live layer count and recovery facts", () => {
@@ -77,7 +77,7 @@ test("library summary is a primitive projection with the live layer count and re
 test("preview state excludes document and collection clones", () => {
   const { port } = mountFixture();
   const state = port.authoring.previewState();
-  expect(Object.keys(state).sort()).toEqual(["character", "control", "eyeShapeOptions", "gesture", "lighting", "motion", "preview", "quality", "savedV"]);
+  expect(Object.keys(state).sort()).toEqual(["character", "control", "eyeShapeOptions", "gesture", "lighting", "motion", "preview", "quality", "savedV", "studioSetups"]);
   expect(state.quality).toMatchObject({ size: 1024, blocked: false });
   expect(state.savedV).toMatchObject({ loaded: false });
 });
@@ -85,6 +85,8 @@ test("preview state excludes document and collection clones", () => {
 test("finish descriptors mirror the package filter instead of a UI copy of eligibility", () => {
   const catalogue = finishCatalogue(), base = freshWorkspace().recipe;
   expect(catalogue.map(item => item.id)).toEqual(["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"]);
+  // Stored names that mean a finish come from the catalogue, so no view keeps the Satin alias (UI-54).
+  expect(catalogue.filter(item => item.stored.length).map(item => [item.id, item.stored])).toEqual([["regular", ["satin"]]]);
   for (const finish of catalogue) {
     // Experimental finishes export in their game-matched model (a colour shift only as a whole-preset pigment).
     const optics = finish.exportAdapter !== "experimental" ? {} : { optics: finish.id === "iridescent"

@@ -1,10 +1,10 @@
-import type { AuthoringDocument } from "./authoring-document";
+import type { AuthoringDocument, LookRestore } from "./authoring-document";
 import type { HistoryEntryId } from "./editor-actions";
 import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 import type { Recipe } from "./recipe";
 
 /** The history family's actions (registered by the composition as the `history` system family). */
-export type HistoryAction = { kind: "recipe.undo" | "recipe.redo" } | { kind: "history.jumpTo"; entryId: string };
+export type HistoryAction = { kind: "history.undo" | "history.redo" } | { kind: "history.jumpTo"; entryId: string };
 
 export type HistoryState = {
   /** The change the next Undo reverts. */
@@ -72,29 +72,22 @@ export function historyTimeline(document: Pick<AuthoringDocument, "historyEntrie
  * step's identity, so a history list can jump to any step (`jumpTo`) as one atomic change.
  */
 export class AuthoringHistory {
-  private expected?: { revision: number; encoded: string; top?: HistoryEntryId };
+  /** The look as the last Undo, Redo or jump left it: the recipe's and the other parts' revisions, its content and the top step. */
+  private expected?: { revision: number; parts: number; encoded: string; top?: HistoryEntryId };
   constructor(private document: AuthoringDocument, private resetStack: (previous: Recipe) => void) {
     // A restore replaces the look history, and its Redo with it.
     document.subscribe(change => { if (change === "restore") this.expected = undefined; });
   }
   /** Restore the latest checkpoint without recording Redo (gesture/control cancellation). */
-  revert(): boolean {
-    const next = this.document.undoRecipe();
-    if (!next) return false;
-    this.publish(next);
-    return true;
-  }
+  revert(): boolean { return this.publish(this.document.revertLook()); }
   /**
    * Restore a cancelled transaction's start without Redo: its own step `step` is taken off (only while
    * it is the top step); without one, the top step already held the start, so its content is shown
    * and the step stays (CORE-42).
    */
   revertTransaction(step: HistoryEntryId | undefined): boolean {
-    const next = step === undefined ? this.document.topRecipe()
-      : this.document.isLatestCheckpoint(step) ? this.document.undoRecipe() : undefined;
-    if (!next) return false;
-    this.publish(next);
-    return true;
+    return this.publish(step === undefined ? this.document.topLook()
+      : this.document.isLatestCheckpoint(step) ? this.document.revertLook() : undefined);
   }
   undo(): boolean { return this.document.canUndo && this.move({ direction: "undo", count: 1 }); }
   redo(): boolean { return this.move({ direction: "redo", count: 1 }); }
@@ -131,30 +124,36 @@ export class AuthoringHistory {
     return !!plan && plan.direction !== "none" && this.move(plan);
   }
   private move(plan: HistoryJumpPlan): boolean {
-    let next: Recipe | undefined;
+    let next: LookRestore | undefined;
     if (plan.direction === "undo") {
       if (this.document.undoDepth < plan.count) return false;
       if (!this.redoValid()) this.clearRedo();
-      next = this.document.undoSteps(plan.count);
+      next = this.document.undoLook(plan.count);
     } else if (plan.direction === "redo") {
       if (!this.redoValid()) { this.clearRedo(); return false; }
       if (this.document.redoDepth < plan.count) return false;
-      next = this.document.redoSteps(plan.count);
+      next = this.document.redoLook(plan.count);
     } else return false;
-    if (!next) return false;
-    this.publish(next);
+    if (!this.publish(next)) return false;
     this.expect();
     return true;
   }
-  /** Replace the recipe once, keeping the active layer where it survives, and reset renderer resources. */
-  private publish(next: Recipe) {
+  /**
+   * Publish what a step restored: the recipe is replaced once (keeping the active layer where it
+   * survives) and renderer resources reset, when the step touched it; the other features' live
+   * documents were restored by the document. False when nothing was restored.
+   */
+  private publish(restored: LookRestore | undefined): boolean {
+    const next = restored?.recipe;
+    if (!next) return !!restored?.features.length;
     const previous = this.document.recipe;
     const activeId = previous.layers[this.document.active]?.id;
     this.document.replaceRecipe(next, next.layers.findIndex(layer => layer.id === activeId));
     this.resetStack(previous);
+    return true;
   }
   private expect() {
-    this.expected = { revision: this.document.geometryVersion.revision, encoded: JSON.stringify(this.document.recipe),
+    this.expected = { revision: this.document.geometryVersion.revision, parts: this.document.partRevision, encoded: this.document.contentKey(),
       top: this.document.historyTop };
   }
   private redoValid() {
@@ -163,11 +162,12 @@ export class AuthoringHistory {
     // Any entry added since (an edit, or an open transaction's checkpoint) hides Redo; a
     // cancelled transaction removes its own entry again, so Redo comes back.
     if (this.document.historyTop !== expected.top) return false;
-    const revision = this.document.geometryVersion.revision;
-    if (revision === expected.revision) return true;
-    // A cancelled gesture republishes geometry without changing content; keep Redo then.
-    if (JSON.stringify(this.document.recipe) !== expected.encoded) return false;
-    expected.revision = revision;
+    const revision = this.document.geometryVersion.revision, parts = this.document.partRevision;
+    if (revision === expected.revision && parts === expected.parts) return true;
+    // A change that records no step (another feature's action with Undo policy `none`, CORE-46) hides Redo,
+    // which would overwrite it; a cancelled gesture or a selection republishes without changing content, so Redo stays.
+    if (this.document.contentKey() !== expected.encoded) return false;
+    expected.revision = revision; expected.parts = parts;
     return true;
   }
   private clearRedo() { this.document.clearRedo(); this.expected = undefined; }

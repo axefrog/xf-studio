@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
 import { cancelsGesture } from "../src/gesture-cancel";
+import { IRREGULAR_RANGE_MESSAGE } from "../src/recipe-actions";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
@@ -79,23 +80,23 @@ test("file workflow IDs are part of the one application registry with unique IDs
 test("Undo and Redo are labelled application actions; a new edit or preset switch discards Redo", () => {
   const { app, document } = coreFixture(), id = document.recipe.layers[0].id;
   expect(app.history()).toEqual({ undo: undefined, redo: undefined, depth: 0, redoDepth: 0 });
-  expect(app.capability({ kind: "recipe.redo" })).toMatchObject({ available: false });
+  expect(app.capability({ kind: "history.redo" })).toMatchObject({ available: false });
   expect(app.dispatch({ kind: "layer.setColor", layerId: id, color: "#112233" }).ok).toBe(true);
   expect(app.dispatch({ kind: "layer.edit", command: { kind: "rename", id, name: "Wing" } }).ok).toBe(true);
   expect(app.history().undo).toEqual({ label: "Rename layer", actionKind: "layer.edit.rename", layerId: id });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(app.history()).toMatchObject({ undo: { label: "Colour" }, redo: { label: "Rename layer" }, depth: 1, redoDepth: 1 });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(document.recipe.layers[0].color).not.toBe("#112233");
-  expect(app.dispatch({ kind: "recipe.redo" }).ok).toBe(true);
-  expect(app.dispatch({ kind: "recipe.redo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.redo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.redo" }).ok).toBe(true);
   expect(document.recipe.layers[0]).toMatchObject({ color: "#112233", name: "Wing" });
   expect(app.history()).toMatchObject({ undo: { label: "Rename layer" }, depth: 2, redoDepth: 0 });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
-  expect(app.capability({ kind: "recipe.redo" }).available).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
+  expect(app.capability({ kind: "history.redo" }).available).toBe(true);
   expect(app.dispatch({ kind: "layer.setOpacity", layerId: id, opacity: .3 }).ok).toBe(true);
-  expect(app.capability({ kind: "recipe.redo" })).toMatchObject({ available: false, reason: expect.stringContaining("redo") });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.capability({ kind: "history.redo" })).toMatchObject({ available: false, reason: expect.stringContaining("redo") });
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   document.restore(document.export());
   expect(app.history().redoDepth).toBe(0);
 });
@@ -105,7 +106,7 @@ test("form and gesture transactions are labelled by their first edit; cancelling
   app.controlBegin("opacity", id);
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .25 });
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .35 });
-  expect(app.capability({ kind: "recipe.undo" })).toMatchObject({ available: false, code: "busy" });
+  expect(app.capability({ kind: "history.undo" })).toMatchObject({ available: false, code: "busy" });
   app.controlCommit("opacity");
   expect(app.history().undo).toMatchObject({ label: "Opacity", actionKind: "layer.setOpacity" });
   app.beginGesture("uv", id);
@@ -137,6 +138,10 @@ test("limitsFor publishes static and state-dependent input limits for a concrete
   const count = app.limitsFor(target, "glitter.setIrregular", "count").value;
   expect(count).toMatchObject({ min: 0, max: 32768, dependsOn: ["radius"] });
   expect(app.dispatch({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 40000 }).ok).toBe(false);
+  // The refusal says why in the person's terms, so the Colour & finish panel shows it as it is (UI-54).
+  expect(app.capability({ kind: "glitter.setIrregular", layerId: id, key: "count", value: 40000 }))
+    .toMatchObject({ available: false, reason: IRREGULAR_RANGE_MESSAGE, issue: { code: "range", field: "count" } });
+  expect(IRREGULAR_RANGE_MESSAGE).toContain("denser than 32,768 flakes need flakes of 0.06% UV or smaller");
   const other = document.recipe.layers[1].id;
   app.dispatch({ kind: "softness.edit", layerId: other, command: { kind: "variable-softness", enabled: false } });
   expect(app.limitsFor({ kind: "point", layerId: other, index: 0 }, "softness.edit", "point-softness").value.requires?.reason)
@@ -202,7 +207,7 @@ test("draft persistence compares the live draft with the library revision it was
   app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: u + .004 } });
   app.endGesture("uv");
   expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [presetId], structureDirty: false });
-  expect(app.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(app.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(service.persistence()).toMatchObject({ dirty: false });
   expect(app.dispatch({ kind: "collection.rename", name: "Other" }).ok).toBe(true);
   expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [], structureDirty: true });
@@ -267,14 +272,14 @@ test("consequences say what an action replaces, writes or discards and how to re
   const layerId = document.recipe.layers[0].id;
   expect(app.consequences({ action: { kind: "layer.select", layerId } })).toEqual({ discards: [], recoverableBy: "none", confirm: false });
   expect(app.consequences({ action: { kind: "layer.edit", command: { kind: "remove", id: layerId } } }))
-    .toEqual({ replaces: "layer-content", recoverableBy: "recipe.undo", discards: [], confirm: false });
+    .toEqual({ replaces: "layer-content", recoverableBy: "history.undo", discards: [], confirm: false });
   expect(app.consequences({ action: { kind: "preset.edit", command: { kind: "remove", id: presetId } } }))
     .toMatchObject({ replaces: "preset", recoverableBy: "preset.restore", confirm: false });
   expect(app.consequences({ file: { kind: "collection.export" } })).toMatchObject({ writes: "library-revision", confirm: false });
   expect(app.consequences({ request: { kind: "package", action: "build" } })).toMatchObject({ writes: "private-files" });
   app.dispatch({ kind: "layer.setOpacity", layerId, opacity: .2 });
-  app.dispatch({ kind: "recipe.undo" });
-  expect(app.consequences({ action: { kind: "recipe.undo" } }).recoverableBy).toBe("none");
+  app.dispatch({ kind: "history.undo" });
+  expect(app.consequences({ action: { kind: "history.undo" } }).recoverableBy).toBe("none");
   expect(app.consequences({ action: { kind: "layer.setColor", layerId, color: "#000000" } }).discards)
     .toEqual([{ kind: "redo", label: "Opacity" }]);
   // Fill the four-draft recovery queue; the next open would evict the oldest draft and needs confirmation.
@@ -285,7 +290,7 @@ test("consequences say what an action replaces, writes or discards and how to re
   const summary = service.summary().draft!;
   expect(summary.recoveryCount).toBe(summary.recoveryLimit);
   expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen",
-    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name }], confirm: true });
+    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name, id: summary.oldestRecoverable!.id }], confirm: true });
 });
 
 test("the viewport snapshot carries UV selection visibility and view-change notifications", async () => {
@@ -326,7 +331,7 @@ test("coordinate commands edit geometry with one Undo each and refuse invalid ta
   expect(app.capability({ kind: "shape.transform", layerId: id, command: { kind: "rotate", radians: .1 }, pivotIndex: 99 }))
     .toMatchObject({ available: false, issue: { field: "pivotIndex" } });
   expect(app.dispatch({ kind: "shape.transform", layerId: id, command: { kind: "translate", du: 5, dv: 0 } }).ok).toBe(false);
-  app.dispatch({ kind: "recipe.undo" }); app.dispatch({ kind: "recipe.undo" });
+  app.dispatch({ kind: "history.undo" }); app.dispatch({ kind: "history.undo" });
   expect(JSON.stringify(document.recipe.layers[0].points.map(p => [p.u, p.v]))).toBe(before);
   if (fieldId) {
     expect(app.dispatch({ kind: "field.setOrigin", layerId: id, fieldId, u: .35, v: .22 }).ok).toBe(true);

@@ -5,22 +5,24 @@
  * modules (archive-precedence, archivexl-config, cco-model, resource-graph, character-resolver) are pure.
  *
  * Read-only towards the game and MO2: archives are opened for reading and WolvenKit writes only into the
- * cache directory. Cache entries are keyed by (depot hash, archive path+size+mtime fingerprint) and store
+ * cache directory. Cache entries are keyed by (depot hash, archive path+size+mtime fingerprint, WolvenKit
+ * identity) and store
  * the serialized JSON with base64 buffers trimmed, plus the SHA-256 of the extracted resource bytes.
  * WolvenKit runs through the shared runner (`wolvenkit-cli.ts`: time limit, exit and log rules, missing
  * .NET), one batch at a time per cache folder, in a unique batch folder.
  */
-import { createHash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
 import { depotHash, type DepotRef } from "./depot-path";
+import { writeFileAtomic } from "./derived-cache";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
-import { parseRdarHeader, parseRdarIndexHashes, RDAR_HEADER_BYTES } from "./rdar-index";
+import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, type SourceCandidate } from "./source-discovery";
-import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions } from "./wolvenkit-cli";
+import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 export interface InstallationOptions {
   readonly gameRoot: string;
@@ -98,22 +100,26 @@ function fingerprint(path: string): string {
   return createHash("sha256").update(`${path}|${stat.size}|${stat.mtimeMs}`).digest("hex").slice(0, 24);
 }
 
-function readIndex(path: string, cacheDir: string): BigUint64Array {
+/**
+ * Sorted depot hashes of an archive's index, cached per archive fingerprint. A cache file is written atomically
+ * and trusted only when it holds exactly the entry count the archive's index declares; anything else (a file
+ * left by an older, non-atomic write that was cut short) is deleted and read again (PREV-47).
+ */
+export function readArchiveIndex(path: string, cacheDir: string): BigUint64Array {
   const key = join(cacheDir, "index", `${fingerprint(path)}.u64`);
-  if (existsSync(key)) { const bytes = readFileSync(key); return new BigUint64Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)); }
-  const fd = openSync(path, "r");
+  if (existsSync(key)) {
+    try {
+      const bytes = readFileSync(key);
+      if (bytes.byteLength === readRdarIndexCount(path) * 8) return new BigUint64Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    } catch { /* Unreadable: read the archive again below. */ }
+    rmSync(key, { force: true });
+  }
+  const hashes = readRdarIndexHashes(path);
   try {
-    const header = new Uint8Array(RDAR_HEADER_BYTES);
-    readSync(fd, header, 0, RDAR_HEADER_BYTES, 0);
-    const { indexOffset, indexSize } = parseRdarHeader(header);
-    if (indexOffset + indexSize > statSync(path).size) throw Error("RDAR index lies outside the file.");
-    const index = new Uint8Array(indexSize);
-    readSync(fd, index, 0, indexSize, indexOffset);
-    const hashes = parseRdarIndexHashes(index);
     mkdirSync(join(cacheDir, "index"), { recursive: true });
-    writeFileSync(key, new Uint8Array(hashes.buffer));
-    return hashes;
-  } finally { closeSync(fd); }
+    writeFileAtomic(key, new Uint8Array(hashes.buffer, hashes.byteOffset, hashes.byteLength));
+  } catch { /* Advisory: the index is used anyway and read again next time. */ }
+  return hashes;
 }
 
 /** Replace base64 payloads with their length so cached JSON stays small; nothing else is altered. */
@@ -132,11 +138,12 @@ type Queue = { archive: MountedArchive; items: Map<string, Pending> };
 export const RESOLVER_STEP_TIMEOUT_MS = 10 * 60_000;
 /**
  * Rule version of the `.failed` markers. A marker is written only when WolvenKit finished a batch cleanly
- * in the batch's own folder, the extracted resource was still there, and no readable JSON came out.
- * Markers without this version (written before PREV-29, when a concurrent batch could delete the folder)
- * are ignored and removed.
+ * in the batch's own folder, the extracted resource was still there, and no readable JSON came out. It
+ * records the WolvenKit identity that failed, and counts only for that identity (PREV-46): another WolvenKit
+ * may convert the resource. Markers without this version (version 1 was written before PREV-29, when a
+ * concurrent batch could delete the folder; version 2 did not record the identity) are ignored and removed.
  */
-export const FAILED_MARKER_VERSION = 2;
+export const FAILED_MARKER_VERSION = 3;
 
 /**
  * One extraction lane per cache folder in this process. Every fetcher on that folder (the character
@@ -153,33 +160,35 @@ function laneFor(cacheDir: string): CacheLane {
   return lane;
 }
 
-/** Write through a temporary sibling and rename, so a reader never sees a half-written cache file. */
-function writeAtomic(path: string, text: string): void {
-  const staging = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  try { writeFileSync(staging, text); renameSync(staging, path); }
-  catch (error) { rmSync(staging, { force: true }); throw error; }
-}
-
 /** Batched WolvenKit CLI extraction with a persistent JSON cache, shared safely by every fetcher on one cache folder. */
 export class WolvenKitFetcher implements ResourceFetchPort {
   private readonly pending = new Map<string, Queue>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly lane: CacheLane;
+  /** The WolvenKit identity (`wolvenKitIdentityKey`) whose output this fetcher caches, and its short form in file names. */
+  readonly tool: string;
+  private readonly toolTag: string;
   readonly stats = { cacheHits: 0, shared: 0, extracted: 0, cliCalls: 0, failures: [] as string[] };
 
   constructor(private readonly cli: string, private readonly cacheDir: string, private readonly contains: (archiveId: string, hash: string) => boolean,
     private readonly log: (message: string) => void = () => {}) {
     this.lane = laneFor(cacheDir);
+    this.tool = wolvenKitIdentityKey(wolvenKitIdentity(cli));
+    this.toolTag = createHash("sha256").update(this.tool).digest("hex").slice(0, 12);
   }
 
-  private cachePath(archive: MountedArchive, hash: string) { return join(this.cacheDir, "json", `${hash}-${fingerprint(archive.id)}.json`); }
+  /** Cache file of one resource: keyed by depot hash, archive fingerprint and WolvenKit identity (a WolvenKit update extracts again). */
+  private cachePath(archive: MountedArchive, hash: string) { return join(this.cacheDir, "json", `${hash}-${fingerprint(archive.id)}-${this.toolTag}.json`); }
 
   /** The cached answer: a resource, null for a current `.failed` marker, or undefined when WolvenKit must run. */
   private cached(path: string): FetchedResource | null | undefined {
     const marker = `${path}.failed`;
     if (existsSync(marker)) {
-      // A resource WolvenKit could not convert stays failed until its container changes (the key includes it).
-      try { if (JSON.parse(readFileSync(marker, "utf8")).markerVersion === FAILED_MARKER_VERSION) return null; } catch { /* unreadable: stale */ }
+      // A resource WolvenKit could not convert stays failed until its container or WolvenKit changes.
+      try {
+        const known = JSON.parse(readFileSync(marker, "utf8"));
+        if (known.markerVersion === FAILED_MARKER_VERSION && known.wolvenKit === this.tool) return null;
+      } catch { /* unreadable: stale */ }
       rmSync(marker, { force: true });
     }
     if (!existsSync(path)) return undefined;
@@ -282,7 +291,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         clean = converted.exitCode === 0 && !/Unhandled exception/i.test(converted.output);
         if (!clean) this.stats.failures.push(`WolvenKit convert did not finish cleanly (exit ${converted.exitCode}); unconverted resources are retried next time.`);
       }
-      mkdirSync(join(this.cacheDir, "json"), { recursive: true });
+      const store = (path: string, text: string) => { mkdirSync(join(this.cacheDir, "json"), { recursive: true }); writeFileAtomic(path, text); };
       for (const queue of batch) for (const [hash, item] of queue.items) {
         const hit = found.get(hash);
         let document: unknown = null;
@@ -292,8 +301,11 @@ export class WolvenKitFetcher implements ResourceFetchPort {
           const bytes = readFileSync(hit.file);
           const extractedSha256 = createHash("sha256").update(bytes).digest("hex");
           const path = hit.path ?? item.ref.path;
-          writeAtomic(this.cachePath(queue.archive, hash), JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
-            group: queue.archive.group, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document }));
+          // The document answers even when the cache write fails (disk full, a locked file); it is extracted again next time.
+          try {
+            store(this.cachePath(queue.archive, hash), JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
+              group: queue.archive.group, wolvenKit: this.tool, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document }));
+          } catch (error) { this.stats.failures.push(`${queue.archive.name}: ${path ?? hash}: not cached: ${(error as Error).message}`); }
           this.stats.extracted++;
           answer(item, { document, extractedSha256, path });
           continue;
@@ -302,9 +314,13 @@ export class WolvenKitFetcher implements ResourceFetchPort {
         // Lasting only when the tool genuinely failed on this resource: a clean run, in this batch's own
         // folder, with the extracted file still there as unbundle wrote it.
         const intact = hit && existsSync(hit.file) && statSync(hit.file).size === hit.bytes;
-        if (hit && clean && intact) writeAtomic(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION,
-          hash, path: hit.path ?? item.ref.path, archive: queue.archive.name,
-          reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
+        if (hit && clean && intact) {
+          try {
+            store(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION,
+              wolvenKit: this.tool, hash, path: hit.path ?? item.ref.path, archive: queue.archive.name,
+              reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
+          } catch { /* Advisory: without the marker the resource is tried again next time. */ }
+        }
         answer(item, null);
       }
     } catch (error) {
@@ -328,7 +344,7 @@ export function openInstallation(options: InstallationOptions): Installation {
   const indexes = new Map<string, BigUint64Array>();
   const indexErrors: string[] = [], unreadIndexes: UnreadIndex[] = [];
   for (const archive of plan.archives) {
-    try { indexes.set(archive.id, readIndex(archive.id, options.cacheDir)); }
+    try { indexes.set(archive.id, readArchiveIndex(archive.id, options.cacheDir)); }
     catch (error) {
       indexErrors.push(`${archive.name}: ${(error as Error).message}`);
       unreadIndexes.push({ id: archive.id, name: archive.name, providerName: archive.providerName, rank: archive.rank, error: (error as Error).message });

@@ -2,6 +2,7 @@ import type { CollectionRequest } from "./collection-service";
 import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "./finish-catalogue";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
@@ -36,18 +37,18 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
-  "recipe.undo": desc("workspace", "content", "none"),
-  "recipe.redo": desc("workspace", "content", "none"),
+  "history.undo": desc("workspace", "content", "none"),
+  "history.redo": desc("workspace", "content", "none"),
   "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
   "layer.select": desc("layer", "selection", "none", { layerId: target("string") }),
   "point.select": desc("point", "selection", "none", { layerId: target("string"), index: target("integer") }),
-  "point.remove": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer") }),
-  "path.edit": desc(["layer", "point"], "content", "recipe", { layerId: target("string"), command: input("object") }, {
+  "point.remove": desc("point", "content", "part", { layerId: target("string"), index: target("integer") }),
+  "path.edit": desc(["layer", "point"], "content", "part", { layerId: target("string"), command: input("object") }, {
     "enable-bezier": {}, "point-mode": { index: target("integer"), mode: enumerated(["aligned", "symmetric", "corner"]) } }),
   "field.select": desc("field", "selection", "none", { layerId: target("string"), fieldId: target("string") }),
-  "field.add": desc("layer", "content", "recipe", { layerId: target("string") }),
-  "field.remove": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string") }),
-  "field.clear": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string") }),
+  "field.add": desc("layer", "content", "part", { layerId: target("string") }),
+  "field.remove": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
+  "field.clear": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string") }),
   "field.setReach": desc("field", "content", "transaction", { layerId: target("string"), fieldId: target("string"), radius: input("number", .005, .2) }),
   "pigment.edit": desc(["point", "layer"], "content", "transaction", { layerId: target("string"), command: input("object") }, {
     "point-strength": { index: target("integer"), value: input("number", 0, 1) },
@@ -59,12 +60,12 @@ export const ACTION_DESCRIPTORS = {
     "uniform-softness": { value: input("number", .0005, .06) } }),
   "layer.setColor": desc("layer", "content", "transaction", { layerId: target("string"), color: input("string") }),
   "layer.setOpacity": desc("layer", "content", "transaction", { layerId: target("string"), opacity: input("number", 0, 1) }),
-  "layer.setSymmetry": desc("layer", "content", "recipe", { layerId: target("string"), symmetry: input("boolean") }),
-  "layer.setFinish": desc("layer", "content", "recipe", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
-  "layer.useGameOptics": desc("layer", "content", "recipe", { layerId: target("string") }),
+  "layer.setSymmetry": desc("layer", "content", "part", { layerId: target("string"), symmetry: input("boolean") }),
+  "layer.setFinish": desc("layer", "content", "part", { layerId: target("string"), finish: enumerated([...FINISH_IDS, ...LEGACY_FINISH_ALIASES]) }),
+  "layer.useGameOptics": desc("layer", "content", "part", { layerId: target("string") }),
   "layer.setShift": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["color", "strength"]), value: input("number|string") }, {
     color: { value: inputText(7, 7) }, strength: { value: input("number", 0, 1) } }),
-  "glitter.selectModel": desc("layer", "content", "recipe", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
+  "glitter.selectModel": desc("layer", "content", "part", { layerId: target("string"), model: enumerated(["classic", "irregular", "direct", "clustered", "fine"]) }),
   "glitter.setClassic": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["cells", "density", "tilt"]), value: input("number") }, {
     cells: { value: input("integer", 32, 256) }, density: { value: input("number", 0, 1) },
     tilt: { value: input("number", 0, 1) } }),
@@ -75,21 +76,21 @@ export const ACTION_DESCRIPTORS = {
   "glitter.setDirect": desc("layer", "content", "transaction", { layerId: target("string"), key: enumerated(["density", "fineShare", "strength", "color"]), value: input("number|string") }, {
     density: { value: input("number", 0, 1) }, fineShare: { value: input("number", 0, 1) },
     strength: { value: input("number", 0, 32) }, color: { value: inputText(7, 7) } }),
-  "point.move": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.insert": desc("layer", "content", "recipe", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "point.setTangent": desc("point", "content", "recipe", { layerId: target("string"), index: target("integer"),
+  "point.move": desc("point", "content", "part", { layerId: target("string"), index: target("integer"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.insert": desc("layer", "content", "part", { layerId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "point.setTangent": desc("point", "content", "part", { layerId: target("string"), index: target("integer"),
     side: enumerated(["in", "out"]), du: input("number", -1, 1), dv: input("number", -1, 1) }),
-  "shape.transform": desc("layer", "content", "recipe", { layerId: target("string"), command: input("object"),
+  "shape.transform": desc("layer", "content", "part", { layerId: target("string"), command: input("object"),
     pivotIndex: { type: "integer", required: false, from: "state", min: 0 } }, {
     translate: { du: input("number", -1, 1), dv: input("number", -1, 1) }, rotate: { radians: input("number") },
     scale: { factor: input("number", .01, 100) } }),
-  "field.setOrigin": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
-  "field.setVector": desc("field", "content", "recipe", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
-  "layer.edit": desc(["layer", "collection"], "content", "recipe", { command: input("object") }, {
+  "field.setOrigin": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), u: input("number", 0, 1), v: input("number", 0, 1) }),
+  "field.setVector": desc("field", "content", "part", { layerId: target("string"), fieldId: target("string"), du: input("number", -.1, .1), dv: input("number", -.1, .1) }),
+  "layer.edit": desc(["layer", "collection"], "content", "part", { command: input("object") }, {
     add: {}, duplicate: { id: target("string") }, remove: { id: target("string") },
     reset: { id: target("string") }, rename: { id: target("string"), name: inputText(1, 80) },
     move: { id: target("string"), to: input("integer", 0) } }),
-  "layer.setEnabled": desc("layer", "content", "recipe", { id: target("string"), enabled: input("boolean") }),
+  "layer.setEnabled": desc("layer", "content", "part", { id: target("string"), enabled: input("boolean") }),
   "preset.edit": desc(["preset", "collection"], "library", "none", { command: input("object") }, {
     add: {}, copy: { id: target("string") }, remove: { id: target("string") },
     restore: {}, rename: { id: target("string"), name: inputText(1, 120) },
@@ -111,8 +112,14 @@ export const ACTION_DESCRIPTORS = {
   "preview.setCreatorLighting": desc("viewport", "workspace", "none", { key: enumerated(["intensity", "cone", "exposure"]), value: input("number|string") }, {
     intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
-  "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", .5, 2) }),
-  "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", 0, 360) }),
+  "preview.resetCreatorLighting": desc("viewport", "workspace", "none"),
+  "preview.setExposure": desc("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
+  "preview.setKeyAngle": desc("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
+  "preview.setStudioLight": desc("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },
+    Object.fromEntries(STUDIO_LIGHT_KEYS.map(key => [key, { value: input("number", STUDIO_LIGHT_RANGES[key].min, STUDIO_LIGHT_RANGES[key].max) }]))),
+  "preview.setStudioNeutral": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.applyStudioSetup": desc("viewport", "workspace", "none", { setup: enumerated(STUDIO_SETUP_IDS) }),
+  "preview.resetStudioLighting": desc("viewport", "workspace", "none"),
   "preview.setEyeShape": desc("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercings": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setSurfaceControls": desc("viewport", "workspace", "none", { enabled: input("boolean") }),
@@ -141,7 +148,9 @@ export const REQUEST_DESCRIPTORS = {
   initialize: request("collection", "read"), refresh: request("collection", "read"),
   open: request("collection", "read", { id: target("string") }),
   save: request("collection", "save"), saveCopy: request("collection", "save"),
-  exportCollection: request("collection", "download"), exportPlan: request("collection", "download"),
+  // `draft` exports an earlier draft in the recovery queue instead (CORE-49).
+  exportCollection: request("collection", "download", { draft: { type: "string", required: false, from: "target" } }),
+  exportPlan: request("collection", "download"),
   import: request("file", "import", { text: input("string"), bytes: input("integer", 0, 16_000_000) }),
   package: request("collection", "package", { action: enumerated(["check", "build"]) }),
 } satisfies Record<CollectionRequest["kind"], RequestDescriptor>;

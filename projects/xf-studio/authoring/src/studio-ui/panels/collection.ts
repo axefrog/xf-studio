@@ -123,7 +123,8 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       setText(count, String(presets.length));
       failed.hidden = !!draft || library.busy || library.progress?.phase !== "error";
       empty.hidden = !draft || presets.length > 0;
-      list.update(presets.map(preset => ({ id: preset.id, name: preset.name, meta: plural(preset.layers, "layer") })), draft?.selected, busy);
+      list.update(presets.map(preset => ({ id: preset.id, name: preset.name,
+        meta: preset.locked ? "Made with a newer XF Studio · kept as it is" : plural(preset.layers, "layer") })), draft?.selected, busy);
       applyCapability(addButton, port.library.capability({ kind: "preset.edit", command: { kind: "add" } }));
       const removed = draft?.removed.at(-1);
       restore.hidden = !removed;
@@ -143,7 +144,14 @@ export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: str
   const consequence = rt.port.authoring.consequences({ file: { kind: "collection.import" } });
   const oldest = consequence.discards.find(item => item.kind === "recovery-draft");
   if (!consequence.confirm || !oldest) { run(); return; }
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.` },
+  // A draft holding a look made with a newer version can't be saved to the library here: exporting it is how it's kept (CORE-49).
+  const detail = oldest.locked
+    ? `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. It has a look made with a newer version of XF Studio, which can't be saved to the library here, so that draft may be its only copy. Export it first to keep it.`
+    : `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.`;
+  const request = { kind: "exportCollection" as const, draft: oldest.id };
+  openMenu([{ kind: "heading", label: `${title}?`, detail },
+    ...(oldest.locked && oldest.id ? [{ kind: "action" as const, label: "Export collection", icon: "export" as const,
+      capability: rt.port.authoring.requestCapability(request), run: () => void rt.request(request) }] : []),
     { kind: "action", label: "Continue", icon: "import", run },
     { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
       run: () => void rt.file({ kind: "collection.recover" }) }],
@@ -407,6 +415,8 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     r.selectorLabel ? ` · in-game selector “${r.selectorLabel}”` : ""));
   if (!isBuild) card.append(h("ul", { class: "result-list" }, check.presets.map(preset =>
     h("li", {}, icon("check"), h("span", { text: name(preset.id) }), h("code", { class: "muted", text: preset.appearance })))));
+  // e.g. before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does.
+  if (!isBuild) for (const text of check.notes ?? []) card.append(note(text, "info"));
   if (r.omissions.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Omitted from the package" }),
     h("ul", { class: "result-list" }, r.omissions.map(item => h("li", {}, icon("warning"),
       h("span", { text: item.kind === "layer" ? `Layer “${item.layerName}” in “${item.presetName}” — ${item.reason}` :

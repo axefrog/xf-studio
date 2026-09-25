@@ -25,6 +25,13 @@ import {
 } from "./package-resources";
 
 /** Accepted plate stems: the host-derived built-in plate, then the historical Experiment 004 override name. */
+/**
+ * The plate's own UVs give another footprint than the one the collection was planned on (a cached plate recorded
+ * under an older rule, or a plate changed during the Build). The CLI reports it as `package_plate_stale`, and the
+ * hosts then discard that cached plate and build once more on a fresh one (PIPE-37).
+ */
+export class PlateFootprintChangedError extends Error {}
+
 export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
 
 export interface ResourceBuildOptions {
@@ -117,7 +124,7 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   const footprintSha256 = sha256(JSON.stringify(footprint));
   // The collection was filtered against a plate footprint (presets that never reach the plate were omitted); it must be this plate's.
   if (options.plateUv && sha256(JSON.stringify(options.plateUv)) !== footprintSha256)
-    throw Error("The eye plate changed while this Build was planning on it. Build again.");
+    throw new PlateFootprintChangedError("The eye plate's recorded UV footprint differs from the plate itself.");
   const plateUv = { bounds, window, transform: uvTransformConstants(window), footprintSha256 };
   writeFileSync(join(out, "logs", "plate-uv.log"), JSON.stringify(plateUv) + "\n", "utf8");
 

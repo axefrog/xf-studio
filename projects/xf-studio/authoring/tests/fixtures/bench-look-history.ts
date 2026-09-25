@@ -49,7 +49,7 @@ results.gesture = median(51, () => {
   core.app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: point.u + .0005 } });
   core.app.endGesture("uv");
 });
-results.undoRedo = median(51, () => { core.app.dispatch({ kind: "recipe.undo" }); core.app.dispatch({ kind: "recipe.redo" }); });
+results.undoRedo = median(51, () => { core.app.dispatch({ kind: "history.undo" }); core.app.dispatch({ kind: "history.redo" }); });
 results.jump40 = median(11, () => {
   const steps = core.app.historyTimeline().steps;
   core.app.dispatch({ kind: "history.jumpTo", entryId: steps[steps.length - 41].id });

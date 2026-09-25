@@ -2,7 +2,6 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import type { AuthoringGestures, GestureSource } from "./authoring-gestures";
 import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
-import { actionLimits, type FieldLimit } from "./action-limits";
 import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
@@ -21,8 +20,10 @@ import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceStat
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";
 import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
-  type Capability, type FeatureModule, type ReasonCode, type ValidationIssue } from "./platform/api";
+  type Capability, type FeatureActionSpec, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
+  type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
+import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
@@ -42,7 +43,7 @@ export type StudioOwnerActions = {
   motion: MotionAction;
   quality: QualityAction;
   savedV: SavedAppearanceAction;
-  character: CharacterAction;
+  characterDetails: CharacterAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
 /**
@@ -69,7 +70,7 @@ export type StudioCapability = Capability;
 /** Every synchronous action entry point (dispatch, context dispatch, form control edits) returns this. */
 export type StudioDispatchResult = { ok: true; result?: unknown } | { ok: false; code: string; message: string };
 export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
-  undo: "none" | "recipe" | "transaction" | "recovery"; async: false };
+  undo: UndoPolicy; async: false };
 export type StudioGestureProposal =
   | { kind: "shape.replace"; next: Layer }
   | { kind: "point.replace"; index: number; next: Partial<Point> }
@@ -84,13 +85,15 @@ type AsyncHandlers = {
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
   eyeMakeup: EyeMakeupPort; undo: () => boolean;
+  /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
+  newId?: () => string;
   /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
   /** The shown V's resolved details and the creator choice tried on it (character-detail-actions.ts). */
-  character?: CharacterDetailActions };
+  characterDetails?: CharacterDetailActions };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -107,13 +110,25 @@ export class StudioApplication {
   private readonly handlers: Handlers;
   /** One handler per asynchronous family (library requests, file workflows). */
   private readonly asyncHandlers: AsyncHandlers;
+  /**
+   * The other registered features' handlers: their pure capability and apply over their live
+   * documents (`document.others`), bound generically, so a feature module needs no handler of its own.
+   */
+  private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
+  /** The open look transaction (`transaction`): its actions record no steps of their own. */
+  private look?: { features: readonly string[] };
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
     this.asyncHandlers = this.bindAsyncHandlers();
+    for (const owner of registry.owners())
+      if (owner.owner === "feature" && !(owner.id in this.handlers)) {
+        if (!services.document.others?.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
+        this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
+      }
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
     const owners = registry.owners().map(owner => owner.id).sort(),
-      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers)].sort();
+      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
     this.subscribeSources();
@@ -136,7 +151,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.character])
+    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -162,6 +177,46 @@ export class StudioApplication {
   registry() {
     return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: this.routes.asyncDescriptors("library"),
       gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
+  }
+  /** The registered feature modules in catalogue order, for the presentation's feature facades (step 5). */
+  features(): { id: string; label: string; stage: FeatureModule["stage"] }[] {
+    return this.routes.owners().flatMap(owner => owner.owner === "feature"
+      ? [{ id: owner.id as string, label: owner.label, stage: (owner as FeatureModule).stage }] : []);
+  }
+  /** The owner of a synchronous action kind (a family or feature ID), or undefined for an unknown kind. */
+  ownerOf(kind: string): string | undefined {
+    const route = this.routes.route(kind);
+    return route.ok ? route.owner.id : undefined;
+  }
+  /**
+   * Whether a feature can be edited in the selected look: not when the look holds a newer build's data (it
+   * is kept exactly as it came), nor while no preset owns the editor. The refusal says why in plain words.
+   */
+  featureEditable(feature: string): StudioCapability {
+    const owner = this.routes.owner(feature);
+    if (owner?.owner !== "feature") return unknownCommand();
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    const locked = this.services.document.locked;
+    return locked ? refusal("unavailable", locked) : { available: true };
+  }
+  /**
+   * Why the selected look's part of this feature can't be edited because the look was made with a newer version
+   * of XF Studio (the plain reason), or undefined when it isn't locked (UI-53). Views read this rather than
+   * inferring it from an `unavailable` refusal, which other reasons may share.
+   */
+  featureLocked(feature: string): string | undefined {
+    if (this.routes.owner(feature)?.owner !== "feature" || this.unowned()) return undefined;
+    return this.services.document.locked;
+  }
+  /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
+  featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
+    return this.services.document.others?.document(feature)?.export();
+  }
+  /** The pure state a feature's specs read: eye makeup's from its port, any other feature's from its live document. */
+  private featureStateOf(feature: string): FeatureState<unknown, unknown> | undefined {
+    // The feature the editor document edits reads through its port; every other one through its live document.
+    if (feature === this.services.document.feature) return this.services.eyeMakeup.state();
+    return this.services.document.others?.document(feature)?.state();
   }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
@@ -212,7 +267,12 @@ export class StudioApplication {
   }
   /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
   limitsFor(target: StudioTarget, kind: StudioAction["kind"], variant?: string): Record<string, FieldLimit> {
-    const limits = actionLimits(this.services.document.recipe, target, kind, variant);
+    const route = this.routes.route(kind);
+    if (!route.ok) return {};
+    // The spec's static limits and units, then the owning feature's state-dependent refinement.
+    let limits = inputLimits(route.spec.descriptor, route.spec.units, variant);
+    const spec = route.spec as Partial<FeatureActionSpec<unknown, unknown>>, state = this.featureStateOf(route.owner.id);
+    if (spec.limits && state) limits = spec.limits(state, target, variant, limits);
     const presets = this.services.collection?.summary().draft?.presets.length;
     if (kind === "preset.edit" && variant === "move" && limits.to && presets !== undefined)
       limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
@@ -311,8 +371,9 @@ export class StudioApplication {
   snapshot() {
     const s = this.services;
     return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
-      preview: s.preview?.snapshot(), character: characterView(s.character),
-      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null, motion: s.motion?.snapshot(),
+      preview: s.preview?.snapshot(), character: characterView(s.characterDetails),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
+      studioSetups: s.preview?.studioSetups() ?? null, motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
   }
@@ -322,9 +383,9 @@ export class StudioApplication {
    */
   previewState() {
     const s = this.services, saved = s.savedV?.snapshot();
-    return structuredClone({ preview: s.preview?.snapshot(), character: characterView(s.character),
+    return structuredClone({ preview: s.preview?.snapshot(), character: characterView(s.characterDetails),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
-      motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
+      studioSetups: s.preview?.studioSetups() ?? null, motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
       gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
@@ -333,8 +394,12 @@ export class StudioApplication {
   consequences(subject: ConsequenceSubject): Consequence {
     const jump = "action" in subject && subject.action.kind === "history.jumpTo"
       ? this.services.history?.plan(subject.action.entryId) : undefined;
+    // An action's own consequence: the generic rule from its descriptor, with its spec's override.
+    const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
+    const own = route?.ok ? { effect: route.spec.descriptor.effect,
+      override: (route.spec as Partial<FeatureActionSpec<unknown, unknown>>).consequence?.((subject as { action: StudioAction }).action) } : undefined;
     return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
-      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump });
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
   history(): HistoryState {
@@ -383,6 +448,11 @@ export class StudioApplication {
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot()))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
+    // A look holding a newer build's data is kept exactly as it came: no feature edits it here (step 5).
+    if (route.owner.owner === "feature" && s.document.locked) return refusal("unavailable", s.document.locked);
+    // A look transaction records the parts it names: nothing else may change while it runs.
+    if (this.look && !this.look.features.includes(route.owner.id))
+      return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
     // Descriptor payload types and ranges gate every entry point, not only context menus.
     const payload = payloadIssue(route.spec.descriptor, action);
     if (payload && payload.code !== "limit") return payload;
@@ -393,7 +463,88 @@ export class StudioApplication {
     if (!domain.available) return domain;
     return payload ?? domain;
   }
-  private handler(owner: string) { return this.handlers[owner as StudioOwnerId] as ActionHandler<StudioAction>; }
+  private handler(owner: string) {
+    return (this.handlers[owner as StudioOwnerId] ?? this.featureHandlers.get(owner)) as ActionHandler<StudioAction>;
+  }
+  /**
+   * A registered feature's handler over its live document: the spec's pure capability, then assign
+   * IDs, apply, record one `part` step when the action's Undo policy asks for one (not inside a look
+   * transaction, which records its own), and publish the result.
+   */
+  private featureHandler(feature: string): ActionHandler<{ kind: string }> {
+    const app = this;
+    const live = () => app.services.document.others?.document(feature);
+    const specOf = (action: { kind: string }) => {
+      const route = app.routes.route(action.kind);
+      if (!route.ok || route.owner.id !== feature) throw Error(`${action.kind} is not an action of ${feature}.`);
+      return route.spec as FeatureActionSpec<unknown, unknown, { kind: string }>;
+    };
+    return {
+      capability: action => {
+        const document = live();
+        return document ? specOf(action).capability(document.state(), action) : refusal("not_ready", "This feature is still loading.");
+      },
+      dispatch: action => {
+        const document = live()!, spec = specOf(action);
+        const concrete = spec.assignIds?.(action, app.services.newId ?? (() => crypto.randomUUID())) ?? action;
+        const result = spec.apply(document.state(), concrete);
+        if (!result.changed) return result.effect;
+        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.checkpointFeature(feature, spec.label(concrete));
+        document.set(result.part, result.editor);
+        app.services.document.partChanged();
+        return result.effect;
+      },
+    };
+  }
+  /**
+   * One Undo step over several parts of the look (feature-module platform §3): `fn` dispatches the
+   * features' actions, which record no steps of their own, and the look history records one `look` step
+   * named `label` for everything they changed. A transaction that changed nothing leaves no step; one
+   * whose `fn` throws or reports a failure is reverted to its start without Redo. Refused inside a
+   * gesture, a form-control adjustment or another transaction, and while no preset owns the editor.
+   * `fn` runs synchronously: a body that returns a promise (or any thenable) is refused and reverted
+   * (CORE-48), since its awaited edits would run after the step closed and record steps of their own.
+   */
+  transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => NotThenable<T>): StudioDispatchResult {
+    const s = this.services;
+    if (this.look || this.gesture || s.controls.snapshot())
+      return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
+    if (s.document.locked) return { ok: false, code: "unavailable", message: s.document.locked };
+    const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
+    if (!features.length || unknown.length)
+      return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
+    const document = s.document, history = s.history;
+    const host: TransactionHost<HistoryEntryId> = {
+      checkpoint: () => document.checkpointLook(features, label), top: () => document.historyTop,
+      relabel: (step, name) => document.relabelCheckpoint(step, name), discard: step => document.discardCheckpoint(step),
+      revert: step => { if (history) history.revertTransaction(step); },
+      content: () => document.contentKey(features),
+    };
+    const transaction = HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true);
+    this.look = { features };
+    let result: NotThenable<T>;
+    try { result = fn(); }
+    catch (error) {
+      this.look = undefined; transaction.cancel(); this.notify();
+      return { ok: false, ...failure(undefined, error) };
+    }
+    this.look = undefined;
+    if (isThenable(result)) {
+      // Nothing awaited can join this step: revert what ran synchronously and say why. The body's own rejection is its caller's.
+      result.then(undefined, () => {});
+      transaction.cancel(); this.notify();
+      return { ok: false, code: "invalid_value", message: "A look change must be applied in one go; this one tried to wait part way through." };
+    }
+    const failed = result && typeof result === "object" && (result as { ok?: unknown }).ok === false
+      ? result as unknown as { code?: string; message?: string } : undefined;
+    if (failed) { transaction.cancel(); this.notify();
+      return { ok: false, code: failed.code ?? "invalid_value", message: failed.message ?? "The change could not be applied." }; }
+    // A step the checkpoint could not add (the top step already held the start) takes the name when the change is kept.
+    transaction.applied(true, () => label);
+    transaction.commit(); this.notify();
+    return { ok: true, result };
+  }
   /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
   private eyeMakeupSpec(action: EyeMakeupAction) {
     const route = this.routes.route(action.kind);
@@ -408,7 +559,8 @@ export class StudioApplication {
   private bindHandlers(): Handlers {
     const app = this;
     // An action records an Undo entry by its Undo policy (its variant's first), never by its effect (CORE-32).
-    const recorded = (action: StudioAction) => this.routes.undoPolicy(action) !== "none";
+    // Inside a look transaction the transaction records the one step.
+    const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
     return {
       history: {
         capability: action => {
@@ -419,15 +571,15 @@ export class StudioApplication {
               !plan ? refusal("missing_target", "That history step no longer exists.") :
               plan.direction === "none" ? refusal("invalid_value", "This is already the current step.") : { available: true };
           }
-          if (action.kind === "recipe.undo") return s.document.canUndo ? { available: true } :
-            refusal("invalid_value", "There is no recipe change to undo.");
+          if (action.kind === "history.undo") return s.document.canUndo ? { available: true } :
+            refusal("invalid_value", "There is no change to undo.");
           return !s.history ? refusal("invalid_value", "Redo is not available in this host.") :
             s.history.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone change to redo.");
         },
         dispatch: action => {
           const s = app.services;
           return action.kind === "history.jumpTo" ? s.history!.jumpTo(action.entryId) :
-            action.kind === "recipe.undo" ? s.undo() : s.history!.redo();
+            action.kind === "history.undo" ? s.undo() : s.history!.redo();
         },
       },
       "eye-makeup": {
@@ -459,9 +611,9 @@ export class StudioApplication {
         capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
         dispatch: action => app.services.savedV!.dispatch(action),
       },
-      character: {
-        capability: action => app.services.character?.check(action) ?? missing("Your V's details are still loading."),
-        dispatch: action => app.services.character!.dispatch(action),
+      characterDetails: {
+        capability: action => app.services.characterDetails?.check(action) ?? missing("Your V's details are still loading."),
+        dispatch: action => app.services.characterDetails!.dispatch(action),
       },
     };
   }
@@ -478,11 +630,19 @@ export class StudioApplication {
           ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." },
       },
       files: {
-        capability: action => app.services.files?.capability(action) ?? missing("Files are still loading."),
-        execute: async action => app.services.files?.execute(action)
-          ?? { ok: false as const, code: "unavailable", message: "Files are still loading." },
+        capability: action => app.lockedExport(action) ?? app.services.files?.capability(action) ?? missing("Files are still loading."),
+        execute: async action => {
+          const locked = app.lockedExport(action);
+          if (locked) return { ok: false as const, code: "unavailable", message: locked.reason! };
+          return app.services.files?.execute(action) ?? { ok: false as const, code: "unavailable", message: "Files are still loading." };
+        },
       },
     };
+  }
+  /** A locked look's recipe and masks are not exported as if it were empty: this build cannot read them. */
+  private lockedExport(action: StudioFileAction): StudioCapability | undefined {
+    const locked = this.services.document.locked;
+    return locked && (action.kind === "recipe.export" || action.kind === "mask.export") ? refusal("unavailable", locked) : undefined;
   }
   /** The async family that owns `kind`, when it is `family`. */
   private ownsAsync(family: StudioRequestOwnerId, kind: string) {
@@ -493,7 +653,7 @@ export class StudioApplication {
   actionsFor(target: StudioTarget): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
     let actions: StudioAction[] = [];
-    if (target.kind === "workspace") actions = [{ kind: "recipe.undo" }];
+    if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
     if (target.kind === "collection") actions = [
       { kind: "preset.edit", command: { kind: "add" } }, { kind: "preset.edit", command: { kind: "restore" } },
       { kind: "collection.undoOpen" }];
@@ -528,7 +688,7 @@ export class StudioApplication {
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
-    if (this.gesture || this.unowned()) return false;
+    if (this.gesture || this.look || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
   /**
@@ -577,9 +737,10 @@ export class StudioApplication {
   }
   canBeginGesture(source: GestureSource, layerId: string): StudioCapability {
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
     if (source === "surface" && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if (this.gesture) return { available: false, code: "busy", reason: "Another gesture is active." };
+    if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }
   gestureCapability(source: GestureSource, target: { kind: "shape" | "path" } |
@@ -695,4 +856,10 @@ function characterView(character: CharacterDetailActions | undefined) {
   if (!character) return undefined;
   const { choices, tried, trying, override } = character.snapshot();
   return { choices, tried, trying, override };
+}
+
+/** A transaction body's result: anything but a promise or other thenable (its awaited edits could not join the step). */
+export type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
 }

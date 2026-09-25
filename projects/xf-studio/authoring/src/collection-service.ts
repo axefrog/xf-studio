@@ -1,6 +1,6 @@
 import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
-import { collectionDraft, newLook, withLiveMemory, withLivePart, type CollectionWorkspace,
+import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
@@ -12,8 +12,16 @@ import type { PackageAction, PackageBuild, PackageCheck } from "./package-action
 import { describePackageExperimental, describePackageOmissions } from "./package-filter";
 import { refusal, type Capability } from "./platform/api";
 
+/** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
+export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
+  "can't put them in a mod. Update XF Studio to build it.";
+export const NO_EDITABLE_EYE_MAKEUP_MESSAGE = "The looks with eye makeup here were made with a newer version of XF Studio, so this " +
+  "version can't put them in a mod. Update XF Studio to build them, or add eye makeup to another look.";
+
 export type CollectionRequest =
-  | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportCollection" | "exportPlan" }
+  | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportPlan" }
+  /** `draft`: the collection ID of an earlier draft in the recovery queue to export instead of the current one (unsaved). */
+  | { kind: "exportCollection"; draft?: string }
   | { kind: "open"; id: string }
   | { kind: "import"; text: string; bytes: number }
   | { kind: "package"; action: PackageAction };
@@ -90,14 +98,16 @@ export class CollectionService {
     private read: () => EditorSnapshot, private show: (editor: EditorSnapshot) => void,
     private transport: CollectionTransport,
     /** Cheap live editor read for dirty checks; defaults to the full editor snapshot. */
-    private readRecipe?: () => { recipe: Recipe; revision: number }) {
+    private readRecipe?: () => { recipe: Recipe; revision: number;
+      /** The other live features' parts and their revision (present only when the composition registers more features). */
+      others?: { revision: number; parts: Record<string, unknown | undefined> } }) {
     if (restored) this.actions = new CollectionActions(model, restored, read, show);
   }
   /** Bookkeeping only: a baseline that cannot be recorded leaves dirty state unknown, never fails a request. */
   private remember(collection: LookCollection, revision: number) {
     let parsed: LookCollection, presets: Baseline["presets"];
     try {
-      parsed = this.model.parts.readCollection(collection, true);
+      parsed = this.model.parts.readCollection(collection, true, "keep");
       presets = new Map(parsed.presets.map(preset => [preset.id, { name: preset.name, raw: JSON.stringify(preset.parts),
         canonical: this.model.parts.canonicalParts(preset.parts) }]));
     } catch { return; }
@@ -110,7 +120,8 @@ export class CollectionService {
     if (!this.actions) return undefined;
     const summary = this.actions.summary(), live = this.readRecipe?.();
     // Without a cheap live read there is no editor revision to key a cache on.
-    const key = live && JSON.stringify([this.content, summary.id, summary.revision, summary.selected, live.revision]);
+    const key = live && JSON.stringify([this.content, summary.id, summary.revision, summary.selected, live.revision,
+      ...(live.others ? [live.others.revision] : [])]);
     if (key && this.persistenceCache?.key === key) return structuredClone(this.persistenceCache.value);
     const ids = summary.presets.map(preset => preset.id);
     let value: DraftPersistence;
@@ -123,7 +134,7 @@ export class CollectionService {
       const dirtyPresets = this.actions.presetsForComparison().filter(preset => {
         const saved = base.presets.get(preset.id);
         if (!saved || saved.name !== preset.name) return true;
-        const parts = preset.id === summary.selected ? liveParts(preset, liveRecipe, this.model) : preset.parts;
+        const parts = preset.id === summary.selected ? liveParts(preset, liveRecipe, this.model, live?.others?.parts) : preset.parts;
         if (JSON.stringify(parts) === saved.raw) return false;
         // Gestures edit in place and may reorder keys; compare canonically before calling it a change.
         try { return this.model.parts.canonicalParts(parts) !== saved.canonical; } catch { return true; }
@@ -189,15 +200,20 @@ export class CollectionService {
     return parseCollection(eyeMakeupCollection(this.actions!.snapshot().collection));
   }
   /**
-   * Whether the draft's eye-makeup view has a look to package (CORE-34): a look with an eye-makeup
-   * part, or the selected look while the live editor has layers. Reads without copying.
+   * Why the draft's eye-makeup view has no look to package, or undefined when it has one (CORE-34): a look
+   * with an eye-makeup part, or the selected look while the live editor has layers. A look made with a newer
+   * version of XF Studio never counts, since the export leaves it out (PIPE-44). Reads without copying.
    */
-  private hasPackageableLook(): boolean {
-    const selected = this.actions!.selected(), live = this.model.live;
-    return this.actions!.presetsForComparison().some(look => look.id === selected
+  private unpackageable(): string | undefined {
+    const selected = this.actions!.selected(), live = this.model.live, looks = this.actions!.presetsForComparison();
+    if (looks.some(look => !look.locked && (look.id === selected
       ? !!look.parts[live] || (this.readRecipe?.() ?? this.read()).recipe.layers.length > 0
-      : !!look.parts[live]);
+      : !!look.parts[live]))) return undefined;
+    if (looks.length && looks.every(look => look.locked)) return EVERY_LOOK_NEWER_MESSAGE;
+    return looks.some(look => look.locked) ? NO_EDITABLE_EYE_MAKEUP_MESSAGE
+      : "None of these presets has eye makeup yet, so there is nothing to put in a mod.";
   }
+
   /** Whether the draft has this preset, without cloning the draft (CORE-05). */
   hasPreset(id: string): boolean { return this.actions?.hasPreset(id) ?? false; }
   /** The draft's collection ID and selected preset, without cloning the draft (CORE-05); undefined while loading. */
@@ -213,12 +229,19 @@ export class CollectionService {
       return refusal("invalid_value", "Saved collection is no longer in this list. Refresh it first.");
     if (request.kind === "import" && (!Number.isSafeInteger(request.bytes) || request.bytes < 0 || request.bytes > 16_000_000))
       return refusal("limit", "Collection exceeds the current 16 MB import budget.");
+    // A look this build cannot read is kept exactly as it came; the library never takes it (its older rows stay as they are).
+    if ((request.kind === "save" || request.kind === "saveCopy") && this.actions.presetsForComparison().some(look => look.locked))
+      return refusal("unavailable", NEWER_LOOKS_LIBRARY_MESSAGE);
     // The draft is validated on every change, so only emptiness can refuse here; no snapshot is taken (CORE-05).
     if ((request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") &&
         !this.actions.summary().presets.length) return refusal("invalid_value", COLLECTION_MESSAGE);
     // A build plan and a mod hold eye makeup only: they need a look that has some (CORE-34).
-    if ((request.kind === "exportPlan" || request.kind === "package") && !this.hasPackageableLook())
-      return refusal("invalid_value", "None of these presets has eye makeup yet, so there is nothing to put in a mod.");
+    if (request.kind === "exportPlan" || request.kind === "package") {
+      const reason = this.unpackageable();
+      if (reason) return refusal("invalid_value", reason);
+    }
+    if (request.kind === "exportCollection" && request.draft !== undefined && !this.actions.recoveryCollection(request.draft))
+      return refusal("missing_target", "That earlier draft is no longer in the recovery list.");
     return { available: true };
   }
   /** Draft action capability with a structured reason code. */
@@ -293,8 +316,11 @@ export class CollectionService {
               }
             }
             // Keep every editor-memory field (historyTrimmed included); only the recipe lives in the preset.
-            const { recipe: _recipe, ...memory } = current;
+            const { recipe: _recipe, liveFeatures, ...memory } = current;
             draft.selected = id; draft.memory[id] = withLiveMemory(undefined, memory, model);
+            // The editor's other live features belong to this look too.
+            const look = draft.collection.presets.find(p => p.id === id)!, written = withLiveFeatures(look, draft.memory[id], liveFeatures, model);
+            look.parts = written.parts; draft.memory[id] = written.memory;
             this.actions = new CollectionActions(model, draft, this.read, this.show); this.content++;
             message = summaries.length
               ? "Existing looks and your current draft are retained. Save collection to store this arrangement."
@@ -322,6 +348,13 @@ export class CollectionService {
           message = `Saved “${stored.collection.name}” · revision ${stored.revision}. Changes made during saving remain in your draft.`; break;
         }
         case "exportCollection": case "exportPlan": {
+          if (request.kind === "exportCollection" && request.draft !== undefined) {
+            // An earlier draft is exported as it is, never saved: the library's revision belongs to the current draft.
+            const earlier = this.actions!.recoveryCollection(request.draft)! as LookCollection;
+            result = { kind: "export", name: "xfs.collection.json", json: JSON.stringify(this.model.parts.writeMinimal(earlier), null, 2) };
+            message = `Exported the earlier draft “${earlier.name}” with its recipes and stable preset identities. It wasn't saved to your library; your current draft is unchanged.`;
+            break;
+          }
           // The draft is saved first only when the library takes it: a collection that needs
           // `xfs/collection-2` is refused there (CORE-30), and exporting it to a file is exactly how
           // it is kept, so its draft snapshot is exported unsaved (CORE-38).
@@ -333,9 +366,15 @@ export class CollectionService {
           result = { kind: "export", name: plan ? "xfs.build-plan.json" : "xfs.collection.json",
             json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection))
               : this.model.parts.writeMinimal(collection), null, 2) };
+          const locked = collection.presets.filter(look => look.locked);
           const kept = storable ? "It was also saved to your library first."
+            : locked.length
+            ? plan ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio. Your draft is kept."
+              : "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept."
             : "It wasn't saved to your library: it has parts the released XF Studio 0.1.0-alpha.1 can't read, and that version opens the same library. Your draft is kept.";
-          message = plan ? `Build plan exported for the offline compiler; this is not an installable mod. ${kept}`
+          // The plan holds eye makeup only; what it leaves out is listed in the file's `omitted` and named here (PIPE-45).
+          const left = plan && locked.length ? ` Not in the plan: ${locked.map(look => `“${look.name}”`).join(", ")}, made with a newer version of XF Studio.` : "";
+          message = plan ? `Build plan exported for the offline compiler; this is not an installable mod.${left} ${kept}`
             : storable ? "Collection saved to your library and exported. Recipes and stable preset identities are included."
             : `Collection exported with its recipes and stable preset identities. ${kept}`; break;
         }
@@ -348,7 +387,7 @@ export class CollectionService {
           if (request.action === "check") {
             const checked = response as PackageCheck;
             result = { kind: "packageCheck", result: checked };
-            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
+            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${(checked.notes ?? []).map(note => ` ${note}`).join("")}${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
           } else {
             const built = response as PackageBuild;
             result = { kind: "packageBuild", result: built };
@@ -359,7 +398,8 @@ export class CollectionService {
         case "import": {
           // Either collection schema imports; parts of features this build lacks are kept.
           let collection: LookCollection;
-          try { collection = this.model.parts.readCollection(JSON.parse(request.text)); }
+          // A look this build cannot read is kept exactly as it came and locked; the others are editable.
+          try { collection = this.model.parts.readCollection(JSON.parse(request.text), false, "keep"); }
           catch (error) { throw new CollectionServiceError(error instanceof SyntaxError ? "invalid_json" : "invalid_collection",
             (error as Error).message); }
           this.actions!.dispatch({ kind: "collection.open", collection });
@@ -380,7 +420,16 @@ export class CollectionService {
 }
 
 /** A look's parts with the live editor's recipe as its live-feature part (no parse; for dirty checks). */
-function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel): Look["parts"] {
-  if (!look.parts[model.live] && !recipe.layers.length) return look.parts;
-  return { ...look.parts, [model.live]: model.parts.envelope(model.live, recipe) };
+function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel,
+  others?: Readonly<Record<string, unknown | undefined>>): Look["parts"] {
+  // A locked look is never written from the editor: its kept parts are what it holds.
+  if (look.locked) return look.parts;
+  let parts = look.parts;
+  if (look.parts[model.live] || recipe.layers.length) parts = { ...parts, [model.live]: model.parts.envelope(model.live, recipe) };
+  if (!others) return parts;
+  // The other live features' parts as the editor holds them (absent: the look lacks the feature).
+  parts = { ...parts };
+  for (const [feature, part] of Object.entries(others))
+    if (part === undefined) delete parts[feature]; else parts[feature] = model.parts.envelope(feature, part);
+  return parts;
 }

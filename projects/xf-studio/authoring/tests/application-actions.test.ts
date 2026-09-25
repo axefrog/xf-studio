@@ -145,7 +145,7 @@ test("recipe edits through app.dispatch record discrete changes once and keep in
   detached.recipe.layers[0].color = "#000000";
   expect(document.recipe.layers[0].color).toBe(original.layers[0].color);
   expect(document.undoDepth).toBe(5);
-  for (let i = 0; i < 4; i++) app.dispatch({ kind: "recipe.undo" });
+  for (let i = 0; i < 4; i++) app.dispatch({ kind: "history.undo" });
   expect(document.recipe.layers[0].finish).toBe("glitter");
   expect(effects).toEqual(["immediate", "immediate", "scheduled", "immediate", "immediate"]);
   unsubscribe();

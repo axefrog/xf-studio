@@ -3,7 +3,7 @@ import { trustedFixture } from "./studio-presentation-fixture";
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["authoring", "editor", "files", "installDetection", "library", "links", "localSetup", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["authoring", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "preferences",
     "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "viewport"]);
   expect("document" in shell.authoring).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);
@@ -15,7 +15,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }).available).toBe(true);
   expect(shell.authoring.dispatch({ kind: "layer.edit", command: { kind: "add" } }).ok).toBe(true);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(5);
-  expect(shell.authoring.dispatch({ kind: "recipe.undo" }).ok).toBe(true);
+  expect(shell.authoring.dispatch({ kind: "history.undo" }).ok).toBe(true);
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(4);
   expect(shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "copy",
     id: shell.library.view().draft!.selected! } }).ok).toBe(true);

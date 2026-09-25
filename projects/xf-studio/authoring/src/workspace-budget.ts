@@ -1,6 +1,6 @@
 import type { CollectionDraft, CollectionWorkspace, DocumentModel } from "./collection-workspace";
-import { withLiveMemory } from "./collection-workspace";
-import { LOOK_MEMORY, type LookMemory } from "./platform/api";
+import { holdsLocked, withLiveMemory } from "./collection-workspace";
+import { KEPT_MEMORY, LOOK_MEMORY, type LookMemory } from "./platform/api";
 import { trimLookHistory } from "./platform/core/look-history";
 import { serializeWorkspace, type WorkspaceState } from "./workspace-state";
 
@@ -21,9 +21,12 @@ export const MIN_SELECTED_HISTORY = 10;
  * `background`: of every other current look; `recovery`: how many recovery drafts are kept (their
  * looks, never their histories); `removed`: how many removed presets are kept for Restore (the latest,
  * without their histories). `lookLevel`: histories are stored as `xfs/look-history-1` instead of whole
- * parts (CORE-39; builds before the look history then open the workspace read-only).
+ * parts (CORE-39; builds before the look history then open the workspace read-only). `kept`: where a locked
+ * look (a newer build's) is written without its kept memory, its parts still verbatim (CORE-47): `outside`
+ * the current presets (recovery drafts and removed presets), or `everywhere`; absent, it is kept whole.
  */
-export type WorkspacePlan = { background: number; selected: number; recovery: number; removed: number; lookLevel?: true };
+export type WorkspacePlan = { background: number; selected: number; recovery: number; removed: number; lookLevel?: true;
+  kept?: "outside" | "everywhere" };
 /** The standard policy: every save stores at least this little. */
 export const STANDARD_PLAN: WorkspacePlan = Object.freeze({ background: PERSISTED_BACKGROUND_HISTORY, selected: Infinity,
   recovery: Infinity, removed: Infinity });
@@ -94,10 +97,13 @@ export type FittedWorkspace = {
  * 1. recovery drafts' histories (the standard policy already keeps their looks without them);
  * 2. other presets' histories, oldest steps first;
  * 3. the selected look's history, oldest steps first, keeping at least `MIN_SELECTED_HISTORY` steps;
- * 4. recovery copies (oldest draft first), then removed presets kept for Restore (oldest first);
- * 5. only when the looks alone leave no room for them, the selected look's last steps.
+ * 4. locked looks' kept memory (a newer build's Undo history and editor state, which this build can't trim)
+ *    in recovery drafts and removed presets, then recovery copies (oldest draft first), then removed presets
+ *    kept for Restore (oldest first); a draft or removed preset holding a locked look is never dropped;
+ * 5. only when the looks alone leave no room for them, the selected look's last steps;
+ * 6. the last resort: the current presets' locked looks' kept memory (CORE-47).
  *
- * The current presets themselves are never dropped. Nothing here changes the live session. `from` is
+ * The current presets themselves are never dropped, and a locked look's parts are always written verbatim. Nothing here changes the live session. `from` is
  * the plan the previous save fitted (autosave passes it): each search starts at its value, so a save
  * that fits where the last one did encodes a few candidates instead of bisecting every stage (CORE-41).
  * The result is the same with or without it.
@@ -165,7 +171,8 @@ export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget
   // 3. The selected look's history, oldest first, down to the floor.
   if (stage("selected", extent.selected, Math.min(MIN_SELECTED_HISTORY, extent.selected))) return done()!;
   plan = { ...plan, selected: Math.min(MIN_SELECTED_HISTORY, extent.selected) };
-  // 4. Recovery copies, then removed presets, oldest first.
+  // 4. Locked looks' kept memory outside the current presets, then recovery copies and removed presets, oldest first.
+  if (extent.kept) { plan = { ...plan, kept: "outside" }; const fitted = done(); if (fitted) return fitted; }
   if (stage("recovery", extent.recovery, 0)) return done()!;
   plan = { ...plan, recovery: 0 };
   if (stage("removed", extent.removed, 0)) return done()!;
@@ -173,6 +180,8 @@ export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget
   // 5. The looks alone leave no room for the floor: keep what fits.
   if (stage("selected", plan.selected, 0)) return done()!;
   plan = { ...plan, selected: 0 };
+  // 6. The current presets' locked looks' kept memory.
+  if (extent.kept) { plan = { ...plan, kept: "everywhere" }; const fitted = done(); if (fitted) return fitted; }
   const smallest = attempt(plan);
   return result(plan, smallest, true);
 }
@@ -180,11 +189,11 @@ export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget
 /** Whether a plan drops more than the standard policy (the form it is stored in drops nothing). */
 function dropsMore(plan: WorkspacePlan) {
   return plan.background !== STANDARD_PLAN.background || plan.selected !== STANDARD_PLAN.selected ||
-    plan.recovery !== STANDARD_PLAN.recovery || plan.removed !== STANDARD_PLAN.removed;
+    plan.recovery !== STANDARD_PLAN.recovery || plan.removed !== STANDARD_PLAN.removed || plan.kept !== undefined;
 }
 
-/** How much each plan field can hold in this workspace (the largest meaningful value). */
-function measure(state: WorkspaceState): WorkspacePlan {
+/** How much each plan field can hold in this workspace (the largest meaningful value); `kept`: whether any locked look keeps memory. */
+function measure(state: WorkspaceState): Omit<WorkspacePlan, "kept"> & { kept: boolean } {
   const collections = state.collections;
   const depth = (memory: LookMemory | undefined) => {
     const own = memory?.[LOOK_MEMORY]?.editor as { entries?: unknown[] } | undefined;
@@ -192,9 +201,12 @@ function measure(state: WorkspaceState): WorkspacePlan {
     return Math.max(0, ...Object.values(memory ?? {}).map(entry => Array.isArray(entry.history) ? entry.history.length : 0));
   };
   const loose = Array.isArray(state.history) ? state.history.length : state.history.entries.length;
-  if (!collections) return { background: 0, selected: loose, recovery: 0, removed: 0 };
+  if (!collections) return { background: 0, selected: loose, recovery: 0, removed: 0, kept: false };
   const ids = collections.collection.presets.map(preset => preset.id);
+  const drafts = [collections, collections.previous, ...(collections.older ?? [])].filter((draft): draft is CollectionDraft => !!draft);
   return {
+    kept: drafts.some(draft => Object.values(draft.memory).some(memory => memory[KEPT_MEMORY]?.editor !== undefined) ||
+      draft.removed.some(entry => entry.memory[KEPT_MEMORY]?.editor !== undefined)),
     background: Math.max(0, ...ids.filter(id => id !== collections.selected).map(id => depth(collections.memory[id]))),
     selected: collections.selected ? depth(collections.memory[collections.selected]) : 0,
     recovery: [collections.previous, ...(collections.older ?? [])].filter(Boolean).length,
@@ -219,25 +231,41 @@ function compactWorkspace(state: WorkspaceState, plan: WorkspacePlan, model: Doc
     const history = model.parts.lookHistory(memory);
     return { ...state, history, ...(history.trimmed ? { historyTrimmed: true } : {}) };
   }
-  const current = compactDraft(collections, plan, true, model);
+  const current = compactDraft(collections, plan, true, model, plan.kept === "everywhere");
+  // A recovery draft holding a locked look (a newer build's, kept exactly as it came) is never dropped to fit.
   const recovery = [collections.previous, ...(collections.older ?? [])]
-    .filter((draft): draft is CollectionDraft => !!draft).slice(0, plan.recovery).map(draft => compactDraft(draft, plan, false, model));
+    .filter((draft): draft is CollectionDraft => !!draft).filter((draft, index) => index < plan.recovery || holdsLocked(draft))
+    .map(draft => compactDraft(draft, plan, false, model, plan.kept !== undefined));
   const compacted: CollectionWorkspace = { ...current,
     ...(recovery.length ? { previous: recovery[0], older: recovery.slice(1) } : {}) };
   // The stored form restores the editor from the collection's selected look, so it keeps no loose editor copy.
   return { ...state, collections: compacted };
 }
 
-function compactDraft(draft: CollectionDraft, plan: WorkspacePlan, current: boolean, model: DocumentModel): CollectionDraft {
+/**
+ * One draft as a plan stores it. `dropKept`: its presets' locked looks are written without their kept memory;
+ * its removed presets' are too whenever the plan drops any kept memory.
+ */
+function compactDraft(draft: CollectionDraft, plan: WorkspacePlan, current: boolean, model: DocumentModel, dropKept: boolean): CollectionDraft {
   const memory: Record<string, LookMemory> = {};
+  const locked = new Set(draft.collection.presets.filter(look => look.locked).map(look => look.id));
   for (const [id, look] of Object.entries(draft.memory)) {
     const keep = !current ? 0 : id === draft.selected ? plan.selected : plan.background;
-    memory[id] = trimLook(look, keep, model);
+    memory[id] = dropKept && locked.has(id) ? withoutKept(look) : trimLook(look, keep, model);
   }
+  // Recovery drafts keep their presets but not their removed-preset lists; removed presets keep no history. A removed
+  // locked look (a newer build's, kept exactly as it came) is always kept, with its memory as it was read.
+  const kept = current ? plan.removed : 0;
   return { collection: draft.collection, revision: draft.revision, selected: draft.selected,
-    // Recovery drafts keep their presets but not their removed-preset lists; removed presets keep no history.
-    memory, removed: (current && plan.removed > 0 ? draft.removed.slice(-plan.removed) : [])
-      .map(entry => ({ ...entry, memory: trimLook(entry.memory, 0, model) })) };
+    memory, removed: draft.removed.filter((entry, index) => index >= draft.removed.length - kept || entry.preset.locked)
+      .map(entry => ({ ...entry, memory: plan.kept !== undefined && entry.preset.locked ? withoutKept(entry.memory) : trimLook(entry.memory, 0, model) })) };
+}
+/**
+ * A locked look's memory without what it kept (its stored editor state and Undo history, which this build can't
+ * read or trim): nothing is written for it, and a reader finds the look again from its verbatim parts (CORE-47).
+ */
+function withoutKept(memory: LookMemory): LookMemory {
+  return memory[KEPT_MEMORY] ? { [KEPT_MEMORY]: { editor: undefined } } : memory;
 }
 
 /** A look's Undo history trimmed to its latest `keep` steps, recording when older ones were dropped. */

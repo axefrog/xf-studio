@@ -1,7 +1,7 @@
 {
  "actionKinds": [
-  "recipe.undo",
-  "recipe.redo",
+  "history.undo",
+  "history.redo",
   "history.jumpTo",
   "layer.select",
   "point.select",
@@ -46,8 +46,13 @@
   "camera.creatorFraming",
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
+  "preview.resetCreatorLighting",
   "preview.setExposure",
   "preview.setKeyAngle",
+  "preview.setStudioLight",
+  "preview.setStudioNeutral",
+  "preview.applyStudioSetup",
+  "preview.resetStudioLighting",
   "preview.setEyeShape",
   "preview.setPiercings",
   "preview.setSurfaceControls",
@@ -68,7 +73,7 @@
   "character.tryChoice"
  ],
  "actionDescriptors": {
-  "recipe.undo": {
+  "history.undo": {
    "scope": [
     "workspace"
    ],
@@ -76,7 +81,7 @@
    "undo": "none",
    "payload": {}
   },
-  "recipe.redo": {
+  "history.redo": {
    "scope": [
     "workspace"
    ],
@@ -136,7 +141,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -156,7 +161,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -172,7 +177,7 @@
    "variants": {
     "enable-bezier": {
      "payload": {},
-     "undo": "recipe"
+     "undo": "part"
     },
     "point-mode": {
      "payload": {
@@ -192,7 +197,7 @@
        ]
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -220,7 +225,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -234,7 +239,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -253,7 +258,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -460,7 +465,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -479,7 +484,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -508,7 +513,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -576,7 +581,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -842,7 +847,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -875,7 +880,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -903,7 +908,7 @@
     "point"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -945,7 +950,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -982,7 +987,7 @@
        "max": 1
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "rotate": {
      "payload": {
@@ -992,7 +997,7 @@
        "from": "input"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "scale": {
      "payload": {
@@ -1004,7 +1009,7 @@
        "max": 100
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -1013,7 +1018,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -1046,7 +1051,7 @@
     "field"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "layerId": {
      "type": "string",
@@ -1080,7 +1085,7 @@
     "collection"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "command": {
      "type": "object",
@@ -1091,7 +1096,7 @@
    "variants": {
     "add": {
      "payload": {},
-     "undo": "recipe"
+     "undo": "part"
     },
     "duplicate": {
      "payload": {
@@ -1101,7 +1106,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "remove": {
      "payload": {
@@ -1111,7 +1116,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "reset": {
      "payload": {
@@ -1121,7 +1126,7 @@
        "from": "target"
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "rename": {
      "payload": {
@@ -1138,7 +1143,7 @@
        "maxLength": 80
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     },
     "move": {
      "payload": {
@@ -1154,7 +1159,7 @@
        "min": 0
       }
      },
-     "undo": "recipe"
+     "undo": "part"
     }
    }
   },
@@ -1163,7 +1168,7 @@
     "layer"
    ],
    "effect": "content",
-   "undo": "recipe",
+   "undo": "part",
    "payload": {
     "id": {
      "type": "string",
@@ -1539,6 +1544,14 @@
     }
    }
   },
+  "preview.resetCreatorLighting": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
   "preview.setExposure": {
    "scope": [
     "viewport"
@@ -1550,8 +1563,8 @@
      "type": "number",
      "required": true,
      "from": "input",
-     "min": 0.5,
-     "max": 2
+     "min": 0.125,
+     "max": 8
     }
    }
   },
@@ -1570,6 +1583,137 @@
      "max": 360
     }
    }
+  },
+  "preview.setStudioLight": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "environment",
+      "key",
+      "elevation",
+      "fill",
+      "rim"
+     ]
+    },
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "environment": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 3
+      }
+     },
+     "undo": "none"
+    },
+    "key": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    },
+    "elevation": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -30,
+       "max": 80
+      }
+     },
+     "undo": "none"
+    },
+    "fill": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    },
+    "rim": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    }
+   }
+  },
+  "preview.setStudioNeutral": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.applyStudioSetup": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "setup": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "soft",
+      "key",
+      "flat",
+      "rim",
+      "mirror"
+     ]
+    }
+   }
+  },
+  "preview.resetStudioLighting": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   },
   "preview.setEyeShape": {
    "scope": [
@@ -1863,7 +2007,7 @@
  },
  "registry": [
   {
-   "id": "recipe.undo",
+   "id": "history.undo",
    "family": "action",
    "scope": [
     "workspace"
@@ -1872,7 +2016,7 @@
    "async": false
   },
   {
-   "id": "recipe.redo",
+   "id": "history.redo",
    "family": "action",
    "scope": [
     "workspace"
@@ -1913,7 +2057,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1923,7 +2067,7 @@
     "layer",
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1941,7 +2085,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1950,7 +2094,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -1959,7 +2103,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2015,7 +2159,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2024,7 +2168,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2033,7 +2177,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2051,7 +2195,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2087,7 +2231,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2096,7 +2240,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2105,7 +2249,7 @@
    "scope": [
     "point"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2114,7 +2258,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2123,7 +2267,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2132,7 +2276,7 @@
    "scope": [
     "field"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2142,7 +2286,7 @@
     "layer",
     "collection"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2151,7 +2295,7 @@
    "scope": [
     "layer"
    ],
-   "undo": "recipe",
+   "undo": "part",
    "async": false
   },
   {
@@ -2282,6 +2426,15 @@
    "async": false
   },
   {
+   "id": "preview.resetCreatorLighting",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "preview.setExposure",
    "family": "action",
    "scope": [
@@ -2292,6 +2445,42 @@
   },
   {
    "id": "preview.setKeyAngle",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setStudioLight",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setStudioNeutral",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.applyStudioSetup",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.resetStudioLighting",
    "family": "action",
    "scope": [
     "viewport"

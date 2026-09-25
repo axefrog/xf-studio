@@ -16,32 +16,30 @@ import { PANEL_META } from "../panel-meta";
 
 type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
-const canonical = (finish: string) => finish === "satin" ? "regular" : finish;
 
 /** One Undo step per continuous edit; refused or failed edits are reported, never swallowed. */
-function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined,
-  failure?: string): Transaction<T> {
+function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined): Transaction<T> {
   return {
-    begin: () => { const layer = rt.port.editor.layer(); if (layer) rt.port.authoring.controlBegin(id, layer.id); },
+    begin: () => { const layer = rt.editor.layer(); if (layer) rt.eyeMakeup.controlBegin(id, layer.id); },
     edit: value => {
-      const layer = rt.port.editor.layer(); if (!layer) return;
+      const layer = rt.editor.layer(); if (!layer) return;
       const action = make(layer, value); if (!action) return;
-      const outcome = rt.port.authoring.controlEdit(id, action);
-      if (!outcome.ok) { rt.feedback.toast("warning", "Colour & finish", failure ?? outcome.message); rt.changed(); }
+      const outcome = rt.eyeMakeup.controlEdit(id, action);
+      if (!outcome.ok) { rt.feedback.toast("warning", "Colour & finish", outcome.message); rt.changed(); }
     },
-    commit: () => rt.port.authoring.controlCommit(id),
-    cancel: () => rt.port.authoring.controlCancel(id),
+    commit: () => rt.eyeMakeup.controlCommit(id),
+    cancel: () => rt.eyeMakeup.controlCancel(id),
   };
 }
 /** Header strip telling a floating inspector which layer it edits. */
-function layerStrip() {
+function layerStrip(rt: StudioRuntime) {
   const swatch = h("span", { class: "swatch", "aria-hidden": "true" }), name = h("strong"), meta = h("span", { class: "muted small" });
   const element = h("div", { class: "layer-strip", role: "status", "aria-live": "off" }, swatch, h("div", {}, name, meta));
   return { element, update(frame: Frame) {
     const layer = frame.layer, recipe = frame.recipe;
     element.hidden = !layer;
     if (!layer) return;
-    swatch.style.setProperty("--swatch", layer.color); swatch.dataset.finish = canonical(layer.finish);
+    swatch.style.setProperty("--swatch", layer.color); swatch.dataset.finish = rt.finishOf(layer.finish)?.id ?? layer.finish;
     setText(name, layer.name);
     const index = recipe.layers.findIndex(item => item.id === layer.id);
     setText(meta, `${recipe.layers.length - index} of ${recipe.layers.length} from front${layer.enabled ? "" : " · hidden"}`);
@@ -54,7 +52,7 @@ function noLayer(rt: StudioRuntime) {
 }
 
 export function finishPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const color = new ColorField({ label: "Colour", transaction: recipeTransaction<string>(rt, "color", (layer, value) => ({ kind: "layer.setColor", layerId: layer.id, color: value })) });
   const opacityRange = rt.range("layer.setOpacity", "opacity");
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
@@ -68,7 +66,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       "aria-label": `${finish.shortLabel}, ${statusText[finish.exportAdapter].toLowerCase()}` },
       h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.shortLabel }));
     element.addEventListener("click", () => {
-      const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
+      const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
     });
     return { finish, element };
   });
@@ -87,12 +85,12 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   const exportLine = h("div", { class: "export-line" });
   const openPackage = button({ label: "Open mod package", icon: "package", small: true, variant: "quiet", onClick: () => rt.dock.reveal("package") });
   const useGame = button({ label: "Use game-matched model", icon: "finish", small: true, onClick: () => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
   } });
   // Colour-shifting (game-matched): one shift colour added toward grazing view angles.
   const shift = {
     color: new ColorField({ label: "Shift colour", transaction: recipeTransaction<string>(rt, "shift-color", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "color", value })) }),
-    strength: new Slider({ label: "Shift strength", min: 0, max: 1, step: .01, format: pct,
+    strength: new Slider({ label: "Shift strength", ...rt.range("layer.setShift", "value", "strength"), step: .01, format: pct,
       transaction: recipeTransaction<number>(rt, "shift-strength", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "strength", value })) }),
   };
   const shiftSection = section("Colour shift", h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element),
@@ -100,7 +98,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
 
   // Glitter preview suite and flake studies.
   const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
   const modelSummary = note("");
   const classic = {
@@ -111,15 +109,17 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     tilt: new Slider({ label: "Orientation spread", ...rt.range("glitter.setClassic", "value", "tilt"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "flake-tilt", (layer, value) => ({ kind: "glitter.setClassic", layerId: layer.id, key: "tilt", value })) }),
   };
-  const irregularFailure = "That amount and flake size are outside the Glitter preview range. Fields denser than 32,768 flakes need small flakes; larger flakes need a lower density.";
+  // Field density shows as a percentage of the largest field the action takes (its registered range); when density and
+  // flake size don't go together, the application says why.
+  const flakesPerPercent = rt.range("glitter.setIrregular", "value", "count").max / 100;
   const irregular = {
-    count: new Slider({ label: "Flake field density", min: 0, max: rt.range("glitter.setIrregular", "value", "count").max / 5000, step: 1, format: value => `${Math.round(value)}%`,
-      transaction: recipeTransaction<number>(rt, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(value) * 5000 }), irregularFailure) }),
+    count: new Slider({ label: "Flake field density", min: 0, max: 100, step: 1, format: value => `${Math.round(value)}%`,
+      transaction: recipeTransaction<number>(rt, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(Math.round(value) * flakesPerPercent) })) }),
     radius: new Slider({ label: "Flake size", ...rt.range("glitter.setIrregular", "value", "radius"), step: .00005, format: value => `${(value * 100).toFixed(3)}% UV`,
-      transaction: recipeTransaction<number>(rt, "irregular-radius", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "radius", value }), irregularFailure) }),
-    spread: new Slider({ label: "Size variation", min: 0, max: 1, step: .05, format: pct,
+      transaction: recipeTransaction<number>(rt, "irregular-radius", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "radius", value })) }),
+    spread: new Slider({ label: "Size variation", ...rt.range("glitter.setIrregular", "value", "spread"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "irregular-spread", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "spread", value })) }),
-    tilt: new Slider({ label: "Orientation spread", min: 0, max: 1, step: .05, format: pct,
+    tilt: new Slider({ label: "Orientation spread", ...rt.range("glitter.setIrregular", "value", "tilt"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "irregular-tilt", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "tilt", value })) }),
     color: new ColorField({ label: "Flake colour", transaction: recipeTransaction<string>(rt, "irregular-color", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "color", value })) }),
   };
@@ -155,7 +155,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       color.update(layer.color); opacity.update(layer.opacity);
-      const current = canonical(layer.finish), target = { kind: "layer" as const, id: layer.id };
+      const current = rt.finishOf(layer.finish)?.id ?? layer.finish, target = { kind: "layer" as const, id: layer.id };
       const choices = port.authoring.choicesFor(target, "layer.setFinish", "finish");
       for (const { finish, element } of finishButtons) {
         setAttr(element, "aria-pressed", String(finish.id === current));
@@ -166,7 +166,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       const descriptor = rt.finishes.find(finish => finish.id === current);
       setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
       // Per-layer status: an experimental finish still in its earlier preview model is left out until switched.
-      const status = port.authoring.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
+      const status = rt.eyeMakeup.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
       if (exportLine.dataset.finish !== key) {
         exportLine.dataset.finish = key;
         const earlier = !!status && !status.exportable && status.blockedBy === "layer" && descriptor?.exportAdapter === "experimental";
@@ -203,7 +203,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
         // Flake size and density bound each other; the application publishes the current limits.
         const count = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "count").value;
         const radius = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "radius").value;
-        irregular.count.update(Math.round(f.count / 5000), { note: count?.note });
+        irregular.count.update(Math.round(f.count / flakesPerPercent), { note: count?.note });
         irregular.radius.update(f.radius, { min: radius?.min, max: radius?.max, note: radius?.note });
         irregular.spread.update(f.spread); irregular.tilt.update(f.tilt); irregular.color.update(f.color);
         const measured = frame.status.glitter.find(item => item.layerId === layer.id);
@@ -221,29 +221,29 @@ export function finishPanel(rt: StudioRuntime): PanelController {
 }
 
 export function shapePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const pointLabel = h("strong", { class: "point-label" });
   const selectPoint = (delta: number) => {
-    const layer = port.editor.layer(); if (!layer) return;
-    const index = (port.editor.selected() + delta + layer.points.length) % layer.points.length;
+    const layer = rt.editor.layer(); if (!layer) return;
+    const index = (rt.editor.selected() + delta + layer.points.length) % layer.points.length;
     rt.dispatch({ kind: "point.select", layerId: layer.id, index });
   };
   const prev = button({ label: "Previous point", icon: "chevronLeft", iconOnly: true, small: true, onClick: () => selectPoint(-1) });
   const next = button({ label: "Next point", icon: "chevronRight", iconOnly: true, small: true, onClick: () => selectPoint(1) });
   const remove = button({ label: "Remove point", icon: "trash", small: true, variant: "quiet", onClick: () => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "point.remove", layerId: layer.id, index: port.editor.selected() });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "point.remove", layerId: layer.id, index: rt.editor.selected() });
   } });
   const enable = button({ label: "Enable Bézier handles", icon: "shape", small: true, onClick: () => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } });
   } });
   const modes = new Segmented<"aligned" | "symmetric" | "corner">({ label: "Selected point handles", options: [
     { value: "aligned", label: "Smooth", title: "Aligned arms with independent lengths" },
     { value: "symmetric", label: "Symmetric", title: "Opposite arms with equal lengths" },
     { value: "corner", label: "Corner", title: "Independent arms" }],
-  onSelect: mode => { const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "point-mode", index: port.editor.selected(), mode } }); } });
+  onSelect: mode => { const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "point-mode", index: rt.editor.selected(), mode } }); } });
   const pathNote = note("");
   const mirror = new Toggle({ label: "Mirror across the face", onChange: checked => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: checked });
   } });
   // Generated from the input binding catalogue; the full list is in the ? Keyboard & mouse dialog.
   const gestures = h("details", { class: "help-block" }, h("summary", { text: "Editing gestures" }),
@@ -278,30 +278,30 @@ export function shapePanel(rt: StudioRuntime): PanelController {
 }
 
 export function edgePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const weight = new Slider({ label: "Selected point pigment", ...rt.range("pigment.edit", "value", "point-strength"), step: .01, format: pct,
-    transaction: recipeTransaction<number>(rt, "weight", (layer, value) => ({ kind: "pigment.edit", layerId: layer.id, command: { kind: "point-strength", index: port.editor.selected(), value } })) });
+    transaction: recipeTransaction<number>(rt, "weight", (layer, value) => ({ kind: "pigment.edit", layerId: layer.id, command: { kind: "point-strength", index: rt.editor.selected(), value } })) });
   const smooth = new Toggle({ label: "Smooth point gradients", onChange: enabled => {
-    const layer = port.editor.layer(); if (!layer) return;
-    port.authoring.controlBegin("smooth-strength", layer.id);
-    const outcome = port.authoring.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } });
+    const layer = rt.editor.layer(); if (!layer) return;
+    rt.eyeMakeup.controlBegin("smooth-strength", layer.id);
+    const outcome = rt.eyeMakeup.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } });
     if (!outcome.ok) rt.feedback.toast("warning", "Pigment", outcome.message);
-    port.authoring.controlCommit("smooth-strength");
+    rt.eyeMakeup.controlCommit("smooth-strength");
   } });
   const blend = new Slider({ label: "Point blend", ...rt.range("pigment.edit", "value", "strength-blend"), step: rt.range("pigment.edit", "value", "strength-blend").min, format: uvPct,
     transaction: recipeTransaction<number>(rt, "strength-blend", (layer, value) => layer.strength.mode === "smooth-boundary"
       ? { kind: "pigment.edit", layerId: layer.id, command: { kind: "strength-blend", value } } : undefined) });
   const pigmentNote = note("");
   const variable = new Toggle({ label: "Per-point edge softness", onChange: enabled => {
-    const layer = port.editor.layer(); if (!layer) return;
-    port.authoring.controlBegin("variable-softness", layer.id);
-    const outcome = port.authoring.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } });
+    const layer = rt.editor.layer(); if (!layer) return;
+    rt.eyeMakeup.controlBegin("variable-softness", layer.id);
+    const outcome = rt.eyeMakeup.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } });
     if (!outcome.ok) rt.feedback.toast("warning", "Edge", outcome.message);
-    port.authoring.controlCommit("variable-softness");
+    rt.eyeMakeup.controlCommit("variable-softness");
   } });
   const width = new Slider({ label: "Edge softness", ...rt.range("softness.edit", "value", "uniform-softness"), step: .0005, format: uvPct,
     transaction: recipeTransaction<number>(rt, "feather", (layer, value) => ({ kind: "softness.edit", layerId: layer.id,
-      command: layer.softness.mode === "boundary" ? { kind: "point-softness", index: port.editor.selected(), value } : { kind: "uniform-softness", value } })) });
+      command: layer.softness.mode === "boundary" ? { kind: "point-softness", index: rt.editor.selected(), value } : { kind: "uniform-softness", value } })) });
   const softnessNote = note("");
   const pointLabel = h("span", { class: "muted small" });
   const body = h("div", { class: "stack" },
@@ -336,24 +336,24 @@ export function edgePanel(rt: StudioRuntime): PanelController {
 }
 
 export function warpPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const add = button({ label: "Add warp", icon: "plus", small: true, onClick: () => {
-    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "field.add", layerId: layer.id });
+    const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "field.add", layerId: layer.id });
   } });
   const chips = h("div", { class: "chip-row", role: "group", "aria-label": "Warp controls" });
   const reach = new Slider({ label: "Reach", ...rt.range("field.setReach", "radius"), step: .001, format: uvPct,
     transaction: {
-      begin: () => { const layer = port.editor.layer(); if (layer && port.editor.selectedField()) port.authoring.controlBegin("radius", layer.id); },
-      edit: value => { const layer = port.editor.layer(), field = port.editor.selectedField(); if (!layer || !field) return;
-        const outcome = port.authoring.controlEdit("radius", { kind: "field.setReach", layerId: layer.id, fieldId: field.id, radius: value });
+      begin: () => { const layer = rt.editor.layer(); if (layer && rt.editor.selectedField()) rt.eyeMakeup.controlBegin("radius", layer.id); },
+      edit: value => { const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (!layer || !field) return;
+        const outcome = rt.eyeMakeup.controlEdit("radius", { kind: "field.setReach", layerId: layer.id, fieldId: field.id, radius: value });
         if (!outcome.ok) { rt.feedback.toast("warning", "Warp", outcome.message); rt.changed(); } },
-      commit: () => port.authoring.controlCommit("radius"), cancel: () => port.authoring.controlCancel("radius"),
+      commit: () => rt.eyeMakeup.controlCommit("radius"), cancel: () => rt.eyeMakeup.controlCancel("radius"),
     } });
   const clear = button({ label: "Reset pull", icon: "reset", small: true, variant: "quiet", onClick: () => {
-    const layer = port.editor.layer(), field = port.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
+    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.clear", layerId: layer.id, fieldId: field.id });
   } });
   const remove = button({ label: "Remove warp", icon: "trash", small: true, variant: "quiet", onClick: () => {
-    const layer = port.editor.layer(), field = port.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.remove", layerId: layer.id, fieldId: field.id });
+    const layer = rt.editor.layer(), field = rt.editor.selectedField(); if (layer && field) rt.dispatch({ kind: "field.remove", layerId: layer.id, fieldId: field.id });
   } });
   const fieldNote = note("");
   let signature = "";
@@ -374,7 +374,7 @@ export function warpPanel(rt: StudioRuntime): PanelController {
         signature = key;
         chips.replaceChildren(...layer.fields.map((item, index) => {
           const chip = h("button", { class: "chip-button", type: "button", "aria-pressed": "false", "data-field": item.id }, icon("warp"), h("span", { text: `Warp ${index + 1}` }));
-          chip.addEventListener("click", () => { const current = port.editor.layer(); if (current) rt.dispatch({ kind: "field.select", layerId: current.id, fieldId: item.id }); });
+          chip.addEventListener("click", () => { const current = rt.editor.layer(); if (current) rt.dispatch({ kind: "field.select", layerId: current.id, fieldId: item.id }); });
           return chip;
         }));
       }

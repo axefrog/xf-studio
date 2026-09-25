@@ -237,7 +237,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(frame.indexOf("makeup.prepareBlend(renderer);")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
   // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and redraws the composite (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
-  expect(source).toContain("environment.restore(); makeup.contextRestored();");
+  expect(source).toContain("studio.restore(); makeup.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
   const restore = source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)"));
   expect(restore).toContain("layeredContextRestored(renderer);");

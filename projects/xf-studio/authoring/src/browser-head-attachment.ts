@@ -24,7 +24,7 @@ type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
 type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
-export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; character?: CharacterDetailActions };
+export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions };
 
 export type HeadAttachmentPorts = {
   workspace: WorkspaceState;
@@ -97,8 +97,8 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));
     ports.preview.presentInitialLayers();
-    ports.attach({ character: characterDetails });
-    releases.push(() => ports.attach({ character: undefined }));
+    ports.attach({ characterDetails });
+    releases.push(() => ports.attach({ characterDetails: undefined }));
     releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
     releases.push(followShownCharacter(characterDetails, savedAppearance));
     const cameraMoved = () => ports.persist();

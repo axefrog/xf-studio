@@ -17,8 +17,8 @@ type RowView = { element: HTMLLIElement; main: HTMLButtonElement; label: HTMLEle
 export function historyPanel(rt: StudioRuntime): PanelController {
   const port = rt.port, keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
   const summary = h("span", { class: "count" });
-  const undo = button({ label: "Undo", icon: "undo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "recipe.undo" }); } });
-  const redo = button({ label: "Redo", icon: "redo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "recipe.redo" }); } });
+  const undo = button({ label: "Undo", icon: "undo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.undo" }); } });
+  const redo = button({ label: "Redo", icon: "redo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.redo" }); } });
   const trimmed = h("p", { class: "note info history-trimmed" }, icon("info"),
     h("span", { text: `${HISTORY_TRIMMED_NOTE}. Only the latest changes are kept for each preset.` }));
   const list = h("ol", { class: "history-list", "aria-label": "Changes to this preset, oldest first" });
@@ -63,7 +63,7 @@ export function historyPanel(rt: StudioRuntime): PanelController {
     update(frame: Frame) {
       const timeline = frame.history, draft = frame.library.draft;
       const hasPreset = !draft || !!draft.selected;
-      const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
+      const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const labels = port.authoring.history();
       undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo);
       redo.disabled = !redoCap.available; redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo);

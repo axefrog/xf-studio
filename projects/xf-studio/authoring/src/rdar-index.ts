@@ -14,11 +14,19 @@ export function parseRdarHeader(bytes: Uint8Array): { indexOffset: number; index
   return { indexOffset: Number(offset), indexSize: view.getUint32(16, true) };
 }
 
+/** Where the index block keeps its u32 file count, and the bytes to read to get it. */
+export const RDAR_INDEX_COUNT_BYTES = 20;
+/** The file count from the first `RDAR_INDEX_COUNT_BYTES` of an index block. */
+export function parseRdarIndexCount(indexHead: Uint8Array): number {
+  if (indexHead.length < RDAR_INDEX_COUNT_BYTES) throw Error("Truncated RDAR index.");
+  return new DataView(indexHead.buffer, indexHead.byteOffset, indexHead.byteLength).getUint32(16, true);
+}
+
 /** Sorted file hashes of an RDAR index block. */
 export function parseRdarIndexHashes(index: Uint8Array): BigUint64Array {
   if (index.length < 28) throw Error("Truncated RDAR index.");
   const view = new DataView(index.buffer, index.byteOffset, index.byteLength);
-  const count = view.getUint32(16, true);
+  const count = parseRdarIndexCount(index);
   if (28 + count * 56 > index.length) throw Error("RDAR file entries exceed the index block.");
   const hashes = new BigUint64Array(count);
   for (let i = 0; i < count; i++) hashes[i] = view.getBigUint64(28 + i * 56, true);

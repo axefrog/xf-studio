@@ -12,6 +12,11 @@ export type FinishDescriptor = {
   shortLabel: string;
   /** Other names people use for this family (foil, pearl, wet look, duochrome). */
   aliases: string[];
+  /**
+   * Stored names that mean this finish (older recipes' `satin` is `regular`): `layer.setFinish` accepts them,
+   * menus never offer them, and a view finds a layer's finish by its ID or one of these (UI-54).
+   */
+  stored: string[];
   description: string;
   /** Browser preview maturity, not a claim about in-game appearance. */
   preview: "working" | "preview-study";
@@ -44,7 +49,8 @@ export function finishCatalogue(): FinishDescriptor[] {
   return FINISH_IDS.map(id => {
     const summary = finishExportSummary(id as Finish);
     return {
-      id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1], description: finishDescription(id as Finish),
+      id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1],
+      stored: LEGACY_FINISH_ALIASES.filter(alias => canonicalFinish(alias) === id), description: finishDescription(id as Finish),
       preview: summary.adapter === "none" ? "preview-study" : "working",
       exportAdapter: summary.adapter, exportNote: summary.note,
     };

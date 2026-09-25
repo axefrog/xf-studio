@@ -195,8 +195,8 @@ const k = (key: string, mods: Partial<Omit<KeyChord, "key">> = {}): KeyChord => 
 export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },
   { id: "shell.save", scope: "global", chords: [k("s", { ctrl: true })], action: { kind: "request", id: "save" }, label: "Save the collection to the local library", inText: true },
-  { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("recipe.undo"), label: "Undo the last recipe change (outside text fields)" },
-  { id: "shell.redo", scope: "global", chords: [k("z", { ctrl: true, shift: true }), k("y", { ctrl: true })], action: act("recipe.redo"), label: "Redo the change you just undid" },
+  { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("history.undo"), label: "Undo the last change (outside text fields)" },
+  { id: "shell.redo", scope: "global", chords: [k("z", { ctrl: true, shift: true }), k("y", { ctrl: true })], action: act("history.redo"), label: "Redo the change you just undid" },
   { id: "shell.regions", scope: "global", chords: [k("F6")], action: shell("regions"), label: "Move focus to the next region (header, panel groups, status bar)", inText: true },
   { id: "shell.regions-back", scope: "global", chords: [k("F6", { shift: true })], action: shell("regions-back"), label: "Move focus to the previous region", inText: true },
   { id: "shell.shortcuts", scope: "global", chords: [k("?")], action: shell("shortcuts"), label: "Keyboard & mouse reference", short: "all shortcuts", notInDialogs: true },
@@ -297,9 +297,10 @@ export const TARGET_LABELS: Readonly<Record<ViewportScope, Record<PointerTarget,
   head: { point: "Contour point", tangent: "Bézier handle", "warp-origin": "Warp position", "warp-vector": "Warp pull", shape: "Shape", empty: "Off makeup" },
   uv: { point: "Contour point", tangent: "Bézier handle", "warp-origin": "Warp position", "warp-vector": "Warp pull", shape: "Shape", empty: "Empty UV space" },
 };
-export type BlockReason = "no-layer" | "layer-hidden" | "surface-off";
+export type BlockReason = "no-layer" | "layer-hidden" | "surface-off" | "look-locked";
 const BLOCK_NOTES: Record<BlockReason, string> = {
   "no-layer": "Add a layer to edit a shape",
+  "look-locked": "This look needs a newer XF Studio · see Layers",
   "layer-hidden": "The selected layer is hidden · show it to edit",
   "surface-off": "Surface controls are off · turn them on to edit on the head",
 };

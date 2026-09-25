@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { runDesktopCheck } from "./check-runner";
-import { desktopPlateCache, runDesktopBuild, type WolvenKitProbe } from "./build";
+import { desktopPlateCache, desktopPlateRouteKey, runDesktopBuild, type WolvenKitProbe } from "./build";
 import { cachedPlateReach } from "../src/eye-plate-service";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { DesktopWorkActivity } from "./work-activity";
@@ -60,9 +60,12 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   if (checking) return json({ code: "package_check_busy", error: "A package Check is already running. Wait for its result before starting another." }, 409);
   checking = true;
   let result;
-  // Check plans on the plate the last Build prepared for this game, when there is one (which presets reach it).
+  // Check plans on the plate the last Build prepared for this game, route and head choice, when there is one (which presets reach it).
   let plate = null;
-  try { plate = buildHost ? cachedPlateReach(desktopPlateCache(buildHost.dataRoot), buildHost.settings.load().settings.gameRoot)?.plate ?? null : null; }
+  try {
+    const saved = buildHost?.settings.load().settings;
+    plate = buildHost && saved ? cachedPlateReach(desktopPlateCache(buildHost.dataRoot), saved.gameRoot, desktopPlateRouteKey(saved))?.plate ?? null : null;
+  }
   catch { plate = null; }
   try { result = await runDesktopCheck(input.collection, workerPath, timeoutMs, request.signal, plate); }
   finally { checking = false; }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { originalPresetCount, packagePresetIdentities, preparePackageCollection } from "./package-filter";
+import { originalPresetCount, packagePresetIdentities, PLATE_REACH_UNCHECKED_NOTE, preparePackageCollection } from "./package-filter";
 import { compilePreset } from "./preset-compiler";
 import type { PackageCheck } from "./package-action";
 import type { PlateReachInput } from "./plate-reach";
@@ -26,6 +26,7 @@ export function preflightPackageCollection(value: unknown, plate: PlateReachInpu
     presets: packagePresetIdentities(plan),
     plateLiftsMm: [...plan.plate.liftsMm],
     plateUv,
+    notes: plateUv ? [] : [PLATE_REACH_UNCHECKED_NOTE],
     packagedCollectionJson,
   };
 }

@@ -233,7 +233,8 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
   writeFileSync(other.options.plateManifest!, JSON.stringify({ ...other.manifest, uv: plateUvManifestRecord(moved) }));
   const error = await runPackageCommand(other.options).catch(e => e);
   expect(error).toBeInstanceOf(PackageBuildError);
-  expect(error.message).toContain("The eye plate changed while this Build was planning on it");
+  expect(error.code).toBe("package_plate_stale"); // the hosts discard the cached plate and build once more (PIPE-37)
+  expect(error.message).toContain("recorded UV footprint differs from the plate itself");
   expect(existsSync(join(other.dir, "dist"))).toBe(false);
   // A damaged footprint file is a plain error, before anything is built.
   const damaged = setup();

@@ -1,6 +1,6 @@
 import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { parseRdarHeader, parseRdarIndexHashes, RDAR_HEADER_BYTES } from "./rdar-index";
+import { parseRdarHeader, parseRdarIndexCount, parseRdarIndexHashes, RDAR_HEADER_BYTES, RDAR_INDEX_COUNT_BYTES } from "./rdar-index";
 
 /** File adapter for RDAR archive indexes: reads only the header and the index block, never file payloads. */
 export function readRdarIndexHashes(path: string): BigUint64Array {
@@ -13,6 +13,20 @@ export function readRdarIndexHashes(path: string): BigUint64Array {
     const index = new Uint8Array(indexSize);
     if (readSync(fd, index, 0, indexSize, indexOffset) !== indexSize) throw Error("Truncated RDAR index.");
     return parseRdarIndexHashes(index);
+  } finally { closeSync(fd); }
+}
+
+/** The file count an archive's index declares, reading only the header and the start of the index block. */
+export function readRdarIndexCount(path: string): number {
+  const fd = openSync(path, "r");
+  try {
+    const header = new Uint8Array(RDAR_HEADER_BYTES);
+    if (readSync(fd, header, 0, RDAR_HEADER_BYTES, 0) !== RDAR_HEADER_BYTES) throw Error("Truncated RDAR header.");
+    const { indexOffset, indexSize } = parseRdarHeader(header);
+    if (indexSize < RDAR_INDEX_COUNT_BYTES || indexOffset + indexSize > statSync(path).size) throw Error("RDAR index lies outside the file.");
+    const head = new Uint8Array(RDAR_INDEX_COUNT_BYTES);
+    if (readSync(fd, head, 0, RDAR_INDEX_COUNT_BYTES, indexOffset) !== RDAR_INDEX_COUNT_BYTES) throw Error("Truncated RDAR index.");
+    return parseRdarIndexCount(head);
   } finally { closeSync(fd); }
 }
 

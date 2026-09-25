@@ -25,7 +25,12 @@ export type PackageCheck = { ready: true; collectionId: string; namespace: strin
    * The eye plate whose UV footprint decided which presets reach it: the plate the host last prepared, or null
    * when none has been prepared yet (Build then judges against the plate it packages). Older answers lack it.
    */
-  plateUv?: PlateUvRecord | null };
+  plateUv?: PlateUvRecord | null;
+  /**
+   * Plain notes for the user about this Check, e.g. that plate reach is judged at Build when no plate was prepared
+   * for this route yet (PIPE-36). Older answers lack it.
+   */
+  notes?: string[] };
 /**
  * Which eye plate was packaged: the built-in plate derived from the installed game (with the head resources it
  * was cut from: base game, installed mods or the base-game escape hatch), or a developer override.
@@ -41,6 +46,14 @@ export type PackageBuild = { package: string; manifest: string; modName: string;
   /** The packaged plate's UV footprint, which decided the plate-reach omissions; results from before it was recorded lack it. */
   plateUv?: PlateUvRecord;
   installed: false; gameRenderingVerified: false };
+/** The error code the package CLI reports on its machine error line (`XFS_PACKAGE_ERROR=`), if any. */
+export function packageErrorCode(stderr: string): string | null {
+  const line = stderr.split(/\r?\n/).reverse().find(value => value.startsWith("XFS_PACKAGE_ERROR="));
+  if (!line) return null;
+  try { const code = (JSON.parse(line.slice("XFS_PACKAGE_ERROR=".length)) as { code?: unknown }).code; return typeof code === "string" ? code : null; }
+  catch { return null; }
+}
+
 export class PackageRequestError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
 }

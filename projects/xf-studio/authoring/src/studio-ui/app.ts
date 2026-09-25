@@ -14,18 +14,14 @@ import { Feedback } from "./feedback";
 import { icon } from "./icons";
 import { defaultCompact, defaultWide, sizeClassFor } from "./layout-defaults";
 import { closeMenus, openMenu, type MenuItem } from "./menu";
-import { activityPanel, characterPanel, lightingPanel, motionPanel, qualityPanel } from "./panels/preview";
-import { importCollection, libraryPanel, libraryState, packagePanel, presetsPanel, type PanelController } from "./panels/collection";
-import { edgePanel, finishPanel, shapePanel, warpPanel } from "./panels/inspector";
-import { layersPanel } from "./panels/layers";
-import { historyPanel } from "./panels/history";
+import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { historyCommandLabel, historyCommandTitle } from "./history-model";
-import { headPanel, uvPanel } from "./panels/viewports";
 import { previewSetupCard } from "./preview-setup-card";
 import { panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
-import { helpPanel } from "./guidance/help-panel";
-import { CLOSED_PANEL_HOMES, type StudioPanelId } from "./layout-defaults";
+import { CLOSED_PANEL_HOMES, PANEL_IDS, type StudioPanelId } from "./layout-defaults";
+import { STUDIO_CATALOGUE } from "./views";
+import { PANEL_FACTORIES, type ViewContext } from "./views/panels";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
 /**
@@ -39,11 +35,11 @@ export function mountStudio(port: Port, root: HTMLElement) {
   const view = viewPreferences(port, feedback);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
   let guidance!: GuidanceController;
-  const help = helpPanel(rt, { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) });
-  const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), historyPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
-    finishPanel(rt), shapePanel(rt), edgePanel(rt), warpPanel(rt), characterPanel(rt), lightingPanel(rt), motionPanel(rt), qualityPanel(rt),
-    activityPanel(rt), help];
+  const context: ViewContext = { guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) } };
+  // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order.
+  const panels: PanelController[] = PANEL_IDS.map(id => PANEL_FACTORIES[id](rt, context));
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
+  const help = byId.get("help") as PanelController & { focusSearch?(): void };
   for (const panel of panels) rt.anchors.register(panelAnchor(panel.spec.id as StudioPanelId), panel.spec.element);
   const restored = restoreDockPreference(port.preferences.snapshot().layout,
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) });
@@ -66,7 +62,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
     homes: CLOSED_PANEL_HOMES,
   });
   rt.dock = dock;
-  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch()); };
+  const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, openHelp);
   const status = statusBar(rt);
@@ -110,7 +106,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
   // at most every 400 ms unless the library's busy/progress state changes.
-  const heavy = new Set<PanelId>(["library", "package"]);
+  const heavy = new Set<PanelId>(STUDIO_CATALOGUE.heavy);
   let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
   const heavyDue = (frame: Frame) => {
     const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);
@@ -149,7 +145,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
       const state = port.authoring.previewState();
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
-      rt.dispatch({ kind: shortcut === "redo" ? "recipe.redo" : "recipe.undo" });
+      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo" });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
@@ -216,14 +212,15 @@ function themeItems(theme: Theme): MenuItem[] {
 
 function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp: () => void) {
   const port = rt.port;
-  // Eye makeup is the only authoring category so far; with nothing to choose, it is a label, not a menu.
-  const category = h("span", { class: "category", title: "Authoring category: eye makeup" },
-    icon("category"), h("span", { text: "Eye makeup" }));
+  // The registered features are the authoring categories; with only one there is nothing to choose, so it is a label, not a menu.
+  const features = port.features(), categoryLabel = features.length === 1 ? features[0].label : `${features.length} features`;
+  const category = h("span", { class: "category", title: `Authoring category: ${categoryLabel.toLowerCase()}` },
+    icon("category"), h("span", { text: categoryLabel }));
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
-  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
-  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
+  const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "history.undo" }) });
+  const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
   const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: "History: every recent change to this preset",
     onClick: () => rt.dock.reveal("history") });
   const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
@@ -261,7 +258,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       setText(preset, draft?.presets.find(item => item.id === draft.selected)?.name ?? "No preset");
       const state = libraryState(frame);
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
-      const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
+      const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const history = port.authoring.history();
       // Name what each would change, and keep the shortcut visible even while unavailable.
       undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
@@ -323,7 +320,7 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
 }
 
 function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>): Command[] {
-  const port = rt.port, layer = port.editor.layer(), field = port.editor.selectedField();
+  const port = rt.port, layer = rt.editor.layer(), field = rt.editor.selectedField();
   const act = (id: string, title: string, group: string, action: StudioAction | undefined, extra: Partial<Command> = {},
     missing = "Select a layer first."): Command => ({
     id, title, group, ...extra,
@@ -337,9 +334,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history();
   return [
-    act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "recipe.undo" }), history.undo?.label), "Edit", { kind: "recipe.undo" },
+    act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "history.undo" }), history.undo?.label), "Edit", { kind: "history.undo" },
       { icon: "undo", shortcut: shortcutLabel("shell.undo"), keywords: "undo back" }),
-    act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "recipe.redo" }), history.redo?.label), "Edit", { kind: "recipe.redo" },
+    act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "history.redo" }), history.redo?.label), "Edit", { kind: "history.redo" },
       { icon: "redo", shortcut: shortcutLabel("shell.redo"), keywords: "redo ctrl+y forward" }),
     { id: "history.open", title: "Show History (every recent change)", group: "Edit", icon: "history", keywords: "undo redo steps changes go back",
       ...always, run: () => rt.dock.reveal("history") },
@@ -350,7 +347,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash", shortcut: `${shortcutLabel("rows.remove")} in Layers` }),
     act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),
     act("layer.toggle", layer?.enabled === false ? "Show selected layer" : "Hide selected layer", "Edit", layer && { kind: "layer.setEnabled", id: layer.id, enabled: !layer.enabled }, { icon: "eye" }),
-    act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: port.editor.selected() }, { icon: "trash" }),
+    act("point.remove", "Remove selected point", "Shape", layer && { kind: "point.remove", layerId: layer.id, index: rt.editor.selected() }, { icon: "trash" }),
     act("path.bezier", "Enable Bézier handles", "Shape", layer && { kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } }, { icon: "shape" }),
     act("layer.mirror", layer?.symmetry ? "Stop mirroring across the face" : "Mirror across the face", "Shape", layer && { kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }, { icon: "mirror" }),
     act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
@@ -383,6 +380,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("lighting.preset", preview.preview?.lightingPreset === "creator" ? "Lighting: studio" : "Lighting: character creator (game)", "View",
       { kind: "preview.setLightingPreset", preset: preview.preview?.lightingPreset === "creator" ? "studio" : "creator" },
       { icon: "lighting", keywords: "creator mirror game lights lut grade compare calibration" }),
+    ...(preview.studioSetups?.setups ?? []).map(entry => act(`lighting.studio.${entry.id}`, `Studio lighting: ${entry.label}`, "View",
+      { kind: "preview.applyStudioSetup", setup: entry.id }, { icon: "lighting", keywords: `studio light setup ${entry.title}` })),
+    act("lighting.studio.reset", "Studio lighting: restore defaults", "View",
+      { kind: "preview.resetStudioLighting" }, { icon: "lighting", keywords: "studio light reset default exposure key ambient soft" }),
     act("camera.creatorFace", "Camera: character-creator face page", "View", { kind: "camera.creatorFraming", page: "face" }, { icon: "front", keywords: "creator 15 fov eyes brows lashes" }),
     act("camera.creatorHair", "Camera: character-creator hair page", "View", { kind: "camera.creatorFraming", page: "hair" }, { icon: "front", keywords: "creator 15 fov hair skin" }),
     ...([["isotropic", "lumens ÷ 4π"], ["cone", "spread over the cone"]] as const).map(([value, label]) =>
@@ -391,6 +392,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...([["full", "full cone angles"], ["half", "half cone angles"]] as const).map(([value, label]) =>
       act(`lighting.creator.cone.${value}`, `Creator lighting diagnostic: ${label}`, "Diagnostics",
         { kind: "preview.setCreatorLighting", key: "cone", value }, { icon: "lighting", keywords: "creator calibration spot angle" })),
+    act("lighting.creator.reset", "Creator lighting diagnostic: restore defaults", "Diagnostics",
+      { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" }),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop character-creator idle" : "Play character-creator idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),

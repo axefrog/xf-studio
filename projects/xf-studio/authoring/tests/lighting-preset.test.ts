@@ -63,6 +63,22 @@ test("creator diagnostics validate their switches and exposure, and the camera p
     "creator:cone/half/0.8", "camera:15"]);
 });
 
+test("Restore defaults puts every creator calibration control back, and says when there is nothing to restore", () => {
+  const { port: p, calls } = port();
+  const actions = new PreviewActions(freshWorkspace().preview, p);
+  expect(actions.capability({ kind: "preview.resetCreatorLighting" })).toEqual({ available: false, reason: "The calibration is already at its defaults." });
+  actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 0.8 });
+  expect(actions.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(true);
+  actions.dispatch({ kind: "preview.resetCreatorLighting" });
+  expect(actions.snapshot().creatorLighting).toEqual({ ...DEFAULT_CREATOR_LIGHTING });
+  expect(calls.at(-1)).toBe(`creator:isotropic/full/${DEFAULT_CREATOR_LIGHTING.exposure}`);
+  expect(actions.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(false);
+  const bare = new PreviewActions(freshWorkspace().preview, port({ creator: false }).port);
+  expect(bare.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(false);
+});
+
 test("a preview without the creator rig explains why, and the LUT's arrival notifies readers", () => {
   const bare = new PreviewActions(freshWorkspace().preview, port({ creator: false }).port);
   expect(bare.capability({ kind: "preview.setLightingPreset", preset: "creator" }).reason).toBe("Creator lighting is unavailable in this preview.");

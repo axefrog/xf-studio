@@ -4,7 +4,7 @@ Last reviewed **26 September 2026** by Claude (coordinator from 25 September; pr
 
 ## Summary
 
-XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game, and the first public alpha, **`v0.1.0-alpha.1`**, exists as a **draft pre-release** awaiting the maintainer's go to publish. The mod **has been seen in game** (25 September): the selector (labelled "XF") appears in the character creator, gameplay and photo mode; switching, clearing and save persistence work; Colour-shifting behaves as designed. Close-up breakup (the plate sat exactly on the skin) is fixed in Build by lifting the plate 0.4 mm like vanilla face decals, and Matte/Satin read too glossy; both await the second session ([experiment 017](../experiments/017-plate-depth/README.md)). The 3D preview renders the head, plate, and the V's own skin, face details (makeup, lipstick, cheeks, freckles, blemishes, scars, tattoos, face cyberware), eyes, brows, lashes and hair resolved from the player's installation, with a **Character creator** lighting preset for calibration. The R&D lab has knowledge pages (also published on the site) on materials and shaders, hair shading, creator lighting, the CC file chain, head CC rendering, Glitter in game, mod loading, runtime access and tooling.
+XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game, and the first public alpha, **`v0.1.0-alpha.1`**, was tagged but stays an unpublished draft: the first published alpha will be **`v0.1.0-alpha.2`**, cut from `main` once the second in-game session confirms the export fixes. The mod **has been seen in game** (25 September): the selector (labelled "XF") appears in the character creator, gameplay and photo mode; switching, clearing and save persistence work; Colour-shifting behaves as designed. Close-up breakup (the plate sat exactly on the skin) is fixed in Build by lifting the plate 0.4 mm like vanilla face decals, and Matte/Satin read too glossy; both await the second session ([experiment 017](../experiments/017-plate-depth/README.md)). The 3D preview renders the head, plate, and the V's own skin, face details (makeup, lipstick, cheeks, freckles, blemishes, scars, tattoos, face cyberware), eyes, brows, lashes and hair resolved from the player's installation, with a **Character creator** lighting preset for calibration. The R&D lab has knowledge pages (also published on the site) on materials and shaders, hair shading, creator lighting, the CC file chain, head CC rendering, Glitter in game, mod loading, runtime access and tooling.
 
 ## What works (verified in code and tests)
 
@@ -33,11 +33,10 @@ Offline verification is not in-game proof. Runtime evidence so far is in the [fi
 
 ## Waiting on the maintainer
 
-1. **Publish the alpha:** review the `v0.1.0-alpha.1` draft pre-release on GitHub and say go; publishing also switches the site's download section on.
-2. **Second in-game session** ([experiment 020](../experiments/020-session-2/README.md)): texture placement at the new density first, then depth variants, gloss calibration, strong Shimmer and the lifted metal ramp; staged in the test profile.
-3. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)).
-4. **Runtime bridge session** (about 15 minutes, read-only) once a dedicated profile is set up ([test card](../research/runtime/runtime-bridge-test-card.md)).
-5. **In-depth review of the new UI.**
+1. **Second in-game session** ([experiment 020](../experiments/020-session-2/README.md)): texture placement at the new density first, then depth variants, gloss calibration, strong Shimmer and the lifted metal ramp; staged in the test profile.
+2. **Calibration captures** at the mirror appearance screen with the Character creator preset's protocol ([creator lighting](../knowledge/creator-lighting.md)).
+3. **Runtime bridge session** (about 15 minutes, read-only) once a dedicated profile is set up ([test card](../research/runtime/runtime-bridge-test-card.md)).
+4. **In-depth review of the new UI.**
 
 ## Active direction
 
@@ -45,7 +44,7 @@ Product and R&D run in parallel, like a commercial team beside a research lab:
 
 - **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (later: save write-back and shareable CC presets); remaining finish adapters.
 - **R&D lab:** the game's material and shader system, and the character-customisation file chain (mining the legacy xf-omega code and the Modding Docs screenshots). Findings are distilled into the agent-facing [knowledge base](../knowledge/README.md).
-- **Desktop app and public site (standing request):** the site is live; `v0.1.0-alpha.1` is a draft pre-release awaiting the maintainer's go. Signing (SignPath) and auto-update come after the first alpha.
+- **Desktop app and public site (standing request):** the site is live; `v0.1.0-alpha.1` stays an unpublished draft; `v0.1.0-alpha.2` is published after session 2 (releases no longer need the maintainer's go-ahead). Signing (SignPath) and auto-update come after the first alpha.
 - **Resumed with in-game evidence:** plate clearance (the decal lift). Native eye assembly remains paused.
 
 See the [ranked backlog](../research/backlog/README.md) for owners and details, and [AGENTS.md](../AGENTS.md) for the standing rules.

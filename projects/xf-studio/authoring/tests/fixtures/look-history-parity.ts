@@ -40,13 +40,25 @@ export function timeline(value: HistorySnapshot, ids: Ids) {
     steps: value.steps.map(step => ({ ...step, id: ids.of(step.id), at: step.at === undefined ? "none" : "set" })) };
 }
 
+/**
+ * User text renamed on purpose since the capture, mapped back to the captured words so the golden still
+ * compares behaviour: Undo is a look history, so its refusal no longer says "recipe" (UI-55).
+ */
+const RENAMED: Readonly<Record<string, string>> = { "There is no change to undo.": "There is no recipe change to undo." };
+function asCaptured<T>(value: T): T {
+  if (!value || typeof value !== "object") return value;
+  const { reason, message } = value as { reason?: unknown; message?: unknown };
+  return { ...value, ...(typeof reason === "string" && RENAMED[reason] ? { reason: RENAMED[reason] } : {}),
+    ...(typeof message === "string" && RENAMED[message] ? { message: RENAMED[message] } : {}) };
+}
+
 /** Everything the History panel, the menus and the look show at one moment. */
 export function moment(core: Core, ids: Ids) {
   const { app, document } = core;
   const history = app.history();
   return { recipe: digest(document.recipe), active: document.active, selected: document.selected,
     history, timeline: timeline(app.historyTimeline(), ids),
-    undo: app.capability({ kind: "recipe.undo" }), redo: app.capability({ kind: "recipe.redo" }) };
+    undo: asCaptured(app.capability({ kind: "history.undo" })), redo: asCaptured(app.capability({ kind: "history.redo" })) };
 }
 
 /**
@@ -55,8 +67,8 @@ export function moment(core: Core, ids: Ids) {
  */
 export function walk(core: Core) {
   const ids = new Ids(), { app } = core, seen = [moment(core, ids)];
-  while (app.capability({ kind: "recipe.undo" }).available) { app.dispatch({ kind: "recipe.undo" }); seen.push(moment(core, ids)); }
-  while (app.capability({ kind: "recipe.redo" }).available) { app.dispatch({ kind: "recipe.redo" }); seen.push(moment(core, ids)); }
+  while (app.capability({ kind: "history.undo" }).available) { app.dispatch({ kind: "history.undo" }); seen.push(moment(core, ids)); }
+  while (app.capability({ kind: "history.redo" }).available) { app.dispatch({ kind: "history.redo" }); seen.push(moment(core, ids)); }
   const last = app.historyTimeline().steps.at(-1)?.id;
   const jump = (entryId: string) => ({ ok: app.dispatch({ kind: "history.jumpTo", entryId }).ok, after: moment(core, ids) });
   const jumps = [jump(app.historyTimeline().startId), ...(last ? [jump(last)] : [])];
@@ -99,7 +111,7 @@ export function session(stored: unknown) {
   if (!loaded.writable) throw Error(loaded.error);
   const { core, actions } = studio(loaded.state), { app, document } = core, ids = new Ids();
   const log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[] = [];
-  const record = (step: string, result?: unknown) => log.push({ step, ...(result === undefined ? {} : { result }), moment: moment(core, ids) });
+  const record = (step: string, result?: unknown) => log.push({ step, ...(result === undefined ? {} : { result: asCaptured(result) }), moment: moment(core, ids) });
   const layer = () => document.recipe.layers[document.active] ?? document.recipe.layers[0];
   record("restored");
   record("opacity", app.dispatch({ kind: "layer.setOpacity", layerId: layer().id, opacity: .41 }));
@@ -110,7 +122,7 @@ export function session(stored: unknown) {
   record("control begin", app.controlBegin("opacity", id));
   record("control edit 1", app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .2 }));
   record("control edit 2", app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .25 }));
-  record("undo inside control", app.capability({ kind: "recipe.undo" }));
+  record("undo inside control", app.capability({ kind: "history.undo" }));
   app.controlCommit("opacity"); record("control commit");
   record("cancelled control begin", app.controlBegin("opacity", id));
   record("cancelled control edit", app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .9 }));
@@ -120,16 +132,16 @@ export function session(stored: unknown) {
   record("gesture begin", app.beginGesture("uv", id));
   record("gesture frame 1", app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: point().u + .003 } }));
   record("gesture frame 2", app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: point().u + .002 } }));
-  record("undo inside gesture", app.capability({ kind: "recipe.undo" }));
+  record("undo inside gesture", app.capability({ kind: "history.undo" }));
   app.endGesture("uv"); record("gesture commit");
   record("cancelled gesture begin", app.beginGesture("surface", id));
   record("cancelled gesture frame", app.applyGesture("surface", { kind: "point.replace", index: 0, next: { v: point().v + .004 } }));
   app.endGesture("surface", true); record("gesture cancel (Esc)");
   record("empty gesture", app.beginGesture("uv", id)); app.endGesture("uv"); record("empty gesture end");
-  record("undo 1", app.dispatch({ kind: "recipe.undo" }));
-  record("undo 2", app.dispatch({ kind: "recipe.undo" }));
-  record("redo 1", app.dispatch({ kind: "recipe.redo" }));
-  record("undo 3", app.dispatch({ kind: "recipe.undo" }));
+  record("undo 1", app.dispatch({ kind: "history.undo" }));
+  record("undo 2", app.dispatch({ kind: "history.undo" }));
+  record("redo 1", app.dispatch({ kind: "history.redo" }));
+  record("undo 3", app.dispatch({ kind: "history.undo" }));
   // A cancelled transaction hides Redo while it is open and brings it back.
   record("control over redo", app.controlBegin("opacity", id));
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .66 });
@@ -139,22 +151,22 @@ export function session(stored: unknown) {
   record("jump to the middle", app.dispatch({ kind: "history.jumpTo", entryId: steps()[Math.floor(steps().length / 2)].id }));
   record("jump to last", app.dispatch({ kind: "history.jumpTo", entryId: steps().at(-1)!.id }));
   record("jump to current", app.dispatch({ kind: "history.jumpTo", entryId: steps()[app.historyTimeline().current]?.id ?? "start" }));
-  record("undo 4", app.dispatch({ kind: "recipe.undo" }));
+  record("undo 4", app.dispatch({ kind: "history.undo" }));
   record("edit discards redo", app.dispatch({ kind: "layer.setSymmetry", layerId: id, symmetry: false }));
-  record("redo refused", app.dispatch({ kind: "recipe.redo" }));
+  record("redo refused", app.dispatch({ kind: "history.redo" }));
   if (actions) {
     const home = actions.summary().selected!;
     actions.dispatch({ kind: "preset.edit", command: { kind: "add" } }); record("preset add");
     const added = actions.summary().selected!;
-    record("undo in the new preset", app.dispatch({ kind: "recipe.undo" }));
+    record("undo in the new preset", app.dispatch({ kind: "history.undo" }));
     record("edit the new preset", app.dispatch({ kind: "layer.edit", command: { kind: "add" } }));
     actions.dispatch({ kind: "preset.select", id: home }); record("back to the first preset");
-    record("undo across the add", app.dispatch({ kind: "recipe.undo" }));
-    record("redo there", app.dispatch({ kind: "recipe.redo" }));
+    record("undo across the add", app.dispatch({ kind: "history.undo" }));
+    record("redo there", app.dispatch({ kind: "history.redo" }));
     actions.dispatch({ kind: "preset.edit", command: { kind: "remove", id: added } }); record("remove the added preset");
-    record("undo after the remove", app.dispatch({ kind: "recipe.undo" }));
+    record("undo after the remove", app.dispatch({ kind: "history.undo" }));
     actions.dispatch({ kind: "preset.edit", command: { kind: "restore" } }); record("restore the removed preset");
-    record("undo in the restored preset", app.dispatch({ kind: "recipe.undo" }));
+    record("undo in the restored preset", app.dispatch({ kind: "history.undo" }));
     actions.dispatch({ kind: "preset.select", id: home }); record("home again");
   }
   // Reload: the workspace as the browser captures it, stored in its standard form and restored (the
