@@ -131,6 +131,12 @@ export function createBrowserPreviewDevice(options: {
       if (!initialQuality.accepted) coordinator.rejectInitialCapacity();
       return initialQuality;
     },
+    /** Forget an unloaded scene; layer work continues on the UV canvases. */
+    disconnectScene(scene: Scene) {
+      if (viewer !== scene) return;
+      viewer = undefined;
+      initialQuality = undefined;
+    },
     /** Publish the preloaded maps once saved appearance, pose and scene settings are restored. */
     presentInitialLayers() {
       if (!viewer) throw Error("The head scene must load before publishing preview layers.");

@@ -32,7 +32,7 @@ export function releaseVars(config: SiteConfig): ReleaseVars {
       releaseSummary: "No public release yet.",
       releaseStatement: `<div class="release-status" data-release-status>
         <span class="tag dev">In development</span>
-        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source, and the XF Eye Artistry mod files it builds have not yet been tested in the game. <a href="#download">How releases will work</a></p>
+        <p><strong>There is no public release or download yet.</strong> The Studio runs locally from source. The XF Eye Artistry mod it builds has been seen in game, but close-up rendering and finish looks are still being tuned. <a href="#download">How releases will work</a></p>
       </div>`,
       downloadSection: `<section class="section alt" id="download" aria-labelledby="download-title" data-download="unreleased">
   <div class="wrap">
@@ -63,8 +63,8 @@ ${fromSource(blob)}
   const stageName = stage === "rc" ? "release candidate" : stage;
   const releaseUrl = `${repo}/releases/tag/${encodeURIComponent(release.tag)}`;
   const warning = pre
-    ? `<strong>${title} is an unsigned ${stageName} pre-release for testing on 64-bit Windows.</strong> It has no automatic updates, and the XF Eye Artistry mod files it builds have not yet been tested in the game. Keep backups of anything you make.`
-    : `<strong>${title} is an unsigned release for 64-bit Windows.</strong> It has no automatic updates, and the XF Eye Artistry mod files it builds have not yet been tested in the game.`;
+    ? `<strong>${title} is an unsigned ${stageName} pre-release for testing on 64-bit Windows.</strong> It has no automatic updates. The XF Eye Artistry mod it builds has been seen in game, but close-up rendering and finish looks are still being tuned. Keep backups of anything you make.`
+    : `<strong>${title} is an unsigned release for 64-bit Windows.</strong> It has no automatic updates. The XF Eye Artistry mod it builds has been seen in game, but close-up rendering and finish looks are still being tuned.`;
   return {
     releaseSummary: pre ? `An unsigned Windows ${stageName} is available for testing.` : "An unsigned Windows release is available.",
     releaseStatement: `<div class="release-status" data-release-status>

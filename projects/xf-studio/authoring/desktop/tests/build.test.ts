@@ -117,6 +117,7 @@ test("desktop capabilities and Local setup enable Build only for validated host 
   } finally { app.stop(); }
 });
 
+// Spawns a process tree and waits out a deadline plus a 1.2 s survival window (about 1.9 s locally); Windows CI process start-up is slower.
 test("a desktop Build deadline stops the process tree and publishes no candidate", async () => {
   const marker = resolve(root, `survived-${crypto.randomUUID()}`);
   // The builder starts a grandchild (as it starts WolvenKit); stopping the tree must stop both.
@@ -127,7 +128,7 @@ test("a desktop Build deadline stops the process tree and publishes no candidate
   await Bun.sleep(1200);
   expect(existsSync(marker)).toBe(false);
   expect(existsSync(resolve(h.data, "package-candidates"))).toBe(false);
-});
+}, 30_000);
 
 test("an invalid collection is refused before starting the builder", async () => {
   const h = host();

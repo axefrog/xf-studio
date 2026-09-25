@@ -246,6 +246,7 @@ test("texture failures: supplied chain, baked input, decode drift and orientatio
   expectFailure(/export-textures-0 failed/, undefined, undefined, { exportTextures: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
 });
 
+// Builds and tampers many packaged resources (about 1.3 s locally); slower CI runners need more than the 5 s default.
 test("resource failures: names, links, buffers, component id, morph count and XBM metadata", () => {
   expectFailure(/XF-branded selector label/, (_b, d) => { d.plan.selectorLabel = "Makeup"; d.cc.headCustomizationOptions[0].Data.localizedName = "Makeup"; });
   // Only in `character_customization`, the selector shows in the creator but not in gameplay or photo mode (seen in game).
@@ -265,7 +266,7 @@ test("resource failures: names, links, buffers, component id, morph count and XB
   // The expected morph count comes from the plate recipe, not a constant.
   expectFailure(/Morph target count is 105, not the plate recipe's 104/, undefined, undefined, { options: { morphTargets: 104 } });
   expectFailure(/did not serialize/, undefined, undefined, { serialize: () => ok() });
-});
+}, 30_000);
 
 test("archive failures: inventory, archive hash, structural declaration and unpacked members", () => {
   const xl = (f: Fixture, text: string) => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive.xl"), text);

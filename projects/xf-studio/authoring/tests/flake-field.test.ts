@@ -55,6 +55,7 @@ describe("isolated irregular planar flake study", () => {
     expect(large.diagnostics.indexedFlakes).toBe(1);
     expect(large.diagnostics.pixels).toBe(0);
   });
+  // Exhaustive per-pixel sampling: about 2 s locally for 4x4 and over 5 s on the windows-2025 release runner, so it gets an explicit budget.
   for(const sampleAxis of [2,4] as const) test(`${sampleAxis}x${sampleAxis} tile boundaries and topmost overlap agree with independent exhaustive samples`, () => {
     const catalogue=createFlakeCatalogue({...defaultIrregularFlakes(),count:1600,radius:.003,spread:1,tilt:1});
     const size=65,job=createFlakeBakeJob(catalogue,size,sampleAxis),conditional=createFlakeBakeJob(catalogue,size,sampleAxis,"covered-average");
@@ -88,7 +89,7 @@ describe("isolated irregular planar flake study", () => {
     const sliced=createFlakeBakeJob(catalogue,size,sampleAxis);
     while(!sliced.advance(43)) {}
     expect(sliced.normal).toEqual(job.normal);expect(sliced.surface).toEqual(job.surface);
-  });
+  }, 30_000);
   test("fully covered fragment interiors have one flat normal, zero count is base material", () => {
     const catalogue=createFlakeCatalogue({...defaultIrregularFlakes(),count:1,radius:.003,spread:0,tilt:1});
     const job=createFlakeBakeJob(catalogue,1024); job.advance(Infinity);

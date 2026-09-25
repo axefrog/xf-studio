@@ -69,8 +69,17 @@ export function createBrowserViewportDevice(options: {
       return uvEditor;
     },
     async loadHead(canvases: HTMLCanvasElement[]) {
+      this.unloadHead();
       viewer = await (options.sceneFactory ?? createScene)(options.headHost, canvases);
       return viewer;
+    },
+    /** Releases the loaded head: its surface editor, then the scene's renderer and canvas. */
+    unloadHead() {
+      editors.detach("surface");
+      surfaceEditor = undefined;
+      const loaded = viewer;
+      viewer = undefined;
+      loaded?.dispose();
     },
     mountSurface(hooks: Parameters<typeof createSurfaceEditor>[1]) {
       if (!viewer) throw Error("The head scene must load before mounting surface controls.");

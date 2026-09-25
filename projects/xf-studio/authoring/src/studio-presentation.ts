@@ -86,7 +86,7 @@ export type StudioPresentationPort<Slot> = {
 /** A fixture port has no host preview: nothing to set up, no card. */
 const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
   card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false },
-  consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, autostart: true,
+  consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true,
 }) as PreviewSetupSnapshot;
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
