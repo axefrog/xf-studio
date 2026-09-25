@@ -9,10 +9,6 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ## Unreleased
 
-### New and improved
-
-### Fixes and under the hood
-
 ## 0.1.0-alpha.1
 
 ### New and improved
@@ -22,9 +18,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **The 3D head preview, built from your own game.** Once XF Studio knows your Cyberpunk 2077 folder and WolvenKit CLI, it prepares the 3D head preview from your own game files the first time you open it: the head with its facial shapes, the eye-makeup area and the eyes, with the game's default skin and eye textures. On the test PC this took 11 to 16 seconds. It shows its progress, can be cancelled, changes nothing in your game, and the head appears without restarting. If XF Studio finds your game folder it offers to use it; if WolvenKit isn't set up it says so, and the UV editor keeps working. The eyes use the game's plain eye texture rather than your character's eye colour, and brows, lashes, hair and piercings aren't in this preview yet. Checked on one PC with game version 2.31 in a browser run of the app's own server; not yet tried in an installed copy of the app.
 - **Keep your looks in a library.** Presets can be added, copied, renamed, reordered and removed. Your collection is saved in a local library with version history, your current draft comes back when you reopen the app, and looks can be exported and imported as files to back up or share.
 - **Check which looks can become mod files.** Check lists every preset and layer that can be built into **XF Eye Artistry**, the eye-makeup mod the Studio makes for you, and names anything that would be left out, and why. It needs no game files.
-- **What you set up yourself for now.** The 3D head preview and **Build** both need your game folder and the WolvenKit CLI, set up under **About → Build setup**; XF Studio finds your game folder when it can. No Python is needed. Anything that isn't ready says so where you would use it.
 - **Licences in About.** About → Licences shows XF Studio's MIT licence and the notices for the software it includes.
-
 - **Eyes follow the eye shape.** Changing eye shape moves the eyeballs with the eyelids, as the game does, including during the idle animation and blinks. Eye shapes are numbered like the character creator.
 - **A History panel lists your recent changes.** Click any step to go back to it, or to a step you undid to go forward again. Steps you undid stay listed, dimmed, until you make a new change. Each preset keeps its own history, and the panel says when older steps were not kept. The Undo and Redo buttons (next to Save) now say which change they would undo or redo, such as “Redo: Move point”, and show their shortcuts: Ctrl+Z, and Ctrl+Shift+Z or Ctrl+Y.
 - **The UV map uses the whole panel and zooms across it.** The map fills its panel at any size, docked or floating. Fit shape fills the panel with a small margin, a single eye fills it on its own, the wheel zooms around the pointer, and right-drag or Ctrl-drag pans anywhere in the panel, with a neutral background around the texture. Your zoom and pan are kept when you reopen the app.
@@ -32,9 +26,15 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **Glossy, Shimmer and Colour-shifting can be built into your mod, as experiments.** Each has a game-matched version whose preview follows how the game can actually draw it: Glossy is one sharp reflection (the game has no separate clear coat), Shimmer uses fine reflective facets that sparkle close up and soften into a sheen further away, and Colour-shifting turns toward a shift colour you choose as the lid curves away from view. Choosing one of these finishes uses the game-matched version; a layer still showing an older preview study is left out of the mod until you press **Use game-matched model**, and Check tells you which ones are waiting. A Colour-shifting preset can only contain that one colour-shift pigment for now. Check, Build and the package record label all three as experimental: the files were checked offline, but nobody has seen them in the game yet.
 - **Shift colour and strength for Colour-shifting**, in the Colour & finish panel.
 - **A tidier finish picker.** Finishes are grouped by what they can do today (Exports, Experimental, Preview only), with short names on equal-sized tiles; other names such as foil, pearl, wet look and duochrome are in the tooltip and the description.
+- **No WolvenKit setup needed.** If you don't have WolvenKit, XF Studio offers to download it for you the first time it needs it. Before anything is downloaded it tells you what WolvenKit is, why it's needed, how big it is (45 MB), where it comes from (WolvenKit's official release on GitHub) and its licence (GPL-3.0), and you choose. The download shows its progress, can be cancelled, is retried if the connection drops, and is checked against the official release before it's used. It goes into XF Studio's own folder; nothing is installed in Windows or your game. Once it's there, the 3D head preview and **Build** set themselves up. Checked end to end on one PC with game version 2.31: from a fresh start to the 3D head in about a minute, and a Build of a look with the downloaded WolvenKit passed its checks.
+- **Help getting Microsoft .NET.** WolvenKit needs Microsoft's free .NET 10 Runtime. If your PC doesn't have it, XF Studio says so plainly and offers one button that gets Microsoft's own installer, then picks it up when you come back.
+- If you already use WolvenKit CLI 8.17.4 or 9.0.1, you can still choose your own copy under **About → Build setup**; it always takes priority.
 
 ### Fixes and under the hood
 
+- **Hair looks the same in light and dark mode and is closer to how dense it looks in game.** The page behind the 3D view used to show through the hair, so hair looked much lighter in light mode and darker in dark mode. The 3D view now draws its own background, and hair and lashes cover the scalp the way the game's hair shader works it out, which makes them a little denser. The jagged dark edge at the hair parting is gone. Checked by measuring the same views in both themes in a browser run of the app; not yet compared with the game.
+- The 3D preview no longer gets stuck when WolvenKit only partly exports the game files: incomplete results are never kept, so trying again really retries. It is also re-prepared when WolvenKit changes, and it says "can't find the head" only when the head is truly missing from your game files.
+- Problems saving the 3D preview (for example a full disk) now say so in plain words instead of blaming WolvenKit.
 - Nothing from the game or other mods is included in the download. Every build is checked automatically so that only the app's own files, its licence and the third-party notices are packaged.
 - Mod files the Studio builds are checked automatically but have **not** been tested in the game yet, and nothing is installed into the game or your mod manager for you.
 - Matte, Satin and Metallic can be built. Glossy, Shimmer and Colour-shifting can be built as experiments (see above). Glitter is preview only: Check and Build leave those layers out and tell you which.

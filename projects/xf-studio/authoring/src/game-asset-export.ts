@@ -15,7 +15,8 @@ import { depotHash, sanitizeDepotPath } from "./depot-path";
  * This module holds the port, the cache and the WolvenKit-backed implementation; callers
  * decide what to export and how to interpret it.
  */
-export const GAME_ASSET_EXPORT_VERSION = 1;
+/** 2: entries are published only when complete, and keyed by the exporting tool's identity. */
+export const GAME_ASSET_EXPORT_VERSION = 2;
 
 /** Where resources are read from: today the game's content archives; later a resolver's winning archive. */
 export type ExportSource = {
@@ -30,18 +31,43 @@ export type ExportedGeometry = {
   depotPath: string; hash: string;
   /** The raw resource and its SHA-256. */
   raw: string; rawSha256: string;
-  glb: string | null;
+  glb: string | null; glbSha256: string | null;
   /** WolvenKit's `.Material.json` for meshes: every material resolved through its `.mi` chain. */
-  materials: string | null;
+  materials: string | null; materialsSha256: string | null;
+  /**
+   * Every output the resource kind needs was produced (mesh: raw, GLB and materials; morph target: raw and GLB).
+   * Only complete exports are cached; an incomplete one is returned uncached so the caller can explain it,
+   * and the next request runs the tool again.
+   */
+  complete: boolean;
   cached: boolean;
 };
 export type ExportedTexture = { depotPath: string; hash: string; png: string; pngSha256: string; cached: boolean };
 
+/**
+ * Typed failures an exporter's tool adapter reports. Consumers map them to their own codes and
+ * messages; anything else thrown by an export is a storage or programming failure, not the tool's.
+ */
+export type ExportFailureCode = "tool_missing" | "runtime_missing" | "tool_failed" | "cancelled";
+export class GameAssetExportError extends Error {
+  constructor(readonly code: ExportFailureCode, message: string, readonly output = "") { super(message); }
+}
+
+/** The tool behind an exporter: `key` separates cache entries per tool build, `label` names it in records. */
+export type ExportTool = { key: string; label: string };
+
 export interface GameAssetExportSession {
+  /** The exporting tool, for provenance records. */
+  readonly tool: ExportTool;
   /** Export meshes/morph targets (and their materials); missing resources are absent from the result. */
   geometry(depotPaths: readonly string[]): Promise<Map<string, ExportedGeometry>>;
   /** Decode textures to PNG; missing resources are absent from the result. */
   textures(depotPaths: readonly string[]): Promise<Map<string, ExportedTexture>>;
+  /**
+   * Which depot paths the source's own archive indexes contain, or null when that can't be read.
+   * Tells "not in the game files" apart from "the tool did not export it".
+   */
+  present(depotPaths: readonly string[]): Set<string> | null;
   /** Remove the session's private work files (cache entries stay). */
   close(): void;
 }
@@ -51,11 +77,21 @@ export interface GameAssetExporter {
 
 /** The one process call this module needs: uncook `depotPaths` from `source` into `outDir`, keeping depot-relative paths. */
 export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; outDir: string; withMaterials: boolean; signal?: AbortSignal }) => Promise<void>;
+export type GameAssetExporterOptions = {
+  /** Identity of the exporting tool; part of every cache key. */
+  tool?: ExportTool;
+  /** Archive index lookup: which decimal depot hashes the source contains. May throw when unreadable. */
+  contains?: (source: ExportSource, hashes: readonly string[]) => Set<string>;
+};
+const UNKNOWN_TOOL: ExportTool = { key: "unknown", label: "an unidentified exporter" };
 
 const depotFile = (root: string, depotPath: string) => join(root, ...depotPath.split("\\"));
 const glbFor = (depotPath: string) => /\.mesh$/i.test(depotPath) ? depotPath.replace(/\.mesh$/i, ".glb") : `${depotPath}.glb`;
 const materialsFor = (depotPath: string) => /\.mesh$/i.test(depotPath) ? depotPath.replace(/\.mesh$/i, ".Material.json") : null;
 const pngFor = (depotPath: string) => depotPath.replace(/\.xbm$/i, ".png");
+/** The cache file names a complete geometry export must have, by resource kind. */
+export const requiredGeometryFiles = (depotPath: string): readonly string[] =>
+  /\.mesh$/i.test(depotPath) ? ["raw", "export.glb", "materials.json"] : ["raw", "export.glb"];
 
 function checkDepotPath(depotPath: string): string {
   const clean = sanitizeDepotPath(depotPath);
@@ -69,9 +105,9 @@ type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath
 
 /** Persistent per-resource cache in host-owned private storage. */
 export class GameAssetExportCache extends DerivedCache {
-  constructor(root: string) { super(root, "game asset export"); }
+  constructor(root: string, private readonly tool: ExportTool = UNKNOWN_TOOL) { super(root, "game asset export"); }
   private sourceKey(source: ExportSource) {
-    return createHash("sha256").update(`${GAME_ASSET_EXPORT_VERSION}|${source.fingerprint}`).digest("hex").slice(0, 16);
+    return createHash("sha256").update(`${GAME_ASSET_EXPORT_VERSION}|${this.tool.key}|${source.fingerprint}`).digest("hex").slice(0, 16);
   }
   entryDirectory(depotPath: string, source: ExportSource) { return this.entry(join("resources", `${depotHash(depotPath)}-${this.sourceKey(source)}`)); }
   /** A verified entry's files, or null. Every file is re-hashed, so a damaged entry is never used. */
@@ -109,25 +145,39 @@ export class GameAssetExportCache extends DerivedCache {
 }
 
 /** Exporter over one `UncookRun` implementation and a persistent cache. */
-export function createGameAssetExporter(cacheRoot: string, run: UncookRun): GameAssetExporter {
-  const cache = new GameAssetExportCache(cacheRoot);
+export function createGameAssetExporter(cacheRoot: string, run: UncookRun, options: GameAssetExporterOptions = {}): GameAssetExporter {
+  const tool = options.tool ?? UNKNOWN_TOOL;
+  const cache = new GameAssetExportCache(cacheRoot, tool);
   return {
     open(source, signal) {
       let work: string | null = null;
       const workDir = () => (work ??= cache.createWork());
       // Textures WolvenKit decoded while resolving materials are reused before a second uncook.
       const decoded = () => work ? join(work, "geometry") : null;
-      const geometryFiles = (depotPath: string, cached: Record<string, string>, fresh: boolean): ExportedGeometry => ({
-        depotPath, hash: depotHash(depotPath), raw: cached.raw!, rawSha256: fileSha256(cached.raw!),
-        glb: cached["export.glb"] ?? null, materials: cached["materials.json"] ?? null, cached: !fresh });
+      const hashOf = (path: string | undefined) => path ? fileSha256(path) : null;
+      const geometryFiles = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedGeometry => ({
+        depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: fileSha256(files.raw!),
+        glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
+        materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
+        complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
       return {
+        tool,
+        present(depotPaths) {
+          if (!options.contains) return null;
+          try {
+            const found = options.contains(source, depotPaths.map(depotHash));
+            return new Set(depotPaths.filter(depotPath => found.has(depotHash(depotPath))));
+          } catch { return null; }
+        },
         async geometry(depotPaths) {
           const out = new Map<string, ExportedGeometry>();
           const needed: string[] = [];
           for (const depotPath of depotPaths) {
             checkDepotPath(depotPath);
             const cached = cache.read(depotPath, source);
-            if (cached?.raw) out.set(depotPath, geometryFiles(depotPath, cached, false)); else needed.push(depotPath);
+            // Only a complete entry is a hit; anything less runs the tool again.
+            if (cached && requiredGeometryFiles(depotPath).every(name => cached[name])) out.set(depotPath, geometryFiles(depotPath, cached, true));
+            else needed.push(depotPath);
           }
           if (!needed.length) return out;
           const outDir = join(workDir(), "geometry");
@@ -140,7 +190,9 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun): Game
             const glb = depotFile(outDir, glbFor(depotPath)), materials = materialsFor(depotPath);
             if (existsSync(glb)) files["export.glb"] = glb;
             if (materials && existsSync(depotFile(outDir, materials))) files["materials.json"] = depotFile(outDir, materials);
-            out.set(depotPath, geometryFiles(depotPath, cache.write(depotPath, source, files), true));
+            // A partial export (WolvenKit can exit 0 with per-file failures) is reported but never cached.
+            const complete = requiredGeometryFiles(depotPath).every(name => files[name]);
+            out.set(depotPath, geometryFiles(depotPath, complete ? cache.write(depotPath, source, files) : files, false));
           }
           return out;
         },

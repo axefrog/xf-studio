@@ -2,7 +2,9 @@ import { resolve, sep } from "node:path";
 import { mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
-import { createPackageHandler, localPackageTools, localPlateCache } from "./src/package-server";
+import { createPackageHandler, localPackageTools, localPlateCache, localToolsRoot } from "./src/package-server";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
 import { eyePlateReadiness } from "./src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
@@ -13,7 +15,6 @@ import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
 import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
-import { LOCALHOST_SETUP_PLACE } from "./src/alpha-availability";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
@@ -21,20 +22,26 @@ const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqli
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"));
 const localSettings = new LocalSettingsStore();
+// WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
+const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
+  configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: message => console.log(message) });
 const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settings => ({ updater: false, installer: false,
-  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }));
+  wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
+  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) }),
+  () => wolvenKit.managedExecutable());
+const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
 const detectionRequest = createInstallDetectionHandler(undefined, { settings: () => {
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
-  localPackageTools(localSettings.load().settings));
+  localPackageTools(localSettings.load().settings, process.env, wolvenKit.managedExecutable()));
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCore = new PreviewCoreHost({
   cacheRoot: resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache")),
-  settings: () => { const tools = packageToolPaths(localSettings.load().settings); return { gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit }; },
-  log: message => console.log(message), setupPlace: LOCALHOST_SETUP_PLACE,
+  settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, wolvenKitCli: wolvenKit.usable() }),
+  log: message => console.log(message),
 });
 const previewCoreRequest = createPreviewCoreHandler(previewCore);
 const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
@@ -57,6 +64,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
+    if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

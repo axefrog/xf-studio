@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   applyHairShadow, bakeHairProfile, bakedSample, EYELASH_DEFAULT_MI_OVERRIDES, gbufferDecalAlbedo, hairAlbedo,
-  hairCoverage, hairFragmentColor, hairRoughness, hairShadowFactor, HAIR_TEMPLATE_DEFAULTS, linearEquivalentDecal,
+  hairCoverage, hairDitherThreshold, hairFragmentColor, hairPixelCoverage, hairResolvedCoverage, hairRoughness, HAIR_DITHER, hairShadowFactor, HAIR_TEMPLATE_DEFAULTS, linearEquivalentDecal,
   linearToSrgb8, overlayHairColor, profileIndex, resolveHairMaterial, sampleStopsEncoded, srgbToLinear, type Rgb,
 } from "../src/hair-colour-model";
 
@@ -150,4 +150,36 @@ test("hair direct light: Mask_Intensity gates and diffuse arithmetic follow the 
   const a = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, V231, 0.2).specular[0];
   const b = hairDirectLight(L, V, T, N, [0.5, 0.5, 0.5], 0.3, V231, 0.7).specular[0];
   expect(a).not.toBeCloseTo(b, 6);
+});
+
+test("the hair dither threshold spans [offset, offset + 5·step) and cycles every five frames", () => {
+  let min = Infinity, max = -Infinity;
+  for (let y = 0.5; y < 64; y++) for (let x = 0.5; x < 64; x++) {
+    const t = hairDitherThreshold(x, y, 0);
+    min = Math.min(min, t); max = Math.max(max, t);
+    expect(hairDitherThreshold(x, y, 5)).toBeCloseTo(t, 9);
+  }
+  expect(min).toBeGreaterThanOrEqual(HAIR_DITHER.offset);
+  expect(max).toBeLessThan(HAIR_DITHER.offset + 5 * HAIR_DITHER.step);
+  expect(HAIR_DITHER.offset + 5 * HAIR_DITHER.step).toBeCloseTo(0.8356, 3);
+});
+
+test("resolved hair coverage matches the dithered pass rate and is nested across layers", () => {
+  // Pass rate of one layer over a 5-frame cycle and a 64x64 pixel block.
+  const passRate = (alphas: number[]) => {
+    let covered = 0, total = 0;
+    for (let frame = 0; frame < 5; frame++) for (let y = 0.5; y < 64; y++) for (let x = 0.5; x < 64; x++) {
+      const t = hairDitherThreshold(x, y, frame);
+      covered += alphas.some(a => a > t) ? 1 : 0; total++;
+    }
+    return covered / total;
+  };
+  for (const a of [0.1, 0.3, 0.5, 0.7]) expect(passRate([a])).toBeCloseTo(hairResolvedCoverage(a), 1);
+  expect(hairResolvedCoverage(0)).toBe(0);
+  expect(hairResolvedCoverage(0.84)).toBe(1);
+  // Denser than the alpha value itself: the dither range ends near 0.84.
+  expect(hairResolvedCoverage(0.5)).toBeGreaterThan(0.58);
+  // Two half-covering layers share the threshold: the pixel is as covered as one layer, not 1 - (1 - a)^2.
+  expect(passRate([0.5, 0.5])).toBeCloseTo(passRate([0.5]), 9);
+  expect(hairPixelCoverage([0.2, 0.5, 0.4])).toBe(hairResolvedCoverage(0.5));
 });

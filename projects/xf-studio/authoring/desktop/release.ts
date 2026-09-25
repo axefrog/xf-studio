@@ -121,8 +121,9 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
     "4. XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. " +
       "If it's missing, XF Studio offers to install it for you with one click, using Microsoft's own installer.", "",
     "5. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
-      "The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio (it needs your game folder and WolvenKit CLI). " +
-      "Building the mod files needs the same two things.", "",
+      "The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It uses WolvenKit CLI, " +
+      "which XF Studio offers to download for you (45 MB, from WolvenKit's official release, GPL-3.0) and which needs Microsoft's free .NET 10 Runtime. " +
+      "Building the mod files uses the same two things.", "",
     "## Licence", "",
     `XF Studio is MIT-licensed ([LICENSE](https://github.com/${repository}/blob/${tag}/LICENSE)). ` +
       `The app includes third-party software; its notices are attached as \`${noticesAssetName}\` and shown under **About → Licences**.`, "",

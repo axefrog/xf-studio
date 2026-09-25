@@ -75,3 +75,21 @@ test("saved MO2 route reports profile readiness while direct route excludes MO2"
     expect(view.fields.mo2Root).toBe(mo2);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("a save from one view waits for another view's refresh instead of being refused as busy", async () => {
+  let release!: () => void;
+  const view = { revision: 1, fields: {}, source: "primary" };
+  const actions = new LocalSetupActions(async method => {
+    if (method === "GET") await new Promise<void>(resolve => { release = resolve; });
+    return { ok: true, status: 200, data: view as never };
+  });
+  await Promise.all([actions.dispatch({ kind: "setup.refresh" }), Promise.resolve().then(() => release())]);
+  const refreshing = actions.dispatch({ kind: "setup.refresh" });
+  expect(actions.snapshot().busy).toBe(true);
+  expect((await actions.dispatch({ kind: "setup.save", fields: {} as never })).ok).toBe(false);
+  const saved = actions.idle().then(() => actions.dispatch({ kind: "setup.save", fields: {} as never }));
+  release();
+  await refreshing;
+  expect((await saved).ok).toBe(true);
+  expect(actions.snapshot().busy).toBe(false);
+});

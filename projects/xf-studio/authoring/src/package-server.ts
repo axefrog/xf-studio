@@ -33,8 +33,12 @@ export type PackageTools = { bun: string; plate: string; plateCache: string; wol
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
-export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env): PackageTools {
-  const configured = packageToolPaths(settings, env);
+/** Localhost folder for tools XF Studio downloads with consent (WolvenKit CLI); `XFS_TOOLS_DIR` relocates it. */
+export const localToolsRoot = (env: Record<string, string | undefined> = process.env) =>
+  resolve(env.XFS_TOOLS_DIR || resolve(app, "data", "tools"));
+export function localPackageTools(settings: LocalSettings = defaultLocalSettings(), env = process.env,
+  managedWolvenKit: string | null = null): PackageTools {
+  const configured = packageToolPaths(settings, env, managedWolvenKit);
   return {
     bun: configured.bun || process.execPath,
     plate: configured.plate || "",
@@ -76,7 +80,9 @@ export async function runLocalPackage(action: PackageAction, file: string, tools
     for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
       let valid = false;
       try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
-      if (!valid) throw Error(`${name} input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_${name === "Game" ? "GAMEPATH" : "WOLVENKIT"} server override.`);
+      if (!valid) throw Error(name === "WolvenKit"
+        ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Local setup, or use the XFS_PACKAGE_WOLVENKIT server override."
+        : "Game input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_GAMEPATH server override.");
     }
     for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
       ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {

@@ -370,7 +370,7 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
   const exports: string[][] = [];
   const trial = createDesktopServer(staticRoot, resolve(previewRoot, "data"),
     { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" }, undefined, undefined, undefined, undefined,
-    () => createGameAssetExporter(resolve(previewRoot, "data", "preview-cache", "exports"), async ({ depotPaths }) => { exports.push(depotPaths); }));
+    () => createGameAssetExporter(resolve(previewRoot, "data", "preview-cache", "exports"), async ({ depotPaths }) => { exports.push(depotPaths); }, { contains: () => new Set() }));
   try {
     const base = `http://127.0.0.1:${trial.port}`;
     const cookie = (await fetch(trial.url)).headers.get("set-cookie")!.split(";")[0]!;
@@ -385,7 +385,7 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
     expect((await post({ action: "prepare" }, "https://attacker.example")).status).toBe(403);
     expect(await (await post({ action: "prepare" })).json()).toMatchObject({ phase: "preparing", canCancel: true });
     await trial.previewCore.settled();
-    // The stand-in exporter found nothing, so the head is reported missing in plain language.
+    // The stand-in exporter found nothing and its archive index lacks the head, so it is reported missing in plain language.
     expect(await (await fetch(base + "/api/desktop/preview", { headers })).json()).toMatchObject({ phase: "blocked", code: "preview_source_missing" });
     expect(exports).toHaveLength(1);
     expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(404);

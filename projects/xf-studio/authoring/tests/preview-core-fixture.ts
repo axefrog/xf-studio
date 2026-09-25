@@ -7,6 +7,7 @@ import { encodePng } from "../src/png";
 import { idListSha256, sha256Hex, type EyePlateRecipe } from "../src/eye-plate-recipe";
 import { PREVIEW_CORE_RECIPE, type PreviewCoreRecipe } from "../src/preview-core-recipe";
 import { createGameAssetExporter, type GameAssetExporter, type UncookRun } from "../src/game-asset-export";
+import { depotHash } from "../src/depot-path";
 
 export const GRID = 5;
 export const HEAD_VERTICES = GRID * GRID;
@@ -154,9 +155,15 @@ export function texturePng(size: number, kind: "colour" | "normal" | "roughness"
 }
 
 export type FakeExport = { exporter: (cacheRoot: string) => GameAssetExporter; calls: { depotPaths: string[]; withMaterials: boolean }[] };
-/** A WolvenKit stand-in that writes the export tree the way `uncook` lays it out. */
-export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "eye-glb" | "eye-morph" | "material" | "textures";
-  beforeWrite?: (signal?: AbortSignal) => Promise<void>; mesh?: Buffer; eye?: () => Uint8Array; eyeMorph?: () => Uint8Array; textureSize?: number } = {}): FakeExport {
+/**
+ * A WolvenKit stand-in that writes the export tree the way `uncook` lays it out.
+ * `omit: "head"` (or `"eye-morph"`) models a game whose archives lack the head; `"head-export"` a head the archives contain but the
+ * tool did not export; `"head-mesh-glb"` a partial export (raw and materials without the mesh GLB). `index: false`
+ * models an unreadable archive index.
+ */
+export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "head-export" | "head-mesh-glb" | "eye-glb" | "eye-morph" | "material" | "textures";
+  beforeWrite?: (signal?: AbortSignal) => Promise<void>; mesh?: Buffer; eye?: () => Uint8Array; eyeMorph?: () => Uint8Array; textureSize?: number; index?: boolean;
+  tool?: { key: string; label: string } } = {}): FakeExport {
   const calls: FakeExport["calls"] = [];
   const run: UncookRun = async ({ depotPaths, outDir, withMaterials, signal }) => {
     calls.push({ depotPaths: [...depotPaths], withMaterials });
@@ -166,7 +173,10 @@ export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, opt
     const size = options.textureSize ?? 256;
     const textures = [[TEXTURES.headAlbedo, "colour"], [TEXTURES.headNormal, "normal"], [TEXTURES.headRoughness, "roughness"], [TEXTURES.eyeAlbedo, "colour"]] as const;
     if (withMaterials) {
-      if (options.omit !== "head") { write(plate.source.meshDepotPath, options.mesh ?? SOURCE_BYTES.mesh); write(plate.source.morphDepotPath, SOURCE_BYTES.morph); }
+      if (options.omit !== "head" && options.omit !== "head-export") {
+        write(plate.source.meshDepotPath, options.mesh ?? SOURCE_BYTES.mesh); write(plate.source.morphDepotPath, SOURCE_BYTES.morph);
+        if (options.omit !== "head-mesh-glb") write(plate.source.meshDepotPath.replace(/\.mesh$/, ".glb"), "synthetic head mesh glb");
+      }
       write(recipe.eye.meshDepotPath, SOURCE_BYTES.eye);
       write(plate.source.morphDepotPath + ".glb", headGlb());
       if (options.omit !== "eye-glb") write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".glb"), (options.eye ?? eyeGlb)());
@@ -185,5 +195,11 @@ export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, opt
       for (const [depot, kind] of textures) if (wanted.has(depot)) write(depot.replace(/\.xbm$/, ".png"), texturePng(size, kind));
     }
   };
-  return { calls, exporter: cacheRoot => createGameAssetExporter(cacheRoot, run) };
+  // The archive index lists every resource except a head or eye morph the game lacks.
+  const lacking = options.omit === "head" ? [plate.source.meshDepotPath, plate.source.morphDepotPath] : options.omit === "eye-morph" ? [recipe.eye.morphDepotPath] : [];
+  const indexed = new Set([plate.source.meshDepotPath, plate.source.morphDepotPath, recipe.eye.meshDepotPath, recipe.eye.morphDepotPath]
+    .filter(depot => !lacking.includes(depot)).map(depotHash));
+  return { calls, exporter: cacheRoot => createGameAssetExporter(cacheRoot, run, {
+    tool: options.tool ?? { key: "fixture-tool:1", label: "Fixture exporter 1.0" },
+    contains: (_source, hashes) => { if (options.index === false) throw Error("unreadable index"); return new Set(hashes.filter(hash => indexed.has(hash))); } }) };
 }

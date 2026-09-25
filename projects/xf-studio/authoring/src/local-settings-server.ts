@@ -18,10 +18,12 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
 
 /** Host-owned configuration endpoint. The browser can edit known fields, never select a settings file. */
 export function createLocalSettingsHandler(store = new LocalSettingsStore(), env = process.env,
-  host: HostFeatures | ((settings: LocalSettings) => HostFeatures) = { updater: false, installer: false }) {
+  host: HostFeatures | ((settings: LocalSettings) => HostFeatures) = { updater: false, installer: false },
+  /** XF Studio's own downloaded WolvenKit, used when neither an override nor a setting names one. */
+  managedWolvenKit: () => string | null = () => null) {
   const view = (): LocalSetupView => {
     const loaded = store.load();
-    const paths = packageToolPaths(loaded.settings, env);
+    const paths = packageToolPaths(loaded.settings, env, managedWolvenKit());
     const effective = { ...loaded.settings, gameRoot: paths.gamepath,
       wolvenKitCli: paths.wolvenkit, bunExecutable: paths.bun };
     return { revision: loaded.settings.revision, source: loaded.source,
