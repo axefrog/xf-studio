@@ -130,6 +130,20 @@ function UiFirstRun {
     Shot "05-check"
     $result.Current.Name
   }
+  UiStep "exportCollection" {
+    UiInvoke "Library" "ControlType.TabItem"
+    $downloads = Join-Path $env:USERPROFILE "Downloads"
+    $before = @(Get-ChildItem $downloads -File -ErrorAction SilentlyContinue).Count
+    UiPress "Export collection"
+    $end = (Get-Date).AddSeconds(30); $file = $null
+    while (-not $file -and (Get-Date) -lt $end) {
+      $file = Get-ChildItem $downloads -File -Filter *.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+      if ($file -and @(Get-ChildItem $downloads -File).Count -le $before) { $file = $null }
+      Start-Sleep -Milliseconds 500
+    }
+    if (-not $file) { throw "No exported collection arrived in Downloads" }
+    [ordered]@{ file = $file.Name; bytes = $file.Length }
+  }
   UiStep "aboutAndLicences" {
     UiInvoke "About XF Studio"
     Start-Sleep -Seconds 1

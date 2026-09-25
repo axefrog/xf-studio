@@ -30,7 +30,7 @@ export class WorkspacePersistence {
     }
     try {
       this.options.storage.setItem(this.options.key, JSON.stringify(this.options.capture()));
-      this.publish({ kind: "saved", message: "Workspace saved in this browser" });
+      this.publish({ kind: "saved", message: "Workspace saved" });
     } catch {
       this.publish({ kind: "unavailable", message: "Browser storage unavailable — save a recipe" });
     }

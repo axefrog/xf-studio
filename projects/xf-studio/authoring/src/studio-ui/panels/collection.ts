@@ -24,7 +24,7 @@ export function libraryState(frame: Frame) {
   const stored = library.summaries.find(item => item.id === draft.id);
   if (library.busy && library.progress?.phase === "working") return { tone: "info" as const, label: "Working…", detail: library.progress.message };
   if (draft.revision === undefined) return { tone: "warning" as const, label: "Not in library",
-    detail: "This collection has never been saved to the local library. Your draft autosaves in this browser." };
+    detail: "This collection has never been saved to the local library. Your draft autosaves on this computer." };
   if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: `Newer r${stored.revision} saved`,
     detail: `Your draft is based on revision ${draft.revision}; the library has revision ${stored.revision} from elsewhere. Saving will report a conflict — save a copy or reopen it.` };
   const persistence = frame.persistence;
@@ -35,10 +35,10 @@ export function libraryState(frame: Frame) {
     const what = [persistence.structureDirty ? "the collection name or preset order" : "",
       presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
     return { tone: "info" as const, label: `Unsaved · based on r${draft.revision}`,
-      detail: `Changed since library revision ${draft.revision}: ${what}. Edits are autosaved in this browser; Save to library records a new immutable revision.` };
+      detail: `Changed since library revision ${draft.revision}: ${what}. Edits are autosaved on this computer; Save to library records a new immutable revision.` };
   }
   return { tone: "neutral" as const, label: `Based on r${draft.revision}`,
-    detail: `Draft based on library revision ${draft.revision}. Edits since then are autosaved in this browser; Save to library records a new immutable revision.` };
+    detail: `Draft based on library revision ${draft.revision}. Edits since then are autosaved on this computer; Save to library records a new immutable revision.` };
 }
 
 export function presetsPanel(rt: StudioRuntime): PanelController {
@@ -176,7 +176,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     onClick: () => void rt.file({ kind: "collection.recover" }) });
   const recoverNote = note("", "info");
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
-  const savedEmpty = emptyState("Nothing saved yet", "Save to library creates revision 1 of this collection. Drafts still autosave in this browser.");
+  const savedEmpty = emptyState("Nothing saved yet", "Save to library creates revision 1 of this collection. Drafts still autosave on this computer.");
   const fileButtons = {
     importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => importCollection(rt, event.currentTarget as Element) }),
     exportCollection: button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) }),
@@ -343,10 +343,23 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       if (!pkg && !lastError) { result.replaceChildren(emptyState("No check yet", "Run Check to see which presets and layers can become mod files. Check creates no files.")); return; }
       if (lastError && !pkg) { result.replaceChildren(h("div", { class: "result-card error" }, icon("error"),
         h("div", {}, h("strong", { text: lastError.kind === "package.build" ? "Build failed" : "Check failed" }), h("p", { text: lastError.message }),
-          h("p", { class: "muted small", text: `Code: ${lastError.code}. Your collection is unchanged.` })))); return; }
+          h("p", { class: "muted small", text: "Your collection is unchanged." }),
+          technicalDetails([["Code", lastError.code], ["Message", lastError.message], ["Time", new Date().toISOString()]],
+            "The desktop app also keeps a log in its data folder (About shows where).")))); return; }
       result.replaceChildren(renderResult(pkg!, library.draft?.presets ?? []));
     },
   };
+}
+
+/** A collapsed "Details" block with a Copy button: codes, hashes and paths for bug reports. */
+function technicalDetails(rows: [string, string][], footnote?: string) {
+  const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
+  const copy = button({ label: "Copy details", icon: "duplicate", small: true, variant: "quiet", onClick: () => {
+    void navigator.clipboard?.writeText(text).then(() => setText(copy.querySelector("span")!, "Copied"), () => {});
+  } });
+  return h("details", { class: "result-details" }, h("summary", { text: "Details" }),
+    h("dl", { class: "facts" }, ...rows.flatMap(([label, value]) => [h("dt", { text: label }), h("dd", {}, h("code", { class: "hash", text: value }))])),
+    footnote ? h("p", { class: "muted small", text: footnote }) : null, copy);
 }
 
 type PackageResultView = ReadonlyDeep<{ kind: "packageCheck"; result: PackageCheck; freshness: "current" | "stale" } |
@@ -372,12 +385,13 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
   if (isBuild) {
     const b = build;
     card.append(h("dl", { class: "facts" },
-      h("dt", { text: "Package" }), h("dd", {}, h("code", { text: b.package })),
-      h("dt", { text: "Manifest" }), h("dd", {}, h("code", { text: b.manifest })),
-      h("dt", { text: "Archive SHA-256" }), h("dd", {}, h("code", { class: "hash", text: b.archiveSha256 }))),
+      h("dt", { text: "Mod files" }), h("dd", {}, h("code", { text: b.package }))),
     note("Your mod was built and checked. It hasn't been tested in game yet, and nothing was installed.", "info"));
   }
-  card.append(h("p", { class: "muted small" }, "Collection fingerprint (SHA-256) ", h("code", { class: "hash", text: r.packagedCollectionSha256 })));
+  // Technical facts stay available for bug reports without crowding the result.
+  card.append(technicalDetails([
+    ...(isBuild ? [["Manifest", build.manifest], ["Archive SHA-256", build.archiveSha256]] as [string, string][] : []),
+    ["Collection fingerprint (SHA-256)", r.packagedCollectionSha256]]));
   if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;

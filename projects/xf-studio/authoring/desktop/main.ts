@@ -61,10 +61,14 @@ try {
 }
 app.onReport(message => log.write(message));
 log.write(`Loopback server ready on 127.0.0.1:${app.port}.`);
+const origin = `http://127.0.0.1:${app.port}`;
 const window = new BrowserWindow({
   title: "XF Studio",
   url: app.url,
   frame: { width: 1440, height: 900 },
+  // The window only ever shows this app's own loopback page; downloads use its blob: URLs.
+  // Electrobun rules: "^" blocks, "*" is a wildcard and the last matching rule wins.
+  navigationRules: JSON.stringify(["^*", `${origin}/*`, `blob:${origin}/*`, "about:blank"]),
 });
 log.write("Window created.");
 const close = new DesktopWorkspaceClose({
@@ -72,6 +76,15 @@ const close = new DesktopWorkspaceClose({
   close: () => { window.close(); },
   report: message => window.webview.executeJavascript(`window.xfDesktopWorkspaceError?.(${JSON.stringify(message)})`),
   rendererReady: () => app.renderer().bootstrapped,
+  confirmCloseWithoutSaving: async () => {
+    log.write("Closing: the latest workspace save failed; asking whether to close without saving.");
+    const { response } = await Utils.showMessageBox({ type: "warning", title: "XF Studio",
+      message: "Your latest changes couldn't be saved.",
+      detail: "Keep XF Studio open to try again or export your collection from the Library panel. " +
+        "If you close now, changes since the last successful save are lost; your saved library is not affected.",
+      buttons: ["Keep XF Studio open", "Close without saving"], defaultId: 0, cancelId: 0 });
+    return response === 1;
+  },
 });
 app.onWorkspaceCloseAck((nonce, status) => close.acknowledge(nonce, status));
 window.on("will-close", event => close.request(event as { response?: { allow: boolean } }));

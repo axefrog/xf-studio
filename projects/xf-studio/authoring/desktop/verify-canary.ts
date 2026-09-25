@@ -62,7 +62,7 @@ const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
 sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
-  "build/studio-main.js", "build/raster-worker.js", packagedNotices, packagedLicence], "Packaged Studio view");
+  "build/studio-main.js", "build/raster-worker.js", "boot-watchdog.js", packagedNotices, packagedLicence], "Packaged Studio view");
 // The installed app must carry the current licence and notices, and the notices
 // must name every shipped program and the versions actually built in.
 for (const [name, source] of [[packagedNotices, noticesPath], [packagedLicence, licencePath]] as const)
@@ -112,4 +112,4 @@ sameMembers(setupMembers, [
 const digest = createHash("sha256").update(readFileSync(installer)).digest("hex");
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
-console.log("Nine allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");

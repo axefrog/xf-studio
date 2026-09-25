@@ -227,7 +227,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
 export function activityPanel(rt: StudioRuntime): PanelController {
   const list = h("ol", { class: "activity", "aria-label": "Recent activity, newest first" });
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
-  const clearHint = note("This log lives only in this browser tab. Results that matter — library revisions, package manifests — are stored by their own services.");
+  const clearHint = note("This log lasts only until XF Studio closes. Results that matter — library revisions, package manifests — are stored by their own services.");
   let count = -1;
   const element = h("div", { class: "panel-content" }, empty, list, clearHint);
   const draw = () => {

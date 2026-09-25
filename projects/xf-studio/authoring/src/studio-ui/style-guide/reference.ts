@@ -26,7 +26,7 @@ export function reference(panels: PanelInfo[]) {
     ["Preset", "One complete look; one choice in the single in-game eye-makeup selector (plus Off)."],
     ["Layer", "One shape with colour, opacity and finish inside a preset. Top of the list = front."],
     ["Finish", "Matte, Satin, Metallic / foil, Shimmer / pearl, Glitter, Glossy / wet look, Colour-shifting. Satin is shown for the internal “regular”."],
-    ["Draft", "The working collection autosaved in this browser."],
+    ["Draft", "The working collection, autosaved on this computer."],
     ["Library · revision", "Explicit, immutable SQLite saves (r1, r2…). “Save to library”, never just “Save file”."],
     ["Collection file · recipe file · build plan", "Portable editable data; a build plan is compiler input — none is a mod."],
     ["Mod package · Check · Build", "Check lists what can be packaged (no files). Build creates your own mod files and checks them; the result says plainly that they are not tested in game and not installed."],

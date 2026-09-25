@@ -597,3 +597,6 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
   .switch:checked + .switch-track::after { background: Highlight; }
   .btn, .segmented, .field, .dock-group, .menu { border: 1px solid CanvasText; }
 }
+.result-details { margin-top: var(--sp-2); font-size: var(--fs-sm); }
+.result-details > summary { cursor: pointer; color: var(--text-muted, inherit); }
+.result-details[open] > .facts { margin: var(--sp-2) 0; }

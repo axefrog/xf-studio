@@ -1,4 +1,4 @@
-// Inlined into the desktop index.html as a classic script, ahead of the module
+// Loaded by the desktop index.html as a classic script, ahead of the module
 // bootstrap, so it runs even if a module fails to load or throws. If the Studio
 // has not mounted within the deadline, or an uncaught error happens before it
 // mounts, it replaces the "Starting…" screen with a plain explanation, Try again
