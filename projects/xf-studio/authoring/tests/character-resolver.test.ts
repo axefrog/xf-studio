@@ -196,6 +196,10 @@ describe("installation-dependent choices", () => {
     const brow = result.appearances[0]!.components[0]!;
     expect(brow.geometry!.renderChunks).toBe(1);
     expect(brow.geometry!.patchedFrom).toEqual([copy]);
+    // The drawn geometry is the patch source, which the copy resolves to the vanilla morph target's archive entry.
+    expect(brow.geometry!.drawnFrom!.ref.path).toBe(copy);
+    expect(fixture.graph.locate(brow.geometry!.drawnFrom!.ref).entry.path).toBe(vanilla);
+    expect(brow.geometry!.chunkLods).toEqual([1]);
     expect(brow.morphRegions).toEqual({ eyes: 1, nose: 1 });
     expect(brow.appliedMorphs).toEqual([{ region: "nose", target: "h012" }]);
     expect(result.appearances[0]!.appearance.status).toBe("defined");

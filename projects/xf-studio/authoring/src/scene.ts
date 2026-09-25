@@ -11,13 +11,12 @@ import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
 import { prepareEyeAppearances } from "./eye-appearance";
 import { eyeRoughnessMap } from "./eye-optics";
-import { parseHairManifest, selectSavedHair, verifyHairBytes, type HairAsset } from "./hair-preview";
-import { attachHairColor, attachHairLighting, attachHairVertexRed, attachStrandCoverage, hairProfileTexture,
-  HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL, STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
-import { resolveHairMaterial, type ProfileEncoding } from "./hair-colour-model";
+import type { ProfileEncoding } from "./hair-colour-model";
 import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
-import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
-import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
+import { sampleUnderlayAlbedo } from "./brow-material";
+import type { AdapterContext } from "./character-material-adapters";
+import type { LoadedCharacterDetails } from "./character-detail-loader";
+import type { DetailSlot } from "./render-detail";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
 import { HeadLoadError } from "./head-load-error";
@@ -126,13 +125,6 @@ async function assembleScene(
   scene.add(gltf.scene);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
   const loader = new THREE.TextureLoader();
-  async function texture(name: string, color = false) {
-    const t = await loader.loadAsync(`/assets/${name}.png`);
-    t.flipY = false;
-    t.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return t;
-  }
   const { "head.albedo": albedo, "eyes.albedo": eyeColor, "head.normal": normal, "head.roughness": roughness } = core.textures;
   const skin = new THREE.MeshStandardMaterial({
     map: albedo,
@@ -201,33 +193,10 @@ async function assembleScene(
           selectedEye.roughnessError ? "unavailable" : "no-matching-optics" },
     };
   }
-  const details: Record<
-    string,
-    {
-      root: THREE.Group;
-      meshes: THREE.SkinnedMesh[];
-      hash: string;
-      definition: string;
-    }
-  > = {};
-  const detailErrors: string[] = [];
-  let savedBrowMaterial: THREE.MeshStandardMaterial | undefined;
-  let savedLash: SavedLashAppearance | undefined;
   // Profile stops are decoded from sRGB before the shader's overlay (see
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
   let browUnderlay: { maxMatchedDistance: number; unmatched: number } | undefined;
-  try {
-    savedBrowMaterial = await loadSavedBrowMaterial(loader, renderer.capabilities.getMaxAnisotropy(), { gbufferBlend: true });
-  } catch (error) {
-    detailErrors.push(`brows: ${(error as Error).message}; using the provisional material`);
-  }
-  try {
-    savedLash = await loadSavedLashAppearance();
-  } catch (error) {
-    detailErrors.push(`lashes: ${(error as Error).message}; using the provisional colour`);
-  }
-  /** Linear skin albedo under each brow vertex, for the sqrt-encoded G-buffer decal blend. */
   function browUnderlayAttribute(brow: THREE.Mesh): THREE.BufferAttribute {
     const image = albedo.image as CanvasImageSource & { width: number; height: number };
     const canvas = document.createElement("canvas");
@@ -244,196 +213,20 @@ async function assembleScene(
     };
     const result = sampleUnderlayAlbedo(world(brow), world(head), head.geometry.getAttribute("uv").array,
       { width: pixels.width, height: pixels.height, data: pixels.data });
-    if (result.unmatched) throw Error(`${result.unmatched} brow vertices are not over the head surface`);
+    if (result.unmatched) throw Error(`${result.unmatched} decal vertices are not over the head surface`);
     browUnderlay = { maxMatchedDistance: result.maxMatchedDistance, unmatched: result.unmatched };
     return new THREE.BufferAttribute(result.underlay, 3);
   }
-  for (const [name, color, hash, definition] of [
-    ["brows", "#675147", "10685882159528859062", "10_brown_ombre"],
-    ["lashes", "#30221b", "6047185506343464350", "05_brown_liquorice"],
-  ]) {
-    try {
-      const buffer = await (await fetch(`/assets/${name}.glb`)).arrayBuffer(),
-        original = restoreFirstWeights(buffer);
-      const asset = await new GLTFLoader().parseAsync(buffer, "/assets/"),
-        // Also loaded for brows so a failed decal-underlay estimate can fall back cleanly.
-        alpha = await texture(`${name}-alpha`);
-      const parts: THREE.SkinnedMesh[] = [];
-      asset.scene.traverse((o) => {
-        if (!(o instanceof THREE.SkinnedMesh)) return;
-        const a = asset.parser.associations.get(o),
-          raw = original.get(asset.parser.json.meshes[a?.meshes ?? -1]?.name);
-        if (!raw) throw Error(`Missing original weights for ${name}`);
-        o.geometry.setAttribute(
-          "skinWeight",
-          new THREE.BufferAttribute(raw, 4),
-        );
-        o.frustumCulled = false;
-        if (name === "brows" && savedBrowMaterial) {
-          try { o.geometry.setAttribute("xfsUnderlay", browUnderlayAttribute(o)); } catch (error) {
-            // Keep the brow visible with the provisional material rather than guessing the skin under it.
-            savedBrowMaterial = undefined;
-            detailErrors.push(`brows: ${(error as Error).message}; using the provisional material`);
-          }
-        }
-        // Generic identity check: the strand-profile manifest must describe this detail's saved appearance.
-        const lash = name === "lashes" && savedLash?.appearanceHash === hash && savedLash.definition === definition
-          ? savedLash : undefined;
-        const mat = name === "brows" && savedBrowMaterial ? savedBrowMaterial : new (lash ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
-          // Lashes are hair.mt: lit by the hair model below, not by the card's dielectric specular.
-          ...(lash ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
-          color: lash ? lash.color : color,
-          alphaMap: alpha,
-          // Saved lashes are hair.mt: dithered coverage like the hair cards, drawn after the makeup stack.
-          ...(lash ? STRAND_COVERAGE_OVER_MAKEUP_MATERIAL : { transparent: true, depthWrite: false, alphaTest: 0.01 }),
-          // Lash .mi chain: RoughnessScale 0, RoughnessBias 1. Three's GGX is not the game's hair BRDF.
-          roughness: lash ? lash.roughness : 0.8,
-          side: THREE.DoubleSide,
-        });
-        if (lash) { attachStrandCoverage(mat, lash.alphaCutoff); attachHairLighting(mat, lash.roughness, lash.strandId); }
-        // Geometry is the local game's/mod's source. Hair/decal shading is provisional.
-        o.material = mat;
-        // Keep context details above the entire editable makeup stack (orders 10–41).
-        o.renderOrder = name === "brows" ? 100 : 101;
-        extendSkin(o, mat);
-        for (const [key, i] of Object.entries(o.morphTargetDictionary ?? {}))
-          o.morphTargetInfluences![i] =
-            head.morphTargetInfluences?.[
-              head.morphTargetDictionary?.[key] ?? -1
-            ] ?? 0;
-        o.name = `preview_${name}`;
-        parts.push(o);
-        meshes.push(o);
-      });
-      if (!parts.length) throw Error(`No skinned ${name} geometry`);
-      scene.add(asset.scene);
-      details[name] = { root: asset.scene, meshes: parts, hash, definition };
-    } catch (error) {
-      detailErrors.push(`${name}: ${(error as Error).message}`);
-    }
+  // Resolved character details (brows, lashes, hair): loaded later from the host's character record
+  // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
+  const detailVisible: Record<DetailSlot, boolean> = { brows: true, lashes: true, hair: true };
+  // Keep context details above the entire editable makeup stack (orders 10–41); hair keeps its own order.
+  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { brows: 100, lashes: 101, hair: 0 };
+  let characterDetails: LoadedCharacterDetails | null = null;
+  function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
+    return { overMakeup: slot === "lashes", profileEncoding,
+      ...(slot === "brows" ? { underlay: (mesh: THREE.Mesh) => browUnderlayAttribute(mesh) } : {}) };
   }
-  const hair: { asset: HairAsset; root: THREE.Group; meshes: THREE.SkinnedMesh[];
-    material: "material-instance" | "template-defaults"; sampleCount: number }[] = [];
-  const hairErrors: string[] = [];
-  // All loaded rigs enter the idle binding once at scene creation. Keep their
-  // aggregate CPU/GPU cost bounded even if a local manifest lists many styles.
-  const MAX_HAIR_BYTES = 128 * 1024 * 1024, MAX_HAIR_VERTICES = 750_000, MAX_HAIR_BONES = 800;
-  let hairBytes = 0, hairVertices = 0, hairBones = 0;
-  try {
-    const response = await fetch("/assets/hair/manifest.json", { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw Error("Local resolved hair assets are unavailable");
-    const entries = parseHairManifest(await response.json());
-    for (const asset of entries) {
-      const root = new THREE.Group(), parts: THREE.SkinnedMesh[] = [];
-      let alpha: THREE.Texture | undefined, bytesUsed = 0, verticesUsed = 0, bonesUsed = 0;
-      const materialTextures: THREE.Texture[] = [];
-      try {
-        const bytes = async (url: string, sha256: string) => {
-          const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-          if (!response.ok) throw Error(`Local hair asset unavailable (${response.status})`);
-          const length = Number(response.headers.get("Content-Length"));
-          if (Number.isFinite(length) && length > MAX_HAIR_BYTES - hairBytes - bytesUsed)
-            throw Error("Local hair asset exceeds the aggregate 128 MiB limit");
-          const data = new Uint8Array(await response.arrayBuffer());
-          if (data.byteLength > MAX_HAIR_BYTES - hairBytes - bytesUsed)
-            throw Error("Local hair asset exceeds the aggregate 128 MiB limit");
-          await verifyHairBytes(data, sha256);
-          bytesUsed += data.byteLength;
-          return data;
-        };
-        const loadMap = async (file: { url: string; sha256: string }, color: boolean) => {
-          const data = await bytes(file.url, file.sha256);
-          const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type: "image/png" }));
-          let map: THREE.Texture;
-          try { map = await loader.loadAsync(url); } finally { URL.revokeObjectURL(url); }
-          map.flipY = false;
-          map.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-          map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-          materialTextures.push(map);
-          return map;
-        };
-        // Three's alphaMap samples green. Source hair_lm60_a has grayscale RGB;
-        // its nearly opaque PNG alpha channel is not the card cutout.
-        alpha = await loadMap(asset.alpha, false);
-        // v3 manifests carry the .mi chain; older ones fall back to hair.mt template values, reported below.
-        const hairMaterial = asset.material ?? resolveHairMaterial();
-        const sampleCount = asset.profile?.sampleCount ?? 127;
-        let strand: { id: THREE.Texture; gradient: THREE.Texture; profile: THREE.Texture } | undefined;
-        let cap: { mask: THREE.Texture; gradient: THREE.Texture } | undefined;
-        if (asset.profile && asset.strandId && asset.strandGradient && asset.capMask && asset.capGradient) {
-          const [id, gradient, mask, capGradient] = await Promise.all([
-            loadMap(asset.strandId, false), loadMap(asset.strandGradient, false),
-            loadMap(asset.capMask, false), loadMap(asset.capGradient, true),
-          ]);
-          // The saved MELUMINARY cap's U coordinates occupy tile 2..3. The
-          // source mask is a 0..1 tile; clamping samples its black right edge
-          // over the entire cap, hiding it. The strand cards use 0..1 UVs.
-          mask.wrapS = THREE.RepeatWrapping;
-          mask.needsUpdate = true;
-          const profile = hairProfileTexture(asset.profile, sampleCount, profileEncoding);
-          materialTextures.push(profile);
-          strand = { id, gradient, profile };
-          cap = { mask, gradient: capGradient };
-        }
-        for (let index = 0; index < asset.parts.length; index++) {
-          const entry = asset.parts[index]!, buffer = (await bytes(entry.url, entry.sha256)).buffer,
-            original = restoreFirstWeights(buffer), loaded = await new GLTFLoader().parseAsync(buffer, "/assets/hair/");
-          root.add(loaded.scene);
-          loaded.scene.traverse(o => {
-            if (o instanceof THREE.Bone) bonesUsed++;
-            if (!(o instanceof THREE.SkinnedMesh)) return;
-            const association = loaded.parser.associations.get(o),
-              raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
-            if (!raw) throw Error(`Missing original hair weights for ${o.name}`);
-            o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-            o.frustumCulled = false;
-            // Strands: the hair light model replaces the card's direct lighting (see hair-shading.ts).
-            const mat = new (index && strand ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
-              // anisotropy > 0 makes Three skin and interpolate the vertex tangent frame (strand = bitangent).
-              ...(index && strand ? { specularIntensity: 0, anisotropy: 1e-4 } : {}),
-              color: strand ? 0xffffff : 0x342c29,
-              roughness: index ? 0.65 : 0.95, side: THREE.DoubleSide,
-              // Strands: MSAA alpha-to-coverage with no alpha test, like the game's dithered
-              // (TAA-resolved) coverage; the cap is a mask-blended decal over the scalp.
-              ...(index ? { alphaMap: alpha, ...(strand ? STRAND_COVERAGE_MATERIAL : { alphaToCoverage: true, alphaTest: 0.12 }) } :
-                cap ? { alphaMap: cap.mask, ...HAIR_CAP_DECAL_MATERIAL } : {}),
-            });
-            // Source textures and CCXL profile stops, rendered with approximate Three lighting.
-            o.material = mat;
-            extendSkin(o, mat);
-            if (index && strand) {
-              attachHairVertexRed(o.geometry);
-              attachHairColor(mat, { kind: "strand", ...strand, sampleCount, material: hairMaterial });
-            }
-            else if (!index && cap) attachHairColor(mat, { kind: "cap", ...cap });
-            o.name = `preview_hair_${index}_${parts.length}`;
-            verticesUsed += o.geometry.getAttribute("position").count;
-            parts.push(o);
-          });
-          if (hairVertices + verticesUsed > MAX_HAIR_VERTICES || hairBones + bonesUsed > MAX_HAIR_BONES)
-            throw Error("Local hair styles exceed the aggregate geometry/rig limit");
-        }
-        if (parts.length < 2) throw Error("Saved hair geometry is incomplete");
-        root.visible = false;
-        scene.add(root);
-        hair.push({ asset, root, meshes: parts, sampleCount,
-          material: asset.material ? "material-instance" : "template-defaults" });
-        meshes.push(...parts);
-        hairBytes += bytesUsed; hairVertices += verticesUsed; hairBones += bonesUsed;
-      } catch (error) {
-        root.traverse(o => {
-          if (o instanceof THREE.Mesh) {
-            o.geometry.dispose();
-            const materials = Array.isArray(o.material) ? o.material : [o.material];
-            for (const material of materials) material.dispose();
-          }
-        });
-        for (const texture of materialTextures) texture.dispose();
-        hairErrors.push(`${asset.label}: ${(error as Error).message}`);
-      }
-    }
-  } catch (error) { hairErrors.push((error as Error).message); }
-  const hairError = hairErrors.join("; ");
   let piercingManifest: PiercingManifest | undefined, piercingError = "";
   let prcManifest: PiercingManifest | undefined, prcError = "";
   const piercingMeshes = new Map<string, THREE.SkinnedMesh[]>();
@@ -623,18 +416,19 @@ async function assembleScene(
   // Every mesh with facial morph targets follows the character-creator morph choices. The eye
   // component carries its own `eyes` targets (a separate morph resource in the game), paired with
   // the head's by (target, region); see face-morphs.ts.
-  const deforming: THREE.Mesh[] = [
+  const coreDeforming: THREE.Mesh[] = [
     head,
     plate,
     ...(eyes.morphTargetDictionary ? [eyes] : []),
-    ...Object.values(details).flatMap((d) => d.meshes),
     ...[...piercingMeshes.values()].flat(),
   ];
+  // Resolved details join and leave with each character record.
+  const deforming = () => [...coreDeforming, ...(characterDetails?.components.flatMap(item => item.meshes) ?? [])];
   // The head is the authority for which eye shapes exist: its `eyes` targets in resource order.
   const eyeShapeChoices: FaceMorphChoice[] = faceMorphChoices(morphTargetNames(head), "eyes");
   const eyesFollowShape = followsFaceMorphChoices(morphTargetNames(eyes), eyeShapeChoices);
   function applyFaceMorph(choice: FaceMorphChoice) {
-    for (const m of deforming) {
+    for (const m of deforming()) {
       if (!m.morphTargetInfluences) continue;
       for (const [i, weight] of faceMorphWeights(morphTargetNames(m), choice.region, choice.target)) m.morphTargetInfluences[i] = weight;
     }
@@ -682,11 +476,14 @@ async function assembleScene(
       throw Error(
         "This study currently contains a female head. Male head assets are still needed.",
       );
+    // The third-person head consumes `TPP`; `character_customization` (the creator puppet) can list fewer
+    // morph regions (a new-game save stores only eyes and nose there, all five in TPP) [resource].
     const group =
-      v.groups.head.find((g) => g.name === "character_customization") ??
-      v.groups.head.find((g) => g.name === "TPP");
-    if (!group?.morphs.length)
+      v.groups.head.find((g) => g.name === "TPP") ??
+      v.groups.head.find((g) => g.name === "character_customization");
+    if (!group)
       throw Error("No supported facial morph group found.");
+    // A V whose every face region is the base shape stores no morphs; that is the base head.
     const names = group.morphs.map((m) => `${m.target}_${m.region}`);
     for (const mesh of [head, ...plates])
       for (const name of names)
@@ -694,8 +491,8 @@ async function assembleScene(
           throw Error(
             `This preview does not contain the saved facial morph ${name}`,
           );
-    for (const mesh of deforming) {
-      mesh.morphTargetInfluences!.fill(0);
+    for (const mesh of deforming()) {
+      mesh.morphTargetInfluences?.fill(0);
       for (const name of names) {
         const i = mesh.morphTargetDictionary?.[name];
         if (i !== undefined) mesh.morphTargetInfluences![i] = 1;
@@ -704,36 +501,64 @@ async function assembleScene(
     const savedEyes = group.morphs.find(m => m.region === "eyes");
     // No saved `eyes` pair means the base shape (`None`); the save stores only chosen morphs.
     const savedEyeShape = faceMorphChoiceIndex(eyeShapeChoices, savedEyes?.target ?? null);
-    const matchedDetails = Object.entries(details)
-      .filter(([, d]) =>
-        group.appearances.some(
-          (a) => a.resourceHash === d.hash && a.definition === d.definition,
-        ),
-      )
-      .map(([name]) => name);
     selectedEye = eyeAppearances.select(group.appearances);
     // Reset explicitly on every accepted save, including unresolved/missing images.
     applyEyeMaterial();
     currentSave = v;
     refreshPiercings();
-    const selectedHair = selectSavedHair(hair.map(h => h.asset), v);
-    for (const h of hair) h.root.visible = h.asset === selectedHair && hairEnabled;
-    const matchedHair = !!selectedHair;
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
-      matchedDetails,
       eyeAppearance: eyeAppearance(),
-      matchedHair,
       matchedPiercing: !!(piercingManifest && savedPiercing(piercingManifest, v)),
       ...(savedEyeShape === undefined ? {} : { eyeShape: savedEyeShape }),
     };
   }
-  let hairEnabled = true;
-  function setHair(enabled: boolean) {
-    hairEnabled = enabled;
-    const selectedHair = selectSavedHair(hair.map(h => h.asset), currentSave);
-    for (const h of hair) h.root.visible = enabled && h.asset === selectedHair;
+  function refreshDetailVisibility() {
+    for (const item of characterDetails?.components ?? []) item.root.visible = detailVisible[item.component.slot];
+  }
+  function setHair(enabled: boolean) { detailVisible.hair = enabled; refreshDetailVisibility(); }
+  /**
+   * Swap in a character's resolved details, replacing the previous ones completely (null removes them).
+   * The new meshes follow the head's current facial shapes and join the idle rig.
+   */
+  function setCharacterDetails(next: LoadedCharacterDetails | null) {
+    if (characterDetails === next) return;
+    const previous = characterDetails;
+    characterDetails = null;
+    if (previous) {
+      idle?.detach(previous.components.flatMap(item => item.bones));
+      for (const item of previous.components) for (const mesh of item.meshes) {
+        const index = meshes.indexOf(mesh); if (index >= 0) meshes.splice(index, 1);
+      }
+      previous.dispose();
+    }
+    if (!next) return;
+    for (const item of next.components) {
+      for (const mesh of item.meshes) {
+        mesh.renderOrder = DETAIL_RENDER_ORDER[item.component.slot];
+        extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial);
+        // Facial shapes: the same (target, region) names as the head's.
+        for (const [key, index] of Object.entries(mesh.morphTargetDictionary ?? {}))
+          mesh.morphTargetInfluences![index] = head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
+        meshes.push(mesh);
+      }
+      scene.add(item.root);
+    }
+    scene.updateMatrixWorld(true);
+    idle?.attach(next.components.flatMap(item => item.bones));
+    characterDetails = next;
+    refreshDetailVisibility();
+  }
+  function characterDetailsEvidence() {
+    const loaded = characterDetails;
+    return { identity: loaded?.record.identity ?? null, source: loaded?.record.character.source ?? null,
+      slots: loaded?.record.slots.map(slot => ({ ...slot })) ?? [], problems: loaded?.problems.map(problem => ({ ...problem })) ?? [],
+      notes: [...(loaded?.notes ?? [])], browUnderlay,
+      components: loaded?.components.map(item => ({ slot: item.component.slot, option: item.component.option, definition: item.component.definition,
+        component: item.component.component, geometry: item.component.geometry.depotPath, visible: item.root.visible,
+        chunks: item.meshes.map(mesh => mesh.name), templates: [...new Set(item.component.materials.map(material => material.template))],
+        vertices: item.meshes.reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0) })) ?? [] };
   }
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
@@ -808,23 +633,13 @@ async function assembleScene(
     })),
     blinkBones: bones.length,
     eyeShape: { choices: eyeShapeChoices.length, eyesFollow: eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
-    detailErrors,
-    browMaterial: savedBrowMaterial ? "saved-double-diffuse" : "provisional",
-    browBlend: savedBrowMaterial ? "gbuffer-sqrt" : "linear",
-    browUnderlay,
-    lashColor: savedLash ? "saved-hair-profile" : "provisional",
-    lashProfile: savedLash ? { ...savedLash.profile, candidates: savedLash.candidates, roughness: savedLash.roughness,
-      alphaCutoff: savedLash.alphaCutoff, albedoLinear: savedLash.color.toArray() } : undefined,
     profileEncoding,
-    hairError,
     piercingError,
     prcError,
     piercing: { source: piercingManifest?.source, styles: piercingManifest?.styles.length ?? 0,
       meshes: [...piercingMeshes].map(([id, parts]) => ({ id, chunks: parts.length,
         vertices: parts.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })) },
     prc: { source: prcManifest?.source, styles: prcManifest?.styles.length ?? 0 },
-    hair: hair.map(h => ({ label: h.asset.label, parts: h.meshes.length, material: h.material, sampleCount: h.sampleCount,
-      vertices: h.meshes.reduce((n, m) => n + m.geometry.getAttribute("position").count, 0) })),
     idle: { available: !!idle, error: idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
       faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
@@ -833,7 +648,7 @@ async function assembleScene(
     scene,
     camera,
     /** Releases the renderer, its canvas, the stage and observers; the scene is unusable afterwards. */
-    dispose: () => releaseAll(releases),
+    dispose: () => { setCharacterDetails(null); releaseAll(releases); },
     onFrame: (callback: () => void) => {
       frameListeners.add(callback);
       return () => frameListeners.delete(callback);
@@ -870,9 +685,10 @@ async function assembleScene(
     applySavedV,
     eyeAppearance,
     setEyeOptics,
-    details,
-    hair,
     setHair,
+    setCharacterDetails,
+    detailContext,
+    characterDetailsEvidence,
     piercingManifest,
     prcManifest,
     piercingStyles,
@@ -925,8 +741,8 @@ async function assembleScene(
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
       idle.setContributions({ body, face }); frameIdle();
     },
-    setDetail: (name: string, v: boolean) => {
-      if (details[name]) details[name].root.visible = v;
+    setDetail: (name: "brows" | "lashes", v: boolean) => {
+      detailVisible[name] = v; refreshDetailVisibility();
     },
     setBlink: (v: number) => {
       amount = v;

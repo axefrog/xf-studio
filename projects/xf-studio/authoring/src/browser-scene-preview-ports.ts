@@ -8,7 +8,6 @@ type Scene = Awaited<ReturnType<typeof createScene>>;
 /** The Three scene stays on the trusted device side of the presentation boundary. */
 export function createBrowserScenePreviewPorts(scene: Scene, options: {
   setSurfaceControls(enabled: boolean): void;
-  hasSavedAppearance(): boolean;
 }): { savedAppearance: SavedAppearancePort; preview: PreviewPort; motion: MotionPort } {
   return {
     savedAppearance: { apply: savedV => scene.applySavedV(savedV) },
@@ -24,9 +23,8 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
         choices: style.choices.map(choice => ({ index: choice.index,
           definition: choice.definition, label: choice.label })) })),
       eyeShapeOptions: scene.eyeShapeOptions,
-      availability: target => target === "hair"
-        ? !options.hasSavedAppearance() || !scene.hair.length ? "Saved hair preview is unavailable." : undefined
-        : !scene.details[target] ? `${target} preview assets are unavailable.` : undefined,
+      // Brows, lashes and hair are visibility preferences: their resolved details arrive later and
+      // follow the setting, so the toggles never depend on what is loaded right now.
     },
     motion: {
       get idle() { return scene.idle; },

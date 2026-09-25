@@ -52,6 +52,24 @@ export function resolveHairMaterial(overrides: unknown = {}): HairMaterialParame
   return result;
 }
 
+/** `hair.mt` parameter names as the material instances and template store them. */
+export const HAIR_MATERIAL_PARAMETER_NAMES: Readonly<Record<string, keyof HairMaterialParameters>> = Object.freeze({
+  AlphaCutoff: "alphaCutoff", RoughnessScale: "roughnessScale", RoughnessBias: "roughnessBias", ShadowStrength: "shadowStrength",
+  ShadowMin: "shadowMin", ShadowMax: "shadowMax", ShadowRoughness: "shadowRoughness", FlowStrength: "flowStrength", Scattering: "scattering",
+});
+
+/** Effective `hair.mt` scalars (instance chain, then template defaults) → the model's parameters, clamped to their ranges. */
+export function hairMaterialFromScalars(scalars: Readonly<Record<string, number>>): HairMaterialParameters {
+  const overrides: Partial<HairMaterialParameters> = {};
+  for (const [name, key] of Object.entries(HAIR_MATERIAL_PARAMETER_NAMES)) {
+    const value = scalars[name];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const [low, high] = PARAMETER_RANGES[key];
+    overrides[key] = Math.min(high, Math.max(low, value));
+  }
+  return resolveHairMaterial(overrides);
+}
+
 export function srgbToLinear(value8: number): number {
   const c = value8 / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

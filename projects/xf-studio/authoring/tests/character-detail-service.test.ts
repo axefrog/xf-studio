@@ -1,0 +1,167 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CharacterDetailHost, characterRequestKey } from "../src/character-detail-host";
+import { hairProfileStops, pngSize, prepareCharacterDetails, textureIsGamma } from "../src/character-detail-service";
+import { depotHash } from "../src/depot-path";
+import { encodePng } from "../src/png";
+import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
+  type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
+import { parseCharacterDetail } from "../src/render-detail";
+import { detailFixture, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+
+const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+const png = encodePng({ width: 2, height: 1, data: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 128]) }, { alpha: true });
+
+/** An exporter over temp files: a tiny GLB-shaped file per geometry and a 2×1 PNG per texture. */
+function fakeExporter(options: { failArchive?: string; calls?: string[] } = {}): GameAssetExporter {
+  let n = 0;
+  return { open(source) {
+    const dir = join(root, `export-${n++}`);
+    mkdirSync(dir, { recursive: true });
+    return { tool: { key: "fake", label: "Fake exporter" }, present: () => null, close() {},
+      async geometry(paths) {
+        options.calls?.push(`geometry ${source.archivePath}`);
+        if (options.failArchive && source.archivePath.includes(options.failArchive)) throw new GameAssetExportError("tool_failed", "fake failure");
+        return new Map(paths.map((path): [string, ExportedGeometry] => {
+          const file = join(dir, `${depotHash(path)}.glb`);
+          writeFileSync(file, `glTF ${path}`);
+          return [path, { depotPath: path, hash: depotHash(path), raw: file, rawSha256: "", glb: file, glbSha256: "", materials: null, materialsSha256: null, complete: true, cached: false }];
+        }));
+      },
+      async textures(paths) {
+        options.calls?.push(`textures ${source.archivePath}`);
+        return new Map(paths.map((path): [string, ExportedTexture] => {
+          const file = join(dir, `${depotHash(path)}.png`);
+          writeFileSync(file, png);
+          return [path, { depotPath: path, hash: depotHash(path), png: file, pngSha256: "", cached: false }];
+        }));
+      } };
+  } };
+}
+
+const route = { gameRoot: join(root, "game"), launchRoute: "mo2" as const, wolvenKitCli: "wk.exe" };
+const prepare = (request = REQUEST_A, exporter = fakeExporter()) => prepareCharacterDetails({ request, route, storeRoot: join(root, "store"),
+  resolverCache: join(root, "resolver"), exporter, open: () => detailFixture().installation() });
+
+describe("character record from the resolver", () => {
+  test("record is versioned, strict, content-addressed and names only the resources that draw", async () => {
+    const calls: string[] = [];
+    const { record, recordFile } = await prepare(REQUEST_A, fakeExporter({ calls }));
+    expect(record.schema).toBe("xfs/render-detail-2");
+    expect(recordFile).toBe(`${record.identity}.json`);
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
+    expect(record.components.map(c => c.slot)).toEqual(["brows", "lashes", "hair"]);
+    const hair = record.components.find(c => c.slot === "hair")!;
+    expect(hair.chunks).toEqual([0, 1]);
+    expect(hair.geometry.depotPath).toBe(P.hairMesh);
+    expect(hair.geometry.file).toMatch(/^[a-f0-9]{64}\.glb$/);
+    const strand = hair.materials[0]!;
+    // Raw channels and the resource's own colour flag; the adapters interpret them.
+    expect(strand.textures.Strand_ID).toMatchObject({ depotPath: P.strandId, width: 2, height: 1, isGamma: false });
+    expect(record.components.find(c => c.slot === "brows")!.materials[0]!.textures.DiffuseTexture!.isGamma).toBe(true);
+    // The mod archive's profile wins over the base game's (R1), with its archive recorded.
+    expect(strand.profiles.HairProfile).toMatchObject({ depotPath: P.hp, archive: "fixture_mod.archive", sampleCount: 127 });
+    expect(strand.profiles.HairProfile!.rootToTip[1]!.color).toEqual([200, 60, 40]);
+    expect(record.provenance.tool).toBe("Fake exporter");
+    // One export call per winning archive and kind.
+    expect(calls.filter(call => call.startsWith("geometry")).length).toBe(1);
+    // Same inputs, same identity: records are content-addressed.
+    expect((await prepare()).record.identity).toBe(record.identity);
+  });
+
+  test("an export failure empties only the affected slot, with one plain line", async () => {
+    const { record } = await prepare(REQUEST_A, fakeExporter({ failArchive: "basegame_fixture" }));
+    expect(record.components).toEqual([]);
+    expect(record.slots.map(s => s.state)).toEqual(["unavailable", "unavailable", "unavailable"]);
+    expect(record.slots[2]!.message).toBe("WolvenKit couldn't read your V's hair from your game files, so it isn't shown.");
+    const b = await prepare(REQUEST_B);
+    expect(b.record.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "none", label: "None" });
+  });
+
+  test("small readers: PNG size, texture colour flag and hair profiles", () => {
+    expect(pngSize(png)).toEqual({ width: 2, height: 1 });
+    expect(pngSize(new Uint8Array(8))).toBeNull();
+    expect(textureIsGamma({ setup: { isGamma: 1 } })).toBe(true);
+    expect(textureIsGamma({ setup: { isGamma: 0 } })).toBe(false);
+    expect(textureIsGamma({})).toBeNull();
+    expect(hairProfileStops({ $type: "CHairProfile", sampleCount: 127, gradientEntriesID: [{ value: 0.5, color: { Red: 1, Green: 2, Blue: 3 } }],
+      gradientEntriesRootToTip: [{ value: 2, color: { Red: 300, Green: 0, Blue: 0 } }] })).toEqual(
+      { sampleCount: 127, id: [{ value: 0.5, color: [1, 2, 3] }], rootToTip: [{ value: 1, color: [255, 0, 0] }] });
+    expect(hairProfileStops({ $type: "CHairProfile", sampleCount: 1, gradientEntriesID: [], gradientEntriesRootToTip: [] })).toBeNull();
+  });
+});
+
+describe("exporter cache keys", () => {
+  test("entries are keyed by depot hash and the winning archive's fingerprint", () => {
+    const archive = join(root, "one.archive"), other = join(root, "two.archive");
+    writeFileSync(archive, "a"); writeFileSync(other, "a");
+    const source = archiveExportSource(archive, route.gameRoot);
+    expect(archiveExportSource(archive, route.gameRoot).fingerprint).toBe(source.fingerprint);
+    expect(archiveExportSource(other, route.gameRoot).fingerprint).not.toBe(source.fingerprint);
+    const cache = new GameAssetExportCache(join(root, "cache"), { key: "tool-1", label: "Tool" });
+    const entry = cache.entryDirectory(P.hairMesh, source);
+    expect(entry).toContain(depotHash(P.hairMesh));
+    expect(cache.entryDirectory(P.browMesh, source)).not.toBe(entry);
+    expect(cache.entryDirectory(P.hairMesh, archiveExportSource(other, route.gameRoot))).not.toBe(entry);
+    expect(new GameAssetExportCache(join(root, "cache"), { key: "tool-2", label: "Tool" }).entryDirectory(P.hairMesh, source)).not.toBe(entry);
+    // A replaced archive (new size or time) is a new container: its exports are never reused.
+    writeFileSync(archive, "changed"); utimesSync(archive, new Date(), new Date(Date.now() + 5000));
+    expect(archiveExportSource(archive, route.gameRoot).fingerprint).not.toBe(source.fingerprint);
+  });
+
+  test("a cached export is reused for the same resource and archive, and re-run for another archive", async () => {
+    const runs: string[] = [];
+    const exporter = createGameAssetExporter(join(root, "reuse"), async ({ source, depotPaths, outDir }) => {
+      runs.push(source.archivePath);
+      for (const path of depotPaths) {
+        const target = join(outDir, ...path.split("\\"));
+        mkdirSync(join(target, ".."), { recursive: true });
+        writeFileSync(target.replace(/\.xbm$/, ".png"), png);
+      }
+    });
+    const a = archiveExportSource(join(root, "one.archive"), route.gameRoot), b = archiveExportSource(join(root, "two.archive"), route.gameRoot);
+    const first = await exporter.open(a).textures([P.capMask]);
+    expect(first.get(P.capMask)!.cached).toBe(false);
+    expect((await exporter.open(a).textures([P.capMask])).get(P.capMask)!.cached).toBe(true);
+    expect((await exporter.open(b).textures([P.capMask])).get(P.capMask)!.cached).toBe(false);
+    expect(runs.length).toBe(2);
+  });
+});
+
+describe("host preparation", () => {
+  test("a newer character supersedes the running one; files are served only by content-addressed name", async () => {
+    const started: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => ({ gameRoot: route.gameRoot, launchRoute: "mo2",
+      mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: process.execPath }), exporter: () => fakeExporter(),
+      prepare: async options => {
+        started.push(options.request.source === "save" ? options.request.appearances[0]!.option : "default");
+        if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
+        return prepareCharacterDetails({ ...options, open: () => detailFixture().installation() });
+      } });
+    const a = host.request(REQUEST_A);
+    expect(a.phase).toBe("preparing");
+    expect(a.key).toBe(characterRequestKey(REQUEST_A));
+    const b = host.request(REQUEST_B);
+    release();
+    await host.settled();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(host.state(a.key).phase).toBe("unknown");
+    const ready = host.state(b.key);
+    expect(ready.phase).toBe("ready");
+    expect(host.filePath(ready.record!)).not.toBeNull();
+    expect(host.filePath("../secret.json")).toBeNull();
+    expect(host.filePath("records/x.json")).toBeNull();
+    expect(started).toEqual(["eyebrows_color1", "eyebrows_color2"]);
+  });
+
+  test("without a game folder or WolvenKit the host says what's needed", () => {
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "none"), settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null,
+      mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
+    expect(host.request(REQUEST_A)).toMatchObject({ phase: "failed", message: "Brows, lashes and hair appear once your game folder and WolvenKit are set up." });
+  });
+});

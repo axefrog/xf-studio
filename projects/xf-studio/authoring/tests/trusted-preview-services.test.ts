@@ -50,7 +50,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
     setBlink: () => calls.push("blink"), animateBlink: () => calls.push("play") };
   const services = createTrustedPreviewServices(workspace, {
     savedAppearance: { apply: () => { calls.push("save"); return { applied: [], appearanceReferences: 0,
-      matchedDetails: [], matchedHair: true, matchedPiercing: false, eyeAppearance: { message: "" }, eyeShape: 9 }; } },
+      matchedPiercing: false, eyeAppearance: { message: "" }, eyeShape: 9 }; } },
     preview, motion,
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);

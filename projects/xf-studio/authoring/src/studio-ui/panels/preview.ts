@@ -7,6 +7,18 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
+type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
+const SLOT_NAMES = { brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair" } as const;
+
+/** One plain line about the shown V's brows, lashes and hair, from the resolved-detail status. */
+export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
+  if (!details || details.phase === "idle") return { done: false, text: "" };
+  const who = details.source === "save" ? "your V" : "the default V";
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s brows, lashes and hair from your game files…` };
+  if (details.phase === "failed") return { done: true, text: details.message };
+  const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
+  return { done: true, text: [`${parts.join(" · ")}.`, details.message, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
+}
 
 export function characterPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -17,7 +29,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const eyeNote = note("");
   const brows = new Toggle({ label: "Eyebrows", onChange: enabled => rt.dispatch({ kind: "preview.setDetail", detail: "brows", enabled }) });
   const lashes = new Toggle({ label: "Eyelashes", onChange: enabled => rt.dispatch({ kind: "preview.setDetail", detail: "lashes", enabled }) });
-  const hair = new Toggle({ label: "Saved V hair", onChange: enabled => rt.dispatch({ kind: "preview.setHair", enabled }) });
+  const hair = new Toggle({ label: "Hair", onChange: enabled => rt.dispatch({ kind: "preview.setHair", enabled }) });
   const piercings = new Toggle({ label: "Piercings", onChange: enabled => rt.dispatch({ kind: "preview.setPiercings", enabled }) });
   const style = new SelectField<string>({ label: "Preview piercing style", onChange: value => {
     const options = port.authoring.previewState().previewOptions ?? [];
@@ -30,7 +42,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   } });
   const detailNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Saved V", note("A save is read locally for facial shape and appearance references. It is never modified or uploaded."),
+    section("Saved V", note("A save is read locally for your V's face, eyes, brows, lashes, hair and piercings. It is never modified or uploaded."),
       h("div", { class: "row wrap gap-s" }, load, exportV), summary),
     section("Eyes", eyeShape.element, eyeNote),
     section("Preview context", brows.element, lashes.element, hair.element, piercings.element, style.element, colour.element, detailNote,
@@ -41,16 +53,16 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       const state = frame.preview, preview = state.preview, saved = state.savedV, assets = frame.status.assets;
       applyCapability(load, port.files.capability({ kind: "savedV.import" }));
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
-      const key = JSON.stringify([saved, (frame.viewport.head.error ?? frame.viewport.head.message)]);
+      const detailLine = characterDetailLine(assets.characterDetails);
+      const key = JSON.stringify([saved, (frame.viewport.head.error ?? frame.viewport.head.message), detailLine]);
       if (summary.dataset.key !== key) {
         summary.dataset.key = key;
         const result = saved.result;
         summary.replaceChildren(...(!saved.loaded || !result ? [emptyState("Reference head", (frame.viewport.head.error ?? frame.viewport.head.message) ??
           "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
           fact(icon("check"), `${result.applied.length} facial regions applied`, `${result.appearanceReferences} appearance references read${saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : ""}`),
-          fact(icon(result.matchedDetails.length === 2 ? "check" : "info"), result.matchedDetails.length === 2 ? "Brows and lashes matched" : "Brows and lashes: reference styles",
-            result.matchedDetails.length === 2 ? "Colours are approximate." : "Not a resolved match for this save."),
-          fact(icon(result.matchedHair ? "check" : "info"), result.matchedHair ? "Hair mesh matched" : "Hair unresolved", result.matchedHair ? "Colour, strand shading and physics are approximate." : "Local assets unavailable or no exact match."),
+          fact(icon(detailLine.done && assets.characterDetails?.slots.every(slot => slot.state !== "unavailable") ? "check" : "info"),
+            "Brows, lashes and hair", detailLine.text || "Waiting for the 3D head."),
           fact(icon(result.matchedPiercing ? "check" : "info"), result.matchedPiercing ? "Vanilla piercing matched" : "No matching vanilla piercing", result.matchedPiercing ? "Materials remain approximate." : "You can try a viewport-only style below."),
           fact(icon("info"), "Eyes", result.eyeAppearance.message),
         ]));
@@ -74,7 +86,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       }
       const hairAllowed = enableReason(rt, { kind: "preview.setHair", enabled: true });
       hair.update(!!preview?.hair, { disabled: !preview || (!preview.hair && !hairAllowed.available), reason: hairAllowed.reason ?? "Preview is still loading.",
-        note: assets.hairError ? `Some local hair styles unavailable: ${assets.hairError}` : "Appears for a matching imported V. Colour, shading and physics are approximate." });
+        note: "Hair physics is not simulated." });
       const options = state.previewOptions ?? [];
       const piercingAllowed = enableReason(rt, { kind: "preview.setPiercings", enabled: true });
       piercings.update(!!preview?.piercings, { disabled: !preview || !options.length || (!preview.piercings && !piercingAllowed.available),
@@ -86,11 +98,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
       colour.update((chosen?.choices ?? []).map(choice => ({ value: choice.definition, label: `${choice.index}. ${choice.label}` })), preview?.piercingDefinition, !chosen,
         "Choose a preview style first.");
       colour.element.hidden = !chosen;
-      const provenance = assets.detailErrors.length ? `Some details unavailable: ${assets.detailErrors.join("; ")}`
-        : assets.browMaterial === "saved-double-diffuse" ? assets.lashColor === "saved-hair-profile"
-          ? `Saved Arkhe brow maps (G-buffer decal blend) · lash profile: ${assets.lashProfileLabel ?? "unknown"} · hair-shader colour, approximate lighting.`
-          : "Saved Arkhe brow maps + installed ombre gradient · lash shading approximate."
-          : assets.loaded ? "Reference brow and lash styles · approximate colours." : "";
+      // The shown V's resolved details, read from your own installed game and mods.
+      const provenance = saved.loaded ? "" : detailLine.text;
       setText(detailNote, [provenance, chosen?.id.startsWith("prc_") ? "Private PRC slot preview: materials and effective game winners remain unverified." : ""].filter(Boolean).join(" "));
       detailNote.hidden = !detailNote.textContent;
     },

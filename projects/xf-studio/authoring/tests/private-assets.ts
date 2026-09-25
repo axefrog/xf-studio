@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { oracleTest } from "./optional-oracles";
 
@@ -38,3 +38,15 @@ export const derivedPreviewTest = oracleTest(derivedPreviewPath("head.glb") !== 
 /** The prepared file's path; only call inside a `derivedPreviewTest`. */
 export const derivedPreviewFile = (name: string) => derivedPreviewPath(name) ??
   (() => { throw Error(`The prepared 3D preview has no ${name}.`); })();
+
+/** Prepared character records (brows, lashes, hair) in the derived preview cache's `characters/` store. Read-only. */
+export function derivedCharacterRecords(): { record: any; file: (name: string) => string }[] {
+  const root = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "..", "data", "preview-cache"), "characters");
+  try {
+    return readdirSync(resolve(root, "records")).filter(name => /^[a-f0-9]{64}\.json$/.test(name))
+      .map(name => ({ record: JSON.parse(readFileSync(resolve(root, "records", name), "utf8")), file: (file: string) => resolve(root, "files", file) }));
+  } catch { return []; }
+}
+/** Tests on resolved character details, which exist only once the preview prepared a V from a local game. */
+export const derivedCharacterTest = oracleTest(derivedCharacterRecords().length > 0,
+  "no V's brows, lashes or hair have been prepared from a local game yet (open the 3D preview once, or set XFS_PREVIEW_CORE_CACHE to a ready cache).");

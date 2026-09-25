@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
 import { extendSkin, restoreFirstWeights } from "../src/skin";
-import { derivedPreviewFile, derivedPreviewTest, privateAssetTest } from "./private-assets";
+import { derivedCharacterRecords, derivedCharacterTest, derivedPreviewFile, derivedPreviewTest } from "./private-assets";
 test("CPU surface picking retains contributions beyond the first four", () => {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute([1, 2, 3], 3));
@@ -35,51 +35,50 @@ test("CPU surface picking retains contributions beyond the first four", () => {
   expect(q.w).toBeCloseTo(1, 6);
   expect(q.x).toBeCloseTo(p.x, 6);
 });
-// The head comes from the preview derived from the local game; brows and lashes are detail intake files.
-for (const [asset, morphCount, skinCount] of [
-  ["head", 105, 2],
-  ["brows", 105, 1],
-  ["lashes", 21, 1],
-] as const)
-  (asset === "head" ? derivedPreviewTest : privateAssetTest)(`${asset} GLB retains customization morphs, all skin sets and normalized totals`, async () => {
-    const file = Bun.file(asset === "head" ? derivedPreviewFile("head.glb") :
-      new URL(`../public/assets/${asset}.glb`, import.meta.url),
-    );
-    if (!(await file.exists()))
-      throw Error("Run local preview/detail intake before asset tests.");
-    const buffer = await file.arrayBuffer(),
-      view = new DataView(buffer),
-      n = view.getUint32(12, true),
-      json = JSON.parse(
-        new TextDecoder().decode(new Uint8Array(buffer, 20, n)),
-      ),
-      start = 28 + n;
-    const first = restoreFirstWeights(buffer);
-    expect(first.size).toBe(skinCount);
-    for (const mesh of json.meshes) {
-      const p = mesh.primitives[0];
-      // Skinned meshes carry the facial targets; the derived eyes carry only their own eye shapes.
-      if (!p.targets || p.attributes.JOINTS_0 === undefined) continue;
-      expect(p.targets.length).toBe(morphCount);
+/** Every skinned primitive keeps its full (eight-influence) skin, its facial targets, and normalized totals. */
+function checkSkinnedGlb(buffer: ArrayBuffer, morphCounts: readonly number[] | null, skinCount?: number, eightInfluences = true) {
+  const view = new DataView(buffer), n = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, n))), start = 28 + n;
+  const first = restoreFirstWeights(buffer);
+  if (skinCount !== undefined) expect(first.size).toBe(skinCount);
+  for (const mesh of json.meshes) {
+    const p = mesh.primitives[0];
+    if (p.attributes.JOINTS_0 === undefined) continue;
+    // Morph components carry the facial targets; plain skinned meshes (hair) carry none.
+    if (p.targets && morphCounts) expect(morphCounts).toContain(p.targets.length);
+    if (eightInfluences || p.attributes.JOINTS_1 !== undefined) {
       expect(p.attributes.JOINTS_1).toBeDefined();
       expect(p.attributes.WEIGHTS_1).toBeDefined();
-      const arrays = [];
-      for (let k = 0; p.attributes[`WEIGHTS_${k}`] !== undefined; k++) {
-        const a = json.accessors[p.attributes[`WEIGHTS_${k}`]],
-          b = json.bufferViews[a.bufferView];
-        arrays.push({
-          count: a.count,
-          offset: start + (b.byteOffset ?? 0) + (a.byteOffset ?? 0),
-          stride: b.byteStride ?? 16,
-        });
-      }
-      for (let i = 0; i < arrays[0].count; i++) {
-        let sum = 0;
-        for (const a of arrays)
-          for (let k = 0; k < 4; k++)
-            sum += view.getFloat32(a.offset + i * a.stride + k * 4, true);
-        expect(sum).toBeCloseTo(1, 5);
-      }
-      expect(first.get(mesh.name)!.length).toBe(arrays[0].count * 4);
     }
-  });
+    const arrays = [];
+    for (let k = 0; p.attributes[`WEIGHTS_${k}`] !== undefined; k++) {
+      const a = json.accessors[p.attributes[`WEIGHTS_${k}`]], b = json.bufferViews[a.bufferView];
+      arrays.push({ count: a.count, offset: start + (b.byteOffset ?? 0) + (a.byteOffset ?? 0), stride: b.byteStride ?? 16 });
+    }
+    for (let i = 0; i < arrays[0]!.count; i++) {
+      let sum = 0;
+      for (const a of arrays) for (let k = 0; k < 4; k++) sum += view.getFloat32(a.offset + i * a.stride + k * 4, true);
+      expect(sum).toBeCloseTo(1, 5);
+    }
+    expect(first.get(mesh.name)!.length).toBe(arrays[0]!.count * 4);
+  }
+}
+
+// The head comes from the preview derived from the local game.
+derivedPreviewTest("head GLB retains customization morphs, all skin sets and normalized totals", async () => {
+  checkSkinnedGlb(await Bun.file(derivedPreviewFile("head.glb")).arrayBuffer(), [105], 2);
+});
+
+// Brows, lashes and hair come from resolved character records (exported from the winning archives).
+derivedCharacterTest("resolved brow, lash and hair GLBs retain their facial targets, all skin sets and normalized totals", async () => {
+  const records = derivedCharacterRecords();
+  const slots = new Set<string>();
+  for (const { record, file } of records) for (const component of record.components) {
+    slots.add(component.slot);
+    // Head decals and lashes carry the head's 105 face targets or the eye component's 21.
+    // Some chunks (the eyeball beside the lashes) have four influences only; the export keeps what the game has.
+    // Plain skinned meshes (hair) may carry a garment-support shape, which is not a facial target.
+    checkSkinnedGlb(await Bun.file(file(component.geometry.file)).arrayBuffer(), component.geometry.morphTargets ? [105, 21] : null, undefined, false);
+  }
+  expect(slots.size).toBeGreaterThan(0);
+});

@@ -489,6 +489,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .viewport-context { font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; background: var(--stage-chip); padding: 6px 8px; max-width: 60%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 2px solid var(--accent); }
 .viewport-tools { display: flex; gap: 1px; background: var(--stage-chip); padding: 2px; }
+.viewport-detail-status { position: absolute; top: calc(var(--sp-4) + 34px); left: var(--sp-4); max-width: min(46ch, 60%); margin: 0; pointer-events: none;
+  display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-text-muted); background: var(--stage-chip); padding: 5px 8px; }
+.viewport-detail-status[hidden] { display: none; }
+.viewport-detail-status[data-tone="progress"]::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--stage-updating); animation: pulse 1s steps(2) infinite; }
 .viewport-tools .btn.ghost { color: var(--stage-text-muted); }
 .viewport-tools .btn.ghost:hover:not(:disabled) { background: var(--stage-hover); color: var(--stage-strong); }
 .viewport-tools .btn.ghost[aria-pressed="true"] { color: var(--stage-signal); background: var(--stage-signal-bg); }
@@ -1221,7 +1225,7 @@ body.guide { overflow: auto; height: auto; }
 <article class="pattern" id="c-facts" data-status="implemented">
   <header class="pattern-head"><h3>Fact list</h3><span class="status-tag implemented">Implemented</span></header>
   <div class="specimen" data-compare><div class="fact-list" style="max-width:360px"><div class="fact"><span class="fact-mark"><svg viewBox="0 0 16 16" class="icon" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg></span><div><strong>12 facial regions applied</strong><p class="muted small">41 appearance references read · game 2.31</p></div></div><div class="fact"><span class="fact-mark"><svg viewBox="0 0 16 16" class="icon" aria-hidden="true"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z"/><path d="M8 7v4.5M8 4.6v.6"/></svg></span><div><strong>Hair unresolved</strong><p class="muted small">Local assets unavailable or no exact match.</p></div></div></div></div>
-  <dl class="guidance"><dt>What</dt><dd>Matched versus unresolved facts, each with a mark and an honest qualifier.</dd><dt>When</dt><dd>Saved-V import results and future asset provenance.</dd><dt>Combine</dt><dd>Sits under the action that produced the facts (Load V from a save).</dd><dt>Adapt</dt><dd>Single column in every size.</dd><dt>Driven by</dt><dd>previewState().savedV.result (matchedDetails, matchedHair, matchedPiercing, eyeAppearance).</dd></dl>
+  <dl class="guidance"><dt>What</dt><dd>Matched versus unresolved facts, each with a mark and an honest qualifier.</dd><dt>When</dt><dd>Saved-V import results and future asset provenance.</dd><dt>Combine</dt><dd>Sits under the action that produced the facts (Load V from a save).</dd><dt>Adapt</dt><dd>Single column in every size.</dd><dt>Driven by</dt><dd>previewState().savedV.result (applied, matchedPiercing, eyeAppearance) and status.assets.characterDetails (brows, lashes and hair of the shown V).</dd></dl>
 </article>
 <article class="pattern" id="c-activity" data-status="implemented">
   <header class="pattern-head"><h3>Activity log</h3><span class="status-tag implemented">Implemented</span></header>

@@ -18,36 +18,62 @@ export class IdleAnimation {
   private readonly local = new THREE.Matrix4();
   private readonly faceDelta = new THREE.Matrix4();
   private readonly faceMixer?: THREE.AnimationMixer;
+  /** Driver lookups and their bind-pose inverses, kept so bones loaded later bind to the same neutral pose. */
+  private readonly drivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
+  private readonly faceDrivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
   constructor(readonly source: THREE.Object3D, readonly clip: THREE.AnimationClip,
     targets: THREE.Object3D[], ancestry: Record<string, string | null>,
     readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip }) {
     source.updateMatrixWorld(true);
-    const drivers = new Map<string, THREE.Object3D>();
-    source.traverse(o => drivers.set(o.name, o));
-    const faceDrivers = new Map<string, THREE.Object3D>();
+    source.traverse(o => this.drivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
     if (facial) {
       facial.source.updateMatrixWorld(true);
-      facial.source.traverse(o => faceDrivers.set(o.name,o));
+      facial.source.traverse(o => this.faceDrivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
       this.faceMixer = new THREE.AnimationMixer(facial.source);
       this.faceMixer.clipAction(facial.clip).setLoop(THREE.LoopRepeat,Infinity).play();
     }
+    this.ancestry = ancestry;
+    this.bind(targets);
+    this.mixer = new THREE.AnimationMixer(source);
+    this.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+  }
+  private readonly ancestry: Record<string, string | null>;
+  private bind(targets: readonly THREE.Object3D[]) {
     for (const bone of targets) {
       let name: string | null = bone.name;
       const seen = new Set<string>();
-      while (name && !drivers.has(name) && !seen.has(name)) {
-        seen.add(name); name = ancestry[name] ?? null;
+      while (name && !this.drivers.has(name) && !seen.has(name)) {
+        seen.add(name); name = this.ancestry[name] ?? null;
       }
-      if (!name || !drivers.has(name)) { this.unmapped.push(bone.name); continue; }
-      const driver = drivers.get(name)!;
-      const faceDriver = faceDrivers.get(bone.name);
-      this.bindings.push({ bone, driver, inverseDriverBind: driver.matrixWorld.clone().invert(),
-        faceDriver, inverseFaceBind: faceDriver?.matrixWorld.clone().invert(),
+      if (!name || !this.drivers.has(name)) { this.unmapped.push(bone.name); continue; }
+      const driver = this.drivers.get(name)!, face = this.faceDrivers.get(bone.name);
+      this.bindings.push({ bone, driver: driver.driver, inverseDriverBind: driver.inverseBind,
+        faceDriver: face?.driver, inverseFaceBind: face?.inverseBind,
         worldBind: bone.matrixWorld.clone(), position: bone.position.clone(), rotation: bone.quaternion.clone(), scale: bone.scale.clone() });
     }
     const depth = (o: THREE.Object3D): number => o.parent ? 1 + depth(o.parent) : 0;
     this.bindings.sort((a,b) => depth(a.bone)-depth(b.bone));
-    this.mixer = new THREE.AnimationMixer(source);
-    this.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+  }
+  /**
+   * Bind bones loaded after construction (a resolved detail's own rig copy). Their current pose must be the
+   * neutral bind pose, which a freshly loaded detail has; the running phase is applied at once.
+   */
+  attach(targets: readonly THREE.Object3D[]) {
+    if (!targets.length) return;
+    this.bind(targets);
+    if (this.enabled) this.update(0);
+  }
+  /** Forget bones that leave the scene (a replaced detail), restoring their neutral pose first. */
+  detach(targets: readonly THREE.Object3D[]) {
+    if (!targets.length) return;
+    const leaving = new Set(targets);
+    for (let i = this.bindings.length - 1; i >= 0; i--) {
+      const binding = this.bindings[i]!;
+      if (!leaving.has(binding.bone)) continue;
+      binding.bone.position.copy(binding.position); binding.bone.quaternion.copy(binding.rotation); binding.bone.scale.copy(binding.scale);
+      this.bindings.splice(i, 1);
+    }
+    for (let i = this.unmapped.length - 1; i >= 0; i--) if (targets.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
   }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
