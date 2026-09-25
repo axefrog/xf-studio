@@ -134,6 +134,13 @@ export const DDS_HEADER_BYTES = 148;
 export const DXGI_RGBA8_SRGB = 29;
 export const DXGI_R8 = 61;
 
+/** DXGI_FORMAT_R8G8B8A8_UNORM, used for tangent-normal inputs. */
+export const DXGI_RGBA8 = 28;
+export type DdsFormat = "rgba8-srgb" | "rgba8-unorm" | "r8";
+const DDS_FORMATS: Record<DdsFormat, { stride: number; dxgi: number }> = {
+  "rgba8-srgb": { stride: 4, dxgi: DXGI_RGBA8_SRGB }, "rgba8-unorm": { stride: 4, dxgi: DXGI_RGBA8 }, r8: { stride: 1, dxgi: DXGI_R8 },
+};
+
 /**
  * Uncompressed DX10 DDS accepted by WolvenKit's XBM importer. The importer
  * compresses to QualityColor/QualityR while retaining the caller's levels when
@@ -142,8 +149,14 @@ export const DXGI_R8 = 61;
 export function encodeFlatDds(levels: readonly Uint8Array[], size: number, channel: FlatMapChannel): Uint8Array {
   if (channel !== "diffuse" && channel !== "roughness" && channel !== "metalness")
     throw new RangeError("Unsupported flat-map channel");
-  const count = mipLevelCount(size);
-  const stride = channel === "diffuse" ? 4 : 1;
+  return encodeDds(levels, size, channel === "diffuse" ? "rgba8-srgb" : "r8");
+}
+
+/** A complete square power-of-two chain in one uncompressed DX10 DDS file. */
+export function encodeDds(levels: readonly Uint8Array[], size: number, format: DdsFormat): Uint8Array {
+  const spec = DDS_FORMATS[format];
+  if (!spec) throw new RangeError("Unsupported DDS format");
+  const count = mipLevelCount(size), stride = spec.stride;
   let side = size, payload = 0;
   for (const level of levels) {
     if (level.length !== side * side * stride) throw new RangeError("Invalid DDS mip byte length");
@@ -164,7 +177,7 @@ export function encodeFlatDds(levels: readonly Uint8Array[], size: number, chann
   view.setUint32(80, 4, true); // DDPF_FOURCC
   out.set([0x44, 0x58, 0x31, 0x30], 84); // "DX10"
   view.setUint32(108, 0x401008, true); // TEXTURE|COMPLEX|MIPMAP
-  view.setUint32(128, stride === 4 ? DXGI_RGBA8_SRGB : DXGI_R8, true);
+  view.setUint32(128, spec.dxgi, true);
   view.setUint32(132, 3, true); // D3D10_RESOURCE_DIMENSION_TEXTURE2D
   view.setUint32(136, 0, true);
   view.setUint32(140, 1, true); // array size

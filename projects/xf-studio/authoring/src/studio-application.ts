@@ -23,6 +23,7 @@ import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./finish-catalogue";
+import { layerExport, type LayerExport } from "./finish-export";
 
 export type StudioAction = { kind: "recipe.undo" | "recipe.redo" } | RecipeAction | LayerAction | Exclude<CollectionAction, { kind: "collection.saved" }> | PreviewAction |
   MotionAction | QualityAction | SavedAppearanceAction;
@@ -53,7 +54,7 @@ const selection = new Set<StudioAction["kind"]>(["layer.select", "point.select",
 const recipeKinds = new Set<StudioAction["kind"]>([
   "layer.select", "point.select", "point.remove", "path.edit", "field.select", "field.add",
   "field.remove", "field.clear", "field.setReach", "pigment.edit", "softness.edit",
-  "layer.setColor", "layer.setOpacity", "layer.setSymmetry", "layer.setFinish",
+  "layer.setColor", "layer.setOpacity", "layer.setSymmetry", "layer.setFinish", "layer.useGameOptics", "layer.setShift",
   "glitter.selectModel", "glitter.setClassic", "glitter.setIrregular", "glitter.setDirect",
   "point.move", "point.insert", "point.setTangent", "shape.transform", "field.setOrigin", "field.setVector"]);
 const collectionKinds = new Set<StudioAction["kind"]>([
@@ -293,6 +294,11 @@ export class StudioApplication {
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(); }
+  /** Game-export status of one layer in the current recipe (route, experimental note or omission reason). Check decides. */
+  layerExport(layerId: string): LayerExport | undefined {
+    const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
+    return layer && layerExport(layer);
+  }
   glitterModelCatalogue() { return glitterModelCatalogue(); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {

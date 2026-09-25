@@ -20,7 +20,7 @@ export type StudioPresentationPort<Slot> = {
     "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "consequences" | "finishCatalogue" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "consequences" | "finishCatalogue" | "layerExport" |
     "glitterModelCatalogue"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
@@ -121,6 +121,7 @@ export function createStudioPresentation<Slot>(sources: {
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
     previewState: () => a.previewState(), history: () => a.history(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
+    layerExport: layerId => a.layerExport(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
   };
   const fallback = () => a.snapshot().document;

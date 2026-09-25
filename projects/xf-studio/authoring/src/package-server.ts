@@ -130,7 +130,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
     let prepared: ReturnType<typeof preparePackageCollection>;
     try { prepared = preparePackageCollection(collection); }
     catch (error) { return json({ error: (error as Error).message, code: "no_exportable_content" }, 422); }
-    const { plan, omissions, packaged } = prepared;
+    const { plan, omissions, experimental, packaged } = prepared;
     const source = JSON.stringify(collection);
     const packagedHash = createHash("sha256").update(JSON.stringify(packaged)).digest("hex");
     const work = mkdtempSync(resolve(tmpdir(), "xfs-ui-package-"));
@@ -145,6 +145,7 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
             checked.modName !== plan.modName || checked.selectorLabel !== plan.selectorLabel ||
             checked.originalPresetCount !== collection.presets.length || checked.packagedCollectionSha256 !== packagedHash ||
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
+            JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
             JSON.stringify(checked.presets) !== JSON.stringify(plan.presets.map(p =>
               ({ id: p.id, revision: p.revision, appearance: p.appearance }))))
           throw Error("Package preflight returned a different collection identity.");

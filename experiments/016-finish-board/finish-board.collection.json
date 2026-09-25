@@ -1,0 +1,2280 @@
+{
+  "schema": "xfas/collection-1",
+  "id": "7a6d3c10-1f01-4a51-9c3e-0000000000b0",
+  "name": "XF finish board (diagnostic)",
+  "presets": [
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000001",
+      "name": "Board 1 · flat finishes",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-1",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-2",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-3",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-4",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-5",
+            "name": "Glossy (single lobe) right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-6",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000002",
+      "name": "Board 2 · shimmer",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-7",
+            "name": "Satin control",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-8",
+            "name": "Shimmer fine",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 128,
+              "density": 0.65,
+              "tilt": 0.65,
+              "seed": 2077
+            }
+          },
+          {
+            "id": "board-9",
+            "name": "Shimmer coarse (glitter proxy)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 32,
+              "density": 0.8,
+              "tilt": 1,
+              "seed": 4242
+            }
+          },
+          {
+            "id": "board-10",
+            "name": "Glossy control",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "board-11",
+            "name": "Shimmer fine right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 128,
+              "density": 0.65,
+              "tilt": 0.65,
+              "seed": 2077
+            }
+          },
+          {
+            "id": "board-12",
+            "name": "Matte control",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000003",
+      "name": "Board 3 · colour shift",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-13",
+            "name": "Duochrome lid",
+            "enabled": true,
+            "color": "#3a2350",
+            "finish": "iridescent",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1",
+              "shift": {
+                "color": "#3fd4c2",
+                "strength": 0.8
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000004",
+      "name": "Board 4 · colour shift, strength 0",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-14",
+            "name": "Duochrome lid",
+            "enabled": true,
+            "color": "#3a2350",
+            "finish": "iridescent",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1",
+              "shift": {
+                "color": "#3fd4c2",
+                "strength": 0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000005",
+      "name": "Board 5 · sqrt-space blend steps",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-15",
+            "name": "Black 25%",
+            "enabled": true,
+            "color": "#000000",
+            "finish": "matte",
+            "opacity": 0.25,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.33,
+                "v": 0.268,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.364,
+                "v": 0.268,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.364,
+                "v": 0.288,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.33,
+                "v": 0.288,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-16",
+            "name": "Black 50%",
+            "enabled": true,
+            "color": "#000000",
+            "finish": "matte",
+            "opacity": 0.5,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.37,
+                "v": 0.27,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.404,
+                "v": 0.27,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.404,
+                "v": 0.29,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.37,
+                "v": 0.29,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-17",
+            "name": "Black 75%",
+            "enabled": true,
+            "color": "#000000",
+            "finish": "matte",
+            "opacity": 0.75,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.41,
+                "v": 0.268,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.268,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.288,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.41,
+                "v": 0.288,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "7a6d3c10-1f01-4a51-9c3e-000000000006",
+      "name": "Board 6 · metalness 0 to 0.3",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "board-18",
+            "name": "Satin base left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-19",
+            "name": "Metal ramp 0 to 0.3",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.462,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 0,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.372,
+                "v": 0.211,
+                "weight": 0.5,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.372,
+                "v": 0.248,
+                "weight": 0.5,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 0,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-20",
+            "name": "Satin base right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-21",
+            "name": "Metal 0.05",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.077,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6739999999999999,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.698,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.698,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6739999999999999,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-22",
+            "name": "Metal 0.1",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.154,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6454,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6694,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6694,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6454,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-23",
+            "name": "Metal 0.15",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.231,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6168,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6408,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6408,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6168,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-24",
+            "name": "Metal 0.2",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.308,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.5882000000000001,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6122000000000001,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6122000000000001,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5882000000000001,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "board-25",
+            "name": "Metal 0.3",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.462,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.5596,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5836,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5836,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5596,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

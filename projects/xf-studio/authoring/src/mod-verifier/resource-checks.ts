@@ -15,10 +15,68 @@ export function ensure(condition: unknown, message: string): asserts condition {
   if (!condition) throw new VerificationError(message);
 }
 
+export type VerifierRoute = "flat" | "faceted" | "fresnel";
+export type VerifierChannel = "diffuse" | "roughness" | "metalness" | "normal" | "mask" | "gradient";
+
 export interface VerifierPreset {
   readonly id: string; readonly name: string; readonly index: number;
   readonly appearance: string; readonly appAppearance: string;
-  readonly textures: Record<"diffuse" | "roughness" | "metalness", string>;
+  /** Absent in builds made before the faceted and Fresnel routes: those are flat `@preset` presets. */
+  readonly route?: VerifierRoute; readonly material?: string;
+  readonly recipe?: Node;
+  readonly textures: Partial<Record<VerifierChannel, string>>;
+}
+
+/** The published per-route resource specification, restated here independently of the builder. */
+export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: readonly (readonly [string, VerifierChannel])[] }> = {
+  flat: { template: "base/materials/mesh_decal.mt",
+    textures: [["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] },
+  faceted: { template: "base/materials/mesh_decal.mt",
+    textures: [["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"], ["NormalTexture", "normal"]] },
+  fresnel: { template: "base/materials/mesh_decal_gradientmap_recolor_blendable.mt",
+    textures: [["MaskTexture", "mask"], ["GradientMap", "gradient"]] },
+};
+export const routeOf = (preset: VerifierPreset): VerifierRoute => preset.route ?? "flat";
+export const materialOf = (preset: VerifierPreset): string => preset.material ?? "@preset";
+/** XBM import settings each channel must carry. */
+export const CHANNEL_SETUP: Record<VerifierChannel, { isGamma: 0 | 1; compression: string }> = {
+  diffuse: { isGamma: 1, compression: "TCM_QualityColor" }, gradient: { isGamma: 1, compression: "TCM_QualityColor" },
+  roughness: { isGamma: 0, compression: "TCM_QualityR" }, metalness: { isGamma: 0, compression: "TCM_QualityR" },
+  mask: { isGamma: 0, compression: "TCM_QualityR" }, normal: { isGamma: 0, compression: "TCM_Normalmap" },
+};
+/** Side of the uniform Fresnel base-colour texture. */
+export const GRADIENT_SIDE = 16;
+
+const srgbDecode = (v: number) => (v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4));
+const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
+/** WolvenKit stores material scalars as float32 and prints nine significant digits. */
+const sameFloat32 = (actual: unknown, want: number) => typeof actual === "number" && Math.abs(actual - Math.fround(want)) <= 1e-7 * Math.max(1, Math.abs(want));
+const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+
+/** The one colour-shift pigment of a Fresnel preset, read from its recipe: base colour, shift colour and strength. */
+export function fresnelPigment(preset: VerifierPreset): { color: string; shift: { color: string; strength: number } } {
+  const layers: Node[] = (preset.recipe?.layers ?? []).filter((l: Node) => l.enabled && l.opacity > 0);
+  ensure(layers.length > 0, `Fresnel preset ${preset.name} has no active layer`);
+  const keys = new Set(layers.map(l => JSON.stringify([String(l.color).toLowerCase(), String(l.optics?.shift?.color).toLowerCase(), l.optics?.shift?.strength])));
+  ensure(keys.size === 1 && layers.every(l => l.finish === "iridescent" && l.optics?.model === "game-matched-1"),
+    `Fresnel preset ${preset.name} is not one colour-shift pigment`);
+  return { color: layers[0].color, shift: layers[0].optics.shift };
+}
+
+/** Expected scalar and colour parameters of each route's material instance (the published specification). */
+export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPreset): Record<string, Node> {
+  const white = { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 };
+  const flat = { DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
+    RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0, DiffuseColor: white };
+  if (route === "flat") return flat;
+  if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1 };
+  const { shift } = fresnelPigment(preset);
+  const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
+  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
+  return { DiffuseAlpha: 1, RoughnessMetalnessAlpha: 1, NormalAlpha: 0, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
+    RoughnessScale: 0, RoughnessBias: .32, MetalnessScale: 0, MetalnessBias: .25, FadeOutOffset: 1000, FadeOutDistance: 1,
+    FresnelColorIntensity: round6(2 * shift.strength * peak), FresnelExponent: 2,
+    FresnelColor: { $type: "Color", Red, Green, Blue, Alpha: 255 }, DiffuseColor: white };
 }
 
 export interface VerifierPlan {
@@ -39,7 +97,7 @@ export interface RoundTrippedResources {
 
 export interface ResolvedPreset {
   readonly appearance: string; readonly chunkMaterial: string;
-  readonly textures: Record<"diffuse" | "roughness" | "metalness", string>;
+  readonly textures: Partial<Record<VerifierChannel, string>>;
 }
 
 const value = (x: Node) => x?.$value;
@@ -85,24 +143,55 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     ensure(sameJson(morph[field], r.sourceMorph[field], IGNORED), `Morph ${field} differs from the source plate`);
   ensure(dep(morph.baseMesh) === plan.mesh, "Morph baseMesh does not reference the planned mesh");
   ensure(morph.targets?.length === 105, "Morph target count is not 105");
-  ensure(mesh.materialEntries?.length === 1, "Mesh must have exactly one material entry");
-  ensure(value(mesh.materialEntries[0].name) === "@preset", "Mesh material entry is not @preset");
+  // Material entries: one per distinct template entry, in first-use order across presets.
+  const entryNames: string[] = [];
+  for (const preset of plan.presets) if (!entryNames.includes(materialOf(preset))) entryNames.push(materialOf(preset));
+  ensure(mesh.materialEntries?.length === entryNames.length,
+    entryNames.length === 1 ? "Mesh must have exactly one material entry" : `Mesh must have exactly ${entryNames.length} material entries`);
+  mesh.materialEntries.forEach((entry: Node, i: number) => ensure(value(entry.name) === entryNames[i] && entry.index === i && entry.isLocalInstance === 1,
+    entryNames.length === 1 ? "Mesh material entry is not @preset" : `Mesh material entry ${i} is not the local ${entryNames[i]}`));
   const materials = mesh.localMaterialBuffer?.materials;
-  ensure(materials?.length === 1, "Mesh must have exactly one local material");
-  const material = materials[0];
-  ensure(dep(material.baseMaterial) === "base/materials/mesh_decal.mt", "Material is not based on mesh_decal.mt");
-  const params: Record<string, Node> = {};
-  for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
-  ensure(params.NormalAlpha === 0 && params.AlphaMaskContrast === 0 && params.SecondaryMaskInfluence === 0, "Material normal/mask parameters are not zero");
-  ensure([params.DiffuseAlpha, params.RoughnessMetalnessAlpha, params.RoughnessScale, params.MetalnessScale].every(v => v === 1),
-    "Material alpha/scale parameters are not one");
-  ensure(sameJson(params.DiffuseColor, { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 }), "DiffuseColor is not opaque white");
-  ensure(params.RoughnessBias === 0 && params.MetalnessBias === 0, "Material biases are not zero");
+  ensure(materials?.length === entryNames.length,
+    entryNames.length === 1 ? "Mesh must have exactly one local material" : `Mesh must have exactly ${entryNames.length} local materials`);
+  const paramsByEntry = new Map<string, Record<string, Node>>();
+  entryNames.forEach((name, i) => {
+    const preset = plan.presets.find(p => materialOf(p) === name)!, route = routeOf(preset), material = materials[i];
+    ensure(route !== "fresnel" || plan.presets.filter(p => materialOf(p) === name).length === 1, `Fresnel material ${name} is shared`);
+    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (route === "flat" ? "@preset" : "@faceted"),
+      `Material entry ${name} does not match its ${route} route`);
+    ensure(dep(material.baseMaterial) === ROUTE_SPEC[route].template,
+      route === "flat" ? "Material is not based on mesh_decal.mt" : `Material ${name} is not based on ${ROUTE_SPEC[route].template}`);
+    const params: Record<string, Node> = {};
+    for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
+    const expected = expectedMaterialValues(route, preset);
+    if (route === "flat") {
+      ensure(params.NormalAlpha === 0 && params.AlphaMaskContrast === 0 && params.SecondaryMaskInfluence === 0, "Material normal/mask parameters are not zero");
+      ensure([params.DiffuseAlpha, params.RoughnessMetalnessAlpha, params.RoughnessScale, params.MetalnessScale].every(v => v === 1),
+        "Material alpha/scale parameters are not one");
+      ensure(sameJson(params.DiffuseColor, expected.DiffuseColor), "DiffuseColor is not opaque white");
+      ensure(params.RoughnessBias === 0 && params.MetalnessBias === 0, "Material biases are not zero");
+    }
+    for (const [key, want] of Object.entries(expected))
+      ensure(typeof want === "object" ? sameJson(params[key], want) : sameFloat32(params[key], want),
+        `Material ${name} ${key} is ${JSON.stringify(params[key])}, expected ${JSON.stringify(want)}`);
+    const textureParams: string[] = ROUTE_SPEC[route].textures.map(([parameter]) => parameter);
+    const extra = Object.keys(params).filter(key => !(key in expected) && !textureParams.includes(key));
+    ensure(!extra.length, `Material ${name} sets unexpected parameters: ${extra.join(", ")}`);
+    paramsByEntry.set(name, params);
+  });
   const appearances = mesh.appearances.map((a: Node) => value(a.Data.name));
   ensure(sameJson(appearances, plan.presets.map(p => p.appearance)), "Mesh appearances differ from the planned presets");
-  const seed = mesh.appearances[0].Data;
-  ensure(sameJson(seed.chunkMaterials.map(value), [plan.presets[0].appearance + "@preset"]), "Seed appearance does not use the @preset template");
-  ensure(mesh.appearances.slice(1).every((a: Node) => !a.Data.chunkMaterials?.length), "Only the seed appearance may carry chunk materials");
+  const seedPreset = plan.presets[0], seed = mesh.appearances[0].Data;
+  ensure(sameJson(seed.chunkMaterials.map(value), [seedPreset.appearance + materialOf(seedPreset)]),
+    `Seed appearance does not use the ${materialOf(seedPreset)} template`);
+  // Stubs expand from the seed; a preset on another entry, or any Fresnel preset, names its own.
+  const explicit = (preset: VerifierPreset) => materialOf(preset) !== materialOf(seedPreset) || routeOf(preset) === "fresnel";
+  mesh.appearances.slice(1).forEach((a: Node, i: number) => {
+    const preset = plan.presets[i + 1];
+    if (explicit(preset)) ensure(sameJson(a.Data.chunkMaterials?.map(value), [preset.appearance + materialOf(preset)]),
+      `Appearance ${preset.appearance} must name ${materialOf(preset)}`);
+    else ensure(!a.Data.chunkMaterials?.length, "Only the seed appearance may carry chunk materials");
+  });
 
   ensure(app.appearances?.length === 2, "App must define exactly Off and the template");
   const [off, template] = app.appearances.map((a: Node) => a.Data);
@@ -165,7 +254,13 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     const suffix = full.slice(cut + 2);
     ensure(suffix === preset.appearance && suffix.startsWith("xfs_"), `Selector suffix ${suffix} does not name the preset appearance`);
     const expanded = {} as ResolvedPreset["textures"];
-    for (const [parameter, channel] of [["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] as const) {
+    // Explicit chunk material, or the seed's template expanded with this appearance as its prefix.
+    const entry = explicit(preset) ? materialOf(preset) : materialOf(seedPreset);
+    const params = paramsByEntry.get(entry)!, route = routeOf(preset);
+    ensure(entry === materialOf(preset), `Preset ${preset.name} would resolve to ${entry}, not its ${materialOf(preset)} material`);
+    const planned = Object.keys(preset.textures).sort(), routed: string[] = ROUTE_SPEC[route].textures.map(([, channel]) => channel).sort();
+    ensure(sameJson(planned, routed), `Preset ${preset.name} plans textures ${planned.join(", ")} for its ${route} route`);
+    for (const [parameter, channel] of ROUTE_SPEC[route].textures) {
       const reference = params[parameter];
       ensure(reference?.Flags === "Soft", `${parameter} is not a Soft reference`);
       const pattern = dep(reference);
@@ -173,12 +268,12 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
       const path = pattern.slice(1).replaceAll("{material}", suffix);
       ensure(path === preset.textures[channel] && r.archiveHas(path), `${parameter} resolves to ${path}, not the planned generated texture`);
       expanded[channel] = path;
-      const metadata = r.texture(path), setup = metadata.setup;
-      ensure(metadata.width === textureSizes[i] && metadata.height === textureSizes[i], `${path} has unexpected dimensions`);
-      ensure(setup.hasMipchain === 1 && setup.isGamma === (channel === "diffuse" ? 1 : 0), `${path} has unexpected mip/gamma settings`);
-      ensure(setup.compression === (channel === "diffuse" ? "TCM_QualityColor" : "TCM_QualityR"), `${path} has unexpected compression`);
+      const metadata = r.texture(path), setup = metadata.setup, side = channel === "gradient" ? GRADIENT_SIDE : textureSizes[i];
+      ensure(metadata.width === side && metadata.height === side, `${path} has unexpected dimensions`);
+      ensure(setup.hasMipchain === 1 && setup.isGamma === CHANNEL_SETUP[channel].isGamma, `${path} has unexpected mip/gamma settings`);
+      ensure(setup.compression === CHANNEL_SETUP[channel].compression, `${path} has unexpected compression`);
     }
-    resolved.push({ appearance: preset.appAppearance, chunkMaterial: suffix + "@preset", textures: expanded });
+    resolved.push({ appearance: preset.appAppearance, chunkMaterial: suffix + entry, textures: expanded });
   });
   return { appearanceNames: appearances, materialTemplates: materials.length, meshAppearances: mesh.appearances.length,
     selectorOptionCount: option.definitions.length, resolved };

@@ -231,7 +231,7 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
       collectionSha256: sourceHash, namespace: check.namespace,
       modName: check.modName, selectorLabel: check.selectorLabel,
       packagedCollectionSha256: packagedHash,
-      originalPresetCount: check.originalPresetCount, omissions: check.omissions,
+      originalPresetCount: check.originalPresetCount, omissions: check.omissions, experimental: check.experimental,
       presets: check.presets, verifiedPresetCount: verification.presetCount,
       verifiedUnpackedFiles: verification.unpackedFilesVerified,
       files: names.map(name => ({ path: `archive/pc/mod/${name}`, sha256: fileHash(join(target, name)),
@@ -248,6 +248,6 @@ export async function runPackageCommand(options: PackageCommandOptions): Promise
   return { package: final, manifest: join(final, "manifest.json"),
     modName: check.modName, selectorLabel: check.selectorLabel, archiveSha256: verification.archiveSha256,
     presetCount: verification.presetCount, originalPresetCount: check.originalPresetCount,
-    omissions: check.omissions, packagedCollectionSha256: packagedHash, plate: plateRecord, installed: false,
+    omissions: check.omissions, experimental: check.experimental, packagedCollectionSha256: packagedHash, plate: plateRecord, installed: false,
     gameRenderingVerified: false };
 }

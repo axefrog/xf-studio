@@ -35,21 +35,68 @@ export function componentId(component: string): string {
   return String(value || 1n);
 }
 
-/** Replace the plate's appearances and material with one per-preset appearance and a shared `{material}` decal. */
-export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter): Json {
-  const root = mesh.Data.RootChunk, seed = plan.presets[0].appearance;
-  root.appearances = plan.presets.map((preset, i) => handles.handle({ $type: "meshMeshAppearance", name: cname(preset.appearance),
-    chunkMaterials: i === 0 ? [cname(seed + "@preset")] : [], tags: [] }));
-  root.materialEntries = [{ $type: "CMeshMaterialEntry", index: 0, isLocalInstance: 1, name: cname("@preset") }];
+const floatValue = (name: string, value: number) => ({ $type: "Float", [name]: value });
+const colorValue = (name: string, c: { Red: number; Green: number; Blue: number; Alpha: number }) =>
+  ({ $type: "Color", [name]: { $type: "Color", Red: c.Red, Green: c.Green, Blue: c.Blue, Alpha: c.Alpha } });
+const WHITE = { Red: 255, Green: 255, Blue: 255, Alpha: 255 };
+const softTexture = (plan: CollectionPlan, parameter: string, channel: string) =>
+  ({ $type: "rRef:ITexture", [parameter]: resourceRef(`*${plan.depot}/textures/{material}_${channel}.xbm`, true) });
+const localInstance = (template: string, values: Json[]) => ({ $type: "CMaterialInstance", audioTag: cname("None"),
+  baseMaterial: resourceRef(template), cookingPlatform: "PLATFORM_PC", enableMask: 0, resourceVersion: 4, values });
+
+/** The flat `@preset` instance, unchanged since the Experiment 005 builder. */
+function flatMaterial(plan: CollectionPlan) {
   const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] as const)
-    .map(([name, channel]) => ({ $type: "rRef:ITexture", [name]: resourceRef(`*${plan.depot}/textures/{material}_${channel}.xbm`, true) }));
+    .map(([name, channel]) => softTexture(plan, name, channel));
   for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0,
     SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
-    values.push({ $type: "Float", [name]: value });
-  values.push({ $type: "Color", DiffuseColor: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 } });
-  root.localMaterialBuffer.materials = [{ $type: "CMaterialInstance", audioTag: cname("None"),
-    baseMaterial: resourceRef("base/materials/mesh_decal.mt"), cookingPlatform: "PLATFORM_PC", enableMask: 0,
-    resourceVersion: 4, values }];
+    values.push(floatValue(name, value));
+  values.push(colorValue("DiffuseColor", WHITE));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** `@faceted`: the flat instance plus a normal map composed with the skin normal (NormalsBlendingMode 1). */
+function facetedMaterial(plan: CollectionPlan) {
+  const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"],
+    ["NormalTexture", "normal"]] as const).map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1,
+    RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1,
+    RoughnessBias: 0, MetalnessBias: 0 }))
+    values.push(floatValue(name, value));
+  values.push(colorValue("DiffuseColor", WHITE));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** One colour-shift preset's gradient-recolour instance: mask and base colour maps plus its shift constants. */
+function fresnelMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["presets"][number]) {
+  const material = preset.fresnel;
+  if (!material) throw Error(`Colour-shift preset ${preset.id} has no planned Fresnel material.`);
+  const values: Json[] = ([["MaskTexture", "mask"], ["GradientMap", "gradient"]] as const)
+    .map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries(material)) if (typeof value === "number") values.push(floatValue(name, value));
+  values.push(colorValue("FresnelColor", material.FresnelColor), colorValue("DiffuseColor", WHITE));
+  return localInstance(FRESNEL_TEMPLATE, values);
+}
+export const FRESNEL_TEMPLATE = "base/materials/mesh_decal_gradientmap_recolor_blendable.mt";
+
+/**
+ * Replace the plate's appearances and materials. Each preset binds its route's template entry:
+ * `<appearance>@<entry>`, whose `{material}` prefix resolves that preset's textures. Presets that share
+ * the seed's template entry stay empty stubs, which ArchiveXL expands from the seed; any other preset
+ * names its entry explicitly. A flat-only collection is byte-for-byte the Experiment 005 layout.
+ */
+export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter): Json {
+  const root = mesh.Data.RootChunk, seed = plan.presets[0];
+  const entries: string[] = [];
+  for (const preset of plan.presets) if (!entries.includes(preset.material)) entries.push(preset.material);
+  root.appearances = plan.presets.map((preset, i) => handles.handle({ $type: "meshMeshAppearance", name: cname(preset.appearance),
+    chunkMaterials: i === 0 || preset.material !== seed.material || preset.route === "fresnel" ? [cname(preset.appearance + preset.material)] : [],
+    tags: [] }));
+  root.materialEntries = entries.map((name, index) => ({ $type: "CMeshMaterialEntry", index, isLocalInstance: 1, name: cname(name) }));
+  root.localMaterialBuffer.materials = entries.map(name => {
+    const preset = plan.presets.find(p => p.material === name)!;
+    return preset.route === "flat" ? flatMaterial(plan) : preset.route === "faceted" ? facetedMaterial(plan) : fresnelMaterialInstance(plan, preset);
+  });
   root.localMaterialBuffer.rawData = null;
   root.localMaterialBuffer.rawDataHeaders = [];
   return mesh;

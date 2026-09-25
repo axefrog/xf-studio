@@ -1,3 +1,5 @@
+import { fresnelMaterial, planPresetExport, ROUTE_CHANNELS, ROUTE_MATERIAL_ENTRY, type ExportRoute, type FresnelMaterial,
+  type TextureChannel } from "./finish-export";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { parseRecipe, type Recipe } from "./recipe";
 
@@ -24,13 +26,21 @@ export function parseCollection(value: unknown, allowEmpty = false): PresetColle
   return { schema:input.schema,id:input.id,name:input.name,presets };
 }
 
+/** Texture depot paths of one preset; the channels present depend on its export route. */
+export type PlanTextures = Partial<Record<TextureChannel, string>>;
+
 export function planCollection(value: unknown) {
   const collection = parseCollection(value), key = collection.id.replaceAll("-", "");
   const namespace = `xfs_c${key}`, depot = `axefrog/appearance_studio/collections/${key}`;
   const presets = collection.presets.map((preset, i) => {
     const appearance = `xfs_p${preset.id.replaceAll("-", "")}`;
-    return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`,
-      textures:Object.fromEntries(["diffuse","roughness","metalness"].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as Record<"diffuse"|"roughness"|"metalness",string> };
+    // The export route decides the material template entry and which texture channels exist.
+    const exported = planPresetExport(preset.recipe), route: ExportRoute = exported.route;
+    const material = route === "fresnel" ? `@fresnel_${preset.id.replaceAll("-", "")}` : ROUTE_MATERIAL_ENTRY[route];
+    // A colour-shift preset's material constants (its one shift colour) are part of the plan.
+    const fresnel: FresnelMaterial | undefined = route === "fresnel" ? fresnelMaterial(exported.included[0].optics!.shift!) : undefined;
+    return { ...preset, index:i+1, appearance, appAppearance:`${namespace}__${appearance}`, route, material, ...(fresnel ? { fresnel } : {}),
+      textures:Object.fromEntries(ROUTE_CHANNELS[route].map(channel => [channel,`${depot}/textures/${appearance}_${channel}.xbm`])) as PlanTextures };
   });
   // Branding (modName/selectorLabel) is display text, never part of a resource identity.
   return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name,

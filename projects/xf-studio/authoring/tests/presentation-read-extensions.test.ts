@@ -85,13 +85,23 @@ test("finish descriptors mirror the package filter instead of a UI copy of eligi
   const catalogue = finishCatalogue(), base = freshWorkspace().recipe;
   expect(catalogue.map(item => item.id)).toEqual(["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"]);
   for (const finish of catalogue) {
-    const layer = { ...structuredClone(base.layers[0]), finish: finish.id, enabled: true, opacity: .8 };
+    // Experimental finishes export in their game-matched model (a colour shift only as a whole-preset pigment).
+    const optics = finish.exportAdapter !== "experimental" ? {} : { optics: finish.id === "iridescent"
+      ? { model: "game-matched-1" as const, shift: { color: "#3fd4c2", strength: .6 } } : { model: "game-matched-1" as const } };
+    const layer = { ...structuredClone(base.layers[0]), finish: finish.id, enabled: true, opacity: .8, ...optics };
     const matte = { ...structuredClone(base.layers[1]), finish: "matte" as const, enabled: true, opacity: .8 };
+    const layers = finish.id === "iridescent" ? [layer] : [matte, layer];
     const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Gate",
-      presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1, recipe: { ...base, layers: [matte, layer] } }] };
+      presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1, recipe: { ...base, schema: "xfs/recipe-11", layers } }] };
     const omitted = preparePackageCollection(collection).omissions.some(item => item.kind === "layer" && item.layerId === layer.id);
     expect(omitted).toBe(finish.exportAdapter === "none");
     expect(finish.preview === "preview-study").toBe(omitted);
+    if (finish.exportAdapter === "experimental") {
+      const earlier = structuredClone(collection); delete earlier.presets[0].recipe.layers.at(-1)!.optics;
+      // The earlier browser-study model of the same finish does not export.
+      if (finish.id === "iridescent") expect(() => preparePackageCollection(earlier)).toThrow();
+      else expect(preparePackageCollection(earlier).omissions.some(item => item.kind === "layer" && item.layerId === layer.id)).toBe(true);
+    }
   }
 });
 

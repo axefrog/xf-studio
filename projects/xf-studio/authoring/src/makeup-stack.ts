@@ -5,6 +5,9 @@ import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeu
 import type { Layer } from "./recipe";
 import {installProceduralGlintStudy} from "./direct-glint";
 import {isDirectGlint} from "./direct-glint-settings";
+import {FLAT_SURFACE,FRESNEL_SURFACE} from "./finish-export";
+import {installFresnelTint} from "./fresnel-tint";
+import {previewFacetChains} from "./route-mip-chains";
 
 export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> };
 export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
@@ -14,6 +17,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
+  const tints=new Map<THREE.Material,ReturnType<typeof installFresnelTint>>();
   let layerIds: string[] = [];
   anchor.visible = false;
   const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
@@ -24,7 +28,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     !isDirectGlint(layer.flakes);
   const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? studioIrregularOpticalKey(layer.flakes,size)
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
+    // Game-matched Shimmer bakes the same flakes but uploads route-filtered mip chains.
+    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size, ...(layer.optics ? [layer.optics.model] : [])]);
   const albedoKeyFor = (layer:Layer,size:number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
     : undefined;
@@ -44,9 +49,12 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   function clearDirect(material:THREE.MeshPhysicalMaterial){
     direct.get(material)?.dispose();direct.delete(material);
   }
+  function clearTint(material:THREE.MeshPhysicalMaterial){
+    tints.get(material)?.dispose();tints.delete(material);
+  }
   function disposeSlot(i: number) {
     const material = materials[i];
-    clearFlakes(material); clearDirect(material); material.dispose(); textures[i].dispose(); plates[i].removeFromParent();
+    clearFlakes(material); clearDirect(material); clearTint(material); material.dispose(); textures[i].dispose(); plates[i].removeFromParent();
   }
   function createSlot(canvas: HTMLCanvasElement, i: number) {
     const mesh = anchor.clone(), texture = maskTexture(canvas);
@@ -113,7 +121,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   function updateLayer(i: number, layer: Layer, optics?: BakedOptics, albedo?: BakedAlbedo, completeMask=false) {
     const material = materials[i];
     if (!material) return;
-    if (!layer.enabled) { clearFlakes(material);clearDirect(material); plates[i].visible = false; return; }
+    if (!layer.enabled) { clearFlakes(material);clearDirect(material);clearTint(material); plates[i].visible = false; return; }
     // The shader is cheap to configure, but must never run against a prior
     // layer/shape mask while the cancellable raster worker is still pending.
     if(layer.finish==="glitter" && isDirectGlint(layer.flakes) && !completeMask)return;
@@ -129,15 +137,18 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       if (!optics) return;
       if (optics.size !== size || optics.normal.length !== size * size * 4 || optics.surface.length !== size * size * 4)
         throw new Error("Optical maps must match the completed preview mask size.");
-      const map = (data: Uint8Array<ArrayBuffer>) => {
-        const texture = new THREE.DataTexture(data, size, size);
-        texture.flipY = false; texture.generateMipmaps = true;
+      // Game-matched Shimmer: the export route's mode-1 facet fade and variance-widened roughness mips.
+      const chains = layer.optics ? previewFacetChains(optics.normal, optics.surface, size) : undefined;
+      const map = (data: Uint8Array<ArrayBuffer>, levels?: Uint8Array[]) => {
+        const texture = new THREE.DataTexture(levels ? levels[0] as Uint8Array<ArrayBuffer> : data, size, size);
+        texture.flipY = false; texture.generateMipmaps = !levels;
+        if (levels) texture.mipmaps = levels.map((level, k) => ({ data: level, width: size >> k || 1, height: size >> k || 1 })) as unknown as typeof texture.mipmaps;
         texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
         texture.anisotropy = anisotropy; texture.needsUpdate = true;
         return texture;
       };
       const next: {key:string;normal:THREE.DataTexture;surface:THREE.DataTexture;albedo?:THREE.DataTexture;albedoKey?:string} =
-        { key, normal: map(optics.normal), surface: map(optics.surface) };
+        { key, normal: map(optics.normal, chains?.normal), surface: map(optics.surface, chains?.surface) };
       clearFlakes(material); flakes.set(material, next);
     } else if (!useMaps) clearFlakes(material);
     if(directSettings){
@@ -149,6 +160,13 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       glint.setFineShare(directSettings.fineShare);glint.setStrength(directSettings.strength);
       glint.setSeed(directSettings.seed);glint.setColor(directSettings.color);glint.setBodyColor(layer.color);
     }else clearDirect(material);
+    // Game-matched Colour-shifting: the gradient-recolour decal's additive Fresnel colour.
+    const shift = canonicalFinish(layer.finish) === "iridescent" ? layer.optics?.shift : undefined;
+    if (shift) {
+      let tint = tints.get(material);
+      if (!tint) { tint = installFresnelTint(material); tints.set(material, tint); }
+      tint.set(shift.color, shift.strength);
+    } else clearTint(material);
     const maps = flakes.get(material), changed = Boolean(material.normalMap) !== Boolean(maps);
     if (candidateKey && maps && maps.albedoKey!==candidateKey) {
       if (maps.albedo) maps.albedo.dispose();
@@ -161,11 +179,15 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     material.map = maps?.albedo ?? textures[i]; material.color.set(candidateKey ? "#ffffff" : layer.color);
     material.normalMap = maps?.normal ?? null;
     material.roughnessMap = material.metalnessMap = maps?.surface ?? null;
-    const finish = canonicalFinish(layer.finish);
-    material.roughness = directSettings ? .55 : useMaps ? 1 : finish === "matte" ? .88 : finish === "metallic" || finish === "iridescent" ? .27 : finish === "glossy" ? .16 : .38;
-    material.metalness = useMaps ? 1 : finish === "metallic" || finish === "iridescent" ? .65 : 0;
-    material.clearcoat = directSettings ? .4 : finish === "glossy" ? 1 : 0; material.clearcoatRoughness = directSettings ? .24 : .08;
-    material.iridescence = finish === "iridescent" ? 1 : 0; material.iridescenceIOR = 1.3;
+    const finish = canonicalFinish(layer.finish), game = !!layer.optics;
+    // Game-matched models follow the export surfaces; earlier layers keep their original study values.
+    material.roughness = directSettings ? .55 : useMaps ? 1 : game && finish === "glossy" ? FLAT_SURFACE.glossy.roughness
+      : game && finish === "iridescent" ? FRESNEL_SURFACE.roughness
+      : finish === "matte" ? .88 : finish === "metallic" || finish === "iridescent" ? .27 : finish === "glossy" ? .16 : .38;
+    material.metalness = useMaps ? 1 : game && finish === "iridescent" ? FRESNEL_SURFACE.metalness : finish === "metallic" || finish === "iridescent" ? .65 : 0;
+    // The G-buffer holds one lobe: the game-matched Glossy has no clear coat.
+    material.clearcoat = directSettings ? .4 : finish === "glossy" && !game ? 1 : 0; material.clearcoatRoughness = directSettings ? .24 : .08;
+    material.iridescence = finish === "iridescent" && !game ? 1 : 0; material.iridescenceIOR = 1.3;
     material.iridescenceThicknessRange = [400, 400];
     if (changed) material.needsUpdate = true;
     plates[i].visible = true; textures[i].needsUpdate = true;

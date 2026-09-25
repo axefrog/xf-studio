@@ -6,7 +6,7 @@ import type { FieldSelection } from "./field-selection";
 import { defaultFlakes, isIrregular, type Flakes } from "./finish";
 import { glitterModel, glitterModels, selectGlitterModel, type GlitterChoices, type GlitterModel } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
-import { clamp, MAX_FIELDS, parseRecipe, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
+import { clamp, DEFAULT_SHIFT, GAME_OPTICS_FINISHES, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "./validation-issues";
 
@@ -23,6 +23,9 @@ export type RecipeAction =
   | { kind: "layer.setOpacity"; layerId: string; opacity: number }
   | { kind: "layer.setSymmetry"; layerId: string; symmetry: boolean }
   | { kind: "layer.setFinish"; layerId: string; finish: Layer["finish"] }
+  /** Switch a Glossy, Shimmer or Colour-shifting layer from its earlier browser study to the game-matched model. */
+  | { kind: "layer.useGameOptics"; layerId: string }
+  | { kind: "layer.setShift"; layerId: string; key: "color" | "strength"; value: number | string }
   | { kind: "glitter.selectModel"; layerId: string; model: GlitterModel }
   | { kind: "glitter.setClassic"; layerId: string; key: "cells" | "density" | "tilt"; value: number }
   | { kind: "glitter.setIrregular"; layerId: string; key: "count" | "radius" | "spread" | "tilt" | "color"; value: number | string }
@@ -108,10 +111,19 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
     return refuse({ code: "mode", field: "model", message: "Select a classic flake model first." });
+  if (action.kind === "layer.useGameOptics" && !GAME_OPTICS_FINISHES.includes(layer.finish))
+    return refuse({ code: "mode", field: "finish", message: "Only Glossy, Shimmer and Colour-shifting have a game-matched model." });
+  if (action.kind === "layer.useGameOptics" && layer.optics)
+    return refuse({ code: "mode", field: "optics", message: "This layer already uses the game-matched model." });
+  if (action.kind === "layer.setShift" && !(layer.finish === "iridescent" && layer.optics?.shift))
+    return refuse({ code: "mode", field: "optics", message: "Select a game-matched Colour-shifting layer first." });
   if (action.kind === "glitter.selectModel" && !glitterModels.includes(action.model))
     return refuse({ code: "format", field: "model", message: "Unknown Glitter model." });
   return { available: true };
 }
+
+const gameOptics = (finish: Layer["finish"]): GameOptics =>
+  finish === "iridescent" ? { model: "game-matched-1", shift: { ...DEFAULT_SHIFT } } : { model: "game-matched-1" };
 
 /** Applies a single validated document/selection command without DOM or renderer access. */
 export function applyRecipeAction(state: RecipeActionState, action: RecipeAction,
@@ -161,6 +173,13 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   else if (action.kind === "layer.setFinish") {
     if (action.finish !== "glitter" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes))) changed.flakes = defaultFlakes();
     changed.finish = action.finish; effect = "immediate";
+    // Choosing a finish that has a game-matched model uses it; older layers keep theirs until switched.
+    delete changed.optics;
+    if (GAME_OPTICS_FINISHES.includes(action.finish)) { changed.optics = gameOptics(action.finish); next.recipe = { ...next.recipe, schema: "xfs/recipe-11" }; }
+  } else if (action.kind === "layer.useGameOptics") {
+    changed.optics = gameOptics(layer.finish); next.recipe = { ...next.recipe, schema: "xfs/recipe-11" }; effect = "immediate";
+  } else if (action.kind === "layer.setShift") {
+    changed.optics = { ...layer.optics!, shift: { ...layer.optics!.shift!, [action.key]: action.value } };
   } else if (action.kind === "glitter.selectModel") {
     if (glitterModel(layer.flakes) === action.model) return { state, choices, effect: { kind: "selection" as const, layerIndex: index }, changed: false };
     next.recipe = parseRecipe(selectGlitterModel(state.recipe, layer.id, action.model, nextChoices, presetId));

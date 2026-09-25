@@ -309,8 +309,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       mo2Fields, directFields, setupState, setupReadiness,
       h("div", { class: "row wrap gap-s" }, saveSetup, refreshSetup, restoreSetup)),
     section("What can be packaged", h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : "Can be built", finish.exportAdapter === "none" ? "warning" : "success")))),
-    note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Check decides — this list is a guide.")));
+      h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
+        finish.exportAdapter === "flat-provisional" ? "success" : "warning")))),
+    note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials in their game-matched model, but nobody has seen them in game yet. Check decides — this list is a guide.")));
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {

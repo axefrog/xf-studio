@@ -10,8 +10,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { archiveInventory } from "./archive-inventory-fs";
-import { bakeCollection, BAKED_CHANNELS, type BakedRecord, type CollectionPlan } from "./package-bake";
-import { encodeFlatDds, flatMipChain } from "./flat-mip-chain";
+import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
+import { encodeDds, flatMipChain } from "./flat-mip-chain";
+import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "./route-mip-chains";
+import type { TextureChannel } from "./finish-export";
 import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
 import {
   appearanceResource, archiveXlDeclaration, assertBrandedPlan, customizationResource, HandleCounter,
@@ -46,9 +48,15 @@ const TEXTURE_GROUPS: readonly (readonly [string, TextureImportSettings])[] = [
     GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
   ["dds-scalar", { IsGamma: false, TextureGroup: "TEXG_Generic_Grayscale", RawFormat: "TRF_Grayscale", Compression: "TCM_QualityR",
     GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+  ["dds-normal", { IsGamma: false, TextureGroup: "TEXG_Generic_Normal", RawFormat: "TRF_TrueColor", Compression: "TCM_Normalmap",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
 ];
+/** Import group of each texture channel: sRGB colour, linear scalar or tangent normal. */
+export const CHANNEL_GROUP: Record<TextureChannel, "dds-colour" | "dds-scalar" | "dds-normal"> = {
+  diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar", mask: "dds-scalar", normal: "dds-normal",
+};
 const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json", "roundtrip", "export-dds",
-  "input/dds-colour", "input/dds-scalar", "archive", "package/archive/pc/mod"];
+  "input/dds-colour", "input/dds-scalar", "input/dds-normal", "archive", "package/archive/pc/mod"];
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
@@ -92,7 +100,7 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
     checkCancelled(options.signal);
   });
   writeFileSync(join(out, "logs", "bake.log"),
-    `Compiled ${records.length} authored presets; ${records.length * 3} map inputs. No installation.\n`, "utf8");
+    `Compiled ${records.length} authored presets; ${records.reduce((n, r) => n + r.maps.length, 0)} map inputs. No installation.\n`, "utf8");
   steps.push({ name: "bake", exitCode: 0 });
   log("bake complete");
   // The build record keeps the plan exactly as written to plan.json.
@@ -105,24 +113,34 @@ export async function buildPackageResources(options: ResourceBuildOptions): Prom
   const textureDir = join(archive, ...plan.depot.split("/"), "textures");
   for (const path of [modelDir, appDir, textureDir]) mkdirSync(path, { recursive: true });
 
-  // 2. Full coverage-space mip chains, written as the DDS inputs WolvenKit imports without regenerating mips.
+  // 2. Full mip chains for each route, written as the DDS inputs WolvenKit imports without regenerating mips.
+  const groupsUsed = new Set<string>();
   plan.presets.forEach((preset, i) => {
     const record = compiled[i];
-    if (record.id !== preset.id) throw Error(`Compiled record ${i} does not match preset ${preset.id}`);
-    const raw = {} as Record<typeof BAKED_CHANNELS[number], Uint8Array>;
+    if (record.id !== preset.id || record.route !== preset.route) throw Error(`Compiled record ${i} does not match preset ${preset.id}`);
+    const raw = {} as Partial<Record<TextureChannel, Uint8Array>>;
     for (const map of record.maps) {
       const data = new Uint8Array(readFileSync(join(baked, map.file)));
       if (sha256(data) !== map.sha256) throw Error(`Baked ${map.channel} map changed after compiling: ${map.file}`);
       raw[map.channel] = data;
     }
-    const chain = flatMipChain(raw.diffuse, raw.roughness, raw.metalness, record.size);
-    for (const channel of BAKED_CHANNELS) {
-      const group = channel === "diffuse" ? "dds-colour" : "dds-scalar";
-      writeFileSync(join(out, "input", group, `${preset.appearance}_${channel}.dds`), encodeFlatDds(chain[channel], record.size, channel));
+    const chains: Partial<Record<TextureChannel, readonly Uint8Array[]>> = {};
+    if (record.route === "fresnel") {
+      chains.mask = maskMipChain(raw.mask!, record.size);
+      chains.gradient = uniformMipChain(raw.gradient!, record.maps.find(m => m.channel === "gradient")!.side);
+    } else if (record.route === "faceted") {
+      const chain = facetedMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, raw.normal!, record.size);
+      Object.assign(chains, { diffuse: chain.diffuse, roughness: chain.roughness, metalness: chain.metalness, normal: chain.normal.map(normalRgba) });
+    } else Object.assign(chains, flatMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, record.size));
+    for (const map of record.maps) {
+      const group = CHANNEL_GROUP[map.channel];
+      const format = group === "dds-colour" ? "rgba8-srgb" : group === "dds-normal" ? "rgba8-unorm" : "r8";
+      writeFileSync(join(out, "input", group, `${preset.appearance}_${map.channel}.dds`), encodeDds(chains[map.channel]!, map.side, format));
+      groupsUsed.add(group);
     }
   });
   for (const [group, settings] of TEXTURE_GROUPS)
-    await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
+    if (groupsUsed.has(group)) await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
 
   // 3. Rewrite the plate's appearances/material and the morph's base mesh; geometry is not touched.
   await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
