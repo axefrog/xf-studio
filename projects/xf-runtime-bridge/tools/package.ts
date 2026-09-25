@@ -10,7 +10,12 @@
 //   red4ext/plugins/XFRuntimeBridge/Scripts/*.reds       (added to redscript by the plugin)
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
+//   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json and RED4ext.SDK, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
+//
+// It refuses to package unless the project tree is clean and the DLL was built from HEAD with a
+// clean tree: the build writes "XFB_BUILD=<commit>;dirty=<0|1>" into the DLL
+// (native/cmake/BuildInfo.cmake), and the manifest records that commit.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -29,7 +34,33 @@ if (!existsSync(dll)) {
 }
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const git = (...args: string[]) => spawnSync("git", args, { cwd: projectDir, encoding: "utf8" }).stdout.trim();
+const git = (...args: string[]) => {
+  const result = spawnSync("git", args, { cwd: projectDir, encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  return result.stdout.trim();
+};
+
+// Provenance gate: package only committed source, and only a DLL built from exactly that commit.
+const head = git("rev-parse", "HEAD");
+const dirtyFiles = git("status", "--porcelain", "--", ".");
+if (dirtyFiles) {
+  console.error(`refusing to package: projects/xf-runtime-bridge has uncommitted changes:\n${dirtyFiles}`);
+  process.exit(3);
+}
+const marker = /XFB_BUILD=([0-9a-f]{40}|unknown);dirty=([01])/.exec(readFileSync(dll).toString("latin1"));
+if (!marker) {
+  console.error(`refusing to package: ${dll} carries no build marker; rebuild it`);
+  process.exit(3);
+}
+const [, builtCommit, builtDirty] = marker;
+if (builtDirty !== "0" || builtCommit !== head) {
+  console.error(
+    `refusing to package: the DLL was built from ${builtCommit}${builtDirty === "1" ? " with uncommitted changes" : ""}, ` +
+      `but HEAD is ${head}. Rebuild from the clean tree: cmake --build build --config Release`,
+  );
+  process.exit(3);
+}
+const notices = join(projectDir, "native", "THIRD_PARTY_NOTICES.txt");
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];
@@ -52,6 +83,7 @@ function stage(variant: "default" | "diagnostic") {
 
   const plugin = "red4ext/plugins/XFRuntimeBridge";
   put(dll, `${plugin}/XFRuntimeBridge.dll`);
+  put(notices, `${plugin}/THIRD_PARTY_NOTICES.txt`);
   let config = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8");
   if (variant === "diagnostic") {
     config = config.replace(/^enabled = false$/m, "enabled = true");
@@ -79,8 +111,8 @@ function stage(variant: "default" | "diagnostic") {
     variant,
     bridge_enabled: variant === "diagnostic",
     allow_writes: false,
-    commit: git("rev-parse", "HEAD"),
-    dirty: git("status", "--porcelain", "--", ".").length > 0,
+    commit: builtCommit, // read from the DLL's build marker; equals HEAD at packaging time
+    source_tree_clean: true,
     built_for: {
       game: "2.31 (3.0.80.51928)",
       red4ext: "1.30.0 (SDK 1.0.0)",

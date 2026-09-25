@@ -3,6 +3,8 @@
 #include <RED4ext/Api/v1/Logger.hpp>
 #include <RED4ext/Version.hpp>
 
+#include "core/BuildInfo.hpp"
+
 namespace xfb::plugin
 {
 Red4extSink::Red4extSink(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
@@ -60,6 +62,8 @@ nlohmann::json InfoJson()
     return nlohmann::json{
         {"plugin", "XF Runtime Bridge"},
         {"plugin_version", XFB_VERSION_STRING},
+        {"build_commit", std::string(BuildCommit())},
+        {"build_dirty", BuildDirty()},
         {"protocol", kProtocolVersion},
         {"sid", state.session.sessionId},
         {"sdk_version", std::to_string(RED4EXT_VER_MAJOR) + "." + std::to_string(RED4EXT_VER_MINOR) + "." +

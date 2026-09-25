@@ -15,7 +15,9 @@ Bridge::Bridge(const Config& aConfig, const Session& aSession, GameThreadQueue& 
     , m_queue(aQueue)
     , m_dispatcher(aConfig, aSession, aQueue)
 {
-    m_dispatcher.Register({"bridge.kill", Access::Read, RunOn::BridgeThread,
+    // Control, not read or write: it changes only the bridge (it can only take access away),
+    // never the game, so it stays available when allow_writes = false.
+    m_dispatcher.Register({"bridge.kill", Access::Control, RunOn::BridgeThread,
                            "Kill switch: refuse all further requests until the game restarts.",
                            [this](const MethodContext& aContext) {
                                Kill("client:" + std::to_string(aContext.clientPid));
@@ -36,9 +38,13 @@ bool Bridge::Start(std::string& aError)
         return false;
     }
 
-    if (!m_server.Start(m_session.pipeName, m_config.idleDisconnectSeconds,
-                        [this](const std::string& aLine, uint32_t aPid) { return m_dispatcher.Handle(aLine, aPid); },
-                        aError))
+    if (!m_server.Start(
+            m_session.pipeName, m_config.idleDisconnectSeconds,
+            [this](const std::string& aLine, uint32_t aPid) {
+                auto result = m_dispatcher.Handle(aLine, aPid);
+                return PipeReply{std::move(result.line), result.rejected};
+            },
+            aError))
     {
         return false;
     }
@@ -52,17 +58,34 @@ bool Bridge::Start(std::string& aError)
                          {"plugin_version", XFB_VERSION_STRING},
                          {"allow_writes", m_config.allowWrites}};
     std::string writeError;
-    if (!win32::WriteFileAtomic(m_session.SessionFile(), discovery.dump(2), writeError))
+    if (!win32::WriteFileAtomic(m_session.SessionFile(),
+                                discovery.dump(2, ' ', false, json::error_handler_t::replace), writeError))
     {
         m_server.Stop();
         aError = "could not write session.json: " + writeError;
         return false;
     }
     m_sessionFileWritten.store(true);
-    log::Info("bridge.session_file", "written=true dir=%LOCALAPPDATA%/XFStudio/runtime-bridge (or XFB_RUNTIME_DIR)");
+    log::Info("bridge.session_file", "written=true dir=%LOCALAPPDATA%/XFStudio/runtime-bridge");
 
     m_watching.store(true);
-    m_watcher = std::thread([this] { Watch(); });
+    m_watcher = std::thread(
+        [this]
+        {
+            // Thread entry: nothing may escape (std::terminate would take the game down).
+            try
+            {
+                Watch();
+            }
+            catch (const std::exception& e)
+            {
+                log::Error("bridge.thread_failed", std::string("thread=watcher what=") + e.what());
+            }
+            catch (...)
+            {
+                log::Error("bridge.thread_failed", "thread=watcher what=unknown");
+            }
+        });
     return true;
 }
 
@@ -76,12 +99,21 @@ void Bridge::Stop(const std::string& aReason)
             m_watcher.join();
         }
     }
+    StopListener(aReason);
+    RemoveSessionFile();
+}
+
+void Bridge::StopListener(const std::string& aReason)
+{
+    // Release anything the pipe thread waits for on the game thread first, so the join in
+    // PipeServer::Stop is bounded. The bridge is the queue's only producer, and once the bridge
+    // stops (kill switch, shutdown or unload) it never starts again in this process.
+    m_queue.Close();
     if (m_server.IsRunning())
     {
         log::Info("bridge.stopping", "reason=" + aReason);
         m_server.Stop();
     }
-    RemoveSessionFile();
 }
 
 void Bridge::Kill(const std::string& aReason)
@@ -112,7 +144,8 @@ json Bridge::Status() const
                 {"connections", m_server.ConnectionsAccepted()},
                 {"requests", m_dispatcher.RequestCount()},
                 {"allow_writes", m_config.allowWrites},
-                {"game_thread_pumping", m_queue.IsPumping()}};
+                {"game_thread_pumping", m_queue.IsPumping()},
+                {"late_game_tasks", m_queue.LateCompletions()}};
 }
 
 void Bridge::Watch()
@@ -134,7 +167,7 @@ void Bridge::Watch()
         if (m_dispatcher.IsKilled() && m_server.IsRunning())
         {
             lock.unlock();
-            m_server.Stop();
+            StopListener("kill_switch");
             log::Warn("bridge.listener_closed", "reason=kill_switch");
             lock.lock();
         }

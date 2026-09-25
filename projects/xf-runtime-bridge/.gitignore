@@ -1,0 +1,4 @@
+# Build output wherever CMake is pointed (build/, native/build/ ...), packages and captures.
+build/
+dist/
+captures/

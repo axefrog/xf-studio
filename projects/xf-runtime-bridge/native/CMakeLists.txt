@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
 # XF Runtime Bridge: RED4ext plugin plus an offline self-test host for the bridge core.
-# See ../README.md for the design and ../docs/test-card.md for the in-game session.
+# See ../README.md, and research/runtime/runtime-bridge-design.md and runtime-bridge-test-card.md
+# at the repository root for the design and the in-game session.
 
 project(
   XFRuntimeBridge
@@ -75,8 +76,19 @@ set(XFB_OPTIONS /W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus)
 # Bridge core: game-independent transport, protocol, session and logging.
 # It never includes RED4ext headers, so the self-test can host it without the game.
 # -----------------------------------------------------------------------------
+# Build info: the git commit and tree state, regenerated on every build (cmake/BuildInfo.cmake).
+set(XFB_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+add_custom_target(xfb_build_info
+  COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.." "-DOUTPUT=${XFB_GENERATED_DIR}/XfbBuildInfo.hpp"
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildInfo.cmake"
+  BYPRODUCTS "${XFB_GENERATED_DIR}/XfbBuildInfo.hpp"
+  COMMENT "Recording the source commit"
+  VERBATIM
+)
+
 add_library(xfb_core STATIC
   src/core/Bridge.cpp
+  src/core/BuildInfo.cpp
   src/core/Config.cpp
   src/core/Dispatcher.cpp
   src/core/GameThreadQueue.cpp
@@ -85,7 +97,8 @@ add_library(xfb_core STATIC
   src/core/Session.cpp
   src/core/Win32.cpp
 )
-target_include_directories(xfb_core PUBLIC src)
+target_include_directories(xfb_core PUBLIC src PRIVATE "${XFB_GENERATED_DIR}")
+add_dependencies(xfb_core xfb_build_info)
 target_compile_definitions(xfb_core PUBLIC ${XFB_DEFINITIONS})
 target_compile_options(xfb_core PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_core PUBLIC nlohmann_json::nlohmann_json bcrypt advapi32 version)
@@ -111,6 +124,6 @@ set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/UnitTests.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)

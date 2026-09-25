@@ -17,7 +17,9 @@ No ArchiveXL stub: XF Eye Artistry already exercises ArchiveXL, and a data-only 
 
 ## Bridge in one paragraph
 
-The plugin opens `\\.\pipe\xf-runtime-bridge-<pid>-<random>` only when `[bridge] enabled = true`. The pipe is local only, has a user-only DACL, and takes one client at a time. Each side sends newline-delimited JSON, and every request carries the per-session token published in `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json`. Only allowlisted methods exist. Write methods are refused unless `allow_writes = true`, and every request is logged with a correlation ID. A rate limit applies. A kill switch (the CET hotkey, the `bridge.kill` method or a `KILL` file) stops the bridge until the game restarts. Game work runs on the main thread from the plugin's Running-state update. Methods are listed in the [design §3.2](../../research/runtime/runtime-bridge-design.md#32-protocol-1).
+The plugin opens `\\.\pipe\xf-runtime-bridge-<pid>-<random>` only when `[bridge] enabled = true`. The pipe is local only, has a user-only DACL, and takes one client at a time. Each side sends newline-delimited JSON, and every request carries the per-session token published in `%LOCALAPPDATA%\XFStudio\runtime-bridge\session.json`. Only allowlisted methods exist. Write methods are refused unless `allow_writes = true`, and every request and every refusal is logged with a correlation ID. Requests are capped at 64 KiB and 32 levels of nesting. A rate limit covers every request, authenticated or not, and a connection that sends five malformed or unauthenticated requests is dropped. A kill switch (the CET hotkey, the `bridge.kill` control method or a `KILL` file) stops the bridge until the game restarts. Game work runs on the main thread from the plugin's Running-state update. Methods are listed in the [design §3.2](../../research/runtime/runtime-bridge-design.md#32-protocol-1).
+
+**Security boundary:** the Windows user, at medium integrity. Other users, remote machines, browsers and low-integrity or AppContainer processes can't reach the pipe. Any process running as the same user can read the token and connect, but such a process can already read or change the game's memory. The design's [safety model](../../research/runtime/runtime-bridge-design.md#4-safety-model) has the details.
 
 ## Build and check
 
@@ -28,13 +30,24 @@ Needs Visual Studio 2022 (MSVC 14.43) and CMake 4.0.1. The two dependencies are 
 cmake -S native -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 
-bun tools/selftest.ts                                  # 26 offline checks of the bridge core through the real client
+bun tools/selftest.ts                                  # 75 offline checks: 19 in-process, the rest through the real clients
 bun tools/lint-redscript.ts --bundle <COPY of r6/cache/final.redscripts>
 bun tools/lint-lua.ts
 bun tools/package.ts                                   # dist/xf-runtime-bridge-<v>.zip (bridge off) and -diagnostic.zip (on, read-only)
 ```
 
-- **Self-test:** `xfb_selftest.exe` hosts the same core with a simulated game thread. It checks the token, allowlist, write gate, rate limit, message size, game-thread marshalling and errors, reconnects, the kill method and `KILL` file, and that the token never reaches the log.
+- **Self-test:** `xfb_selftest.exe` hosts the same core with a simulated game thread. Through the Bun library and both command-line clients it checks:
+  - the token, allowlist, write gate and rate limit;
+  - message size, the nesting limit (including the 5,000-deep request that used to crash the host) and which `id` values are echoed;
+  - dropping a client after five rejected requests, with every refusal logged;
+  - game-thread marshalling, errors, and `timeout_after_start` with its late-completion log line;
+  - invalid UTF-8 in a result;
+  - reconnects, the kill method and `KILL` file, and a bounded stop with a client that never reads;
+  - both clients refusing a pipe served by the wrong process;
+  - that the token never reaches the log.
+
+  `xfb_selftest.exe --unit` adds the in-process checks: UTF-8-safe log cutting, the nesting pre-scan and the game-thread queue's task states.
+- **Packaging:** each build writes `XFB_BUILD=<commit>;dirty=<0|1>` into the DLL. `package.ts` refuses to package from a dirty project tree, or a DLL not built cleanly from `HEAD`. The manifest records that commit. Each zip carries `THIRD_PARTY_NOTICES.txt` (nlohmann/json and RED4ext.SDK, both MIT).
 - **Lint tools:**
   - **redscript:** the official `redscript-cli` 0.5.31. It reports errors but still exits 0, so the wrapper fails on any `ERROR` line. It does **not** check `@wrapMethod` parameter lists for `cb` methods.
   - **Lua:** `luaparse` 0.3.1 with the LuaJIT grammar, plus checks for CET-specific mistakes.
@@ -43,8 +56,12 @@ bun tools/package.ts                                   # dist/xf-runtime-bridge-
 
 ## Clients
 
-- **Bun:** `bun tools/bridge-client.ts ping | smoke | call <method> [json] | discover | kill`
-- **PowerShell 7:** `pwsh -File tools/bridge-client.ps1 ping | smoke | call <method> | discover | kill`. It also checks that the pipe's server process matches `session.json` before it sends the token.
+- **Bun:** `bun tools/bridge-client.ts ping | smoke | call <method> [json] | discover | kill`. It opens the pipe through `bun:ffi` (kernel32), not `node:net`, so that it can do the two checks below.
+- **PowerShell 7:** `pwsh -File tools/bridge-client.ps1 ping | smoke | call <method> | discover | kill`.
+- **Both clients:**
+  - They open the pipe at the Identification impersonation level, so a process squatting the pipe name can't impersonate them.
+  - They check that the pipe's server process matches `session.json`'s `pid` before sending the token, and exit with code 3 if it doesn't.
+  - `--runtime-dir` / `-RuntimeDir` exist for the self-test only. The plugin has no runtime-folder override, so there is no `XFB_RUNTIME_DIR` any more.
 - **External capture:** `pwsh -File tools/capture-window.ps1 -Name <label>` saves a PNG of the game window's client area under the ignored `captures/`. There is no verified in-game screenshot API, so this captures the screen as displayed (after ReShade and overlays). Use it for framing, not colour calibration.
 
 ## Logs

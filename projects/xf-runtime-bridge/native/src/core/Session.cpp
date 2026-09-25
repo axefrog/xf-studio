@@ -16,7 +16,7 @@ std::filesystem::path Session::KillFile() const
     return runtimeDir / L"KILL";
 }
 
-bool CreateSession(Session& aOut, std::string& aError)
+bool CreateSession(Session& aOut, std::string& aError, const std::filesystem::path& aRuntimeDirOverride)
 {
     std::string pipeSuffix;
     if (!win32::RandomHex(8, aOut.sessionId) || !win32::RandomHex(32, aOut.token) ||
@@ -29,7 +29,7 @@ bool CreateSession(Session& aOut, std::string& aError)
     aOut.pipeName = L"\\\\.\\pipe\\xf-runtime-bridge-" + std::to_wstring(aOut.processId) + L"-" +
                     win32::Widen(pipeSuffix);
     aOut.startedAt = win32::UtcNowIso8601();
-    aOut.runtimeDir = win32::RuntimeDirectory();
+    aOut.runtimeDir = aRuntimeDirOverride.empty() ? win32::RuntimeDirectory() : aRuntimeDirOverride;
     if (aOut.runtimeDir.empty())
     {
         aError = "LOCALAPPDATA is not set";

@@ -45,27 +45,30 @@ const std::string& SessionId();
 // Longest message kept; longer text is cut and marked, so a caller cannot flood the log.
 inline constexpr size_t kMaxMessageBytes = 2048;
 
+// Never throws: a line that cannot be built or written is dropped.
 void Write(Level aLevel, std::string_view aLayer, std::string_view aCid, std::string_view aEvent,
-           std::string_view aMessage);
+           std::string_view aMessage) noexcept;
 
-inline void Debug(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-")
+inline void Debug(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-") noexcept
 {
     Write(Level::Debug, "native", aCid, aEvent, aMessage);
 }
-inline void Info(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-")
+inline void Info(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-") noexcept
 {
     Write(Level::Info, "native", aCid, aEvent, aMessage);
 }
-inline void Warn(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-")
+inline void Warn(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-") noexcept
 {
     Write(Level::Warn, "native", aCid, aEvent, aMessage);
 }
-inline void Error(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-")
+inline void Error(std::string_view aEvent, std::string_view aMessage, std::string_view aCid = "-") noexcept
 {
     Write(Level::Error, "native", aCid, aEvent, aMessage);
 }
 } // namespace log
 
-// Replaces control characters and cuts to a maximum length so untrusted text is safe to log.
+// Makes untrusted text safe to log: control characters become ' ' or '?', invalid UTF-8 bytes
+// become '?', and the text is cut to at most aMaxBytes on a character boundary (never inside a
+// multi-byte character), with a " [cut N bytes]" marker when anything was dropped.
 std::string Sanitize(std::string_view aText, size_t aMaxBytes);
 } // namespace xfb

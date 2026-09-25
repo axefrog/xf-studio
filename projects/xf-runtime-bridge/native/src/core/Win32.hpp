@@ -25,7 +25,8 @@ std::filesystem::path ModuleDirectory(const void* aAddressInModule);
 bool FileVersion(const std::filesystem::path& aPath, std::string& aOut);
 std::filesystem::path ProcessImagePath();
 
-// %LOCALAPPDATA%\XFStudio\runtime-bridge unless XFB_RUNTIME_DIR overrides it.
+// %LOCALAPPDATA%\XFStudio\runtime-bridge. There is deliberately no environment override: only
+// the self-test uses another folder, passed explicitly to CreateSession.
 std::filesystem::path RuntimeDirectory();
 
 // Writes a file via a temporary sibling and an atomic replace.

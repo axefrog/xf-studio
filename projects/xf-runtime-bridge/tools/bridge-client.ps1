@@ -3,9 +3,10 @@
   XF Runtime Bridge client for PowerShell 7 (no Bun needed).
 
 .DESCRIPTION
-  Reads session.json, checks that the pipe really belongs to the game process named there
-  (GetNamedPipeServerProcessId), sends one request per method and prints one line per answer.
-  Never prints the session token.
+  Reads session.json, opens the pipe at the Identification impersonation level, checks that
+  the pipe really belongs to the game process named there (GetNamedPipeServerProcessId) before
+  sending the token, sends one request per method and prints one line per answer.
+  Never prints the session token. -RuntimeDir is for the offline self-test only.
 
 .EXAMPLE
   pwsh -File tools/bridge-client.ps1 ping
@@ -23,7 +24,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not $RuntimeDir) {
-    $RuntimeDir = if ($env:XFB_RUNTIME_DIR) { $env:XFB_RUNTIME_DIR } else { Join-Path $env:LOCALAPPDATA 'XFStudio\runtime-bridge' }
+    $RuntimeDir = Join-Path $env:LOCALAPPDATA 'XFStudio\runtime-bridge'
 }
 $sessionFile = Join-Path $RuntimeDir 'session.json'
 if (-not (Test-Path $sessionFile)) {
@@ -45,7 +46,10 @@ public static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandle
 '@
 
 $pipeName = $session.pipe -replace '^\\\\\.\\pipe\\', ''
-$pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+# Identification level: the server may learn who we are but can never impersonate us, so a
+# process squatting the pipe name gains nothing from our connection.
+$pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut,
+    [System.IO.Pipes.PipeOptions]::None, [System.Security.Principal.TokenImpersonationLevel]::Identification)
 try {
     $pipe.Connect($TimeoutMs)
 } catch {

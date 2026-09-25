@@ -7,9 +7,12 @@
 //   bun tools/bridge-client.ts kill                kill switch (bridge refuses everything after)
 //
 // Options: --runtime-dir <dir> (default %LOCALAPPDATA%\XFStudio\runtime-bridge), --cid <id>
-// Exit code: 0 when every request answered ok, 1 otherwise, 2 when no bridge session exists.
+// Exit code: 0 when every request answered ok, 1 otherwise, 2 when no bridge session exists or
+// the pipe cannot be opened, 3 when the pipe's server is not the process session.json names.
+// The pipe is opened at the Identification impersonation level, and the token is sent only
+// after the server PID check passes (see bridge-lib.ts).
 
-import { BridgeClient, describeSession, defaultRuntimeDir, readSession } from "./bridge-lib.ts";
+import { BridgeClient, PipeConnectError, describeSession, defaultRuntimeDir, readSession } from "./bridge-lib.ts";
 
 const SMOKE_METHODS = [
   "ping",
@@ -55,6 +58,7 @@ async function main() {
     await client.connect();
   } catch (error) {
     console.error(`Could not open ${session.pipe}: ${(error as Error).message}`);
+    if (error instanceof PipeConnectError && error.code === "wrong_server") process.exit(3);
     console.error("The session file may be stale (game closed or crashed), or another client is connected.");
     process.exit(2);
   }

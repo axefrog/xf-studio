@@ -59,10 +59,10 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | RES-01 | Med | Resolver | When a creator switcher picks a non-default choice, the default choice's target stays active too (skin types 01 and 03 both active in test states); see [head CC render evidence](../character-customization/head-cc-render-evidence.md) | **Fixed** (claude/resolver-choices, 25 Sep): switcher targets take activation only from switchers, checked against all six vanilla UI presets |
 | RES-02 | Med | Resolver | A "None" choice (e.g. no scar) yields an empty entry and a missing-appearance warning instead of nothing | **Fixed** (claude/resolver-choices, 25 Sep): a definition named `None` emits no descriptor |
 | PREV-20 | Med | Presentation/startup | A head-load failure after the scene loads leaves head-bound wiring attached (theme binding, app attach, preview device, surface editor, controls listener) and `createScene` late errors leave an extra canvas; Try again then doubles them | **Fixed** (claude/release-prep, 25 Sep) |
-| RB-01 | High | Runtime bridge | Unbounded JSON nesting: a ~20 KB tokenless message overflows the game thread's stack (reproduced at depth 5,000 on the self-test host) (`Dispatcher.cpp:261-297`) | Open (fix before the bridge session) |
-| RB-02 | Med | Runtime bridge | `FlushFileBuffers` waits for a client that never reads, so kill and game exit hang (`PipeServer.cpp:194`) | Open (fix before the bridge session) |
-| RB-03 | Med | Runtime bridge | Exceptions can escape thread entries, exported functions and natives (`dump()` on invalid UTF-8; byte-cut `Sanitize`) | Open |
-| RB-04 | Med | Runtime bridge | A request reported cancelled after a timeout can still run on the game thread (`GameThreadQueue.cpp`) | Open |
+| RB-01 | High | Runtime bridge | Unbounded JSON nesting: a ~20 KB tokenless message overflows the game thread's stack (reproduced at depth 5,000 on the self-test host) (`Dispatcher.cpp:261-297`) | **Fixed** (claude/bridge-hardening, 25 Sep) |
+| RB-02 | Med | Runtime bridge | `FlushFileBuffers` waits for a client that never reads, so kill and game exit hang (`PipeServer.cpp:194`) | **Fixed** (claude/bridge-hardening, 25 Sep) |
+| RB-03 | Med | Runtime bridge | Exceptions can escape thread entries, exported functions and natives (`dump()` on invalid UTF-8; byte-cut `Sanitize`) | **Fixed** (claude/bridge-hardening, 25 Sep) |
+| RB-04 | Med | Runtime bridge | A request reported cancelled after a timeout can still run on the game thread (`GameThreadQueue.cpp`) | **Fixed** (claude/bridge-hardening, 25 Sep) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Partly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures and profiles; character details load with cancellation, supersede and dispose (claude/render-resolver). The core head record is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -148,6 +148,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **UI-04/UI-10/UI-11/UI-12 (extended):** `bootstrap.js` grew (Start fresh); Satin alias and glitter ID mapping remain in the UI and the shift slider hard-codes 0–1; `scene.ts` 925 lines, renders every frame, allocates per frame; no behavioural tests for the preview card or startup failure paths.
 - **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
 - **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
+- **RB-05..11** (runtime bridge security review at `ac251d8`): Fixed in claude/bridge-hardening (see below).
 
 ## New subsystems since last review
 
@@ -156,6 +157,28 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **XF Runtime Bridge** (claude/runtime-baseline): new project `projects/xf-runtime-bridge` (RED4ext C++ plugin with a named-pipe bridge, redscript, CET Lua, TweakXL). First code that accepts commands from outside the game.
 - **Site knowledge generator** (claude/public-knowledge): `projects/xf-studio/site/tools/knowledge.ts`, `privacy.ts`.
 - **Resolved character details** (claude/render-resolver, 25 Sep): host service and endpoint shared by both hosts (`character-detail-service/host/server.ts`, `/api/preview-character`, `/assets/character/`), the pure planner (`character-detail-plan.ts`), the render record version 2 (`render-detail.ts`), and the renderer's loader, material adapters and application service (`character-detail-loader.ts`, `character-material-adapters.ts`, `character-detail-actions.ts`). Reads the installed game and MO2 read-only; runs WolvenKit; serves content-addressed files. Not yet reviewed.
+
+## Fixed in claude/bridge-hardening
+
+Runtime bridge security review (`projects/xf-runtime-bridge`). Evidence: `bun tools/selftest.ts` passes 75 checks (19 in-process, 56 through the Bun library and both command-line clients); both lints pass; the plugin builds without warnings.
+
+- **RB-01:** `JsonNestingDepth` pre-scans every line (strings and escapes respected, never recursive) and refuses nesting deeper than 32 before parsing; only a number, string or null `id` is echoed. The 5,000-deep tokenless request is now `bad_request` and the host keeps answering; 32 levels pass and 33 fail.
+- **RB-02:** no `FlushFileBuffers`. Every wait in the pipe thread watches the stop event, which is also checked on each loop, so a client that keeps data flowing can't delay a stop either. The exception is a fixed 0.5 s linger that lets a dropped client read its last reply (such as the `bridge.kill` answer). Stopping the bridge closes the game-thread queue first, releasing any waiter; `PipeServer::Stop` warns and cancels the pipe's I/O if the thread takes over 1 s, and logs `bridge.server_stopped stop_ms=`. With a client that never reads, a KILL stopped the host in about 0.7 s (`stop_ms` about 510, mostly the linger), and shutdown with a pipe full of unread replies gave `stop_ms` 0 (the reproduction had held the host 12 s).
+- **RB-03:** responses, logs, natives and `session.json` serialise with `error_handler_t::replace`; `Sanitize` cuts on UTF-8 character boundaries and turns invalid bytes into `?`; `log::Write` never throws. `Dispatcher::Handle`, both bridge threads, `Main`, the state and RTTI callbacks and all five natives run inside catch-alls that log; a failed load leaves the bridge off.
+- **RB-04:** each queued task has an atomic state (queued, running, done, cancelled) changed by compare-and-swap. A task still queued at the timeout is cancelled and never runs. A running one gets a 1 s grace, then the client gets `timeout_after_start`, and the game thread logs `game.task_completed_late` when it finishes. `Close()` releases queued and running waiters at once. Unit checks cover every path; the self-test covers grace and late completion through the pipe.
+- **RB-05:** the rate limit runs before the token check, so it covers unauthenticated requests. Malformed and unauthenticated requests are marked rejected: the fifth on a connection drops it, and the server waits 1 s before accepting again. Every refusal is logged under its own event.
+- **RB-06:** the Bun client opens the pipe through `bun:ffi` (kernel32) instead of `node:net`, at the Identification impersonation level, and checks `GetNamedPipeServerProcessId` before sending the token. The PowerShell client also uses Identification. Both exit 3 on a wrong server and send nothing (self-tested).
+- **RB-07:** `XFB_RUNTIME_DIR` is gone. Only the self-test passes a folder, explicitly, to `CreateSession`; the clients' `--runtime-dir`/`-RuntimeDir` flags are for the self-test.
+- **RB-08:** before each game call, `RequireSignature` checks the static flag, parameter count and types, and return type name against red-dump-json, and refuses with `rtti_signature`. It can't catch a function whose signature is unchanged but whose behaviour changed, so the "fails soft" claims in the docs are corrected.
+- **RB-09:** the event handles are guarded by a mutex in `DropClient` and `Stop`.
+- **RB-10:** a failed connect calls `DisconnectNamedPipe` and retries with backoff (100 ms doubling to 5 s, stop-aware).
+- **RB-11:**
+  - `projects/xf-runtime-bridge/.gitignore` ignores `build/` anywhere in the project.
+  - `bridge.kill` is a new *control* access class (the docs said "kill"; the code said read).
+  - The test card shows `<n>ms`.
+  - Both zips carry `THIRD_PARTY_NOTICES.txt` (nlohmann/json and RED4ext.SDK, both MIT, plus the SDK's bundled notice).
+  - Each build embeds `XFB_BUILD=<commit>;dirty=<0|1>` in the DLL (`native/cmake/BuildInfo.cmake`). `package.ts` refuses a dirty tree, or a DLL not built cleanly from `HEAD`, and the manifest records that commit.
+  - The design doc now states the security boundary: the Windows user at medium integrity.
 
 ## Fixed in claude/release-prep
 
@@ -167,7 +190,6 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **UI-34:** the setup service counts show requests (`showRequests`); the card takes focus only when that count changes, never when it opens by itself.
 - **UI-35:** the head pane's next-step button applies the setup action's capability (disabled with its reason while a step runs).
 - **REL-01:** `desktop/package-content-scan.ts` scans every packaged text member of the real archive in `verify-canary.ts` for absolute user-profile paths (`C:\Users\<name>` in any drive, slash direction or escaping) and email addresses, allowing placeholders, example domains and addresses in licence text, and redacts findings for the public log. Tested in `desktop/tests/package-content-scan.test.ts`; the three canary archives built locally on 25 September scan clean and a planted path is caught.
-- **RB-05..11** (runtime bridge security review at `ac251d8`): pre-token requests unrated and some refusals unlogged; Bun client lacks the server-PID check and impersonation limit; `XFB_RUNTIME_DIR` honoured in game; game calls check names not signatures (version gate covers today); unsynchronised drop-event handle; failed connect retried without reset; docs/packaging mismatches (`build/` not ignored, `bridge.kill` access class, test-card line, missing nlohmann notice, manifest commit).
 - **CI (release blocker):** the first Desktop release run failed on a 5.1 s exhaustive flake test under Bun's 5 s default. Tests taking about a second or more locally now carry explicit, commented timeouts (flake-field, glint oracle, mod-verifier resource failures, workspace storage budget, desktop Build deadline).
 
 ## Fixed in claude/wolvenkit-fetch
