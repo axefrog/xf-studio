@@ -307,7 +307,7 @@ The plan is stored with the collection and edited through collection actions (`p
 | Which features ship together | **one product** holding every exportable feature | move any feature to another or a new product |
 | Product identity | default product ID = collection ID; others new UUIDs | — |
 | Archive/`.xl` file name | `xfs_c<collection>` for the default product (byte-identical to today); `xfs_m<product>` for others | never shown or edited |
-| Mod name (MO2 folder, mod-manager entry) | one feature: that feature's brand ("XF Eye Artistry"); several: **"XF Looks"** | rename freely (keeping the "XF " prefix) |
+| Mod name (MO2 folder, mod-manager entry) | one feature: that feature's brand ("XF Eye Artistry"); several: **"XF Looks"** | rename freely (the "XF " prefix is a default, not enforced) |
 | Name stability | a derived name is **frozen into the plan at first successful Build**, so adding a feature later never silently renames an installed mod | explicit rename |
 | Folder collision with another XF product | name + " (collection name)" | rename |
 | Selector label | per feature, the exporter's default, identical merged or split | per-feature label |
@@ -317,7 +317,7 @@ The plan is stored with the collection and edited through collection actions (`p
 
 Selectors and resource identities are **feature-scoped and product-independent**. Merging or splitting changes only the archive, `.xl`, folder and manifest that carry them.
 
-- **Selectors.** Each exporter emits its own character-creator option in its own group, with Off plus one choice per packaged preset. A merged `.archive.xl` lists every feature's customizations; a split one lists only its own.
+- **Selectors.** Each exporter chooses how its looks appear in the character creator: **its own selector** where that's genuinely best (eye makeup needs one because of its custom face plate), or **extra choices added to the matching vanilla option set** otherwise (for example lip makeup joining the vanilla lipstick choices). The choice is part of the exporter's defaults and is recorded in the plan and manifest. A merged `.archive.xl` lists every feature's customizations; a split one lists only its own.
 - **Resources.** Eye makeup keeps its grandfathered depot root. New features use `…/<key>/<feature>/`.
 - **Versioning.** Each feature plan records exporter ID/version, plan hash, source revisions and output hashes.
 
@@ -430,4 +430,10 @@ If either module needs a platform change beyond the composition list, the design
 
 ## Decisions
 
-Resolved with the maintainer on 25 September 2026: merged-by-default packaging with user splitting; sensible, overridable defaults everywhere. Remaining decisions are listed in [docs/status.md](../../docs/status.md) until settled.
+Resolved with the maintainer on 25 September 2026:
+
+- **Packaging:** merged by default, user-splittable.
+- **Defaults:** sensible and overridable everywhere.
+- **Selectors:** a custom selector only where best (eye makeup, because of the plate); otherwise contribute choices to vanilla option sets.
+- **Brand prefix:** "XF " is a default name prefix, not an enforced rule. XF Studio is free and open source.
+- **Timing:** the platform migration starts after the first alpha rather than gating it.
