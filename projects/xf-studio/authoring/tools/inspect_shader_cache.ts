@@ -2,10 +2,11 @@
  * Never executes shaders or modifies the game. Compiled shader extracts stay local.
  */
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {join,resolve} from 'node:path';
+import {configuredGameRoot} from './configured-game-root';
 import {createHash} from 'node:crypto';
 const root=resolve(import.meta.dir,'../../../..');
-const source='F:/Games/Cyberpunk 2077/engine/shader_final.cache';
+const source=join(configuredGameRoot(),'engine','shader_final.cache');
 const bytes=readFileSync(source),footer=bytes.subarray(bytes.length-112);
 if(footer.toString('ascii',104,108)!=='RDHS'||footer.readUInt32LE(108)!==10)throw Error('Unsupported shader cache footer');
 const count=footer.readUInt32LE(0),extraCount=footer.readUInt32LE(4),paramCount=footer.readUInt32LE(8);

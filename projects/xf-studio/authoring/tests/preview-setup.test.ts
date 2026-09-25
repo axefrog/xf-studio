@@ -5,6 +5,7 @@ import { USER_FACING_JARGON } from "../src/alpha-availability";
 import { HeadLoadError, headLoadFailureCode } from "../src/head-load-error";
 import { PolledHostState } from "../src/host-state-poller";
 import type { InstallDetectionActions } from "../src/install-detection-actions";
+import { XBOX_UNSUPPORTED_MESSAGE } from "../src/install-detection";
 import type { LocalSetupFields, LocalSetupView } from "../src/local-settings-server";
 import { LocalSetupActions } from "../src/local-setup-actions";
 import { PreviewPreparationActions, type PreviewState } from "../src/preview-preparation";
@@ -33,7 +34,7 @@ const wolvenKitState = (phase: WolvenKitSetupState["phase"], patch: Partial<Wolv
 
 /** A scripted host: preparation and WolvenKit states, a switch to drop contact, and the settings it saved. */
 function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupState; autostart?: boolean; hostSetup?: boolean;
-  games?: string[]; loadHead?: () => Promise<void> } = {}) {
+  games?: string[]; unsupported?: string[]; loadHead?: () => Promise<void> } = {}) {
   const host = { preview: options.preview ?? previewState({}), wolvenKit: options.wolvenKit ?? wolvenKitState("ready"),
     down: false, requests: [] as string[], preparing: 0, head: options.loadHead ?? (async () => {}) };
   const preparation = new PreviewPreparationActions(async action => {
@@ -66,7 +67,8 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     return { ok: true, status: 200, data: view() };
   });
   const detection = { dispatch: async () => ({ ok: true as const }),
-    snapshot: () => ({ games: { candidates: (options.games ?? []).map(root => ({ root })) } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
+    snapshot: () => ({ games: { candidates: (options.games ?? []).map(root => ({ root })),
+      unsupported: (options.unsupported ?? []).map(message => ({ source: "xbox", root: null, detail: "", message })) } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
   let autostart = options.autostart ?? true, hostSetupOpened = 0;
   const links: string[] = [];
   const setup = new PreviewSetupActions({ preparation, wolvenKit, detection, localSetup, setupPlace: "Game & tools",
@@ -225,6 +227,21 @@ test("a detected game folder is saved over the other settings, and setup opens w
   await desktop.setup.dispatch({ kind: "previewSetup.openSetup" });
   expect(desktop.hostSetupOpened).toBe(1);
   expect(desktop.setup.snapshot().setupRequests).toBe(0);
+});
+
+test("a recognised but unusable copy (the Xbox app's) explains itself on the game card and still offers the folder choice", async () => {
+  const h = harness({ preview: previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, code: "preview_game_missing",
+    message: "Choose your Cyberpunk 2077 game folder." }), unsupported: [XBOX_UNSUPPORTED_MESSAGE] });
+  await h.setup.start();
+  await until(() => h.setup.snapshot().card.body === XBOX_UNSUPPORTED_MESSAGE);
+  expect(h.setup.snapshot().card.primary).toEqual({ label: "Choose game folder", action: { kind: "previewSetup.openSetup" } });
+  for (const text of spoken(h.setup.snapshot())) expect(USER_FACING_JARGON.test(text), text).toBe(false);
+  // A usable copy wins: the note is only for when nothing else was found.
+  const both = harness({ preview: previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, code: "preview_game_missing",
+    message: "Choose your Cyberpunk 2077 game folder." }), games: ["D:\\Games\\Cyberpunk 2077"], unsupported: [XBOX_UNSUPPORTED_MESSAGE] });
+  await both.setup.start();
+  await until(() => both.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
+  expect(both.setup.snapshot().card.body).not.toMatch(/Xbox/);
 });
 
 test("the WolvenKit consent is a port state, and closing it downloads nothing", async () => {

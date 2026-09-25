@@ -111,6 +111,25 @@ test("each route reports what the game would load, with plain guidance and no pr
   } finally { f.cleanup(); }
 });
 
+test("the version check reads the same way whichever store installed the game", () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-stores-"));
+  try {
+    // Folder shapes the stores use by default (Steam library, GOG, Epic without a space) plus a unicode library.
+    const shapes = [join(root, "SteamLibrary", "steamapps", "common", "Cyberpunk 2077"), join(root, "GOG Games", "Cyberpunk 2077"),
+      join(root, "Epic Games", "Cyberpunk2077"), join(root, "Bibliothèque ゲーム", "steamapps", "common", "Cyberpunk 2077")];
+    const port = createWindowsDetectionHost();
+    const summaries = shapes.map(game => {
+      put(join(game, "bin", "x64", "Cyberpunk2077.exe"), "fixture");
+      put(join(game, "red4ext", "RED4ext.dll"), fakePe([1, 30, 0, 0]));
+      put(join(game, "red4ext", "plugins", "ArchiveXL", "ArchiveXL.dll"), fakePe([1, 27, 3, 0]));
+      const check = checkFrameworkVersions(port, { gameRoot: game, launchRoute: "direct", mo2Root: null, mo2ProfileId: null });
+      return JSON.stringify(check.routes[0]!.verdicts.map(row => [row.framework, row.status, row.installed, row.message]));
+    });
+    expect(new Set(summaries).size).toBe(1);
+    expect(JSON.parse(summaries[0]!).map((row: unknown[]) => row[1])).toEqual(["ok", "ok", "missing"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("an unreadable route explains the next step instead of guessing", () => {
   const f = fixture();
   try {

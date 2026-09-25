@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { DetectionHostPort } from "./install-detection";
+import { parseMountedDrives, type DetectionHostPort } from "./install-detection";
 import type { FrameworkHostPort } from "./framework-versions";
 import { describeMo2Instance, type Mo2InstanceDescription } from "./mo2-instance";
 
@@ -23,32 +23,43 @@ export function createWindowsDetectionHost(env: NodeJS.ProcessEnv = process.env,
         .filter(entry => kind === "directory" ? entry.isDirectory() : entry.isFile()).map(entry => entry.name);
     } catch { return null; }
   };
+  const whole = (path: string, maxBytes: number): Buffer | null => {
+    const stat = regular(path);
+    if (!stat || stat.size > maxBytes) return null;
+    let fd: number | undefined;
+    try {
+      fd = openSync(path, "r");
+      const buffer = Buffer.alloc(stat.size);
+      let read = 0;
+      while (read < buffer.length) {
+        const bytes = readSync(fd, buffer, read, buffer.length - read, read);
+        if (bytes === 0) break;
+        read += bytes;
+      }
+      return buffer.subarray(0, read);
+    } catch { return null; }
+    finally { if (fd !== undefined) closeSync(fd); }
+  };
+  const registry = async (key: string, recursive = false): Promise<string | null> => {
+    if (platform !== "win32" || !registryKey.test(key)) return null;
+    // reg.exe prints in the console code page; paths outside it may not round-trip.
+    return new Promise(done => execFile("reg.exe", ["query", key, ...(recursive ? ["/s"] : [])],
+      { encoding: "utf8", timeout: timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+      (error, stdout) => done(error || typeof stdout !== "string" ? null : stdout)));
+  };
   return {
     platform,
     env: name => env[name],
-    async registry(key, recursive = false) {
-      if (platform !== "win32" || !registryKey.test(key)) return null;
-      // reg.exe prints in the console code page; paths outside it may not round-trip.
-      return new Promise(done => execFile("reg.exe", ["query", key, ...(recursive ? ["/s"] : [])],
-        { encoding: "utf8", timeout: timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
-        (error, stdout) => done(error || typeof stdout !== "string" ? null : stdout)));
+    registry,
+    readText(path, maxBytes) { return whole(path, maxBytes)?.toString("utf8") ?? null; },
+    readBinary(path, maxBytes) {
+      const buffer = whole(path, maxBytes);
+      return buffer ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.length) : null;
     },
-    readText(path, maxBytes) {
-      const stat = regular(path);
-      if (!stat || stat.size > maxBytes) return null;
-      let fd: number | undefined;
-      try {
-        fd = openSync(path, "r");
-        const buffer = Buffer.alloc(stat.size);
-        let read = 0;
-        while (read < buffer.length) {
-          const bytes = readSync(fd, buffer, read, buffer.length - read, read);
-          if (bytes === 0) break;
-          read += bytes;
-        }
-        return buffer.subarray(0, read).toString("utf8");
-      } catch { return null; }
-      finally { if (fd !== undefined) closeSync(fd); }
+    /** Local volumes Windows has assigned a letter (the mounted-device list), so no network share is probed. */
+    async drives() {
+      const text = await registry("HKLM\\SYSTEM\\MountedDevices");
+      return text ? parseMountedDrives(text) : [];
     },
     /** Bounded window of a regular file (the framework check reads PE headers and `.rsrc` only). */
     readBytes(path, offset, length) {

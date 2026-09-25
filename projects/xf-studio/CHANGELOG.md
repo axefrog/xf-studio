@@ -29,6 +29,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **Help getting Microsoft .NET.** WolvenKit needs Microsoft's free .NET 10 Runtime. If your PC doesn't have it, XF Studio says so plainly and offers one button that gets Microsoft's own installer, then picks it up when you come back.
 - **Use your own WolvenKit if you prefer.** If you already use WolvenKit CLI 8.17.4 or 9.0.1, choose it under **About → Build setup**; it always takes priority. The field is optional: leave it empty and XF Studio can download WolvenKit for you.
 - **The 3D preview setup is always one click away.** If you choose **Not now**, the head panel keeps saying what the preview needs and offers **Set up 3D preview** to bring the setup back. While the preview is being prepared or WolvenKit is downloading, the head panel shows the progress in neutral colours; red is kept for real problems.
+- **Finds Cyberpunk 2077 whichever PC store you use.** XF Studio looks for the game in every Steam library, GOG, the Epic Games Store and Mod Organizer 2, and skips an Epic copy that hasn't finished installing. If it finds only an Xbox app copy, it says plainly that XF Eye Artistry needs the PC edition sold on Steam, GOG or Epic Games, and how to get going. Checked on one PC with the GOG version; Steam, Epic and Xbox app setups are checked by automated tests only.
 - **Licences in About.** About → Licences shows XF Studio's MIT licence and the notices for the software it includes.
 
 ### Fixes and under the hood

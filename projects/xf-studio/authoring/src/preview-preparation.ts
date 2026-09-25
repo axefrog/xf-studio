@@ -52,15 +52,16 @@ export type PreviewView = {
 /**
  * Pure: the plain-language card for one host state, plus an optional detected game folder and the
  * WolvenKit setup state. While the preview waits only for WolvenKit, WolvenKit's own card is shown.
+ * `gameNote` explains a copy detection found but can't use (for example the Xbox app's) when no folder was found.
  */
 export function previewView(state: PreviewState, detectedGame: string | null = null, wolvenKit: WolvenKitSetupState | null = null,
-  setupPlace = "Build setup"): PreviewView {
+  setupPlace = "Build setup", gameNote: string | null = null): PreviewView {
   if (state.phase === "needs-setup" && !state.needs.includes("game") && state.needs.includes("wolvenkit") && wolvenKit && wolvenKit.phase !== "ready") {
     const card = wolvenKitCard(wolvenKit, setupPlace);
     return { title: card.title, body: card.body, progress: card.progress, step: card.step, primary: card.primary, secondary: card.secondary,
       links: card.links, visible: card.visible, viewport: card.viewport };
   }
-  const view = previewCard(state, detectedGame);
+  const view = previewCard(state, detectedGame, gameNote);
   return { secondary: null, links: [], ...view, viewport: viewportMessage(state) };
 }
 
@@ -77,7 +78,8 @@ function viewportMessage(state: PreviewState): string {
   }
 }
 
-function previewCard(state: PreviewState, detectedGame: string | null): Omit<PreviewView, "viewport" | "secondary" | "links"> {
+function previewCard(state: PreviewState, detectedGame: string | null,
+  gameNote: string | null): Omit<PreviewView, "viewport" | "secondary" | "links"> {
   const hidden = { title: "", body: "", progress: null, step: null, primary: null, visible: false };
   switch (state.phase) {
     case "ready": return hidden;
@@ -92,7 +94,7 @@ function previewCard(state: PreviewState, detectedGame: string | null): Omit<Pre
         return detectedGame
           ? { title: "Turn on the 3D preview", body: `We found Cyberpunk 2077 at ${detectedGame}. XF Studio builds the 3D head from your own game files and changes nothing in your game.`,
             progress: null, step: null, primary: { label: "Use this folder", action: "use-game" }, visible: true }
-          : { title: "Turn on the 3D preview", body: state.message, progress: null, step: null, primary: { label: "Choose game folder", action: "setup" }, visible: true };
+          : { title: "Turn on the 3D preview", body: gameNote ?? state.message, progress: null, step: null, primary: { label: "Choose game folder", action: "setup" }, visible: true };
       return { title: "The 3D preview needs WolvenKit", body: state.message, progress: null, step: null, primary: { label: "Set up WolvenKit…", action: "wolvenkit-consent" }, visible: true };
     case "blocked":
       return { title: "The 3D preview can't be built for this game version", body: state.message, progress: null, step: null,

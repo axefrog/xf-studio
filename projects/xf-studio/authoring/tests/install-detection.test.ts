@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { join, resolve, sep } from "node:path";
 import { decodeQSettingsValue, describeMo2Instance, parseMo2Modlist, parseNxmHandlerIni,
   parseQSettingsIni } from "../src/mo2-instance";
-import { detectGameInstalls, detectMo2Instances, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths,
+import { detectGameInstalls, detectMo2Instances, parseEpicInstallList, parseEpicManifest, parseGamingRoot,
+  parseMountedDrives, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths, XBOX_UNSUPPORTED_MESSAGE,
   type DetectionHostPort } from "../src/install-detection";
 
 // Synthetic, asset-free fixtures. Paths are placeholders under a fake drive, never a real machine.
@@ -10,8 +11,8 @@ const root = resolve("/xfs-fixture");
 const p = (...parts: string[]) => join(root, ...parts);
 const exe = (game: string) => join(game, "bin", "x64", "Cyberpunk2077.exe");
 
-function fakeHost(files: Record<string, string>, registry: Record<string, string>, env: Record<string, string> = {},
-  platform = "win32"): DetectionHostPort & { queries: string[] } {
+function fakeHost(files: Record<string, string | Uint8Array>, registry: Record<string, string>, env: Record<string, string> = {},
+  platform = "win32", drives: string[] = []): DetectionHostPort & { queries: string[] } {
   const norm = (path: string) => resolve(path).toLowerCase();
   const table = new Map(Object.entries(files).map(([path, text]) => [norm(path), text]));
   const children = (path: string, kind: "dir" | "file") => {
@@ -26,7 +27,9 @@ function fakeHost(files: Record<string, string>, registry: Record<string, string
   const queries: string[] = [];
   return { platform, queries, env: name => env[name],
     registry: async (key, recursive) => { queries.push(`${key}${recursive ? " /s" : ""}`); return registry[key] ?? null; },
-    readText: (path, max) => { const text = table.get(norm(path)); return text !== undefined && text.length <= max ? text : null; },
+    readText: (path, max) => { const text = table.get(norm(path)); return typeof text === "string" && text.length <= max ? text : null; },
+    readBinary: (path, max) => { const bytes = table.get(norm(path)); return bytes instanceof Uint8Array && bytes.length <= max ? bytes : null; },
+    drives: async () => drives,
     isFile: path => table.has(norm(path)),
     directories: path => { const list = children(path, "dir"); return list.length ? list : null; },
     files: path => { const list = children(path, "file"); return list.length ? list : null; } };
@@ -121,6 +124,120 @@ test("game detection confirms every Steam, GOG, Epic and MO2 lead by executable 
   const other = await detectGameInstalls(fakeHost({}, {}, {}, "linux"));
   expect(other.supported).toBe(false);
   expect(other.issues[0]?.code).toBe("unsupported_platform");
+});
+
+const utf16 = (text: string) => { const bytes = new Uint8Array(text.length * 2); text.split("").forEach((ch, i) => {
+  bytes[i * 2] = ch.charCodeAt(0) & 0xff; bytes[i * 2 + 1] = ch.charCodeAt(0) >> 8; }); return bytes; };
+/** A `.GamingRoot` as the Xbox app writes it (layout observed on two drives): "RGBX", uint32 1, NUL-terminated UTF-16LE paths. */
+const gamingRoot = (...paths: string[]) => new Uint8Array([...new TextEncoder().encode("RGBX"), 1, 0, 0, 0,
+  ...paths.flatMap(path => [...utf16(path), 0, 0])]);
+const vdfPath = (path: string) => path.replaceAll("\\", "\\\\");
+const bom = "\uFEFF";
+
+test("Xbox, drive, Epic and BOM/CRLF inputs parse the way their writers lay them out", () => {
+  expect(parseGamingRoot(gamingRoot("XboxGames"))).toEqual(["XboxGames"]);
+  expect(parseGamingRoot(gamingRoot("Games\\GamePass"))).toEqual(["Games\\GamePass"]);
+  expect(parseGamingRoot(gamingRoot("..\\escape", "C:\\absolute", "\\rooted", "Ok"))).toEqual(["Ok"]);
+  expect(parseGamingRoot(new TextEncoder().encode("not a gaming root"))).toBeNull();
+  expect(parseMountedDrives(["", "HKEY_LOCAL_MACHINE\\SYSTEM\\MountedDevices",
+    "    \\DosDevices\\C:    REG_BINARY    444D494F3A49443A", "    \\??\\Volume{6c1de7f1-04e5}    REG_BINARY    5F003F00",
+    "    \\DosDevices\\f:    REG_BINARY    6E320983", ""].join("\r\n"))).toEqual(["C:\\", "F:\\"]);
+  expect(parseEpicManifest(`${bom}{\r\n\t"InstallLocation": "X:\\\\Epic\\\\Cyberpunk2077",\r\n\t"bIsIncompleteInstall": true\r\n}`))
+    .toMatchObject({ installLocation: "X:\\Epic\\Cyberpunk2077", incomplete: true });
+  expect(parseEpicManifest('{"InstallLocation": ""}')).toBeNull();
+  expect(parseEpicInstallList(`${bom}{"InstallationList":[{"InstallLocation":"X:\\\\A","AppName":"a"},{"AppName":"b"}]}`))
+    .toEqual([{ appName: "a", installLocation: "X:\\A" }]);
+  expect(parseEpicInstallList("{ not json")).toEqual([]);
+  expect(steamInstallDir(parseVdf(`${bom}"AppState"\r\n{\r\n\t"appid"\t\t"1091500"\r\n\t"InstallDir"\t\t"Cyberpunk 2077"\r\n}\r\n`)))
+    .toBe("Cyberpunk 2077");
+});
+
+test("Steam detection survives registry, library-file, manifest-case, BOM/CRLF and unicode variations", async () => {
+  const steam = p("Program Files (x86)", "Steam"), library = p("Bibliothèque ゲーム");
+  const game = join(library, "steamapps", "common", "Cyberpunk 2077");
+  const host = fakeHost({
+    // Only the config\ copy of libraryfolders.vdf exists, with a BOM, CRLF endings and a unicode library.
+    [p("Program Files (x86)", "Steam", "config", "libraryfolders.vdf")]:
+      `${bom}"libraryfolders"\r\n{\r\n\t"0"\r\n\t{\r\n\t\t"path"\t\t"${vdfPath(steam)}"\r\n\t}\r\n\t"1"\r\n\t{\r\n\t\t"path"\t\t"${vdfPath(library)}"\r\n\t}\r\n}\r\n`,
+    // The manifest is in the second library; its installdir key and value differ in case from the folder on disk.
+    [join(library, "steamapps", "appmanifest_1091500.acf")]: `${bom}"AppState"\r\n{\r\n\t"InstallDir"\t\t"cyberpunk 2077"\r\n}\r\n`,
+    [exe(game)]: "",
+  }, {
+    // HKCU SteamPath came back through the console code page with a lost character; HKLM InstallPath is intact.
+    "HKCU\\Software\\Valve\\Steam": "HKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/st?am\r\n",
+    "HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam": `HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Valve\\Steam\r\n    InstallPath    REG_SZ    ${steam}\r\n`,
+  });
+  const result = await detectGameInstalls(host);
+  expect(result.candidates.map(row => [row.root, row.evidence])).toEqual([[game, [{ source: "steam", detail: "Steam app 1091500" }]]]);
+  expect(result.issues.map(row => [row.source, row.code])).toEqual([["steam", "registry_text_unreadable"]]);
+
+  // No registry record at all: the default Program Files folder is still searched.
+  const fallback = await detectGameInstalls(fakeHost({
+    [p("pf86", "Steam", "steamapps", "appmanifest_1091500.acf")]: '"AppState" { "installdir" "Cyberpunk 2077" }',
+    [exe(p("pf86", "Steam", "steamapps", "common", "Cyberpunk 2077"))]: "",
+  }, {}, { "ProgramFiles(x86)": p("pf86") }));
+  expect(fallback.candidates.map(row => row.root)).toEqual([p("pf86", "Steam", "steamapps", "common", "Cyberpunk 2077")]);
+});
+
+test("Epic detection skips unfinished installs, follows moved installs and keeps several copies apart", async () => {
+  const data = p("relocated", "EpicData"), manifests = join(data, "Manifests");
+  const moved = p("games", "Cyberpunk2077"), second = p("epic2", "Cyberpunk2077"), unfinished = p("epic", "Downloading");
+  const item = (fields: Record<string, unknown>) => `{\r\n${Object.entries(fields)
+    .map(([name, value]) => `\t"${name}": ${JSON.stringify(value)}`).join(",\r\n")}\r\n}`;
+  const host = fakeHost({
+    [join(manifests, "A.item")]: item({ DisplayName: "Cyberpunk 2077", AppName: "fixture-app", InstallLocation: p("epic", "OldPlace"),
+      LaunchExecutable: "bin/x64/Cyberpunk2077.exe", bIsIncompleteInstall: false }),
+    [join(manifests, "B.item")]: item({ DisplayName: "Cyberpunk 2077", AppName: "fixture-app-2", InstallLocation: second,
+      LaunchExecutable: "bin\\x64\\Cyberpunk2077.exe", bIsIncompleteInstall: false }),
+    [join(manifests, "C.item")]: item({ DisplayName: "Cyberpunk 2077: Phantom Liberty", AppName: "fixture-dlc", InstallLocation: second,
+      LaunchExecutable: "", bIsIncompleteInstall: false }),
+    [join(manifests, "D.item")]: `${bom}${item({ DisplayName: "Cyberpunk 2077", AppName: "fixture-app-3", InstallLocation: unfinished,
+      LaunchExecutable: "bin/x64/Cyberpunk2077.exe", bIsIncompleteInstall: true })}`,
+    [p("programdata", "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat")]: JSON.stringify({ InstallationList: [
+      { InstallLocation: moved, AppName: "fixture-app" }, { InstallLocation: unfinished, AppName: "fixture-app-3" },
+      { InstallLocation: p("epic", "Unrelated"), AppName: "other-game" }] }),
+    [exe(moved)]: "", [exe(second)]: "", [exe(unfinished)]: "", [p("epic", "Unrelated", "Game.exe")]: "",
+  }, { "HKLM\\SOFTWARE\\WOW6432Node\\Epic Games\\EpicGamesLauncher":
+    `HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Epic Games\\EpicGamesLauncher\r\n    AppDataPath    REG_SZ    ${data}${sep}\r\n` },
+  { ProgramData: p("programdata") });
+  const result = await detectGameInstalls(host);
+  expect(result.candidates.map(row => [row.root, row.evidence.map(e => e.detail)])).toEqual([
+    [second, ["Epic app fixture-app-2", "Epic app fixture-dlc"]], [moved, ["Epic install list (fixture-app)"]]]);
+  expect(result.rejected).toEqual([{ root: p("epic", "OldPlace"), source: "epic" }, { root: unfinished, source: "epic" }]);
+  expect(result.issues.map(row => row.code)).toEqual(["install_incomplete"]);
+});
+
+test("Xbox app copies are recognised from library folders and packages, reported plainly and never offered", async () => {
+  const xbox = p("c", "XboxGames", "Cyberpunk 2077", "Content"), gog = p("f", "GamePass", "Cyberpunk 2077 GOG");
+  const host = fakeHost({
+    [p("c", ".GamingRoot")]: gamingRoot("XboxGames"), [p("f", ".GamingRoot")]: gamingRoot("GamePass"),
+    [join(xbox, "MicrosoftGame.config")]: "", [exe(xbox)]: "",
+    [p("f", "GamePass", "Other Game", "Content", "MicrosoftGame.config")]: "",
+    // A GOG copy that happens to sit inside an Xbox library folder is not an Xbox app install.
+    [exe(gog)]: "",
+  }, { "HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games": ["HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1423049311",
+    `    path    REG_SZ    ${gog}`, ""].join("\r\n") }, {}, "win32", [p("c"), p("f"), p("empty")]);
+  const mo2 = { schema: "xfs/mo2-instance-detection-1" as const, supported: true, issues: [], limitations: [], instances: [
+    describeMo2Instance(`[General]\ngameName=Cyberpunk 2077\ngamePath=@ByteArray(${xbox.replaceAll("\\", "\\\\")})\n`, p("mo2"), "portable", "mo2"),
+    describeMo2Instance(`[General]\ngameName=Cyberpunk 2077\ngamePath=@ByteArray(${p("WindowsApps", "Pkg").replaceAll("\\", "\\\\")})\n`,
+      p("mo2b"), "portable", "mo2b")] };
+  const result = await detectGameInstalls(host, mo2);
+  expect(result.candidates.map(row => row.root)).toEqual([gog]);
+  expect(result.unsupported.map(row => [row.source, row.root])).toEqual([["xbox", xbox], ["xbox", p("WindowsApps", "Pkg")]]);
+  expect(result.unsupported[0]!.message).toBe(XBOX_UNSUPPORTED_MESSAGE);
+  expect(XBOX_UNSUPPORTED_MESSAGE).toMatch(/XF Eye Artistry needs ArchiveXL/);
+  expect(XBOX_UNSUPPORTED_MESSAGE).toMatch(/Install Cyberpunk 2077 from Steam, GOG or Epic Games, then choose that folder\.$/);
+  expect(result.issues.map(row => [row.source, row.code])).toEqual([["xbox", "store_unsupported"]]);
+  expect(result.rejected).toEqual([]);
+
+  // Only a Gaming Services package registration (for example a WindowsApps install): no folder to name.
+  const packaged = await detectGameInstalls(fakeHost({}, { "HKLM\\SOFTWARE\\Microsoft\\GamingServices\\PackageRepository\\Package": [
+    "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\GamingServices\\PackageRepository\\Package",
+    "    Fixture.Cyberpunk2077_1.0.0.0_x64__fixture    REG_SZ    {00000000-0000-0000-0000-000000000000}#Fixture.Cyberpunk2077_fixture",
+    "    Fixture.OtherGame_1.0.0.0_x64__fixture    REG_SZ    {00000000-0000-0000-0000-000000000001}#Fixture.OtherGame_fixture", ""].join("\r\n") }));
+  expect(packaged.unsupported.map(row => [row.root, row.detail]))
+    .toEqual([[null, "Xbox app package Fixture.Cyberpunk2077_1.0.0.0_x64__fixture"]]);
+  expect(packaged.candidates).toEqual([]);
 });
 
 test("MO2 detection finds global instances and portable instances named by the download handler", async () => {

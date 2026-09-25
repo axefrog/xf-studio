@@ -2,10 +2,11 @@
  * DXBC programs into ignored research inputs for local disassembly. */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { configuredGameRoot } from "./configured-game-root";
 
 const root = resolve(import.meta.dir, "../../../..");
-const source = "F:/Games/Cyberpunk 2077/engine/shader_final.cache";
+const source = join(configuredGameRoot(), "engine", "shader_final.cache");
 const bytes = readFileSync(source);
 const sourceHash = createHash("sha256").update(bytes).digest("hex");
 if (sourceHash !== "339145371a3b5aaa08eb4ef82d558f445b632e28603ee0f3b4860270dfc3ccfa")
