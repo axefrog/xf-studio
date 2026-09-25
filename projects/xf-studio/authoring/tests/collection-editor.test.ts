@@ -8,6 +8,7 @@ import { LookLibrary } from "../src/library-store";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
 import { initialRecipe } from "../src/recipe";
+import { historyRecipes } from "./fixtures/looks";
 import { parseCollection, planCollection } from "../src/preset-collection";
 import { freshWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { recipeOf } from "./fixtures/looks";
@@ -24,7 +25,7 @@ test("preset switching retains unsaved recipes, selections and Undo; structural 
   editor.recipe.layers[0].color = "#aabbcc";
   session.select(original.id);
   expect(editor.recipe.layers[0].color).toBe("#123456"); expect(editor.active).toBe(2); expect(editor.selected).toBe(3);
-  expect(editor.history).toHaveLength(1);
+  expect(historyRecipes(editor.history)).toHaveLength(1);
   const before = planCollection(session.snapshot().collection);
   session.edit({ kind: "rename", id: original.id, name: "Renamed" });
   session.edit({ kind: "move", id: original.id, to: 1 });

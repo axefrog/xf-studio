@@ -26,8 +26,10 @@ test("the registry reproduces the pre-platform catalogue exactly (golden snapsho
 });
 
 test("every action is owned by exactly one registered owner", () => {
-  const owned = STUDIO_OWNERS.flatMap(owner => Object.keys(owner.actions));
-  expect(new Set(owned).size).toBe(owned.length);
+  // Synchronous owners hold the action table; the async families (library requests, file workflows) route beside it.
+  const owned = STUDIO_OWNERS.filter(owner => !("async" in owner)).flatMap(owner => Object.keys(owner.actions));
+  const all = STUDIO_OWNERS.flatMap(owner => Object.keys(owner.actions));
+  expect(new Set(all).size).toBe(all.length);
   expect(owned).toEqual(Object.keys(ACTION_DESCRIPTORS));
   for (const kind of owned) {
     const route = STUDIO_REGISTRY.route(kind);

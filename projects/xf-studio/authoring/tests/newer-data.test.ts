@@ -20,6 +20,7 @@ import { WorkspacePersistence } from "../src/workspace-persistence";
 import { loadWorkspace, NEWER_WORKSPACE_MESSAGE, parseWorkspace, serializeWorkspace, workspaceKeys,
   type WorkspaceState } from "../src/workspace-state";
 import { restore } from "./fixtures/workspace-observable";
+import { historyRecipes } from "./fixtures/looks";
 import { fixedId, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 
 const EYE = "eye-makeup", NEWER_PART = "xfs/eye-makeup-part-9";
@@ -144,9 +145,9 @@ test("step-2 code paths read what this build writes: a registry that knows only 
     const state = restore(fixture).state;
     const text = JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS));
     const read = parseWorkspace(JSON.parse(text), stepTwo, []);
-    const recipes = (value: WorkspaceState) => ({ recipe: value.recipe, history: value.history,
+    const recipes = (value: WorkspaceState) => ({ recipe: value.recipe, history: historyRecipes(value.history),
       looks: value.collections!.collection.presets.map(look => look.parts[EYE].body),
-      histories: Object.values(value.collections!.memory).map(memory => memory[EYE].history),
+      histories: Object.values(value.collections!.memory).map(memory => historyRecipes(STUDIO_DOCUMENTS.parts.lookHistory(memory))),
       removed: value.collections!.removed.map(entry => entry.preset.parts[EYE].body),
       recovery: value.collections!.previous?.collection.presets.map(look => look.parts[EYE].body) });
     // Part-1 bodies read back through the step-2 path are the same recipes (their file schemas aside).

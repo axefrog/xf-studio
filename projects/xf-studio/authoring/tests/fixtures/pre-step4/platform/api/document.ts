@@ -27,13 +27,6 @@ export interface PartCodec<P> {
   starter(): P;
   /** Primitive facts for cheap views (CORE-05): never a clone of the part. */
   summary(part: P): Readonly<Record<string, number | string | boolean>>;
-  /**
-   * Stable content chunks of a parsed part for the look history (feature-module platform §3): an edit
-   * of one item then stores only that item's chunk again. Plain JSON values; without `chunks` a part is
-   * one chunk. `join(chunks(p))` must give `p` back exactly, key order included.
-   */
-  chunks?(part: P): readonly unknown[];
-  join?(chunks: readonly unknown[]): P;
   /** Largest serialized part (UTF-16 code units) a collection may hold; larger parts are refused on read. */
   readonly maxBytes: number;
   /**
@@ -73,20 +66,13 @@ export type LookCollection = { schema: typeof COLLECTION_2; id: string; name: st
 export type StoredLookCollection = LookCollection;
 
 /**
- * One feature's editor memory for one look in a workspace: its editor state. Workspaces written
- * before the look history (and a newer build's feature this build does not register) also keep that
- * feature's Undo history here as whole parts, oldest first (`history`; `historyTrimmed` present, true,
- * only when older entries were dropped); readers turn it into the look's history.
+ * One feature's editor memory for one look in a workspace: its editor state and its Undo
+ * history (whole parts, oldest first). `historyTrimmed` is present (true) only when older
+ * entries were dropped. The look history (migration step 4) replaces the per-feature history.
  */
-export type PartMemory<E = unknown, P = unknown> = { editor: E; history?: P[]; historyTrimmed?: true };
-/**
- * Editor memory of one look: each feature's memory by feature ID, and the look's own memory under
- * `LOOK_MEMORY` (never a feature ID), whose editor state is the look's one Undo history
- * (`LookHistoryData`; absent while the history is empty). Read it with the part registry's `lookHistory`.
- */
+export type PartMemory<E = unknown, P = unknown> = { editor: E; history: P[]; historyTrimmed?: true };
+/** Editor memory of one look, by feature. */
 export type LookMemory = Record<string, PartMemory>;
-/** The key of a look's own memory (its Undo history) beside its features' memory; not a valid feature ID. */
-export const LOOK_MEMORY = "@look";
 
 /** What an action reads: the feature's part and its editor state. */
 export type FeatureState<P, E> = { readonly part: P; readonly editor: E };

@@ -10,7 +10,7 @@ import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/workspace-persistence";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
-import { looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
+import { historyRecipes, looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 afterEach(() => { jest.useRealTimers(); });
@@ -133,14 +133,14 @@ test("a realistic workspace fits the storage budget with the standard policy and
   const collections = restored.collections!, selected = collections.selected!;
   // The selected preset keeps its full Undo history and is the editor recipe.
   expect(restored.recipe).toEqual(recipeOf(state.collections!.collection.presets.find(p => p.id === selected)!));
-  expect(restored.history).toHaveLength(RECIPE_HISTORY_LIMIT);
+  expect(historyRecipes(restored.history)).toHaveLength(RECIPE_HISTORY_LIMIT);
   for (const preset of collections.collection.presets)
     expect(memoryOf(collections, preset.id).history).toHaveLength(preset.id === selected ? RECIPE_HISTORY_LIMIT : PERSISTED_BACKGROUND_HISTORY);
   // Removed presets and recovery drafts keep their looks, not their Undo histories.
   expect(collections.removed).toHaveLength(REMOVED_PRESET_LIMIT);
-  expect(collections.removed.every(entry => entry.memory["eye-makeup"].history.length === 0)).toBe(true);
+  expect(collections.removed.every(entry => STUDIO_DOCUMENTS.parts.lookHistory(entry.memory).entries.length === 0)).toBe(true);
   expect([collections.previous, ...collections.older!]).toHaveLength(COLLECTION_RECOVERY_LIMIT);
-  expect(Object.values(collections.previous!.memory).every(memory => memory["eye-makeup"].history.length === 0)).toBe(true);
+  expect(Object.values(collections.previous!.memory).every(memory => STUDIO_DOCUMENTS.parts.lookHistory(memory).entries.length === 0)).toBe(true);
   expect(collections.previous!.collection).toEqual(state.collections!.previous!.collection);
   expect(collections.previous!.removed).toEqual([]);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);

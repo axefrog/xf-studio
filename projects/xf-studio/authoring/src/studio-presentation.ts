@@ -169,8 +169,9 @@ export function createStudioPresentation<Slot>(sources: {
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
   };
   const files: StudioPresentationPort<Slot>["files"] = {
-    snapshot: () => f.snapshot(), capability: action => f.capability(action),
-    execute: action => f.execute(action), activity: () => f.activity(), cancel: id => f.cancel(id),
+    // File workflows route through the application's registry (the `files` family).
+    snapshot: () => f.snapshot(), capability: action => a.fileCapability(action),
+    execute: action => a.executeFile(action), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),

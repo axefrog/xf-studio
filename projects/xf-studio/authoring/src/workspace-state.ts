@@ -1,8 +1,10 @@
 import { emptyRecipe, initialRecipe, parseRecipe, starterRecipe, type Recipe } from "./recipe";
 import { parseSavedV, type SavedV } from "./save-reader";
-import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, writeCollectionWorkspace,
+import { liveMemory, livePart, parseCollectionWorkspace, readCollectionWorkspaceV1, withLiveMemory, writeCollectionWorkspace,
   type CollectionWorkspace, type DocumentModel, type RestoreWarnings } from "./collection-workspace";
-import { isNewerData, type LookMemory, type PartEnvelope } from "./platform/api";
+import { isNewerData, LOOK_MEMORY, type LookMemory, type PartEnvelope } from "./platform/api";
+import type { DocumentHistory } from "./authoring-document";
+import { emptyLookHistory } from "./platform/core/look-history";
 import type { NewerPolicy } from "./platform/core/document";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
@@ -37,8 +39,13 @@ export const WORKSPACE_2 = "xfs/workspace-2";
  */
 export type WorkspaceState = {
   schema: typeof WORKSPACE_2;
-  recipe: Recipe; active: number; selected: number; history: Recipe[];
-  /** Present (true) only when older Undo entries than `history[0]` were dropped. */
+  recipe: Recipe; active: number; selected: number;
+  /**
+   * The live look's Undo history: `LookHistoryData` when read or captured by this build; eye
+   * makeup's whole recipes, oldest first, are accepted too (fresh workspaces and tests build one so).
+   */
+  history: DocumentHistory;
+  /** Present (true) only when older Undo entries than the oldest kept one were dropped. */
   historyTrimmed?: boolean;
   uvView: UVView;
   fieldSelection: FieldSelection;
@@ -75,7 +82,7 @@ export type StoredWorkspace = Omit<WorkspaceState, "schema" | "recipe" | "active
 };
 export function freshWorkspace(recipe = initialRecipe()): WorkspaceState {
   return {
-    schema: WORKSPACE_2, recipe, active: 0, selected: 0, history: [],
+    schema: WORKSPACE_2, recipe, active: 0, selected: 0, history: emptyLookHistory(),
     uvView: defaultUVView(), fieldSelection: {}, glitterChoices: {},
     preview: { textureSize: DEFAULT_PREVIEW_TEXTURE_SIZE, eyeShape: 9, surface: true, wire: false, brows: true, lashes: true, hair: true,
       piercings: true, piercingStyle: "", piercingDefinition: "",
@@ -107,7 +114,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   newer: NewerPolicy = "refuse"): WorkspaceState {
   const v = value as Record<string, unknown> & Partial<WorkspaceState>;
   if (!v || (v.schema as string) !== WORKSPACE_1 && v.schema !== WORKSPACE_2) throw Error("Unsupported workspace version");
-  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v) : readEditorV2(v as unknown as StoredWorkspace, model, newer);
+  const state = (v.schema as string) === WORKSPACE_1 ? readEditorV1(v, model) : readEditorV2(v as unknown as StoredWorkspace, model, newer);
   state.uiPreferences = parseUIPreferences(v.uiPreferences);
   state.uvView = parseUVView(v.uvView);
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
@@ -162,17 +169,21 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
 }
 
 /** Workspace-1's top-level editor: the recipe, its selection, Undo history and the Glitter/shift memory. */
-function readEditorV1(v: Record<string, unknown>): WorkspaceState {
+function readEditorV1(v: Record<string, unknown>, model: DocumentModel): WorkspaceState {
   const recipe = parseRecipe(v.recipe), state = freshWorkspace(recipe);
   state.fieldSelection = parseFieldSelection(v.fieldSelection, recipe);
   state.glitterChoices = parseGlitterChoices(v.glitterChoices);
   if (Number.isInteger(v.active) && finite(v.active, 0, recipe.layers.length - 1)) state.active = v.active as number;
   if (recipe.layers.length && Number.isInteger(v.selected) && finite(v.selected, 0, recipe.layers[state.active].points.length - 1))
     state.selected = v.selected as number;
+  const history: Recipe[] = [];
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
-    try { state.history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
+    try { history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
   }
-  if (v.historyTrimmed === true || (Array.isArray(v.history) && v.history.length > 80)) state.historyTrimmed = true;
+  const trimmed = v.historyTrimmed === true || (Array.isArray(v.history) && v.history.length > 80);
+  // The look history holds the recipes (as the live document keeps them).
+  state.history = liveMemory(withLiveMemory(undefined, { active: 0, selected: 0, history, historyTrimmed: trimmed }, model), model).history;
+  if (trimmed) state.historyTrimmed = true;
   return state;
 }
 
@@ -191,7 +202,7 @@ function readEditorV2(v: StoredWorkspace, model: DocumentModel, newer: NewerPoli
   if (live.historyTrimmed) state.historyTrimmed = true;
   const features = registry.readFeatureWide(v.features);
   state.glitterChoices = (features[LIVE] as { choices?: GlitterChoices } | undefined)?.choices ?? {};
-  delete parts[LIVE]; delete memory[LIVE]; delete features[LIVE];
+  delete parts[LIVE]; delete memory[LIVE]; delete memory[LOOK_MEMORY]; delete features[LIVE];
   const other = { ...(Object.keys(parts).length ? { parts } : {}), ...(Object.keys(memory).length ? { memory } : {}),
     ...(Object.keys(features).length ? { features } : {}) };
   if (Object.keys(other).length) state.otherFeatures = other;
@@ -213,8 +224,8 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel):
   const look = collections ? undefined : {
     parts: registry.minimalLook({ id: "", name: "", revision: 1,
       parts: { ...otherFeatures?.parts, [LIVE]: registry.envelope(LIVE, recipe) } }, false).parts,
-    memory: registry.writeMemory({ ...otherFeatures?.memory, [LIVE]: { editor: { active, selected, fieldSelection },
-      history, ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } }) };
+    memory: registry.writeMemory(withLiveMemory(otherFeatures?.memory, { active, selected, fieldSelection, history,
+      ...(historyTrimmed ? { historyTrimmed: true } : {}) }, model)) };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model) } : {}) };
 }

@@ -10,21 +10,26 @@
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID } from "../features/eye-makeup";
-import { COLLECTION_FAMILY, HISTORY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY, SAVED_V_FAMILY } from "./system-families";
+import { COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, QUALITY_FAMILY,
+  SAVED_V_FAMILY } from "./system-families";
 import type { DocumentModel } from "../collection-workspace";
-import type { StudioOwnerActions, StudioOwnerId } from "../studio-application";
+import type { StudioOwnerActions, StudioOwnerId, StudioRequestOwnerId } from "../studio-application";
 import type { StudioComposition } from "../trusted-authoring-core";
 
 export type { StudioOwnerActions, StudioOwnerId };
 
-/** Registration order is catalogue order: the golden registry snapshot pins it. */
+/**
+ * Registration order is catalogue order: the golden registry snapshot pins it. The asynchronous
+ * families (library requests, file workflows) route by owner too, outside the synchronous table.
+ */
 export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY,
-  QUALITY_FAMILY, SAVED_V_FAMILY] as const;
+  QUALITY_FAMILY, SAVED_V_FAMILY, LIBRARY_FAMILY, FILES_FAMILY] as const;
 
 // Compile-time: the list's IDs are exactly the owners StudioApplication binds handlers for.
 type ListedIds = (typeof STUDIO_OWNERS)[number]["id"];
-type Unlisted = { [K in StudioOwnerId]: [Extract<ListedIds, K>] extends [never] ? K : never }[StudioOwnerId];
-const exact: [ListedIds] extends [StudioOwnerId] ? [Unlisted] extends [never] ? true : false : false = true;
+type BoundIds = StudioOwnerId | StudioRequestOwnerId;
+type Unlisted = { [K in BoundIds]: [Extract<ListedIds, K>] extends [never] ? K : never }[BoundIds];
+const exact: [ListedIds] extends [BoundIds] ? [Unlisted] extends [never] ? true : false : false = true;
 void exact;
 
 export const STUDIO_REGISTRY = new Registry<(typeof STUDIO_OWNERS)[number]>(STUDIO_OWNERS);

@@ -4,9 +4,10 @@ import { eyeMakeupPort, type EyeMakeupGestures, type EyeMakeupSpec } from "./aut
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
+import { gestureHistoryLabel } from "./history-labels";
 import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
-import type { Registry } from "./platform/core/registry";
+import type { AnyOwner, Registry } from "./platform/core/registry";
 import { RecipeActions } from "./recipe-actions";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "./recipe";
@@ -17,7 +18,7 @@ import type { WorkspaceState } from "./workspace-state";
  * action registry and the document model. Built once in `compose/` and passed in by the startup
  * and server roots; nothing below the roots imports the composition.
  */
-export type StudioComposition = { readonly registry: Registry; readonly documents: DocumentModel };
+export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel };
 
 /** Trusted, DOM-free authoring composition. The presentation receives only StudioApplication. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
@@ -34,9 +35,10 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     if (!route.ok || route.owner.id !== documents.live) throw Error(`${kind} is not an action of ${documents.live}.`);
     return route.spec as EyeMakeupSpec;
   };
+  // The live document edits the live feature's part; its look history chunks parts through the part registry.
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
-    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) });
+    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) }, { feature: documents.live, parts: documents.parts });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(
@@ -53,11 +55,13 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const eyeMakeup = eyeMakeupPort(document, recipe, ports.resetStack, ports.newId);
   // Gesture frames run the module's registered gestures and publish through the port (CORE-31).
   const gestures = new AuthoringGestures(document,
-    { applyGesture: edit => eyeMakeup.gesture(live.gestures as EyeMakeupGestures, edit) }, revert);
+    { applyGesture: edit => eyeMakeup.gesture(live.gestures as EyeMakeupGestures, edit) }, revert,
+    edit => (live.gestures as EyeMakeupGestures).label?.(edit) ?? gestureHistoryLabel(edit));
   // Form controls apply through the registered apply and the port too; their transaction owns the
   // Undo entry, so no checkpoint is recorded here. StudioApplication.controlEdit runs the capability
   // gate first and reports failures as typed results, so hosts wire nothing here.
-  const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert);
+  const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed, revert,
+    action => specOf(action.kind).label(action));
   const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls }, registry);
   return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, undo, history, documents };
 }

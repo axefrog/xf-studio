@@ -6,7 +6,7 @@ import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } fro
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import type { LookCollection } from "../src/platform/api";
-import { looks, memoryOf, recipeOf } from "./fixtures/looks";
+import { historyRecipes, looks, memoryOf, recipeOf } from "./fixtures/looks";
 import { recipeFile } from "../src/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
@@ -141,7 +141,7 @@ test("opening two saved collections keeps the earlier unsaved draft recoverable 
   resumed.dispatch({ kind: "collection.undoOpen" });
   expect(resumed.summary().draft).toMatchObject({ id: draft.id, revision: 1, recoveryCount: 2 });
   expect(editor.recipe.layers[0].color).toBe("#fedcba");
-  expect(editor.history).toHaveLength(1);
+  expect(historyRecipes(editor.history)).toHaveLength(1);
   let savedColor: string | undefined, savedRevision: number | undefined;
   source.transport.save = async (value, revision) => {
     savedColor = recipeOf(value.presets[0]).layers[0].color; savedRevision = revision;
@@ -175,7 +175,7 @@ test("the first collection keeps every editor-memory field of the legacy workspa
   expect(memory).toMatchObject({ historyTrimmed: true, active: 0, selected: 0 });
   expect(memory.history).toHaveLength(1);
   expect("recipe" in memory).toBe(false);
-  // The recipe is the look's eye-makeup part; the memory is that feature's editor state and history.
-  expect(Object.keys(draft.memory[draft.selected!])).toEqual(["eye-makeup"]);
+  // The recipe is the look's eye-makeup part; the memory is that feature's editor state and the look's history.
+  expect(Object.keys(draft.memory[draft.selected!])).toEqual(["eye-makeup", "@look"]);
   expect(recipeOf(draft.collection.presets[0])).toEqual(recipe);
 });

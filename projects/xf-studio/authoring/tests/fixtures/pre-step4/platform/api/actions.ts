@@ -19,7 +19,6 @@ export type ActionDescriptor<Scope extends string = string> = { scope: readonly 
 
 import type { Capability } from "./capability";
 import type { FeatureResult, FeatureState } from "./document";
-import type { HistoryLabel } from "./history";
 
 /**
  * One registered action. Migration step 1 registered the existing descriptor (scope,
@@ -52,8 +51,6 @@ export type FeatureActionSpec<P, E, A extends { kind: string } = { kind: string 
      * actions that create any (the host calls it before `apply`; existing IDs are kept).
      */
     assignIds?(action: A, newId: () => string): A;
-    /** What the action's Undo step is called in menus and the History panel (the look history's label). */
-    label(action: A): HistoryLabel;
   };
 export type FeatureActionTable<P, E, A extends { kind: string }, Scope extends string = string, X = unknown> =
   { readonly [K in A["kind"]]: FeatureActionSpec<P, E, Extract<A, { kind: K }>, Scope, X> };
@@ -98,14 +95,12 @@ export function featureActionTable<P, E, A extends { kind: string }, Scope exten
   kinds: Readonly<Record<A["kind"], true>>,
   behaviour: { capability(state: FeatureState<P, E>, action: A): Capability;
     apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X>;
-    assignIds?(action: A, newId: () => string): A;
-    label(action: A): HistoryLabel }): FeatureActionTable<P, E, A, Scope, X> {
+    assignIds?(action: A, newId: () => string): A }): FeatureActionTable<P, E, A, Scope, X> {
   const base = actionTable<A, Scope>(descriptors, kinds) as Readonly<Record<string, ActionSpec<A, Scope>>>;
   const table: Record<string, FeatureActionSpec<P, E, A, Scope, X>> = {};
   for (const [kind, spec] of Object.entries(base)) table[kind] = Object.freeze({ descriptor: spec.descriptor,
     capability: (state: FeatureState<P, E>, action: A) => behaviour.capability(state, action),
     apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action),
-    label: (action: A) => behaviour.label(action),
     ...(behaviour.assignIds ? { assignIds: behaviour.assignIds } : {}) });
   return Object.freeze(table) as unknown as FeatureActionTable<P, E, A, Scope, X>;
 }

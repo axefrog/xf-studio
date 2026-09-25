@@ -8,6 +8,7 @@
  * history lands (migration step 4), so `EditorMemory` below is that document's memory for one
  * look; every other part and feature memory of a look is carried unchanged.
  */
+import type { DocumentHistory } from "./authoring-document";
 import type { FieldSelection } from "./field-selection";
 import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection, type LookMemory,
   type PartMemory } from "./platform/api";
@@ -23,13 +24,17 @@ export type DocumentModel = { readonly parts: PartRegistry; readonly live: strin
 
 export { emptyRecipe } from "./recipe";
 export type Preset = Look;
-/** The live editor document's memory for one look: its selection and its Undo history. */
-export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: Recipe[];
-  /** Present (true) only when older Undo entries than `history[0]` were dropped; lets the UI say so. */
+/**
+ * The live editor document's memory for one look: its selection and the look's Undo history. The
+ * history is `LookHistoryData` in everything this build makes; eye makeup's whole recipes, oldest
+ * first, are still accepted (how older in-memory forms and tests hold one).
+ */
+export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: DocumentHistory;
+  /** Present (true) only when older Undo entries than the oldest kept one were dropped; lets the UI say so. */
   historyTrimmed?: boolean };
 export type CollectionDraft = {
   collection: LookCollection; revision?: number; selected?: string;
-  /** Editor memory of each look, by feature. */
+  /** Editor memory of each look, by feature, with the look's Undo history (`LOOK_MEMORY`). */
   memory: Record<string, LookMemory>;
   removed: { preset: Look; index: number; memory: LookMemory }[];
 };
@@ -40,22 +45,29 @@ export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, histor
 /**
  * A deep copy of an in-memory workspace. A workspace is JSON data (it is stored as JSON), and a JSON
  * copy takes about 25 ms on the large fixture where `structuredClone` takes 65 ms and a reparse 70 ms.
+ * Undo histories are chunked look histories, so a copy no longer repeats every step's whole recipe.
  */
 export function copyWorkspace<T extends CollectionDraft>(value: T): T { return JSON.parse(JSON.stringify(value)); }
 
-/** The live document's memory in a look's memory (defaults when the look has none). */
+/** The live document's memory in a look's memory (defaults when the look has none); its history is the look's. */
 export function liveMemory(memory: LookMemory | undefined, model: DocumentModel): EditorMemory {
-  const entry = memory?.[model.live] as PartMemory<{ active: number; selected: number; fieldSelection?: FieldSelection }, Recipe> | undefined;
-  if (!entry) return emptyMemory();
-  return { active: entry.editor.active, selected: entry.editor.selected, history: entry.history,
-    ...(entry.historyTrimmed ? { historyTrimmed: true } : {}),
-    ...(entry.editor.fieldSelection ? { fieldSelection: entry.editor.fieldSelection } : {}) };
+  const entry = memory?.[model.live] as PartMemory<{ active: number; selected: number; fieldSelection?: FieldSelection }> | undefined;
+  const history = model.parts.lookHistory(memory);
+  return { active: entry?.editor.active ?? 0, selected: entry?.editor.selected ?? 0, history,
+    ...(history.trimmed ? { historyTrimmed: true } : {}),
+    ...(entry?.editor.fieldSelection ? { fieldSelection: entry.editor.fieldSelection } : {}) };
 }
-/** A look's memory with the live document's memory replaced; other features' memory is kept. */
+/**
+ * A look's memory with the live document's memory and the look's Undo history replaced; other
+ * features' memory is kept. Whole recipes (the older form) become the look history here.
+ */
 export function withLiveMemory(memory: LookMemory | undefined, editor: EditorMemory, model: DocumentModel): LookMemory {
   const { active, selected, fieldSelection, history, historyTrimmed } = editor;
-  return { ...memory, [model.live]: { editor: { active, selected, ...(fieldSelection ? { fieldSelection } : {}) }, history,
-    ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } };
+  const data = Array.isArray(history)
+    ? model.parts.lookHistory({ [model.live]: { editor: {}, history, ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } })
+    : historyTrimmed && !history.trimmed ? { ...history, trimmed: true as const } : history;
+  return model.parts.withLookHistory({ ...memory, [model.live]: { editor: { active, selected, ...(fieldSelection ? { fieldSelection } : {}) } } },
+    data);
 }
 /** The live document's part of a look, or undefined when the look does not have one. */
 export function livePart(look: Pick<Look, "parts"> | undefined, model: DocumentModel): Recipe | undefined {
@@ -123,7 +135,8 @@ function readDraft(value: unknown, format: DraftFormat, policy: ReadPolicy): Col
 function withLiveDefault(memory: LookMemory, look: Look, model: DocumentModel): LookMemory {
   const { parts, live } = model;
   if (memory[live]) return memory;
-  return { ...memory, [live]: parts.readFeatureMemory(live, undefined, parts.feature(live)!.part.current, [], false, look) };
+  const module = parts.feature(live)!;
+  return { ...memory, [live]: { editor: module.editor.parse(undefined, parts.part(look, live) ?? module.part.empty()) } };
 }
 /** The stored collection's own schema with the draft's identity, to read one removed preset the same way. */
 function storedIdentity(collection: LookCollection, stored: unknown) {
@@ -173,8 +186,8 @@ export function readCollectionWorkspaceV1(value: unknown, model: DocumentModel, 
   const schema = parts.feature(legacy)!.part.legacy!.schema;
   const memory = (editor: unknown, look: Look): LookMemory => {
     const input = editor as { active?: unknown; selected?: unknown; fieldSelection?: unknown; history?: unknown; historyTrimmed?: unknown } | undefined;
-    return { [legacy]: parts.readFeatureMemory(legacy, input && { active: input.active, selected: input.selected,
-      fieldSelection: input.fieldSelection }, schema, input?.history, input?.historyTrimmed === true, look, newer) };
+    return parts.readFeatureMemory(legacy, input && { active: input.active, selected: input.selected,
+      fieldSelection: input.fieldSelection }, schema, input?.history, input?.historyTrimmed === true, look, newer);
   };
   return readWorkspaceDrafts(value, {
     memory: (source, look) => memory((source as { editors?: Record<string, unknown> })?.editors?.[look.id], look),

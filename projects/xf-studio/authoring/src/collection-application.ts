@@ -38,7 +38,8 @@ export class CollectionApplication implements CollectionViewPort {
         document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} });
         onEditorRestored();
       }, transport, () => ({ recipe: document.recipe, revision: document.geometryVersion.revision }));
-    app.attach({ collection: this.service });
+    // Library requests and file workflows route through the application's registry (CORE-36).
+    app.attach({ collection: this.service, files });
     files.attachCollection(this.service);
   }
   view() { return this.service.view(); }
@@ -56,8 +57,8 @@ export class CollectionApplication implements CollectionViewPort {
   currentLayerCount() { return this.document.recipe.layers.length; }
   capability(action: ViewAction) { return this.app.capability(action); }
   dispatch(action: ViewAction) { return this.app.dispatch(action); }
-  fileCapability(action: StudioFileAction) { return this.files.capability(action); }
-  fileExecute(action: StudioFileAction) { return this.files.execute(action); }
+  fileCapability(action: StudioFileAction) { return this.app.fileCapability(action); }
+  fileExecute(action: StudioFileAction) { return this.app.executeFile(action); }
   execute(request: CollectionRequest) { return this.files.executeCollection(request); }
   initialize() { return this.execute({ kind: "initialize" }); }
   importRecipe(recipe: Recipe, name: string) {
