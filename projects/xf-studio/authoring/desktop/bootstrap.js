@@ -1,10 +1,10 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
-// It adds the desktop first-run welcome, About (version, licences, build setup)
-// and, for maintainers only, a bounded intake for prepared core preview files.
-// Community installs never see the intake: the host reports previewIntake=false.
+// It adds the desktop first-run welcome, About (version, licences, build setup),
+// the host-owned workspace storage, and then starts the shared Studio composition
+// root (`src/studio-startup.ts`) with those desktop host services.
 import { createBrowserLocalSetup } from "../src/browser-local-setup-device";
+import { createBrowserPreviewPreparation } from "../src/preview-preparation";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
-import { mountPreviewPreparation } from "./preview-preparation.js";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -102,7 +102,7 @@ window.xfDesktopWorkspaceFlush = async updateNonce => {
     });
   }
 };
-window.xfDesktopWorkspaceStorage = {
+const workspaceStorage = {
   getItem(key) {
     if (key === workspaceKey) return workspaceText;
     try { return localStorage.getItem(key); } catch { return null; }
@@ -315,67 +315,22 @@ void initialSetup.then(() => {
   if (setupView?.source === "new") welcome.showModal();
   else if (setupView?.source === "backup") setup.showModal();
 }).catch(() => { aboutReadiness.textContent = "Build setup couldn't be loaded. Check still works."; });
-// Developer-only: the five prepared preview files come from a maintainer
-// pipeline that community users cannot run, so the host hides this intake.
-if (capabilities.previewIntake && capabilities.previewAssets !== "ready") {
-  const intakeButton = document.createElement("button");
-  intakeButton.id = "desktop-intake-open";
-  intakeButton.type = "button";
-  intakeButton.textContent = "Enable 3D preview";
-  const root = document.createElement("dialog");
-  root.id = "desktop-intake";
-  root.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Developer preview files</h1><p>Import the five prepared core preview files to switch on the 3D head. The UV editor, library and Check work without them.</p><label class="desktop-intake-label">Prepared preview folder<input id="desktop-intake-folder" type="text" autocomplete="off" placeholder="C:\\path\\to\\prepared-assets"></label><div class="desktop-intake-actions"><button type="button" id="desktop-intake-inspect">Inspect folder</button><button type="button" id="desktop-intake-import" disabled>Import valid files</button></div><p id="desktop-intake-status" aria-live="polite">The host checks five core preview files before copying them.</p><p>The imported files stay in your private data folder:</p><code id="desktop-asset-path"></code><p>A recorded hash match is only a diagnostic. This installer includes no game or mod files.</p><div class="desktop-intake-actions"><button type="button" id="desktop-setup-open-inline">Build setup</button><button type="button" id="desktop-intake-close">Continue in UV editor</button></div></div>';
-  document.body.append(intakeButton, root);
-  intakeButton.addEventListener("click", () => root.showModal());
-  root.querySelector("#desktop-intake-close").addEventListener("click", () => root.close());
-  root.querySelector("#desktop-asset-path").textContent = `${capabilities.userDataPath}\\preview-assets`;
-  root.querySelector("#desktop-setup-open-inline").addEventListener("click", () => void openSetup());
-  const folder = root.querySelector("#desktop-intake-folder");
-  const inspect = root.querySelector("#desktop-intake-inspect");
-  const importButton = root.querySelector("#desktop-intake-import");
-  const status = root.querySelector("#desktop-intake-status");
-  if (capabilities.previewAssets === "incomplete") status.textContent =
-    "The private preview folder exists but its five core files are incomplete or invalid. Intake preserves that folder; inspect or move it yourself before importing.";
-  let inspected = "";
-  folder.addEventListener("input", () => { inspected = ""; importButton.disabled = true; });
-  async function intake(action) {
-    inspect.disabled = true;
-    importButton.disabled = true;
-    status.textContent = action === "inspect" ? "Checking prepared files…" : "Copying verified files…";
-    try {
-      const response = await fetch("/api/desktop/assets/intake", { method: "POST",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, folder: folder.value.trim() }) });
-      const result = await response.json();
-      if (!result.files) throw Error(result.error || "Intake failed.");
-      if (!result.ready) {
-        inspected = "";
-        status.textContent = `Files need attention: ${result.files.filter(file => file.status !== "matched")
-          .map(file => `${file.name} (${file.status})`).join(", ")}.`;
-      } else if (action === "inspect") {
-        inspected = folder.value.trim();
-        importButton.disabled = false;
-        const known = result.files.filter(file => file.matchesKnownOutput).length;
-        status.textContent = `Five core files passed structural checks. ${known} match the recorded output hashes. Import copies them into private app data; source ownership is unverified.`;
-      } else {
-        status.textContent = "Core preview files imported. Opening the editor…";
-        location.reload();
-      }
-    } catch (error) { status.textContent = error.message || "Intake failed."; }
-    finally { inspect.disabled = false; if (action === "inspect" && inspected) importButton.disabled = false; }
-  }
-  inspect.addEventListener("click", () => void intake("inspect"));
-  importButton.addEventListener("click", () => { if (inspected === folder.value.trim()) void intake("import"); });
-}
-// Community path: prepare the 3D preview from the player's own game files.
-if (!(capabilities.previewIntake && capabilities.previewAssets !== "ready")) mountPreviewPreparation({ capabilities,
+// Once any settings form saves, the Build setup dialog shows the saved view.
+setupActions.subscribe(() => { const view = setupActions.snapshot().view; if (view && !setup.open) showSetup(view); });
+let previewReady = false;
+let flushRequest = null;
+window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
+void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
+  storage: workspaceStorage,
+  // The desktop host file (16 MB limit) holds more than browser storage.
+  storageBudget: 12_000_000,
+  previewPreparation: createBrowserPreviewPreparation("/api/desktop/preview"),
+  localSetup: setupActions,
+  setupPlace: "Build setup",
   openSetup: () => void openSetup(),
-  useGameFolder: async path => {
-    await initialSetup.catch(() => {});
-    await setupAction({ kind: "setup.save", fields: { ...setupView.fields, gameRoot: path } });
-  } });
-document.documentElement.dataset.desktopPreviewAssets = capabilities.previewAssets;
-document.documentElement.dataset.desktopPreviewIntake = capabilities.previewIntake ? "enabled" : "disabled";
-void import("/build/studio-main.js").catch(error => {
+  onFlushRequest: flush => { flushRequest = flush; },
+  onPreviewReady: () => { previewReady = true; },
+})).catch(() => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");
     root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
@@ -391,7 +346,7 @@ const report = () => {
   try { const probe = new Worker("/build/raster-worker.js", { type: "module" }); worker = true; probe.terminate(); }
   catch { /* Missing worker support. */ }
   const state = document.querySelector(".boot-error") ? "error" :
-    studio?.classList.contains("studio-ready") ? document.documentElement.dataset.desktopPreviewAssets === "ready" ? "interactive" : "uv-only" : "starting";
+    studio?.classList.contains("studio-ready") ? previewReady ? "interactive" : "uv-only" : "starting";
   void fetch("/api/desktop/smoke", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ schema: "xfs/desktop-smoke-1", state, webgl2, worker }) });
 };

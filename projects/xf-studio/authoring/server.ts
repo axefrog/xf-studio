@@ -12,6 +12,8 @@ import { LocalSettingsStore } from "./src/local-settings-store";
 import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
+import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
+import { LOCALHOST_SETUP_PLACE } from "./src/alpha-availability";
 const dataRoot = resolve(process.env.XFAS_DATA_DIR ?? resolve(import.meta.dir, "data"));
 mkdirSync(dataRoot, { recursive: true });
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
@@ -27,14 +29,15 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
 } });
 const packageRequest = createPackageHandler(action => action === "check" ? localPackageTools() :
   localPackageTools(localSettings.load().settings));
-// Derived 3D preview (head, plate, eyes, maps) from the configured game; `XFS_PREVIEW_CORE_CACHE` relocates it.
+// The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
+// served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCore = new PreviewCoreHost({
   cacheRoot: resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache")),
   settings: () => { const tools = packageToolPaths(localSettings.load().settings); return { gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit }; },
-  log: message => console.log(message),
+  log: message => console.log(message), setupPlace: LOCALHOST_SETUP_PLACE,
 });
 const previewCoreRequest = createPreviewCoreHandler(previewCore);
-const preferDerivedCore = process.env.XFS_PREVIEW_CORE === "derived";
+const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 const build = await buildBrowser(resolve(root, "build"));
@@ -63,13 +66,15 @@ const server = Bun.serve({
       return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/health")
       return Response.json({ app: "xf-studio", version: "0.1.0" });
+    // Research pages pinned to historical private fixtures read them here, never through /assets.
+    const research = url.pathname.startsWith("/research-assets/");
     let path: string;
     try {
       path = resolve(
         root,
         "." +
           decodeURIComponent(
-            url.pathname === "/" ? "/index.html" : url.pathname,
+            url.pathname === "/" ? "/index.html" : research ? "/assets" + url.pathname.slice("/research-assets".length) : url.pathname,
           ),
       );
     } catch {
@@ -78,21 +83,19 @@ const server = Bun.serve({
     if (!path.startsWith(root + sep))
       return new Response("Not found", { status: 404 });
     let file = Bun.file(path);
+    const assetName = path.startsWith(resolve(root, "assets") + sep) ? path.slice(resolve(root, "assets").length + 1) : null;
+    if (!research && assetName !== null && coreFiles.has(assetName)) {
+      // The core preview has one source: the derivation from the player's own game files.
+      const derived = previewCore.assetPath(assetName);
+      if (!derived) return new Response("Not found", { status: 404 });
+      file = Bun.file(derived);
+    }
     // Optional private overlay for /assets (e.g. a worktree whose public/assets is a
     // read-only link to another checkout). Files present in the overlay win.
-    if (assetOverlay && path.startsWith(resolve(root, "assets") + sep)) {
+    else if (assetOverlay && assetName !== null) {
       const overlayPath = resolve(assetOverlay, "." + path.slice(resolve(root, "assets").length));
       if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
         file = Bun.file(overlayPath);
-    }
-    // Private prepared assets (public/assets or the overlay) win as a whole set; without a prepared
-    // head the core preview files (and their render record) come from the derived cache.
-    // `XFS_PREVIEW_CORE=derived` makes a ready derived core win over prepared files (developer check).
-    const preparedHead = async () => !preferDerivedCore && (await Bun.file(resolve(root, "assets", "head.glb")).exists() ||
-      (!!assetOverlay && await Bun.file(resolve(assetOverlay, "head.glb")).exists()));
-    if (path.startsWith(resolve(root, "assets") + sep) && (preferDerivedCore || !(await file.exists())) && !(await preparedHead())) {
-      const derived = previewCore.assetPath(path.slice(resolve(root, "assets").length + 1));
-      if (derived) file = Bun.file(derived);
     }
     if (!(await file.exists()))
       return new Response("Not found", { status: 404 });

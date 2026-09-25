@@ -61,7 +61,6 @@ if (!new URL(page.url).searchParams.has("verify")) {
 }
 let expression = process.argv[3];
 if (expression?.startsWith("@")) expression = readFileSync(expression.slice(1), "utf8")
-  .replaceAll("__PREPARED_PATH__", JSON.stringify(process.env.XFS_TRIAL_PREPARED ?? ""))
   .replaceAll("__SETUP_FIELDS__", JSON.stringify(process.env.XFS_TRIAL_SETTINGS_FILE ?
     JSON.parse(readFileSync(process.env.XFS_TRIAL_SETTINGS_FILE, "utf8")) : {}));
 const state = await evaluate(expression ?? `(() => ({
@@ -69,8 +68,7 @@ const state = await evaluate(expression ?? `(() => ({
   href: location.origin,
   native: Boolean(window.__electrobunWebviewId),
   ready: document.querySelector('#studio')?.className,
-  assetMode: document.documentElement.dataset.desktopPreviewAssets,
-  intake: Boolean(document.querySelector('#desktop-intake-open')),
+  previewCard: document.querySelector('#preview-card')?.hidden === false,
   preview: window.xfStudioPresentation?.viewport.snapshot(),
   controls: [...document.querySelectorAll('button')].slice(0, 45).map(x => ({id:x.id, text:x.textContent?.trim().slice(0,60)})),
 }))()`);

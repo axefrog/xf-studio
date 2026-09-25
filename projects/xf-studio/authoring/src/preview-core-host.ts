@@ -35,13 +35,15 @@ export type PreviewCoreHostOptions = {
   exporter?: (cli: string | null) => GameAssetExporter;
   log?: (message: string) => void;
   now?: () => number;
+  /** Where the person sets the game folder and WolvenKit CLI, in this host's own words. */
+  setupPlace?: string;
 };
 
 const MESSAGES = {
   ready: "The 3D preview is ready.",
   idle: "XF Studio can build the 3D head preview from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
   game: "Choose your Cyberpunk 2077 game folder so XF Studio can build the 3D head preview from your own game files.",
-  wolvenkit: "XF Studio needs WolvenKit CLI to read your game files, and it isn't set up yet. Add its location in Build setup to turn on the 3D preview. The UV editor, library and Check keep working without it.",
+  wolvenkit: (place: string) => `XF Studio needs WolvenKit CLI to read your game files, and it isn't set up yet. Add its location in ${place} to turn on the 3D preview. The UV editor, library and Check keep working without it.`,
   cancelled: "Preparing the 3D preview was cancelled. You can start it again at any time.",
 } as const;
 
@@ -78,7 +80,7 @@ export class PreviewCoreHost {
     if (readiness.state === "ready") return { ...base, phase: "ready", message: MESSAGES.ready, code: null, needs: [], progress: null, canPrepare: false, canCancel: false };
     if (!isFile(settings.wolvenKitCli)) needs.push("wolvenkit");
     if (needs.length) return { ...base, phase: "needs-setup", code: needs.includes("game") ? "preview_game_missing" : "preview_tool_missing",
-      message: needs.includes("game") ? MESSAGES.game : MESSAGES.wolvenkit, needs, progress: null, canPrepare: false, canCancel: false };
+      message: needs.includes("game") ? MESSAGES.game : MESSAGES.wolvenkit(this.options.setupPlace ?? "Build setup"), needs, progress: null, canPrepare: false, canCancel: false };
     if (readiness.state === "blocked") return { ...base, phase: "blocked", message: readiness.message, code: readiness.code, needs: [], progress: null,
       canPrepare: true, canCancel: false };
     if (this.lastFailure && this.lastFailure.gameRoot === settings.gameRoot)

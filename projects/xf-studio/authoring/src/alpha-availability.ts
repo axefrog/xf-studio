@@ -6,10 +6,13 @@
 
 /**
  * Shown for every head, camera, motion and saved-V action until the 3D preview has been
- * prepared from the player's own game files (the desktop then reports its progress instead).
+ * prepared from the player's own game files (the preview card then reports its progress instead).
  */
 export const NO_3D_PREVIEW_IN_ALPHA =
   "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
+
+/** Where the local Studio page sets the game folder and WolvenKit CLI (the desktop app calls it Build setup). */
+export const LOCALHOST_SETUP_PLACE = "the Mod package panel under Game & tools";
 
 /** Shown for Build when the host's Build setup is incomplete; the setup view lists the missing paths. */
 export const BUILD_NEEDS_SETUP =

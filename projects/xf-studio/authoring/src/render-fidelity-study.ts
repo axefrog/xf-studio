@@ -299,9 +299,9 @@ async function createPane(host: HTMLElement, maps: {
   fill.position.set(0.4, 1.65, -0.2);
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
-  const bytes = await loadBytes("/assets/head.glb", headHash ?? EXPECTED_SKIN_HASHES.head);
+  const bytes = await loadBytes("/research-assets/head.glb", headHash ?? EXPECTED_SKIN_HASHES.head);
   const weightSets = restoreFirstWeights(bytes.buffer as ArrayBuffer);
-  const gltf = await new GLTFLoader().parseAsync(bytes.buffer as ArrayBuffer, "/assets/");
+  const gltf = await new GLTFLoader().parseAsync(bytes.buffer as ArrayBuffer, "/research-assets/");
   scene.add(gltf.scene);
   const head = new THREE.MeshStandardMaterial({
     map: maps.skinColor, roughness: 0.85, roughnessMap: maps.skinRoughness,
@@ -407,8 +407,8 @@ async function main() {
   if (!savedEye?.roughness) throw Error("The exact Kala saved-eye diffuse and roughness are not staged locally.");
   const savedEyeRoughnessScale = savedEye.roughness.scale;
   const [skinColor, skinNormal, skinRoughness, eyeColor, roughness] = await Promise.all([
-    imageTexture("/assets/head-color.png", true), imageTexture("/assets/head-normal.png", false),
-    imageTexture("/assets/head-roughness.png", false), imageTexture(savedEye.url, true, savedEye.sha256),
+    imageTexture("/research-assets/head-color.png", true), imageTexture("/research-assets/head-normal.png", false),
+    imageTexture("/research-assets/head-roughness.png", false), imageTexture(savedEye.url, true, savedEye.sha256),
     imageTexture(savedEye.roughness.url, false, savedEye.roughness.sha256),
   ]);
   const maps = { skinColor, skinNormal, skinRoughness, eyeColor };

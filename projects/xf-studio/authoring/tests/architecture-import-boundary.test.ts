@@ -40,7 +40,7 @@ test("install detection keeps parsing pure and host access in its adapter", () =
 // `studio-ui/` tree) and browser entry points may import the core, never the
 // reverse. `context-menu` is presentation policy shared by both shells.
 const presentation = (path: string) => /^\.\/(?:[\w-]+-ui|studio-ui\/.*|context-menu)$/.test(path);
-const entries = new Set(["main", "studio-main", "port-smoke", "application-boundary-fixture"]);
+const entries = new Set(["main", "studio-main", "studio-startup", "port-smoke", "application-boundary-fixture"]);
 
 test("core modules never import presentation modules or browser entry points", () => {
   const { readdirSync } = require("node:fs") as typeof import("node:fs");

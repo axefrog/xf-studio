@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
@@ -6,12 +6,11 @@ import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck } from "../src/install-detection-server";
 import { LocalSettingsStore } from "../src/local-settings-store";
-import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
+import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
 import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
-import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 import { DesktopWorkActivity } from "./work-activity";
@@ -19,6 +18,7 @@ import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
+import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
@@ -71,21 +71,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       frameworks: hostFrameworkCheck(settings) }));
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
   const token = randomBytes(32).toString("hex");
-  const assetRoot = resolve(dataRoot, "preview-assets");
-  const coreAssetsReady = createCoreAssetReadiness(dataRoot);
-  // Community path: the core preview is derived from the player's own game files.
+  // The core preview has one source: the derivation from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
     settings: () => { try { const { gameRoot, wolvenKitCli } = settingsStore.load().settings; return { gameRoot, wolvenKitCli }; }
       catch { return { gameRoot: null, wolvenKitCli: null }; } },
     log: message => report(message) });
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
-  /** Prepared developer files win; otherwise the derived preview; otherwise what is missing. */
-  const previewAssetState = async (): Promise<{ state: "ready" | "incomplete" | "missing"; source: "prepared" | "derived" | null }> =>
-    await coreAssetsReady() ? { state: "ready", source: "prepared" } : previewCore.ready() ? { state: "ready", source: "derived" } :
-      { state: existsSync(assetRoot) ? "incomplete" : "missing", source: null };
-  // Maintainer-only: the five prepared preview files come from a private
-  // pipeline, so the intake stays hidden and refused unless explicitly enabled.
-  const previewIntake = () => existsSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER));
+  const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
@@ -112,11 +104,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname.startsWith("/api/") && request.method === "POST" &&
           request.headers.get("Content-Type")?.split(";")[0].trim() !== "application/json")
         return new Response("Expected JSON", { status: 415 });
-      if (url.pathname === "/api/desktop/capabilities") {
-        const preview = await previewAssetState();
-        return Response.json(desktopCapabilities(preview.state, version, dataRoot, buildReady(), previewIntake(), preview.source),
+      if (url.pathname === "/api/desktop/capabilities")
+        return Response.json(desktopCapabilities(previewCore.ready() ? "ready" : "missing", version, dataRoot, buildReady()),
           { headers: { "Cache-Control": "no-store" } });
-      }
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === "/api/desktop/update") {
         if (request.method === "GET") return Response.json(updates.snapshot(),
@@ -133,8 +123,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
-      if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
-        desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
       if (url.pathname === "/api/desktop/workspace/start-fresh") {
         const response = desktopWorkspaceStartFresh(routedRequest, workspaceStore, url.searchParams.has("verify"));
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
@@ -181,18 +169,20 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
       if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
-      const asset = url.pathname.startsWith("/assets/");
-      const root = asset ? assetRoot : staticRoot;
-      try { path = resolve(root, "." + decodeURIComponent(asset ? url.pathname.slice("/assets".length) : url.pathname === "/" ? "/index.html" : url.pathname)); }
-      catch { return new Response("Bad path", { status: 400 }); }
-      if (!path.startsWith(root + sep)) return new Response("Not found", { status: 404 });
-      let file = Bun.file(path);
-      let servedRoot = root;
-      if (asset && !(await coreAssetsReady())) {
-        // Without a complete developer intake, the core preview files come from the derived cache.
-        const derived = previewCore.assetPath(url.pathname.slice("/assets/".length));
-        if (derived) { path = derived; file = Bun.file(derived); servedRoot = resolve(derived, ".."); }
+      let servedRoot = staticRoot;
+      if (url.pathname.startsWith("/assets/")) {
+        // Only the derived core preview files are served as assets; the installer carries none.
+        let name: string;
+        try { name = decodeURIComponent(url.pathname.slice("/assets/".length)); } catch { return new Response("Bad path", { status: 400 }); }
+        const derived = coreFiles.has(name) ? previewCore.assetPath(name) : null;
+        if (!derived) return new Response("Not found", { status: 404 });
+        path = derived; servedRoot = resolve(derived, "..");
+      } else {
+        try { path = resolve(staticRoot, "." + decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)); }
+        catch { return new Response("Bad path", { status: 400 }); }
+        if (!path.startsWith(staticRoot + sep)) return new Response("Not found", { status: 404 });
       }
+      const file = Bun.file(path);
       if (!(await file.exists())) return new Response("Not found", { status: 404 });
       try {
         const resolvedRoot = realpathSync(servedRoot), resolvedFile = realpathSync(path);

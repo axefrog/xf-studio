@@ -65,9 +65,7 @@ export function characterPanel(rt: StudioRuntime): PanelController {
         !preview || !shapes.length, frame.viewport.head.error ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
-      const fixedEyes = preview && shapes.length > 1 && state.eyeShapeOptions && !state.eyeShapeOptions.eyesFollow
-        ? "These developer-prepared eyes carry no eye-shape data, so they stay at the base shape while the eyelids move. The preview built from your game files moves both." : "";
-      setText(eyeNote, [overriding, fixedEyes].filter(Boolean).join(" "));
+      setText(eyeNote, overriding);
       eyeNote.hidden = !eyeNote.textContent;
       for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
         const enabled = !!preview?.[detail], allowed = enableReason(rt, { kind: "preview.setDetail", detail, enabled: true });

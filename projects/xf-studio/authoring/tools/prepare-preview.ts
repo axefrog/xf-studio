@@ -1,6 +1,6 @@
 // Derive the localhost 3D preview core from the configured game (Local setup, or the
 // XFS_PACKAGE_GAMEPATH / XFS_PACKAGE_WOLVENKIT overrides) into the ignored preview cache.
-// The localhost server serves it whenever public/assets has no prepared head.
+// The localhost server serves the core preview files only from this cache.
 //   bun tools/prepare-preview.ts
 import { join, resolve } from "node:path";
 import { createGameAssetExporter } from "../src/game-asset-export";

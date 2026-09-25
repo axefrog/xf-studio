@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
 import { extendSkin, restoreFirstWeights } from "../src/skin";
-import { privateAssetTest } from "./private-assets";
+import { derivedPreviewFile, privateAssetTest } from "./private-assets";
 test("CPU surface picking retains contributions beyond the first four", () => {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute([1, 2, 3], 3));
@@ -35,13 +35,14 @@ test("CPU surface picking retains contributions beyond the first four", () => {
   expect(q.w).toBeCloseTo(1, 6);
   expect(q.x).toBeCloseTo(p.x, 6);
 });
+// The head comes from the preview derived from the local game; brows and lashes are detail intake files.
 for (const [asset, morphCount, skinCount] of [
   ["head", 105, 2],
   ["brows", 105, 1],
   ["lashes", 21, 1],
 ] as const)
   privateAssetTest(`${asset} GLB retains customization morphs, all skin sets and normalized totals`, async () => {
-    const file = Bun.file(
+    const file = Bun.file(asset === "head" ? derivedPreviewFile("head.glb") :
       new URL(`../public/assets/${asset}.glb`, import.meta.url),
     );
     if (!(await file.exists()))
@@ -57,7 +58,8 @@ for (const [asset, morphCount, skinCount] of [
     expect(first.size).toBe(skinCount);
     for (const mesh of json.meshes) {
       const p = mesh.primitives[0];
-      if (!p.targets) continue;
+      // Skinned meshes carry the facial targets; the derived eyes carry only their own eye shapes.
+      if (!p.targets || p.attributes.JOINTS_0 === undefined) continue;
       expect(p.targets.length).toBe(morphCount);
       expect(p.attributes.JOINTS_1).toBeDefined();
       expect(p.attributes.WEIGHTS_1).toBeDefined();

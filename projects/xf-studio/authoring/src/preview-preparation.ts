@@ -2,11 +2,9 @@
  * Renderer-side actions for preparing the 3D preview from the player's game files. The host
  * owns the work and every path; this module only reads its state, asks it to start or
  * cancel, polls while it runs, and turns the state into plain-language view facts.
- * The desktop bootstrap renders them; Studio listens for the two window events below.
+ * The preview card renders them; the Studio composition root follows the same actions to
+ * load the head once the preview is ready.
  */
-export const PREVIEW_STATUS_EVENT = "xfs-desktop-preview-status";
-export const PREVIEW_READY_EVENT = "xfs-desktop-preview-ready";
-export type PreviewStatusDetail = { message: string };
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";
 export type PreviewState = {
@@ -44,18 +42,21 @@ export type PreviewView = {
   viewport: string;
 };
 
-/** Pure: the plain-language card for one host state, plus an optional detected game folder. */
-export function previewView(state: PreviewState, detectedGame: string | null = null): PreviewView {
+/**
+ * Pure: the plain-language card for one host state, plus an optional detected game folder and
+ * where the host lets the player set the game folder and WolvenKit CLI.
+ */
+export function previewView(state: PreviewState, detectedGame: string | null = null, setupPlace = "Build setup"): PreviewView {
   const view = previewCard(state, detectedGame);
-  return { ...view, viewport: viewportMessage(state) };
+  return { ...view, viewport: viewportMessage(state, setupPlace) };
 }
 
-function viewportMessage(state: PreviewState): string {
+function viewportMessage(state: PreviewState, setupPlace: string): string {
   switch (state.phase) {
     case "ready": return "";
     case "preparing": return "Preparing the 3D preview from your Cyberpunk 2077 files…";
     case "needs-setup": return state.needs.includes("game") ? "The 3D preview needs your Cyberpunk 2077 game folder."
-      : "The 3D preview needs WolvenKit CLI. Add it in Build setup.";
+      : `The 3D preview needs WolvenKit CLI. Add it in ${setupPlace}.`;
     case "blocked": return "The 3D preview can't be built for this game version yet.";
     case "failed": return state.code === "preview_cancelled" ? "The 3D preview wasn't prepared. You can start it again at any time."
       : "The 3D preview couldn't be prepared. Try again from the card below.";
@@ -128,7 +129,8 @@ export class PreviewPreparationActions {
   dispose() { if (this.timer) clearTimeout(this.timer); this.listeners.clear(); }
 }
 
-export function createBrowserPreviewPreparation(endpoint = "/api/desktop/preview") {
+/** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
+export function createBrowserPreviewPreparation(endpoint: string) {
   return new PreviewPreparationActions(async action => {
     const response = action === "refresh" ? await fetch(endpoint, { cache: "no-store" }) : await fetch(endpoint, { method: "POST",
       credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
