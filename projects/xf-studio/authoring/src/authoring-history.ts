@@ -72,7 +72,8 @@ export function historyTimeline(document: Pick<AuthoringDocument, "historyEntrie
  * step's identity, so a history list can jump to any step (`jumpTo`) as one atomic change.
  */
 export class AuthoringHistory {
-  private expected?: { revision: number; encoded: string; top?: HistoryEntryId };
+  /** The look as the last Undo, Redo or jump left it: the recipe's and the other parts' revisions, its content and the top step. */
+  private expected?: { revision: number; parts: number; encoded: string; top?: HistoryEntryId };
   constructor(private document: AuthoringDocument, private resetStack: (previous: Recipe) => void) {
     // A restore replaces the look history, and its Redo with it.
     document.subscribe(change => { if (change === "restore") this.expected = undefined; });
@@ -152,7 +153,7 @@ export class AuthoringHistory {
     return true;
   }
   private expect() {
-    this.expected = { revision: this.document.geometryVersion.revision, encoded: this.document.contentKey(),
+    this.expected = { revision: this.document.geometryVersion.revision, parts: this.document.partRevision, encoded: this.document.contentKey(),
       top: this.document.historyTop };
   }
   private redoValid() {
@@ -161,11 +162,12 @@ export class AuthoringHistory {
     // Any entry added since (an edit, or an open transaction's checkpoint) hides Redo; a
     // cancelled transaction removes its own entry again, so Redo comes back.
     if (this.document.historyTop !== expected.top) return false;
-    const revision = this.document.geometryVersion.revision;
-    if (revision === expected.revision) return true;
-    // A cancelled gesture republishes geometry without changing content; keep Redo then.
+    const revision = this.document.geometryVersion.revision, parts = this.document.partRevision;
+    if (revision === expected.revision && parts === expected.parts) return true;
+    // A change that records no step (another feature's action with Undo policy `none`, CORE-46) hides Redo,
+    // which would overwrite it; a cancelled gesture or a selection republishes without changing content, so Redo stays.
     if (this.document.contentKey() !== expected.encoded) return false;
-    expected.revision = revision;
+    expected.revision = revision; expected.parts = parts;
     return true;
   }
   private clearRedo() { this.document.clearRedo(); this.expected = undefined; }

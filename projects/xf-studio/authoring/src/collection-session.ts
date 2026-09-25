@@ -61,7 +61,7 @@ export class CollectionSession {
   }
   renameCollection(name: string) {
     this.stash();
-    this.state.collection = this.model.parts.readCollection({ ...this.state.collection, name: name.trim() }, true, "keep");
+    this.state.collection = this.model.parts.rereadCollection({ ...this.state.collection, name: name.trim() });
   }
   edit(command: PresetCommand) {
     this.stash(); const previous = this.state.selected;

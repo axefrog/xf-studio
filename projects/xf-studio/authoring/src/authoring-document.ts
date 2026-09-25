@@ -104,6 +104,8 @@ export class AuthoringDocument {
   partChanged() { this.otherRevision++; this.notify("part"); }
   /** Increments whenever another live feature's part changes (published, restored or loaded). */
   private otherRevision = 0;
+  /** The other live features' revision (`otherRevision`): it changes whenever one of their parts or editors is published, restored or loaded. */
+  get partRevision() { return this.otherRevision; }
   /** The other live features' parts as they are now (not copies) and their revision; undefined without other features. */
   otherParts(): { revision: number; parts: Record<string, unknown | undefined> } | undefined {
     const others = this.others;

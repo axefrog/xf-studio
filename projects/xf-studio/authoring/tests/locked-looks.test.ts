@@ -9,17 +9,19 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
+import { consequenceOf } from "../src/action-consequences";
+import { CollectionService, EVERY_LOOK_NEWER_MESSAGE, NO_EDITABLE_EYE_MAKEUP_MESSAGE, type CollectionTransport } from "../src/collection-service";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { CollectionLibrary } from "../src/collection-store";
 import { collectionDraft, emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE } from "../src/collection-workspace";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { LookLibrary } from "../src/library-store";
 import { COLLECTION_2, isNewerData, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
-import { eyeMakeupCollection, NEWER_LOOK_REASON } from "../src/preset-collection";
+import { eyeMakeupCollection, NEWER_LOOK_REASON, planCollection } from "../src/preset-collection";
 import { initialRecipe, parseRecipe } from "../src/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createStudioPresentation } from "../src/studio-presentation";
+import { fitWorkspace } from "../src/workspace-budget";
 import { freshWorkspace, loadWorkspace, serializeWorkspace, workspaceKeys } from "../src/workspace-state";
 
 const EYE = "eye-makeup";
@@ -158,4 +160,160 @@ test("the mod export leaves a locked look out and says why; the library never ta
   expect(service.capability({ kind: "exportCollection" })).toEqual({ available: true });
   const exported = await service.execute({ kind: "exportCollection" });
   expect(exported).toMatchObject({ ok: true });
+});
+
+/** A collection file of A (this build's) and B, whose preset carries `extra` and whose eye makeup is `body`. */
+const importedFile = (extra: Record<string, unknown>, body: unknown) => ({ schema: COLLECTION_2, id: ID.collection, name: "Imported", presets: [
+  { id: ID.a, name: "A", revision: 1, parts: { [EYE]: { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } },
+  { id: ID.b, name: "B", revision: 1, ...extra, parts: { [EYE]: { schema: "xfs/eye-makeup-part-2", body } } }] });
+const refusalOf = (read: () => unknown) => { try { read(); return "accepted"; } catch (error) { return (error as Error).message; } };
+
+test("a locked key from outside the app is never trusted: a damaged look is refused with it as without it (CORE-45)", async () => {
+  const withKey = importedFile({ locked: "anything" }, "not a recipe"), without = importedFile({}, "not a recipe");
+  const refused = refusalOf(() => STUDIO_PARTS.readCollection(without, false, "keep"));
+  expect(refused).not.toBe("accepted");
+  expect(refusalOf(() => STUDIO_PARTS.readCollection(withKey, false, "keep"))).toBe(refused);
+  // Through the import request too: the same refusal, and the draft is not replaced.
+  const service = await serviceOver(collectionDraft(importedFile({}, initialRecipe()), STUDIO_DOCUMENTS));
+  const text = JSON.stringify(withKey);
+  expect(await service.execute({ kind: "import", text, bytes: text.length })).toMatchObject({ ok: false, code: "invalid_collection", message: refused });
+  expect(service.summary().draft!.name).toBe("Imported");
+  // A stored workspace carrying the key reads the same way: its readable look opens editable.
+  const stored = storedWorkspace();
+  stored.collections.collection.presets[0].locked = "anything";
+  const loaded = loadWorkspace(storage(stored), false, STUDIO_DOCUMENTS);
+  expect(loaded.state.collections!.collection.presets.map(look => !!look.locked)).toEqual([false, true, true]);
+});
+
+test("a readable look carrying a locked key opens editable (CORE-45)", () => {
+  const read = STUDIO_PARTS.readCollection(importedFile({ locked: NEWER_LOOK_MESSAGE }, initialRecipe()), false, "keep");
+  expect(read.presets.map(look => look.locked)).toEqual([undefined, undefined]);
+  expect(JSON.stringify(read)).not.toContain("locked");
+});
+
+test("a look locked by its newer Undo history stays locked through collection edits in the session (CORE-45)", () => {
+  // B's parts read; only its memory holds a newer build's history.
+  const stored = storedWorkspace();
+  stored.collections.collection.presets[1].parts = { [EYE]: { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } };
+  const loaded = loadWorkspace(storage(stored), false, STUDIO_DOCUMENTS);
+  expect(find(loaded.state.collections!.collection, ID.b).locked).toBe(NEWER_LOOK_MESSAGE);
+  const core = createTrustedAuthoringCore(loaded.state, { resetStack: () => {}, selectedCollection: () => "draft", newId: ids() }, STUDIO_COMPOSITION);
+  const draft = new CollectionSession(STUDIO_DOCUMENTS, loaded.state.collections!, () => core.document.export(),
+    editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), ids());
+  draft.edit({ kind: "rename", id: ID.b, name: "B renamed" });
+  draft.renameCollection("Renamed looks");
+  expect(find(draft.snapshot().collection, ID.b).locked).toBe(NEWER_LOOK_MESSAGE);
+  // The stored form still carries no key; the next restore locks it again from its memory.
+  const written = JSON.parse(JSON.stringify(serializeWorkspace({ ...loaded.state, collections: draft.snapshot() }, STUDIO_DOCUMENTS)));
+  expect(JSON.stringify(written)).not.toContain("\"locked\"");
+  expect(find(loadWorkspace(storage(written), false, STUDIO_DOCUMENTS).state.collections!.collection, ID.b).locked).toBe(NEWER_LOOK_MESSAGE);
+});
+
+test("the eye-makeup facade says a look is locked explicitly (UI-53)", () => {
+  const { core, draft } = session();
+  const port = createStudioPresentation({ authoring: core.app, editor: core.presentation, library: {} as never, files: {} as never,
+    viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
+  expect(port.feature("eye-makeup").locked()).toBeUndefined();
+  draft.select(ID.b);
+  expect(port.feature("eye-makeup").locked()).toBe(NEWER_LOOK_MESSAGE);
+  draft.select(ID.a);
+  expect(port.feature("eye-makeup").locked()).toBeUndefined();
+});
+
+/** A collection service over `state`, whose library and package host must never be asked. */
+async function serviceOver(state: ReturnType<typeof collectionDraft> & { previous?: ReturnType<typeof collectionDraft> }) {
+  let editor: EditorSnapshot = { recipe: initialRecipe(), ...emptyMemory() };
+  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("none"); },
+    save: async () => { throw Error("The library must not be asked."); }, package: async () => { throw Error("The package host must not be asked."); } };
+  const service = new CollectionService(STUDIO_DOCUMENTS, state, { selected: "", name: "" }, () => editor, value => editor = value, transport);
+  await service.execute({ kind: "initialize" });
+  return service;
+}
+
+test("a collection whose only eye makeup is locked offers no build, with a plain reason (PIPE-44)", async () => {
+  const { draft } = session();
+  const locked = draft.snapshot().collection.presets.filter(look => look.locked);
+  // Every look locked.
+  const all = await serviceOver({ ...collectionDraft({ ...draft.snapshot().collection, presets: locked }, STUDIO_DOCUMENTS), selected: ID.b });
+  for (const request of [{ kind: "exportPlan" as const }, { kind: "package" as const, action: "check" as const }, { kind: "package" as const, action: "build" as const }])
+    expect(all.capability(request)).toEqual({ available: false, code: "invalid_value", reason: EVERY_LOOK_NEWER_MESSAGE });
+  expect(all.capability({ kind: "exportCollection" })).toEqual({ available: true });
+  // A look without eye makeup beside them: the reason names the locked ones.
+  const mixed = await serviceOver({ ...collectionDraft({ ...draft.snapshot().collection, presets: [
+    { id: ID.a, name: "A", revision: 1, parts: {} }, ...locked] }, STUDIO_DOCUMENTS), selected: ID.b });
+  expect(mixed.capability({ kind: "exportPlan" })).toEqual({ available: false, code: "invalid_value", reason: NO_EDITABLE_EYE_MAKEUP_MESSAGE });
+});
+
+test("the Export plan names what it leaves out and lists it in the file (PIPE-45)", async () => {
+  const { draft } = session();
+  const service = await serviceOver({ ...collectionDraft(draft.snapshot().collection, STUDIO_DOCUMENTS), selected: ID.a });
+  const exported = await service.execute({ kind: "exportPlan" });
+  expect(exported).toMatchObject({ ok: true, result: { kind: "export", name: "xfs.build-plan.json" } });
+  const plan = JSON.parse((exported as { result: { json: string } }).result.json);
+  expect(plan.schema).toBe("xfas/export-plan-1");
+  expect(plan.presets.map((preset: { id: string }) => preset.id)).toEqual([ID.a]);
+  expect(plan.omitted).toEqual([{ presetId: ID.b, presetName: "B", reason: NEWER_LOOK_REASON },
+    { presetId: ID.c, presetName: "C", reason: NEWER_LOOK_REASON }]);
+  const message = service.summary().progress!.message;
+  expect(message).toContain("Not in the plan: “B”, “C”, made with a newer version of XF Studio.");
+  expect(message).not.toContain("exported exactly as it came");
+  // A collection the plan holds whole carries no `omitted` key, as before.
+  expect("omitted" in planCollection(eyeMakeupCollection({ ...draft.snapshot().collection,
+    presets: draft.snapshot().collection.presets.filter(look => !look.locked) }))).toBe(false);
+});
+
+test("discarding a recovery draft that holds a locked look says so and offers to export it (CORE-49)", async () => {
+  const { draft } = session();
+  const earlier = { ...collectionDraft({ ...draft.snapshot().collection, id: "00000000-0000-4000-8000-0000000c0de1", name: "Earlier" },
+    STUDIO_DOCUMENTS), selected: ID.a };
+  const current = collectionDraft({ schema: COLLECTION_2, id: ID.collection, name: "Current", presets: [
+    { id: ID.a, name: "A", revision: 1, parts: { [EYE]: { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } }] }, STUDIO_DOCUMENTS);
+  const service = await serviceOver({ ...current, previous: earlier });
+  const summary = service.summary().draft!;
+  expect(summary.oldestRecoverable).toEqual({ id: earlier.collection.id, name: "Earlier", locked: true });
+  // At the queue's limit, opening another collection discards it: the consequence carries its ID and the lock.
+  const full = { ...summary, recoveryCount: summary.recoveryLimit };
+  expect(consequenceOf({ request: { kind: "import", text: "", bytes: 0 } }, { draft: full, history: { depth: 0, redoDepth: 0 },
+    undoLimit: 100, removedLimit: 20 }).discards).toEqual([{ kind: "recovery-draft", label: "Earlier", id: earlier.collection.id, locked: true }]);
+  // Export collection for that draft writes it as it is, unsaved; the current draft is unchanged.
+  expect(service.capability({ kind: "exportCollection", draft: "00000000-0000-4000-8000-00000000dead" }))
+    .toMatchObject({ available: false, code: "missing_target" });
+  const exported = await service.execute({ kind: "exportCollection", draft: earlier.collection.id });
+  expect(exported).toMatchObject({ ok: true, result: { kind: "export", name: "xfs.collection.json" } });
+  const file = JSON.parse((exported as { result: { json: string } }).result.json);
+  expect([file.schema, file.id, file.name]).toEqual([COLLECTION_2, earlier.collection.id, "Earlier"]);
+  expect(file.presets.map((look: LookCollection["presets"][number]) => look.parts[EYE])).toEqual(
+    [file.presets[0].parts[EYE], NEWER_B, newerModelC()]);
+  expect(service.summary().draft!.id).toBe(ID.collection);
+  expect(service.summary().progress!.message).toContain("Exported the earlier draft “Earlier”");
+});
+
+test("an over-budget workspace drops locked looks' kept memory, recovery drafts first, parts verbatim (CORE-47)", () => {
+  const bigHistory = Array.from({ length: 200 }, (_, i) => ({ layers: [{ id: `l${i}`, pad: "x".repeat(2000) }] }));
+  const stored = storedWorkspace();
+  stored.collections.memory[ID.b] = { [EYE]: { editor: {}, partSchema: "xfs/eye-makeup-part-9", history: bigHistory } };
+  // In the current draft only the last resort drops it, and the workspace then fits.
+  const loaded = loadWorkspace(storage(stored), false, STUDIO_DOCUMENTS);
+  const size = JSON.stringify(stored).length, budget = Math.floor(size / 2);
+  const fitted = fitWorkspace(loaded.state, STUDIO_DOCUMENTS, budget);
+  expect([fitted.overBudget, fitted.plan.kept, fitted.trimmed]).toEqual([false, "everywhere", true]);
+  const written = JSON.parse(fitted.encoded);
+  expect(find(written.collections.collection, ID.b)).toEqual(find(stored.collections.collection, ID.b));
+  expect(written.collections.memory[ID.b]).toBeUndefined();
+  const again = loadWorkspace(storage(written), false, STUDIO_DOCUMENTS);
+  expect([again.writable, find(again.state.collections!.collection, ID.b).locked]).toEqual([true, NEWER_LOOK_MESSAGE]);
+  // Within the budget nothing changes: the standard form keeps it whole.
+  expect(fitWorkspace(loaded.state, STUDIO_DOCUMENTS, size * 2).plan.kept).toBeUndefined();
+  // In a recovery draft its kept memory goes before the current draft's, and the draft itself is kept.
+  const recovering = storedWorkspace();
+  recovering.collections.previous = { ...structuredClone(stored.collections), collection: { ...structuredClone(stored.collections.collection),
+    id: "00000000-0000-4000-8000-0000000c0de1" } };
+  const restored = loadWorkspace(storage(recovering), false, STUDIO_DOCUMENTS);
+  const whole = fitWorkspace(restored.state, STUDIO_DOCUMENTS).size;
+  const outside = fitWorkspace(restored.state, STUDIO_DOCUMENTS, whole - 1000);
+  expect([outside.overBudget, outside.plan.kept, outside.plan.recovery]).toEqual([false, "outside", Infinity]);
+  const kept = JSON.parse(outside.encoded).collections;
+  expect(find(kept.previous.collection, ID.b)).toEqual(find(stored.collections.collection, ID.b));
+  expect(kept.previous.memory[ID.b]).toBeUndefined();
+  expect(kept.memory[ID.b]).toEqual(MEMORY_B);
 });

@@ -146,7 +146,9 @@ export const REQUEST_DESCRIPTORS = {
   initialize: request("collection", "read"), refresh: request("collection", "read"),
   open: request("collection", "read", { id: target("string") }),
   save: request("collection", "save"), saveCopy: request("collection", "save"),
-  exportCollection: request("collection", "download"), exportPlan: request("collection", "download"),
+  // `draft` exports an earlier draft in the recovery queue instead (CORE-49).
+  exportCollection: request("collection", "download", { draft: { type: "string", required: false, from: "target" } }),
+  exportPlan: request("collection", "download"),
   import: request("file", "import", { text: input("string"), bytes: input("integer", 0, 16_000_000) }),
   package: request("collection", "package", { action: enumerated(["check", "build"]) }),
 } satisfies Record<CollectionRequest["kind"], RequestDescriptor>;

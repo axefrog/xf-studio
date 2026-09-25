@@ -16,32 +16,30 @@ import { PANEL_META } from "../panel-meta";
 
 type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
-const canonical = (finish: string) => finish === "satin" ? "regular" : finish;
 
 /** One Undo step per continuous edit; refused or failed edits are reported, never swallowed. */
-function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined,
-  failure?: string): Transaction<T> {
+function recipeTransaction<T>(rt: StudioRuntime, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined): Transaction<T> {
   return {
     begin: () => { const layer = rt.editor.layer(); if (layer) rt.eyeMakeup.controlBegin(id, layer.id); },
     edit: value => {
       const layer = rt.editor.layer(); if (!layer) return;
       const action = make(layer, value); if (!action) return;
       const outcome = rt.eyeMakeup.controlEdit(id, action);
-      if (!outcome.ok) { rt.feedback.toast("warning", "Colour & finish", failure ?? outcome.message); rt.changed(); }
+      if (!outcome.ok) { rt.feedback.toast("warning", "Colour & finish", outcome.message); rt.changed(); }
     },
     commit: () => rt.eyeMakeup.controlCommit(id),
     cancel: () => rt.eyeMakeup.controlCancel(id),
   };
 }
 /** Header strip telling a floating inspector which layer it edits. */
-function layerStrip() {
+function layerStrip(rt: StudioRuntime) {
   const swatch = h("span", { class: "swatch", "aria-hidden": "true" }), name = h("strong"), meta = h("span", { class: "muted small" });
   const element = h("div", { class: "layer-strip", role: "status", "aria-live": "off" }, swatch, h("div", {}, name, meta));
   return { element, update(frame: Frame) {
     const layer = frame.layer, recipe = frame.recipe;
     element.hidden = !layer;
     if (!layer) return;
-    swatch.style.setProperty("--swatch", layer.color); swatch.dataset.finish = canonical(layer.finish);
+    swatch.style.setProperty("--swatch", layer.color); swatch.dataset.finish = rt.finishOf(layer.finish)?.id ?? layer.finish;
     setText(name, layer.name);
     const index = recipe.layers.findIndex(item => item.id === layer.id);
     setText(meta, `${recipe.layers.length - index} of ${recipe.layers.length} from front${layer.enabled ? "" : " · hidden"}`);
@@ -54,7 +52,7 @@ function noLayer(rt: StudioRuntime) {
 }
 
 export function finishPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const color = new ColorField({ label: "Colour", transaction: recipeTransaction<string>(rt, "color", (layer, value) => ({ kind: "layer.setColor", layerId: layer.id, color: value })) });
   const opacityRange = rt.range("layer.setOpacity", "opacity");
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
@@ -92,7 +90,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   // Colour-shifting (game-matched): one shift colour added toward grazing view angles.
   const shift = {
     color: new ColorField({ label: "Shift colour", transaction: recipeTransaction<string>(rt, "shift-color", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "color", value })) }),
-    strength: new Slider({ label: "Shift strength", min: 0, max: 1, step: .01, format: pct,
+    strength: new Slider({ label: "Shift strength", ...rt.range("layer.setShift", "value", "strength"), step: .01, format: pct,
       transaction: recipeTransaction<number>(rt, "shift-strength", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "strength", value })) }),
   };
   const shiftSection = section("Colour shift", h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element),
@@ -111,15 +109,17 @@ export function finishPanel(rt: StudioRuntime): PanelController {
     tilt: new Slider({ label: "Orientation spread", ...rt.range("glitter.setClassic", "value", "tilt"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "flake-tilt", (layer, value) => ({ kind: "glitter.setClassic", layerId: layer.id, key: "tilt", value })) }),
   };
-  const irregularFailure = "That amount and flake size are outside the Glitter preview range. Fields denser than 32,768 flakes need small flakes; larger flakes need a lower density.";
+  // Field density shows as a percentage of the largest field the action takes (its registered range); when density and
+  // flake size don't go together, the application says why.
+  const flakesPerPercent = rt.range("glitter.setIrregular", "value", "count").max / 100;
   const irregular = {
-    count: new Slider({ label: "Flake field density", min: 0, max: rt.range("glitter.setIrregular", "value", "count").max / 5000, step: 1, format: value => `${Math.round(value)}%`,
-      transaction: recipeTransaction<number>(rt, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(value) * 5000 }), irregularFailure) }),
+    count: new Slider({ label: "Flake field density", min: 0, max: 100, step: 1, format: value => `${Math.round(value)}%`,
+      transaction: recipeTransaction<number>(rt, "irregular-count", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "count", value: Math.round(Math.round(value) * flakesPerPercent) })) }),
     radius: new Slider({ label: "Flake size", ...rt.range("glitter.setIrregular", "value", "radius"), step: .00005, format: value => `${(value * 100).toFixed(3)}% UV`,
-      transaction: recipeTransaction<number>(rt, "irregular-radius", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "radius", value }), irregularFailure) }),
-    spread: new Slider({ label: "Size variation", min: 0, max: 1, step: .05, format: pct,
+      transaction: recipeTransaction<number>(rt, "irregular-radius", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "radius", value })) }),
+    spread: new Slider({ label: "Size variation", ...rt.range("glitter.setIrregular", "value", "spread"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "irregular-spread", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "spread", value })) }),
-    tilt: new Slider({ label: "Orientation spread", min: 0, max: 1, step: .05, format: pct,
+    tilt: new Slider({ label: "Orientation spread", ...rt.range("glitter.setIrregular", "value", "tilt"), step: .05, format: pct,
       transaction: recipeTransaction<number>(rt, "irregular-tilt", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "tilt", value })) }),
     color: new ColorField({ label: "Flake colour", transaction: recipeTransaction<string>(rt, "irregular-color", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "color", value })) }),
   };
@@ -155,7 +155,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
       empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       color.update(layer.color); opacity.update(layer.opacity);
-      const current = canonical(layer.finish), target = { kind: "layer" as const, id: layer.id };
+      const current = rt.finishOf(layer.finish)?.id ?? layer.finish, target = { kind: "layer" as const, id: layer.id };
       const choices = port.authoring.choicesFor(target, "layer.setFinish", "finish");
       for (const { finish, element } of finishButtons) {
         setAttr(element, "aria-pressed", String(finish.id === current));
@@ -203,7 +203,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
         // Flake size and density bound each other; the application publishes the current limits.
         const count = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "count").value;
         const radius = rt.port.authoring.limitsFor(target, "glitter.setIrregular", "radius").value;
-        irregular.count.update(Math.round(f.count / 5000), { note: count?.note });
+        irregular.count.update(Math.round(f.count / flakesPerPercent), { note: count?.note });
         irregular.radius.update(f.radius, { min: radius?.min, max: radius?.max, note: radius?.note });
         irregular.spread.update(f.spread); irregular.tilt.update(f.tilt); irregular.color.update(f.color);
         const measured = frame.status.glitter.find(item => item.layerId === layer.id);
@@ -221,7 +221,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
 }
 
 export function shapePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const pointLabel = h("strong", { class: "point-label" });
   const selectPoint = (delta: number) => {
     const layer = rt.editor.layer(); if (!layer) return;
@@ -278,7 +278,7 @@ export function shapePanel(rt: StudioRuntime): PanelController {
 }
 
 export function edgePanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const weight = new Slider({ label: "Selected point pigment", ...rt.range("pigment.edit", "value", "point-strength"), step: .01, format: pct,
     transaction: recipeTransaction<number>(rt, "weight", (layer, value) => ({ kind: "pigment.edit", layerId: layer.id, command: { kind: "point-strength", index: rt.editor.selected(), value } })) });
   const smooth = new Toggle({ label: "Smooth point gradients", onChange: enabled => {
@@ -336,7 +336,7 @@ export function edgePanel(rt: StudioRuntime): PanelController {
 }
 
 export function warpPanel(rt: StudioRuntime): PanelController {
-  const port = rt.port, strip = layerStrip(), empty = noLayer(rt);
+  const port = rt.port, strip = layerStrip(rt), empty = noLayer(rt);
   const add = button({ label: "Add warp", icon: "plus", small: true, onClick: () => {
     const layer = rt.editor.layer(); if (layer) rt.dispatch({ kind: "field.add", layerId: layer.id });
   } });

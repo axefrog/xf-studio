@@ -54,8 +54,8 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       const swatch = row.lead.querySelector<HTMLElement>(".swatch")!;
       swatch.style.setProperty("--swatch", layer.color);
       swatch.style.opacity = String(.35 + .65 * layer.opacity);
-      swatch.dataset.finish = layer.finish === "satin" ? "regular" : layer.finish;
-      const descriptor = rt.finishes.find(finish => finish.id === (layer.finish === "satin" ? "regular" : layer.finish));
+      const descriptor = rt.finishOf(layer.finish);
+      swatch.dataset.finish = descriptor?.id ?? layer.finish;
       const flag = row.trailing.querySelector<HTMLElement>(".finish-flag")!;
       const status = rt.eyeMakeup.layerExport(layer.id);
       flag.hidden = status ? status.exportable : descriptor?.exportAdapter !== "none";
@@ -94,15 +94,15 @@ export function layersPanel(rt: StudioRuntime): PanelController {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
       // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
       const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
-      const locked = hasPreset && !frame.editable.available && frame.editable.code === "unavailable";
+      const reason = hasPreset ? frame.locked : undefined, locked = reason !== undefined;
       noPreset.hidden = hasPreset;
       newer.hidden = !locked;
-      if (locked) setText(newerBody, frame.editable.reason ?? "");
+      if (locked) setText(newerBody, reason);
       empty.hidden = !hasPreset || locked || layers.length > 0;
       setText(count, String(layers.length));
       count.title = "The current preview budget is 32 layers per preset.";
       list.update([...layers].reverse().map(layer => {
-        const descriptor = rt.finishes.find(finish => finish.id === (layer.finish === "satin" ? "regular" : layer.finish));
+        const descriptor = rt.finishOf(layer.finish);
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label.split(" /")[0] ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
       applyCapability(add, rt.addLayerCapability());

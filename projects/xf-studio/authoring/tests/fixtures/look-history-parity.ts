@@ -40,13 +40,25 @@ export function timeline(value: HistorySnapshot, ids: Ids) {
     steps: value.steps.map(step => ({ ...step, id: ids.of(step.id), at: step.at === undefined ? "none" : "set" })) };
 }
 
+/**
+ * User text renamed on purpose since the capture, mapped back to the captured words so the golden still
+ * compares behaviour: Undo is a look history, so its refusal no longer says "recipe" (UI-55).
+ */
+const RENAMED: Readonly<Record<string, string>> = { "There is no change to undo.": "There is no recipe change to undo." };
+function asCaptured<T>(value: T): T {
+  if (!value || typeof value !== "object") return value;
+  const { reason, message } = value as { reason?: unknown; message?: unknown };
+  return { ...value, ...(typeof reason === "string" && RENAMED[reason] ? { reason: RENAMED[reason] } : {}),
+    ...(typeof message === "string" && RENAMED[message] ? { message: RENAMED[message] } : {}) };
+}
+
 /** Everything the History panel, the menus and the look show at one moment. */
 export function moment(core: Core, ids: Ids) {
   const { app, document } = core;
   const history = app.history();
   return { recipe: digest(document.recipe), active: document.active, selected: document.selected,
     history, timeline: timeline(app.historyTimeline(), ids),
-    undo: app.capability({ kind: "history.undo" }), redo: app.capability({ kind: "history.redo" }) };
+    undo: asCaptured(app.capability({ kind: "history.undo" })), redo: asCaptured(app.capability({ kind: "history.redo" })) };
 }
 
 /**
@@ -99,7 +111,7 @@ export function session(stored: unknown) {
   if (!loaded.writable) throw Error(loaded.error);
   const { core, actions } = studio(loaded.state), { app, document } = core, ids = new Ids();
   const log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[] = [];
-  const record = (step: string, result?: unknown) => log.push({ step, ...(result === undefined ? {} : { result }), moment: moment(core, ids) });
+  const record = (step: string, result?: unknown) => log.push({ step, ...(result === undefined ? {} : { result: asCaptured(result) }), moment: moment(core, ids) });
   const layer = () => document.recipe.layers[document.active] ?? document.recipe.layers[0];
   record("restored");
   record("opacity", app.dispatch({ kind: "layer.setOpacity", layerId: layer().id, opacity: .41 }));

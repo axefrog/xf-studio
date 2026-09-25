@@ -82,7 +82,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
     adapt: "Handle sizes are fixed in screen pixels; zoom the UV map or the camera for precision." },
   "t-saved": { adapt: "Header chip hides below 720 px; the Presets panel and status bar keep the information." },
   "t-undo": { adapt: "The same wording in toasts, menus and the palette at every size.",
-    drives: "history.undo capability; preset.edit restore; collection.recover; views never enter recipe history." },
+    drives: "history.undo capability; preset.edit restore; collection.recover; views never enter the look history." },
   "t-async": { combine: "Collection edits pause (disabled with a reason) while a library request runs; layer editing continues during a save.",
     adapt: "Progress lives in the panel that started it and in the status bar." },
   "t-disabled": { combine: "The same reason text appears in every entry point for the same action.", adapt: "Reasons wrap under controls; they are never truncated." },

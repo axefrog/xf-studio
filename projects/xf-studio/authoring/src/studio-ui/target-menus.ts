@@ -140,7 +140,7 @@ export function layerSections(rt: StudioRuntime, layerId: string, anchor: MenuAn
         .map(choice => {
           const descriptor = rt.finishes.find(item => item.id === choice.value);
           return { kind: "action", label: descriptor?.label ?? String(choice.value), capability: choice.capability,
-            checked: layer.finish === choice.value || (layer.finish === "satin" && choice.value === "regular"),
+            checked: (rt.finishOf(layer.finish)?.id ?? layer.finish) === choice.value,
             hint: descriptor?.exportAdapter === "none" ? "Preview only · not built into your mod"
               : descriptor?.exportAdapter === "experimental" ? "Experimental export · not yet tested in game" : undefined,
             run: () => { rt.dispatch(choice.action); } };

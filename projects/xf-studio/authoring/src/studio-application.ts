@@ -195,13 +195,23 @@ export class StudioApplication {
     const locked = this.services.document.locked;
     return locked ? refusal("unavailable", locked) : { available: true };
   }
+  /**
+   * Why the selected look's part of this feature can't be edited because the look was made with a newer version
+   * of XF Studio (the plain reason), or undefined when it isn't locked (UI-53). Views read this rather than
+   * inferring it from an `unavailable` refusal, which other reasons may share.
+   */
+  featureLocked(feature: string): string | undefined {
+    if (this.routes.owner(feature)?.owner !== "feature" || this.unowned()) return undefined;
+    return this.services.document.locked;
+  }
   /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
   featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
     return this.services.document.others?.document(feature)?.export();
   }
   /** The pure state a feature's specs read: eye makeup's from its port, any other feature's from its live document. */
   private featureStateOf(feature: string): FeatureState<unknown, unknown> | undefined {
-    if (feature === "eye-makeup") return this.services.eyeMakeup.state();
+    // The feature the editor document edits reads through its port; every other one through its live document.
+    if (feature === this.services.document.feature) return this.services.eyeMakeup.state();
     return this.services.document.others?.document(feature)?.state();
   }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
@@ -488,8 +498,10 @@ export class StudioApplication {
    * named `label` for everything they changed. A transaction that changed nothing leaves no step; one
    * whose `fn` throws or reports a failure is reverted to its start without Redo. Refused inside a
    * gesture, a form-control adjustment or another transaction, and while no preset owns the editor.
+   * `fn` runs synchronously: a body that returns a promise (or any thenable) is refused and reverted
+   * (CORE-48), since its awaited edits would run after the step closed and record steps of their own.
    */
-  transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => T): StudioDispatchResult {
+  transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => NotThenable<T>): StudioDispatchResult {
     const s = this.services;
     if (this.look || this.gesture || s.controls.snapshot())
       return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
@@ -507,13 +519,19 @@ export class StudioApplication {
     };
     const transaction = HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true);
     this.look = { features };
-    let result: T;
+    let result: NotThenable<T>;
     try { result = fn(); }
     catch (error) {
       this.look = undefined; transaction.cancel(); this.notify();
       return { ok: false, ...failure(undefined, error) };
     }
     this.look = undefined;
+    if (isThenable(result)) {
+      // Nothing awaited can join this step: revert what ran synchronously and say why. The body's own rejection is its caller's.
+      result.then(undefined, () => {});
+      transaction.cancel(); this.notify();
+      return { ok: false, code: "invalid_value", message: "A look change must be applied in one go; this one tried to wait part way through." };
+    }
     const failed = result && typeof result === "object" && (result as { ok?: unknown }).ok === false
       ? result as unknown as { code?: string; message?: string } : undefined;
     if (failed) { transaction.cancel(); this.notify();
@@ -550,7 +568,7 @@ export class StudioApplication {
               plan.direction === "none" ? refusal("invalid_value", "This is already the current step.") : { available: true };
           }
           if (action.kind === "history.undo") return s.document.canUndo ? { available: true } :
-            refusal("invalid_value", "There is no recipe change to undo.");
+            refusal("invalid_value", "There is no change to undo.");
           return !s.history ? refusal("invalid_value", "Redo is not available in this host.") :
             s.history.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone change to redo.");
         },
@@ -825,3 +843,9 @@ const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }
+
+/** A transaction body's result: anything but a promise or other thenable (its awaited edits could not join the step). */
+export type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
+}

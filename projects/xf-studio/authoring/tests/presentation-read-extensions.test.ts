@@ -85,6 +85,8 @@ test("preview state excludes document and collection clones", () => {
 test("finish descriptors mirror the package filter instead of a UI copy of eligibility", () => {
   const catalogue = finishCatalogue(), base = freshWorkspace().recipe;
   expect(catalogue.map(item => item.id)).toEqual(["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"]);
+  // Stored names that mean a finish come from the catalogue, so no view keeps the Satin alias (UI-54).
+  expect(catalogue.filter(item => item.stored.length).map(item => [item.id, item.stored])).toEqual([["regular", ["satin"]]]);
   for (const finish of catalogue) {
     // Experimental finishes export in their game-matched model (a colour shift only as a whole-preset pigment).
     const optics = finish.exportAdapter !== "experimental" ? {} : { optics: finish.id === "iridescent"

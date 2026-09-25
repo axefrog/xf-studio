@@ -144,7 +144,14 @@ export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: str
   const consequence = rt.port.authoring.consequences({ file: { kind: "collection.import" } });
   const oldest = consequence.discards.find(item => item.kind === "recovery-draft");
   if (!consequence.confirm || !oldest) { run(); return; }
-  openMenu([{ kind: "heading", label: `${title}?`, detail: `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.` },
+  // A draft holding a look made with a newer version can't be saved to the library here: exporting it is how it's kept (CORE-49).
+  const detail = oldest.locked
+    ? `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. It has a look made with a newer version of XF Studio, which can't be saved to the library here, so that draft may be its only copy. Export it first to keep it.`
+    : `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.`;
+  const request = { kind: "exportCollection" as const, draft: oldest.id };
+  openMenu([{ kind: "heading", label: `${title}?`, detail },
+    ...(oldest.locked && oldest.id ? [{ kind: "action" as const, label: "Export collection", icon: "export" as const,
+      capability: rt.port.authoring.requestCapability(request), run: () => void rt.request(request) }] : []),
     { kind: "action", label: "Continue", icon: "import", run },
     { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
       run: () => void rt.file({ kind: "collection.recover" }) }],

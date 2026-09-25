@@ -34,6 +34,12 @@ export type FeatureFacade<A extends { kind: string } = { kind: string }> = Featu
    * the look was made with a newer version of XF Studio, so a view can say so on that look.
    */
   editable(): StudioCapability;
+  /**
+   * The plain reason when the selected look was made with a newer version of XF Studio, so this feature's part
+   * of it is kept as it is and can't be edited here; undefined otherwise. Views show the newer-version notice
+   * from this, never from an `unavailable` refusal (UI-53).
+   */
+  locked(): string | undefined;
   capability(action: A): StudioCapability;
   dispatch(action: A): StudioDispatchResult;
   limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
@@ -215,7 +221,7 @@ export function createStudioPresentation<Slot>(sources: {
     const foreign = { available: false as const, code: "invalid_value" as const, reason: `That is not a ${info.label.toLowerCase()} command.` };
     return { ...info,
       kinds: () => a.actionKinds().filter(own),
-      editable: () => a.featureEditable(info.id),
+      editable: () => a.featureEditable(info.id), locked: () => a.featureLocked(info.id),
       capability: action => own(action.kind) ? a.capability(action as never) : foreign,
       dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
       limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},
