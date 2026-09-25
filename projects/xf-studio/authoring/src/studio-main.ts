@@ -5,7 +5,7 @@
  */
 import { createBrowserFileDevice } from "./browser-file-device";
 import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
-import { PREVIEW_READY_EVENT, PREVIEW_STATUS_EVENT, type PreviewStatusDetail } from "./preview-preparation";
+import { HOST_SETUP_CHANGED_EVENT, PREVIEW_READY_EVENT, PREVIEW_STATUS_EVENT, type PreviewStatusDetail } from "./preview-preparation";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -152,6 +152,15 @@ async function start() {
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
+  // A change reported while setup is busy is re-read as soon as it is free, so no change is missed.
+  let setupRefreshQueued = false;
+  const refreshSetup = () => {
+    if (localSetup.snapshot().busy) { setupRefreshQueued = true; return; }
+    setupRefreshQueued = false;
+    void localSetup.dispatch({ kind: "setup.refresh" });
+  };
+  localSetup.subscribe(() => { if (setupRefreshQueued && !localSetup.snapshot().busy) refreshSetup(); });
+  window.addEventListener(HOST_SETUP_CHANGED_EVENT, refreshSetup);
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
   await port!.library.execute({ kind: "initialize" });

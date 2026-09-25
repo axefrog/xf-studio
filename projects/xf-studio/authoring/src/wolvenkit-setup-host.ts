@@ -4,7 +4,7 @@ import { delimiter, join, resolve } from "node:path";
 import { fileSha256 } from "./derived-cache";
 import { detectDotNet, missingFramework, runtimeGuidance, runtimeRequirementFor, type DotNetInstall, type FrameworkReference } from "./dotnet-runtime";
 import { DownloadError, downloadVerified, type DownloadOptions } from "./tool-download";
-import { probeWolvenKitCli, wolvenKitIdentity } from "./wolvenkit-cli";
+import { probeWolvenKitCliAsync, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "./wolvenkit-cli";
 import { extractionIssue, MANAGED_INSTALL_SCHEMA, megabytes, parseInstallManifest, WOLVENKIT_RELEASE,
   type ManagedInstallManifest, type ManagedToolRelease } from "./wolvenkit-release";
 import { extractZip, ZipError } from "./zip-extract";
@@ -56,6 +56,8 @@ export type WolvenKitSetupOptions = {
   stallMs?: number;
   /** Finds a compatible CLI already on this computer; default: WolvenKit.CLI.exe on PATH, probed. */
   findExisting?: () => { path: string; version: string } | null;
+  /** Run the new copy's version check after installing (default); tests with stand-in files turn it off. */
+  probeAfterInstall?: boolean;
   log?: (message: string) => void;
   now?: () => number;
 };
@@ -82,13 +84,16 @@ type Failure = { code: string; message: string };
 const isFile = (path: string | null | undefined): path is string => { try { return !!path && statSync(path).isFile(); } catch { return false; } };
 const stamp = (path: string) => { try { const s = statSync(path); return `${s.size}|${s.mtimeMs}`; } catch { return "missing"; } };
 
-/** Default detection of an existing CLI: `WolvenKit.CLI.exe` in a PATH folder that passes the version probe. */
+/**
+ * Default detection of an existing CLI: `WolvenKit.CLI.exe` in a PATH folder whose version resource names a
+ * verified release. Read from the file only (nothing is started); Build still runs its full check before use.
+ */
 export function findWolvenKitOnPath(env: Record<string, string | undefined> = process.env): { path: string; version: string } | null {
   for (const folder of (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean)) {
     const candidate = join(folder, "WolvenKit.CLI.exe");
     if (!isFile(candidate)) continue;
-    const probe = probeWolvenKitCli(candidate);
-    if (probe.ok) return { path: candidate, version: probe.version };
+    const version = wolvenKitIdentity(candidate)?.version;
+    if (version && (SUPPORTED_WOLVENKIT_VERSIONS as readonly string[]).includes(version)) return { path: candidate, version };
   }
   return null;
 }
@@ -301,6 +306,14 @@ export class WolvenKitSetupHost {
         renameSync(temporary, this.manifestFile);
         for (const name of readdirSync(this.toolRoot)) if (name.startsWith(".old-")) rmSync(join(this.toolRoot, name), { recursive: true, force: true });
       } catch (error) { throw { code: "wolvenkit_disk", message: MESSAGES.disk, detail: (error as Error).message }; }
+      // When its runtime is present, run the new copy once: it proves WolvenKit starts, and Build readiness
+      // then answers from the result instead of checking again. Not a gate: the files already match the release.
+      const executable = join(this.installDirectory, release.executable);
+      if (this.runtimeFor(executable)?.installed !== false && this.platform === "win32" && this.options.probeAfterInstall !== false) {
+        running.step = "Checking that WolvenKit runs";
+        const probe = await probeWolvenKitCliAsync(executable);
+        this.options.log?.(probe.ok ? `WolvenKit ${probe.version} runs.` : `WolvenKit check after install: ${probe.code}.`);
+      }
     } catch (error) {
       if (signal.aborted) throw { code: "wolvenkit_cancelled", message: MESSAGES.cancelled };
       if (error && typeof error === "object" && "code" in error && "message" in error && String((error as Failure).code).startsWith("wolvenkit_")) throw error;

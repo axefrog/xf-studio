@@ -52,7 +52,7 @@ function host(patch: Partial<WolvenKitSetupOptions> & { asset?: string } = {}) {
   const log: string[] = [];
   let dotnet = WITH_NET10;
   const service = new WolvenKitSetupHost({ root, configured: () => null, release: release(patch.asset), platform: "win32",
-    dotnet: () => dotnet, retryDelaysMs: [5, 5], findExisting: () => null, log: message => log.push(message), ...patch });
+    dotnet: () => dotnet, retryDelaysMs: [5, 5], findExisting: () => null, probeAfterInstall: false, log: message => log.push(message), ...patch });
   return { root, service, log, setDotNet: (value: DotNetInstall) => { dotnet = value; } };
 }
 const leftovers = (root: string) => [...readdirSync(join(root, "downloads")), ...readdirSync(join(root, "wolvenkit")).filter(name => name.startsWith("."))];

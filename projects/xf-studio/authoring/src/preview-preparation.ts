@@ -8,6 +8,11 @@ import { wolvenKitCard, type WolvenKitCardAction, type WolvenKitLink, type Wolve
 
 export const PREVIEW_STATUS_EVENT = "xfs-desktop-preview-status";
 export const PREVIEW_READY_EVENT = "xfs-desktop-preview-ready";
+/**
+ * The host's setup changed outside Studio's own setup panel (a game folder or WolvenKit chosen,
+ * WolvenKit downloaded, the preview prepared): Studio re-reads its setup, so Build availability follows.
+ */
+export const HOST_SETUP_CHANGED_EVENT = "xfs-host-setup-changed";
 export type PreviewStatusDetail = { message: string };
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";

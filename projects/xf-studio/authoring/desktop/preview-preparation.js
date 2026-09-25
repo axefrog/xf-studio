@@ -4,7 +4,7 @@
 // cancel or retry) and tells Studio when the head can load. WolvenKit is downloaded only after
 // the person agrees in the consent dialog. It is separate from the welcome and About dialogs.
 import { createBrowserInstallDetection } from "../src/browser-install-detection-device";
-import { createBrowserPreviewPreparation, PREVIEW_READY_EVENT, PREVIEW_STATUS_EVENT, previewView, shouldAutoStart } from "../src/preview-preparation";
+import { createBrowserPreviewPreparation, HOST_SETUP_CHANGED_EVENT, PREVIEW_READY_EVENT, PREVIEW_STATUS_EVENT, previewView, shouldAutoStart } from "../src/preview-preparation";
 import { createBrowserWolvenKitSetup, wolvenKitConsent } from "../src/wolvenkit-setup";
 
 const AUTOSTART_KEY = "xfs.preview.autostart";
@@ -21,10 +21,12 @@ const STYLE = `
 .desktop-preview-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .desktop-preview-actions button, #desktop-wolvenkit-consent button { padding: 6px 12px; color: var(--text, #f0f2f2);
   background: var(--bg-raised, #111820); border: 1px solid var(--line-strong, #59616b); font: inherit; }
-#desktop-preview-primary, #desktop-wolvenkit-confirm { background: var(--accent, #f2db52); color: var(--accent-ink, #1d2023); font-weight: 600; }
+#desktop-preview-primary, #desktop-wolvenkit-consent #desktop-wolvenkit-confirm { background: var(--accent, #f2db52);
+  color: var(--accent-ink, #1d2023); font-weight: 600; }
 .desktop-preview-links { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.desktop-preview-links button { padding: 0; border: 0; background: none; color: var(--accent, #f2db52);
-  text-decoration: underline; font: inherit; cursor: pointer; }
+#desktop-preview-card .desktop-preview-links button, #desktop-wolvenkit-consent .desktop-preview-links button { padding: 0; border: 0;
+  background: none; color: var(--accent, #f2db52); text-decoration: underline; font: inherit; cursor: pointer; }
+#desktop-wolvenkit-consent .desktop-preview-links { margin-bottom: 12px; }
 #desktop-wolvenkit-consent { width: min(560px, calc(100vw - 32px)); box-sizing: border-box; padding: 20px 22px;
   color: var(--text, #f0f2f2); background: var(--bg-panel, #20272f); border: 1px solid var(--line-strong, #59616b);
   font: 13px/1.5 "Segoe UI", sans-serif; }
@@ -71,6 +73,8 @@ export function mountPreviewPreparation(host) {
   const wolvenKit = createBrowserWolvenKitSetup("/api/desktop/wolvenkit");
   const detection = createBrowserInstallDetection();
   let detectedGame = null, detectionTried = false, dismissed = false, announcedReady = false, lastStatus = "", lastWolvenKit = null;
+  // Studio re-reads the host's setup, so Build availability follows WolvenKit and the game folder.
+  const setupChanged = () => window.dispatchEvent(new Event(HOST_SETUP_CHANGED_EVENT));
   const autostart = () => { try { return localStorage.getItem(AUTOSTART_KEY) !== "off"; } catch { return true; } };
   const setAutostart = on => { try { on ? localStorage.removeItem(AUTOSTART_KEY) : localStorage.setItem(AUTOSTART_KEY, "off"); } catch { /* Convenience only. */ } };
   let attempted = !autostart();
@@ -103,6 +107,7 @@ export function mountPreviewPreparation(host) {
         announcedReady = true;
         document.documentElement.dataset.desktopPreviewAssets = "ready";
         window.dispatchEvent(new Event(PREVIEW_READY_EVENT));
+        setupChanged();
       }
       return;
     }
@@ -189,6 +194,7 @@ export function mountPreviewPreparation(host) {
     }
   }
   async function refreshAll() {
+    setupChanged();
     await wolvenKit.dispatch({ kind: "wolvenkit.refresh" });
     await actions.dispatch({ kind: "preview.refresh" });
     await maybeStart();
@@ -207,6 +213,7 @@ export function mountPreviewPreparation(host) {
     const phase = wolvenKit.snapshot()?.phase ?? null;
     // Once WolvenKit is ready (downloaded, or .NET installed), the preview can start.
     if (phase === "ready" && lastWolvenKit !== null && lastWolvenKit !== "ready") void actions.dispatch({ kind: "preview.refresh" }).then(maybeStart);
+    if (phase !== lastWolvenKit && lastWolvenKit !== null) setupChanged();
     lastWolvenKit = phase;
     render();
   });

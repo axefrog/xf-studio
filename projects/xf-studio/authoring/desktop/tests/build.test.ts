@@ -231,7 +231,7 @@ test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, 
   const app = createDesktopServer(view, h.data, { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" },
     undefined, h.tools, fixtureWolvenKit, undefined, undefined, {
       openExternal: url => { opened.push(url); return true; },
-      wolvenKit: { platform: "win32", findExisting: () => null,
+      wolvenKit: { platform: "win32", findExisting: () => null, probeAfterInstall: false,
         dotnet: () => ({ root: "C:\dotnet", source: "default", frameworks: { "Microsoft.NETCore.App": ["10.0.12"] } }),
         release: { ...WOLVENKIT_RELEASE, url: `http://127.0.0.1:${feed.port}/wk.zip`, archiveBytes: zip.length, archiveSha256: sha(zip),
           files: 3, installedBytes: Object.values(files).reduce((sum, value) => sum + value.length, 0),

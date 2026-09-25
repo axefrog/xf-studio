@@ -205,7 +205,10 @@ about.querySelector("#desktop-licences-open").addEventListener("click", () => {
   about.close(); licences.showModal(); void showLicence("LICENSE.txt");
 });
 document.body.append(aboutButton, about, licences);
-aboutButton.addEventListener("click", () => { about.showModal(); void refreshUpdate(); void refreshWolvenKitNote(); });
+aboutButton.addEventListener("click", () => {
+  about.showModal(); void refreshUpdate(); void refreshWolvenKitNote();
+  void setupAction({ kind: "setup.refresh" }).catch(() => {});
+});
 const setup = document.createElement("dialog");
 setup.id = "desktop-setup";
 setup.innerHTML = '<h2>Build setup</h2><p>Building the ' + EYE_MAKEUP_MOD.modName + ' mod files uses your Cyberpunk 2077 game folder and WolvenKit. XF Studio finds the game and downloads WolvenKit for you from the 3D preview card; fill these in only to use your own. You don&#39;t need any of this to design looks or run Check. These paths stay on this computer, and you can change them any time from About.</p><form id="desktop-setup-form"><div id="desktop-setup-fields"></div><p id="desktop-setup-status" role="status"></p><div class="desktop-setup-actions"><button type="button" id="desktop-setup-restore" hidden>Restore previous settings</button><button type="button" id="desktop-setup-defer" hidden>Skip for now</button><button type="submit" id="desktop-setup-save">Save</button><button type="button" id="desktop-setup-close">Close</button></div></form>';
