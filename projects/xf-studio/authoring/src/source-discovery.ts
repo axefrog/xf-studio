@@ -1,7 +1,10 @@
-import { lstatSync, opendirSync, readFileSync, statSync, type Stats } from "node:fs";
+import { createHash } from "node:crypto";
+import { type Dirent, lstatSync, opendirSync, readFileSync, statSync, type Stats } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
 import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
+import { folderStampMode, type FolderStampMode } from "./volume-info";
 
 /** Physical inventory only. An archive has no known depot members until an index adapter examines it. */
 export type SourceFileKind = "archive" | "archive-xl" | "loose-customization" | "archive-modlist";
@@ -68,7 +71,8 @@ export interface WatchedPath { readonly path: string; readonly stamp: string }
 
 /**
  * A path's identity for change detection, from its `lstat` (null when it is missing): a directory by its modification
- * time (which changes when an entry is added, removed or renamed in it), a file by size and modification time.
+ * time (which changes when an entry is added, removed or renamed in it), a file by size and modification time. On a volume
+ * whose folder times can't be trusted (volume-info.ts), a scanned directory is stamped by its listing instead (`listingStamp`).
  */
 export function pathStamp(stat: { isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean; size: number; mtimeMs: number } | null): string {
   if (!stat) return "missing";
@@ -77,6 +81,21 @@ export function pathStamp(stat: { isDirectory(): boolean; isFile(): boolean; isS
   return stat.isFile() ? `file|${stat.size}|${stat.mtimeMs}` : `other|${stat.mtimeMs}`;
 }
 const lstatOrNull = (path: string) => { try { return lstatSync(path); } catch { return null; } };
+const entryType = (entry: Pick<Dirent, "isSymbolicLink" | "isDirectory" | "isFile">) =>
+  entry.isSymbolicLink() ? "l" : entry.isDirectory() ? "d" : entry.isFile() ? "f" : "o";
+/** A directory's stamp by its listing (PIPE-58): every entry's name and type, hashed. `list|` marks it for the check. */
+export function listingStamp(entries: readonly Pick<Dirent, "name" | "isSymbolicLink" | "isDirectory" | "isFile">[]): string {
+  const text = entries.map(entry => `${entryType(entry)}:${entry.name}`).sort().join("\n");
+  return `list|${createHash("sha256").update(text).digest("hex").slice(0, 32)}`;
+}
+/** A directory's listing stamp read now (`missing` when it can't be listed). */
+export async function readListingStamp(path: string): Promise<string> {
+  try { return listingStamp(await readdir(path, { withFileTypes: true })); } catch { return "missing"; }
+}
+export interface DiscoveryOptions {
+  /** How folders under a scan root are stamped (default: by the volume's file system, volume-info.ts). A test seam. */
+  readonly folderStamps?: (root: string) => FolderStampMode;
+}
 export interface ScanLimits {
   /** Total filesystem entries across every configured root. */
   readonly maxEntries?: number;
@@ -110,7 +129,7 @@ const kindOf = (path: string): SourceFileKind | null => {
 };
 
 /** No data extraction, writes, or process launch. A fresh call re-reads the selected route. */
-export function discoverSources(input: LocalSettings, requested: ScanLimits = {}): SourceDiscovery {
+export function discoverSources(input: LocalSettings, requested: ScanLimits = {}, options: DiscoveryOptions = {}): SourceDiscovery {
   const settings = parseLocalSettings(input);
   const limits = { ...defaults, ...requested };
   for (const [name, value] of Object.entries(limits))
@@ -139,18 +158,23 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       watch(absoluteRoot, rootStat);
       issue("source_root_invalid", `${provider} source root must be a real directory.`); return;
     }
+    // Folders on a volume whose folder times can't be trusted are stamped by their listing (PIPE-58).
+    const byListing = (options.folderStamps ?? folderStampMode)(absoluteRoot) === "listing";
     // `rel` is the directory's portable path below the root. Entry types come from the directory listing; only
     // directories (for their stamp) and candidate files (for size and time) are inspected further.
     const walk = (dir: string, depth: number, rel: string) => {
       if (depth > limits.maxDepth) { issue("scan_depth_exceeded", `${provider} scan depth limit reached.`); return; }
-      // Stamped before its entries are read, so a change made while scanning shows as a changed stamp later.
+      // Stamped before its entries are read, so a change made while scanning shows as a changed stamp later. A listing stamp
+      // replaces it once the whole listing was read: it is then exactly what this scan saw.
       watch(dir);
+      const stamped = watched.length - 1, listed: Dirent[] = [];
       let handle;
       try { handle = opendirSync(dir); }
       catch { issue("directory_unreadable", `${provider} directory could not be read.`); return; }
       try { while (true) {
         const entry = handle.readSync();
-        if (!entry) break;
+        if (!entry) { if (byListing) watched[stamped] = { path: dir, stamp: listingStamp(listed) }; break; }
+        if (byListing) listed.push(entry);
         const name = entry.name;
         if (++entries > limits.maxEntries) { issue("scan_entries_exceeded", "Source scan entry limit reached."); return; }
         if (!name || name === "." || name === ".." || /[\\/]/.test(name)) { issue("path_escape", "A source entry escaped its configured root."); continue; }

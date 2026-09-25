@@ -168,13 +168,20 @@ test("the watched-path check is much cheaper than opening", async () => {
   expect(check).toBeLessThan(Math.max(open, 5));
 });
 
-test("a view whose fetcher failed transiently gets a fresh graph; views per cache folder share the archives", async () => {
+test("a view whose consumer read failed transiently gets a fresh graph; views per cache folder share the archives", async () => {
   const setup = installation();
   const { registry } = counting();
   const first = await registry.acquire(setup.options);
-  // A lasting answer (or none) keeps the graph; a transient failure replaces it over the same archives.
   expect((await registry.acquire(setup.options)).graph).toBe(first.graph);
-  first.fetcher.stats.transient++;
+  // A lasting failure keeps the graph; one that may not repeat replaces it over the same archives, so it is read again (PIPE-54).
+  let transient = false;
+  Object.assign(first.fetcher, { fetch: async () => null, transient: () => transient });
+  expect(await first.graph.load(refFromPath("mod\\hair.mesh"))).toBeNull();
+  expect(first.graph.retryableFailures).toBe(0);
+  expect((await registry.acquire(setup.options)).graph).toBe(first.graph);
+  transient = true;
+  expect(await first.graph.load(refFromPath("base\\a.mesh"))).toBeNull();
+  expect(first.graph.retryableFailures).toBe(1);
   const retried = await registry.acquire(setup.options);
   expect(retried.graph).not.toBe(first.graph);
   expect(retried.depot).toBe(first.depot);
@@ -207,9 +214,9 @@ test("a request key changes once the registry finds the opened installation out 
 });
 
 /**
- * A fixture chain read like the character details read it: an `.app` with two part entities (awaited one after the
- * other), their mesh, its material, then the material's template, hair profiles and layer setup one at a time, and the
- * setup's layer templates one at a time. Each WolvenKit batch here is one unbundle and one convert launch.
+ * A fixture chain read like the character details read it: an `.app` with two part entities (read together, as the resolver
+ * reads an appearance's parts), their mesh, its material, then the material's template, hair profiles and layer setup one at
+ * a time, and the setup's layer templates one at a time.
  */
 async function readChain(prefetch: boolean) {
   const root = temporary(), cache = join(root, "cache");
@@ -262,7 +269,7 @@ async function readChain(prefetch: boolean) {
   };
   const graph = new ResourceGraph(depot, readArchiveXlConfig([]), fetcher, prefetch);
   const hair = await graph.app(refFromPath("base\\v\\hair.app"));
-  for (const part of hair!.appearances[0]!.partsValues) await graph.entityComponents(part);
+  await Promise.all(hair!.appearances[0]!.partsValues.map(part => graph.entityComponents(part)));
   await graph.mesh(refFromPath("base\\v\\hair.mesh"));
   await graph.load(refFromPath("base\\v\\hair.mi"), "mi");
   for (const path of ["base\\v\\hair.mt", "base\\v\\root.hp", "base\\v\\tip.hp", "base\\v\\hair.mlsetup", "base\\v\\one.mltemplate", "base\\v\\two.mltemplate"])
@@ -272,7 +279,7 @@ async function readChain(prefetch: boolean) {
 
 test("prefetch reads a resource chain in fewer WolvenKit launches, and reads the same resources", async () => {
   const without = await readChain(false), withPrefetch = await readChain(true);
-  expect(without.batches).toBe(11);
+  expect(without.batches).toBe(10);
   expect(withPrefetch.batches).toBeLessThanOrEqual(6);
   // Resources with a depot path are extracted and serialized in one launch per batch (no separate convert).
   expect(withPrefetch.launches).toBe(withPrefetch.batches);

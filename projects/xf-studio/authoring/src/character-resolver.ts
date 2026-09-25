@@ -131,7 +131,9 @@ export function inputFromSave(saved: { isMale: boolean; groups: Record<CcoPart, 
 /** The provenance label a custom resource's options and choices carry (`definedBy`, `providedBy`). */
 export const customLabel = (path: string, provenance: Provenance) => `${path} (${provenance.provider ?? "unknown"})`;
 
-type LoadedCco = { merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"] };
+type LoadedCco = { merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"];
+  /** The precedence ambiguities of the resources the merge read (`ResourceGraph.collect`), reported with every V it serves. */
+  ambiguities: Ambiguity[] };
 type CcoReader = (root: JsonObject, label: string) => CcoResource;
 /**
  * The merged CCO of each graph, reader and body gender, made once: merging a few hundred custom resources is the costliest
@@ -152,15 +154,17 @@ export function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender, read
   if (!byGender) { byGender = new Map(); byReader.set(read, byGender); }
   const known = byGender.get(bodyGender);
   if (known) return known;
-  const errors = graph.loadErrors.size;
-  const pending = mergeCco(graph, bodyGender, read);
+  // Only a read that may succeed next time makes the merge worth redoing (PIPE-54); a lasting failure, or a prefetched resource no
+  // consumer asked for, does not.
+  const failures = graph.retryableFailures;
+  const pending = graph.collect(() => mergeCco(graph, bodyGender, read)).then(({ value, ambiguities }) => ({ ...value, ambiguities }));
   byGender.set(bodyGender, pending);
   const forget = () => { if (byGender!.get(bodyGender) === pending) byGender!.delete(bodyGender); };
-  pending.then(() => { if (graph.loadErrors.size !== errors) forget(); }, forget);
+  pending.then(() => { if (graph.retryableFailures !== failures) forget(); }, forget);
   return pending;
 }
 
-async function mergeCco(graph: ResourceGraph, bodyGender: BodyGender, read: CcoReader): Promise<LoadedCco> {
+async function mergeCco(graph: ResourceGraph, bodyGender: BodyGender, read: CcoReader): Promise<Omit<LoadedCco, "ambiguities">> {
   const gaps: { code: string; subject: string; detail: string }[] = [];
   const path = ccoPath(bodyGender, graph.depot.plan.ep1Installed);
   const baseRef = refFromPath(path);
@@ -169,8 +173,12 @@ async function mergeCco(graph: ResourceGraph, bodyGender: BodyGender, read: CcoR
   const base = read(loaded.root, "base game");
   const declared = graph.xl.customizations[bodyGender];
   const customs = await Promise.all(declared.map(async custom => {
-    const resource = await graph.load(refFromPath(custom.path), "inkcharcustomization");
-    if (!resource) gaps.push({ code: "custom-cco-missing", subject: custom.path, detail: `Registered by ${custom.declaredBy} but no mounted archive provides it (ArchiveXL logs and skips).` });
+    const ref = refFromPath(custom.path);
+    const resource = await graph.load(ref, "inkcharcustomization");
+    // A resource an archive provides but that could not be read is not the same gap as one no archive provides (PIPE-66).
+    const unread = resource ? undefined : graph.loadErrors.get(ref.hash);
+    if (unread) gaps.push({ code: "custom-cco-unreadable", subject: custom.path, detail: `Registered by ${custom.declaredBy}; ${unread} Its options are left out.` });
+    else if (!resource) gaps.push({ code: "custom-cco-missing", subject: custom.path, detail: `Registered by ${custom.declaredBy} but no mounted archive provides it (ArchiveXL logs and skips).` });
     return { custom, resource };
   }));
   const present = customs.filter(entry => entry.resource);
@@ -471,8 +479,10 @@ async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: Ap
   const components: { model: ComponentModel; origin: ResolvedComponent["origin"] }[] = [];
   const inline = structuredClone(definition.components);
   for (const model of inline) components.push({ model, origin: { kind: "inline", source: `${refLabel(appRef)}:${definition.name} (${definition.componentsSource})` } });
-  for (const part of parts) {
-    const entity = await graph.entityComponents(part);
+  // The appearance's parts are read together (one extraction batch), and only this appearance's (PIPE-64).
+  const entities = await Promise.all(parts.map(part => graph.entityComponents(part)));
+  for (const [index, part] of parts.entries()) {
+    const entity = entities[index];
     if (!entity) continue;
     for (const model of entity.components) {
       const existing = components.find(c => c.model.name === model.name);
@@ -536,12 +546,15 @@ export async function resolveCharacter(graph: ResourceGraph, input: CharacterInp
     if (entry) entry.groups.push(morph.group); else morphKeys.set(key, { region: morph.region, target: morph.target, groups: [morph.group] });
   }
   const morphs = [...morphKeys.values()];
-  const appearances = await Promise.all([...unique.values()].map(({ descriptor, groups }) => resolveAppearance(ctx, cco.merged, descriptor, groups, morphs)));
+  // The precedence ambiguities this V's own reads met, and the merged creator resource's (PIPE-63).
+  const { value: appearances, ambiguities: observed } = await graph.collect(() =>
+    Promise.all([...unique.values()].map(({ descriptor, groups }) => resolveAppearance(ctx, cco.merged, descriptor, groups, morphs))));
+  const precedence = new Map([...(cco.ambiguities ?? []), ...observed].map(entry => [`${entry.code}|${entry.subject}|${entry.detail}`, entry]));
   const applied = (region: string, target: string) => appearances.reduce((sum, a) => sum + a.components.filter(c => c.appliedMorphs.some(m => m.region === region && m.target === target)).length, 0);
   return { schema: "xfs/resolved-character-1", bodyGender: input.bodyGender, origin: input.origin,
     cco: { base: cco.base, customResources: cco.customs, hairColorTags: cco.merged.hairColorTags },
     appearances, morphs: morphs.map(m => ({ ...m, components: applied(m.region, m.target) })),
-    ambiguities: [...ctx.ambiguities, ...graph.observedAmbiguities.values()], gaps: ctx.gaps,
+    ambiguities: [...ctx.ambiguities, ...precedence.values()], gaps: ctx.gaps,
     rules: [...graph.depot.plan.rules, ...cco.merged.rules,
       note("R9-morphs", "hypothesis", "A (target, region) pair applies to every morph component whose targets contain it; manager semantics unread."),
       note("R10-materials", "source", "Mesh appearance → chunk materials → entries or ArchiveXL templates (@name, @context, *{attr} paths) → instance chain to .mt/.remt; Mesh/Extension.cpp replicated for static and template routes.")] };

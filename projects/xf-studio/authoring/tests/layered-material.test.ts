@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { accumulateLayer, bakeOrder, BAKE_SIZE, bakeSurface, colourMaskLevels, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters,
-  layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, reorientedNormal, resolveSurface, stackProblems, uvDomain,
+  layeredBakeExtent, layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, NEUTRAL_BASE_COLOUR, reorientedNormal,
+  resolveSurface, stackProblems, uvDomain,
   type LayerAccumulator, type LayerBakeParameters, type LayerSamples } from "../src/layered-material";
 import { MAX_SETUP_LAYERS, MAX_TABLE_ENTRIES, readSetup, readTemplate } from "../src/layered-setup";
 import type { RenderLayer, RenderLayered, RenderTexture } from "../src/render-detail";
@@ -172,11 +173,13 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
   });
 
   /** A renderer stand-in: enough of the WebGL renderer for the bake, with the program diagnostics, framebuffer status and error it reports. */
-  function fakeRenderer(options: { runnable?: boolean; framebuffer?: number; error?: number; halfFloat?: boolean } = {}) {
+  function fakeRenderer(options: { runnable?: boolean; framebuffer?: number; error?: number; halfFloat?: boolean; lost?: () => boolean } = {}) {
     const materials: THREE.Material[] = [];
     let error = options.error ?? 0;
-    const gl = { NO_ERROR: 0, FRAMEBUFFER: 0x8d40, FRAMEBUFFER_COMPLETE: 0x8cd5,
-      getError: () => { const e = error; error = 0; return e; }, checkFramebufferStatus: () => options.framebuffer ?? 0x8cd5 };
+    const queries = { getError: 0, checkFramebufferStatus: 0 };
+    const gl = { NO_ERROR: 0, FRAMEBUFFER: 0x8d40, FRAMEBUFFER_COMPLETE: 0x8cd5, queries, isContextLost: () => options.lost?.() ?? false,
+      getError: () => { queries.getError++; const e = error; error = 0; return e; },
+      checkFramebufferStatus: () => { queries.checkFramebufferStatus++; return options.framebuffer ?? 0x8cd5; } };
     let target: THREE.WebGLRenderTarget | null = null;
     const renderer = {
       capabilities: { isWebGL2: true }, extensions: { has: (name: string) => options.halfFloat !== false || name === "OES_texture_float_linear" },
@@ -186,7 +189,7 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
         if (options.error) error = options.error; },
       properties: { get: () => ({ currentProgram: { diagnostics: { runnable: options.runnable ?? true, programLog: "ERROR: 0:12: 'xfsTiled' : no matching function" } } }) },
     };
-    return { renderer: renderer as unknown as THREE.WebGLRenderer, materials };
+    return { renderer: renderer as unknown as THREE.WebGLRenderer, materials, queries };
   }
   const input = (size = 8) => ({ layers: [{ parameters: params(0), textures: {} }], domain: { min: [0, 0] as [number, number], max: [1, 1] as [number, number] },
     size, globals: { ratio: 1, normalIntensity: 1, normalUvScale: [1, 1] as [number, number], normalUvBias: [0, 0] as [number, number] } });
@@ -251,6 +254,70 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
     failed.handle.contextRestored();
     expect(failed.handle.state).toBe("failed");
   });
+
+  test("a bake while the context is lost stays pending; one that failed because the context was lost is tried again (PREV-73)", () => {
+    let lost = true;
+    const { renderer } = fakeRenderer({ lost: () => lost });
+    const waiting = createLayeredMaterial(input());
+    expect(waiting.handle.bake(renderer)).toBe(false);
+    expect(waiting.handle.state).toBe("pending");
+    // Lost part-way through: the draws report the lost context, and the failure is re-armed on restore.
+    let draws = 0;
+    const midway = fakeRenderer({ error: 0x9242, lost: () => ++draws > 1 && lost });
+    lost = false;
+    const cut = createLayeredMaterial(input());
+    expect(cut.handle.bake(midway.renderer)).toBe(false);
+    expect(cut.handle.state).toBe("failed");
+    expect(cut.handle.evidence().error).toMatch(/0x9242/);
+    cut.handle.contextRestored();
+    expect(cut.handle.state).toBe("pending");
+    expect(cut.handle.bake(renderer)).toBe(true);
+    expect(waiting.handle.bake(renderer)).toBe(true);
+  });
+
+  test("the framebuffer is checked once per target and errors once per pass, not after every layer (PREV-75)", () => {
+    const { renderer, queries } = fakeRenderer();
+    const many = { ...input(), layers: Array.from({ length: 12 }, (_, i) => ({ parameters: params(i), textures: {} })) };
+    expect(createLayeredMaterial(many).handle.bake(renderer)).toBe(true);
+    // The two accumulation targets and the kept maps; errors drained once, then after the clear, the layers and the resolve.
+    expect(queries.checkFramebufferStatus).toBe(3);
+    expect(queries.getError).toBe(4);
+    // An error raised by any layer is still caught.
+    const failing = fakeRenderer({ error: 0x502 });
+    expect(createLayeredMaterial(many).handle.bake(failing.renderer)).toBe(false);
+  });
+
+  test("a wide UV domain gets a wide bake; a mirrored part the density of its unmirrored half (PREV-77)", () => {
+    const stack: RenderLayered = { setup: { depotPath: "s", archive: null, sha256: null }, mask: null, ratio: 1, useNormal: true, layers: [layer()] };
+    // An eyeball whose UVs span three tiles across and one down.
+    const wide = layeredBakeExtent(stack, { min: [0, 0], max: [3, 1] }, { worldArea: 1.8e-3, uvArea: 2 });
+    expect(wide.width).toBe(4 * wide.height);
+    // Mirroring a half onto the same UVs doubles both areas: the same density, the same bake.
+    const half = { worldArea: 2e-4, uvArea: 0.4 }, mirrored = { worldArea: 4e-4, uvArea: 0.8 };
+    const unit = { min: [0, 0] as [number, number], max: [1, 1] as [number, number] };
+    expect(layeredBakeExtent(stack, unit, mirrored)).toEqual(layeredBakeExtent(stack, unit, half));
+    // A non-square bake keeps both sides within the limits, and its evidence and bytes follow it.
+    const made = createLayeredMaterial({ ...input(8), height: 4 });
+    made.handle.bake(fakeRenderer().renderer);
+    expect(made.handle.target!.width).toBe(8);
+    expect(made.handle.target!.height).toBe(4);
+    expect(made.handle.evidence()).toMatchObject({ size: 8, height: 4, bytes: Math.round(8 * 4 * 8 * 4 / 3) });
+  });
+
+  test("shared maps are credited to a user still holding them, so the evidence sums to what the GPU keeps (PREV-78)", () => {
+    const { renderer } = fakeRenderer();
+    const a = createLayeredMaterial(input()), b = createLayeredMaterial(input()), c = createLayeredMaterial(input());
+    for (const made of [a, b, c]) made.handle.bake(renderer);
+    const total = () => [a, b, c].reduce((sum, made) => sum + made.handle.evidence().bytes, 0);
+    const one = Math.round(8 * 8 * 8 * 4 / 3);
+    expect(total()).toBe(one);
+    expect(a.handle.evidence()).toMatchObject({ bytes: one, shared: true });
+    a.material.dispose();
+    expect(total()).toBe(one);
+    expect(b.handle.evidence().bytes).toBe(one);
+    b.material.dispose();
+    expect(c.handle.evidence()).toMatchObject({ bytes: one, shared: false });
+  });
 });
 
 describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () => {
@@ -260,12 +327,12 @@ describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () 
   test("the mask limit is only for a mask the host could not read, not for a mask with fewer layers than the setup", () => {
     const masked = layer({ textures: { mask: texture() } });
     // Three setup layers, a two-layer mask: layer 2 has no mask image and simply covers nothing, as in game.
-    expect(stackProblems(stack([layer(), masked, layer()], maskRef(2)))).toEqual({ mask: false, templates: 0 });
+    expect(stackProblems(stack([layer(), masked, layer()], maskRef(2)))).toEqual({ mask: false, templates: 0, base: false });
     // The mask could not be read at all, or a layer inside its count lacks its image.
-    expect(stackProblems(stack([layer(), layer()], maskRef(0)))).toEqual({ mask: true, templates: 0 });
-    expect(stackProblems(stack([layer(), layer(), masked], maskRef(3)))).toEqual({ mask: true, templates: 0 });
+    expect(stackProblems(stack([layer(), layer()], maskRef(0)))).toEqual({ mask: true, templates: 0, base: false });
+    expect(stackProblems(stack([layer(), layer(), masked], maskRef(3)))).toEqual({ mask: true, templates: 0, base: false });
     // The setup names no mask: nothing unread.
-    expect(stackProblems(stack([layer(), layer()], null))).toEqual({ mask: false, templates: 0 });
+    expect(stackProblems(stack([layer(), layer()], null))).toEqual({ mask: false, templates: 0, base: false });
   });
 
   test("a layer whose template could not be read is left out of the bake, and counted", () => {
@@ -273,8 +340,26 @@ describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () 
     const layered = stack([layer(), unreadable, layer({ textures: { mask: texture() } })], maskRef(3));
     expect(bakeOrder(layered).map(entry => entry.index)).toEqual([2, 0]);
     expect(stackProblems(layered).templates).toBe(1);
-    // An unreadable bottom layer is left out too: nothing under the masked layers.
-    expect(bakeOrder(stack([layer({ templateUnreadable: true }), layer({ textures: { mask: texture() } })], maskRef(2))).map(entry => entry.index)).toEqual([1]);
+    // An unreadable bottom layer is drawn as a neutral grey matte with no maps (PREV-76), not left out (which bakes black at zero
+    // roughness under the masked layers), and said.
+    const unreadBottom = stack([layer({ templateUnreadable: true, textures: { color: texture() }, colorScale: [0, 0, 0] }), layer({ textures: { mask: texture() } })], maskRef(2));
+    const order = bakeOrder(unreadBottom);
+    expect(order.map(entry => [entry.index, !!entry.neutral])).toEqual([[1, false], [0, true]]);
+    expect(order[1]!.maps).toEqual({ color: false, normal: false, roughness: false, metalness: false, microblend: false, mask: false });
+    expect(stackProblems(unreadBottom)).toEqual({ mask: false, templates: 1, base: true });
+    // What it bakes to where no masked layer covers: mid grey, fully rough, not metallic.
+    const baked = accumulateLayer(EMPTY_ACCUMULATOR, order[1]!, samples({ colour: [1, 1, 1], roughness: 1, metalness: 0 }), true);
+    close(baked.colour, [NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR]);
+    expect([baked.roughness, baked.metalness]).toEqual([1, 0]);
+    // A bottom layer at zero opacity adds nothing either way.
+    expect(bakeOrder(stack([layer({ templateUnreadable: true, opacity: 0 })], null))).toEqual([]);
+  });
+
+  test("the mesh-wide normal's scalars are clamped like the layers' (PREV-76)", () => {
+    const stackOf: RenderLayered = { setup: { depotPath: "s", archive: null, sha256: null }, mask: null, ratio: 1, useNormal: true, layers: [layer()] };
+    const globals = layeredGlobals({ scalars: { GlobalNormalIntensity: 1e30, GlobalNormalUVScale: -1e30, GlobalNormalUVBias: Number.POSITIVE_INFINITY } }, stackOf);
+    expect(globals).toMatchObject({ normalIntensity: 16, normalUvScale: [-256, -256], normalUvBias: [0, 0] });
+    expect(layeredGlobals({ scalars: {} }, stackOf)).toMatchObject({ normalIntensity: 1, normalUvScale: [1, 1], normalUvBias: [0, 0] });
   });
 
   test("the bake clamps every stored number to a plausible range: a tile of 1e38 can't make a coordinate NaN", () => {

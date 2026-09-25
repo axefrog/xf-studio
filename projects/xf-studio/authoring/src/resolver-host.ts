@@ -22,7 +22,8 @@ import { writeFileAtomic } from "./derived-cache";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
-import { discoverSources, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
+import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
+import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 export interface InstallationOptions {
@@ -34,6 +35,8 @@ export interface InstallationOptions {
   readonly wolvenKitCli: string;
   readonly cacheDir: string;
   readonly log?: (message: string) => void;
+  /** How folders are stamped (default: by the volume's file system, volume-info.ts). A test seam. */
+  readonly folderStamps?: (root: string) => FolderStampMode;
 }
 
 export interface Installation {
@@ -48,6 +51,11 @@ export interface Installation {
     readonly scanIssues: readonly string[];
     /** Blocking scan issues that may hide an archive, `.xl` or modlist file (see SourceIssue.mayHideSources). */
     readonly scanGaps: readonly string[];
+    /**
+     * What could not be read at open time and may read next time (PIPE-57): an archive index, a folder or entry the scan could not
+     * inspect, an `.xl` file. An installation with any is opened again after a while (installation-registry.ts).
+     */
+    readonly readErrors?: readonly string[];
     readonly mountedArchives: number;
     readonly unmountedArchives: number;
     readonly indexErrors: readonly string[];
@@ -73,10 +81,13 @@ const lower = (value: string) => value.toLowerCase();
 const XL_LOCATIONS = [/^red4ext\/plugins\/archivexl\/bundle\/.+\.xl$/, /^archive\/pc\/mod\/.+\.xl$/];
 
 /** The game-folder ArchiveXL bundle is outside source discovery's `archive/pc` scan. Its folder and files are watched too. */
-function gameBundleFiles(gameRoot: string, watched: WatchedPath[]): SourceCandidate[] {
+function gameBundleFiles(gameRoot: string, watched: WatchedPath[], byListing: boolean): SourceCandidate[] {
   const bundle = join(gameRoot, "red4ext", "plugins", "ArchiveXL", "Bundle");
   const stamp = (path: string) => { try { return pathStamp(lstatSync(path)); } catch { return pathStamp(null); } };
-  watched.push({ path: bundle, stamp: stamp(bundle) });
+  const folder = stamp(bundle);
+  let listed = folder;
+  if (byListing && folder.startsWith("dir|")) try { listed = listingStamp(readdirSync(bundle, { withFileTypes: true })); } catch { /* stamped by time */ }
+  watched.push({ path: bundle, stamp: listed });
   if (!existsSync(bundle) || lstatSync(bundle).isSymbolicLink()) return [];
   const now = new Date().toISOString();
   return readdirSync(bundle).filter(name => /\.(archive|xl)$/i.test(name)).map(name => {
@@ -151,7 +162,18 @@ export function trimBuffers(value: unknown): unknown {
   return out;
 }
 
-interface Pending { ref: DepotRef; extension: string | null; resolve: (value: FetchedResource | null) => void }
+/**
+ * The document without `Header.ArchiveFileName` (PIPE-60): the converter writes the temporary file it read there (a private path),
+ * `uncook -s` writes none, and nothing reads it. Stripping it makes both routes store the same JSON.
+ */
+export function withoutArchiveFileName(document: unknown): unknown {
+  const header = (document as { Header?: unknown } | null)?.Header;
+  if (!header || typeof header !== "object" || !("ArchiveFileName" in header)) return document;
+  const { ArchiveFileName: _dropped, ...rest } = header as Record<string, unknown>;
+  return { ...(document as object), Header: rest };
+}
+
+interface Pending { archive: MountedArchive; ref: DepotRef; extension: string | null; resolve: (value: FetchedResource | null) => void }
 type Queue = { archive: MountedArchive; items: Map<string, Pending> };
 
 /** Time limit of one WolvenKit step (unbundle or convert) of a resolver batch. */
@@ -162,8 +184,15 @@ export const RESOLVER_STEP_TIMEOUT_MS = 10 * 60_000;
  * records the WolvenKit identity that failed, and counts only for that identity (PREV-46): another WolvenKit
  * may convert the resource. Markers without this version (version 1 was written before PREV-29, when a
  * concurrent batch could delete the folder; version 2 did not record the identity) are ignored and removed.
+ *
+ * A resource the archive lists but WolvenKit writes nothing for, in launches that finished cleanly, gets a marker of kind
+ * `not-written` counting those batches (PIPE-54). It becomes lasting at `NOT_WRITTEN_RUNS`: one clean miss may be a fluke of
+ * that launch, a second in another batch is how that WolvenKit treats the resource. Like every marker it is keyed by the
+ * archive's fingerprint and the WolvenKit identity, so a changed archive or another WolvenKit tries again.
  */
 export const FAILED_MARKER_VERSION = 3;
+/** Clean batches that wrote nothing for a resource before that is taken as lasting (PIPE-54). */
+export const NOT_WRITTEN_RUNS = 2;
 
 /**
  * One extraction lane per cache folder in this process. Every fetcher on that folder (the character
@@ -171,28 +200,59 @@ export const FAILED_MARKER_VERSION = 3;
  * time, and a resource one fetcher is extracting is awaited by the others instead of extracted again.
  * Batch folders are unique (`mkdtemp`), so another process on the same cache cannot collide either.
  */
-interface CacheLane { tail: Promise<void>; inflight: Map<string, Promise<FetchedResource | null>> }
+interface CacheLane { tail: Promise<void>; inflight: Map<string, Promise<FetchedResource | null>>;
+  /** Cache files whose last answer was a null that may not repeat (`WolvenKitFetcher.transient`), whichever fetcher gave it. */
+  transient: Set<string> }
 const lanes = new Map<string, CacheLane>();
 function laneFor(cacheDir: string): CacheLane {
   const key = process.platform === "win32" ? resolve(cacheDir).toLowerCase() : resolve(cacheDir);
   let lane = lanes.get(key);
-  if (!lane) { lane = { tail: Promise.resolve(), inflight: new Map() }; lanes.set(key, lane); }
+  if (!lane) { lane = { tail: Promise.resolve(), inflight: new Map(), transient: new Set() }; lanes.set(key, lane); }
   return lane;
 }
 
 /** A depot path WolvenKit can select by pattern: plain path text, no ArchiveXL markers. */
 const plainPath = (path: string | null): path is string => !!path && path.length <= 512 && !/[*{}<>|"?\0]/.test(path);
-/** Most characters of one selection pattern, so a launch's command line stays well inside Windows' limit. */
+/** Most characters of one escaped selection pattern: a bound on the regex WolvenKit compiles, well under the command line. */
 export const MAX_PATTERN_CHARS = 12_000;
-function regexChunks(paths: readonly string[]): string[][] {
-  const chunks: string[][] = [];
-  let current: string[] = [], size = 0;
-  for (const path of paths) {
-    if (current.length && size + path.length + 8 > MAX_PATTERN_CHARS) { chunks.push(current); current = []; size = 0; }
-    current.push(path); size += path.length + 8;
+/** Windows' command-line limit (`CreateProcess`), in characters, and the margin kept below it. */
+export const COMMAND_LINE_LIMIT = 32_767;
+const COMMAND_LINE_MARGIN = 512;
+/** Most characters the archives of one launch take on its command line; a batch with more is split (PIPE-61). */
+export const MAX_ARCHIVE_CHARS = 16_000;
+/**
+ * An argument's length on a Windows command line, with the space before it: quoted when it holds a space, tab or quote, each quote
+ * escaped with a backslash, and backslashes doubled before a quote or the closing quote (the rules Node and Bun quote by).
+ */
+export function commandLineArgumentLength(arg: string): number {
+  if (arg && !/[\s"]/.test(arg)) return arg.length + 1;
+  let length = 3, slashes = 0;
+  for (const ch of arg) {
+    if (ch === "\\") { slashes++; continue; }
+    length += ch === "\"" ? slashes * 2 + 2 : slashes + 1;
+    slashes = 0;
   }
-  if (current.length) chunks.push(current);
-  return chunks;
+  return length + slashes * 2;
+}
+/**
+ * The selection patterns of an `uncook` launch over `archives` (PIPE-61): `paths` split so that each escaped pattern stays within
+ * `MAX_PATTERN_CHARS` and each launch's whole command line (the CLI, the archives, the output folder, the pattern and the flags)
+ * within `COMMAND_LINE_LIMIT`. Escaping is counted as `depotPathRegex` writes it.
+ */
+export function uncookPatterns(cli: string, archives: readonly string[], output: string, paths: readonly string[]): string[] {
+  const fixed = [cli, "uncook", ...archives, "-o", output, "-r", "-u", "-s", "-v", "Minimal"].reduce((sum, arg) => sum + commandLineArgumentLength(arg), 0);
+  // The pattern is quoted when a path holds a space (3 more characters); it never ends in a backslash (it ends in `)$`).
+  const budget = Math.min(MAX_PATTERN_CHARS, COMMAND_LINE_LIMIT - COMMAND_LINE_MARGIN - fixed - 4);
+  const empty = depotPathRegex([]).length, wrapper = "(?i)".length + empty;
+  const patterns: string[] = [];
+  let current: string[] = [], size = wrapper;
+  for (const path of paths) {
+    const escaped = depotPathRegex([path]).length - empty + 1;
+    if (current.length && size + escaped > budget) { patterns.push(`(?i)${depotPathRegex(current)}`); current = []; size = wrapper; }
+    current.push(path); size += escaped;
+  }
+  if (current.length) patterns.push(`(?i)${depotPathRegex(current)}`);
+  return patterns;
 }
 
 /** Batched WolvenKit CLI extraction with a persistent JSON cache, shared safely by every fetcher on one cache folder. */
@@ -219,33 +279,43 @@ export class WolvenKitFetcher implements ResourceFetchPort {
   /** Cache file of one resource: keyed by depot hash, archive fingerprint and WolvenKit identity (a WolvenKit update extracts again). */
   private cachePath(archive: MountedArchive, hash: string) { return join(this.cacheDir, "json", `${hash}-${fingerprint(archive.id)}-${this.toolTag}.json`); }
 
-  /** The cached answer: a resource, null for a current `.failed` marker, or undefined when WolvenKit must run. */
-  private cached(path: string): FetchedResource | null | undefined {
+  /** A current marker of this WolvenKit for a cache file, or null (a stale or unreadable one is removed). */
+  private marker(path: string): { kind?: string; runs?: number } | null {
     const marker = `${path}.failed`;
-    if (existsSync(marker)) {
-      // A resource WolvenKit could not convert stays failed until its container or WolvenKit changes.
-      try {
-        const known = JSON.parse(readFileSync(marker, "utf8"));
-        if (known.markerVersion === FAILED_MARKER_VERSION && known.wolvenKit === this.tool) return null;
-      } catch { /* unreadable: stale */ }
-      rmSync(marker, { force: true });
-    }
+    if (!existsSync(marker)) return null;
+    try {
+      const known = JSON.parse(readFileSync(marker, "utf8"));
+      if (known.markerVersion === FAILED_MARKER_VERSION && known.wolvenKit === this.tool) return known;
+    } catch { /* unreadable: stale */ }
+    rmSync(marker, { force: true });
+    return null;
+  }
+
+  /** The cached answer: a resource, null for a lasting `.failed` marker, or undefined when WolvenKit must run. */
+  private cached(path: string): FetchedResource | null | undefined {
+    // A resource WolvenKit could not convert stays failed until its container or WolvenKit changes; one it wrote nothing for, once
+    // that happened in `NOT_WRITTEN_RUNS` clean batches.
+    const known = this.marker(path);
+    if (known && (known.kind !== "not-written" || (known.runs ?? 0) >= NOT_WRITTEN_RUNS)) return null;
     if (!existsSync(path)) return undefined;
     try {
-      const entry = JSON.parse(readFileSync(path, "utf8"));
-      return { document: entry.document, extractedSha256: entry.meta.extractedSha256, path: entry.meta.path };
+      const text = readFileSync(path, "utf8"), entry = JSON.parse(text);
+      return { document: withoutArchiveFileName(entry.document), extractedSha256: entry.meta.extractedSha256, path: entry.meta.path, bytes: text.length };
     } catch { rmSync(path, { force: true }); return undefined; }
   }
+
+  /** Whether the last null answer for this resource may not repeat (`ResourceFetchPort.transient`). */
+  transient(archive: MountedArchive, ref: DepotRef): boolean { return this.lane.transient.has(this.cachePath(archive, ref.hash)); }
 
   fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
     const path = this.cachePath(archive, ref.hash);
     const cached = this.cached(path);
-    if (cached !== undefined) { this.stats.cacheHits++; return Promise.resolve(cached); }
+    if (cached !== undefined) { this.stats.cacheHits++; this.lane.transient.delete(path); return Promise.resolve(cached); }
     const inflight = this.lane.inflight.get(path);
     if (inflight) { this.stats.shared++; return inflight; }
     const promise = new Promise<FetchedResource | null>(resolve => {
       const queue = this.pending.get(archive.id) ?? { archive, items: new Map<string, Pending>() };
-      queue.items.set(ref.hash, { ref, extension, resolve });
+      queue.items.set(ref.hash, { archive, ref, extension, resolve });
       this.pending.set(archive.id, queue);
       if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.lane.tail = this.lane.tail.then(() => this.flush()); }, 30);
     });
@@ -259,24 +329,38 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     return runWolvenKit(this.cli, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
   }
 
+  /**
+   * Answer null: `lasting` when a marker records that the tool fails on this resource, otherwise a failure that may not repeat
+   * (counted, and remembered for `transient`, so a graph that asked for it reads it again later).
+   */
+  private answerNull(archive: MountedArchive, item: Pending, lasting: boolean): void {
+    const path = this.cachePath(archive, item.ref.hash);
+    if (lasting) this.lane.transient.delete(path);
+    else { this.stats.transient++; this.lane.transient.add(path); }
+    item.resolve(null);
+  }
+
   /** Extract everything queued. Never rejects, so the shared lane is never poisoned; every waiter is answered. */
   private async flush(): Promise<void> {
     const queues = [...this.pending.values()];
     this.pending.clear();
     if (!queues.length) return;
+    const archiveChars = (batch: Queue[]) => batch.reduce((sum, other) => sum + commandLineArgumentLength(other.archive.id), 0);
     try {
       // Archives in one CLI call must not both contain a requested hash, or outputs would collide.
       const batches: Queue[][] = [];
       for (const queue of queues) {
-        const fits = batches.find(batch => batch.every(other =>
-          ![...queue.items.keys()].some(hash => this.contains(other.archive.id, hash)) &&
-          ![...other.items.keys()].some(hash => this.contains(queue.archive.id, hash))));
+        // Nor may one launch name more archives than its command line holds (PIPE-61).
+        const fits = batches.find(batch => archiveChars(batch) + commandLineArgumentLength(queue.archive.id) <= MAX_ARCHIVE_CHARS &&
+          batch.every(other =>
+            ![...queue.items.keys()].some(hash => this.contains(other.archive.id, hash)) &&
+            ![...other.items.keys()].some(hash => this.contains(queue.archive.id, hash))));
         if (fits) fits.push(queue); else batches.push([queue]);
       }
       for (const batch of batches) await this.extract(batch);
     } catch (error) {
       this.stats.failures.push(String(error));
-      for (const queue of queues) for (const item of queue.items.values()) { this.stats.transient++; item.resolve(null); }
+      for (const queue of queues) for (const item of queue.items.values()) this.answerNull(queue.archive, item, false);
     }
     if (this.pending.size) await this.flush();
   }
@@ -285,7 +369,10 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     // Another process may have cached some of these since they were queued.
     for (const queue of queues) for (const [hash, item] of [...queue.items]) {
       const cached = this.cached(this.cachePath(queue.archive, hash));
-      if (cached !== undefined) { this.stats.cacheHits++; item.resolve(cached); queue.items.delete(hash); }
+      if (cached === undefined) continue;
+      this.stats.cacheHits++; queue.items.delete(hash);
+      if (cached) { this.lane.transient.delete(this.cachePath(queue.archive, hash)); item.resolve(cached); }
+      else this.answerNull(queue.archive, item, true);
     }
     const batch = queues.filter(queue => queue.items.size);
     if (!batch.length) return;
@@ -293,7 +380,10 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     const dir = mkdtempSync(join(this.cacheDir, "tmp", `batch-${process.pid}-`));
     const raw = join(dir, "raw");
     const answered = new Set<Pending>();
-    const answer = (item: Pending, value: FetchedResource | null) => { answered.add(item); item.resolve(value); };
+    const answer = (item: Pending, value: FetchedResource) => {
+      answered.add(item); this.lane.transient.delete(this.cachePath(item.archive, item.ref.hash)); item.resolve(value);
+    };
+    const fail = (item: Pending, lasting: boolean) => { answered.add(item); this.answerNull(item.archive, item, lasting); };
     try {
       const hashes = [...new Set(batch.flatMap(queue => [...queue.items.keys()]))];
       const archives = batch.map(queue => queue.archive.id);
@@ -311,9 +401,13 @@ export class WolvenKitFetcher implements ResourceFetchPort {
           if (!found.has(hash)) found.set(hash, { file: full, path: numeric ? null : rel, bytes: statSync(full).size, clean });
         }
       };
+      // Whether every extraction launch of this batch finished cleanly: only then does a resource it wrote nothing for count
+      // towards a lasting `not-written` marker (PIPE-54).
+      let extractedCleanly = true;
       const finished = (run: WolvenKitRun, step: string) => {
         const clean = run.exitCode === 0 && !/Unhandled exception/i.test(run.output);
         if (!clean) this.stats.failures.push(`WolvenKit ${step} did not finish cleanly (exit ${run.exitCode}); unconverted resources are retried next time.`);
+        if (!clean && step !== "convert") extractedCleanly = false;
         return clean;
       };
       // Step 1, one launch: resources with a known depot path are extracted and serialized together (`uncook -u -s`, whose
@@ -322,9 +416,9 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       const named = [...new Set(batch.flatMap(queue => [...queue.items].filter(([hash, item]) => plainPath(item.ref.path) && depotHash(item.ref.path!) === hash)
         .map(([, item]) => item.ref.path!.replaceAll("/", "\\"))))];
       const serialized = join(dir, "serialized");
-      for (const chunk of regexChunks(named)) {
+      for (const pattern of uncookPatterns(this.cli, archives, serialized, named)) {
         mkdirSync(serialized, { recursive: true });
-        const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", `(?i)${depotPathRegex(chunk)}`, "-u", "-s", "-v", "Minimal"],
+        const run = await this.run(["uncook", ...archives, "-o", serialized, "-r", pattern, "-u", "-s", "-v", "Minimal"],
           { accept: () => true, failure: /(?!)/ });
         walk(serialized, serialized, finished(run, "uncook"));
       }
@@ -335,7 +429,7 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       if (rest.length) {
         mkdirSync(raw, { recursive: true });
         writeFileSync(join(dir, "hashes.txt"), rest.join("\n") + "\n");
-        await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true });
+        finished(await this.run(["unbundle", ...archives, "-o", raw, "--hash", join(dir, "hashes.txt")], { accept: () => true, failure: /(?!)/ }), "unbundle");
         const before = new Set(found.keys());
         walk(raw, raw, true);
         // Unnamed outputs get the expected extension so WolvenKit's converter recognises them.
@@ -356,40 +450,45 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       for (const queue of batch) for (const [hash, item] of queue.items) {
         const hit = found.get(hash);
         let document: unknown = null;
-        try { if (hit && existsSync(`${hit.file}.json`)) document = trimBuffers(JSON.parse(readFileSync(`${hit.file}.json`, "utf8"))); }
+        try { if (hit && existsSync(`${hit.file}.json`)) document = withoutArchiveFileName(trimBuffers(JSON.parse(readFileSync(`${hit.file}.json`, "utf8")))); }
         catch (error) { this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash}: ${(error as Error).message}`); }
         if (hit && document) {
           const bytes = readFileSync(hit.file);
           const extractedSha256 = createHash("sha256").update(bytes).digest("hex");
           const path = hit.path ?? item.ref.path;
           // The document answers even when the cache write fails (disk full, a locked file); it is extracted again next time.
-          try {
-            store(this.cachePath(queue.archive, hash), JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
-              group: queue.archive.group, wolvenKit: this.tool, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document }));
-          } catch (error) { this.stats.failures.push(`${queue.archive.name}: ${path ?? hash}: not cached: ${(error as Error).message}`); }
+          const text = JSON.stringify({ meta: { hash, path, archive: queue.archive.name,
+            group: queue.archive.group, wolvenKit: this.tool, extractedSha256, bytes: bytes.length, cachedAt: new Date().toISOString() }, document });
+          try { store(this.cachePath(queue.archive, hash), text); rmSync(`${this.cachePath(queue.archive, hash)}.failed`, { force: true }); }
+          catch (error) { this.stats.failures.push(`${queue.archive.name}: ${path ?? hash}: not cached: ${(error as Error).message}`); }
           this.stats.extracted++;
-          answer(item, { document, extractedSha256, path, fresh: true });
+          answer(item, { document, extractedSha256, path, fresh: true, bytes: text.length });
           continue;
         }
         this.stats.failures.push(`${queue.archive.name}: ${item.ref.path ?? hash} was not extracted or converted.`);
         // Lasting only when the tool genuinely failed on this resource: a clean run, in this batch's own
         // folder, with the extracted file still there as unbundle wrote it.
         const intact = hit && existsSync(hit.file) && statSync(hit.file).size === hit.bytes;
-        let lasting = false;
-        if (hit && hit.clean && intact) {
+        const marker = (fields: Record<string, unknown>) => {
           try {
-            store(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION,
-              wolvenKit: this.tool, hash, path: hit.path ?? item.ref.path, archive: queue.archive.name,
-              reason: "WolvenKit extracted the resource but produced no readable JSON.", at: new Date().toISOString() }));
-            lasting = true;
-          } catch { /* Advisory: without the marker the resource is tried again next time. */ }
+            store(`${this.cachePath(queue.archive, hash)}.failed`, JSON.stringify({ markerVersion: FAILED_MARKER_VERSION, wolvenKit: this.tool, hash,
+              path: hit?.path ?? item.ref.path, archive: queue.archive.name, ...fields, at: new Date().toISOString() }));
+            return true;
+          } catch { return false; } // Advisory: without the marker the resource is tried again next time.
+        };
+        let lasting = false;
+        if (hit && hit.clean && intact) lasting = marker({ reason: "WolvenKit extracted the resource but produced no readable JSON." });
+        else if (!hit && extractedCleanly) {
+          // Nothing written, in launches that finished cleanly: counted per batch, lasting from the `NOT_WRITTEN_RUNS`th (PIPE-54).
+          const known = this.marker(this.cachePath(queue.archive, hash));
+          const runs = (known?.kind === "not-written" ? known.runs ?? 0 : 0) + 1;
+          lasting = marker({ kind: "not-written", runs, reason: "The archive lists the resource, but WolvenKit wrote nothing for it." }) && runs >= NOT_WRITTEN_RUNS;
         }
-        if (!lasting) this.stats.transient++;
-        answer(item, null);
+        fail(item, lasting);
       }
     } catch (error) {
       this.stats.failures.push(error instanceof WolvenKitRunError ? `${error.code}: ${error.message}` : String(error));
-      for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) { this.stats.transient++; item.resolve(null); }
+      for (const queue of batch) for (const item of queue.items.values()) if (!answered.has(item)) fail(item, false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
 }
@@ -405,14 +504,18 @@ export function installationView(core: { depot: DepotIndex; xl: ArchiveXlConfig 
   return { graph: new ResourceGraph(core.depot, core.xl, fetcher), fetcher };
 }
 
+/** Scan issues that may read differently next time (a locked or briefly unreadable folder, entry, mod list or settings file). */
+const UNREADABLE_ISSUES = new Set(["directory_unreadable", "entry_unreadable", "profile_unreadable", "mo2_ini_unreadable"]);
+
 /** Discover the route's sources, mount archives, read indexes and `.xl` files, and open a resource graph. */
 export function openInstallation(options: InstallationOptions): Installation {
   const log = options.log ?? (() => {});
   const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: options.gameRoot, launchRoute: options.launchRoute,
     mo2Root: options.mo2Root ?? null, mo2ProfileId: options.mo2ProfileId ?? null, manualModRoot: options.manualModRoot ?? null };
-  const discovery = discoverSources(settings, { maxEntries: 1_000_000, maxDepth: 24 });
+  const folderStamps = options.folderStamps ?? folderStampMode;
+  const discovery = discoverSources(settings, { maxEntries: 1_000_000, maxDepth: 24 }, { folderStamps });
   const watch: WatchedPath[] = [...discovery.watched];
-  const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot, watch)];
+  const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing")];
   // The game's own version: an update replaces the executable (and usually its archives).
   const executable = join(options.gameRoot, "bin", "x64", "Cyberpunk2077.exe");
   let executableStat = null;
@@ -447,7 +550,7 @@ export function openInstallation(options: InstallationOptions): Installation {
       const bundle = (c: SourceCandidate) => lower(c.virtualPath).startsWith("red4ext/") ? 0 : 1;
       return bundle(a) - bundle(b) || (lower(a.virtualPath) < lower(b.virtualPath) ? -1 : lower(a.virtualPath) > lower(b.virtualPath) ? 1 : 0);
     });
-  const xlIssues: string[] = [];
+  const xlIssues: string[] = [], xlReadErrors: string[] = [];
   const documents: XlDocument[] = [];
   for (const file of xlFiles) {
     const key = identity(file.physicalPath, file.sizeBytes, file.modifiedMs);
@@ -462,7 +565,7 @@ export function openInstallation(options: InstallationOptions): Installation {
     if (read.excludes) xlIssues.push(`${file.virtualPath}: uses !exclude; the YAML reader drops tags, so exclusions are treated as targets.`);
     // Each open gets its own copy of a remembered document.
     if (read.error === undefined) documents.push({ id: file.virtualPath, document: structuredClone(read.document) });
-    else xlIssues.push(`${file.virtualPath}: ${read.error}`);
+    else { xlIssues.push(`${file.virtualPath}: ${read.error}`); xlReadErrors.push(`${file.virtualPath}: ${read.error}`); }
   }
   indexMemo = nextIndexes; xlMemo = nextXl;
   const xl = readArchiveXlConfig(documents);
@@ -470,6 +573,7 @@ export function openInstallation(options: InstallationOptions): Installation {
   return { plan, depot, xl, graph, fetcher, watch, summary: { route: options.launchRoute, scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
     scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
+    readErrors: [...indexErrors, ...xlReadErrors, ...discovery.issues.filter(issue => UNREADABLE_ISSUES.has(issue.code)).map(issue => `${issue.code}: ${issue.detail}`)],
     mountedArchives: plan.archives.length, unmountedArchives: plan.unmounted.length, indexErrors, unreadIndexes,
     xlFiles: documents.length, xlIssues: [...xlIssues, ...xl.issues], ep1Installed: plan.ep1Installed, modOrder: plan.modOrder } };
 }

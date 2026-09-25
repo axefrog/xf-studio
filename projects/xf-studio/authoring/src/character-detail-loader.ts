@@ -151,6 +151,12 @@ class DetailLedger {
   }
 }
 const ledgers = new WeakMap<LoadedCharacterDetails, DetailLedger>();
+/**
+ * A shared texture's ledger key: its file, how the adapter reads it and how it wraps, and the resource's own `isGamma` flag, which
+ * decides a colour input's colour space (PREV-79): two resources with one image but different flags are two textures.
+ */
+export const textureLedgerKey = (source: Pick<RenderTexture, "file" | "isGamma">, use: TextureUse, wrap: TextureWrap) =>
+  `${source.file}|${use}|${wrap}|${source.isGamma ? "gamma" : "linear"}`;
 /** A component's content identity: its whole record entry (geometry file hash, chunks and every material input). */
 const contentKey = (component: RenderComponent) => JSON.stringify(component);
 /** Slots whose adapters read the resolved skin under them (the face decals' and brows' underlay): reused only with an unchanged skin. */
@@ -316,7 +322,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
             const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
             if (!source) return undefined;
-            const key = `${source.file}|${use}|${wrap}`;
+            const key = textureLedgerKey(source, use, wrap);
             let entry = ledger.textures.get(key);
             if (!entry) {
               const texture = new THREE.Texture(loadedImages.get(source.file));

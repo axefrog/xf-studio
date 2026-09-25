@@ -117,7 +117,8 @@ type Preparation = { key: string; state: GradingLutState; promise: Promise<void>
 class Superseded extends Error {}
 
 /**
- * One preparation at a time, keyed by the installation fingerprint the character details use. A changed
+ * One preparation at a time, keyed by the installation fingerprint the character details use (with this host's registry's
+ * generation), checked against the mod setup before each request (`refresh`). A changed
  * installation supersedes the running preparation: its WolvenKit run is stopped at once, but source discovery
  * (synchronous) and a resource load already under way finish first, and the new preparation starts once it has
  * settled.
@@ -145,7 +146,7 @@ export class GradingLutHost {
 
   /** The LUT state for the host's current installation; starts preparing when the installation changed or a retry is due. */
   request(): GradingLutState {
-    const settings = this.options.settings(), key = installationFingerprint(settings);
+    const settings = this.options.settings(), key = installationFingerprint(settings, this.installations);
     const known = this.current;
     if (known?.key === key) {
       if (known.retryAt !== null && this.now() >= known.retryAt) this.run(known, settings, known.promise);
@@ -161,6 +162,17 @@ export class GradingLutHost {
   }
 
   async settled(): Promise<void> { await this.current?.promise; }
+
+  /**
+   * Check the route's opened installation before a request is answered (PIPE-59), as the character details do: a mod setup changed
+   * since it was opened moves the route's generation on, so the key changes and the LUT is picked again from the new setup.
+   */
+  async refresh(): Promise<void> {
+    const settings = this.options.settings();
+    if (!settings.gameRoot || !settings.wolvenKitCli) return;
+    try { await this.installations.revalidate({ ...settings, gameRoot: settings.gameRoot, wolvenKitCli: settings.wolvenKitCli }); }
+    catch { /* The preparation opens the route again and reports what it cannot read. */ }
+  }
 
   /** Start (or retry) `entry` once `after` has settled. Never rejects. */
   private run(entry: Preparation, settings: CharacterDetailSettings, after: Promise<void>): void {
@@ -278,6 +290,8 @@ export function createGradingLutHandler(host: GradingLutHost) {
     if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin))
       return json({ code: "forbidden", error: "Use the local studio to prepare the preview." }, 403);
     if (request.method !== "GET") return json({ code: "method", error: "Method not allowed." }, 405);
+    // An answer picked earlier is reused only while the mod setup it came from is unchanged.
+    await host.refresh();
     return json(host.request());
   };
 }

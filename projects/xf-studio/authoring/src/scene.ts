@@ -231,7 +231,9 @@ async function assembleScene(
     studio.restore(); makeup.contextRestored();
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
-    bakeLayered();
+    // The re-bake's outcome reaches the panel, and the core eye shows only while no layered eye design is baked (PREV-74).
+    publishBakeLimits([...skinLimits(), ...bakeLayered()]);
+    if (characterDetails) eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
   };
   renderer.domElement.addEventListener("webglcontextrestored", restored);
   releases.push(() => renderer.domElement.removeEventListener("webglcontextrestored", restored));
@@ -433,8 +435,20 @@ async function assembleScene(
   }
   function refreshDetailVisibility() {
     for (const item of drawnDetails()) item.root.visible = detailVisible[item.component.slot];
-    // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63).
-    if (characterDetails) bakeLayered();
+    // A layered part of a slot that was hidden is baked when the slot is first shown (PREV-63); its outcome reaches the panel (PREV-74).
+    if (characterDetails) publishBakeLimits([...skinLimits(), ...bakeLayered()]);
+  }
+  /**
+   * The placed V's limits (its skin placement's and its bakes') when they change after `setCharacterDetails` returned them: a slot
+   * shown later, a re-bake after a context restore (PREV-74).
+   */
+  const bakeLimitListeners = new Set<(limits: { slot: DetailSlot; limit: DetailLimit }[]) => void>();
+  let publishedBakeLimits = "[]";
+  function publishBakeLimits(limits: { slot: DetailSlot; limit: DetailLimit }[]) {
+    const text = JSON.stringify(limits);
+    if (text === publishedBakeLimits) return;
+    publishedBakeLimits = text;
+    for (const listener of bakeLimitListeners) listener(limits.map(entry => ({ ...entry })));
   }
   function setHair(enabled: boolean) { detailVisible.hair = enabled; refreshDetailVisibility(); }
   /**
@@ -460,10 +474,11 @@ async function assembleScene(
       head.visible = true;
       eyes.visible = true;
       resolvedSkin = null;
-      previous.dispose(kept);
     }
+    // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
+    const releasePrevious = () => previous?.dispose(kept);
     refreshPlateUnderlay();
-    if (!next) return { limits: [] };
+    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -501,6 +516,8 @@ async function assembleScene(
     }
     // Layered chunks (piercings, eye designs): each stack is baked once into surface maps with this renderer, then lit per frame.
     const bakeLimits = bakeLayered();
+    releasePrevious();
+    publishedBakeLimits = JSON.stringify([...skinLimits(), ...bakeLimits]);
     // The V's own eyeball (a baked layered design's included) replaces the core eye.
     eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
     applyEyeOptics();
@@ -653,6 +670,11 @@ async function assembleScene(
     setEyeOptics,
     setHair,
     setCharacterDetails,
+    /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */
+    onBakeLimits(listener: (limits: { slot: DetailSlot; limit: DetailLimit }[]) => void) {
+      bakeLimitListeners.add(listener);
+      return () => { bakeLimitListeners.delete(listener); };
+    },
     detailContext,
     // With the renderer's live geometry and texture counts, so a V switch or a tried style can be measured (PREV-63).
     characterDetailsEvidence: () => ({ ...characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,

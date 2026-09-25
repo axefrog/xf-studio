@@ -4,7 +4,7 @@ import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-mod
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
 import type { DetailSlot, RenderChunkMaterial, RenderTexture } from "./render-detail";
-import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeSize, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
+import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeExtent, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, skinRoughness, type SkinImage, type SkinMaterialHandle, type SkinParameters,
   type SkinTexels } from "./skin-material";
@@ -331,15 +331,19 @@ const layered: MaterialAdapter = {
     const problems = stackProblems(stack);
     if (problems.mask) { limits.push("layered-mask"); notes.push("its layer mask could not be read; the layers it masks are not drawn"); }
     if (problems.templates) notes.push(`${problems.templates} layer(s) whose template could not be read are left out`);
+    // A bottom layer whose template could not be read is drawn neutral (PREV-76), with a code the presentation words.
+    if (problems.base) { limits.push("layered-base"); notes.push("its base layer's template could not be read; a neutral grey stands in for it"); }
     const layers = order.map(parameters => {
-      const source = stack.layers[parameters.index]!.textures;
+      // The neutral stand-in samples no maps.
+      const source = parameters.neutral ? {} : stack.layers[parameters.index]!.textures;
       const read = (role: keyof LayerTextures, use: TextureUse, wrap: TextureWrap) => source[role] ? textures(source[role]!, use, wrap) : undefined;
       return { parameters, textures: { color: read("color", "colour", "repeat"), normal: read("normal", "data", "repeat"),
         roughness: read("roughness", "data", "repeat"), metalness: read("metalness", "data", "repeat"),
         microblend: read("microblend", "data", "repeat"), mask: read("mask", "data", "repeat") } satisfies LayerTextures };
     });
     const domain = uvDomain(mesh.geometry.getAttribute("uv") as THREE.BufferAttribute | undefined);
-    const made = createLayeredMaterial({ layers, domain, size: layeredBakeSize(stack, domain, bakeSurface(mesh)),
+    const extent = layeredBakeExtent(stack, domain, bakeSurface(mesh));
+    const made = createLayeredMaterial({ layers, domain, size: extent.width, height: extent.height,
       globals: { ...layeredGlobals(chunk, stack), normal: textures("GlobalNormal", "data", "repeat") } });
     return { material: made.material, owned: [], notes, limits, layered: made.handle };
   },

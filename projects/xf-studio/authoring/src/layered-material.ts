@@ -41,6 +41,8 @@ export type LayerBakeParameters = {
   roughIn: [number, number]; roughOut: [number, number]; metalIn: [number, number]; metalOut: [number, number];
   colourMaskIn: [number, number]; colourMaskOut: [number, number];
   maps: LayerMaps;
+  /** A neutral stand-in for a bottom layer whose template could not be read (PREV-76): drawn with no maps. */
+  neutral?: true;
 };
 
 const saturate = (value: number) => Math.min(1, Math.max(0, value));
@@ -82,29 +84,41 @@ export function layerBakeParameters(layer: RenderLayer, index: number): LayerBak
       microblend: !!layer.textures.microblend, mask: !!layer.textures.mask } };
 }
 
+/** The colour of the neutral stand-in for an unreadable bottom layer: a mid grey (linear), fully rough and not metallic. */
+export const NEUTRAL_BASE_COLOUR = 0.214;
 /**
  * The layers the bake draws, **front to back** (the program's order): every masked layer that has mask data and a visible opacity,
  * from the highest index down, then the bottom layer (index 0, full mask). A layer at zero opacity adds nothing; a masked layer whose
- * mask layer is absent has no coverage anywhere (as a tile without that layer's bit). A layer whose `.mltemplate` the host could not
- * read is left out (PREV-67): drawn with neutral values it would cover its mask with opaque white.
+ * mask layer is absent has no coverage anywhere (as a tile without that layer's bit). A masked layer whose `.mltemplate` the host could
+ * not read is left out (PREV-67): drawn with neutral values it would cover its mask with opaque white. A bottom layer whose template
+ * could not be read is drawn as a neutral grey matte (PREV-76), not left out: without it everything the masks leave uncovered bakes
+ * black at zero roughness, a mirror-dark finish the part never had.
  */
 export function bakeOrder(layered: RenderLayered): LayerBakeParameters[] {
   const layers = layered.layers.map(layerBakeParameters);
   const drawn = (layer: LayerBakeParameters) => layer.opacity > 0 && !layered.layers[layer.index]!.templateUnreadable;
   const masked = layers.slice(1).filter(layer => drawn(layer) && layer.maps.mask).reverse();
-  return layers[0] && drawn(layers[0]) ? [...masked, layers[0]] : masked;
+  const bottom = layers[0];
+  if (!bottom || bottom.opacity <= 0) return masked;
+  if (drawn(bottom)) return [...masked, bottom];
+  const identity: [number, number] = [1, 0];
+  return [...masked, { ...bottom, tile: 1, offset: [0, 0], mbNormal: 0, normalStrength: 0, colour: [NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR],
+    roughIn: identity, roughOut: identity, metalIn: identity, metalOut: identity, colourMaskIn: [0, 1], colourMaskOut: [0, 1],
+    maps: { color: false, normal: false, roughness: false, metalness: false, microblend: false, mask: false }, neutral: true }];
 }
 /**
  * Why a stack draws less than it should, from what the host could read (PREV-67): `mask` when the `.mlmask` it names could not be read
  * (no mask layer at all, or a masked layer inside the mask's layer count without its image); `templates` counts drawn layers skipped
- * because their `.mltemplate` could not be read. A mask with fewer layers than the setup is not a problem: the upper layers cover
- * nothing, as in game.
+ * because their `.mltemplate` could not be read; `base` when that includes the bottom layer, which is then drawn neutral (PREV-76). A
+ * mask with fewer layers than the setup is not a problem: the upper layers cover nothing, as in game.
  */
-export function stackProblems(layered: RenderLayered): { mask: boolean; templates: number } {
+export function stackProblems(layered: RenderLayered): { mask: boolean; templates: number; base: boolean } {
   const mask = layered.mask;
   const unreadMask = !!mask && (mask.layers === 0 ||
     layered.layers.some((layer, index) => index > 0 && index < mask.layers && layer.opacity > 0 && !layer.templateUnreadable && !layer.textures.mask));
-  return { mask: unreadMask, templates: layered.layers.filter(layer => layer.opacity > 0 && layer.templateUnreadable).length };
+  const bottom = layered.layers[0];
+  return { mask: unreadMask, templates: layered.layers.filter(layer => layer.opacity > 0 && layer.templateUnreadable).length,
+    base: !!bottom && bottom.opacity > 0 && !!bottom.templateUnreadable };
 }
 
 /** What the program accumulates over the layers at one texel. */
@@ -336,20 +350,25 @@ export type LayeredInput = {
   globals: LayeredGlobals;
   /** The mesh's UV range the bake covers (min and max U, V); the lit material samples the maps over it. */
   domain: { min: [number, number]; max: [number, number] };
-  /** Bake size in texels (square). */
+  /** Bake width in texels; the height when `height` is absent (a square bake). */
   size: number;
+  /** Bake height in texels, for a domain wider or taller than it is long (PREV-77). */
+  height?: number;
 };
-export type LayeredEvidence = { state: "pending" | "baked" | "failed"; size: number; layers: number[]; domain: { min: [number, number]; max: [number, number] };
+export type LayeredEvidence = { state: "pending" | "baked" | "failed"; size: number; height: number; layers: number[]; domain: { min: [number, number]; max: [number, number] };
   globalNormal: boolean; error?: string;
   /** Bytes the kept maps take on the GPU (both packed maps with their mips), shared with every chunk baked from the same stack. */
   bytes: number; shared: boolean };
 export type LayeredHandle = {
   readonly state: "pending" | "baked" | "failed";
-  /** Bake the stack with this renderer (once). Returns false if it failed; the chunk is then left out. */
+  /**
+   * Bake the stack with this renderer (once). Returns false if it failed (the chunk is then left out) or could not run yet: while
+   * the renderer's context is lost the handle stays pending and bakes after the restore (PREV-73).
+   */
   bake(renderer: THREE.WebGLRenderer): boolean;
   /**
    * The renderer's context was lost and restored: the kept maps are gone, so the material hides and the stack is baked again by the
-   * next `bake` (PREV-62). A failed bake stays failed.
+   * next `bake` (PREV-62). A bake that failed because the context was lost is tried again too (PREV-73); any other failure stands.
    */
   contextRestored(): void;
   /** Plain data for the developer evidence. */
@@ -360,9 +379,9 @@ export type LayeredHandle = {
 
 /** The chunk-wide values a layered chunk's template instance sets (the record carries scalars; vectors fall back to identity). */
 export function layeredGlobals(chunk: Pick<RenderChunkMaterial, "scalars">, layered: RenderLayered): Omit<LayeredGlobals, "normal"> {
-  const scalar = (name: string, fallback: number) => Number.isFinite(chunk.scalars[name]) ? chunk.scalars[name]! : fallback;
-  const scale = scalar("GlobalNormalUVScale", 1), bias = scalar("GlobalNormalUVBias", 0);
-  return { ratio: clampLayer(layered.ratio, "ratio", 1), normalIntensity: scalar("GlobalNormalIntensity", 1),
+  // Clamped to the layers' ranges like every other stored number (PREV-76): a hostile scale can't make a sampling coordinate NaN.
+  const scale = clampLayer(chunk.scalars.GlobalNormalUVScale, "tile", 1), bias = clampLayer(chunk.scalars.GlobalNormalUVBias, "offset", 0);
+  return { ratio: clampLayer(layered.ratio, "ratio", 1), normalIntensity: clampLayer(chunk.scalars.GlobalNormalIntensity, "normal", 1),
     normalUvScale: [scale, scale], normalUvBias: [bias, bias] };
 }
 
@@ -395,21 +414,29 @@ export function bakeSurface(mesh: THREE.Mesh): BakeSurface | null {
   return Number.isFinite(worldArea) && Number.isFinite(uvArea) && worldArea > 0 && uvArea > 0 ? { worldArea, uvArea } : null;
 }
 /**
- * The bake's side, a power of two within `BAKE_SIZE` (PREV-63): the texel density `BAKE_TEXELS_PER_METRE` over the part's own surface.
- * The baked square covers the UV domain, of which the UVs use `uvArea`; so a side of `N` gives `worldArea · domainArea / uvArea / N²`
- * square metres per texel. Without a measurable surface, the older rule: the finest mask over the domain, or the usual density of a
- * one-tile part.
+ * The bake's width and height, each a power of two within `BAKE_SIZE` (PREV-63, PREV-77): the texel density `BAKE_TEXELS_PER_METRE`
+ * over the part's own surface, along each side of the UV domain. A UV unit of the part covers `worldArea / uvArea` square metres (the
+ * triangles' areas summed on both sides), so a side spanning `s` UV units needs `BAKE_TEXELS_PER_METRE · s · √(worldArea / uvArea)`
+ * texels. Mirrored or overlapping UVs count once per triangle on both sides: each copy of a texel lies on the surface at that same
+ * density, so the ratio holds (dividing by the covered UV area instead would size a mirrored part up by √2 for nothing). A domain
+ * wider than it is tall (an eyeball whose UVs span several tiles) gets a wider bake, not a square one. Without a measurable surface,
+ * the older rule: the finest mask over the domain, or the usual density of a one-tile part.
  */
-export function layeredBakeSize(layered: RenderLayered, domain: LayeredInput["domain"], surface?: BakeSurface | null): number {
+export function layeredBakeExtent(layered: RenderLayered, domain: LayeredInput["domain"], surface?: BakeSurface | null): { width: number; height: number } {
   const width = Math.max(domain.max[0] - domain.min[0], 1e-3), height = Math.max(domain.max[1] - domain.min[1], 1e-3);
-  let wanted: number;
-  if (surface) wanted = BAKE_TEXELS_PER_METRE * Math.sqrt(surface.worldArea * width * height / surface.uvArea);
-  else {
-    const span = Math.max(width, height);
-    const mask = Math.max(0, ...layered.layers.map(layer => Math.max(layer.textures.mask?.width ?? 0, layer.textures.mask?.height ?? 0)));
-    wanted = Math.max(mask * Math.min(span, 4), BAKE_SIZE.usual * Math.min(span, 2));
+  const side = (wanted: number) => Math.min(BAKE_SIZE.max, Math.max(BAKE_SIZE.min, 2 ** Math.round(Math.log2(Math.max(1, wanted)))));
+  if (surface) {
+    const perUv = BAKE_TEXELS_PER_METRE * Math.sqrt(surface.worldArea / surface.uvArea);
+    return { width: side(perUv * width), height: side(perUv * height) };
   }
-  return Math.min(BAKE_SIZE.max, Math.max(BAKE_SIZE.min, 2 ** Math.round(Math.log2(Math.max(1, wanted)))));
+  const mask = Math.max(0, ...layered.layers.map(layer => Math.max(layer.textures.mask?.width ?? 0, layer.textures.mask?.height ?? 0)));
+  const along = (span: number) => side(Math.max(mask * Math.min(span, 4), BAKE_SIZE.usual * Math.min(span, 2)));
+  return { width: along(width), height: along(height) };
+}
+/** The larger side of `layeredBakeExtent`. */
+export function layeredBakeSize(layered: RenderLayered, domain: LayeredInput["domain"], surface?: BakeSurface | null): number {
+  const extent = layeredBakeExtent(layered, domain, surface);
+  return Math.max(extent.width, extent.height);
 }
 
 /** The mesh UV range a bake covers: the vertices' bounds, padded by 1/256 of the span, never empty. */
@@ -474,20 +501,26 @@ function bakeKit(renderer: THREE.WebGLRenderer): BakeKit {
 }
 
 /**
- * Whether the last draw with `material` ran: its program compiled and linked (three.js keeps the diagnostics when it checks shader
- * errors, as it does by default), the bound framebuffer is complete and WebGL reported no error (PREV-65). A driver that fails any of
- * these would otherwise leave black maps reported as baked.
+ * Whether the last draw with `material` ran (PREV-65): its program compiled and linked (three.js keeps the diagnostics when it checks
+ * shader errors, as it does by default), and, when asked, that the bound framebuffer is complete and WebGL reported no error. A driver
+ * that fails any of these would otherwise leave black maps reported as baked. The two GL queries stall the pipeline, so a bake asks
+ * for the framebuffer once per target and for errors once per pass (PREV-75): an error flag stays set until it is read.
  */
-function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material): string | null {
+function drawFailed(renderer: THREE.WebGLRenderer, material: THREE.Material, checks: { framebuffer: boolean; error: boolean }): string | null {
   const gl = renderer.getContext();
   const program = (renderer.properties.get(material) as { currentProgram?: { diagnostics?: { runnable: boolean; programLog: string } } }).currentProgram;
   if (!program) return "the bake program was not built";
   if (program.diagnostics && !program.diagnostics.runnable) return `the bake program failed to build: ${program.diagnostics.programLog.slice(0, 200)}`;
-  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-  if (status !== gl.FRAMEBUFFER_COMPLETE) return `the bake target is incomplete (0x${status.toString(16)})`;
-  const error = gl.getError();
+  if (checks.framebuffer) {
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) return `the bake target is incomplete (0x${status.toString(16)})`;
+  }
+  const error = checks.error ? gl.getError() : gl.NO_ERROR;
   return error !== gl.NO_ERROR ? `WebGL error 0x${error.toString(16)} while baking` : null;
 }
+/** WebGL's error for a lost context. */
+const CONTEXT_LOST_WEBGL = 0x9242;
+const contextLost = (renderer: THREE.WebGLRenderer) => (renderer.getContext() as { isContextLost?: () => boolean }).isContextLost?.() === true;
 
 /** three.js's roughness and metalness map chunks, reading the packed maps' alpha instead of G and B. */
 export const PACKED_ROUGHNESS_GLSL = /* glsl */`
@@ -501,17 +534,19 @@ float metalnessFactor = metalness;
 	metalnessFactor *= texture2D( metalnessMap, vMetalnessMapUv ).a;
 #endif`;
 /** Bytes the two packed 8-bit maps take with their mips. */
-const keptBytes = (size: number) => Math.round(size * size * 8 * 4 / 3);
+const keptBytes = (width: number, height: number) => Math.round(width * height * 8 * 4 / 3);
 /**
  * Baked maps shared between chunks whose stacks, domains and sizes are identical (PREV-63: the same part drawn twice bakes once).
- * Keyed by renderer, then by the input's identity; released when the last material using one is disposed.
+ * Keyed by renderer, then by the input's identity; released when the last material using one is disposed. The maps' bytes are
+ * credited to one user, the longest-standing one still using them (PREV-78), so the evidence sums to what the GPU keeps.
  */
-const sharedBakes = new WeakMap<THREE.WebGLRenderer, Map<string, { target: THREE.WebGLRenderTarget; users: number }>>();
+type SharedBake = { target: THREE.WebGLRenderTarget; users: Set<symbol> };
+const sharedBakes = new WeakMap<THREE.WebGLRenderer, Map<string, SharedBake>>();
 const textureId = (texture: THREE.Texture | undefined) => texture ? texture.uuid : "-";
 /** A bake's identity: every parameter and input texture of its layers, its globals, domain and size. */
 export function bakeKey(input: LayeredInput): string {
   const g = input.globals;
-  return JSON.stringify([input.size, input.domain, g.ratio, g.normalIntensity, g.normalUvScale, g.normalUvBias, textureId(g.normal),
+  return JSON.stringify([input.size, input.height ?? input.size, input.domain, g.ratio, g.normalIntensity, g.normalUvScale, g.normalUvBias, textureId(g.normal),
     input.layers.map(({ parameters, textures }) => [parameters, textureId(textures.color), textureId(textures.normal), textureId(textures.roughness),
       textureId(textures.metalness), textureId(textures.microblend), textureId(textures.mask)])]);
 }
@@ -535,9 +570,12 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
   };
   material.customProgramCacheKey = () => "xfs_layered_packed";
   let state: "pending" | "baked" | "failed" = "pending", error: string | undefined;
-  let result: THREE.WebGLRenderTarget | null = null, shared = false, release: (() => void) | null = null;
+  /** The bake failed because the context was lost (tried again after the restore, PREV-73). */
+  let lostContext = false;
+  const me = Symbol("layered bake user"), width = input.size, height = input.height ?? input.size;
+  let result: THREE.WebGLRenderTarget | null = null, entry: SharedBake | null = null, release: (() => void) | null = null;
   // The baked maps live as long as the material: whoever disposes the material (the loader, per V) releases them.
-  material.addEventListener("dispose", () => { release?.(); release = null; result = null; });
+  material.addEventListener("dispose", () => { release?.(); release = null; result = null; entry = null; });
   const { min, max } = input.domain;
   const domain = new THREE.Vector4(min[0], min[1], max[0] - min[0], max[1] - min[1]);
   const show = (target: THREE.WebGLRenderTarget) => {
@@ -556,7 +594,7 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
     material.needsUpdate = true;
   };
   const hide = () => {
-    release?.(); release = null; result = null;
+    release?.(); release = null; result = null; entry = null;
     material.map = material.normalMap = material.roughnessMap = material.metalnessMap = null;
     material.visible = false;
     material.needsUpdate = true;
@@ -565,6 +603,8 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
     get state() { return state; },
     get target() { return result; },
     contextRestored() {
+      // A bake that failed because the context was lost runs again (PREV-73); any other failure stands.
+      if (state === "failed" && lostContext) { state = "pending"; error = undefined; lostContext = false; return; }
       if (state !== "baked") return;
       // The kept maps died with the context (they are not disposed: their GL objects belong to the lost context). The renderer's
       // shared bakes are forgotten (`layeredContextRestored`), and the next `bake` rebuilds them.
@@ -573,15 +613,20 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
     },
     bake(renderer) {
       if (state !== "pending") return state === "baked";
+      // Nothing can be drawn while the context is lost: stay pending, and bake after the restore (PREV-73).
+      if (contextLost(renderer)) return false;
       const unsupported = bakeUnsupported(renderer);
       if (unsupported) { state = "failed"; error = unsupported; return false; }
       const key = bakeKey(input);
       let bakes = sharedBakes.get(renderer);
       if (!bakes) { bakes = new Map(); sharedBakes.set(renderer, bakes); }
+      const use = (shared: SharedBake) => {
+        shared.users.add(me); entry = shared; result = shared.target;
+        release = () => { shared.users.delete(me); if (!shared.users.size) { shared.target.dispose(); if (bakes!.get(key) === shared) bakes!.delete(key); } };
+      };
       const known = bakes.get(key);
       if (known) {
-        known.users++; shared = true; result = known.target;
-        release = () => { if (--known.users <= 0) { known.target.dispose(); if (bakes!.get(key) === known) bakes!.delete(key); } };
+        use(known);
         show(known.target);
         state = "baked";
         return true;
@@ -597,15 +642,16 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
         for (let i = 0; i < 8 && gl.getError() !== gl.NO_ERROR; i++) { /* drain */ }
         // Half-float accumulation (PREV-63): signed normals and coverage sums above 1 need a float format; half precision keeps the
         // bake within the CPU reference's tolerance.
-        const accumulate = () => new THREE.WebGLRenderTarget(input.size, input.size, { count: 3, type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+        const accumulate = () => new THREE.WebGLRenderTarget(width, height, { count: 3, type: THREE.HalfFloatType, format: THREE.RGBAFormat,
           depthBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         targets.push(accumulate(), accumulate());
         renderer.autoClear = false;
         kit.mesh.material = kit.clear;
         renderer.setRenderTarget(targets[0]!);
         renderer.render(kit.scene, kit.camera);
-        let failure = drawFailed(renderer, kit.clear);
+        let failure = drawFailed(renderer, kit.clear, { framebuffer: true, error: true });
         let from = 0;
+        const checked = new Set<THREE.WebGLRenderTarget>([targets[0]!]);
         const u = kit.pass.uniforms, g = input.globals;
         (u.uDomain!.value as THREE.Vector4).copy(domain);
         kit.mesh.material = kit.pass;
@@ -633,12 +679,15 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
           kit.pass.uniformsNeedUpdate = true;
           renderer.setRenderTarget(targets[to]!);
           renderer.render(kit.scene, kit.camera);
-          failure = drawFailed(renderer, kit.pass);
+          failure = drawFailed(renderer, kit.pass, { framebuffer: !checked.has(targets[to]!), error: false });
+          checked.add(targets[to]!);
           from = to;
         });
+        // One error check for every layer drawn (an error flag stays set until it is read).
+        failure ??= drawFailed(renderer, kit.pass, { framebuffer: false, error: true });
         if (failure) throw Error(failure);
         // The kept maps: colour (sRGB) with roughness in alpha, and the normal with metalness in alpha, both 8-bit with mips.
-        made = new THREE.WebGLRenderTarget(input.size, input.size, { count: 2, type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false,
+        made = new THREE.WebGLRenderTarget(width, height, { count: 2, type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false,
           generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
         made.textures[0]!.colorSpace = THREE.SRGBColorSpace;
         const r = kit.resolve.uniforms;
@@ -653,18 +702,19 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
         kit.mesh.material = kit.resolve;
         renderer.setRenderTarget(made);
         renderer.render(kit.scene, kit.camera);
-        const resolveFailure = drawFailed(renderer, kit.resolve);
+        const resolveFailure = drawFailed(renderer, kit.resolve, { framebuffer: true, error: true });
         if (resolveFailure) throw Error(resolveFailure);
-        const entry = { target: made, users: 1 };
-        bakes.set(key, entry);
-        result = made; shared = false;
-        release = () => { if (--entry.users <= 0) { entry.target.dispose(); if (bakes!.get(key) === entry) bakes!.delete(key); } };
+        const baked: SharedBake = { target: made, users: new Set() };
+        bakes.set(key, baked);
+        use(baked);
         made = null;
-        show(result);
+        show(baked.target);
         state = "baked";
       } catch (reason) {
         state = "failed";
         error = (reason as Error).message;
+        // Lost while baking (the draws report the lost context): tried again after the restore (PREV-73).
+        lostContext = contextLost(renderer) || error.includes(`0x${CONTEXT_LOST_WEBGL.toString(16)}`);
         made?.dispose();
         result = null;
       } finally {
@@ -675,9 +725,13 @@ export function createLayeredMaterial(input: LayeredInput): { material: THREE.Me
       }
       return state === "baked";
     },
-    evidence: () => ({ state, size: input.size, layers: input.layers.map(entry => entry.parameters.index),
-      domain: { min: [...min] as [number, number], max: [...max] as [number, number] }, globalNormal: !!input.globals.normal,
-      bytes: state === "baked" && !shared ? keptBytes(input.size) : 0, shared, ...(error ? { error } : {}) }),
+    evidence: () => {
+      // Credited to the longest-standing user of shared maps (PREV-78); `shared` when another chunk uses the same maps.
+      const credited = state === "baked" && !!entry && entry.users.values().next().value === me;
+      return { state, size: width, height, layers: input.layers.map(item => item.parameters.index),
+        domain: { min: [...min] as [number, number], max: [...max] as [number, number] }, globalNormal: !!input.globals.normal,
+        bytes: credited ? keptBytes(width, height) : 0, shared: state === "baked" && !!entry && entry.users.size > 1, ...(error ? { error } : {}) };
+    },
   };
   return { material, handle };
 }

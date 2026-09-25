@@ -11,13 +11,15 @@
  * - `layered-material`: another part made of layered materials (a piercing, or a layered part of hair or another detail) could not be
  *   drawn, for the same reasons; it is left out.
  * - `layered-mask`: a layered part's mask could not be read, so only its bottom layer is drawn (its colour and finish only).
+ * - `layered-base`: a layered part's bottom layer template could not be read, so a neutral grey matte stands in for it where no
+ *   other layer covers (PREV-76).
  * - `decal-template`: a face detail uses a decal material (a `mesh_decal` family member such as the emissive or parallax
  *   decal) the preview does not draw yet; that part is left out.
  * - `rigid-part`: a part whose exported mesh has no skin (a framework's linked ring) is drawn where the export placed it and does not
  *   follow the head's idle movement. The component binds to the entity's `root`, not to a head bone, so the data names no bone to
  *   follow [resource]; how the engine moves such a part is unread [hypothesis] (knowledge/head-cc-rendering.md).
  */
-export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "decal-template", "rigid-part"] as const;
+export const DETAIL_LIMITS = ["head-shape", "skin-glow", "eye-design", "layered-material", "layered-mask", "layered-base", "decal-template", "rigid-part"] as const;
 export type DetailLimit = typeof DETAIL_LIMITS[number];
 
 /**
@@ -32,4 +34,16 @@ export type DetailNotice = typeof DETAIL_NOTICES[number];
 export class DetailVersionSkewError extends Error {
   readonly notice: DetailNotice = "version-skew";
   constructor(detail: string) { super(`The preview host and this page are different versions: ${detail}`); }
+}
+
+/** The limit codes of each shown slot, as the renderer reports them after the details were placed (PREV-74). */
+export type SlotLimits = readonly { slot: string; limits: readonly DetailLimit[] }[];
+/** `slots` with each shown slot's limit codes replaced by `update`'s (a slot `update` doesn't name, or not shown, is kept as it is). */
+export function withSlotLimits<T extends { slot: string; state: string; limits?: DetailLimit[] }>(slots: readonly T[], update: SlotLimits): T[] {
+  return slots.map(slot => {
+    const next = update.find(entry => entry.slot === slot.slot);
+    if (!next || slot.state !== "shown") return slot;
+    const { limits: _old, ...rest } = slot;
+    return (next.limits.length ? { ...rest, limits: [...next.limits] } : rest) as T;
+  });
 }
