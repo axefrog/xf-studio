@@ -99,7 +99,8 @@ export function createBrowserViewportDevice(options: {
     headPending(phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
       attachment.setPending("head", phase, message, progress);
     },
-    drawUV() { uvEditor?.draw(); },
+    /** The recipe or selection changed: redraw the UV pane, and the head's next frame (its handles follow them). */
+    drawUV() { uvEditor?.draw(); viewer?.requestRender(); },
     capture() { return editors.capture(); },
     uvEditor() { return uvEditor; },
     surfaceEditor() { return surfaceEditor; },

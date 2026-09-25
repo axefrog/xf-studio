@@ -5,7 +5,8 @@ import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECA
   STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
 import type { DetailSlot, RenderChunkMaterial } from "./render-detail";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
-import { createSkinMaterial, skinBaseImage, skinParameters, type SkinImage, type SkinMaterialHandle } from "./skin-material";
+import { createSkinMaterial, skinBaseTexels, skinParameters, type SkinImage, type SkinMaterialHandle, type SkinTexels } from "./skin-material";
+import type { DetailLimit } from "./detail-limits";
 
 /**
  * Renderer material adapters: one per game material template the preview draws (render-templates.ts).
@@ -29,19 +30,22 @@ export type AdapterContext = {
   overMakeup: boolean;
   /**
    * Linear skin colour under each vertex of a decal mesh, for the sqrt-space G-buffer blend; throws when unavailable.
-   * `skin` is the resolved skin's toned base colour when the V's skin loaded before the decal.
+   * `skin` is the V's resolved skin when it loaded before the decal: its toned base colour and its head chunks, so
+   * the colour is read on whichever head the scene draws (head-skin-placement.ts).
    */
-  underlay?: (mesh: THREE.Mesh, skin?: SkinImage | null) => THREE.BufferAttribute;
-  /** The resolved skin's toned base colour (8-bit sRGB), when the skin was loaded first. */
-  skinBase?: () => SkinImage | null;
+  underlay?: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => THREE.BufferAttribute;
+  /** The resolved skin, when the skin was loaded first. */
+  skin?: ResolvedSkinSurface;
   /** How hair profile stops are decoded (knowledge/hair-shading.md §3). */
   profileEncoding: ProfileEncoding;
 };
+/** The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser) and its head chunks. */
+export type ResolvedSkinSurface = { base: () => SkinTexels | null; chunks: readonly THREE.Mesh[] };
 export type AdaptedMaterial = { material: THREE.Material; owned: THREE.Texture[]; notes: string[];
-  /** Plain lines for the person using the app when part of the chunk is not drawn. */
-  limits?: string[];
+  /** Why part of the chunk is not drawn, as codes the presentation words. */
+  limits?: DetailLimit[];
   /** The skin adapter's handle and its toned base colour for decals drawn over it. */
-  skin?: { handle: SkinMaterialHandle; base: () => SkinImage | null } };
+  skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null } };
 export interface MaterialAdapter {
   readonly id: RenderAdapterId;
   create(chunk: RenderChunkMaterial, textures: ChunkTextures, mesh: THREE.Mesh, context: AdapterContext): AdaptedMaterial;
@@ -72,7 +76,6 @@ export function texturePixels(texture: THREE.Texture | undefined, size: number):
 const FLAT_NORMAL = [128, 128, 255, 255], BLACK = [0, 0, 0, 255], CLEAR = [0, 0, 0, 0];
 /** Size of the skin colour image decals blend against (enough for per-vertex sampling). */
 const SKIN_BASE_SIZE = 1024;
-const GLOW_LIMIT = "Glowing skin details from your installed mods aren't shown yet.";
 
 /**
  * `skin.mt`: the head's skin from the resolved chain (skin-material.ts): albedo, RG normal, roughness R/B
@@ -102,18 +105,19 @@ const skinAdapter: MaterialAdapter = {
       detailNormal: sampled("DetailNormal") ?? neutral(FLAT_NORMAL),
       microDetail: sampled("MicroDetail") ?? neutral(FLAT_NORMAL),
       tintMask: tintMask ?? neutral(BLACK), secondary: secondary ?? neutral(CLEAR) }, parameters);
-    const notes: string[] = [], limits: string[] = [];
+    const notes: string[] = [], limits: DetailLimit[] = [];
     if (!parameters.profile) notes.push("no readable skin profile; the base game's default profile values are used");
     // Emissive has no path in the preview yet: say so only when the resolved mask would actually glow.
     const emissive = parameters.emissiveEV > 0.001 ? sampled("EmissiveMask") : undefined;
     const glow = texturePixels(emissive, 64);
-    if (glow && Array.from({ length: glow.width * glow.height }, (_, i) => glow.data[i * 4]!).some(red => red > 2)) limits.push(GLOW_LIMIT);
-    let base: SkinImage | null | undefined;
+    if (glow && Array.from({ length: glow.width * glow.height }, (_, i) => glow.data[i * 4]!).some(red => red > 2)) limits.push("skin-glow");
+    // Toned lazily: a decal reads only the few hundred texels under its vertices, never the whole image (PREV-43).
+    let base: SkinTexels | null | undefined;
     const baseImage = () => {
       if (base !== undefined) return base;
       const colour = texturePixels(albedo, SKIN_BASE_SIZE);
       const size = colour ? Math.max(colour.width, colour.height) : 0;
-      base = colour ? skinBaseImage(colour, texturePixels(tintMask, size), texturePixels(secondary, size), parameters,
+      base = colour ? skinBaseTexels(colour, texturePixels(tintMask, size), texturePixels(secondary, size), parameters,
         { albedo: albedo.colorSpace === THREE.SRGBColorSpace, secondary: secondary?.colorSpace === THREE.SRGBColorSpace,
           mask: tintMask?.colorSpace === THREE.SRGBColorSpace }) : null;
       return base;
@@ -168,7 +172,7 @@ const doubleDiffuseDecal: MaterialAdapter = {
     const notes: string[] = [];
     let gbufferBlend = false;
     if (context.underlay) {
-      try { mesh.geometry.setAttribute("xfsUnderlay", context.underlay(mesh, context.skinBase?.() ?? null)); gbufferBlend = true; }
+      try { mesh.geometry.setAttribute("xfsUnderlay", context.underlay(mesh, context.skin ?? null)); gbufferBlend = true; }
       catch (error) { notes.push(`linear decal blend (${(error as Error).message})`); }
     }
     const material = createDoubleDiffuseDecalMaterial(primary, secondary, gradient,

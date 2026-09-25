@@ -130,25 +130,53 @@ export function skinRoughness(r: number, b: number, bias: readonly [number, numb
 
 export type SkinImage = { width: number; height: number; data: ArrayLike<number> };
 /**
+ * An 8-bit sRGB image read texel by texel (`texel` returns 0–255 for channel 0–2). Decals sample the skin
+ * only under their own vertices, so a lazily evaluated image avoids toning every texel of the skin (PREV-43).
+ */
+export type SkinTexels = { width: number; height: number; texel(x: number, y: number, channel: number): number };
+export const imageTexels = (image: SkinImage): SkinTexels => ({ width: image.width, height: image.height,
+  texel: (x, y, channel) => image.data[(y * image.width + x) * 4 + channel]! });
+type SkinBaseParameters = Pick<SkinParameters, "tintColor" | "tintScale" | "secondaryInfluence" | "secondaryTintInfluence">;
+type SkinBaseGamma = { albedo: boolean; secondary: boolean; mask?: boolean };
+
+/** One toned texel as 8-bit sRGB RGB, from same-size images (see `skinBaseImage`). */
+function skinBaseTexel(at: number, albedo: SkinImage, mask: SkinImage | null, secondary: SkinImage | null,
+  params: SkinBaseParameters, gamma: SkinBaseGamma): [number, number, number] {
+  const decode = (value: number, isGamma: boolean) => isGamma ? srgbToLinear(value / 255) : value / 255;
+  const a = [0, 1, 2].map(k => decode(albedo.data[at + k]!, gamma.albedo));
+  const sec = secondary ? [decode(secondary.data[at]!, gamma.secondary), decode(secondary.data[at + 1]!, gamma.secondary),
+    decode(secondary.data[at + 2]!, gamma.secondary), secondary.data[at + 3]! / 255] : [0, 0, 0, 0];
+  const colour = skinBaseColour(a, mask ? decode(mask.data[at]!, !!gamma.mask) : 0, sec, params);
+  return [0, 1, 2].map(k => Math.round(linearToSrgb(clamp01(colour[k]!)) * 255)) as [number, number, number];
+}
+const sameSize = (albedo: SkinImage, image: SkinImage | null) => image && image.width === albedo.width && image.height === albedo.height ? image : null;
+
+/**
  * The toned base colour as an 8-bit sRGB RGBA image (for decals that blend over the skin), from same-size
  * 8-bit images: albedo, tint mask and secondary albedo, each decoded from sRGB when its resource is gamma.
  */
 export function skinBaseImage(albedo: SkinImage, mask: SkinImage | null, secondary: SkinImage | null,
-  params: Pick<SkinParameters, "tintColor" | "tintScale" | "secondaryInfluence" | "secondaryTintInfluence">,
-  gamma: { albedo: boolean; secondary: boolean; mask?: boolean } = { albedo: true, secondary: true }): { width: number; height: number; data: Uint8ClampedArray } {
+  params: SkinBaseParameters, gamma: SkinBaseGamma = { albedo: true, secondary: true }): { width: number; height: number; data: Uint8ClampedArray } {
   const { width, height } = albedo, out = new Uint8ClampedArray(width * height * 4);
-  const decode = (value: number, isGamma: boolean) => isGamma ? srgbToLinear(value / 255) : value / 255;
-  const sameSize = (image: SkinImage | null) => image && image.width === width && image.height === height ? image : null;
-  const m = sameSize(mask), s = sameSize(secondary);
+  const m = sameSize(albedo, mask), s = sameSize(albedo, secondary);
   for (let i = 0; i < width * height; i++) {
-    const at = i * 4;
-    const a = [0, 1, 2].map(k => decode(albedo.data[at + k]!, gamma.albedo));
-    const sec = s ? [decode(s.data[at]!, gamma.secondary), decode(s.data[at + 1]!, gamma.secondary), decode(s.data[at + 2]!, gamma.secondary), s.data[at + 3]! / 255] : [0, 0, 0, 0];
-    const colour = skinBaseColour(a, m ? decode(m.data[at]!, !!gamma.mask) : 0, sec, params);
-    for (let k = 0; k < 3; k++) out[at + k] = Math.round(linearToSrgb(clamp01(colour[k]!)) * 255);
-    out[at + 3] = 255;
+    const at = i * 4, colour = skinBaseTexel(at, albedo, m, s, params, gamma);
+    out[at] = colour[0]; out[at + 1] = colour[1]; out[at + 2] = colour[2]; out[at + 3] = 255;
   }
   return { width, height, data: out };
+}
+
+/** The same toned image, evaluated only at the texels read, each once (the same values as `skinBaseImage`). */
+export function skinBaseTexels(albedo: SkinImage, mask: SkinImage | null, secondary: SkinImage | null,
+  params: SkinBaseParameters, gamma: SkinBaseGamma = { albedo: true, secondary: true }): SkinTexels {
+  const m = sameSize(albedo, mask), s = sameSize(albedo, secondary);
+  const toned = new Map<number, [number, number, number]>();
+  return { width: albedo.width, height: albedo.height, texel(x, y, channel) {
+    const index = y * albedo.width + x;
+    let colour = toned.get(index);
+    if (!colour) { colour = skinBaseTexel(index * 4, albedo, m, s, params, gamma); toned.set(index, colour); }
+    return colour[channel]!;
+  } };
 }
 
 export type SkinTextures = {

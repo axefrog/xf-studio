@@ -12,7 +12,8 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   const savedAppearance = new SavedAppearanceActions(ports.savedAppearance);
   const restoredSavedAppearance = workspace.savedV
     ? savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }) : undefined;
-  const initial = { ...workspace.preview };
+  // A private copy: restoring adjusts it (unavailable details, piercing and eye-shape fallbacks), never the caller's workspace.
+  const initial = structuredClone(workspace.preview);
   for (const detail of ["brows", "lashes"] as const) {
     if (ports.preview.availability?.(detail)) initial[detail] = false;
   }

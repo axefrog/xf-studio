@@ -10,6 +10,11 @@ export class IdleAnimation {
   }[] = [];
   readonly unmapped: string[] = [];
   enabled = false;
+  /**
+   * Called after anything other than playback changes the pose or the playing state (enable, pause, seek,
+   * contributions, bones joining or leaving), so a render-on-demand viewport draws it. `update` never calls it.
+   */
+  onChange?: () => void;
   private elapsed = 0;
   private playbackPaused = false;
   private bodyContribution = true;
@@ -62,6 +67,7 @@ export class IdleAnimation {
     if (!targets.length) return;
     this.bind(targets);
     if (this.enabled) this.update(0);
+    this.onChange?.();
   }
   /** Forget bones that leave the scene (a replaced detail), restoring their neutral pose first. */
   detach(targets: readonly THREE.Object3D[]) {
@@ -74,15 +80,18 @@ export class IdleAnimation {
       this.bindings.splice(i, 1);
     }
     for (let i = this.unmapped.length - 1; i >= 0; i--) if (targets.some(bone => bone.name === this.unmapped[i])) this.unmapped.splice(i, 1);
+    this.onChange?.();
   }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
     this.enabled = enabled; this.elapsed = 0; this.playbackPaused = false;
     if (enabled) this.update(0);
     else this.restore();
+    this.onChange?.();
   }
   setPaused(paused: boolean) {
     this.playbackPaused = this.enabled && paused;
+    this.onChange?.();
   }
   setContributions({ body, face }: { body?: boolean; face?: boolean }) {
     if (body !== undefined) this.bodyContribution = body;
@@ -90,6 +99,7 @@ export class IdleAnimation {
     // Recompose at the held phase, including when paused, so a muted source
     // cannot leave its previous world-space transform on a target.
     this.update(0);
+    this.onChange?.();
   }
   restore() {
     for (const b of this.bindings) {
@@ -100,6 +110,7 @@ export class IdleAnimation {
   seek(seconds: number) {
     this.elapsed = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
     this.update(0);
+    this.onChange?.();
   }
   update(seconds: number) {
     if (!this.enabled) return;

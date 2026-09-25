@@ -4,6 +4,7 @@ import { materialAdapter, textureColourSpace, type AdaptedMaterial, type Adapter
 import { CHARACTER_DETAIL_ASSETS, DETAIL_SLOTS, parseCharacterDetail, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture } from "./render-detail";
 import { restoreFirstWeights } from "./skin";
+import type { DetailLimit } from "./detail-limits";
 
 /**
  * Renderer device port for the resolved character details (head skin, brows, lashes, hair): it reads the host's
@@ -26,8 +27,8 @@ export type LoadedCharacterDetails = {
   components: LoadedCharacterComponent[];
   /** Slots that could not be shown in full, in plain words. */
   problems: { slot: DetailSlot; message: string }[];
-  /** Shown slots with a part the preview can't draw yet, in plain words. */
-  limits: { slot: DetailSlot; message: string }[];
+  /** Shown slots with a part the preview can't draw yet, as codes the presentation words. */
+  limits: { slot: DetailSlot; limit: DetailLimit }[];
   notes: string[];
   dispose(): void;
 };
@@ -111,13 +112,14 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   const made = new Map<string, THREE.Texture>();
   const problems: LoadedCharacterDetails["problems"] = [], limits: LoadedCharacterDetails["limits"] = [], notes: string[] = [];
   const components: LoadedCharacterComponent[] = [];
-  // The skin loads first, so decals over it (brows) can blend against the resolved skin colour.
+  // The skin loads first, so decals over it (brows) can blend against the resolved skin colour, read on the
+  // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
-  let skinBase: AdapterContext["skinBase"];
+  let resolvedSkin: AdapterContext["skin"];
   try {
     for (const component of ordered) {
       aborted();
-      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinBase ? { skinBase } : {}) };
+      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(resolvedSkin ? { skin: resolvedSkin } : {}) };
       try {
         // Every texture a drawn chunk names is fetched and verified before any material is built.
         const loadedImages = new Map<string, HTMLImageElement>();
@@ -168,8 +170,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           materials.push(adapted.material);
           owned.push(...adapted.owned);
           notes.push(...adapted.notes.map(note => `${component.slot} ${object.name}: ${note}`));
-          for (const message of adapted.limits ?? []) if (!limits.some(item => item.slot === component.slot && item.message === message))
-            limits.push({ slot: component.slot, message });
+          for (const limit of adapted.limits ?? []) if (!limits.some(item => item.slot === component.slot && item.limit === limit))
+            limits.push({ slot: component.slot, limit });
           if (adapted.skin) skin ??= adapted.skin;
           object.material = adapted.material;
           object.name = `detail_${component.slot}_${object.name}`;
@@ -184,7 +186,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         if (verticesUsed > MAX_VERTICES) throw Error("the details have more geometry than the preview allows");
         if (!meshes.length) throw Error("no drawable chunk was found in the exported geometry");
         components.push({ component, root, meshes, bones, ...(skin ? { skin } : {}) });
-        if (skin && !skinBase) skinBase = skin.base;
+        if (skin && !resolvedSkin) resolvedSkin = { base: skin.base, chunks: meshes };
       } catch (error) {
         if (signal?.aborted) throw error;
         const [noun, isnt] = SLOT_NOUN[component.slot];

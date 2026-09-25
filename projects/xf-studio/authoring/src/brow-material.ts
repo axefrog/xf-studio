@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { imageTexels, type SkinImage, type SkinTexels } from "./skin-material";
 
 /**
  * Adapter for `mesh_decal_double_diffuse.mt` (the brows' post-G-buffer decal), driven by the material's
@@ -129,19 +130,18 @@ vec3 a_pow2(vec3 v) { return v * v; }`);
 /**
  * Per-vertex linear albedo of the surface under each target vertex: nearest
  * source vertex (same bind space), its UV, bilinear sample of an sRGB8 RGBA
- * image. Pure over typed arrays so it is testable without a GPU.
+ * image (or a lazily toned one, read only at these texels). Pure over typed arrays so it is testable without a GPU.
  */
 export function sampleUnderlayAlbedo(targetPositions: ArrayLike<number>, sourcePositions: ArrayLike<number>,
                                      sourceUvs: ArrayLike<number>,
-                                     image: { width: number; height: number; data: ArrayLike<number> },
+                                     source: SkinImage | SkinTexels,
                                      maxDistance = 0.02): { underlay: Float32Array; maxMatchedDistance: number; unmatched: number } {
   const targets = targetPositions.length / 3, sources = sourcePositions.length / 3;
   const underlay = new Float32Array(targets * 3);
   const decode = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-  const texel = (x: number, y: number, c: number) => {
-    const px = Math.min(image.width - 1, Math.max(0, x)), py = Math.min(image.height - 1, Math.max(0, y));
-    return decode(image.data[(py * image.width + px) * 4 + c]!);
-  };
+  const image = "texel" in source ? source : imageTexels(source);
+  const texel = (x: number, y: number, c: number) =>
+    decode(image.texel(Math.min(image.width - 1, Math.max(0, x)), Math.min(image.height - 1, Math.max(0, y)), c));
   let maxMatchedDistance = 0, unmatched = 0;
   for (let t = 0; t < targets; t++) {
     const tx = targetPositions[t * 3]!, ty = targetPositions[t * 3 + 1]!, tz = targetPositions[t * 3 + 2]!;

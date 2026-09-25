@@ -752,6 +752,8 @@ export function createSurfaceEditor(
       group.visible = value;
       if (!value) { hovered = undefined; if (hoverTarget) hoverTarget = "empty"; }
       publishInput();
+      // The handles appear or vanish without a camera or recipe change: the head draws on demand.
+      viewer.requestRender?.();
     },
     diagnostics: () => ({
       enabled,

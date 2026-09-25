@@ -11,6 +11,7 @@ import { characterRequestFor, type CharacterRequest } from "./character-detail-r
 import type { SavedV } from "./save-reader";
 import type { DetailSlot, DetailSlotState } from "./render-detail";
 import { DETAIL_SLOTS } from "./render-detail";
+import type { DetailLimit } from "./detail-limits";
 
 /** The host's preparation state (character-detail-host.ts), as the transport returns it. */
 export type HostCharacterState = {
@@ -22,17 +23,22 @@ export type CharacterDetailPort = {
   request(request: CharacterRequest, signal: AbortSignal): Promise<HostCharacterState>;
   /** Poll one request's state. */
   poll(key: string, signal: AbortSignal): Promise<HostCharacterState>;
-  /** Load a prepared record and swap it into the scene, replacing whatever was there; returns per-slot outcomes. */
-  show(record: string, signal: AbortSignal): Promise<{ slots: DetailSlotState[] }>;
+  /**
+   * Load a prepared record and swap it into the scene, replacing whatever was there; returns per-slot outcomes,
+   * with the limit codes of a shown slot the preview draws only in part.
+   */
+  show(record: string, signal: AbortSignal): Promise<{ slots: (DetailSlotState & { limits?: DetailLimit[] })[] }>;
   /** Remove every resolved detail from the scene. */
   clear(): void;
   wait(ms: number, signal: AbortSignal): Promise<void>;
 };
-export type CharacterSlotStatus = { slot: DetailSlot; state: "pending" | DetailSlotState["state"]; label: string; message?: string };
+export type CharacterSlotStatus = { slot: DetailSlot; state: "pending" | DetailSlotState["state"]; label: string; message?: string;
+  /** Why a shown slot is drawn only in part, as codes the presentation words. */
+  limits?: DetailLimit[] };
 export type CharacterDetailStatus = {
   phase: "idle" | "preparing" | "ready" | "failed";
   source: CharacterRequest["source"] | null;
-  /** One plain line; empty when there is nothing to say. */
+  /** One plain line; empty when there is nothing to say. Partial-drawing limits are codes on the slots. */
   message: string;
   progress: { index: number; total: number; label: string } | null;
   slots: CharacterSlotStatus[];
@@ -96,7 +102,7 @@ export class CharacterDetailActions {
     const shown = await this.port.show(state.record, signal);
     if (signal.aborted) return;
     const slots = DETAIL_SLOTS.map(slot => shown.slots.find(entry => entry.slot === slot) ?? { slot, state: "none" as const, label: "None" });
-    // Unavailable slots first, then shown slots with a part the preview can't draw yet.
+    // Unavailable slots first, then shown slots with a line of their own from the record.
     const lines = [...slots.filter(slot => slot.state === "unavailable" && slot.message), ...slots.filter(slot => slot.state === "shown" && slot.message)]
       .map(slot => slot.message!);
     this.publish({ phase: "ready", source: request.source, message: lines.join(" "), progress: null, slots });
