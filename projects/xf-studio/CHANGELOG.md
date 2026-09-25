@@ -32,3 +32,4 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - The installer is not code-signed, so Windows SmartScreen may warn before it runs. Checksums and a build-provenance attestation are published with each release so you can check the file came from this project's automated build.
 - Automatic updates are off. Download new versions from the releases page. Installing one version over another hasn't been tested yet, so export your looks as a backup first. Uninstalling with the default **App** option keeps your library and settings.
 - Closing the window waits for your latest draft to be saved, and shows a message instead of closing if saving fails.
+- XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. If it's missing, the app says so and offers Microsoft's download page instead of showing an empty window, and any other startup failure shows **Try again** and **Copy diagnostics**.

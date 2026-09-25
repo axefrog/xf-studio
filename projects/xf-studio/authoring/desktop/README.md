@@ -50,6 +50,8 @@ Disposable Windows installs have exercised the WebView editor, Build, restart an
 
 **Developer preview intake.** The five prepared preview files come from a maintainer pipeline that community users cannot run, so the host reports `previewIntake: false` and answers the intake endpoint with 404 unless an empty file named `developer-preview-intake` exists in the app's data folder (the path About shows). With it, **Enable 3D preview** and the intake dialog return exactly as before; `tools/review-ready-assets.ts` and `tools/review-first-run.ts` create the marker for their developer steps.
 
+**Startup failures are never a blank window.** `main.ts` writes a bounded `desktop.log` in the data folder (version, WebView2 detection, loopback port, page load, bootstrap, smoke state, failures). `webview2.ts` follows Microsoft's documented registry check for the Evergreen runtime. If the WebView never requests the Studio page (5 s when no runtime is detected, otherwise 20 s), a native message explains it: without WebView2 it offers Microsoft's download page; otherwise it offers **Copy diagnostics**. Closing a window whose page never loaded closes at once instead of waiting for a workspace save. Inside the page, `boot-watchdog.js` is inlined as a classic script ahead of the module bootstrap: an uncaught script error before mount, or no mounted Studio after 30 s, replaces "Starting…" with a plain explanation, **Try again** and **Copy diagnostics**.
+
 **Alpha wording.** User-facing reasons for things that are not in this alpha come from `src/alpha-availability.ts` (no 3D preview; Build needs a developer setup) and follow its jargon policy. Build readiness is part of the `package.build` file capability, so the command palette, header and Mod package panel all show the same reason.
 
 ### Package Check and Build
@@ -68,7 +70,7 @@ A clean data root opens a welcome instead of the path form. It says the 3D head 
 
 ### Community alpha control inventory, 25 September
 
-`tools/review-alpha-inventory.ts` walks every reachable control of the desktop build as a community user (no preview files, no Build setup): the welcome, About, the overlay buttons, every command-palette entry, every control in every dock panel, the header and status bar, and the UV-map and layer-row context menus. It fails if any control is disabled without a visible reason or shows developer jargon. `tests/alpha-capability-reasons.test.ts` enforces the same rule for every catalogued target action and every head, camera, motion and saved-V action. The latest walk found 201 controls: 157 available, 44 unavailable with a reason, none silent.
+`tools/review-alpha-inventory.ts` walks every reachable control of the desktop build as a community user (no preview files, no Build setup): the welcome, About, the overlay buttons, every command-palette entry, every control in every dock panel, the header and status bar, and the UV-map and layer-row context menus. It fails if any control is disabled without a visible reason or shows developer jargon. `tests/alpha-capability-reasons.test.ts` enforces the same rule for every catalogued target action and every head, camera, motion and saved-V action. The latest walk found 203 controls: 157 available, 46 unavailable with a reason, none silent.
 
 | Area | Community user in this alpha | How it says so |
 |---|---|---|
@@ -145,9 +147,23 @@ Installer trials so far ran from a sandboxed agent process whose `LOCALAPPDATA` 
 
 ## Clean-machine first run
 
-Windows Sandbox gives a disposable Windows session with no Studio data, Bun or developer paths. It is an optional Windows feature that the machine owner must enable (it is not enabled on the development machine). `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit. Opening its `.wsb` file starts an offline sandbox that runs `tools/sandbox-first-run.ps1`: it records the environment and WebView2 version, checks the ZIP checksum, runs setup, launches the app and saves `report.json` plus a screenshot to `artifacts/sandbox-trial/results/`. This automation has not yet run in a sandbox. Then check by hand:
+### Windows Sandbox results, 25 September
 
-1. Local setup opens; **Continue without paths** reaches the Studio, and the head pane says preview assets are unavailable.
+Windows Sandbox (Windows 11 Enterprise 10.0.26100, networking off, elevated sandbox account) was enabled on the development machine and the kit now runs unattended: it dismisses the setup's final **Installation complete** window (Electrobun 2.0.1's `--quiet` applies to uninstall only and makes setup exit 1), restarts the app with a WebView2 debugging port, probes the loopback server, captures only the app or dialog window, copies `desktop.log` and shuts the sandbox down. `tools/sandbox-launch.ps1` starts it at a fixed 1600×1000 window. Results and screenshots stay in the ignored `artifacts/sandbox-trial/results/`.
+
+| Run | Build | Observed |
+|---|---|---|
+| Before | `35yq1y2ht9yj1` | Checksum matched; setup needed a manual click on **Installation complete** (232 s); the app window stayed **blank white** on first run and relaunch, and closing it did not complete because the save handshake waited for a page that never loaded. |
+| After, default sandbox | `38bs774jb4nrk` | No WebView2 Runtime anywhere in the sandbox (no Evergreen registry key in any of the three documented locations, no runtime folder). Install 14 s unattended; `desktop.log` shows the loopback server and window starting; after 5 s the app shows **"XF Studio needs the Microsoft Edge WebView2 Runtime"** with **Open the Microsoft download page**; closing works. |
+| After, host runtime copied in | `15i95hcea5bi6` | A copy of the host's WebView2 153 runtime, given as a fixed-version runtime (with Microsoft's AppContainer read grants), still started no `msedgewebview2` process under Electrobun 2.0.1, and the app showed **"XF Studio couldn't show its window"** with **Copy diagnostics**. |
+
+Root cause: the Windows Sandbox image does not include the WebView2 Runtime, which Electrobun's native renderer requires; the dev machine has it, so the app works there. The UV editor has **not yet been seen rendering inside the sandbox**. `bun tools/sandbox-trial.ts --install-webview2` turns sandbox networking on and installs Microsoft's signed Evergreen runtime with its official bootstrapper before the app, which is the remaining step to see the full first run there; it downloads that installer from Microsoft, so it runs only with the maintainer's go-ahead. The same packaged view renders the welcome and UV editor in the asset-free browser reviews above.
+
+### Manual checklist
+
+Windows Sandbox gives a disposable Windows session with no Studio data, Bun, WebView2 Runtime or developer paths; it is enabled on the development machine. `bun tools/sandbox-trial.ts [setup.zip]` prepares an ignored `artifacts/sandbox-trial/` kit and `tools/sandbox-launch.ps1` runs it unattended as described above. After a run with a WebView2 Runtime present, check by hand:
+
+1. The welcome opens; **Start designing** reaches the Studio, and the head pane says the 3D head preview isn't available in this alpha.
 2. Add a layer, edit its shape, Undo and Redo; save a preset to the library.
 3. Run Check; it reports the collection without needing game files.
 4. Close the window, reopen from the Start menu, and confirm that the preset and selection return and setup does not reappear.

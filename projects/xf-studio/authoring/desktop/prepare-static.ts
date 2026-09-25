@@ -17,7 +17,13 @@ cpSync(licencePath, resolve(output, packagedLicence));
 const html = readFileSync(resolve(authoring, "public", "index.html"), "utf8");
 const script = '<script type="module" src="/build/studio-main.js"></script>';
 if (!html.includes(script)) throw Error("Studio entry changed; review desktop bootstrap before packaging.");
-writeFileSync(resolve(output, "index.html"), html.replace(script, '<script type="module" src="/desktop-bootstrap.js"></script>'));
+// The watchdog is inlined as a classic script so it runs even if a module fails.
+const watchdog = readFileSync(resolve(import.meta.dir, "boot-watchdog.js"), "utf8");
+if (watchdog.includes("</script")) throw Error("The boot watchdog cannot be inlined.");
+writeFileSync(resolve(output, "index.html"), html.replace(script,
+  `<script>
+${watchdog}</script>
+    <script type="module" src="/desktop-bootstrap.js"></script>`));
 const bootstrap = await Bun.build({ entrypoints: [resolve(import.meta.dir, "bootstrap.js")], target: "browser" });
 if (!bootstrap.success || bootstrap.outputs.length !== 1)
   throw Error(bootstrap.logs.map(String).join("\n") || "Desktop bootstrap did not bundle.");

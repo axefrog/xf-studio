@@ -30,6 +30,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const settingsStore = new LocalSettingsStore(dataRoot);
   const workspaceStore = new DesktopWorkspaceStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
+  // Renderer progress for the host's blank-window watchdog and close handling.
+  const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
+  let report: (message: string) => void = message => console.log(message);
   const shutdown = new AbortController();
   const activity = new DesktopWorkActivity();
   const updateGuard = updateTrial && new DesktopUpdateApplyGuard(activity,
@@ -97,6 +100,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
         desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
       if (url.pathname === "/api/desktop/workspace") {
+        if (request.method === "GET" && !renderer.bootstrapped) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
         if (request.method === "POST" && response.status === 204)
           updateGuard?.noteWorkspaceWrite(request.headers.get("X-XFS-Update-Flush"));
@@ -117,7 +121,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
         if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "uv-only", "starting", "interactive"].includes(value.state) ||
           typeof value.webgl2 !== "boolean" || typeof value.worker !== "boolean") return new Response("Bad report", { status: 400 });
-        console.log(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
+        renderer.smoke = value.state;
+        report(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
@@ -143,6 +148,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (!resolvedFile.startsWith(resolvedRoot + sep) || !statSync(resolvedFile).isFile())
           return new Response("Not found", { status: 404 });
       } catch { return new Response("Not found", { status: 404 }); }
+      if (firstVisit && !renderer.pageServed) { renderer.pageServed = true; report("WebView requested the Studio page."); }
       return new Response(request.method === "HEAD" ? null : file, { headers: {
         "Content-Type": file.type, "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
         ...(firstVisit ? { "Set-Cookie": `xfs_session=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}),
@@ -153,6 +159,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     url: `${server.url}?session=${token}`,
     port: server.port,
     onWorkspaceCloseAck(handler: (nonce: string, status: "saved" | "failed") => boolean) { closeAck = handler; },
+    /** Route host diagnostics (page served, bootstrap, smoke state) to the host log. */
+    onReport(handler: (message: string) => void) { report = handler; },
+    renderer(): Readonly<typeof renderer> { return { ...renderer }; },
     beforeQuit(event: { response?: { allow: boolean } }) { updateGuard?.beforeQuit(event); },
     beginInstallTransaction() { return activity.begin("install"); },
     stop() { shutdown.abort(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },

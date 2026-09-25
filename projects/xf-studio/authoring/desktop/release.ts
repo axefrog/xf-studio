@@ -118,7 +118,9 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
     "2. Extract the whole ZIP (the setup program needs its hidden `.installer` folder) and run `XF Studio-Setup-canary.exe`.",
     "3. The installer is not code-signed yet, so Windows SmartScreen may show **Windows protected your PC**. " +
       "Only if the checksum matched, choose **More info → Run anyway**. If Smart App Control is on, Windows blocks unsigned apps and offers no per-app override.",
-    "4. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
+    "4. XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. " +
+      "If it's missing, the app tells you and opens Microsoft's download page.", "",
+    "5. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
       "The 3D head preview isn't available in this alpha, and building the mod files still needs a developer setup.", "",
     "## Licence", "",
     `XF Studio is MIT-licensed ([LICENSE](https://github.com/${repository}/blob/${tag}/LICENSE)). ` +
