@@ -39,8 +39,9 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { basename, join, relative, resolve, sep } from "node:path";
 import { readDdsChain, type DdsKind } from "./dds-reader";
 import { resourceRecords, type ResourceFile } from "./resource-inventory";
-import { checkArchiveXl, checkResources, ensure, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError, type Node,
-  type VerifierPlan, type VerifierRoute } from "./resource-checks";
+import { checkPlateGeometry, VERIFIER_PLATE_LIFT_MM, type PlateGeometryReport } from "./plate-geometry";
+import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, fresnelPigment, GRADIENT_SIDE, routeOf, sameJson, VerificationError,
+  type Node, type VerifierPlan, type VerifierRoute } from "./resource-checks";
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 
@@ -77,7 +78,7 @@ export const VERIFICATION_LIMITS: readonly string[] = [
   "Dynamic resolution is a source-derived model, not executed ArchiveXL.",
   "A/B/Off component clearing and save persistence need runtime evidence.",
   "Decoded XBM mip texel centres checked against coverage-space BOX reductions; bilinear/trilinear filtering between centres and game rendering remain unverified.",
-  "Zero-offset plate control; outward clearance candidate still required.",
+  "Plate lift checked against the vanilla face-decal offset (0.40 mm along the head's normals, morph-aware); depth behaviour, eyelid contact and deformation need in-game evidence.",
   "Flat, faceted and Fresnel decal routes are checked as resources and pixels; the faceted normal sign, the Fresnel colour-parameter encoding and every finish's lit appearance need in-game evidence.",
   "Glitter has no export route; only Matte, Satin, Metallic and the experimental game-matched Glossy, Shimmer and Colour-shifting finishes are packaged.",
 ];
@@ -88,7 +89,8 @@ export interface VerificationReport {
   build: string; presetCount: number; selectorCount: 1; selectorOptionCount: number; appDefinitions: 2;
   compiledComponentTemplates: 1; meshAppearances: number; materialTemplates: number; textureCount: number;
   archiveBytes: number; archiveSha256: string; unpackedFilesVerified: number; preservedMorphs: number;
-  modelBuffersUnchanged: true;
+  /** The packaged plate against its input: lifted positions, all other bytes exact. */
+  plateGeometry: PlateGeometryReport;
   resolvedDynamicPaths: ReturnType<typeof checkResources>["resolved"];
   decodedPixelChecks: ({
     preset: string; coveredTexels: number; coverageError: ErrorStats; premultipliedEncodedColourError: ErrorStats;
@@ -341,6 +343,15 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     plan.presets.forEach((preset, i) => ensure(source.presets[i]?.id === preset.id && sameJson(source.presets[i].recipe, preset.recipe),
       `Build record's recipe for preset ${preset.name} differs from the packaged collection`));
   }
+  // Diagnostic knobs (a prepared test candidate) must be exactly the packaged collection's, preset by preset.
+  if (options.packagedCollection !== undefined) {
+    const diagnostics = (options.packagedCollection as Node)?.diagnostics;
+    plan.presets.forEach(preset => ensure(sameJson(preset.diagnostics, diagnostics?.presets?.[preset.id]),
+      `Build record's diagnostics for preset ${preset.name} differ from the packaged collection`));
+    ensure(diagnostics === undefined || Object.keys(diagnostics.presets ?? {}).every(id => plan.presets.some(p => p.id === id)),
+      "Packaged collection diagnostics name a preset the build does not contain");
+  }
+  const liftsMm = expectedPlateLifts(plan, VERIFIER_PLATE_LIFT_MM);
   const presetRoutes = plan.presets.map((preset, i) => {
     const route = routeOf(preset);
     ensure(records[i].route === route, `Compiled record for ${preset.appearance} is ${records[i].route ?? "missing its route"}, but its recipe needs the ${route} route`);
@@ -401,6 +412,9 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     archiveHas: path => members.has(path),
   }, build.artifacts.map((a: Node) => a.path), records.map(r => r.size), options.morphTargets ?? null);
 
+  const plateGeometry = checkPlateGeometry(converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
+    converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
+
   const pixelResults: VerificationReport["decodedPixelChecks"] = [], mipResults: VerificationReport["decodedMipChecks"] = [];
   plan.presets.forEach((preset, i) => {
     const { pixel, mips } = checkTextures(out, records[i], preset, exported);
@@ -418,7 +432,7 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
     appDefinitions: 2, compiledComponentTemplates: 1, meshAppearances: summary.meshAppearances,
     materialTemplates: summary.materialTemplates, textureCount: plan.presets.reduce((n, p) => n + Object.keys(p.textures).length, 0),
     archiveBytes: archiveData.length, archiveSha256, unpackedFilesVerified: files.length, preservedMorphs: summary.morphTargets,
-    modelBuffersUnchanged: true, resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
+    plateGeometry, resolvedDynamicPaths: summary.resolved, decodedPixelChecks: pixelResults,
     decodedMipChecks: mipResults, presetRoutes, archiveXlSha256: sha256(xlBytes), plateInputs: { ...plate.start },
     installed: false, gameRenderingVerified: false, limits: [...VERIFICATION_LIMITS],
   };

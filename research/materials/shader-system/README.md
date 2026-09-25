@@ -141,16 +141,28 @@ In the lifted `.hlsl`, read `_N` as SSA `%N` of that program's `.ll`. Loops stay
 | Value | Branch | Class |
 |---|---|---|
 | 4 | Rebuilds a tangent frame from GBuffer1. `GBuffer1.w × 3` selects the dropped axis (`%88`–`%146`). | Hair |
-| 1 | If a `cb6` flag is set and metalness < 0.1, albedo is replaced by 1 (`%147`–`%154`). Later, a per-pixel colour is fetched from `cb6` register `4 + index`, with `index = (GBuffer1.w·3) << 1 | bit 6 of GBuffer2.w·255` (`%224`–`%237`). | Subsurface |
+| 1 | If a `cb6` flag is set and metalness < 0.1, albedo is replaced by 1 (`%147`–`%154`). Later, the pixel's skin-profile **dual-specular kernel** is fetched from `cb6` register `4 + index`, with `index = (GBuffer1.w·3) << 1 | bit 6 of GBuffer2.w·255` (`%224`–`%237`). The `%COM` type lays out 8 `SKernelDualSpecular` entries in registers 4–11: `roughness0` and `roughness1` multiply the G-buffer roughness for two GGX lobes, summed and scaled by (1 + `lobeMix`)/2 (sun `%575`–`%751`; local lights from `%2766`, which add a per-light roughness offset). An earlier reading of this fetch as a colour was wrong. | Subsurface |
 | 3 | Decodes a second, octahedral-encoded vector from GBuffer2.zw (8 bits each) plus two bits each from GBuffer0.w and GBuffer1.w (`%155`–`%192`), and zeroes the GBuffer2.z term. | Eye |
 
 These values match the templates' `materialType` enum (`ERenderMaterialType`: Standard 0, Subsurface 1, Cloth 2, Eye 3, Hair 4, Foliage 5). The `_XXXXXXXX` suffix of the clustered-light variants is that class bitmask, and no `00000100` (Cloth-only) variant exists. That enum-to-stencil identity is an inference from matching values, not a traced write.
 
-For every class except Eye, `saturate((GBuffer2.z − 1/3) × 1.5)` (`%85`–`%87`) scales an extra lighting term (`%1201`). What GBuffer2.z means is still a hypothesis:
+`saturate((GBuffer2.z − 1/3) × 1.5)` (`%85`–`%87`, forced to 0 for Eye at `%197`) is used only in the **Foliage** branch (class 5, block `%1051`): `%1201` weights a back-lit transmission lobe, 0.5·z·D_GGX(α = (0.5r + 0.2)², saturate(−V·L′))·(1 + |N·L|), added to diffuse (`%1186`–`%1204`). The Subsurface branch, the local-light path and the SSS passes never read GBuffer2.z.
 
 - Standard writers store exactly 1/3 (metal_base target 2 `.z`, decal target 2 `.z`), so the term is zero.
-- Skin stores `0.4 + 0.6 × TEXCOORD3.w` (`%1142`/`%1143`). Its vertex program `7494393843130164436` writes `TEXCOORD3.w = COLOR.y`, so the input is the **vertex colour's green channel** ([annotation results](annotation-results.md#basematerialsskinmt)).
-- The engine's debug view list includes "Translucency", which fits this term.
+- Skin stores `0.4 + 0.6 × TEXCOORD3.w` (`%1142`/`%1143`). Its vertex program `7494393843130164436` writes `TEXCOORD3.w = COLOR.y`, so the input is the **vertex colour's green channel** ([annotation results](annotation-results.md#basematerialsskinmt)). The deferred light ignores it for skin.
+- A decal blending `.z` toward 1/3 therefore changes nothing for skin pixels. (This section previously said the term applied to every class except Eye.)
+
+### Screen-space SSS passes (static cache)
+
+Decompiled for [experiment 017](../../../experiments/017-plate-depth/README.md); the index attributes names heuristically, and these three were confirmed by content:
+
+| Program | Role |
+|---|---|
+| Setup `18323727242039837728` | For class 1, copies the global light's diffuse output and writes linear depth. No GBuffer2 read. |
+| Blur_Horizontal `13638945895069409584` | Reads GBuffer2 `.x` (skips pixels with metalness > 0.1) and `.w` (profile bit) only. |
+| Combine `7703933925853799832` | Class 1 only. Metalness > 0.1: exposure × (specular + unblurred diffuse), no SSS. Otherwise (unblurred + profile colour × (blurred − unblurred)) × lerp(albedo², `cb6[0].rgb`, `cb6[0].w`) + specular + an ambient term. Specular is added unchanged; `.y` and `.z` are never read. |
+
+The two programs indexed as `Setup_UseTranslucency` hold a sun-only light that uses GBuffer2.w bits, not `.z`.
 
 ### What writers put in the `.w` channels
 

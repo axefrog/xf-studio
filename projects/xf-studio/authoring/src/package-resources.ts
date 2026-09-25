@@ -44,15 +44,23 @@ const softTexture = (plan: CollectionPlan, parameter: string, channel: string) =
 const localInstance = (template: string, values: Json[]) => ({ $type: "CMaterialInstance", audioTag: cname("None"),
   baseMaterial: resourceRef(template), cookingPlatform: "PLATFORM_PC", enableMask: 0, resourceVersion: 4, values });
 
-/** The flat `@preset` instance, unchanged since the Experiment 005 builder. */
-function flatMaterial(plan: CollectionPlan) {
+/** The flat `@preset` instance, unchanged since the Experiment 005 builder; a diagnostic surface override replaces its scalars. */
+function flatMaterial(plan: CollectionPlan, surface: Record<string, number> = {}) {
   const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] as const)
     .map(([name, channel]) => softTexture(plan, name, channel));
   for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0,
     SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
-    values.push(floatValue(name, value));
+    values.push(floatValue(name, surface[name] ?? value));
   values.push(colorValue("DiffuseColor", WHITE));
   return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** Entry bound to the plate chunks a preset does not use when the plate carries several lifts. */
+export const HIDDEN_CHUNK_ENTRY = "xfs_hidden";
+/** A decal instance that writes nothing: colour, normal and surface target alphas are all zero. */
+function hiddenMaterial() {
+  return localInstance("base/materials/mesh_decal.mt",
+    Object.entries({ DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 }).map(([name, value]) => floatValue(name, value)));
 }
 
 /** `@faceted`: the flat instance plus a normal map composed with the skin normal (NormalsBlendingMode 1). */
@@ -87,15 +95,23 @@ export const FRESNEL_TEMPLATE = "base/materials/mesh_decal_gradientmap_recolor_b
  */
 export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter): Json {
   const root = mesh.Data.RootChunk, seed = plan.presets[0];
+  const chunks = plan.plate.liftsMm.length, chunkCount = root.renderResourceBlob?.Data?.header?.renderChunkInfos?.length;
+  if (chunkCount !== undefined && chunkCount !== chunks) throw Error(`The plate has ${chunkCount} render chunks; the plan lifts ${chunks}.`);
   const entries: string[] = [];
   for (const preset of plan.presets) if (!entries.includes(preset.material)) entries.push(preset.material);
+  // Several lifts (a diagnostic depth comparison): every appearance names all chunks, its own with its
+  // material and the others with the hidden entry. One lift keeps the Experiment 005 stub layout.
+  const chunkMaterials = (preset: CollectionPlan["presets"][number], i: number) => chunks > 1
+    ? Array.from({ length: chunks }, (_, chunk) => cname(chunk === preset.plateChunk ? preset.appearance + preset.material : HIDDEN_CHUNK_ENTRY))
+    : i === 0 || preset.material !== seed.material || preset.route === "fresnel" ? [cname(preset.appearance + preset.material)] : [];
   root.appearances = plan.presets.map((preset, i) => handles.handle({ $type: "meshMeshAppearance", name: cname(preset.appearance),
-    chunkMaterials: i === 0 || preset.material !== seed.material || preset.route === "fresnel" ? [cname(preset.appearance + preset.material)] : [],
-    tags: [] }));
+    chunkMaterials: chunkMaterials(preset, i), tags: [] }));
+  if (chunks > 1) entries.push(HIDDEN_CHUNK_ENTRY);
   root.materialEntries = entries.map((name, index) => ({ $type: "CMeshMaterialEntry", index, isLocalInstance: 1, name: cname(name) }));
   root.localMaterialBuffer.materials = entries.map(name => {
+    if (name === HIDDEN_CHUNK_ENTRY) return hiddenMaterial();
     const preset = plan.presets.find(p => p.material === name)!;
-    return preset.route === "flat" ? flatMaterial(plan) : preset.route === "faceted" ? facetedMaterial(plan) : fresnelMaterialInstance(plan, preset);
+    return preset.route === "flat" ? flatMaterial(plan, preset.diagnostics?.surface) : preset.route === "faceted" ? facetedMaterial(plan) : fresnelMaterialInstance(plan, preset);
   });
   root.localMaterialBuffer.rawData = null;
   root.localMaterialBuffer.rawDataHeaders = [];

@@ -1,6 +1,6 @@
 # Native head eye-plate bootstrap — 25 September 2026
 
-**Status:** the neutral cut is now **production**. XF Studio's Build derives it from the user's installed game as the [built-in eye plate](#built-in-production-plate), byte for byte and without this experiment's GLB/.NET round trip. Clearance correction is paused pending in-game evidence: every lifted candidate has been rejected (most recently the packed candidate, on subframe idle contacts). Further fitting waits for the first in-game smoke test to show whether residual eyelid contacts are actually visible.
+**Status:** the neutral cut is now **production**. XF Studio's Build derives it from the user's installed game as the [built-in eye plate](#built-in-production-plate), byte for byte and without this experiment's GLB/.NET round trip. The cached plate keeps the exact head-surface correspondence; since [experiment 017](../017-plate-depth/README.md), **Build lifts the packaged copy 0.4 mm** along the head's shading normals (morph deltas carry the offset along each target's normal; skin bytes, normals, UVs and triangles unchanged), the way every vanilla face decal sits on the head. The first in-game session showed why: the coincident plate broke into skin-coloured patches close up. The fitted clearance candidates below remain rejected research; the vanilla-style lift has not been through their dense idle, subframe and finite-contact gates.
 
 ## Current state
 
@@ -114,6 +114,8 @@ previously extracted installed 2.31 head. It reproduced the same bound-head
 SHA-256 as Experiment 006 and a deterministic selected GLB hash on repeat.
 
 ## Clearance limits
+
+*Superseded for packaging by the 0.4 mm export lift ([experiment 017](../017-plate-depth/README.md)); kept as the record of the neutral cut.*
 
 This is an **exact neutral cut**: its surface coincides with the head and has
 no designed outward clearance. Packaging already used a neutral plate

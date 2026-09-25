@@ -26,6 +26,10 @@ export interface VerifierPreset {
   /** The packaged (filtered) recipe the preset was compiled from. */
   readonly recipe: Node;
   readonly textures: Partial<Record<VerifierChannel, string>>;
+  /** Render chunk of the packaged plate this preset draws (its lift's position in `plan.plate.liftsMm`). */
+  readonly plateChunk?: number;
+  /** Diagnostic-only export knobs copied from the packaged collection (a prepared test candidate). */
+  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>> };
 }
 
 /**
@@ -113,12 +117,40 @@ export function fresnelPigment(preset: VerifierPreset): { color: string; shift: 
   return { color: layers[0].color, shift: layers[0].optics.shift };
 }
 
+/** Flat-material scalars a diagnostic surface override may replace, with their accepted ranges (restated). */
+export const VERIFIER_SURFACE_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  RoughnessScale: [0, 2], RoughnessBias: [-1, 1], MetalnessScale: [0, 2], MetalnessBias: [-1, 1], RoughnessMetalnessAlpha: [0, 1],
+};
+/** The diagnostic surface override of a preset, validated; undefined when it has none. */
+export function surfaceOf(preset: VerifierPreset): Readonly<Record<string, number>> | undefined {
+  const surface = preset.diagnostics?.surface;
+  if (surface === undefined) return undefined;
+  ensure(surface && typeof surface === "object" && Object.keys(surface).length > 0, `Preset ${preset.name} has an empty diagnostic surface`);
+  for (const [name, number] of Object.entries(surface)) {
+    const range = VERIFIER_SURFACE_RANGES[name];
+    ensure(range && typeof number === "number" && number >= range[0] && number <= range[1], `Preset ${preset.name} overrides ${name} outside the diagnostic rules`);
+  }
+  return surface;
+}
+/** 32-bit FNV-1a of UTF-16 code units, eight hex digits (restated for the diagnostic entry name). */
+function fnv1a32(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+/** Material entry a flat preset with a diagnostic surface must use: one per distinct override. */
+export const diagnosticEntryOf = (surface: Readonly<Record<string, number>>) =>
+  "@flat_" + fnv1a32(JSON.stringify(Object.keys(surface).sort().map(key => [key, surface[key]])));
+/** Entry bound to unused plate chunks when the plate carries several lifts, and its all-zero alphas. */
+export const HIDDEN_ENTRY = "xfs_hidden";
+export const HIDDEN_VALUES: Readonly<Record<string, number>> = { DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 };
+
 /** Expected scalar and colour parameters of each route's material instance (the published specification). */
 export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPreset): Record<string, Node> {
   const white = { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 };
   const flat = { DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
     RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0, DiffuseColor: white };
-  if (route === "flat") return flat;
+  if (route === "flat") return { ...flat, ...(surfaceOf(preset) ?? {}) };
   if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1 };
   const { shift } = fresnelPigment(preset);
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
@@ -134,6 +166,25 @@ export interface VerifierPlan {
   readonly offAppearance: string; readonly templateAppearance: string;
   readonly mesh: string; readonly morph: string; readonly app: string; readonly customization: string;
   readonly presets: readonly VerifierPreset[];
+  /** The packaged plate's lifts in millimetres, one render chunk each. */
+  readonly plate?: { readonly liftsMm: readonly number[] };
+}
+
+/**
+ * The plate lifts a plan must use, re-derived from its presets: each preset's diagnostic lift or the
+ * restated production lift, distinct values ascending; every preset must draw its own lift's chunk.
+ */
+export function expectedPlateLifts(plan: VerifierPlan, productionLiftMm: number): number[] {
+  const liftOf = (preset: VerifierPreset) => {
+    const lift = preset.diagnostics?.plateLiftMm;
+    ensure(lift === undefined || (typeof lift === "number" && lift >= 0 && lift <= 1), `Preset ${preset.name} has an invalid diagnostic plate lift`);
+    return lift ?? productionLiftMm;
+  };
+  const lifts = [...new Set(plan.presets.map(liftOf))].sort((a, b) => a - b);
+  ensure(sameJson(plan.plate?.liftsMm, lifts), `Plan plate lifts ${JSON.stringify(plan.plate?.liftsMm)} differ from the presets' lifts ${JSON.stringify(lifts)}`);
+  for (const preset of plan.presets)
+    ensure(preset.plateChunk === lifts.indexOf(liftOf(preset)), `Preset ${preset.name} does not draw its lift's plate chunk`);
+  return lifts;
 }
 
 export interface RoundTrippedResources {
@@ -148,6 +199,10 @@ export interface RoundTrippedResources {
 export interface ResolvedPreset {
   readonly appearance: string; readonly chunkMaterial: string;
   readonly textures: Partial<Record<VerifierChannel, string>>;
+  /** Render chunk of the packaged plate this preset draws (its lift's position in `plan.plate.liftsMm`). */
+  readonly plateChunk?: number;
+  /** Diagnostic-only export knobs copied from the packaged collection (a prepared test candidate). */
+  readonly diagnostics?: { readonly plateLiftMm?: number; readonly surface?: Readonly<Record<string, number>> };
 }
 
 const value = (x: Node) => x?.$value;
@@ -192,10 +247,12 @@ export interface ResourceSummary {
 export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, artifactPaths: readonly string[],
   textureSizes: readonly number[], morphTargets: number | null): ResourceSummary {
   const { mesh, morph, app, customization: cc } = r;
-  for (const field of ["renderResourceBlob", "boneNames", "boneRigMatrices", "boundingBox"])
+  // Geometry (render buffers and morph rows) is checked against the planned lifts in plate-geometry.ts.
+  for (const field of ["boneNames", "boneRigMatrices", "boundingBox"])
     ensure(field in mesh && sameJson(mesh[field], r.sourceMesh[field], IGNORED), `Mesh ${field} differs from the source plate`);
-  for (const field of ["blob", "targets"])
-    ensure(sameJson(morph[field], r.sourceMorph[field], IGNORED), `Morph ${field} differs from the source plate`);
+  ensure(sameJson(morph.targets, r.sourceMorph.targets, IGNORED), "Morph targets differs from the source plate");
+  const chunks = Array.isArray(plan.plate?.liftsMm) ? plan.plate!.liftsMm.length : 0;
+  ensure(chunks > 0, "Plan names no plate lift");
   ensure(dep(morph.baseMesh) === plan.mesh, "Morph baseMesh does not reference the planned mesh");
   const targetCount = Array.isArray(morph.targets) ? morph.targets.length : 0;
   ensure(morphTargets === null ? targetCount > 0 : targetCount === morphTargets,
@@ -203,6 +260,7 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   // Material entries: one per distinct template entry, in first-use order across presets.
   const entryNames: string[] = [];
   for (const preset of plan.presets) if (!entryNames.includes(materialOf(preset))) entryNames.push(materialOf(preset));
+  if (chunks > 1) entryNames.push(HIDDEN_ENTRY);
   ensure(mesh.materialEntries?.length === entryNames.length,
     entryNames.length === 1 ? "Mesh must have exactly one material entry" : `Mesh must have exactly ${entryNames.length} material entries`);
   mesh.materialEntries.forEach((entry: Node, i: number) => ensure(value(entry.name) === entryNames[i] && entry.index === i && entry.isLocalInstance === 1,
@@ -212,16 +270,29 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     entryNames.length === 1 ? "Mesh must have exactly one local material" : `Mesh must have exactly ${entryNames.length} local materials`);
   const paramsByEntry = new Map<string, Record<string, Node>>();
   entryNames.forEach((name, i) => {
-    const preset = plan.presets.find(p => materialOf(p) === name)!, route = routeOf(preset), material = materials[i];
+    const material = materials[i];
+    if (name === HIDDEN_ENTRY) {
+      ensure(dep(material.baseMaterial) === ROUTE_SPEC.flat.template, "Hidden chunk material is not based on mesh_decal.mt");
+      const params: Record<string, Node> = {};
+      for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
+      ensure(sameJson(Object.keys(params).sort(), Object.keys(HIDDEN_VALUES).sort()) &&
+        Object.entries(HIDDEN_VALUES).every(([key, want]) => sameFloat32(params[key], want)), "Hidden chunk material must write nothing (all alphas 0)");
+      return;
+    }
+    const preset = plan.presets.find(p => materialOf(p) === name)!, route = routeOf(preset);
     ensure(route !== "fresnel" || plan.presets.filter(p => materialOf(p) === name).length === 1, `Fresnel material ${name} is shared`);
-    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (route === "flat" ? "@preset" : "@faceted"),
+    const surface = route === "flat" ? surfaceOf(preset) : undefined;
+    ensure(route === "flat" || preset.diagnostics?.surface === undefined, `Preset ${preset.name} carries a diagnostic surface on the ${route} route`);
+    ensure(route === "fresnel" ? name.startsWith("@fresnel_") : name === (surface ? diagnosticEntryOf(surface) : route === "flat" ? "@preset" : "@faceted"),
       `Material entry ${name} does not match its ${route} route`);
+    ensure(plan.presets.filter(p => materialOf(p) === name).every(p => sameJson(p.diagnostics?.surface, preset.diagnostics?.surface)),
+      `Material entry ${name} is shared by presets with different surfaces`);
     ensure(dep(material.baseMaterial) === ROUTE_SPEC[route].template,
       route === "flat" ? "Material is not based on mesh_decal.mt" : `Material ${name} is not based on ${ROUTE_SPEC[route].template}`);
     const params: Record<string, Node> = {};
     for (const item of material.values) for (const [key, v] of Object.entries(item)) if (key !== "$type") params[key] = v;
     const expected = expectedMaterialValues(route, preset);
-    if (route === "flat") {
+    if (route === "flat" && !surface) {
       ensure(params.NormalAlpha === 0 && params.AlphaMaskContrast === 0 && params.SecondaryMaskInfluence === 0, "Material normal/mask parameters are not zero");
       ensure([params.DiffuseAlpha, params.RoughnessMetalnessAlpha, params.RoughnessScale, params.MetalnessScale].every(v => v === 1),
         "Material alpha/scale parameters are not one");
@@ -239,13 +310,16 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   const appearances = mesh.appearances.map((a: Node) => value(a.Data.name));
   ensure(sameJson(appearances, plan.presets.map(p => p.appearance)), "Mesh appearances differ from the planned presets");
   const seedPreset = plan.presets[0], seed = mesh.appearances[0].Data;
-  ensure(sameJson(seed.chunkMaterials.map(value), [seedPreset.appearance + materialOf(seedPreset)]),
-    `Seed appearance does not use the ${materialOf(seedPreset)} template`);
+  // One chunk per lift: with several, every appearance names each chunk, its own with its material and the rest hidden.
+  const bound = (preset: VerifierPreset) => chunks > 1
+    ? Array.from({ length: chunks }, (_, chunk) => chunk === preset.plateChunk ? preset.appearance + materialOf(preset) : HIDDEN_ENTRY)
+    : [preset.appearance + materialOf(preset)];
+  ensure(sameJson(seed.chunkMaterials.map(value), bound(seedPreset)), `Seed appearance does not use the ${materialOf(seedPreset)} template`);
   // Stubs expand from the seed; a preset on another entry, or any Fresnel preset, names its own.
-  const explicit = (preset: VerifierPreset) => materialOf(preset) !== materialOf(seedPreset) || routeOf(preset) === "fresnel";
+  const explicit = (preset: VerifierPreset) => chunks > 1 || materialOf(preset) !== materialOf(seedPreset) || routeOf(preset) === "fresnel";
   mesh.appearances.slice(1).forEach((a: Node, i: number) => {
     const preset = plan.presets[i + 1];
-    if (explicit(preset)) ensure(sameJson(a.Data.chunkMaterials?.map(value), [preset.appearance + materialOf(preset)]),
+    if (explicit(preset)) ensure(sameJson(a.Data.chunkMaterials?.map(value), bound(preset)),
       `Appearance ${preset.appearance} must name ${materialOf(preset)}`);
     else ensure(!a.Data.chunkMaterials?.length, "Only the seed appearance may carry chunk materials");
   });

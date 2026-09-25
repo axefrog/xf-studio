@@ -1,0 +1,4151 @@
+{
+  "schema": "xfas/collection-1",
+  "id": "0170d3e0-1f01-4a51-9c3e-0000000000c0",
+  "name": "XF plate depth candidate (diagnostic)",
+  "presets": [
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000001",
+      "name": "Depth A · 0 mm control",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-1",
+            "name": "Satin lid",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-2",
+            "name": "Matte under-eye",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.33,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.33,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000002",
+      "name": "Depth B · +0.1 mm",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-3",
+            "name": "Satin lid",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-4",
+            "name": "Matte under-eye",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.33,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.33,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000003",
+      "name": "Depth C · +0.2 mm",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-5",
+            "name": "Satin lid",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-6",
+            "name": "Matte under-eye",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.33,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.33,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000004",
+      "name": "Depth D · +0.4 mm",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-7",
+            "name": "Satin lid",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-8",
+            "name": "Matte under-eye",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": true,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.33,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.266,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.33,
+                "v": 0.286,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000005",
+      "name": "Gloss A · as before",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-9",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-10",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-11",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-12",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-13",
+            "name": "Glossy right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-14",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000006",
+      "name": "Gloss B · skin rough",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-15",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-16",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-17",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-18",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-19",
+            "name": "Glossy right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-20",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000007",
+      "name": "Gloss C · all rough",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-21",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-22",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-23",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-24",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-25",
+            "name": "Glossy right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-26",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000008",
+      "name": "Gloss D · rough +0.12",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-27",
+            "name": "Matte",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-28",
+            "name": "Satin",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-29",
+            "name": "Glossy (single lobe)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-30",
+            "name": "Metallic",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-31",
+            "name": "Glossy right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "glossy",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            }
+          },
+          {
+            "id": "depth-32",
+            "name": "Matte right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "matte",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000009",
+      "name": "Shimmer · strong",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-33",
+            "name": "Satin control",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.35,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-34",
+            "name": "Shimmer fine (Board 2)",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.346,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.398,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.346,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 128,
+              "density": 0.65,
+              "tilt": 0.65,
+              "seed": 2077
+            }
+          },
+          {
+            "id": "depth-35",
+            "name": "Shimmer strong",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.394,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.394,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 64,
+              "density": 0.8,
+              "tilt": 1,
+              "seed": 2078
+            }
+          },
+          {
+            "id": "depth-36",
+            "name": "Shimmer strong right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.65,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.65,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 64,
+              "density": 0.8,
+              "tilt": 1,
+              "seed": 2078
+            }
+          },
+          {
+            "id": "depth-37",
+            "name": "Shimmer fine right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "shimmer",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.602,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.654,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.602,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            },
+            "optics": {
+              "model": "game-matched-1"
+            },
+            "flakes": {
+              "cells": 128,
+              "density": 0.65,
+              "tilt": 0.65,
+              "seed": 2077
+            }
+          },
+          {
+            "id": "depth-38",
+            "name": "Satin control right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.212,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.606,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "0170d3e0-1f01-4a51-9c3e-000000000010",
+      "name": "Metal ramp · lifted",
+      "revision": 1,
+      "recipe": {
+        "schema": "xfs/recipe-11",
+        "uv": "gltf-uv0-top-left",
+        "layers": [
+          {
+            "id": "depth-39",
+            "name": "Satin base left",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-40",
+            "name": "Metal ramp 0 to 0.3",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.462,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.3,
+                "v": 0.211,
+                "weight": 0,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.372,
+                "v": 0.211,
+                "weight": 0.5,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.444,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.372,
+                "v": 0.248,
+                "weight": 0.5,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.3,
+                "v": 0.248,
+                "weight": 0,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-41",
+            "name": "Satin base right",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "regular",
+            "opacity": 1,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.556,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.211,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.7,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.556,
+                "v": 0.248,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-42",
+            "name": "Metal 0.05",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.077,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6739999999999999,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.698,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.698,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6739999999999999,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-43",
+            "name": "Metal 0.1",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.154,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6454,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6694,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6694,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6454,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-44",
+            "name": "Metal 0.15",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.231,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.6168,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6408,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6408,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6168,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-45",
+            "name": "Metal 0.2",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.308,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.5882000000000001,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6122000000000001,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.6122000000000001,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5882000000000001,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          },
+          {
+            "id": "depth-46",
+            "name": "Metal 0.3",
+            "enabled": true,
+            "color": "#6d4a7e",
+            "finish": "metallic",
+            "opacity": 0.462,
+            "feather": 0.004,
+            "symmetry": false,
+            "pathMode": "bezier",
+            "points": [
+              {
+                "u": 0.5596,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5836,
+                "v": 0.215,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5836,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              },
+              {
+                "u": 0.5596,
+                "v": 0.244,
+                "weight": 1,
+                "handles": {
+                  "mode": "corner",
+                  "in": {
+                    "u": 0,
+                    "v": 0
+                  },
+                  "out": {
+                    "u": 0,
+                    "v": 0
+                  }
+                }
+              }
+            ],
+            "fields": [],
+            "strength": {
+              "mode": "smooth-boundary",
+              "blend": 0.0005
+            },
+            "softness": {
+              "mode": "uniform"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "diagnostics": {
+    "schema": "xfs/export-diagnostics-1",
+    "presets": {
+      "0170d3e0-1f01-4a51-9c3e-000000000001": {
+        "plateLiftMm": 0
+      },
+      "0170d3e0-1f01-4a51-9c3e-000000000002": {
+        "plateLiftMm": 0.1
+      },
+      "0170d3e0-1f01-4a51-9c3e-000000000003": {
+        "plateLiftMm": 0.2
+      },
+      "0170d3e0-1f01-4a51-9c3e-000000000006": {
+        "surface": {
+          "RoughnessMetalnessAlpha": 0
+        }
+      },
+      "0170d3e0-1f01-4a51-9c3e-000000000007": {
+        "surface": {
+          "RoughnessScale": 0,
+          "RoughnessBias": 1,
+          "MetalnessScale": 0,
+          "MetalnessBias": 0
+        }
+      },
+      "0170d3e0-1f01-4a51-9c3e-000000000008": {
+        "surface": {
+          "RoughnessBias": 0.12
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { parseExportDiagnostics } from "./export-diagnostics";
 import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import { layerExport, planPresetExport, type ExportAdapterId } from "./finish-export";
 import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
@@ -55,7 +56,9 @@ export function preparePackageCollection(value: unknown) {
     presets.push({ ...preset, recipe: { ...preset.recipe, layers } });
   }
   if (!presets.length) throw Error("No mod files can be made: no preset has an active layer with an exportable finish (Matte, Satin, Metallic, or a game-matched Glossy, Shimmer or Colour-shifting layer). Your collection is unchanged.");
-  const packaged: PresetCollection = { ...source, presets };
+  // Diagnostic knobs of a prepared test candidate stay with the packaged copy for the presets it keeps.
+  const diagnostics = parseExportDiagnostics((value as { diagnostics?: unknown } | null)?.diagnostics, presets.map(p => p.id));
+  const packaged: PresetCollection = { ...source, presets, ...(diagnostics ? { diagnostics } : {}) };
   const plan = planCollection(packaged);
   return { source, packaged, plan, omissions, experimental };
 }

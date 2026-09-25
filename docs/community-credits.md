@@ -158,6 +158,10 @@ These mods were studied from local installations. Where the private preview disp
 
 An inventory-worn earring mod that provided a packaging precedent for our jewellery construction-set design. Studied only; its individual authorship is still being confirmed.
 
+### Limerence
+
+[Limerence X AllieKat Winterkissed AXL Eyeshadows](https://www.nexusmods.com/cyberpunk2077/mods/18323), a collaboration with AllieKat per its title and description. Its eyeshadow mesh and morph target reuse the base game's eye-makeup geometry unchanged, which confirmed that working face-decal mods sit at the vanilla 0.40 mm offset above the head. Studied only; private local reference.
+
 ### MELUMINARY
 
 [MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant. Private local reference only; its creator credits and permissions are still being confirmed.

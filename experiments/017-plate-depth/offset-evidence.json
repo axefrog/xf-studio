@@ -1,0 +1,315 @@
+{
+  "schema": "xfs/plate-depth-evidence-1",
+  "units": "millimetres; + = outside the head along its normals",
+  "head": {
+    "vertices": 7186,
+    "triangles": 13186,
+    "lodLevels": 1,
+    "note": "lodLevelInfo [0], renderLODs [0], one chunk with lodMask 1"
+  },
+  "decals": {
+    "makeup_eyes_01": {
+      "vertices": 1152,
+      "chunks": 1,
+      "lodMasks": [
+        1
+      ],
+      "lodLevelInfo": [
+        0
+      ],
+      "vertexFactory": 4,
+      "neutralSignedDistance": {
+        "min": 0.1263,
+        "p1": 0.2956,
+        "median": 0.3994,
+        "p99": 0.4045,
+        "max": 0.4065
+      },
+      "bestNormalOffset": {
+        "amountMm": 0.4,
+        "medianResidualMm": 0.00506,
+        "p99ResidualMm": 0.133,
+        "distinctHeadVertices": 1152
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h171",
+            "minMm": -0.469
+          },
+          {
+            "target": "h091",
+            "minMm": -0.4008
+          },
+          {
+            "target": "h141",
+            "minMm": -0.3995
+          },
+          {
+            "target": "h061",
+            "minMm": -0.3717
+          },
+          {
+            "target": "h151",
+            "minMm": -0.3586
+          }
+        ],
+        "medianOfMediansMm": 0.3994,
+        "verticesBelowHeadAcrossTargets": 54
+      }
+    },
+    "makeup_lips_01": {
+      "vertices": 693,
+      "chunks": 1,
+      "lodMasks": [
+        1
+      ],
+      "lodLevelInfo": [
+        0
+      ],
+      "vertexFactory": 4,
+      "neutralSignedDistance": {
+        "min": -0.4022,
+        "p1": -0.3927,
+        "median": 0.4,
+        "p99": 0.4057,
+        "max": 0.4063
+      },
+      "bestNormalOffset": {
+        "amountMm": 0.4,
+        "medianResidualMm": 0.00459,
+        "p99ResidualMm": 0.0889,
+        "distinctHeadVertices": 685
+      }
+    },
+    "makeup_freckles_01": {
+      "vertices": 1333,
+      "chunks": 2,
+      "lodMasks": [
+        1,
+        1
+      ],
+      "lodLevelInfo": [
+        0
+      ],
+      "vertexFactory": 4,
+      "neutralSignedDistance": {
+        "min": 0.264,
+        "p1": 0.36,
+        "median": 0.3989,
+        "p99": 0.404,
+        "max": 0.406
+      },
+      "bestNormalOffset": {
+        "amountMm": 0.4,
+        "medianResidualMm": 0.00532,
+        "p99ResidualMm": 0.0959,
+        "distinctHeadVertices": 1281
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h192",
+            "minMm": 0.1126
+          },
+          {
+            "target": "h132",
+            "minMm": 0.1429
+          },
+          {
+            "target": "h202",
+            "minMm": 0.159
+          },
+          {
+            "target": "h193",
+            "minMm": 0.1674
+          },
+          {
+            "target": "h133",
+            "minMm": 0.2323
+          }
+        ],
+        "medianOfMediansMm": 0.3988,
+        "verticesBelowHeadAcrossTargets": 0
+      }
+    },
+    "pimples_01": {
+      "vertices": 192,
+      "chunks": 2,
+      "lodMasks": [
+        1,
+        1
+      ],
+      "lodLevelInfo": [
+        0
+      ],
+      "vertexFactory": 4,
+      "neutralSignedDistance": {
+        "min": 0.337,
+        "p1": 0.3794,
+        "median": 0.3969,
+        "p99": 0.4026,
+        "max": 0.4045
+      },
+      "bestNormalOffset": {
+        "amountMm": 0.4,
+        "medianResidualMm": 0.02459,
+        "p99ResidualMm": 0.1003,
+        "distinctHeadVertices": 192
+      }
+    }
+  },
+  "builtInPlate": {
+    "vertices": 1620,
+    "lift0.0mm": {
+      "neutralSignedDistance": {
+        "min": 0.0,
+        "p1": 0.0,
+        "median": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h011",
+            "minMm": 0.0
+          },
+          {
+            "target": "h012",
+            "minMm": 0.0
+          },
+          {
+            "target": "h013",
+            "minMm": 0.0
+          },
+          {
+            "target": "h014",
+            "minMm": 0.0
+          },
+          {
+            "target": "h015",
+            "minMm": 0.0
+          }
+        ],
+        "medianOfMediansMm": 0.0,
+        "verticesBelowHeadAcrossTargets": 0
+      }
+    },
+    "lift0.1mm": {
+      "neutralSignedDistance": {
+        "min": 0.0119,
+        "p1": 0.0655,
+        "median": 0.1,
+        "p99": 0.1,
+        "max": 0.1
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h111",
+            "minMm": -0.1
+          },
+          {
+            "target": "h061",
+            "minMm": -0.1
+          },
+          {
+            "target": "h171",
+            "minMm": -0.0997
+          },
+          {
+            "target": "h031",
+            "minMm": -0.0991
+          },
+          {
+            "target": "h021",
+            "minMm": -0.099
+          }
+        ],
+        "medianOfMediansMm": 0.1,
+        "verticesBelowHeadAcrossTargets": 61
+      }
+    },
+    "lift0.2mm": {
+      "neutralSignedDistance": {
+        "min": 0.0222,
+        "p1": 0.1254,
+        "median": 0.1999,
+        "p99": 0.2,
+        "max": 0.2
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h111",
+            "minMm": -0.2
+          },
+          {
+            "target": "h061",
+            "minMm": -0.2
+          },
+          {
+            "target": "h171",
+            "minMm": -0.1995
+          },
+          {
+            "target": "h031",
+            "minMm": -0.1982
+          },
+          {
+            "target": "h021",
+            "minMm": -0.198
+          }
+        ],
+        "medianOfMediansMm": 0.1999,
+        "verticesBelowHeadAcrossTargets": 62
+      }
+    },
+    "lift0.4mm": {
+      "neutralSignedDistance": {
+        "min": -0.0935,
+        "p1": 0.2274,
+        "median": 0.3998,
+        "p99": 0.4,
+        "max": 0.4
+      },
+      "morphs": {
+        "worstTargets": [
+          {
+            "target": "h111",
+            "minMm": -0.4
+          },
+          {
+            "target": "h061",
+            "minMm": -0.4
+          },
+          {
+            "target": "h171",
+            "minMm": -0.3989
+          },
+          {
+            "target": "h031",
+            "minMm": -0.3963
+          },
+          {
+            "target": "h021",
+            "minMm": -0.396
+          }
+        ],
+        "medianOfMediansMm": 0.3998,
+        "verticesBelowHeadAcrossTargets": 302
+      }
+    }
+  },
+  "modDecals": {
+    "xfea": {
+      "vertices": 1152,
+      "positionsEqualVanillaEyeMakeup": true
+    },
+    "winterkissed_w": {
+      "vertices": 1152,
+      "positionsEqualVanillaEyeMakeup": true
+    }
+  }
+}

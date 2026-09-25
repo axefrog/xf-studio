@@ -1,6 +1,6 @@
 # Shimmer / pearl
 
-**Status:** experimental export (faceted decal), game-matched model only. Not seen in game.
+**Status:** experimental export (faceted decal), game-matched model only. First seen in game on 25 September: the default fine facets (128 cells, tilt 0.65) read as a diffused gloss rather than sparkle at photo-mode distances. [Experiment 017](../../../experiments/017-plate-depth/README.md) tests a stronger setting (64 cells, tilt 1.0) beside it.
 
 ## Intended look
 
