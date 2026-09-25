@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit | Date | Scope | Result |
 |---|---|---|---|
+| `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
 | `b9597bd` | 2026-09-25 | First deep review: core, pipeline/resolver/adapters, presentation/desktop (three parallel reviewers) | 7 High, 30 Medium, 18 Low. Over the High budget, so feature merges are paused except critical-path work. |
 
 ## Open findings
@@ -42,6 +43,14 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
+| PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | Fixing: claude/wolvenkit-fetch |
+| PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | Fixing: claude/wolvenkit-fetch |
+| PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives | Open (platform step 7) |
+| PREV-04 | Med | Preview export | Catch-all blames WolvenKit for cache/disk/JSON errors | Fixing: claude/wolvenkit-fetch |
+| PREV-05 | Med | Preview export | 'Head missing' inferred from missing outputs; tool failure misreported as blocked | Fixing: claude/wolvenkit-fetch |
+| PREV-06 | Med | Preview export | Duplicated WolvenKit runner (sixth invocation path) with preview-specific errors | Fixing: claude/wolvenkit-fetch |
+| PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
+| PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
 | PIPE-04 | Med | Resolver | Resolver WolvenKit runner: no timeout/exit check, poisoned promise chain, non-atomic cache, cache not keyed by WolvenKit version | Open |
 | PIPE-05 | Med | Pipeline | Readiness and diagnostic tools hard-code MO2 mods/profiles dirs | Open |
@@ -75,6 +84,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 **Low findings** (picked up opportunistically). Paths are relative to `projects/xf-studio/authoring`.
 
+- **PREV-09..16** (preview export, 25 Sep focused review): silent fallback to unhashed prepared files; host precedence drift; non-atomic cache write; no cache eviction or work-folder sweep; duplicate fingerprints; synchronous hashing on the request path; readiness passed via data attributes; test gaps (loader, error mapping, cache reuse).
+
 - **PIPE-15:** a candidate that fails the second result gate stays in `package-candidates/` (`desktop/build.ts:206-212`).
 - **PIPE-16:** plate input hashes aren't compared start vs end, and the verifier hard-codes 105 morphs. Being fixed in cleanup-pipeline.
 - **PIPE-17:** `reg.exe` output is decoded as UTF-8, and process output is decoded per chunk (multi-byte splits).
@@ -96,7 +107,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- Generic game asset export (`game-asset-export*.ts`) and the derived 3D preview core (`preview-core-*.ts`, `render-detail.ts`, `core-detail-loader.ts`, desktop `preview-preparation.js`), 25 September 2026.
+None since `f3f7147`.
 
 ## Fixed in claude/cleanup-core
 
