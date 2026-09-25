@@ -1,12 +1,14 @@
 /**
  * Static checks over a built site: bun tools/check.ts [distDir]
  * Structure and accessibility basics, link integrity (including repository links against tracked files),
- * the content/asset policy, the release-claim guard and the no-dates guard for future directions. Exits non-zero on any issue.
+ * the content/asset policy, the personal-data guard, the release-claim guard, the no-dates guard for future directions and the
+ * knowledge pages' caveat, date, source and correction links. Exits non-zero on any issue.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { buildGuide } from "../../authoring/tools/build-style-guide";
 import { basePath, loadConfig, repoRoot, siteRoot, styleGuideSource, type SiteConfig } from "./config";
+import { findPersonalData } from "./privacy";
 
 export type Issue = { file: string; message: string };
 export type CheckOptions = {
@@ -47,11 +49,13 @@ type PageScan = {
   csp: boolean; charset: boolean; viewport: boolean; headings: number[]; ids: string[];
   links: { attr: string; value: string; tag: string }[]; text: string; releaseStatus: boolean; download: string[]; main: boolean;
   problems: string[]; labelledBy: string[]; futureSections: number; futureText: string;
+  knowledge: { caveat: number; updated: number; source: number; improve: number };
 };
 
 async function scanPage(html: string): Promise<PageScan> {
   const scan: PageScan = { lang: null, title: "", description: null, canonical: null, robots: null, csp: false, charset: false, viewport: false,
-    headings: [], ids: [], links: [], text: "", releaseStatus: false, download: [], main: false, problems: [], labelledBy: [], futureSections: 0, futureText: "" };
+    headings: [], ids: [], links: [], text: "", releaseStatus: false, download: [], main: false, problems: [], labelledBy: [], futureSections: 0, futureText: "",
+    knowledge: { caveat: 0, updated: 0, source: 0, improve: 0 } };
   const named: { what: string; label: string | null; text: string }[] = [];
   const nameHandler = (what: string) => ({
     element(el: HTMLRewriterTypes.Element) {
@@ -84,6 +88,10 @@ async function scanPage(html: string): Promise<PageScan> {
     .on("[data-release-status]", { element() { scan.releaseStatus = true; } })
     .on("[data-download]", { element(el) { scan.download.push(el.getAttribute("data-download")!); } })
     .on("[data-future]", { element() { scan.futureSections++; scan.futureText += " "; }, text(chunk) { scan.futureText += chunk.text; } })
+    .on("[data-knowledge-caveat]", { element() { scan.knowledge.caveat++; } })
+    .on("[data-knowledge-updated]", { element() { scan.knowledge.updated++; } })
+    .on("a[data-knowledge-source]", { element(el) { if (el.getAttribute("href")) scan.knowledge.source++; } })
+    .on("a[data-knowledge-improve]", { element(el) { if (el.getAttribute("href")) scan.knowledge.improve++; } })
     .on("[aria-labelledby]", { element(el) { scan.labelledBy.push(...el.getAttribute("aria-labelledby")!.split(/\s+/)); } })
     .on("*", { element(el) {
       for (const [name] of el.attributes) {
@@ -133,11 +141,13 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
     const size = statSync(join(dir, file)).size;
     bytes += size;
     if (!ALLOWED_EXTENSIONS.has(extname(file).toLowerCase())) add(file, `file type ${extname(file) || "(none)"} is not allowed on the public site; see README “Content policy”`);
-    const fileBudget = file === guideFile ? config.budgets.styleGuideBytes : config.budgets.fileBytes;
+    const fileBudget = file === guideFile ? config.budgets.styleGuideBytes
+      : file.startsWith("knowledge/") ? config.budgets.knowledgeFileBytes : config.budgets.fileBytes;
     if (size > fileBudget) add(file, `${size} bytes exceeds the per-file budget of ${fileBudget}`);
     if ([".html", ".css", ".js", ".svg", ".xml", ".txt"].includes(extname(file))) {
       const text = readFileSync(join(dir, file), "utf8");
       if (PRIVATE_PATH.test(text)) add(file, `contains a local machine path: ${PRIVATE_PATH.exec(text)![0]}`);
+      for (const found of findPersonalData(text)) add(file, `contains personal data (${found.name}): ${found.match}`);
       if (/file:\/\//i.test(text)) add(file, "contains a file:// URL");
       if (/\{\{\w+\}\}/.test(text)) add(file, "contains an unrendered {{placeholder}}");
       if (file.endsWith(".css") || file.endsWith(".js")) {
@@ -190,6 +200,15 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
     }
     const schedule = FUTURE_SCHEDULE.exec(scan.futureText.replace(/\s+/g, " "));
     if (schedule) add(page, `future-direction text ([data-future]) contains a date or schedule: “${schedule[0]}”`);
+    if (page.startsWith("knowledge/")) {
+      // Every knowledge page says it may be wrong and how to correct it; articles also show their date and source.
+      if (scan.knowledge.caveat !== 1) add(page, `knowledge pages need exactly one [data-knowledge-caveat] banner (found ${scan.knowledge.caveat})`);
+      if (page !== "knowledge/index.html") {
+        if (!scan.knowledge.updated) add(page, "knowledge page is missing its [data-knowledge-updated] date");
+        if (!scan.knowledge.source) add(page, "knowledge page is missing its a[data-knowledge-source] link to the Markdown on GitHub");
+        if (!scan.knowledge.improve) add(page, "knowledge page is missing its a[data-knowledge-improve] link");
+      }
+    }
     if (page === "index.html" && !scan.futureSections) add(page, "home page must mark its vision and directions sections with [data-future] so the no-dates guard applies");
 
     const pageUrl = new URL(page === "index.html" ? "" : page, base);
@@ -203,9 +222,11 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
       if (/\b(?:127\.0\.0\.1|localhost)\b/.test(value)) { add(page, `link to localhost: ${value}`); continue; }
       const url = new URL(value, pageUrl);
       if (DOWNLOADABLE.test(url.pathname)) add(page, `link to a downloadable package/asset: ${value}`);
-      if (/\/releases(?:\/|$)/.test(url.pathname)) {
+      const repoPath = new URL(config.repoUrl + "/").pathname.replace(/\/$/, "");
+      // Only XF Studio's own releases are guarded; citing another project's release page (e.g. a tool version) is fine.
+      const ownRepo = url.origin === new URL(config.repoUrl).origin && (url.pathname === repoPath || url.pathname.startsWith(repoPath + "/"));
+      if ((ownRepo || url.origin === base.origin) && /\/releases(?:\/|$)/.test(url.pathname)) {
         const allowed = config.release ? [`/releases`, `/releases/tag/${encodeURIComponent(config.release.tag)}`] : [];
-        const repoPath = new URL(config.repoUrl + "/").pathname.replace(/\/$/, "");
         if (config.releaseStatus === "unreleased") add(page, `link to releases while unreleased: ${value}`);
         // /releases/latest skips pre-releases and /releases/download/ is a direct asset; link the configured tag page.
         else if (url.origin !== "https://github.com" || !allowed.some(path => url.pathname === repoPath + path))

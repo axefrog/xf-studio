@@ -26,7 +26,7 @@ Template defaults [resource]: `AlphaCutoff` 0.33, `RoughnessScale` 1, `Roughness
 | Pass | What it does | Grade |
 |---|---|---|
 | `hair_alpha_accum` | Remaps `a = saturate(max(Strand_Alpha.r − AlphaCutoff, 0)/(1 − AlphaCutoff))`, times 1.33 when a global flag is set. Keeps the fragment when `a` exceeds the dither threshold below. Inserts `depth \| round(saturate(Strand_Alpha.r)·63)` into a 3-deep k-buffer (atomic max, reverse-Z). The colour target keeps transmittance `Π(1−Strand_Alpha.r)`. | [source] |
-| `hair_basecolor_blend` | For fragments in the k-buffer, adds `(|colour|·w, w)` with `w = stored alpha/63` (additive blend). | [source] |
+| `hair_basecolor_blend` | For fragments in the k-buffer, adds `(\|colour\|·w, w)` with `w = stored alpha/63` (additive blend). | [source] |
 | `hair_gbuffer_solid` | Writes the G-buffer for the most opaque of the two front k-buffer layers, with the same dithered test. GBuffer0 = `sqrt(Σwc/Σw)`. GBuffer1 = packed strand tangent frame. GBuffer2 = `(0, roughness, 1/3 + 2/3·transmittance·thickness/Scattering, Strand_ID)`. | [source] |
 
 **The dither.** Both passes compute, from the pixel centre `(x, y)` and a per-frame counter `f` (a camera-constant register; its meaning as a frame counter is [hypothesis]):
@@ -72,13 +72,13 @@ The Hair branch (stencil class 4) of the global-light compute programs was decod
 
 | Term | 2.31 arithmetic | Grade |
 |---|---|---|
-| Frame | T from GBuffer1 (strand); `sinθL = T·L`, `sinθV = T·V`, `cosθD = cos(|asin sinθV − asin sinθL|/2)`, `cosφ` between L and V projected normal to T | [source] |
+| Frame | T from GBuffer1 (strand); `sinθL = T·L`, `sinθV = T·V`, `cosθD = cos(\|asin sinθV − asin sinθL\|/2)`, `cosφ` between L and V projected normal to T | [source] |
 | Colour | `C = clamp(albedo·(1−metal)·cb0[17].y, 1e−5, 1)` (albedo multiplier) | [source] |
 | **Per-strand shift** | `ρ = cb0[17].z + (cb0[17].w − cb0[17].z)·frac(frac(ID·0.0729477)·52.98292)`, with ID the stored `Strand_ID` | [source] |
 | **R** (white) | Gaussian `M((r/cb0[17].x)²·√2·cos(φ/2), sinθL + sinθV − 2 sin α (cos α cos(φ/2) cosθV + sin α sinθV))` with `α = cb0[16].x + ρ`. `N = cos(φ/2)/4`. Schlick F0 0.0466 at `√(½ + ½V·L)`. Scaled by `cb0[12].x` and the gate `clamp(wrap(N·L, cb0[19].y) + 1 − cb0[19].z)` | [source] |
 | **TRT** (tinted) | `M(2r², sinθL + sinθV − ρ − cb0[16].z)`, `(1−f)²f` with f at `cosθD/2`, `C^(0.8/cosθD)`, `exp(cb0[20].x·cosφ − cb0[20].y)`, scaled by `cb0[12].z` | [source] |
 | **TT** | Not present in this global path | [source] |
-| **Diffuse** ("multiple scatter") | `C · (1/π) · lerp(w, 1 − |sinθL|, cb0[18].y) · clamp(w + 1 − cb0[18].w) · shadow · cb0[12].w · pow(C/luma601(C), 1 − shadow)`, with `w = wrap(N·L, cb0[18].x)` | [source] |
+| **Diffuse** ("multiple scatter") | `C · (1/π) · lerp(w, 1 − \|sinθL\|, cb0[18].y) · clamp(w + 1 − cb0[18].w) · shadow · cb0[12].w · pow(C/luma601(C), 1 − shadow)`, with `w = wrap(N·L, cb0[18].x)` | [source] |
 | wrap(x, k) | `saturate((x + k)/(1 + k)²)` | [source] |
 | r | GBuffer2.y clamped to [0.04, 1] | [source] |
 
@@ -115,7 +115,7 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 
 | Game step | Preview | Status |
 |---|---|---|
-| Profile bake, truncated lookup, overlay, shadow term, `|c|` | Float profile texture (ID row, root-to-tip row), `texelFetch` | Faithful to §3; bake grade [hypothesis] |
+| Profile bake, truncated lookup, overlay, shadow term, `\|c\|` | Float profile texture (ID row, root-to-tip row), `texelFetch` | Faithful to §3; bake grade [hypothesis] |
 | Coverage | Remapped `Strand_Alpha.r`, stretched over the dither range (`hairResolvedCoverage`); strands and saved lashes are unblended, depth-writing, MSAA alpha-to-coverage with no alpha test (lashes still draw after the makeup layers) | Coverage fraction and its nesting faithful to §2 (see below); colour mixing within a pixel approximate (no 3-layer k-buffer) |
 | Hair cap (`mesh_decal_gradientmap_recolor.mt`) | Mask-blended decal over the scalp (no depth write, no alpha test); gradient indexed by the mask | Linear "over" blend, lighter at partial coverage than the engine's sqrt-space blend |
 | Lighting | Hair-class direct light (§5, gates and per-strand shift included) for key and fill lights on the skinned bitangent; card specular off; Three's ambient diffuse scaled by `EnvProbe/MultiScatter` | Structure [source], constants [community]; environment path approximated, no environment R/TRT |

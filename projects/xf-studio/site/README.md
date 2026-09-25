@@ -1,6 +1,6 @@
 # XF Studio public site
 
-The public face of XF Studio: a small static site describing the product, its verified current capabilities, honest status, future directions, documentation and community credits. It presents XF Studio as a customisation studio for Cyberpunk 2077 that starts with the user's own V and may grow into other areas of the game, with eye makeup as its first working feature. It deploys through the repository workflow at **https://axefrog.github.io/xf-studio/** (see [Repository settings](#repository-settings-one-time)).
+The public face of XF Studio: a small static site describing the product, its verified current capabilities, honest status, future directions, documentation, community credits and a [knowledge section](#knowledge-section) generated from the repository's R&D knowledge base. It presents XF Studio as a customisation studio for Cyberpunk 2077 that starts with the user's own V and may grow into other areas of the game, with eye makeup as its first working feature. It deploys through the repository workflow at **https://axefrog.github.io/xf-studio/** (see [Repository settings](#repository-settings-one-time)).
 
 The public site is independent of the Studio app at runtime and has its own `package.json`, tests and ignore rules. Its design follows the Studio's visual language. The [authoritative interface style guide](https://axefrog.github.io/xf-studio/style-guide.html) is published as a separate, directly viewable reference from the [generated local source](../authoring/public/style-guide.html); it is not a marketing page. The deployment workflow also watches the guide and its design sources. The site check rebuilds the guide and rejects stale source or a published copy that differs from it. The published guide URL was verified after the first deployment.
 
@@ -21,14 +21,16 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 
 | Path | Purpose |
 |---|---|
-| `site.config.json` | Site name, base URL, repository URL/branch, author, `statusReviewed` date, `releaseStatus` and `release`, navigation and size budgets. |
+| `site.config.json` | Site name, base URL, repository URL/branch, author, `statusReviewed` date, `releaseStatus` and `release`, navigation and size budgets (`knowledgeFileBytes` is the per-file budget for generated knowledge pages). |
 | `src/layout.html` | Shared head, header, theme switch and footer. |
 | `src/pages/*.html` | One file per page, starting with a `<!--page {json} -->` header. |
+| `src/knowledge/index.html`, `page.html` | Templates for the generated knowledge index and for each knowledge page. |
 | `src/assets/` | `site.css`, `theme.js` and `favicon.svg`. All original; no fonts or raster images. |
 | `../authoring/public/style-guide.html` | Generated Studio reference copied byte-for-byte to `dist/style-guide.html`; design source changes require regeneration. |
 | `tools/build.ts`, `check.ts`, `serve.ts`, `qa.ts`, `cdp.ts`, `config.ts` | Build, checks, local server and browser QA. |
 | `tools/release.ts` | Renders the hero release statement, the home page `#download` section and the description's release summary from the config. |
-| `tests/site.test.ts` | Unit tests. |
+| `tools/knowledge.ts`, `markdown.ts`, `privacy.ts`, `html.ts` | Knowledge section generator, Markdown rendering on Bun's built-in parser, the personal-data guard and shared HTML escaping. |
+| `tests/site.test.ts`, `tests/knowledge.test.ts` | Unit tests. |
 | `evidence/` | Concise, committed QA records. Screenshots stay in ignored `.evidence/`. |
 
 ## Updating content
@@ -45,6 +47,18 @@ Run from this folder with Bun 1.4.2 (the repository's toolchain version):
 - Repository links use `{{blob}}/<path>`. The check verifies that every such target is a **tracked** file, so ignored local files cannot slip in as links.
 
 **Credits.** `credits.html` summarises [docs/community-credits.md](../../../docs/community-credits.md), which remains authoritative. When that record gains or corrects an entry, update the public summary in the same checkpoint: copy names exactly as evidenced, never guess authorship, keep the kind of use explicit (learning, dependency, private local preview) and keep unresolved attributions visible. The site's own design and code came from the Studio style guide and official GitHub documentation, not from community sources.
+
+## Knowledge section
+
+`knowledge/` on the site is generated at build time from the repository's [`knowledge/*.md`](../../../knowledge/README.md) pages, so it follows the knowledge base without hand copying. `tools/knowledge.ts` reads [`knowledge/README.md`](../../../knowledge/README.md) for the topic list, each topic's one-line summary and maturity, and the evidence-grade legend.
+
+- **What is published.** Only topics whose maturity is Draft or Solid ([public knowledge rules](../../../research/backlog/public-knowledge-site.md)). Seed topics appear on the index under “Not published yet”, without a link. A `knowledge/*.md` file missing from the README's Topics table, or a Topics link to a missing file, fails the build.
+- **Every page** carries the “research in progress, may be wrong” banner (`[data-knowledge-caveat]`), the evidence-grade legend, a “last updated” date (the file's last commit), a link to its Markdown on GitHub, an “Improve this page” link (a prefilled GitHub issue), an edit link, and a footer pointing to the credits. Inline citations and links are kept exactly as written. `tools/check.ts` fails a knowledge page without the banner, date, source or improve link.
+- **Rendering.** Bun's built-in GFM parser (no dependency), with GitHub-compatible heading ids so anchors shared from GitHub work here, tables in keyboard-scrollable regions, evidence grades such as `[source]` shown as labels, and code spans that wrap only at path separators and underscores. The site cannot run Mermaid under its Content-Security-Policy, so a flowchart is listed as text (its arrows and boxes), with its source and a link to GitHub's drawing. Images are refused; link to the file instead.
+- **Links.** Links to other published knowledge pages stay on the site and `README.md` goes to the knowledge index. Every other repository link goes to GitHub (`blob` for files, `tree` for folders) and must be a tracked file. Links into `research/consumers/`, `inventory/`, `local/`, `captures/` or `experiments/*/generated/` fail the build even when tracked, since those hold private or raw third-party data.
+- **Privacy.** The generator refuses a page containing a user-profile path (`C:\Users\<name>`, `C:/Users/<name>`, `/home/<name>`, `/Users/<name>`) or an e-mail address (`tools/privacy.ts`), and the check applies the same guard to every published file.
+- **Tables.** GFM splits a table row on every unescaped `|`, even inside code, silently losing content; on GitHub too. The build fails on a row whose cell count differs from its header. Escape such pipes as `\|`.
+- **Dates.** “Last updated” needs full git history; the build refuses a shallow clone, so the Pages workflow checks out with `fetch-depth: 0`. A file that has never been committed shows “not yet committed”.
 
 ## Design
 
@@ -81,8 +95,8 @@ It also captures a forced-colours view. To review the pre-release state before s
 
 `.github/workflows/pages.yml` (repository root):
 
-- **Triggers.** Pushes to `main` that touch this folder, the generated style guide, its design CSS/source or the workflow; pull requests that touch them (build, test and check only); and manual runs from the Actions tab (**Run workflow**). Manual runs on another branch build but do not deploy.
-- **Build job.** Full shallow checkout (needed to validate repository links), Bun 1.4.2, `bun test`, build with the base URL from `actions/configure-pages`, `bun tools/check.ts`, then `actions/upload-pages-artifact` of `dist/`.
+- **Triggers.** Pushes to `main` that touch this folder, the `knowledge/` pages, the generated style guide, its design CSS/source or the workflow; pull requests that touch them (build, test and check only); and manual runs from the Actions tab (**Run workflow**). Manual runs on another branch build but do not deploy.
+- **Build job.** Full checkout with history (`fetch-depth: 0`: repository links are validated against tracked files, and knowledge pages show last-commit dates), Bun 1.4.2, `bun test`, build with the base URL from `actions/configure-pages`, `bun tools/check.ts`, then `actions/upload-pages-artifact` of `dist/`.
 - **Deploy job.** `actions/deploy-pages` into the `github-pages` environment, with only `pages: write` and `id-token: write`. Deployments are serialised and never cancelled mid-run.
 - **Actions.** Checked on 24 September 2026: `actions/checkout@v7`, `actions/configure-pages@v6`, `actions/upload-pages-artifact@v5` and `actions/deploy-pages@v5` (GitHub-owned, major tags), plus `oven-sh/setup-bun` pinned by commit SHA (v2.2.0). The official custom-workflow guide showed older majors on that date; the release pages are authoritative. When updating, read each action's release notes, keep `setup-bun` SHA-pinned, and keep `bun-version` in step with [docs/toolchain.md](../../../docs/toolchain.md).
 
@@ -112,7 +126,7 @@ These are manual owner decisions, not performed by any script here:
 - deployments time out after 10 minutes;
 - soft limits of 100 GB bandwidth per month and 10 builds per hour.
 
-Pages must not be used for commercial transactions, SaaS or sensitive data. The site pages and assets use under 100 KiB; the published style guide adds most of the remaining 423 KiB. Release downloads are hosted by GitHub Releases, never by Pages.
+Pages must not be used for commercial transactions, SaaS or sensitive data. The hand-written pages and assets use under 100 KiB, the published style guide about 380 KiB and the generated knowledge pages about 420 KiB (the largest, the file chain, about 130 KiB), within the 1.5 MiB total budget. Release downloads are hosted by GitHub Releases, never by Pages.
 
 **Troubleshooting.**
 

@@ -19,7 +19,8 @@ const messages = async (dir: string, repoFiles: Set<string> | null = null) =>
 describe("build", () => {
   test("renders every page with no leftover placeholders and versioned assets", () => {
     const result = fresh();
-    expect(result.pages).toEqual(["404.html", "credits.html", "index.html"]);
+    expect(result.pages.filter(page => !page.startsWith("knowledge/"))).toEqual(["404.html", "credits.html", "index.html"]);
+    expect(result.pages).toContain("knowledge/index.html");
     for (const page of result.pages) {
       const html = readFileSync(join(result.outDir, page), "utf8");
       expect(html).not.toMatch(/\{\{\w+\}\}/);

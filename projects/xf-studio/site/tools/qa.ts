@@ -22,6 +22,10 @@ const SCHEMES = ["light", "dark"] as const;
 const PAGES = [
   { name: "index", path: "", sections: true },
   { name: "credits", path: "credits.html", sections: true },
+  { name: "knowledge", path: "knowledge/", sections: true },
+  { name: "knowledge-cc-file-chain", path: "knowledge/cc-file-chain.html", sections: false },
+  { name: "knowledge-mod-loading", path: "knowledge/mod-loading.html", sections: false },
+  { name: "knowledge-materials", path: "knowledge/materials-and-shaders.html", sections: false },
   { name: "404", path: "no/such/page", sections: false, expectStatus: 404 },
 ];
 
@@ -69,7 +73,8 @@ const LAYOUT = `(() => {
   const width = document.documentElement.clientWidth;
   const offenders = [...document.querySelectorAll("body *")].filter(el => { const r = el.getBoundingClientRect(); return r.width && (r.right > width + 1 || r.left < -1) && !el.closest(".site-nav, .skip-link, .sr-only"); })
     .slice(0, 8).map(el => el.tagName.toLowerCase() + (el.className && typeof el.className === "string" ? "." + el.className.split(" ").join(".") : "") + " right=" + Math.round(el.getBoundingClientRect().right));
-  const smallTargets = [...document.querySelectorAll("a, button")].filter(el => el.checkVisibility() && !el.closest("p, li p, dd, .sr-only") && !el.classList.contains("skip-link"))
+  // Links inside running text (paragraphs, list items, table cells, captions) are exempt, as in WCAG 2.5.8's inline exception.
+  const smallTargets = [...document.querySelectorAll("a, button")].filter(el => el.checkVisibility() && !el.closest("p, li p, dd, .sr-only, .kb-article td, .kb-article th, .kb-article li, .diagram figcaption") && !el.classList.contains("skip-link"))
     .filter(el => { const r = el.getBoundingClientRect(); return r.width && (r.height < 24 || r.width < 24); }).map(el => (el.textContent.trim() || el.getAttribute("aria-label") || el.tagName).slice(0, 30));
   return { scrollWidth: document.documentElement.scrollWidth, clientWidth: width, offenders, smallTargets,
     theme: document.documentElement.dataset.theme ?? "system", bodyBackground: getComputedStyle(document.body).backgroundColor,

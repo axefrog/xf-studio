@@ -2,6 +2,15 @@
 
 This is the R&D lab's distilled reference for how Cyberpunk 2077's engine, resources and modding frameworks fit together. It is written primarily for agents: CP2077 modding knowledge is thin in training data, so every agent should be able to start here instead of rediscovering it. The project's standing mandate is that R&D runs permanently alongside product work, like a research lab beside a commercial team. The knowledge built here is what makes body customisation, world integration and quest tooling possible later.
 
+## Published on the public site
+
+Draft and Solid pages are published as the [Knowledge section](https://axefrog.github.io/xf-studio/knowledge/) of the public site, generated from these files on every site build ([how](../projects/xf-studio/site/README.md#knowledge-section)). Each published page gets a banner saying it is research in progress that may be wrong, the grade legend below, its last-commit date, and links to its source and to open an issue. Write with that audience in mind:
+
+- The Topics table below drives the site: its topic text is each page's public summary, and a page missing from it fails the site build.
+- Personal paths (`C:\Users\<name>`), e-mail addresses, images and links into `research/consumers/`, `inventory/`, `local/` or `experiments/*/generated/` fail the build. Every other repository link must point at a tracked file.
+- In tables, escape a `|` inside code as `\|`; GFM splits the row otherwise, on GitHub as well.
+- Mermaid diagrams appear on the site as a text list of boxes and arrows with a link to GitHub's drawing, so keep node labels meaningful on their own.
+
 ## How this differs from `research/`
 
 `research/` holds investigations: studies, audits, dated evidence and decisions tied to a task. `knowledge/` holds the **current, consolidated answer** to "how does X work?", with each claim citing the research, source code, wiki page or runtime capture that supports it. When research changes our understanding, update the knowledge page in the same checkpoint.

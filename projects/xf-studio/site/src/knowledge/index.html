@@ -1,0 +1,44 @@
+<!--page {
+  "title": "Knowledge base · XF Studio",
+  "description": "XF Studio's research notes on how Cyberpunk 2077's engine, resources and modding frameworks fit together: materials and shaders, hair shading, the character-customisation file chain, mod loading and tooling. Research in progress, with evidence grades and citations.",
+  "nav": "knowledge"
+} -->
+<header class="page-head kb-head">
+  <div class="wrap">
+    <p class="eyebrow">Knowledge base</p>
+    <h1>How Cyberpunk 2077 fits together, as far as we know</h1>
+    <p class="lede">XF Studio runs a research lab beside the product. It studies how the game’s engine, resources and modding frameworks work, so that the Studio can read game files the way the game does. These pages share its consolidated findings with the modding community. They are generated from the <a href="{{blob}}/knowledge/README.md">knowledge base in the repository</a> each time the site is built, so they follow its current state.</p>
+    {{caveat}}
+    {{legend}}
+  </div>
+</header>
+
+<section class="section" aria-labelledby="topics-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">01</span>Topics</p>
+      <h2 id="topics-title">Published pages</h2>
+      <p class="lede">Each page states what it covers, which game and framework versions it describes, and how each claim was established. <strong>Draft</strong> means consolidated but with significant gaps.</p>
+    </header>
+    <ul class="kb-topics">
+{{topics}}
+    </ul>
+{{planned}}
+  </div>
+</section>
+
+<section class="section alt" aria-labelledby="help-title">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="eyebrow"><span class="num">02</span>Corrections</p>
+      <h2 id="help-title">Help us get it right</h2>
+      <p>These notes will contain mistakes. If you know better, or can confirm something in game, please <a href="{{issueUrl}}">open an issue</a> or send a pull request that edits the page’s Markdown in the <a href="{{tree}}/knowledge">knowledge folder</a>. Links to sources, captures or tests help most.</p>
+      <p>The <a href="https://wiki.redmodding.org/cyberpunk-2077-modding">Cyberpunk 2077 Modding Wiki</a> remains the community’s reference. These pages link to it rather than copy it, and add what our own reading of source code and resources found.</p>
+    </div>
+    <div class="prose">
+      <p class="eyebrow"><span class="num">03</span>Attribution</p>
+      <h2 id="credit-title">Built on community work</h2>
+      <p>Much of this knowledge comes from modders, tool authors and wiki writers. Each page cites its sources inline, with links to the wiki pages, mods and repositories it learned from, and the <a href="{{root}}credits.html">credits</a> acknowledge everyone whose work taught us something. If you recognise your work and it is not credited properly, please tell us.</p>
+    </div>
+  </div>
+</section>

@@ -163,7 +163,7 @@ The layout below is decoded from the tiled deferred light (`m_shaderLightsComput
 | Target | RGB | A |
 |---|---|---|
 | **GBuffer0** | `sqrt(linear base colour)`. The light squares it. | Class-specific payload (bits of the eye's second vector). Skin writes 1. |
-| **GBuffer1** | World normal `n / max(|n|) × 0.5 + 0.5`. The light uses `normalize(rgb − 0.5)`. | Class-specific: skin-profile slot high bits (skin); tangent-axis selector (hair); octahedral bits (eye). 0 for metal_base. |
+| **GBuffer1** | World normal `n / max(\|n\|) × 0.5 + 0.5`. The light uses `normalize(rgb − 0.5)`. | Class-specific: skin-profile slot high bits (skin); tangent-axis selector (hair); octahedral bits (eye). 0 for metal_base. |
 | **GBuffer2** | **x = metalness, y = roughness** (the light clamps it to [0.04, 1]), **z = a transmission weight** read only by the Foliage class: neutral 1/3 for Standard materials, `0.4 + 0.6·(vertex colour G)` for skin (which the Subsurface lighting ignores). | Class-specific: skin-profile low bit, an emissive flag and 6 bits (skin); the eye's second vector (eye). Standard emissive writers (metal_base family, `mesh_decal_emissive`) store bit 7 = emissive flag and 7 bits = `sqrt(EV/10)`. |
 | **Stencil** (bits 5+) | Lighting class = `ERenderMaterialType`: Standard 0, Subsurface 1, Cloth 2, Eye 3, Hair 4, Foliage 5. The value is set per material template (`materialType`). | — |
 
