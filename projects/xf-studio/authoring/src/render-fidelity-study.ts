@@ -1,9 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { parseEyeManifest, verifyEyeBytes } from "./eye-appearance";
+import { parseEyeManifest, roughnessRedToGreen, verifyEyeBytes } from "./eye-study-fixture";
 import { loadSavedBrowMaterial } from "./brow-study-fixture";
-import { roughnessRedToGreen } from "./eye-optics";
 import { extendSkin, restoreFirstWeights } from "./skin";
 import { skinPackedRgToRgb, skinRoughnessToGreen } from "./skin-study-maps";
 import { browScreenMetrics } from "./brow-study-metrics";

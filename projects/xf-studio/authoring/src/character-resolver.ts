@@ -65,6 +65,12 @@ export interface ResolvedComponent {
      * its blob from), else the mesh (or its render-blob patch source). A renderer exports this one.
      */
     readonly drawnFrom: Provenance | null;
+    /**
+     * The effective morph target's `baseTexture` rule (after ArchiveXL patches): the named material parameter is
+     * bound to a runtime texture built from `texture` [hypothesis: knowledge/eye-rendering.md §1.3]. Null for a
+     * plain mesh component; `texture` null or `parameter` empty means the material's own value stands.
+     */
+    readonly morphTexture: { readonly texture: Provenance | null; readonly parameter: string } | null;
   } | null;
   /** Morph target regions and names this component carries. */
   readonly morphRegions: Readonly<Record<string, number>>;
@@ -343,6 +349,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   const patchedFrom: string[] = [];
   let morphProvenance: Provenance | null = null;
   let blobFrom: DepotRef | null = null;
+  let morphTexture: { texture: Provenance | null; parameter: string } | null = null;
   const morphRegions: Record<string, number> = {};
   if (component.morphResource) {
     morph = await ctx.graph.morph(component.morphResource);
@@ -350,6 +357,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
     if (morph) {
       meshRef = morph.baseMesh; renderChunks = morph.renderChunks; chunkLods = morph.renderChunkLods; notes.push(...morph.notes);
       if (morph.blobFrom) { patchedFrom.push(refLabel(morph.blobFrom)); blobFrom = morph.blobFrom; }
+      morphTexture = { texture: morph.baseTexture ? ctx.graph.provenance(morph.baseTexture) : null, parameter: morph.baseTextureParam };
       for (const target of morph.targets) morphRegions[target.region] = (morphRegions[target.region] ?? 0) + 1;
     } else ctx.gaps.push({ code: "morphtarget-missing", subject: refLabel(ctx.graph.named(component.morphResource)), detail: `Component ${component.name} names a morph target no mounted archive provides.` });
   }
@@ -387,7 +395,7 @@ async function resolveComponent(ctx: Context, component: ComponentModel, origin:
   return { ...base, morphRegions, appliedMorphs, meshAppearanceResolved, materials,
     geometry: { morphTarget: morphProvenance, mesh: meshRef ? ctx.graph.provenance(meshRef, mesh?.loaded.provenance.extractedSha256 ?? null) : null,
       renderChunks, chunkLods, visibleChunks: visible, drawsNothing, patchedFrom,
-      drawnFrom: drawnRef ? ctx.graph.provenance(drawnRef) : null }, notes };
+      drawnFrom: drawnRef ? ctx.graph.provenance(drawnRef) : null, morphTexture }, notes };
 }
 
 async function resolveAppearance(ctx: Context, merged: MergedCco, descriptor: AppearanceDescriptor, groups: string[],

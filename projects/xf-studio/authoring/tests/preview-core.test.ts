@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { depotHash } from "../src/depot-path";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,7 @@ import { adaptMap, checkMap } from "../src/preview-core-maps";
 import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "../src/preview-core-materials";
 import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview-core-assemble";
 import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview-core-service";
-import { uncookArguments } from "../src/game-asset-export-wolvenkit";
+import { uncookArguments, uncookByHashArguments } from "../src/game-asset-export-wolvenkit";
 import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import {
@@ -144,6 +145,10 @@ test("the WolvenKit call uncooks exactly the named depot paths, with the game pa
   expect(args[args.indexOf("-r") + 1]).toBe("^(?:base\\\\a\\.mesh|base\\\\b\\.morphtarget)$");
   expect(args).not.toContain("-s");
   expect(uncookArguments("C:\\x.archive", ["base\\t.xbm"], "C:\\out", null)).not.toContain("-gp");
+  // An archive without path names: one texture by its depot hash (WolvenKit writes `<hash>.png`).
+  const byHash = uncookByHashArguments("C:\\x.archive", "base\\t.xbm", "C:\\out");
+  expect(byHash[byHash.indexOf("--hash") + 1]).toBe(depotHash("base\\t.xbm"));
+  expect(byHash).not.toContain("-r");
 });
 
 test("the export cache keys each resource by depot path and source, and rejects unsafe paths", async () => {

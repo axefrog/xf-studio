@@ -76,7 +76,13 @@ export interface GameAssetExporter {
 }
 
 /** The one process call this module needs: uncook `depotPaths` from `source` into `outDir`, keeping depot-relative paths. */
-export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; outDir: string; withMaterials: boolean; signal?: AbortSignal }) => Promise<void>;
+/**
+ * One export call. By default the resources are selected by depot path. `byHash` selects the single resource by
+ * its depot hash instead and writes it as `<hash>.<ext>` in `outDir`: archives built without path names (many older
+ * mods) list only hashes, so a path pattern finds nothing in them.
+ */
+export type UncookRun = (input: { source: ExportSource; depotPaths: string[]; outDir: string; withMaterials: boolean; signal?: AbortSignal;
+  byHash?: boolean }) => Promise<void>;
 export type GameAssetExporterOptions = {
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
@@ -160,15 +166,16 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
         glb: files["export.glb"] ?? null, glbSha256: hashOf(files["export.glb"]),
         materials: files["materials.json"] ?? null, materialsSha256: hashOf(files["materials.json"]),
         complete: requiredGeometryFiles(depotPath).every(name => !!files[name]), cached });
+      const present = (depotPaths: readonly string[]): Set<string> | null => {
+        if (!options.contains) return null;
+        try {
+          const found = options.contains(source, depotPaths.map(depotHash));
+          return new Set(depotPaths.filter(depotPath => found.has(depotHash(depotPath))));
+        } catch { return null; }
+      };
       return {
         tool,
-        present(depotPaths) {
-          if (!options.contains) return null;
-          try {
-            const found = options.contains(source, depotPaths.map(depotHash));
-            return new Set(depotPaths.filter(depotPath => found.has(depotHash(depotPath))));
-          } catch { return null; }
-        },
+        present,
         async geometry(depotPaths) {
           const out = new Map<string, ExportedGeometry>();
           const needed: string[] = [];
@@ -215,8 +222,20 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
           const outDir = join(workDir(), "textures");
           mkdirSync(outDir, { recursive: true });
           await run({ source, depotPaths: needed, outDir, withMaterials: false, signal });
+          const unnamed: string[] = [];
           for (const depotPath of needed) {
             const png = depotFile(outDir, pngFor(depotPath));
+            if (existsSync(png)) store(depotPath, png, true); else unnamed.push(depotPath);
+          }
+          // Not found by path: the archive may list hashes only. Ask for each missing texture by its hash, when the
+          // source's own index says it is there (or cannot say).
+          const inIndex = unnamed.length ? present(unnamed) : null;
+          for (const depotPath of unnamed) {
+            if (inIndex && !inIndex.has(depotPath)) continue;
+            const hashDir = join(outDir, "by-hash");
+            mkdirSync(hashDir, { recursive: true });
+            await run({ source, depotPaths: [depotPath], outDir: hashDir, withMaterials: false, signal, byHash: true });
+            const png = join(hashDir, `${depotHash(depotPath)}.png`);
             if (existsSync(png)) store(depotPath, png, true);
           }
           return out;

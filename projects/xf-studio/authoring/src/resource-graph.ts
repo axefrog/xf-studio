@@ -109,6 +109,12 @@ export interface MorphModel {
   readonly renderChunkLods: readonly number[] | null;
   readonly targets: { name: string; region: string }[];
   readonly blobFrom: DepotRef | null;
+  /**
+   * `baseTexture` and `baseTextureParamName` after ArchiveXL patches: the morph component renders with a runtime
+   * texture built from this base and binds it to the named material parameter (knowledge/eye-rendering.md §1.3).
+   */
+  readonly baseTexture: DepotRef | null;
+  readonly baseTextureParam: string;
   readonly notes: RuleNote[];
 }
 
@@ -411,6 +417,7 @@ export class ResourceGraph {
       const blob = scope.data(root.blob);
       return {
         baseMesh: depotRef(root.baseMesh), baseMeshAppearance: cname(root.baseMeshAppearance),
+        baseTexture: depotRef(root.baseTexture), baseTextureParam: cname(root.baseTextureParamName),
         blob, renderChunks: blob ? renderChunkCount(blob.baseBlob, scope) : null,
         renderChunkLods: blob ? chunkLodMasks(blob.baseBlob, scope) : null,
         targets: asArray(root.targets).filter(isObject).map(target => ({ name: cname(target.name), region: cname(target.regionName) })),
@@ -418,7 +425,7 @@ export class ResourceGraph {
     };
     const base = read(loaded.root);
     const notes: RuleNote[] = [];
-    let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods } = base;
+    let { baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, baseTexture, baseTextureParam } = base;
     const targets = [...base.targets];
     let blobFrom: DepotRef | null = null;
     // A patch source is never itself patched (OnMorphTargetResourceLoad returns early).
@@ -428,6 +435,9 @@ export class ResourceGraph {
       const patchMorph = read(source.root);
       if (patchMorph.baseMesh && patchModifies(patch, "baseMesh")) baseMesh = patchMorph.baseMesh;
       if (patchModifies(patch, "baseMeshAppearance", !patchMorph.baseMeshAppearance)) baseMeshAppearance = patchMorph.baseMeshAppearance;
+      // OnMorphTargetResourceLoad: an empty source value overwrites only when the patch names the property.
+      if (patchModifies(patch, "baseTexture", !patchMorph.baseTexture)) baseTexture = patchMorph.baseTexture;
+      if (patchModifies(patch, "baseTextureParamName", !patchMorph.baseTextureParam)) baseTextureParam = patchMorph.baseTextureParam;
       if (patchMorph.blob && patchModifies(patch, "blob", !!base.blob)) { renderChunks = patchMorph.renderChunks; renderChunkLods = patchMorph.renderChunkLods; blobFrom = source.ref; }
       if (patchModifies(patch, "targets")) for (const target of patchMorph.targets) {
         const index = targets.findIndex(existing => existing.name === target.name);
@@ -435,6 +445,6 @@ export class ResourceGraph {
       }
       notes.push(note("R3-morph-patch", "source", `${patch.sourcePath} patches this morph target (${[...patch.props].join(", ") || "all props"}; ${patch.declaredBy}).`));
     }
-    return { loaded, baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, targets, blobFrom, notes };
+    return { loaded, baseMesh, baseMeshAppearance, renderChunks, renderChunkLods, targets, blobFrom, baseTexture, baseTextureParam, notes };
   }
 }

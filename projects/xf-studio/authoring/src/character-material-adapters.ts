@@ -6,6 +6,7 @@ import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECA
 import type { DetailSlot, RenderChunkMaterial } from "./render-detail";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
 import { createSkinMaterial, skinBaseTexels, skinParameters, type SkinImage, type SkinMaterialHandle, type SkinTexels } from "./skin-material";
+import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, IRIS_MASK_ENCODING, shellParameters, type EyeHandle } from "./eye-material";
 import type { DetailLimit } from "./detail-limits";
 
 /**
@@ -45,7 +46,11 @@ export type AdaptedMaterial = { material: THREE.Material; owned: THREE.Texture[]
   /** Why part of the chunk is not drawn, as codes the presentation words. */
   limits?: DetailLimit[];
   /** The skin adapter's handle and its toned base colour for decals drawn over it. */
-  skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null } };
+  skin?: { handle: SkinMaterialHandle; base: () => SkinTexels | null };
+  /** The eye adapters' handle: its role (eyeball or wetness shell, from the template) and its switches. */
+  eye?: EyeHandle;
+  /** Recorded but not drawn yet (a placeholder template): the loader keeps the mesh hidden. */
+  hidden?: boolean };
 export interface MaterialAdapter {
   readonly id: RenderAdapterId;
   create(chunk: RenderChunkMaterial, textures: ChunkTextures, mesh: THREE.Mesh, context: AdapterContext): AdaptedMaterial;
@@ -181,8 +186,56 @@ const doubleDiffuseDecal: MaterialAdapter = {
   },
 };
 
+/**
+ * `eye.mt` and `eye_gradient.mt`: the eyeball (eye-material.ts). The template decides the role, never the chunk index
+ * (the male mesh swaps the eye and wetness chunks). A gradient template must carry its mask and ramp.
+ */
+const eyeball: MaterialAdapter = {
+  id: "eye",
+  create(chunk, textures) {
+    const albedo = need(textures("Albedo", "colour", "repeat"), "Albedo", chunk);
+    const roughness = textures("Roughness", "data", "repeat");
+    const owned: THREE.Texture[] = [], notes: string[] = [];
+    let irisMask: THREE.Texture | undefined, ramp: THREE.Texture | undefined;
+    if (renderTemplate(chunk.template)?.gradients?.includes("IrisColorGradient")) {
+      // The mask is a gamma resource; the preview reads its R raw unless the switch says decoded (eye-rendering.md §2.3).
+      irisMask = need(textures("IrisMask", IRIS_MASK_ENCODING === "raw" ? "data" : "colour", "repeat"), "IrisMask", chunk);
+      const stops = chunk.gradients.IrisColorGradient?.stops;
+      if (!stops) throw Error(`chunk ${chunk.chunk} has no IrisColorGradient`);
+      ramp = gradientTexture(stops);
+      owned.push(ramp);
+    }
+    if (!roughness) notes.push("no readable eye roughness; the flat preview roughness is used");
+    const made = createEyeMaterial({ albedo, roughness, irisMask, gradient: ramp }, eyeParameters(chunk));
+    return { material: made.material, owned: [...owned, ...made.owned], notes, eye: made.handle };
+  },
+};
+
+/** `eye_shadow.mt`: the eye's wetness shell, a blended forward pass over the eye (eye-material.ts). */
+const eyeShell: MaterialAdapter = {
+  id: "eye-shell",
+  create(chunk, textures) {
+    const mask = need(textures("Mask", "data", "clamp"), "Mask", chunk);
+    const made = createEyeShellMaterial(mask, shellParameters(chunk));
+    return { material: made.material, owned: [], notes: [], eye: made.handle };
+  },
+};
+
+/**
+ * `multilayered.mt`: no layered-material adapter yet. The chunk stays hidden and says so with a code: on the eyes
+ * (the graphic eye designs) the scene shows the default eye in its place.
+ */
+const layeredPlaceholder: MaterialAdapter = {
+  id: "layered-placeholder",
+  create(_chunk, _textures, _mesh, context) {
+    return { material: new THREE.MeshBasicMaterial({ visible: false }), owned: [], notes: ["layered material not drawn yet"], hidden: true,
+      limits: [context.slot === "eyes" ? "eye-design" : "layered-material"] };
+  },
+};
+
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
-  skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal });
+  skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
+  eye: eyeball, "eye-shell": eyeShell, "layered-placeholder": layeredPlaceholder });
 
 /** The adapter for a chunk's template, or undefined when the preview does not draw that template. */
 export function materialAdapter(template: string | null): MaterialAdapter | undefined {

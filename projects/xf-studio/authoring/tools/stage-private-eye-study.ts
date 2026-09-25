@@ -1,8 +1,9 @@
-// Local preview only. The selected third-party image is never a distributable asset.
+// Stages the historical saved-eye pair for /render-fidelity-study.html only (the preview resolves eyes itself).
+// The selected third-party image is never a distributable asset.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { parseEyeManifest } from "../src/eye-appearance";
+import { parseEyeManifest } from "../src/eye-study-fixture";
 
 const root = resolve(import.meta.dir, "../../../.."), out = resolve(import.meta.dir, "../public/assets/eyes");
 const source = resolve(root, "research/consumers/saved-v-eyes/raw/kala/eye_16_diffuse.png");

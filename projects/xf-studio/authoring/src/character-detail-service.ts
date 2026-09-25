@@ -1,12 +1,12 @@
 /**
- * Host application service: prepare the character render record (head skin, brows, lashes and hair) for one V from
+ * Host application service: prepare the character render record (head skin, brows, lashes, hair and eyes) for one V from
  * the installation the launch route loads. It opens the route with the generic resolver (the same source
  * discovery, archive precedence and ArchiveXL rules Build uses), resolves the V's choices, plans the
  * drawable components (character-detail-plan.ts), exports each winning resource through the generic
  * game-asset exporter (GLB for geometry, PNG for textures, cached per depot hash and archive fingerprint),
  * and writes a content-addressed record the renderer loads. Read-only towards the game and MO2.
  *
- * There is no mod-specific code: a CCXL hair, brow or lash pack resolves exactly like vanilla, and so does a
+ * There is no mod-specific code: a CCXL hair, brow, lash or eye pack resolves exactly like vanilla, and so does a
  * complexion mod, whether it replaces textures or skin profiles at their vanilla paths (archive precedence) or
  * patches the head mesh's appearances through ArchiveXL (the resolver follows the patch's materials).
  */
@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, SLOT_WORDS, type CharacterPlan, type PlannedComponent } from "./character-detail-plan";
+import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
@@ -22,7 +22,8 @@ import { archiveExportSource, GameAssetExportError, type GameAssetExporter } fro
 import { templateDefaults } from "./material-template";
 import { asArray, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
-  type RenderComponent, type RenderProfile, type RenderProfileStop, type RenderSkinProfile, type RenderTexture } from "./render-detail";
+  type RenderComponent, type RenderGradient, type RenderProfile, type RenderProfileStop, type RenderRgba, type RenderSkinProfile,
+  type RenderTexture } from "./render-detail";
 import { renderTemplate } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
@@ -30,7 +31,7 @@ import type { Provenance, ResourceGraph } from "./resource-graph";
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, brows, lashes and hair" },
+  { step: "resolving", label: "Working out your V's skin, eyes, brows, lashes and hair" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -55,8 +56,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, brows, lashes and hair aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, brows, lashes and hair aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, eyes, brows, lashes and hair aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, eyes, brows, lashes and hair aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -110,6 +111,22 @@ export function skinProfileValues(root: JsonObject): Omit<RenderSkinProfile, "de
   // Serializers omit fields at their type defaults; a missing field reads as the class default (1 for scales, white colours).
   return { roughness0: number(root.roughness0, 1, 16), roughness1: number(root.roughness1, 1, 16), lobeMix: number(root.lobeMix, 0, 16),
     blurSize: number(root.blurSize, 0, 64), diffuse: colour(root.diffuse), falloff: colour(root.falloff) };
+}
+
+/** A serialized `CGradient` as the record carries it: 8-bit RGBA stops sorted by value (stored order is not sorted). */
+export function gradientStops(root: JsonObject): RenderGradient["stops"] | null {
+  if (root.$type !== "CGradient") return null;
+  const channel = (value: unknown, fallback: number) => {
+    const n = Number(value ?? fallback);
+    return Number.isFinite(n) ? Math.max(0, Math.min(255, Math.round(n))) : fallback;
+  };
+  const stops = asArray(root.gradientEntries).filter(isObject).map(entry => {
+    const colour = isObject(entry.color) ? entry.color : {};
+    // Serializers omit a field at its type default: 0 for the position and channels, 255 for alpha.
+    return { value: Math.max(0, Math.min(1, Number(entry.value) || 0)),
+      color: [channel(colour.Red, 0), channel(colour.Green, 0), channel(colour.Blue, 0), channel(colour.Alpha, 255)] as RenderRgba };
+  }).sort((a, b) => a.value - b.value);
+  return stops.length ? stops.slice(0, 32) : null;
 }
 
 const paramText = (value: MaterialParamValue) => value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "name" ? value.value
@@ -272,6 +289,16 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       skinProfileOf.set(key, values ? { depotPath: refLabel(provenance.ref), archive: loaded!.provenance.archive,
         sha256: hexSha(loaded!.provenance.extractedSha256), ...values } : null);
     }
+  const gradientOf = new Map<string, RenderGradient | null>();
+  for (const component of plan.components) for (const material of component.materials)
+    for (const provenance of Object.values(material.gradients)) {
+      const key = refLabel(provenance.ref).toLowerCase();
+      if (gradientOf.has(key)) continue;
+      const loaded = await graph.load(provenance.ref, "gradient");
+      const stops = loaded ? gradientStops(loaded.root) : null;
+      gradientOf.set(key, stops ? { depotPath: refLabel(provenance.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256), stops } : null);
+    }
   cancelled();
 
   progress("writing");
@@ -288,13 +315,13 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
-      let complete = true;
+      const unread: string[] = [];
       for (const [param, provenance] of Object.entries(material.textures)) {
         const key = refLabel(provenance.ref).toLowerCase(), at = textureAt.get(key);
         const png = at ? textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
-        if (!at || !png) { complete = false; continue; }
+        if (!at || !png) { unread.push(`${param} (${at ? "not exported" : "not in any mounted archive"})`); continue; }
         const stored = store(options.storeRoot, png, "png"), size = pngSize(stored.bytes);
-        if (!size) { complete = false; continue; }
+        if (!size) { unread.push(`${param} (unreadable image)`); continue; }
         const gamma = gammaOf.get(key);
         if (gamma === null || gamma === undefined) notes.push(`${refLabel(provenance.ref)}: colour flag unreadable; treated as linear.`);
         chunkTextures[param] = { file: stored.file, sha256: stored.sha256, depotPath: refLabel(provenance.ref), ...size, isGamma: !!gamma,
@@ -304,22 +331,28 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       const chunkProfiles: Record<string, RenderProfile> = {};
       for (const [param, provenance] of Object.entries(material.profiles)) {
         const profile = profileOf.get(refLabel(provenance.ref).toLowerCase());
-        if (profile) chunkProfiles[param] = profile; else complete = false;
+        if (profile) chunkProfiles[param] = profile; else unread.push(param);
       }
       const chunkSkinProfiles: Record<string, RenderSkinProfile> = {};
       for (const [param, provenance] of Object.entries(material.skinProfiles)) {
         const profile = skinProfileOf.get(refLabel(provenance.ref).toLowerCase());
-        if (profile) chunkSkinProfiles[param] = profile; else complete = false;
+        if (profile) chunkSkinProfiles[param] = profile; else unread.push(param);
+      }
+      const chunkGradients: Record<string, RenderGradient> = {};
+      for (const [param, provenance] of Object.entries(material.gradients)) {
+        const gradient = gradientOf.get(refLabel(provenance.ref).toLowerCase());
+        if (gradient) chunkGradients[param] = gradient; else unread.push(param);
       }
       // A chunk missing an input its adapter reads is left out rather than drawn wrongly.
-      if (!complete) {
-        notes.push(`${component.component} chunk ${material.chunk}: an input could not be read; the chunk is not drawn.`);
+      if (unread.length) {
+        notes.push(`${component.component} chunk ${material.chunk}: ${unread.join(", ")} could not be read; the chunk is not drawn.`);
         continue;
       }
       materials.push({ chunk: material.chunk, name: material.name, template: material.template, scalars: material.scalars,
-        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles });
+        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles, gradients: chunkGradients });
     }
-    if (!materials.length) { failSlot(component.slot, "export"); continue; }
+    // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws.
+    if (!materials.some(material => !renderTemplate(material.template)?.placeholder)) { failSlot(component.slot, "export"); continue; }
     if (component.skippedChunks) notes.push(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
     const hash = component.drawnFrom.ref.hash;
     components.push({ id: `${component.slot}:${component.component}:${hash}`, slot: component.slot, option: component.option,
@@ -327,7 +360,8 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       geometry: { file: glb.file, sha256: glb.sha256, depotPath: located.depotPath, depotHash: hash, morphTargets: component.morphTargets,
         sources: [{ depotPath: located.depotPath, archive: located.archive.name, provider: located.archive.provider,
           ...(hexSha(component.drawnFrom.extractedSha256) ? { sha256: hexSha(component.drawnFrom.extractedSha256)! } : {}) }] },
-      renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials });
+      renderChunks: component.renderChunks, chunks: materials.map(material => material.chunk), materials,
+      ...(component.morphTexture ? { morphTexture: recordMorphTexture(component.morphTexture)! } : {}) });
   }
   // A slot whose components all failed is unavailable; one with some drawn stays shown.
   for (const [slot, state] of slots) if (state.state === "shown" && !components.some(item => item.slot === slot)) failSlot(slot, "export");

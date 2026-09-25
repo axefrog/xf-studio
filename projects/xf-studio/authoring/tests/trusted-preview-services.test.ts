@@ -53,7 +53,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
     setBlink: () => calls.push("blink"), animateBlink: () => calls.push("play") };
   const services = createTrustedPreviewServices(workspace, {
     savedAppearance: { apply: () => { calls.push("save"); return { applied: [], appearanceReferences: 0,
-      matchedPiercing: false, eyeAppearance: { message: "" }, eyeShape: 9 }; } },
+      matchedPiercing: false, eyeShape: 9 }; } },
     preview, motion,
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);
@@ -92,7 +92,7 @@ const savedV = (isMale: boolean): SavedV => ({ schema: "eye-artistry/saved-v-1",
   presetVersion: 1, isMale, brainIsMale: isMale,
   groups: { head: [{ name: "TPP", appearances: [], morphs: [] }], arms: [], body: [] },
   perspectives: [], tags: [], evidence: { nodeName: "appearance", nodeBytes: 1, bytesRead: 1, trailingBytes: 0, chunks: 1, decompressedBytes: 1 } });
-const applied = { applied: [], appearanceReferences: 0, matchedPiercing: false, eyeAppearance: { message: "" } };
+const applied = { applied: [], appearanceReferences: 0, matchedPiercing: false };
 
 test("the creator rig's body follows the applied save, derived by the saved-appearance service (CORE-25)", () => {
   const calls: string[] = [];

@@ -1,12 +1,15 @@
 /**
  * Pure selection step between the generic resolver and the character render record: which resolved
- * drawing components are the V's head skin, brows, lashes and hair, which of their chunks the preview can draw,
- * and each chunk's effective material inputs (instance chain first, then the template's defaults).
+ * drawing components are the V's head skin, brows, lashes, hair and eyes, which of their chunks the preview can
+ * draw, and each chunk's effective material inputs (instance chain first, then the template's defaults, then the
+ * morph target's `baseTexture` rule).
  *
  * Everything is decided from the game's own data, never from mod identities:
  * - **Slot** comes from the character-creator option's `uiSlot` in the effective (merged) CCO. Vanilla and
- *   CCXL options share the vanilla slots (`skin_type`, `eyebrows_color`, `eyelash_color`, `hair_color`)
- *   [resource]. The skin type's appearance draws the head itself: its morph-target component carries the
+ *   CCXL options share the vanilla slots (`skin_type`, `eyebrows_color`, `eyelash_color`, `hair_color`, `eyes_color`)
+ *   [resource]. The eye colour's appearance draws the eye component: its eyeball chunk (`eye.mt`, `eye_gradient.mt`
+ *   or `multilayered.mt`) and its wetness shell (`eye_shadow.mt`). A chunk's role comes from its template, never
+ *   its index: the male eye mesh swaps the two (knowledge/eye-rendering.md §1). The skin type's appearance draws the head itself: its morph-target component carries the
  *   `skin.mt` chunk whose instance chain holds the tone (knowledge/head-cc-rendering.md §2).
  * - **Consumer** is the third-person head: only choices listed in the `TPP` or `hairs` groups draw on the
  *   third-person puppet (the FPP hair twins sit in `FPP_hairs`) [resource; consumer wiring hypothesis].
@@ -15,25 +18,32 @@
  * - **Drawable chunks** are those whose material template the renderer has an adapter for
  *   (render-templates.ts). A component with none (a hair shadow mesh on `glass.mt` or `metal_base.remt`) is
  *   left out; which components are shadow-only is still an open question (knowledge/head-cc-rendering.md).
+ *   A placeholder template (`multilayered.mt`, no adapter yet) is recorded beside drawn chunks, so the renderer can
+ *   say plainly that part is not shown, but never makes a component drawable on its own.
+ * - **Morph texture rule**: a morph target's `baseTexture` replaces its named parameter's texture (the vanilla eye
+ *   morph binds a flat `normal.xbm` to `Normal`; ArchiveXL's eye fix clears it) [hypothesis, eye-rendering.md §1.3].
  */
 import type { CcoResource } from "./cco-model";
 import type { ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
-import type { DetailSlot, DetailSlotState, RenderRgba } from "./render-detail";
+import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
 import { DETAIL_SLOTS } from "./render-detail";
 import { renderTemplate } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
-  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair" });
+  skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
 
 export type PlannedChunk = {
-  chunk: number; name: string; template: string | null; drawn: boolean;
+  chunk: number; name: string; template: string | null;
+  /** The renderer has an adapter for the template; `placeholder` when that adapter only reports the chunk as not drawn. */
+  drawn: boolean; placeholder: boolean;
   scalars: Record<string, number>; colours: Record<string, RenderRgba>;
   textures: Record<string, Provenance>; profiles: Record<string, Provenance>; skinProfiles: Record<string, Provenance>;
+  gradients: Record<string, Provenance>;
 };
 export type PlannedComponent = {
   slot: DetailSlot; option: string; definition: string; component: string;
@@ -42,6 +52,8 @@ export type PlannedComponent = {
   renderChunks: number; chunks: number[]; materials: PlannedChunk[];
   /** Chunks that are visible in game but not drawn by the preview (unsupported template). */
   skippedChunks: number;
+  /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
+  morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
 };
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[] };
 /** Template defaults per template depot path (lower case), read by the host from the `.mt`. */
@@ -50,7 +62,7 @@ export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** Plain words per slot: the noun, and "aren't … they" or "isn't … it". */
 export const SLOT_WORDS: Readonly<Record<DetailSlot, { noun: string; not: string; pronoun: string }>> = Object.freeze({
   skin: { noun: "skin", not: "isn't", pronoun: "it" }, brows: { noun: "eyebrows", not: "aren't", pronoun: "they" }, lashes: { noun: "eyelashes", not: "aren't", pronoun: "they" },
-  hair: { noun: "hair", not: "isn't", pronoun: "it" } });
+  hair: { noun: "hair", not: "isn't", pronoun: "it" }, eyes: { noun: "eyes", not: "aren't", pronoun: "they" } });
 
 /** A plain colour or style label from a definition name (`female__05_brown_liquorice` → `brown liquorice`). */
 export function choiceLabel(definition: string): string {
@@ -92,11 +104,17 @@ export function effectiveParams(material: ResolvedChunkMaterial, defaults: Templ
   return [...own.values()];
 }
 
-function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults): PlannedChunk {
+/** The morph `baseTexture` rule for one chunk: the replacement texture when it names a texture input the adapter reads. */
+export function morphTextureOverride(rule: PlannedComponent["morphTexture"], textureInputs: readonly string[]): [string, Provenance] | null {
+  if (!rule?.texture || !rule.parameter || !textureInputs.includes(rule.parameter) || !/\.xbm$/i.test(rule.texture.ref.path ?? "")) return null;
+  return [rule.parameter, rule.texture];
+}
+
+function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"]): PlannedChunk {
   const template = material.template ? refLabel(material.template.ref) : null;
   const inputs = renderTemplate(template);
-  const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, drawn: !!inputs,
-    scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {} };
+  const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, drawn: !!inputs, placeholder: !!inputs?.placeholder,
+    scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {} };
   if (!inputs) return chunk;
   for (const param of effectiveParams(material, defaults)) {
     const scalar = parseScalar(param);
@@ -106,8 +124,11 @@ function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults):
       if (inputs.textures.includes(param.name) && /\.xbm$/i.test(param.resource.ref.path)) chunk.textures[param.name] = param.resource;
       if (inputs.profiles.includes(param.name) && /\.hp$/i.test(param.resource.ref.path)) chunk.profiles[param.name] = param.resource;
       if (inputs.skinProfiles.includes(param.name) && /\.sp$/i.test(param.resource.ref.path)) chunk.skinProfiles[param.name] = param.resource;
+      if (inputs.gradients?.includes(param.name) && /\.gradient$/i.test(param.resource.ref.path)) chunk.gradients[param.name] = param.resource;
     }
   }
+  const override = morphTextureOverride(rule, inputs.textures);
+  if (override) chunk.textures[override[0]] = override[1];
   return chunk;
 }
 
@@ -117,17 +138,23 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   if (!geometry || geometry.drawsNothing || !geometry.drawnFrom || geometry.drawnFrom.status !== "archive" || !geometry.visibleChunks?.length ||
       !geometry.renderChunks) return null;
   const lods = geometry.chunkLods;
+  const morphTexture = geometry.morphTexture && geometry.morphTarget
+    ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
   const materials = component.materials.filter(material => !lods || ((lods[material.chunk] ?? 1) & 1) === 1)
-    .map(material => planChunk(material, defaults));
+    .map(material => planChunk(material, defaults, morphTexture));
   const drawn = materials.filter(material => material.drawn);
-  if (!drawn.length) return null;
+  if (!drawn.some(material => !material.placeholder)) return null;
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
-    chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length };
+    chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture };
 }
 
+/** The record's form of a planned morph texture rule. */
+export const recordMorphTexture = (rule: PlannedComponent["morphTexture"]): RenderMorphTexture | undefined =>
+  rule ? { morph: refLabel(rule.morph.ref), texture: rule.texture ? refLabel(rule.texture.ref) : null, parameter: rule.parameter || null } : undefined;
+
 /**
- * Select the head skin, brows, lashes and hair of a resolved character. Each slot reports one outcome: shown, none
+ * Select the head skin, brows, lashes, hair and eyes of a resolved character. Each slot reports one outcome: shown, none
  * (the V has no such detail, e.g. hair "none"), or unavailable with one plain line.
  */
 export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults = new Map()): CharacterPlan {

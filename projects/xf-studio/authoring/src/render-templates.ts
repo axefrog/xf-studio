@@ -7,7 +7,7 @@
  *
  * Template paths are the game's own depot paths; nothing here names a mod or framework.
  */
-export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal";
+export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal" | "eye" | "eye-shell" | "layered-placeholder";
 export type RenderTemplateInputs = {
   readonly adapter: RenderAdapterId;
   /** Texture parameters the adapter samples. */
@@ -16,6 +16,13 @@ export type RenderTemplateInputs = {
   readonly profiles: readonly string[];
   /** `CSkinProfile` parameters the adapter reads. */
   readonly skinProfiles: readonly string[];
+  /** `CGradient` parameters the adapter reads (their stops go into the record). */
+  readonly gradients?: readonly string[];
+  /**
+   * Recorded so the renderer can say the chunk is not drawn yet, never drawn itself: a component is planned only
+   * when it has at least one chunk that really draws (so a part made only of such chunks stays out, as before).
+   */
+  readonly placeholder?: true;
 };
 
 export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = Object.freeze({
@@ -30,6 +37,16 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
   // Brows (and, later, several lip styles): the double-diffuse post-G-buffer decal.
   "base\\materials\\mesh_decal_double_diffuse.mt": { adapter: "double-diffuse-decal",
     textures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], profiles: [], skinProfiles: [] },
+  // The eyeball (knowledge/eye-rendering.md §2). Both templates share one program; the gradient one adds the iris
+  // mask and colour ramp. `Normal` and `NormalBubble` feed the two-normal eye light (ranks 4–5) and are recorded now.
+  "base\\materials\\eye.mt": { adapter: "eye", profiles: [], skinProfiles: [],
+    textures: ["Albedo", "Normal", "Roughness", "NormalBubble"] },
+  "base\\materials\\eye_gradient.mt": { adapter: "eye", profiles: [], skinProfiles: [], gradients: ["IrisColorGradient"],
+    textures: ["Albedo", "Normal", "Roughness", "NormalBubble", "IrisMask"] },
+  // The eye's wetness shell: a forward pass that darkens the eye towards the lids and adds the tear line (§4).
+  "base\\materials\\eye_shadow.mt": { adapter: "eye-shell", textures: ["Mask"], profiles: [], skinProfiles: [] },
+  // Layered (`.mlsetup`) materials: the graphic eye designs, many piercings and accessories. No adapter draws them yet.
+  "engine\\materials\\multilayered.mt": { adapter: "layered-placeholder", textures: [], profiles: [], skinProfiles: [], placeholder: true },
 });
 
 const key = (template: string) => template.toLowerCase().replaceAll("/", "\\");

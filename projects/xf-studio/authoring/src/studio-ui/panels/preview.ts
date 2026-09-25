@@ -11,18 +11,20 @@ import type { DetailLimit } from "../../detail-limits";
 
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
-const SLOT_NAMES = { skin: "Skin", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair" } as const;
+const SLOT_NAMES = { skin: "Skin", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes" } as const;
 /** What each renderer limit code means for the person using the app (detail-limits.ts). */
 export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
   "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",
   "skin-glow": "Glowing skin details from your installed mods aren't shown yet.",
+  "eye-design": "Your V's eye design is made of layered materials the preview can't draw yet, so the default eye is shown in its place.",
+  "layered-material": "Some parts made of layered materials aren't shown yet.",
 };
 
-/** One plain line about the shown V's skin, brows, lashes and hair, from the resolved-detail status. */
+/** One plain line about the shown V's skin, eyes, brows, lashes and hair, from the resolved-detail status. */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
-  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, brows, lashes and hair from your game files…` };
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, eyes, brows, lashes and hair from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.message };
   const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
   const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);
@@ -71,9 +73,8 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           "Load a save to preview your V's facial shape. Makeup authoring works without it.")] : [
           fact(icon("check"), `${result.applied.length} facial regions applied`, `${result.appearanceReferences} appearance references read${saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : ""}`),
           fact(icon(detailLine.done && assets.characterDetails?.slots.every(slot => slot.state !== "unavailable") ? "check" : "info"),
-            "Skin, brows, lashes and hair", detailLine.text || "Waiting for the 3D head."),
+            "Skin, eyes, brows, lashes and hair", detailLine.text || "Waiting for the 3D head."),
           fact(icon(result.matchedPiercing ? "check" : "info"), result.matchedPiercing ? "Vanilla piercing matched" : "No matching vanilla piercing", result.matchedPiercing ? "Materials remain approximate." : "You can try a viewport-only style below."),
-          fact(icon("info"), "Eyes", result.eyeAppearance.message),
         ]));
       }
       // Choices come from the loaded head's own eye-shape targets, numbered like the character creator.
@@ -180,7 +181,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const normals = new Toggle({ label: "Preview normal map", onChange: enabled => rt.dispatch({ kind: "preview.setNormals", enabled }) });
   const surface = new Toggle({ label: "Surface controls on the head", onChange: enabled => rt.dispatch({ kind: "preview.setSurfaceControls", enabled }) });
   const wire = new Toggle({ label: "Plate wireframe", onChange: enabled => rt.dispatch({ kind: "preview.setWire", enabled }) });
-  const optics = new Toggle({ label: "Source eye roughness study", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
+  const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
     section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, creatorFace, creatorHair)),
@@ -217,11 +218,10 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       normals.update(!!preview?.normals, loading); surface.update(!!preview?.surface, loading); wire.update(!!preview?.wire, loading);
       optics.update(!!preview?.eyeOptics, loading);
       const eye = assets.eyeOptics;
-      setText(opticsNote, !eye ? "Opt-in browser material study for an exactly matched saved eye." : eye.active
-        ? "Source roughness R × material scale. Browser study only; eye normals, refraction and game lighting remain unmatched."
-        : !eye.requested ? "Off: original diffuse-only eye preview. Enable for the exactly matched saved eye."
-          : eye.error ? `Source eye roughness unavailable: ${eye.error}. Diffuse-only fallback is active.`
-            : "No matching source roughness map is loaded. Diffuse-only fallback is active.");
+      setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active
+        ? "The eye's own roughness from your game files. The eye's surface detail, depth and the game's eye lighting aren't reproduced yet."
+        : !eye.requested ? "Off: the eyes use the preview's even gloss."
+          : "The eye shown has no roughness the preview can read, so it keeps the even gloss.");
     },
   };
 }

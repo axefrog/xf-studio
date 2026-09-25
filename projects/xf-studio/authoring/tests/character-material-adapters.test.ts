@@ -9,7 +9,7 @@ import { RENDER_TEMPLATES } from "../src/render-templates";
 const texture = (depotPath: string, isGamma = false): RenderTexture =>
   ({ file: `${"a".repeat(64)}.png`, sha256: "a".repeat(64), sources: [], depotPath, width: 4, height: 4, isGamma });
 const chunk = (template: string, textures: string[], extra: Partial<RenderChunkMaterial> = {}): RenderChunkMaterial => ({
-  chunk: 0, name: "m", template, scalars: {}, colours: {}, profiles: {}, skinProfiles: {},
+  chunk: 0, name: "m", template, scalars: {}, colours: {}, profiles: {}, skinProfiles: {}, gradients: {},
   textures: Object.fromEntries(textures.map(name => [name, texture(`x\\${name}.xbm`)])), ...extra });
 const requests: string[] = [];
 const textures: ChunkTextures = (parameter, use, wrap) => { requests.push(`${parameter}:${use}:${wrap}`); return new THREE.Texture(); };

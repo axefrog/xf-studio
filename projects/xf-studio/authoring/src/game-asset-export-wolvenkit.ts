@@ -1,3 +1,4 @@
+import { depotHash } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type UncookRun } from "./game-asset-export";
 import { archiveSourceContains } from "./rdar-index-fs";
@@ -15,9 +16,15 @@ export function uncookArguments(archivePath: string, depotPaths: readonly string
     "--mesh-export-type", "MeshOnly", ...(gameRoot ? ["-gp", gameRoot] : []), "-v", "Minimal"];
 }
 
+/** One resource by its depot hash (an archive without path names); WolvenKit writes `<hash>.<ext>`. */
+export function uncookByHashArguments(archivePath: string, depotPath: string, outDir: string): string[] {
+  return ["uncook", archivePath, "-o", outDir, "--hash", depotHash(depotPath), "-u", "--uext", "png", "-v", "Minimal"];
+}
+
 export function createWolvenKitUncook(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): UncookRun {
-  return async ({ source, depotPaths, outDir, withMaterials, signal }) => {
-    const args = uncookArguments(source.archivePath, depotPaths, outDir, withMaterials ? source.gameRoot : null);
+  return async ({ source, depotPaths, outDir, withMaterials, signal, byHash }) => {
+    const args = byHash ? uncookByHashArguments(source.archivePath, depotPaths[0]!, outDir)
+      : uncookArguments(source.archivePath, depotPaths, outDir, withMaterials ? source.gameRoot : null);
     // WolvenKit logs per-file material warnings on success; the exporter checks the exported files instead.
     try { await runWolvenKit(cli, args, { signal, timeoutMs, keep: 64_000 }); }
     catch (error) {

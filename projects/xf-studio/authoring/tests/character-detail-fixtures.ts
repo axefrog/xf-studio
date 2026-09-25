@@ -1,10 +1,14 @@
 // Asset-free synthetic installation shaped like the reference resolver outputs for the head skin, brows,
-// lashes and hair: a vanilla-style creator resource with a skin-type switcher, the head morph component whose
+// lashes, hair and eyes: a vanilla-style creator resource with a skin-type switcher, the head morph component whose
 // mesh holds one local material per (tone, type) over a tone `.mi` chain ending at `skin.mt`, a brow decal,
 // the eye component's lash chunk, a hair mesh with a cap, a lower LOD and a shadow mesh, plus a "mod" archive
 // that adds a second brow style, replaces a hair profile, and (like a complexion mod) replaces a skin-type
 // albedo and the template-default skin profile at their vanilla paths. An optional texture-framework archive
 // patches the head mesh's appearances through ArchiveXL with a donor mesh that adds a secondary albedo.
+// Eyes: one three-chunk eye mesh (lashes, eyeball, wetness shell) whose eye-colour choices are a gradient eye, a
+// texture-only eye, a layered design and a chunk-swapped (male-order) gradient eye; its morph target binds a flat
+// normal to `Normal`, and an ArchiveXL-style fix copy clears that for the app's "mod" appearance, which a
+// CCXL-style pack's colour is built from (a CCO on the eye slot, a patch mesh with an `@eyes` template and soft paths).
 // No private save, game file or real mod name is used.
 import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
@@ -37,7 +41,18 @@ export const P = {
   skinMt: "base\\materials\\skin.mt", defaultSp: "engine\\materials\\defaults\\default.sp",
   micro: "base\\fixture\\tex\\microdetail_n.xbm", flat: "base\\fixture\\tex\\flat_n.xbm", black: "base\\fixture\\tex\\black.xbm",
   donorMesh: "framework\\donor_head.mesh", overlay: "framework\\tex\\head_overlay_d01.xbm",
+  eyeApp: "base\\fixture\\he_basehead.app", eyeGradMt: "base\\materials\\eye_gradient.mt", eyeShadowMt: "base\\materials\\eye_shadow.mt",
+  layeredMt: "engine\\materials\\multilayered.mt", blueMi: "base\\fixture\\eyes\\blue_eye_gradient.mi", shadowMi: "base\\fixture\\eyes\\eyeshadow_base.mi",
+  eyeD: "base\\fixture\\eyes\\eye_d02.xbm", eyeN: "base\\fixture\\eyes\\eye_n01.xbm", eyeRm: "base\\fixture\\eyes\\eye_rm01.xbm",
+  irisMask: "base\\fixture\\eyes\\eye_mask.xbm", bubble: "base\\fixture\\eyes\\normal_bubble.xbm", shellMask: "base\\fixture\\eyes\\eye_shadow_mask.xbm",
+  textureEyeD: "base\\fixture\\eyes\\texture_eye_d01.xbm", textureEyeN: "base\\fixture\\eyes\\texture_eye_n01.xbm",
+  blueGradient: "base\\fixture\\eyes\\eye_blue.gradient", defaultGradient: "engine\\materials\\defaults\\default.gradient",
+  editorNormal: "engine\\textures\\editor\\normal.xbm", fixMorph: "archive_xl\\fixture\\he_morphs_normal_fix.morphtarget",
+  nullMorph: "archive_xl\\common\\null.morphtarget", packCco: "fixture_pack\\eyes.inkcharcustomization",
+  packPatch: "fixture_pack\\eyes_patch.mesh", packD: "fixture_pack\\tex\\pack_eye_01_d.xbm", packN: "fixture_pack\\tex\\pack_eye_01_n.xbm",
 } as const;
+/** The eye colour's chunk mask: every chunk but the lashes (chunk 0). */
+export const EYE_MASK = "18446744073709551614";
 /** Skin tone definitions, as the vanilla creator names them. */
 export const TONES = { pale: "h0_000_pwa__basehead__01_ca_pale", ivory: "h0_000_pwa__basehead__01_ca_pale_00_warm_ivory",
   senna: "h0_000_pwa__basehead__03_ca_senna" } as const;
@@ -56,6 +71,16 @@ const hParam = (name: string, path: string) => ({ $type: "CMaterialParameterHair
 const spParam = (name: string, path: string) => ({ $type: "CMaterialParameterSkinParameters", parameterName: cn(name), skinProfile: rp(path) });
 const cParam = (name: string, r: number, g: number, b: number) =>
   ({ $type: "CMaterialParameterColor", parameterName: cn(name), color: { $type: "Color", Red: r, Green: g, Blue: b, Alpha: 255 } });
+const gParam = (name: string, path: string) => ({ $type: "CMaterialParameterGradient", parameterName: cn(name), gradient: rp(path) });
+const gradientRef = (name: string, path: string) => ({ $type: "rRef:CGradient", [name]: rp(path) });
+const gradientStop = (value: number, r: number, g: number, b: number) => ({ $type: "rendGradientEntry", value, color: { $type: "Color", Red: r, Green: g, Blue: b, Alpha: 255 } });
+/** A morph target with its `baseTexture` rule. */
+const morphWithTexture = (baseMesh: string, chunks: number, texture: string | null, parameter: string) => {
+  const doc = morphtarget(baseMesh, chunks, [["h011", "eyes"]]) as { Data: { RootChunk: Record<string, unknown> } };
+  doc.Data.RootChunk.baseTexture = rp(texture);
+  doc.Data.RootChunk.baseTextureParamName = cn(parameter);
+  return doc;
+};
 const skinProfile = (values: { roughness0: number; roughness1: number; lobeMix: number; blurSize: number; falloff: [number, number, number] }) =>
   cr2w({ $type: "CSkinProfile", roughness0: values.roughness0, roughness1: values.roughness1, lobeMix: values.lobeMix, blurSize: values.blurSize,
     diffuse: { $type: "Color", Red: 255, Green: 255, Blue: 255, Alpha: 255 },
@@ -86,9 +111,10 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
       option("eyelash_color", P.lashApp, ["brown"], "eyelash_color"),
       option("hair_color1", P.hairApp, ["brown"], "hair_color"),
       option("hair_color_fpp_01", P.hairFppApp, ["default"], "hair_color_fpp", 1, 1),
-    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color"], hairs: ["hair_color1"],
+      option("eyes_color", P.eyeApp, ["gradient_blue", "texture_blue", "layered_design", "swapped_blue"], "eyes_color"),
+    ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
-        "eyelash_color", "hair_color1", "hair_color_fpp_01"] }),
+        "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }),
     // Skin: the type's .app names the tone's mesh appearance on the one head morph component (plus a part the preview doesn't draw).
     [P.skinApp1]: app(toneAppearances("").map(entry => ({ ...entry, components: [...entry.components, meshComponent("seam_fix", P.shadowMesh)] }))),
     [P.skinApp3]: app(toneAppearances("_d03")),
@@ -122,12 +148,38 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
           scalar("UseGradientMap", 1), scalar("GradientMapIntensity", 0.5), colour("SecondaryDiffuseColor", 62, 49, 42)]),
         instance(P.decalMt, [tex("DiffuseTexture", P.browD2), tex("SecondaryDiffuseAlpha", P.browDs), tex("GradientMap", P.grad)])] }),
     [P.lashApp]: app([{ name: "brown", components: [morphComponent("eyes", P.eyeMorph, "brown", "1")] }]),
-    [P.eyeMorph]: morphtarget(P.eyeMesh, 2, [["h011", "eyes"]]),
-    [P.eyeMesh]: mesh({ appearances: [{ name: "brown", chunkMaterials: ["lashes", "eye"] }],
-      entries: [{ name: "lashes", local: true, index: 0 }, { name: "eye", local: true, index: 1 }], local: [
+    // The vanilla eye morph binds a flat editor normal to the eye's `Normal`.
+    [P.eyeMorph]: morphWithTexture(P.eyeMesh, 3, P.editorNormal, "Normal"),
+    // Index 1 is the dynamic-appearance source for names without "__" (ArchiveXL); it binds the fix copy.
+    [P.eyeApp]: app([["gradient_blue", P.eyeMorph], ["mod", P.fixMorph], ["texture_blue", P.eyeMorph], ["layered_design", P.eyeMorph],
+      ["swapped_blue", P.eyeMorph]].map(([name, morph]) => ({ name: name!, components: [morphComponent("eyes", morph!, name === "mod" ? "gradient_blue" : name!, EYE_MASK)] }))),
+    [P.eyeMesh]: mesh({ appearances: [{ name: "brown", chunkMaterials: ["lashes", "eye", "wetness"] },
+        { name: "blood_gradient_black", chunkMaterials: ["lashes", "blood_gradient_black@eyes", "wetness"] },
+        { name: "gradient_blue", chunkMaterials: ["lashes", "gradient_blue@eyes", "wetness"] },
+        { name: "texture_blue", chunkMaterials: ["lashes", "texture_blue@eyes", "wetness"] },
+        { name: "layered_design", chunkMaterials: ["lashes", "layered_design@eyes", "wetness"] },
+        // The male mesh's order: wetness in chunk 1, the eye in chunk 2.
+        { name: "swapped_blue", chunkMaterials: ["lashes", "wetness", "gradient_blue@eyes"] }],
+      entries: [{ name: "lashes", local: true, index: 0 }, { name: "eye", local: true, index: 1 }, { name: "blood_gradient_black@eyes", local: false, index: 0 },
+        { name: "gradient_blue@eyes", local: false, index: 0 }, { name: "texture_blue@eyes", local: true, index: 2 },
+        { name: "layered_design@eyes", local: true, index: 3 }, { name: "wetness", local: false, index: 1 }],
+      external: [P.blueMi, P.shadowMi], local: [
         instance(P.hairMt, [tex("Strand_Alpha", P.lashAlpha), tex("Strand_Gradient", P.white), hp("HairProfile", P.hp),
           scalar("AlphaCutoff", 0), scalar("RoughnessScale", 0), scalar("RoughnessBias", 1)]),
-        instance(P.eyeMt)] }),
+        instance(P.eyeMt), instance(P.eyeMt, [tex("Albedo", P.textureEyeD), tex("Normal", P.textureEyeN)]), instance(P.layeredMt)] }),
+    [P.blueMi]: mi(P.eyeGradMt, [tex("Albedo", P.eyeD), gradientRef("IrisColorGradient", P.blueGradient), scalar("BlickScale", 0.1)]),
+    [P.shadowMi]: mi(P.eyeShadowMt, [tex("Mask", P.shellMask), colour("ShadowColor", 125, 58, 58), scalar("Intensity", 0.7), scalar("Exponent", 0.8)]),
+    // Stored out of order, as the game's gradients are.
+    [P.blueGradient]: cr2w({ $type: "CGradient", gradientEntries: [gradientStop(0.785713971, 130, 192, 229), gradientStop(1, 255, 255, 255), gradientStop(0, 22, 22, 22)] }),
+    [P.eyeMt]: template([tParam("Albedo", P.white), tParam("Normal", P.eyeN), tParam("Roughness", P.eyeRm), tParam("NormalBubble", P.bubble),
+      sParam("RoughnessScale", 0.493420988), sParam("IrisSize", 0.737374008)]),
+    [P.eyeGradMt]: template([tParam("Albedo", P.white), tParam("Normal", P.eyeN), tParam("Roughness", P.eyeRm), tParam("NormalBubble", P.bubble),
+      tParam("IrisMask", P.irisMask), gParam("IrisColorGradient", P.defaultGradient), sParam("RoughnessScale", 0.493420988)]),
+    [P.eyeShadowMt]: template([cParam("ShadowColor", 255, 0, 0), sParam("Exponent", 2.2), sParam("Intensity", 1), tParam("Mask", P.black),
+      sParam("WetnessRoughness", 1), sParam("WetnessStrength", 4)]),
+    [P.layeredMt]: template([]),
+    [P.eyeD]: xbm(true), [P.eyeN]: xbm(false), [P.eyeRm]: xbm(false), [P.irisMask]: xbm(true), [P.bubble]: xbm(false), [P.shellMask]: xbm(false),
+    [P.textureEyeD]: xbm(true), [P.textureEyeN]: xbm(true), [P.editorNormal]: xbm(false),
     [P.hairApp]: app([{ name: "brown", components: [meshComponent("hair", P.hairMesh, "brown"), meshComponent("hair_shadow", P.shadowMesh)] }]),
     [P.hairFppApp]: app([{ name: "default", components: [meshComponent("hair_fpp", P.shadowMesh)] }]),
     [P.hairMesh]: lodMesh({ appearances: [{ name: "brown", chunkMaterials: ["long", "cap", "long"] }],
@@ -145,6 +197,18 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
     [P.browD]: xbm(true), [P.browDs]: xbm(true), [P.grad]: xbm(true), [P.lashAlpha]: xbm(false), [P.white]: xbm(false), [P.grey]: xbm(false),
     [P.strandA]: xbm(false), [P.strandId]: xbm(false), [P.strandG]: xbm(false), [P.capMask]: xbm(false), [P.hp]: profile(60),
   } };
+  // An ArchiveXL-style bundle: the null morph whose empty `baseTexture` its patch copies onto the fix copy.
+  const bundle: FixtureArchive = { virtualPath: "red4ext/plugins/ArchiveXL/Bundle/ArchiveXL.archive", files: {
+    [P.nullMorph]: cr2w({ $type: "MorphTargetMesh", baseMesh: rp(null), baseTexture: rp(null), baseTextureParamName: cn("None"), targets: [] }) } };
+  // A CCXL-style eye pack: one colour on the eye slot, built from the app's "mod" appearance, its patch mesh's
+  // `@eyes` template naming soft texture paths from the colour's name.
+  const pack: FixtureArchive = { virtualPath: "archive/pc/mod/fixture_pack.archive", provider: "mo2-mod", providerName: "Fixture eye pack", priority: 3, files: {
+    [P.packCco]: cco([appearanceOption("", null, ["pack_eye_01"], { uiSlot: "eyes_color" })], {}),
+    [P.packPatch]: mesh({ appearances: [{ name: "pack_eye_01", chunkMaterials: [], tags: ["blood_gradient_black"] }],
+      entries: [{ name: "@eyes", local: true, index: 0 }],
+      local: [instance(P.eyeMt, [tex("Albedo", "*fixture_pack\\tex\\{material}_d.xbm"), tex("Normal", "*fixture_pack\\tex\\{material}_n.xbm")])] }),
+    [P.packD]: xbm(true), [P.packN]: xbm(false),
+  } };
   // A mod archive: a second brow style's texture and a replacement hair profile (it wins over the base game).
   // Like a complexion mod, it also replaces skin type 3's albedo and the template-default skin profile at their vanilla paths.
   const mod: FixtureArchive = { virtualPath: "archive/pc/mod/fixture_mod.archive", provider: "mo2-mod", providerName: "Fixture mod", priority: 1, files: {
@@ -160,9 +224,16 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
           tex("SecondaryAlbedo", P.overlay), scalar("SecondaryAlbedoInfluence", 1), scalar("SecondaryAlbedoTintColorInfluence", 1)])] }),
       [P.overlay]: xbm(true),
     } };
-  const archives = options.skinPatch ? [base, mod, framework] : [base, mod];
-  const xl: XlDocument[] = options.skinPatch ? [{ id: "archive/pc/mod/fixture_framework.xl",
-    document: { resource: { patch: { [P.donorMesh]: { props: ["appearances"], targets: [P.headMesh] } } } } }] : [];
+  const archives = options.skinPatch ? [base, bundle, mod, pack, framework] : [base, bundle, mod, pack];
+  const xl: XlDocument[] = [
+    // The eye app gets ArchiveXL's dynamic customization appearances; the fix copy of the eye morph drops its base texture.
+    { id: "red4ext/plugins/ArchiveXL/Bundle/EyesFix.xl", document: { resource: { scope: { "player_customization.app": [P.eyeApp] },
+      copy: { [P.eyeMorph]: P.fixMorph }, patch: { [P.nullMorph]: { props: ["baseTexture", "baseTextureParamName"], targets: [P.fixMorph] } } } } },
+    { id: "archive/pc/mod/fixture_pack.xl", document: { customizations: { female: P.packCco },
+      resource: { patch: { [P.packPatch]: { props: ["appearances"], targets: [P.eyeMesh] } } } } },
+    ...(options.skinPatch ? [{ id: "archive/pc/mod/fixture_framework.xl",
+      document: { resource: { patch: { [P.donorMesh]: { props: ["appearances"], targets: [P.headMesh] } } } } }] : []),
+  ];
   return { archives, installation: () => {
     const { plan, depot, graph } = fixtureInstallation(archives, xl);
     return { plan, depot, graph, xl: graph.xl, fetcher: {} as Installation["fetcher"], summary: { route: "mo2", scanComplete: true, scanIssues: [],
@@ -175,11 +246,13 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
 const saved = (items: [string, string, string, string][]): CharacterRequest => ({ schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: "female",
   appearances: items.map(([group, option, path, definition]) => ({ group, option, app: depotHash(path), definition })),
   morphs: [{ group: "TPP", region: "nose", target: "h012" }] });
-/** V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group). */
+/** V "A": skin type 1 in pale, brow style 1, lashes, hair 1 (with its FPP twin in its own group), the gradient blue eye. */
 export const REQUEST_A = saved([["TPP", "skin_type_01", P.skinApp1, TONES.pale], ["TPP", "eyebrows_color1", P.browApp1, "brown"],
-  ["TPP", "eyelash_color", P.lashApp, "brown"],
+  ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "gradient_blue"],
   ["hairs", "hair_color1", P.hairApp, "brown"], ["FPP_hairs", "hair_color_fpp_01", P.hairFppApp, "default"],
   ["character_customization", "eyebrows_color1", P.browApp1, "brown"]]);
-/** V "B": skin type 3 in senna, the mod's brow style, lashes, and no hair at all. */
+/** V "B": skin type 3 in senna, the mod's brow style, lashes, no hair at all, and the eye pack's colour. */
 export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna], ["TPP", "eyebrows_color2", P.browApp2, "dark"],
-  ["TPP", "eyelash_color", P.lashApp, "brown"]]);
+  ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "pack_eye_01"]]);
+/** A save-shaped request for one eye colour alone (the other slots none). */
+export const eyeRequest = (definition: string) => saved([["TPP", "eyes_color", P.eyeApp, definition]]);
