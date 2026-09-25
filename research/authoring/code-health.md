@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
 | `b9597bd` | 2026-09-25 | First deep review: core, pipeline/resolver/adapters, presentation/desktop (three parallel reviewers) | 7 High, 30 Medium, 18 Low. Over the High budget, so feature merges are paused except critical-path work. |
 
@@ -43,6 +44,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-03 | High | Core (design) | Presets/Undo/routing only understand eye-makeup recipes; needs domain registry + general preset model before CC controls | Designed: [feature-module platform](feature-module-platform.md); implementation scheduled |
+| CORE-16 | High | Core | `selectGlitterModel` doesn't know `xfs/recipe-11`: choosing Fine/Clustered/Direct Glitter beside a game-matched Glossy/Shimmer layer is offered then refused, or silently downgrades the schema (`glitter-model.ts:62-65`, `recipe-actions.ts:178-180`). CORE-09 made worse | **Fixed** (claude/cleanup-core2, 25 Sep) |
 | PREV-01 | High | Preview export | Incomplete WolvenKit exports cached as complete; preview permanently stuck until the game changes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-02 | Med | Preview export | Export/preview cache keys ignore WolvenKit identity and GLB/material hashes | **Fixed** (claude/wolvenkit-fetch, 25 Sep) |
 | PREV-03 | Med | Preview export (design) | Material chains resolved by WolvenKit's view of the game folder, not the resolver's winning archives. Worse since PIPE-01: Build cuts the plate from the head the launch route loads, while the preview still reads only `archive/pc/content` (`preview-core-recipe.ts:32` comment claims they share one head) | Open (platform step 7); fix the comment and add a preview notice meanwhile |
@@ -80,8 +82,12 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | CORE-05 | Med | Core | Queries deep-copy/reparse the collection (context menu 0.1–0.4 s) and some stash as a side effect | Open |
 | CORE-06 | Med | Core | Control edits skip validation and throw raw errors, leaving a transaction open | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-07 | Med | Core | Optical-bake and range rules duplicated across core, workers and descriptors | Open |
-| CORE-08 | Med | Core | Duplicate action catalogues and Undo policies; finish choices not from the catalogue | Open |
-| CORE-09 | Med | Core (design) | One layer's glitter model bumps the whole recipe schema; nested schema conditionals | Open |
+| CORE-08 | Med | Core | Duplicate action catalogues and Undo policies; finish choices not from the catalogue | Partly fixed (claude/cleanup-core2): Undo policy comes from the descriptor table and the routing sets are compiler-checked against the action unions; the `layer.setFinish` enum still isn't fed from `finishCatalogue()` (with CORE-20) |
+| CORE-09 | Med | Core (design) | One layer's glitter model bumps the whole recipe schema; nested schema conditionals | Partly fixed (claude/cleanup-core2): one `requiredRecipeSchema` helper replaces the nested conditionals and never downgrades; the schema is still recipe-wide by design until the feature-module platform |
+| CORE-17 | Med | Core | `layer.setFinish` always replaces optics: re-selecting Colour-shift resets shift colour/strength and adds an Undo step; re-selecting Glossy silently upgrades an earlier-model layer; shift settings aren't remembered like Glitter's | **Fixed** (claude/cleanup-core2, 25 Sep) |
+| CORE-18 | Med | Core | `layerExport(layerId)` judges layers alone, but Colour-shift eligibility is preset-wide: the Inspector says Experimental while Check omits the layer | **Fixed** (claude/cleanup-core2, 25 Sep) |
+| CORE-19 | Med | Core | Same defect as PIPE-23 (Fresnel rule counts unexportable layers) | Open (with PIPE-23) |
+| CORE-20 | Med | Core | Finish/route rules in five places (`finish-export.ts` two tables, `recipe.ts` `GAME_OPTICS_FINISHES`, verifier `resource-checks.ts:61`, `makeup-stack.ts:184-187`); extends CORE-07/UI-10 | Open |
 | CORE-10 | Med | Core | One damaged recovery draft blocks the whole workspace restore | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-11 | Med | Tests | Core test gaps (startup wiring, history limit, workspace size, routing) | Partly fixed (claude/cleanup-core); routing tests remain |
 
@@ -115,11 +121,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PREV-17:** the WolvenKit post-install probe ignores the cancel signal (`wolvenkit-setup-host.ts:314`); Cancel does nothing for up to 30 s.
 - **PREV-18:** WolvenKit unpacking runs synchronously on the server, and the .NET registry check re-runs every 3 s while the card polls every 500 ms.
 - **PREV-19:** test gaps: `tool-download.ts` stall/redirect/length/oversize paths, `createInstalledHeadSource`, the PIPE-23 and PIPE-24 cases, and `process-tree`.
+- **CORE-21:** Fixed (claude/cleanup-core2): shift edits are labelled "Shift colour" or "Shift strength".
+- **CORE-22:** dead eligibility exports `SUPPORTED_FLAT_FINISHES`, `unsupportedFlatLayers` (`preset-compiler.ts`) and `presetRoute` (`finish-export.ts`).
+- **CORE-23:** Fixed (claude/cleanup-core2): one `historyTimeline()` mapper in `authoring-history.ts` serves both.
+- **CORE-24:** Fixed (claude/cleanup-core2): the first collection keeps every editor-memory field except the recipe.
+- **CORE-08/CORE-15 (extended):** new actions were added to both the descriptor table and the hand-kept `recipeKinds`/`undoPolicy()` sets (fixed in claude/cleanup-core2, see CORE-08); new refusals come back as `invalid_value` instead of `incompatible_mode` (open).
 
 ## New subsystems since last review
 
-- **Managed tool download** (claude/wolvenkit-fetch, 25 Sep): `wolvenkit-setup-host.ts` (service), `tool-download.ts`, `zip-extract.ts`, `dotnet-runtime.ts` (adapters), `wolvenkit-release.ts` (pin), `wolvenkit-setup.ts` (renderer actions and views), endpoints `/api/desktop/wolvenkit`, `/api/wolvenkit` and `/api/desktop/open-link`. First code that downloads and unpacks executables; review with the next deep review.
-- **Shared WolvenKit runner** (`wolvenkit-cli.ts`, same branch): the one place Build, the eye plate and the preview start WolvenKit.
+None. (The managed tool download and the shared WolvenKit runner were reviewed at `19bf84c`; the presentation layer's review follows the legacy-shell removal.)
 
 ## Fixed in claude/wolvenkit-fetch
 
@@ -138,8 +148,22 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **CORE-06:** `capability()` applies descriptor payload ranges, `controlEdit` runs the same gate and returns a typed result, exceptions are classified by source, and control dispatch is wired inside `createTrustedAuthoringCore`. Test: `tests/control-edit-validation.test.ts`.
 - **CORE-11 (partial):** the tests above, plus touched fixtures (`studio-application`, `alpha-capability-reasons`, `application-boundary-fixture`) now build through `createTrustedAuthoringCore`.
 
+## Fixed in claude/cleanup-core2
+
+- **CORE-16 (and CORE-09, partly):** `requiredRecipeSchema()` (`recipe-schema.ts`) computes the schema from every layer's stored form (irregular 7, Direct 8, Clustered 9, Fine 10, game-matched optics 11) and never goes below the current schema. `applyRecipeAction` applies it to every edit and `selectGlitterModel` uses it, so no per-layer choice downgrades the recipe or invalidates another layer. Tests (`tests/finish-actions.test.ts`): Glitter models beside game-matched Glossy, Direct beside Fine on recipe-11 and recipe-10, no downgrade after removing or changing the last game-matched layer, and every finish/model the capability offers also dispatches.
+- **CORE-17:** re-selecting the current finish (Satin and its alias included) is a no-op with no Undo step, so an earlier-model Glossy layer stays as it is until `layer.useGameOptics`. Colour-shift settings are remembered per preset and layer in the same editor memory as inactive Glitter models (the workspace's `glitterChoices` key gains an optional `shift` entry that older builds ignore); leaving Glitter also keeps the active model's settings.
+- **CORE-18:** `StudioApplication.layerExport()` returns the layer's status in the preset-level plan (`planPresetExport`), with `blockedBy: "layer" | "preset"`; a hidden layer is judged as if shown. The Inspector shows "Left out of this preset" with the plan's reason instead of "Experimental" or "Earlier preview model".
+- **CORE-08 (partial):** `undoPolicy()` reads the descriptor table (command or key variant first); the recipe and collection routing sets are typed records over the action unions (`RECIPE_ACTION_KINDS`), and the selection-only set is derived from descriptor `effect`. One visible change: the Presets "Restore" entry now reports the descriptor's `recovery` policy. Boundary test in `tests/studio-application.test.ts`.
+- **CORE-21, CORE-23, CORE-24:** see the Low list.
+
 ## Fixed in claude/cleanup-pipeline
 
 - **PIPE-13:** a new Authoring workflow runs `bun test`, `bun run check` and `bun run build` on Ubuntu and the desktop typecheck (Electrobun devkit) and `bun test tests` on Windows for pushes to `main` and pull requests touching the authoring source. `XFS_REQUIRE_ORACLES=1` turns oracle, game-integration and declared private-asset skips into failures for release runs.
 - **PIPE-02, PIPE-16:** the independent verifier unbundles its own copy of the archive, checks every member hash, then runs its own WolvenKit serialize and texture export on those members and the plate inputs; it parses the `.archive.xl` structurally, re-hashes plate inputs at the end, and takes the morph target count from the plate recipe. The builder no longer writes the round trip or texture export.
 - **PIPE-01:** the built-in plate is cut from the head the launch route loads (generic resolver plus `.xl` patches), with topology gates, provenance in the plate and package manifests, a cache key over that provenance, a named `plate_source_modded` stop and the `XFS_EYE_PLATE_HEAD=base-game` escape hatch.
+
+## Fixed in claude/retire-legacy
+
+- **UI-05:** one composition root, `src/studio-startup.ts`, started by the localhost entry `studio-main.ts` and by the desktop bootstrap (which now bundles `studio-startup.js` instead of `studio-main.js`). The sidebar shell (`main.ts`, `/legacy.html`, `style.css`, eleven `*-ui.ts` modules), `/port-smoke.html` and `/application-boundary-fixture.html` were removed; `tests/trusted-studio-bootstrap.test.ts`, `tests/studio-presentation.test.ts` and `tests/studio-application.test.ts` remain the page-free port fixtures. Legacy-only `preset.expand`/`collection.filesOpen`, the workspace `panels` block, draft `expanded`/`filesOpen` flags, `captureBrowserPanels`, `setupContextMenus` and the editors' keyword-cursor fallback went with it; stored workspaces with those fields still restore (fields ignored).
+- **UI-06 (data attributes):** host differences reach the root as a typed `StudioHost` (storage, budget, preparation service, shared `LocalSetupActions`, setup place, flush and preview-ready callbacks); `tests/studio-ui-boundary.test.ts` fails if the root or entry reads `dataset`, `xfDesktop*` or `xfs-desktop*`. The desktop smoke report uses the ready callback, and the WolvenKit card's `xfs-host-setup-changed` window event became the card's `onSetupChanged` callback into the root. The WolvenKit consent and .NET card now run on both hosts through the shared `src/browser-preview-card.ts`; one `LocalSetupActions` instance is shared by Build setup, Game & tools and the card, and `idle()` lets a save wait for another view's refresh instead of being refused as busy. Boot and head-load failures show plain sentences; raw error text remains only after "The 3D preview couldn't be loaded:" for loader messages, which are already plain.
+- **PREV-09 and the prepared-file path:** the core head, plate, eyes and maps come only from the derived game-file preview on both hosts. Removed: localhost prepared-file precedence and `XFS_PREVIEW_CORE=derived`, the desktop five-file intake (`desktop/asset-intake.ts`, marker, dialog, endpoint, trial scripts, `review-ready-assets.ts`), `tools/export_preview.py`, the unhashed prepared render record and the prepared-eyes notice. Render records must be `game-files` with hashes and morph sources. The preparation card (`src/browser-preview-card.ts`) is shared, so localhost with no cache offers preparation from the saved settings. Real-geometry tests read the derived head and skip with a reason when no preview is prepared.

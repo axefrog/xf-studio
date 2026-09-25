@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { restoreFirstWeights } from "./skin";
-import { CORE_DETAIL_URL, CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, parseCoreDetail, PREPARED_CORE_DETAIL, type CoreDetail,
+import { CORE_DETAIL_URL, CORE_TEXTURE_COLOUR, CORE_TEXTURE_SLOTS, parseCoreDetail, type CoreDetail,
   type CoreTextureSlot, type RenderResource } from "./render-detail";
 
 /**
- * Renderer device port for the core head detail: it takes a typed render record (from the
- * host, or the fixed description of developer-prepared files), fetches and hash-checks each
+ * Renderer device port for the core head detail: it takes the host's typed render record for
+ * the preview derived from the player's game files, fetches and hash-checks each
  * resource, and returns ready Three.js objects. On any failure it disposes what it created.
  * Later details (skin variants, hair, piercings, other characters) should load through the
  * same record shape instead of fixed URLs.
@@ -27,11 +27,11 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The host's record when it has one; the developer intake's fixed files otherwise. */
+/** The host's record for the derived preview; there is no other source of the core head. */
 export async function readCoreDetail(fetcher: CoreDetailFetch = fetch): Promise<CoreDetail> {
   let response: Response;
-  try { response = await fetcher(CORE_DETAIL_URL); } catch { return PREPARED_CORE_DETAIL; }
-  if (response.status === 404) return PREPARED_CORE_DETAIL;
+  try { response = await fetcher(CORE_DETAIL_URL); } catch { throw Error("The 3D preview record could not be read."); }
+  if (response.status === 404) throw Error("The 3D preview hasn't been prepared from your game files yet.");
   if (!response.ok) throw Error("The 3D preview record could not be read.");
   return parseCoreDetail(await response.json());
 }
@@ -40,7 +40,7 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch)
   const response = await fetcher(`/assets/${resource.file}`);
   if (!response.ok) throw Error(`${resource.file} is unavailable.`);
   const bytes = await response.arrayBuffer();
-  if (resource.sha256 && await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
+  if (await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
   return bytes;
 }
 

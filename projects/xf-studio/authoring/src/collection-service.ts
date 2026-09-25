@@ -174,7 +174,7 @@ export class CollectionService {
     const allowed = this.actionCapability(action);
     if (!allowed.available) throw new CollectionServiceError("unavailable", allowed.reason!);
     this.actions!.dispatch(action);
-    if (action.kind !== "preset.expand" && action.kind !== "collection.filesOpen") this.content++;
+    this.content++;
     this.notify();
   }
   /** A restored draft's revision content is fetched once so dirty state can be exact after reload. */
@@ -232,8 +232,9 @@ export class CollectionService {
               if (existing) { existing.recipe = current.recipe; existing.name = this.legacy.name.trim() || existing.name; }
               else draft.collection.presets.push({ id, name: this.legacy.name.trim() || "Unsaved preset", revision: 1, recipe: current.recipe });
             }
-            draft.selected = id; draft.editors[id] = { active: current.active, selected: current.selected,
-              fieldSelection: current.fieldSelection, history: current.history };
+            // Keep every editor-memory field (historyTrimmed included); only the recipe lives in the preset.
+            const { recipe: _recipe, ...memory } = current;
+            draft.selected = id; draft.editors[id] = memory;
             this.actions = new CollectionActions(draft, this.read, this.show); this.content++;
             message = summaries.length
               ? "Existing looks and your current draft are retained. Save collection to store this arrangement."

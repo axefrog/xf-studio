@@ -119,8 +119,7 @@ test("preference actions publish detached state and workspace composition captur
     uvView: () => state.uvView, savedV: () => state.savedV,
     collections: () => state.collections, quality: () => state.preview.textureSize,
     preview: () => undefined, motion: () => undefined,
-    sidebar: () => ({ sidebarLeft: state.panels.sidebarLeft, sidebarRight: state.panels.sidebarRight }),
-    layout: () => state.panels, uiPreferences: () => actions.snapshot() as typeof state.uiPreferences,
+    uiPreferences: () => actions.snapshot() as typeof state.uiPreferences,
   });
   expect(composer.capture().uiPreferences).toEqual(actions.snapshot());
   composer.setPreviewReady();

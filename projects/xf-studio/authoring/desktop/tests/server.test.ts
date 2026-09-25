@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createDesktopServer } from "../server";
-import { desktopVersionFromMetadata, PREVIEW_INTAKE_MARKER } from "../host";
+import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { createPackageHandler } from "../../src/package-server";
@@ -36,15 +36,19 @@ test("session gates static files and narrowly typed host facts", async () => {
   const response = await fetch(base + "/api/desktop/capabilities", { headers });
   expect(await response.json()).toMatchObject({ schema: "xfs/desktop-capabilities-1", library: true,
     packageCheck: true, packageBuild: false, updater: false, previewAssets: "missing", version: "0.0.1", channel: "dev",
-    buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot, previewIntake: false });
+    buildHash: "dev", metadataStatus: "ready", userDataPath: dataRoot });
   expect((await fetch(base + "/api/desktop/smoke", { method: "POST", headers: { ...headers,
     Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-smoke-1",
     state: "uv-only", webgl2: true, worker: true }) })).status).toBe(204);
+  // Files placed by hand in the data folder are never served: only the derived preview is.
   const assetRoot = resolve(root, "data", "preview-assets");
   mkdirSync(assetRoot, { recursive: true });
   writeFileSync(resolve(assetRoot, "head.glb"), "local-only fixture");
-  expect((await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).previewAssets).toBe("incomplete");
-  expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(200);
+  expect((await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).previewAssets).toBe("missing");
+  expect((await fetch(base + "/assets/head.glb", { headers })).status).toBe(404);
+  expect((await fetch(base + "/assets/brows.glb", { headers })).status).toBe(404);
+  expect((await fetch(base + "/api/desktop/assets/intake", { method: "POST", headers: { ...headers, Origin: base,
+    "Content-Type": "application/json" }, body: JSON.stringify({ action: "inspect", folder: assetRoot }) })).status).toBe(405);
 });
 
 test("About version never falls back to source metadata when packaged metadata is invalid", () => {
@@ -147,31 +151,6 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     trial.beforeQuit(stale);
     expect(stale.response).toEqual({ allow: false });
   } finally { trial.stop(); }
-});
-
-test("asset intake requires the desktop session and accepts only a folder inspection command", async () => {
-  const base = `http://127.0.0.1:${app.port}`;
-  const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
-  const body = JSON.stringify({ action: "inspect", folder: resolve(root, "absent") });
-  const endpoint = base + "/api/desktop/assets/intake";
-  // Community installs have no intake: the endpoint does not exist until the developer marker is present.
-  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
-    "Content-Type": "application/json" }, body })).status).toBe(404);
-  writeFileSync(resolve(dataRoot, PREVIEW_INTAKE_MARKER), "");
-  expect((await (await fetch(base + "/api/desktop/capabilities", { headers: { Cookie: cookie } })).json()).previewIntake).toBe(true);
-  expect((await fetch(endpoint, { method: "POST", headers: { Origin: base,
-    "Content-Type": "application/json" }, body })).status).toBe(403);
-  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie,
-    Origin: "https://attacker.example", "Content-Type": "application/json" }, body })).status).toBe(403);
-  expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
-    "Content-Type": "application/json" }, body: JSON.stringify({ action: "read", folder: dataRoot }) })).status).toBe(400);
-  const report = await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: base,
-    "Content-Type": "application/json" }, body });
-  expect(report.status).toBe(422);
-  const diagnostic = await report.json();
-  expect(diagnostic).toMatchObject({ ready: false, provenance: "unverified" });
-  expect(diagnostic.files).toHaveLength(5);
-  expect(diagnostic.files[0]).toEqual({ name: "head.glb", status: "missing", matchesKnownOutput: null });
 });
 
 test("SQLite library initializes in the supplied user-data root", async () => {
@@ -398,7 +377,7 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
     const headers = { Cookie: cookie };
     expect((await fetch(base + "/api/desktop/preview")).status).toBe(403);
     expect(await (await fetch(base + "/api/desktop/preview", { headers })).json()).toMatchObject({ phase: "needs-setup", needs: ["game", "wolvenkit"] });
-    expect(await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).toMatchObject({ previewAssets: "missing", previewSource: null });
+    expect(await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).toMatchObject({ previewAssets: "missing" });
     new LocalSettingsStore(resolve(previewRoot, "data")).save({ ...(await import("../../src/local-settings")).defaultLocalSettings(),
       gameRoot: game, wolvenKitCli: cli }, 0);
     const post = (body: unknown, origin = base) => fetch(base + "/api/desktop/preview", { method: "POST",

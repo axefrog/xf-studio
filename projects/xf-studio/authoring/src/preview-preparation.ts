@@ -2,18 +2,10 @@
  * Renderer-side actions for preparing the 3D preview from the player's game files. The host
  * owns the work and every path; this module only reads its state, asks it to start or
  * cancel, polls while it runs, and turns the state into plain-language view facts.
- * The desktop bootstrap renders them; Studio listens for the two window events below.
+ * The preview card renders them; the Studio composition root follows the same actions to
+ * load the head once the preview is ready.
  */
 import { wolvenKitCard, type WolvenKitCardAction, type WolvenKitLink, type WolvenKitSetupState } from "./wolvenkit-setup";
-
-export const PREVIEW_STATUS_EVENT = "xfs-desktop-preview-status";
-export const PREVIEW_READY_EVENT = "xfs-desktop-preview-ready";
-/**
- * The host's setup changed outside Studio's own setup panel (a game folder or WolvenKit chosen,
- * WolvenKit downloaded, the preview prepared): Studio re-reads its setup, so Build availability follows.
- */
-export const HOST_SETUP_CHANGED_EVENT = "xfs-host-setup-changed";
-export type PreviewStatusDetail = { message: string };
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";
 export type PreviewState = {
@@ -147,7 +139,8 @@ export class PreviewPreparationActions {
   dispose() { if (this.timer) clearTimeout(this.timer); this.listeners.clear(); }
 }
 
-export function createBrowserPreviewPreparation(endpoint = "/api/desktop/preview") {
+/** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
+export function createBrowserPreviewPreparation(endpoint: string) {
   return new PreviewPreparationActions(async action => {
     const response = action === "refresh" ? await fetch(endpoint, { cache: "no-store" }) : await fetch(endpoint, { method: "POST",
       credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });

@@ -26,8 +26,10 @@ const bootstrap = await Bun.build({ entrypoints: [resolve(import.meta.dir, "boot
 if (!bootstrap.success || bootstrap.outputs.length !== 1)
   throw Error(bootstrap.logs.map(String).join("\n") || "Desktop bootstrap did not bundle.");
 writeFileSync(resolve(output, "desktop-bootstrap.js"), await bootstrap.outputs[0].text());
+// The bootstrap starts the shared composition root (`studio-startup`) with desktop host services;
+// the localhost entry (`studio-main`) is not shipped.
 const result = await Bun.build({
-  entrypoints: ["studio-main.ts", "raster-worker.ts"].map(name => resolve(authoring, "src", name)),
+  entrypoints: ["studio-startup.ts", "raster-worker.ts"].map(name => resolve(authoring, "src", name)),
   outdir: resolve(output, "build"),
   target: "browser",
 });

@@ -5,6 +5,8 @@ import { PreviewActions } from "../src/preview-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
 import { ViewportAttachment } from "../src/viewport-attachment";
+import { RECIPE_ACTION_KINDS } from "../src/recipe-actions";
+import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/studio-action-descriptors";
 
 function fixture() {
   const workspace = freshWorkspace();
@@ -49,7 +51,7 @@ test("recipe Undo is a current workspace action with live capability and one ato
 
 test("unavailable 3D device leaves authoring and Undo available with explicit reasons", () => {
   const { app, document } = fixture();
-  const reason = "3D preview assets are missing. Import the five prepared files to enable the head view.";
+  const reason = "The 3D preview needs your Cyberpunk 2077 game folder.";
   app.setPreviewUnavailable(reason);
   expect(app.capability({ kind: "camera.front" })).toEqual({ available: false, code: "asset_unavailable", reason });
   expect(app.capability({ kind: "motion.setBlink", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
@@ -267,4 +269,25 @@ test("hit-context commands recheck field, layer and collection identity at invoc
     command: { kind: "add" } })).toMatchObject({ ok: true });
   expect(app.dispatchContext(collectionHit.context, { kind: "preset.edit",
     command: { kind: "add" } })).toMatchObject({ ok: false, code: "missing_target" });
+});
+
+test("Undo policies and recipe routing come from the descriptor table, not parallel lists (CORE-08)", () => {
+  const { app, document } = fixture(), layer = document.recipe.layers[0];
+  // Every recipe action kind has a descriptor; selection-only ones are exactly the "selection" effects.
+  for (const kind of RECIPE_ACTION_KINDS) expect(kind in ACTION_DESCRIPTORS).toBe(true);
+  expect([...RECIPE_ACTION_KINDS].filter(kind =>
+    ACTION_DESCRIPTORS[kind as keyof typeof ACTION_DESCRIPTORS].effect === "selection").sort())
+    .toEqual(["field.select", "layer.select", "point.select"]);
+  const expected = (action: { kind: string; command?: { kind: string }; key?: string }) => {
+    const descriptor: ActionDescriptor = ACTION_DESCRIPTORS[action.kind as keyof typeof ACTION_DESCRIPTORS];
+    const variant = action.command?.kind ?? action.key;
+    return (variant && descriptor.variants?.[variant]?.undo) || descriptor.undo;
+  };
+  const targets = [{ kind: "workspace" as const }, { kind: "collection" as const }, { kind: "viewport" as const },
+    { kind: "layer" as const, id: layer.id }, { kind: "point" as const, layerId: layer.id, index: 0 }];
+  let checked = 0;
+  for (const target of targets) for (const info of app.actionsFor(target)) {
+    expect(info.undo).toBe(expected(info.action as never)); checked++;
+  }
+  expect(checked).toBeGreaterThan(10);
 });

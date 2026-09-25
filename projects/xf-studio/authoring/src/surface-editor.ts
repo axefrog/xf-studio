@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { cancelsGesture } from "./gesture-cancel";
-import { CURSOR_FALLBACK, cursorFor, modifierKey, modifiersOf, pointerBinding, type EditorInputState,
+import { modifierKey, modifiersOf, pointerBinding, type EditorInputState,
   type GestureKind, type PointerTarget } from "./input-bindings";
 import { clamp, curve, MAX_FIELDS, type Layer } from "./recipe";
 import { MAX_CURVE_POINTS, moveTangent, tangentEndpoint } from "./bezier-path";
@@ -41,8 +41,7 @@ type Hooks = {
   cancel: () => void;
   finish?: () => void;
   message: (text: string) => void;
-  /** Hover target, active gesture and editability, for hint strips and cursors. Without it
-   * (legacy shell) the adapter sets a keyword cursor itself from the same catalogue. */
+  /** Hover target, active gesture and editability, for hint strips and cursors (the presentation draws both). */
   input?: (state: EditorInputState) => void;
 };
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
@@ -511,14 +510,11 @@ export function createSurfaceEditor(
     return { target: handle ? HANDLE_TARGET[handle.kind] : painted ? "shape" as PointerTarget : "empty" as PointerTarget,
       editable, layer, handle, uv, painted };
   }
-  let hoverTarget: PointerTarget | undefined, hoverModifiers = modifiersOf({}), inputKey = "";
+  let hoverTarget: PointerTarget | undefined, inputKey = "";
   function publishInput() {
     const gesture: GestureKind | undefined = shapeDrag?.kind ?? (drag ? "handle" : wheel ? "scale" : undefined);
     const state: EditorInputState = { target: hoverTarget, gesture, editable: enabled && !!hooks.layer()?.enabled };
-    if (!hooks.input) {
-      canvas.style.cursor = CURSOR_FALLBACK[cursorFor({ scope: "head", target: hoverTarget, gesture, modifiers: hoverModifiers })];
-      return;
-    }
+    if (!hooks.input) return;
     const key = JSON.stringify(state);
     if (key !== inputKey) { inputKey = key; hooks.input(state); }
   }
@@ -602,7 +598,7 @@ export function createSurfaceEditor(
       if (!drag) {
         const resolved = targetAt(e.clientX, e.clientY);
         hovered = resolved.handle;
-        hoverTarget = resolved.target; hoverModifiers = modifiersOf(e);
+        hoverTarget = resolved.target;
         publishInput();
         return;
       }
@@ -668,7 +664,7 @@ export function createSurfaceEditor(
   function rehover(e: PointerEvent) {
     update();
     const resolved = targetAt(e.clientX, e.clientY);
-    hovered = resolved.handle; hoverTarget = resolved.target; hoverModifiers = modifiersOf(e);
+    hovered = resolved.handle; hoverTarget = resolved.target;
     publishInput();
   }
   canvas.addEventListener("pointerleave", () => {

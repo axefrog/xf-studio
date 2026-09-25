@@ -29,20 +29,20 @@ server.onReport(message => { log.push(message); console.log(`  host: ${message}`
 const started = Date.now();
 const elapsed = () => `${((Date.now() - started) / 1000).toFixed(1)} s`;
 let browser: Awaited<ReturnType<typeof launch>> | undefined;
-const card = () => browser!.evaluate(`({ title: document.querySelector('#desktop-preview-title')?.textContent,
-  body: document.querySelector('#desktop-preview-body')?.textContent, step: document.querySelector('#desktop-preview-step')?.textContent,
-  hidden: document.querySelector('#desktop-preview-card')?.hidden, action: document.querySelector('#desktop-preview-primary')?.dataset.action,
-  label: document.querySelector('#desktop-preview-primary')?.textContent, secondary: document.querySelector('#desktop-preview-secondary')?.textContent })`);
+const card = () => browser!.evaluate(`({ title: document.querySelector('#preview-card-title')?.textContent,
+  body: document.querySelector('#preview-card-body')?.textContent, step: document.querySelector('#preview-card-step')?.textContent,
+  hidden: document.querySelector('#preview-card')?.hidden, action: document.querySelector('#preview-card-primary')?.dataset.action,
+  label: document.querySelector('#preview-card-primary')?.textContent, secondary: document.querySelector('#preview-card-secondary')?.textContent })`);
 try {
   browser = await launch(server.url + "&verify=1", { width: 1280, height: 800, debugPort: 9446, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-welcome')?.open");
   await browser.evaluate("document.querySelector('#desktop-welcome-start').click()");
   await browser.waitFor("!document.querySelector('#desktop-welcome').open && document.querySelector('#studio.studio-ready')");
   // The card first offers the detected game folder (or, with none detected, Build setup).
-  await browser.waitFor("['use-game', 'setup', 'wolvenkit-consent'].includes(document.querySelector('#desktop-preview-primary')?.dataset.action)", 30_000);
+  await browser.waitFor("['use-game', 'setup', 'wolvenkit-consent'].includes(document.querySelector('#preview-card-primary')?.dataset.action)", 30_000);
   let state = await card();
   console.log(`[${elapsed()}] card: ${state.title} → ${state.label}`);
-  if (state.action === "use-game") await browser.evaluate("document.querySelector('#desktop-preview-primary').click()");
+  if (state.action === "use-game") await browser.evaluate("document.querySelector('#preview-card-primary').click()");
   else if (state.action === "setup") {
     if (!gameArgument) throw Error("No single game install was detected; pass --game <folder>.");
     await browser.evaluate(`(async () => { const view = await (await fetch('/api/local-settings')).json();
@@ -50,31 +50,31 @@ try {
         body: JSON.stringify({ revision: view.revision, fields: { ...view.fields, gameRoot: ${JSON.stringify(gameArgument)} } }) }); })()`);
     await browser.evaluate("document.getElementById('desktop-setup').dispatchEvent(new Event('close'))");
   }
-  await browser.waitFor("document.querySelector('#desktop-preview-primary')?.dataset.action === 'wolvenkit-consent'", 30_000);
+  await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'wolvenkit-consent'", 30_000);
   state = await card();
   console.log(`[${elapsed()}] card: ${state.title} — ${state.body}`);
   await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-card.png"));
-  await browser.evaluate("document.querySelector('#desktop-preview-primary').click()");
-  await browser.waitFor("document.querySelector('#desktop-wolvenkit-consent')?.open");
-  const consent = await browser.evaluate("document.querySelector('#desktop-wolvenkit-consent').innerText");
+  await browser.evaluate("document.querySelector('#preview-card-primary').click()");
+  await browser.waitFor("document.querySelector('#wolvenkit-consent')?.open");
+  const consent = await browser.evaluate("document.querySelector('#wolvenkit-consent').innerText");
   for (const needed of ["Download WolvenKit 9.0.1?", "45 MB", "official release on GitHub", "GPL-3.0", "Nothing is installed in Windows", "Download (45 MB)"])
     if (!consent.includes(needed)) throw Error(`The consent dialog lacks "${needed}": ${consent}`);
   if (noDotNet && !consent.includes(".NET 10 Runtime")) throw Error("The consent dialog does not mention the missing .NET runtime.");
   await browser.screenshot(resolve(screenshots, `desktop-wolvenkit-consent${noDotNet ? "-no-dotnet" : ""}.png`));
   // Nothing is downloaded before the person agrees.
   if (log.some(line => /WolvenKit download|WolvenKit .* downloaded/.test(line))) throw Error("A download started before consent.");
-  await browser.evaluate("document.querySelector('#desktop-wolvenkit-confirm').click()");
-  await browser.waitFor("document.querySelector('#desktop-preview-title')?.textContent.startsWith('Downloading WolvenKit')", 10_000);
-  await browser.waitFor("parseFloat(document.querySelector('#desktop-preview-progress')?.value ?? 0) > 0.3", 300_000);
+  await browser.evaluate("document.querySelector('#wolvenkit-consent-confirm').click()");
+  await browser.waitFor("document.querySelector('#preview-card-title')?.textContent.startsWith('Downloading WolvenKit')", 10_000);
+  await browser.waitFor("parseFloat(document.querySelector('#preview-card-progress')?.value ?? 0) > 0.3", 300_000);
   state = await card();
   console.log(`[${elapsed()}] ${state.title} ${state.step}`);
   await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-downloading.png"));
   if (noDotNet) {
-    await browser.waitFor("document.querySelector('#desktop-preview-primary')?.dataset.action === 'runtime-install'", 300_000);
+    await browser.waitFor("document.querySelector('#preview-card-primary')?.dataset.action === 'runtime-install'", 300_000);
     state = await card();
     console.log(`[${elapsed()}] card: ${state.title} — ${state.body} [${state.label} | ${state.secondary}]`);
     await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-needs-dotnet.png"));
-    await browser.evaluate("document.querySelector('#desktop-preview-primary').click()");
+    await browser.evaluate("document.querySelector('#preview-card-primary').click()");
     await browser.waitFor(`true`);
     await Bun.sleep(500);
     if (!opened.includes("https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe")) throw Error(`Microsoft's installer link was not opened: ${opened}`);
@@ -83,7 +83,7 @@ try {
     console.log(JSON.stringify({ result: "runtime guidance shown", opened }, null, 2));
   } else {
     // WolvenKit ready → the preview prepares itself → the head attaches without a reload.
-    await browser.waitFor("document.documentElement.dataset.desktopPreviewAssets === 'ready' && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 600_000);
+    await browser.waitFor("window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 600_000);
     console.log(`[${elapsed()}] the 3D head is ready`);
     await Bun.sleep(1500);
     await browser.screenshot(resolve(screenshots, "desktop-wolvenkit-head-ready.png"));
@@ -93,8 +93,8 @@ try {
       if (!build.ready) await Bun.sleep(1000);
     }
     const capabilities = await browser.evaluate("fetch('/api/desktop/capabilities').then(r => r.json())");
-    console.log(`[${elapsed()}] Build readiness: ${build.ready ? "ready" : JSON.stringify(build.issues)}; capabilities.packageBuild=${capabilities.packageBuild}; previewSource=${capabilities.previewSource}`);
-    if (!build.ready || !capabilities.packageBuild || capabilities.previewSource !== "derived") throw Error("Build readiness did not turn green.");
+    console.log(`[${elapsed()}] Build readiness: ${build.ready ? "ready" : JSON.stringify(build.issues)}; capabilities.packageBuild=${capabilities.packageBuild}; previewAssets=${capabilities.previewAssets}`);
+    if (!build.ready || !capabilities.packageBuild || capabilities.previewAssets !== "ready") throw Error("Build readiness did not turn green.");
     const palette = await browser.evaluate("window.xfStudioPresentation.files.capability({ kind: 'package.build' })");
     if (!palette.available) throw Error(`Build is still unavailable in the Studio: ${JSON.stringify(palette)}`);
     await browser.evaluate("document.querySelector('#desktop-about-open').click()");

@@ -62,7 +62,7 @@ const views = `${bundle}/Resources/app/views/studio/`;
 const viewFiles = members.filter(name => name.startsWith(views) && !name.endsWith("/"))
   .map(name => name.slice(views.length));
 sameMembers(viewFiles, ["index.html", "studio.css", "about.css", "desktop-bootstrap.js", "check-worker.js",
-  "build/studio-main.js", "build/raster-worker.js", "boot-watchdog.js", packagedNotices, packagedLicence], "Packaged Studio view");
+  "build/studio-startup.js", "build/raster-worker.js", "boot-watchdog.js", packagedNotices, packagedLicence], "Packaged Studio view");
 // The installed app must carry the current licence and notices, and the notices
 // must name every shipped program and the versions actually built in.
 for (const [name, source] of [[packagedNotices, noticesPath], [packagedLicence, licencePath]] as const)

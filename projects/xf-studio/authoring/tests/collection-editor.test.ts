@@ -31,11 +31,13 @@ test("preset switching retains unsaved recipes, selections and Undo; structural 
   session.edit({ kind: "remove", id: original.id }); session.edit({ kind: "remove", id: copyId });
   expect(editor.recipe).toEqual(emptyRecipe()); expect(session.state.collection.presets).toHaveLength(0);
   expect(() => planCollection(session.state.collection)).toThrow();
-  session.state.filesOpen = true;
   const workspace = freshWorkspace(); workspace.collections = session.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(workspace)));
+  // Sidebar-shell disclosure state saved by earlier builds is ignored on restore.
+  const restored = parseWorkspace(JSON.parse(JSON.stringify({ ...workspace,
+    collections: { ...workspace.collections, filesOpen: true, expanded: false } })));
   expect(restored.collections!.removed).toHaveLength(2); expect(restored.recipe.layers).toHaveLength(0);
-  expect(restored.collections!.filesOpen).toBe(true);
+  expect(restored.collections).not.toHaveProperty("filesOpen");
+  expect(restored.collections).not.toHaveProperty("expanded");
   const resumed = new CollectionSession(restored.collections!, () => editor, e => editor = e);
   resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#aabbcc");
   resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#123456"); expect(editor.active).toBe(2);
