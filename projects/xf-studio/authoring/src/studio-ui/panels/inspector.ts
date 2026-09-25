@@ -59,24 +59,44 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   const opacityRange = rt.range("layer.setOpacity", "opacity");
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
     transaction: recipeTransaction<number>(rt, "opacity", (layer, value) => ({ kind: "layer.setOpacity", layerId: layer.id, opacity: value })) });
+  // Finishes are grouped by export status, so each row's length is intentional and every group
+  // heading is the one status line its cards share. Cards show the short name only; synonyms and
+  // the full name are in the tooltip and the description line.
+  const statusText = { "flat-provisional": "Exports", experimental: "Experimental", none: "Preview only" } as const;
   const finishButtons = rt.finishes.map(finish => {
-    const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id },
-      h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.label }),
-      finish.exportAdapter === "none" ? h("span", { class: "finish-tag warn", text: "Preview" }) : h("span", { class: "finish-tag ok", text: "Exports" }));
+    const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id,
+      "aria-label": `${finish.shortLabel}, ${statusText[finish.exportAdapter].toLowerCase()}` },
+      h("span", { class: "finish-chip", "aria-hidden": "true" }), h("span", { class: "finish-name", text: finish.shortLabel }));
     element.addEventListener("click", () => {
       const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.setFinish", layerId: layer.id, finish: finish.id });
     });
     return { finish, element };
   });
-  const finishGroup = h("div", { class: "finish-grid", role: "group", "aria-label": "Finish family" }, finishButtons.map(item => item.element));
+  const finishGroup = h("div", { class: "finish-groups", role: "group", "aria-label": "Finish family" },
+    (["flat-provisional", "experimental", "none"] as const).filter(status => finishButtons.some(item => item.finish.exportAdapter === status))
+      .map(status => h("div", { class: "finish-group", "data-status": status },
+        h("span", { class: `finish-tag ${status === "flat-provisional" ? "ok" : "warn"}`, "aria-hidden": "true", text: statusText[status] }),
+        h("div", { class: "finish-grid" }, finishButtons.filter(item => item.finish.exportAdapter === status).map(item => item.element)))));
   finishGroup.addEventListener("keydown", event => {
-    const buttons = finishButtons.map(item => item.element), index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    // Arrow keys follow the visual order (grouped by status), not catalogue order.
+    const buttons = [...finishGroup.querySelectorAll<HTMLButtonElement>(".finish-option")], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
     if (step && index >= 0) { event.preventDefault(); buttons[(index + step + buttons.length) % buttons.length].focus(); }
   });
   const description = h("p", { class: "finish-description" });
   const exportLine = h("div", { class: "export-line" });
   const openPackage = button({ label: "Open mod package", icon: "package", small: true, variant: "quiet", onClick: () => rt.dock.reveal("package") });
+  const useGame = button({ label: "Use game-matched model", icon: "finish", small: true, onClick: () => {
+    const layer = port.editor.layer(); if (layer) rt.dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
+  } });
+  // Colour-shifting (game-matched): one shift colour added toward grazing view angles.
+  const shift = {
+    color: new ColorField({ label: "Shift colour", transaction: recipeTransaction<string>(rt, "shift-color", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "color", value })) }),
+    strength: new Slider({ label: "Shift strength", min: 0, max: 1, step: .01, format: pct,
+      transaction: recipeTransaction<number>(rt, "shift-strength", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "strength", value })) }),
+  };
+  const shiftSection = section("Colour shift", h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element),
+    note("The shift colour is added toward the edges of the lid as the view angle grows, the way the game's gradient-recolour decal adds its Fresnel colour. One shift colour per preset exports; it is not thin-film or multichrome."));
 
   // Glitter preview suite and flake studies.
   const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
@@ -123,7 +143,7 @@ export function finishPanel(rt: StudioRuntime): PanelController {
   const body = h("div", { class: "stack" },
     section("Pigment", h("div", { class: "row gap-m align-end" }, color.element, opacity.element)),
     section("Finish", finishGroup, description, exportLine),
-    glitterSection, classicSection, irregularSection, directSection);
+    shiftSection, glitterSection, classicSection, irregularSection, directSection);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "finish", ...PANEL_META["finish"], element },
@@ -139,15 +159,23 @@ export function finishPanel(rt: StudioRuntime): PanelController {
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
         element.disabled = !!choice && !choice.capability.available && finish.id !== current;
-        element.title = `${finish.label} — ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
+        element.title = `${finish.label} — ${statusText[finish.exportAdapter]}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
       }
       const descriptor = rt.finishes.find(finish => finish.id === current);
-      setText(description, descriptor?.description ?? "");
-      if (exportLine.dataset.finish !== current) {
-        exportLine.dataset.finish = current;
-        exportLine.replaceChildren(descriptor?.exportAdapter === "none" ? badge("Preview only", "warning") : badge("Can be built", "success"),
-          h("span", { class: "small", text: descriptor?.exportNote ?? "" }), openPackage);
+      setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
+      // Per-layer status: an experimental finish still in its earlier preview model is left out until switched.
+      const status = port.authoring.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
+      if (exportLine.dataset.finish !== key) {
+        exportLine.dataset.finish = key;
+        const earlier = !!status && !status.exportable && descriptor?.exportAdapter === "experimental";
+        exportLine.replaceChildren(!status?.exportable ? badge(earlier ? "Earlier preview model" : "Preview only", "warning")
+          : status.experimental ? badge("Experimental", "warning") : badge("Can be built", "success"),
+          h("span", { class: "small", text: status ? (status.exportable ? status.note : status.reason) : descriptor?.exportNote ?? "" }),
+          ...(earlier ? [useGame] : []), openPackage);
       }
+      const optics = layer.optics as ReadonlyDeep<Layer["optics"]>;
+      shiftSection.hidden = !(current === "iridescent" && optics?.shift);
+      if (!shiftSection.hidden) { shift.color.update(optics!.shift!.color); shift.strength.update(optics!.shift!.strength); }
       const flakes = layer.flakes as ReadonlyDeep<LegacyFlakes | IrregularFlakes | DirectGlintFlakes> | undefined;
       const glitter = current === "glitter", shimmer = current === "shimmer";
       const modelId: GlitterModel = flakes && "model" in flakes ? flakes.model === "irregular-planar-1" ? "irregular"

@@ -1,4 +1,4 @@
-import { RecipeHistory, type HistoryEntryId } from "./editor-actions";
+import { RecipeHistory, type HistoryEntryId, type HistoryEntryInfo, type PoppedHistoryEntry } from "./editor-actions";
 import { parseFieldSelection, type FieldSelection } from "./field-selection";
 import { parseRecipe, type Recipe } from "./recipe";
 import type { RecipeActionEffect, RecipeActionState } from "./recipe-actions";
@@ -6,7 +6,9 @@ import type { ReadonlyDeep } from "./read-only";
 import type { HistoryLabel } from "./history-labels";
 
 export type DocumentState = { recipe: Recipe; active: number; selected: number;
-  fieldSelection: FieldSelection; history: Recipe[] };
+  fieldSelection: FieldSelection; history: Recipe[];
+  /** Present (true) only when older Undo entries than `history[0]` were dropped. */
+  historyTrimmed?: boolean };
 export type DocumentChange = "recipe" | "selection" | "history" | "restore";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
 
@@ -24,7 +26,7 @@ export class AuthoringDocument {
     this.state = { recipe, active: clamp(initial.active, recipe.layers.length),
       selected: clamp(initial.selected, recipe.layers[clamp(initial.active, recipe.layers.length)]?.points.length ?? 0),
       fieldSelection: parseFieldSelection(initial.fieldSelection, recipe) };
-    this.history = new RecipeHistory(initial.history);
+    this.history = new RecipeHistory(initial.history, initial.historyTrimmed === true);
   }
   subscribe(listener: (change: DocumentChange) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
@@ -97,19 +99,34 @@ export class AuthoringDocument {
   }
   historyLabel() { return this.history.topLabel(); }
   undoRecipe() { const recipe = this.history.undo(); if (recipe) this.notify("history"); return recipe; }
+  /** Undo with the popped entry's identity, so a later Redo can put the same step back. */
+  undoEntry(): PoppedHistoryEntry | undefined {
+    const entry = this.history.undoEntry(); if (entry) this.notify("history"); return entry;
+  }
+  /** Redo path: put an undone step back on top with its identity (`encoded` is the recipe before it). */
+  reapplyHistory(step: HistoryEntryInfo & { encoded: string }) {
+    const added = this.history.reapply(step); if (added) this.notify("history"); return added;
+  }
+  /** Kept Undo entries oldest first, without recipes. */
+  historyEntries(): HistoryEntryInfo[] { return this.history.list(); }
+  /** Identity of the entry the next Undo would restore (cheap; for Redo validity). */
+  get historyTop() { return this.history.topId; }
+  /** True when older Undo entries were dropped (at the limit or before a restore). */
+  get historyTrimmed() { return this.history.trimmed; }
   get canUndo() { return this.history.canUndo; }
   get undoDepth() { return this.history.depth; }
   historySnapshot() { return this.history.snapshot(); }
   restoreHistory(entries: Recipe[]) { this.history.restore(entries); this.notify("history"); }
-  snapshot(): ReadonlyDeep<DocumentState> {
-    return structuredClone({ ...this.state, history: this.history.snapshot() });
+  snapshot(): ReadonlyDeep<DocumentState> { return this.export(); }
+  export(): DocumentState {
+    return structuredClone({ ...this.state, history: this.history.snapshot(),
+      ...(this.history.trimmed ? { historyTrimmed: true } : {}) });
   }
-  export(): DocumentState { return structuredClone({ ...this.state, history: this.history.snapshot() }); }
   /** For collection switches and workspace restore, publish the whole validated editor state at once. */
   restore(value: DocumentState) {
     const recipe = parseRecipe(value.recipe), active = clamp(value.active, recipe.layers.length);
     const fieldSelection = parseFieldSelection(value.fieldSelection, recipe);
-    const history = new RecipeHistory(value.history);
+    const history = new RecipeHistory(value.history, value.historyTrimmed === true);
     this.state = { recipe, active, selected: clamp(value.selected, recipe.layers[active]?.points.length ?? 0),
       fieldSelection };
     this.history = history;

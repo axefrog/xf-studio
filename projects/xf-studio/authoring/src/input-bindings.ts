@@ -189,7 +189,7 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "tabs.close", scope: "tabs", chords: [k("Delete")], action: shell("tab.close"), label: "Close the focused tab" },
   { id: "tabs.content", scope: "tabs", chords: [k("Enter"), k("ArrowDown")], action: shell("tab.content"), label: "Move focus into the panel" },
   { id: "tabs.menu", scope: "tabs", chords: [k("F10", { shift: true }), k("ContextMenu")], action: shell("context-menu"), label: "Layout commands for the focused tab" },
-  { id: "rows.focus", scope: "rows", chords: [k("ArrowUp"), k("ArrowDown"), k("Home"), k("End")], action: shell("row.focus"), label: "Move between rows in Presets and Layers" },
+  { id: "rows.focus", scope: "rows", chords: [k("ArrowUp"), k("ArrowDown"), k("Home"), k("End")], action: shell("row.focus"), label: "Move between rows in Presets, Layers and History" },
   { id: "rows.reorder", scope: "rows", chords: [k("ArrowUp", { alt: true }), k("ArrowDown", { alt: true })], action: shell("row.reorder"), label: "Reorder the focused row" },
   { id: "rows.rename", scope: "rows", chords: [k("F2")], action: shell("row.rename"), label: "Rename the focused row" },
   { id: "rows.remove", scope: "rows", chords: [k("Delete")], action: shell("row.remove"), label: "Remove the focused row" },

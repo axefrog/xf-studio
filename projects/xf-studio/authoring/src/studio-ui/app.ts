@@ -18,6 +18,8 @@ import { activityPanel, characterPanel, lightingPanel, motionPanel, qualityPanel
 import { importCollection, libraryPanel, libraryState, packagePanel, presetsPanel, type PanelController } from "./panels/collection";
 import { edgePanel, finishPanel, shapePanel, warpPanel } from "./panels/inspector";
 import { layersPanel } from "./panels/layers";
+import { historyPanel } from "./panels/history";
+import { historyCommandLabel, historyCommandTitle } from "./history-model";
 import { headPanel, uvPanel } from "./panels/viewports";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 
@@ -30,7 +32,7 @@ export function mountStudio(port: Port, root: HTMLElement) {
   const rt = new StudioRuntime(port, feedback);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
-  const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
+  const panels: PanelController[] = [presetsPanel(rt), layersPanel(rt), historyPanel(rt), libraryPanel(rt), packagePanel(rt), headPanel(rt), uvPanel(rt),
     finishPanel(rt), shapePanel(rt), edgePanel(rt), warpPanel(rt), characterPanel(rt), lightingPanel(rt), motionPanel(rt), qualityPanel(rt),
     activityPanel(rt)];
   const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
@@ -205,6 +207,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
   const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "recipe.undo" }) });
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "recipe.redo" }) });
+  const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: "History: every recent change to this preset",
+    onClick: () => rt.dock.reveal("history") });
   const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
@@ -227,7 +231,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
-    h("div", { class: "header-actions" }, undo, redo, save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, panelsButton, themeButton));
+    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, panelsButton, themeButton));
   return {
     element,
     bindPalette(open: () => void) { palette.onclick = open; },
@@ -239,8 +243,11 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs) {
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
       const undoCap = port.authoring.capability({ kind: "recipe.undo" }), redoCap = port.authoring.capability({ kind: "recipe.redo" });
       const history = port.authoring.history();
-      undo.disabled = !undoCap.available; undo.title = undoCap.available ? `Undo ${history.undo?.label ?? ""} (${keys.undo})`.replace("  ", " ") : `Undo — ${undoCap.reason}`;
-      redo.disabled = !redoCap.available; redo.title = redoCap.available ? `Redo ${history.redo?.label ?? ""} (${keys.redo})`.replace("  ", " ") : `Redo — ${redoCap.reason}`;
+      // Name what each would change, and keep the shortcut visible even while unavailable.
+      undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
+      redo.disabled = !redoCap.available; redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
+      setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
+      setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
       save.disabled = !saveCap.available; save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
@@ -300,10 +307,14 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
   const request = (id: string, title: string, group: string, value: Parameters<StudioRuntime["request"]>[0], extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });
   const always = { capability: () => ({ available: true }) };
-  const preview = port.authoring.previewState(), motion = preview.motion;
+  const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history();
   return [
-    act("undo", "Undo", "Edit", { kind: "recipe.undo" }, { icon: "undo", shortcut: shortcutLabel("shell.undo") }),
-    act("redo", "Redo", "Edit", { kind: "recipe.redo" }, { icon: "redo", shortcut: shortcutLabel("shell.redo"), keywords: "ctrl+y" }),
+    act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "recipe.undo" }), history.undo?.label), "Edit", { kind: "recipe.undo" },
+      { icon: "undo", shortcut: shortcutLabel("shell.undo"), keywords: "undo back" }),
+    act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "recipe.redo" }), history.redo?.label), "Edit", { kind: "recipe.redo" },
+      { icon: "redo", shortcut: shortcutLabel("shell.redo"), keywords: "redo ctrl+y forward" }),
+    { id: "history.open", title: "Show History (every recent change)", group: "Edit", icon: "history", keywords: "undo redo steps changes go back",
+      ...always, run: () => rt.dock.reveal("history") },
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
     { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", capability: () => rt.addLayerCapability(), run: () => { rt.dispatch({ kind: "layer.edit", command: { kind: "add" } }); } },
@@ -317,7 +328,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("field.add", "Add warp control", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
     act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" },
       layer ? "Select a warp control first." : "Select a layer first."),
-    ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
+    ...rt.finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
       { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),

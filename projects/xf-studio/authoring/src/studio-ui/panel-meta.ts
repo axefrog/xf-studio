@@ -5,6 +5,7 @@ import type { StudioPanelId } from "./layout-defaults";
 export const PANEL_META: Record<StudioPanelId, { title: string; icon: IconName; description: string }> = {
   presets: { title: "Presets", icon: "presets", description: "Named looks in the current collection; each is one choice in the game selector." },
   layers: { title: "Layers", icon: "layers", description: "The current preset's layer stack, front first." },
+  history: { title: "History", icon: "history", description: "Your recent changes to the current preset; click any step to go back to it." },
   library: { title: "Library", icon: "library", description: "Local library revisions, recovery and portable files." },
   package: { title: "Mod package", icon: "package", description: "Check and build private local mod candidates." },
   head: { title: "Head", icon: "head", description: "Live 3D preview on V's head with on-surface editing." },

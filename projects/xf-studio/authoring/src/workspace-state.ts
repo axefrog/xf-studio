@@ -23,6 +23,8 @@ export type PreviewState = {
 export type WorkspaceState = {
   schema: "xfas/workspace-1";
   recipe: Recipe; active: number; selected: number; history: Recipe[];
+  /** Present (true) only when older Undo entries than `history[0]` were dropped. */
+  historyTrimmed?: boolean;
   uvView: UVView;
   fieldSelection: FieldSelection;
   glitterChoices: GlitterChoices;
@@ -66,6 +68,7 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
   if (Array.isArray(v.history)) for (const item of v.history.slice(-80)) {
     try { state.history.push(parseRecipe(item)); } catch { /* One damaged undo entry must not lose the draft. */ }
   }
+  if (v.historyTrimmed === true || (Array.isArray(v.history) && v.history.length > 80)) state.historyTrimmed = true;
   if (v.savedV !== undefined) state.savedV = parseSavedV(v.savedV);
   const p = v.preview;
   if (p && typeof p === "object") {
@@ -103,6 +106,7 @@ export function parseWorkspace(value: unknown, warnings?: RestoreWarnings): Work
     state.recipe = preset ? structuredClone(preset.recipe) : emptyRecipe();
     const memory = preset ? state.collections.editors[preset.id] ?? emptyMemory() : emptyMemory();
     state.active = memory.active; state.selected = memory.selected; state.history = memory.history;
+    if (memory.historyTrimmed) state.historyTrimmed = true; else delete state.historyTrimmed;
     state.fieldSelection = memory.fieldSelection ?? {};
   }
   return state;

@@ -178,6 +178,7 @@ type LookHistory = { entries: HistoryEntry[]; chunks: Map<ChunkId, string>; trim
 - **Part edits.** Actions, controls and gestures create `part` entries.
 - **Look transactions.** `app.transaction(label, features, fn)` creates one `look` entry containing several parts. Examples: "Apply character from save", "Paste look", "Reset look".
 - **Redo** keeps today's semantics: session-only, and valid only while the look is exactly what the last Undo produced. A gesture owns the transaction, forms can't begin inside a gesture, and Undo is refused while a transaction is open.
+- **Read model.** The History panel already reads `authoring.historyTimeline()` (`HistorySnapshot`: opaque step IDs, `HistoryLabel`s, optional times, `done`/`undone` state, current index, redo count, `trimmed`, `startId`) and jumps with `history.jumpTo {entryId}`. Neither exposes recipes, so the look history publishes the same shape: one step per `HistoryEntry` (a look transaction is one step), `trimmed` from `trimmedBefore`. It may add optional fields such as the touched features, never rename or remove the current ones.
 
 **Storage.** Each part is split by `codec.chunks()` into chunks stored once per look, addressed by content hash with collisions detected by comparing content. Eye makeup chunks one per layer plus a header. A gesture on one layer of a 32-layer look then costs one layer chunk per entry. A benchmark gate records the real saving at six presets × 80 steps.
 
@@ -350,6 +351,26 @@ Saves store `.app` depot-path hash, definition and option name, none of which de
 - (b) a saved choice survives moving its feature to another archive or mod;
 - (c) a saved choice survives a product or folder rename;
 - (d) selector position changes after a move are cosmetic.
+
+## 6a. Guidance: tours, spotlights and help (planned)
+
+A data-driven guidance system serves first-run onboarding, on-demand "show me how" tours and per-release "what's new" tours.
+
+- **Anchors.** Panels, controls and commands register stable named anchors (e.g. `uv.canvas`, `eye-makeup.finish.picker`, `layers.add`) through the same registry as panels and actions. Tours target anchors, never CSS selectors, so docking and layout changes don't break them. A missing anchor means the step is skipped, never a crash.
+- **Tours as data.**
+
+```ts
+type TourStep = { anchor?: AnchorId; spotlight?: "anchor" | "none"; placement?: "auto" | Side;
+  content: HelpContent;                 // markdown-lite, localisable later
+  buttons: { label: string; action?: StudioCommand | "next" | "back" | "skip" | "finish" }[];
+  advanceWhen?: AppCondition };          // typed event/capability predicate, e.g. { event: "layer.added" }
+type Tour = { id: string; title: string; version?: string /* what's-new */; audience: "onboarding" | "howto" | "whats-new";
+  steps: TourStep[] };
+```
+
+- **Contributions.** Feature modules contribute `tours` and `help` topics alongside panels and actions. The platform owns the spotlight overlay (theme-aware dimming or lightening), the callout component, the tour runner, the Help view, and progress kept in UI preferences.
+- **Help view.** Searchable topics, the keyboard and mouse reference generated from input bindings, and the list of available tours. "What's new" tours are keyed to release versions and the changelog, shown once after an update and replayable from Help.
+- **Actions.** Tour buttons dispatch ordinary typed actions ("Do it for me"), so tours never bypass validation or Undo.
 
 ## 7. Boundary enforcement
 

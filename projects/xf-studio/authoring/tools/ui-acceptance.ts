@@ -41,9 +41,13 @@ const ready = () => page.waitFor(`${P}?.viewport.snapshot().head.phase === 'read
 const uvPoint = (index: number, mirror = false) => js<{ x: number; y: number }>(`(() => {
   const port = ${P}, view = port.viewport.snapshot().uv.view, layer = port.editor.layer(), p = layer.points[${index}];
   const canvas = document.getElementById('device-uv-canvas'), r = canvas.getBoundingClientRect(), bx = canvas.clientLeft, by = canvas.clientTop;
-  const w = r.width - 2 * bx, h = r.height - 2 * by, span = view.span, hh = span / (w / h);
-  const u = ${mirror} ? 1 - p.u : p.u;
-  return { x: r.left + bx + (u - (view.u - span / 2)) / span * w, y: r.top + by + (p.v - (view.v - hh / 2)) / hh * h };
+  const w = r.width - 2 * bx, h = r.height - 2 * by, cs = getComputedStyle(canvas), px = n => parseFloat(cs.getPropertyValue(n)) || 0;
+  // uv-view.ts: the view frame is contained in the canvas minus its --uv-safe-* insets (each pair at most half the side).
+  const k = (a, b, s) => a + b > s / 2 ? s / 2 / (a + b) : 1, kx = k(px('--uv-safe-left'), px('--uv-safe-right'), w), ky = k(px('--uv-safe-top'), px('--uv-safe-bottom'), h);
+  const sw = w - (px('--uv-safe-left') + px('--uv-safe-right')) * kx, sh = h - (px('--uv-safe-top') + px('--uv-safe-bottom')) * ky;
+  const aspect = view.aspect ?? (view.mode === 'both' ? 720 / 310 : 720 / 520), scale = Math.min(sw / view.span, sh * aspect / view.span);
+  const cx = px('--uv-safe-left') * kx + sw / 2, cy = px('--uv-safe-top') * ky + sh / 2, u = ${mirror} ? 1 - p.u : p.u;
+  return { x: r.left + bx + cx + (u - view.u) * scale, y: r.top + by + cy + (p.v - view.v) * scale };
 })()`);
 
 try {

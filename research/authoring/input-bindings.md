@@ -46,6 +46,8 @@ The presentation reads the combined read-only snapshot through `port.viewport.in
   - A note when editing is blocked.
 
   Held modifiers are ignored while the pointer is outside that viewport.
+
+  The strip is an overlay on the viewport stage and never takes layout space; it is clamped to two rows, so a hint change can never resize a canvas (see the [UV viewport](editor-invariants.md#uv-viewport) invariants).
 - **Tooltip.** `targetTip(context)` names a hovered makeup target and lists its bindings for the held modifiers. It appears after 450 ms of dwell.
 - **Cursor.** `cursorFor(context)` returns the active gesture's cursor, or otherwise the cursor of the drag binding under the pointer. The presentation sets it as `data-cursor` on the viewport slot, and `studio.css` renders it. Rotate and scale are SVG cursors: white glyphs with a dark halo, hotspot at the centre, falling back to the `CURSOR_FALLBACK` keywords (grab and nwse-resize). The scene clears the orbit controls' inline cursor, so the CSS applies.
 - **Preference.** `UIPreferences.inputHints` is on by default and persisted with the workspace. `inputHints.set` toggles it from View preferences, the palette or the Keyboard & mouse dialog. It hides the strip and tooltips; cursors stay.

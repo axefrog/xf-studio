@@ -1,9 +1,14 @@
 import type { StudioAction, StudioTarget } from "./studio-application";
 import type { Recipe } from "./recipe";
 
-/** A renderer/DOM adapter identifies the hit; this module never performs picking. */
+/**
+ * A renderer/DOM adapter identifies the hit; this module never performs picking.
+ * `head` is character geometry (skin, eyes, plate) with no makeup or control under the
+ * cursor; `uv-empty` is atlas space with none. Background (no geometry) is no hit at all.
+ */
 export type StudioContextHit =
   | { kind: "uv-empty" }
+  | { kind: "head" }
   | { kind: "shape"; layerId: string }
   | { kind: "point"; layerId: string; index: number }
   | { kind: "tangent"; layerId: string; index: number; side: "incoming" | "outgoing" }
@@ -30,7 +35,7 @@ export function contextScope(hit: StudioContextHit): StudioTarget | undefined {
     case "collection": case "preset": case "layer": case "point": case "field": return hit;
     case "shape": return { kind: "layer", id: hit.layerId };
     case "tangent": return { kind: "point", layerId: hit.layerId, index: hit.index };
-    case "uv-empty": return undefined;
+    case "uv-empty": case "head": return undefined;
   }
 }
 
@@ -89,6 +94,7 @@ export function contextCandidates(hit: StudioContextHit, recipe: Recipe): Contex
     ready("field.remove", { kind: "field.remove", layerId: hit.layerId, fieldId: hit.id }),
     input("field.reach", "field.setReach")];
   // Pan, zoom and insertion need adapter coordinates; no current standalone action
-  // has those inputs. Do not suggest an edit at the wrong place on empty canvas.
+  // has those inputs. Do not suggest an edit at the wrong place on bare skin or empty
+  // canvas: those hits offer no target section, only the viewport's own view actions.
   return [];
 }

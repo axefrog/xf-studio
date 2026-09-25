@@ -15,7 +15,8 @@ export interface InventoryPlan {
   readonly morph: string;
   readonly app: string;
   readonly customization: string;
-  readonly presets: readonly { readonly textures: { readonly diffuse: string; readonly roughness: string; readonly metalness: string } }[];
+  /** Each preset's texture depot paths; which channels exist depends on its export route. */
+  readonly presets: readonly { readonly textures: Readonly<Record<string, string | undefined>> }[];
 }
 
 export interface GeneratedFile {
@@ -61,10 +62,10 @@ export function pathHash(value: string): bigint {
   return hashed;
 }
 
-/** The exact 4 + 3N resource paths a collection plan requires. */
+/** The exact resource paths a collection plan requires: 4 plus each preset's route textures (3 for flat). */
 export function expectedPaths(plan: InventoryPlan): Set<string> {
   const paths = [plan.mesh, plan.morph, plan.app, plan.customization];
-  for (const preset of plan.presets) paths.push(preset.textures.diffuse, preset.textures.roughness, preset.textures.metalness);
+  for (const preset of plan.presets) for (const path of Object.values(preset.textures)) if (path !== undefined) paths.push(path);
   if (paths.length !== new Set(paths).size) throw new Error("Collection plan contains duplicate depot paths.");
   for (const path of paths) depotPath(path);
   return new Set(paths);

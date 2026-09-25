@@ -60,7 +60,7 @@ export function encodeWorkspaceForStorage(state: WorkspaceState, budget = WORKSP
 function compactWorkspace(state: WorkspaceState, level: Level): WorkspaceState {
   const collections = state.collections;
   if (!collections) return level.selected === Infinity ? state
-    : { ...state, history: level.selected > 0 ? state.history.slice(-level.selected) : [] };
+    : { ...state, ...trimHistory(state, level.selected) };
   const current = compactDraft(collections, level, true);
   const recovery = [collections.previous, ...(collections.older ?? [])]
     .filter((draft): draft is CollectionDraft => !!draft).slice(0, level.recovery).map(draft => compactDraft(draft, level, false));
@@ -68,7 +68,8 @@ function compactWorkspace(state: WorkspaceState, level: Level): WorkspaceState {
     ...(recovery.length ? { previous: recovery[0], older: recovery.slice(1) } : {}) };
   // parseWorkspace restores the editor from the collection's selected preset, so the
   // top-level editor copy would only duplicate it.
-  return { ...state, recipe: emptyRecipe(), active: 0, selected: 0, history: [], fieldSelection: {}, collections: compacted };
+  return { ...state, recipe: emptyRecipe(), active: 0, selected: 0, history: [], historyTrimmed: undefined, fieldSelection: {},
+    collections: compacted };
 }
 
 function compactDraft(draft: CollectionDraft, level: Level, current: boolean): CollectionDraft {
@@ -83,6 +84,9 @@ function compactDraft(draft: CollectionDraft, level: Level, current: boolean): C
       .map(entry => ({ ...entry, editor: trim(entry.editor, 0) })) };
 }
 
-function trim(memory: EditorMemory, keep: number): EditorMemory {
-  return { ...memory, history: keep <= 0 ? [] : keep === Infinity ? memory.history : memory.history.slice(-keep) };
+function trim(memory: EditorMemory, keep: number): EditorMemory { return { ...memory, ...trimHistory(memory, keep) }; }
+/** Keep the latest `keep` Undo entries and record when older ones were dropped, so the UI can say so. */
+function trimHistory(memory: Pick<EditorMemory, "history" | "historyTrimmed">, keep: number): Pick<EditorMemory, "history" | "historyTrimmed"> {
+  const history = keep <= 0 ? [] : keep === Infinity ? memory.history : memory.history.slice(-keep);
+  return { history, ...(memory.historyTrimmed || history.length < memory.history.length ? { historyTrimmed: true } : {}) };
 }

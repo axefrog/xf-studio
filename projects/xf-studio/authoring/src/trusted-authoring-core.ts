@@ -16,7 +16,8 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   selectedCollection(): string;
 }) {
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
-    selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history });
+    selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
+    ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const layers = new AuthoringLayerActions(document, ports.resetStack);

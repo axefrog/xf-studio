@@ -38,7 +38,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 |---|---|---|---|---|
 | PIPE-01 | High | Pipeline | Built-in plate always cut from the vanilla head, not the head the game actually loads (head mods/patches) | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
 | PIPE-02 | High | Pipeline | Verifier trusts builder-produced roundtrip/export files; not data-independent; `.xl` only substring-checked | **Fixed** (claude/cleanup-pipeline, 25 Sep) |
-| UI-01 | High | Desktop | Damaged/incompatible `workspace.json` bricks the desktop app; window can't close | Fixing: alpha readiness |
+| UI-01 | High | Desktop | Damaged/incompatible `workspace.json` bricks the desktop app; window can't close | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-02 | High | Rendering | Renderer hard-codes brow/lash identities and per-mod manifests; resolver output not connected to rendering | Partly fixed: core head/plate/eyes load through one typed render record; brows/lashes/hair/piercings follow-on |
 | CORE-01 | High | Core | Autosave loop: save status re-triggers persist every ~180 ms with no edits | **Fixed** (claude/cleanup-core, 25 Sep) |
 | CORE-02 | High | Core | Workspace exceeds browser storage (~5 MB) with realistic histories; autosave silently stops | **Fixed** (claude/cleanup-core, 25 Sep) |
@@ -67,9 +67,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | UI-04 | Med | Desktop | Desktop bootstrap is a second untyped, untested UI | Open |
 | UI-05 | Med | Presentation | Startup wiring duplicated in studio-main, port-smoke and main | Open |
 | UI-06 | Med | Presentation | Desktop decisions leak into shared startup via data attributes; raw error text shown | Open |
-| UI-07 | Med | Desktop | Build readiness probes block the server synchronously | Fixing: alpha readiness |
-| UI-08 | Med | Desktop | Build failure details only in console | Fixing: alpha readiness |
-| UI-09 | Med | Desktop | Desktop autosaves queue instead of replacing | Fixing: alpha readiness |
+| UI-07 | Med | Desktop | Build readiness probes block the server synchronously | **Fixed** (claude/alpha-readiness, 25 Sep) |
+| UI-08 | Med | Desktop | Build failure details only in console | **Fixed** (claude/alpha-readiness, 25 Sep) |
+| UI-09 | Med | Desktop | Desktop autosaves queue instead of replacing | **Fixed** (claude/alpha-readiness, 25 Sep) |
 | UI-10 | Med | Presentation | UI re-implements domain rules (satin alias, glitter model IDs, eye-shape list, limits) | Open |
 | UI-11 | Med | Rendering | scene.ts 893-line monolith, no dispose, renders every frame, leaks on load failure | Open |
 | UI-12 | Med | Tests | UI/desktop test gaps (bootstrap, panels, dock DOM, startup) | Open |
@@ -94,16 +94,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **PIPE-20:** plate derivation parses large JSON on the host event loop; move it to a worker.
 - **PIPE-21:** selector indices shift when presets are omitted; save behaviour unproven. Add to the in-game test card.
 - **PIPE-22:** the game-folder ArchiveXL bundle is listed non-recursively and outside source discovery.
-- **UI-13:** "autosaved in this browser" wording on desktop, and technical jargon in panels. Being fixed in alpha readiness.
+- **UI-13:** Fixed in alpha readiness (plain library chip and autosave wording).
 - **UI-14:** the command palette recomputes every command's availability per keystroke.
 - **UI-15:** theme and lighting actions ignore failures and bypass `rt.dispatch`.
-- **UI-16:** no CSP or navigation guard; wrong status code (403 vs 415); "spike" identifiers remain. Being fixed in alpha readiness.
+- **UI-16:** Fixed in alpha readiness (CSP, navigation guard, 415, identifiers renamed).
 - **UI-17:** `desktop/update-electrobun.ts` is dead and unchecked; two TypeScript versions (5.9.3 vs 7.0.2).
 - **UI-18:** `about.css` and boot-watchdog styles aren't tokenised; duplicate font-size tokens; palette input has `outline:none`.
 - **CORE-12:** a fresh workspace opens the oldest collection and adds an "Unsaved preset".
 - **CORE-13:** dead history helpers; glitter measurements never pruned and keyed by layer IDs that repeat across presets; wrong import consequence text.
 - **CORE-14:** confusing names (`selectedCollection` returns a preset ID); `ReadonlyDeep` defined three times; shared mutable `glitterChoices`; stale test counts in the boundary doc.
 - **CORE-15:** preview reports ready for one frame after an edit; geometry cache recopies on double updates; reason codes come from matching message text.
+- **UI-19:** the header "Authoring category" drop-down still has a section that only says more categories are planned, with no action (`src/studio-ui/app.ts`). It breaks the actionable-menus rule.
+- **UI-20:** when the 3D preview is unavailable, the head view's input hints overlap the "3D preview unavailable" message.
 
 ## New subsystems since last review
 

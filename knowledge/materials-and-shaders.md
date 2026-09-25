@@ -283,7 +283,8 @@ Older one-off extractors (`projects/xf-studio/authoring/tools/inspect_shader_cac
 | `mesh_decal` `post_gbuffer` | `16098255505177109230` | [decal contract](../research/materials/mesh-decal-shader-contract.md) |
 | `mesh_decal_blendable` `post_gbuffer` | `3004271728282315156` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
 | `mesh_decal_wet_character` `post_gbuffer` | `17388524518779931857` | [glossy feasibility](../research/materials/glossy-decal-feasibility.md) |
-| `mesh_decal_gradientmap_recolor_blendable` `post_gbuffer` | `3456408455936683438` | [colour-shift feasibility](../research/materials/colour-shift-game-feasibility.md) |
+| `mesh_decal_gradientmap_recolor_blendable` `post_gbuffer` | `3456408455936683438` | [colour-shift design](../research/materials/finish-designs/colour-shifting.md), [feasibility](../research/materials/colour-shift-game-feasibility.md) |
+| `mesh_decal_gradientmap_recolor_blendable` vertex (Fresnel distance fade) | `7066617541061519457` (DXBC SHA-256 `77e887ec…cb3`) | [colour-shift design](../research/materials/finish-designs/colour-shifting.md) |
 | `mesh_decal_particles` `post_gbuffer` / `highlights` | `1688064767334184205` / `10861674281505605668` | [particle-decal audit](../experiments/009-glitter-game-fixture/particle-decal-audit.md) |
 | `mesh_decal_emissive` `post_gbuffer` (target 2 is additive on B/A, so over skin it would add into GBuffer2.z/.w [hypothesis for the visible effect]) | `9453098283293843067` | [annotation results](../research/materials/shader-system/annotation-results.md#basematerialsmesh_decal_emissivemt) |
 | `mesh_decal_emissive_subsurface` `subsurface_emissive` / `highlights` | `8986576764202126900` / `7960168020925993542` | [glint feasibility](../research/materials/redengine-glint-feasibility.md) |
@@ -382,8 +383,8 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 
 - Normal is RG with reconstructed Z.
 - Roughness and Metalness each read **R** × scale + bias.
-- There are independent colour, normal and surface coverages.
-- `NormalsBlendingMode` > 0.5 composes with the existing screen normal in a reoriented-normal style.
+- There are independent colour, normal and surface coverages. Colour and surface coverage are the **squared** contrast-adjusted colour-map alpha; normal alpha is **not** squared: `NormalAlpha` × (`UseNormalAlphaTex` ? `NormalAlphaTex`.R : colour-map alpha).
+- `NormalsBlendingMode` > 0.5 loads the existing G-buffer normal and composes the decal normal with it by reoriented normal mapping (Barré-Brisebois & Hill) in the plate's tangent frame, lerped by `NormalsBlendingModeAlpha`.R (white by default). Its normal alpha is also multiplied by `saturate(50 − 50·z)`: a flat texel (z = 1) writes nothing, and full weight needs about 11.5° of tilt. Mode 0 replaces the normal with the plate normal plus the map at the plain alpha. [source] (decompiled `16098255505177109230`; see the [Shimmer design](../research/materials/finish-designs/shimmer.md))
 
 | Template | Distinguishing inputs | Relevance |
 |---|---|---|
@@ -392,7 +393,7 @@ See **[hair-shading.md](hair-shading.md)** for the detailed formula work, and th
 | `mesh_decal_wet_character` | Base set | **Writes surface alpha = 1.0** regardless of coverage. It would overwrite roughness across the whole plate. [source] |
 | `mesh_decal_double_diffuse` | `GradientMap`, `UseGradientMap`, `SecondaryDiffuseAlpha/Color/Intensity` | Brows. See [hair shading](hair-shading.md). [resource] |
 | `mesh_decal_gradientmap_recolor(_2)` | `MaskTexture`, `GradientMap` (or a `.gradient` in `_2`). `DiffuseTexture` is an ID map indexing the gradient. | Recolour from one greyscale map [resource]; add-on `meshdecal.py:53` |
-| `mesh_decal_gradientmap_recolor_blendable` | Gradient recolour plus **Fresnel colour added by view angle** | Colour-shift candidate [source] [colour shift](../research/materials/colour-shift-game-feasibility.md) |
+| `mesh_decal_gradientmap_recolor_blendable` | Base = `DiffuseColor` × `GradientMap`(`DiffuseTexture`.R, 0.5); **Fresnel colour** × intensity × w × saturate(\|1 − N·V\|^exponent) added before the square root. Colour coverage = `DiffuseAlpha` × gradient alpha × `MaskTexture`.R, **linear** (not squared). The vertex program sets w = max(1 + `MaterialModifiersConsts[2].x` − saturate((d − `FadeOutOffset`)/`FadeOutDistance`), 0), d = horizontal camera-to-object distance; the defaults remove the tint beyond 0.7 m. | Colour-shifting export route, with the fade pushed to 1000 m [source] [design](../research/materials/finish-designs/colour-shifting.md) |
 | `mesh_decal_parallax` | `HeightTexture`, `HeightStrength` | Parallax offset. The Blender add-on does not implement it. [resource] |
 | `mesh_decal_emissive` | `DiffuseColor2`, `EmissiveEV`, animation and scroll. Target 2 is additive (`One/One`, write mask **BA**). | Glow accents, independent of light [resource] |
 | `mesh_decal_emissive_subsurface` | `EmissiveMask`, `EmissiveMaskChannel`, `EmissiveColor/EV`. Stage `subsurface_emissive`. | Emissive under skin [resource] [source] |
@@ -467,22 +468,24 @@ Transparency needs `enableMask` [wiki] (`textured-material-properties.md` L25).
 
 "Plate" means the owned morph-skinned eye-makeup mesh drawn over the head. Every decal route keeps the underlying Subsurface class (§2.4).
 
-| Finish | Most plausible game route | Why / limits | Grade | Single confirming in-game test |
+The Studio exports each preset as **one decal draw**, so per-texel inputs can vary within a preset but material constants cannot. The implemented routes are in [`finish-export.ts`](../projects/xf-studio/authoring/src/finish-export.ts); each finish has a [design page](../research/materials/finish-designs/README.md). None has been seen in game; the [finish board](../experiments/016-finish-board/README.md) is the prepared test.
+
+| Finish | Export route (current) | Why / limits | Grade | Single confirming in-game test |
 |---|---|---|---|---|
-| **Matte** | `mesh_decal` with `DiffuseAlpha` and `RoughnessMetalnessAlpha` enabled; roughness R ≈ 0.8–1, metal 0 | Replaces skin roughness under the mark; skin SSS still applies. Translucency is diluted where surface alpha > 0. | [source] route; [runtime] untested | Matte swatch next to bare skin under a raking key light, camera fixed then moved. The highlight should vanish on the swatch only. |
-| **Satin** | Same as Matte, roughness ≈ 0.4–0.55 | Soft single GGX lobe; no sparkle by construction | [source] | Same capture; a broad, soft highlight that tracks the light |
-| **Metallic / foil** | `mesh_decal` with metal ≈ 0.8–1 and roughness ≈ 0.2–0.35; F0 comes from the pigment colour | At metal ≥ 0.1 the Subsurface class uses the ordinary albedo path. Reflections come from probes/SSR/RT, so metallic looks dark in dim or probe-poor scenes. | [source] | Metallic swatch in a bright and a dim location. Check for coloured reflections, and for a seam where metal crosses 0.1 on a soft edge. |
-| **Shimmer / pearl** | `mesh_decal` with a fine resolved normal/roughness texture and low-to-moderate metal. Optionally add a weak Fresnel tint via `mesh_decal_gradientmap_recolor_blendable`. | One lobe per pixel; sub-pixel sparkle filters away. The pearl "interference" can only be faked with the Fresnel additive tint. | [source] / [hypothesis] for the look | Face-scale and close-up captures while rotating the camera. Is the sheen visible at normal framing? |
-| **Glitter** | `mesh_decal` with **resolved** facet normals/roughness/metal, plus optional sparse `mesh_decal_emissive` flecks | No stock glint BRDF exists. Fine facets collapse under mip filtering; emissive flecks ignore light. | [source] [glint feasibility](../research/materials/redengine-glint-feasibility.md) | PBR-only vs emissive-only vs combined, under light and camera sweeps and with lights dimmed |
-| **Glossy / wet** | **(a)** Single-lobe: low-roughness non-metal `mesh_decal_blendable`/`mesh_decal`. **(b) New candidate:** a second, coincident skinned shell mesh using `eye_shadow.mt` with `Intensity` 0. Mask **G** sets wet roughness and **B** sets wet strength; it adds a real **forward-lit second specular lobe** on top of the lit makeup. | (a) replaces skin roughness and cannot add clearcoat, because the G-buffer holds one lobe. (b) is the only stock skinned transparent pass found that *adds* specular after lighting. Sorting with lashes and brows (`EMP_Front`), the double draw and blink behaviour are unknown. `multilayered_clear_coat` cannot overlay skin. | (a) [source]; (b) [source] arithmetic, [hypothesis] as makeup | The (b) shell over a dark liner. Does a wet highlight appear on top of the pigment? Is there no darkening at `Intensity` 0? Is it correct during blink and against lashes? |
-| **Colour-shifting** | `mesh_decal_gradientmap_recolor_blendable`: gradient base plus `FresnelColor·Intensity·pow(1−N·V, Exponent)` **added** to colour | One fixed secondary hue added at grazing angles. It is not thin-film or multichrome. The addition happens in sqrt space before squaring. | [source] [colour shift](../research/materials/colour-shift-game-feasibility.md) | Fixed light and moving camera, then fixed camera and moving light. Hue must follow the camera only. |
+| **Matte** | Flat `mesh_decal` (`@preset`): roughness 0.88, metal 0, colour and surface alpha on, normal off | Replaces skin roughness under the mark; skin SSS still applies. Translucency is diluted where surface alpha > 0. | [source] route; [runtime] untested | Board 1: the highlight vanishes on the Matte stripe only |
+| **Satin** | Same, roughness 0.38 | Soft single GGX lobe; no sparkle by construction | [source] | Board 1: a broad, soft highlight that tracks the light |
+| **Metallic / foil** | Same, roughness 0.27, metal 0.65 | At metal ≥ 0.1 the Subsurface class leaves its SSS albedo path. Reflections come from probes/SSR/RT, so metallic looks dark in dim or probe-poor scenes. | [source] | Board 1 in bright and dim places; Board 6 for the 0.1 seam |
+| **Glossy / wet** | **Experimental.** Flat `mesh_decal`, one dielectric lobe at roughness 0.12 (game-matched model only) | One G-buffer lobe: no clear coat, same F0 as skin, only sharper. The `eye_shadow` forward shell (`Intensity` 0, wet highlight from `Mask` G/B) remains the only stock way to add a second lobe; not built. | [source]; look [hypothesis] | Board 1: Glossy's highlight sharper than Satin's without looking metallic |
+| **Shimmer / pearl** | **Experimental.** `mesh_decal` + the classic facet normal map in `NormalsBlendingMode` 1 (`@faceted`), per-texel roughness/metal from the bake, roughness mips widened by lost facet variance | Mode 1 keeps skin normals where facets are flat and fades tilts under about 11.5°; averaged facets fade out at distance and become a broader lobe. Random facet azimuths make the untested green sign irrelevant statistically. | [source]; look [hypothesis] | Board 2: close-up light sweep, then face framing against the Satin control |
+| **Glitter** | **None** (preview only) | No stock glint BRDF; one normal per pixel. Coarse resolved facets (Board 2's coarse Shimmer stripe) are the next candidate; emissive flecks ignore light. | [source] | Board 2 coarse stripe: do distinct flakes flash and go dark? |
+| **Colour-shifting** | **Experimental.** Per-preset `mesh_decal_gradientmap_recolor_blendable` (`@fresnel_<preset>`): uniform base-colour gradient, linear coverage mask, roughness 0.32 and metal 0.25 via bias, `FresnelColor` from the chosen shift colour, exponent 2, distance fade pushed away | One additive secondary hue by view angle, lit like base colour; not thin-film or multichrome. One constant per draw, so a colour-shift preset must be one pigment. The `Color` parameter encoding (byte/255 assumed) and `MaterialModifiersConsts[2].x` are unconfirmed. | [source]; encoding and look [hypothesis] | Boards 3 and 4: teal at the lid edges that follows the camera, not the light |
 
 **Cross-cutting guidance for the browser preview:**
 
 1. Blend decal colour in **sqrt space**, and apply the decal's **squared** coverage curve.
 2. Use F0 = 0.04 for non-metals, and treat roughness as perceptual (α = r²).
 3. Consider Burley diffuse for skin and makeup.
-4. Present the Glossy finish's clearcoat as a *second pass*, not a G-buffer property.
+4. Present Glossy as the one lobe the game can draw (the game-matched model does); a clear coat would need a second, forward pass.
 5. Sample skin roughness from R, with B gating the bias, and eye roughness from R × scale.
 
 ---
@@ -501,18 +504,19 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 8. **Unmapped debris.** Recover the G-buffer render-target formats (8-bit vs 10-bit precision affects the sqrt encoding) and the meaning of the low 5 stencil bits.
 9. **Ray-tracing libraries.** Parse the ray-tracing libraries in `staticshader_final.cache`. Their names survive (`ShadeSurfaceWithLightSample*`, `GBuffer0..2`), which could confirm the BRDF and G-buffer semantics independently.
 10. **Multilayer levels.** Confirm the multilayer levels semantics (`roughLevelsIn/Out` pairs) against the `m_surfaceCache_GenerateMultilayer` program.
-11. **Debug views.** Can the engine's `EEnvManagerModifier` debug views (G-buffer, Roughness, Metalness, Translucency, MaterialID) be enabled from CET or RED4ext? That would turn most questions here into one capture session.
+11. **`Color` parameter encoding.** Do `CMaterialParameterColor` values reach shaders as byte/255 (as `eye_shadow`'s in-shader 2.2 linearisation suggests) or sRGB-decoded? This sets the in-game strength of the Colour-shifting tint. What is `MaterialModifiersConsts[2].x` on the player head?
+12. **Debug views.** Can the engine's `EEnvManagerModifier` debug views (G-buffer, Roughness, Metalness, Translucency, MaterialID) be enabled from CET or RED4ext? That would turn most questions here into one capture session.
 
 ## In-game test asks
 
 Batch these into one prepared session with fixed camera, FOV and light, and record game and framework versions.
 
-1. **Finish board.** One test preset on the plate with side-by-side swatches: matte, satin, metallic, single-lobe glossy, colour-shift, and an `eye_shadow` gloss shell over one liner.
+1. **Finish board (built, not installed).** The [finish board](../experiments/016-finish-board/README.md) packages asks 1–3 as six selector presets through the production pipeline, with its own test card: flat finishes and single-lobe Glossy (Board 1), faceted Shimmer and a coarse glitter proxy (Board 2), and the Fresnel colour shift with its strength-0 control (Boards 3 and 4).
    - Capture a camera orbit under fixed light, then a light sweep under a fixed camera, at close and face framing, with a blink.
-   - Settles routes (a)/(b) for Glossy, the Fresnel colour shift, metallic behaviour on skin and translucency dilution.
-2. **Sqrt-space blend check.** Black `mesh_decal` patches at 25/50/75 % `DiffuseAlpha`, contrast 0, on flat-lit cheek skin, captured in photo mode with fixed exposure.
+   - The `eye_shadow` gloss shell (Glossy route 2) is not on the board; it needs a second component.
+2. **Sqrt-space blend check.** Board 5: black Matte patches at 25/50/75 % coverage under the eyes, contrast 0, captured in photo mode with fixed exposure.
    - Compare measured luminance with linear and sqrt-space predictions.
-3. **Metal threshold edge.** A soft-edged metallic patch whose metalness ramps 0 → 0.3.
+3. **Metal threshold edge.** Board 6: a metalness ramp 0 → 0.3 and five steps (0.05–0.3) over Satin.
    - Look for a visible seam at 0.1.
 4. **Backlit translucency.** Ear or eyelid backlit, with a decal `RoughnessMetalnessAlpha` of 1 vs 0 over identical pigment.
    - Checks the GBuffer2.z dilution hypothesis.

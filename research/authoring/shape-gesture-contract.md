@@ -4,7 +4,7 @@ The active layer's painted footprint can be dragged in UV or on the head. Existi
 
 **Shift always means a shape gesture (B-17, option b).** Off makeup, Shift-drag and Shift-wheel are consumed and do nothing: they never pan or zoom the camera, including while Surface controls are off, and the UV map behaves the same way. Every input resolves through the [input binding catalogue](input-bindings.md), which also drives the viewport hints, tooltips and cursors.
 
-UV wheel zooms around the pointer, and right-drag or Ctrl-drag pans the crop. These are view operations: they preserve the recipe, Undo history and camera, and survive reload. View limits are centre coordinates -1 to 2 and span 0.02 to 10 UV units; pointer anchoring is subject to those limits. Fit and the existing eye-view controls remain available.
+UV wheel zooms around the pointer, and right-drag or Ctrl-drag pans the crop. These are view operations: they preserve the recipe, Undo history and camera, and survive reload. View limits are centre coordinates -1 to 2 and 0.02 to 10 UV units for the larger side of the view frame; pointer anchoring is subject to those limits. The canvas fills the whole panel; see the [UV viewport](editor-invariants.md#uv-viewport) invariants. Fit and the existing eye-view controls remain available.
 
 ## Transform semantics and API
 

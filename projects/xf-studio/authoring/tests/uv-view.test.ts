@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { initialRecipe } from "../src/recipe";
-import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvAspect, uvRegion, uvToPixel } from "../src/uv-view";
+import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/uv-view";
 import { freshWorkspace, parseWorkspace } from "../src/workspace-state";
 
-test("UV mapping is invertible and isotropic across both crops, sizes and mirrored instances", () => {
-  for (const mode of ["both", "single"] as const) for (const width of [260, 400, 600]) {
-    const view = fitUVView({ ...defaultUVView(), mode }, initialRecipe().layers[0]), region = uvRegion(view), height = width / uvAspect(mode);
+test("UV mapping is invertible and isotropic across both crops, pane sizes, insets and mirrored instances", () => {
+  for (const mode of ["both", "single"] as const) for (const [width, height] of [[260, 112], [400, 700], [1200, 380], [333.3, 333.3]]) {
+    const view = fitUVView({ ...defaultUVView(), mode }, initialRecipe().layers[0]);
+    const region = uvViewRegion(view, width, height, { top: 8, right: 8, bottom: 58, left: 8 });
     for (const point of [{ u: .303, v: .231 }, { u: .64, v: .26 }, { u: -.05, v: 1.1 }]) for (const mirror of [false, true]) {
       const shown = reflectUV(point, mirror), p = uvToPixel(shown, region, width, height), back = reflectUV(pixelToUV(p, region, width, height), mirror);
       expect(Math.abs(back.u - point.u)).toBeLessThan(1e-12);

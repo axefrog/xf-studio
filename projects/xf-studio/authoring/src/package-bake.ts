@@ -1,17 +1,20 @@
-// Package bake: compile every preset of a collection into three 1024-pixel raw maps plus a
-// plan and compiled record. Shared by the package builder and tools/bake_collection.ts.
+// Package bake: compile every preset of a collection into its route's 1024-pixel raw maps plus
+// a plan and compiled record. Shared by the package builder and tools/bake_collection.ts.
 // Packaging and game installation are separate operations.
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { compileFlatPreset } from "./preset-compiler";
+import { ROUTE_CHANNELS, type ExportRoute, type TextureChannel } from "./finish-export";
+import { compilePreset } from "./preset-compiler";
 import { planCollection } from "./preset-collection";
 
 export type CollectionPlan = ReturnType<typeof planCollection>;
-export const BAKED_CHANNELS = ["diffuse", "roughness", "metalness"] as const;
-export type BakedChannel = typeof BAKED_CHANNELS[number];
-export interface BakedMap { channel: BakedChannel; file: string; bytes: number; sha256: string }
-export interface BakedRecord { id: string; revision: number; size: number; maps: BakedMap[]; metadata: unknown; recipeSha256: string }
+/** The flat route's channels, kept for callers that predate the other routes. */
+export const BAKED_CHANNELS = ROUTE_CHANNELS.flat;
+export type BakedChannel = TextureChannel;
+/** `side` is the map's square size; it equals the record size except for the small Fresnel gradient. */
+export interface BakedMap { channel: BakedChannel; file: string; bytes: number; sha256: string; side: number }
+export interface BakedRecord { id: string; revision: number; size: number; route: ExportRoute; maps: BakedMap[]; metadata: unknown; recipeSha256: string }
 export const PACKAGE_MAP_SIZE = 1024;
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
@@ -27,14 +30,15 @@ export async function bakeCollection(value: unknown, outDir: string,
   const records: BakedRecord[] = [];
   for (const [index, preset] of plan.presets.entries()) {
     await beforePreset(index);
-    const compiled = compileFlatPreset(preset.recipe, PACKAGE_MAP_SIZE);
+    const compiled = compilePreset(preset.recipe, PACKAGE_MAP_SIZE);
+    if (compiled.route !== preset.route) throw Error(`Preset ${preset.id} compiled as ${compiled.route}, planned as ${preset.route}`);
     const maps: BakedMap[] = [];
-    for (const channel of BAKED_CHANNELS) {
-      const data = compiled[channel], file = `${preset.appearance}_${channel}.raw`;
+    for (const channel of ROUTE_CHANNELS[compiled.route]) {
+      const data = compiled.maps[channel]!, file = `${preset.appearance}_${channel}.raw`;
       writeFileSync(resolve(out, file), data);
-      maps.push({ channel, file, bytes: data.byteLength, sha256: sha256(data) });
+      maps.push({ channel, file, bytes: data.byteLength, sha256: sha256(data), side: compiled.sides[channel]! });
     }
-    records.push({ id: preset.id, revision: preset.revision, size: compiled.size, maps, metadata: compiled.metadata,
+    records.push({ id: preset.id, revision: preset.revision, size: compiled.size, route: compiled.route, maps, metadata: compiled.metadata,
       recipeSha256: sha256(JSON.stringify(preset.recipe)) });
   }
   writeFileSync(resolve(out, "plan.json"), JSON.stringify(plan, null, 2) + "\n");

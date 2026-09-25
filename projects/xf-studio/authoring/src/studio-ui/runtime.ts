@@ -34,12 +34,13 @@ export class Frame {
   get status() { return this.once("status", () => this.port.status.snapshot()); }
   get localSetup() { return this.once("localSetup", () => this.port.localSetup.snapshot()); }
   get preferences() { return this.once("preferences", () => this.port.preferences.snapshot()); }
+  get history() { return this.once("history", () => this.port.authoring.historyTimeline()); }
 }
 export type FrameState = Frame;
 
 const sources: [RegExp, string][] = [
-  [/^recipe\.(undo|redo)$/, "Undo"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
-  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|glitter\.)/, "Colour & finish"],
+  [/^recipe\.(undo|redo)$/, "Undo"], [/^history\./, "History"], [/^preset\./, "Presets"], [/^layer\.(edit|setEnabled|select)$/, "Layers"],
+  [/^(point|path|field|pigment|softness|shape)\./, "Shape"], [/^(layer\.set|layer\.useGameOptics|glitter\.)/, "Colour & finish"],
   [/^camera\./, "Camera"], [/^preview\./, "Preview"], [/^motion\./, "Motion"], [/^quality\./, "Preview quality"],
   [/^collection\./, "Library"], [/^savedV\./, "Saved V"],
 ];

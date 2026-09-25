@@ -6,7 +6,8 @@ import { insertPathPoint, nearestPathSection } from "./path-edit";
 import { moveTangent, tangentEndpoint } from "./bezier-path";
 import { shapeHit, shapeWheelScaleFactor, shiftWheelDelta, transformLayer, wheelScaleFactor } from "./shape-transform";
 import { canvasResolution } from "./canvas-resolution";
-import { fitUVView, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvAspect, uvRegion, uvToPixel, zoomUVView, type UV, type UVView } from "./uv-view";
+import { fitUVView, NO_UV_INSETS, panUVView, parseUVView, pixelToUV, reflectUV, selectionVisibility, uvToPixel, uvViewRegion, zoomUVView,
+  type UV, type UVInsets, type UVView } from "./uv-view";
 import type { StudioGestureProposal } from "./studio-application";
 import type { ViewportHit } from "./viewport-attachment";
 import type { UVViewCommand } from "./viewport-attachment";
@@ -25,7 +26,15 @@ type Handle = { kind: "point" | "origin" | "field" | "tangent"; index: number; f
 const isKnotHandle = (h: Handle) => h.kind === "point" || h.kind === "tangent";
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
-/** Canvas presentation and gestures. View state never enters portable recipes. */
+/** Custom properties the host's CSS sets to keep the fitted frame clear of overlays (hint strip, chips). */
+const INSET_PROPERTIES = { top: "--uv-safe-top", right: "--uv-safe-right", bottom: "--uv-safe-bottom", left: "--uv-safe-left" } as const;
+/** Texture base under the albedo; the stage around the atlas is the host's CSS background. */
+const ATLAS_BASE = "#253132", ATLAS_EDGE = "rgba(138, 148, 154, .75)";
+
+/**
+ * Canvas presentation and gestures. View state never enters portable recipes. The canvas fills
+ * whatever box its host gives it; the persistent view frame is fitted inside that box (see uv-view).
+ */
 export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   both: HTMLButtonElement; single: HTMLButtonElement; other: HTMLButtonElement;
   fit: HTMLButtonElement; note: HTMLElement;
@@ -33,9 +42,14 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   const ctx = canvas.getContext("2d")!, tinted = document.createElement("canvas");
   const listeners = new AbortController();
   let view = parseUVView(initial);
-  // Establish layout before observing it; the initial observer callback must not
-  // itself change the canvas aspect and trigger a resize-observer feedback pass.
-  if (canvas.style) canvas.style.aspectRatio = String(uvAspect(view.mode));
+  // Read once per draw: insets change only with the host's CSS, which is followed by a resize.
+  let insets: UVInsets = readInsets();
+  function readInsets(): UVInsets {
+    const style = typeof window.getComputedStyle === "function" ? window.getComputedStyle(canvas) : undefined;
+    if (!style) return NO_UV_INSETS;
+    const px = (name: string) => { const n = parseFloat(style.getPropertyValue(name)); return Number.isFinite(n) && n > 0 ? n : 0; };
+    return { top: px(INSET_PROPERTIES.top), right: px(INSET_PROPERTIES.right), bottom: px(INSET_PROPERTIES.bottom), left: px(INSET_PROPERTIES.left) };
+  }
   type HandleDrag = { kind: "handle"; handle: Handle; layer: Layer; recipe: Recipe;
     target: Layer["points"][number] | Layer["fields"][number]; start: UV; endpoint?: UV };
   type ShapeDrag = { kind: "translate" | "rotate"; layer: Layer; recipe: Recipe; original: Layer;
@@ -45,13 +59,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
   let wheel: { layer: Layer; recipe: Recipe; expected: Layer["points"]; state: string; selected: number; timer?: ReturnType<typeof setTimeout> } | undefined;
   const bounds = () => {
     const r = canvas.getBoundingClientRect();
-    // #uv has equal borders and no padding. Pointer/drawing coordinates describe
-    // its content box, not the extra border pixels returned by the DOM rectangle.
+    // The canvas has equal borders (if any) and no padding. Pointer/drawing coordinates
+    // describe its content box, not the extra border pixels returned by the DOM rectangle.
     const borderX = canvas.clientLeft || 0, borderY = canvas.clientTop || 0;
     return { left: r.left + borderX, top: r.top + borderY,
       width: Math.max(1, r.width - 2 * borderX), height: Math.max(1, r.height - 2 * borderY) };
   };
-  const region = () => { const b = bounds(); return uvRegion(view, b.width / b.height); };
+  const region = (of = view) => { const b = bounds(); return uvViewRegion(of, b.width, b.height, insets); };
   const coordinate = (e: PointerEvent | MouseEvent) => {
     const b = bounds();
     return pixelToUV({ x: e.clientX - b.left, y: e.clientY - b.top }, region(), b.width, b.height);
@@ -79,10 +93,8 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     ]);
   }
   function draw() {
-    // Explicit CSS aspect breaks the intrinsic-size feedback cycle: resizing the
-    // backing buffer must never change layout and trigger another resize.
-    const aspect = String(uvAspect(view.mode));
-    if (canvas.style && canvas.style.aspectRatio !== aspect) canvas.style.aspectRatio = aspect;
+    // The host sizes the canvas in CSS; the backing buffer follows it and never feeds back into layout.
+    insets = readInsets();
     const b = bounds(), resolution = canvasResolution(b.width, b.height, window.devicePixelRatio);
     if (canvas.width !== resolution.pixelWidth) canvas.width = resolution.pixelWidth;
     if (canvas.height !== resolution.pixelHeight) canvas.height = resolution.pixelHeight;
@@ -92,32 +104,40 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     elements?.both.setAttribute("aria-pressed", String(view.mode === "both"));
     elements?.single.setAttribute("aria-pressed", String(view.mode === "single"));
     if (elements) elements.other.disabled = view.mode !== "single";
-    const r = uvRegion(view, width / height), unit = 1;
+    const r = region(), unit = 1;
     const pixel = (p: UV) => uvToPixel(p, r, width, height);
-    ctx.fillStyle = "#253132"; ctx.fillRect(0, 0, width, height);
-    const image = hooks.albedo();
-    if (image) {
-      ctx.globalAlpha = .55;
-      ctx.drawImage(image, r.u * image.width, r.v * image.height, r.w * image.width, r.h * image.height, 0, 0, width, height);
-      ctx.globalAlpha = 1;
+    // Outside the atlas the host's stage shows through; only the visible part of the atlas is drawn.
+    ctx.clearRect(0, 0, width, height);
+    const atlas = { u0: Math.max(0, r.u), v0: Math.max(0, r.v), u1: Math.min(1, r.u + r.w), v1: Math.min(1, r.v + r.h) };
+    const atlasVisible = atlas.u1 > atlas.u0 && atlas.v1 > atlas.v0;
+    const a0 = pixel({ u: atlas.u0, v: atlas.v0 }), a1 = pixel({ u: atlas.u1, v: atlas.v1 });
+    /** Draws the visible part of a source that covers the whole atlas (scaled for a device-pixel target). */
+    const drawAtlas = (target: CanvasRenderingContext2D, source: CanvasImageSource & { width: number; height: number }, sx = 1, sy = 1) =>
+      target.drawImage(source, atlas.u0 * source.width, atlas.v0 * source.height, (atlas.u1 - atlas.u0) * source.width,
+        (atlas.v1 - atlas.v0) * source.height, a0.x * sx, a0.y * sy, (a1.x - a0.x) * sx, (a1.y - a0.y) * sy);
+    if (atlasVisible) {
+      ctx.fillStyle = ATLAS_BASE; ctx.fillRect(a0.x, a0.y, a1.x - a0.x, a1.y - a0.y);
+      const image = hooks.albedo();
+      if (image) { ctx.globalAlpha = .55; drawAtlas(ctx, image); ctx.globalAlpha = 1; }
     }
     // The tint scratch follows display pixels, never an intermediate 1K atlas.
     if (tinted.width !== resolution.pixelWidth) tinted.width = resolution.pixelWidth;
     if (tinted.height !== resolution.pixelHeight) tinted.height = resolution.pixelHeight;
     const layers = hooks.recipe().layers, masks = hooks.canvases();
-    for (let i = 0; i < layers.length; i++) if (layers[i].enabled && masks[i]) {
+    if (atlasVisible) for (let i = 0; i < layers.length; i++) if (layers[i].enabled && masks[i]) {
       const t = tinted.getContext("2d")!;
-      const mask = masks[i];
       t.clearRect(0, 0, tinted.width, tinted.height); t.globalCompositeOperation = "source-over";
-      t.drawImage(mask, r.u * mask.width, r.v * mask.height, r.w * mask.width, r.h * mask.height,
-        0, 0, tinted.width, tinted.height);
+      drawAtlas(t, masks[i], resolution.scaleX, resolution.scaleY);
       t.globalCompositeOperation = "source-in";
       t.fillStyle = layers[i].color; t.fillRect(0, 0, tinted.width, tinted.height); t.globalCompositeOperation = "source-over";
       ctx.drawImage(tinted, 0, 0, tinted.width, tinted.height, 0, 0, width, height);
     }
-    const centre = pixel({ u: .5, v: r.v });
+    const edge0 = pixel({ u: 0, v: 0 }), edge1 = pixel({ u: 1, v: 1 });
+    ctx.strokeStyle = ATLAS_EDGE; ctx.lineWidth = unit;
+    ctx.strokeRect(edge0.x - .5, edge0.y - .5, edge1.x - edge0.x + 1, edge1.y - edge0.y + 1);
+    const centre = pixel({ u: .5, v: 0 }), centreEnd = pixel({ u: .5, v: 1 });
     ctx.setLineDash([3 * unit, 4 * unit]); ctx.strokeStyle = "#c4ddca55";
-    ctx.beginPath(); ctx.moveTo(centre.x, 0); ctx.lineTo(centre.x, height); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(centre.x, centre.y); ctx.lineTo(centre.x, centreEnd.y); ctx.stroke(); ctx.setLineDash([]);
     const l = hooks.layer();
     if (!l) { if (elements) elements.note.textContent = "Add a layer to edit its shape."; return; }
     for (const mirror of l.symmetry ? [false, true] : [false]) {
@@ -241,9 +261,13 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
       return { hit, mirror: handle.mirror,
         affordance: handle.kind === "origin" ? "warp-origin" : handle.kind === "field" ? "warp-vector" : handle.kind };
     }
-    const shape = shapeHit(layer, p);
-    return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" }
-      : { hit: { kind: "uv-empty" }, affordance: "empty" };
+    // Painted makeup: the selected layer first, then the frontmost other visible layer.
+    const others = [...hooks.recipe().layers].reverse().filter(item => item.id !== layer.id);
+    for (const candidate of [layer, ...others]) {
+      const shape = shapeHit(candidate, p);
+      if (shape) return { hit: { kind: "shape", layerId: candidate.id }, mirror: shape.mirror, affordance: "shape" };
+    }
+    return { hit: { kind: "uv-empty" }, affordance: "empty" };
   }
   /** What is under a UV coordinate. Without a layer everything is empty space. */
   function targetAt(p: UV) {
@@ -300,7 +324,7 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     if (e.pointerId !== drag.pointer) return;
     if (!validDrag()) { stop(); return; }
     if (drag.kind === "pan") {
-      const b = bounds(), r = uvRegion(drag.original, b.width / b.height);
+      const b = bounds(), r = region(drag.original);
       const next = panUVView(drag.original, -(e.clientX - drag.screen.x) / b.width * r.w, -(e.clientY - drag.screen.y) / b.height * r.h);
       if (next.u === view.u && next.v === view.v) return;
       view = next; drag.changed = true; draw(); hooks.persist(); return;
@@ -437,12 +461,12 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     inputCapture: () => !!drag || !!wheel,
     snapshot: () => ({ ...view }),
     selection: () => {
-      const l = hooks.layer(), b = bounds();
-      return l ? selectionVisibility(view, b.width / b.height, l, hooks.selected(), hooks.selectedField()) : undefined;
+      const l = hooks.layer();
+      return l ? selectionVisibility(view, region(), l, hooks.selected(), hooks.selectedField()) : undefined;
     },
     diagnostics: () => {
     const b = bounds();
-    return { view: { ...view }, region: region(), aspect: b.width / b.height,
+    return { view: { ...view }, region: region(), aspect: b.width / b.height, insets: { ...insets },
       resolution: { ...canvasResolution(b.width, b.height, window.devicePixelRatio),
         actualWidth: canvas.width, actualHeight: canvas.height,
         tintWidth: tinted.width, tintHeight: tinted.height }, dragging: !!drag, gesture: drag?.kind ?? (wheel ? "scale" : null),

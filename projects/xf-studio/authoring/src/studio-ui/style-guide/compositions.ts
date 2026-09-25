@@ -15,7 +15,7 @@ export function states() {
     pattern({ id: "t-undo", title: "Undo, recovery and view changes", status: "implemented",
       what: "Three scopes, named consistently: recipe Undo (Ctrl+Z; per preset; content edits, one step per gesture or slider drag), recovery (restore removed preset, recover previous collection draft — separate stacks) and view changes (camera, UV pan/zoom, panels, theme — never undoable, never in recipes).",
       when: "Toasts offer the matching scope: “Undo” after layer removal or reset, “Restore” after preset removal, “Undo open” after opening a collection.",
-      combine: "Menus mark view commands “View changes are not edits”. Removal commands say “Undo with Ctrl+Z” or “Restorable from the Presets panel”." }),
+      combine: "Menus group view commands under their own view heading, after the target's edits. Removal commands say “Undo with Ctrl+Z” or “Restorable from the Presets panel”." }),
     pattern({ id: "t-async", title: "Async work and cancellation", status: "implemented",
       specimen: `<div class="package-progress" style="max-width:420px"><div class="progress indeterminate"></div><p class="progress-text">Building and verifying Cyberpunk mod files from the current collection. This can take several minutes…</p>${note("A started build cannot be cancelled here. Closing the page does not stop it.", "warning")}</div>`,
       what: "Busy states show the application's progress message. Where the server cannot cancel, the UI says so instead of offering a Cancel that lies.",

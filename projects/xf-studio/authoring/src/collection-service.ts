@@ -6,7 +6,7 @@ import { parseRecipe, type Recipe } from "./recipe";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
-import { describePackageOmissions } from "./package-filter";
+import { describePackageExperimental, describePackageOmissions } from "./package-filter";
 
 export type CollectionRequest =
   | { kind: "initialize" | "refresh" | "save" | "saveCopy" | "exportCollection" | "exportPlan" }
@@ -276,11 +276,11 @@ export class CollectionService {
           if (request.action === "check") {
             const checked = response as PackageCheck;
             result = { kind: "packageCheck", result: checked };
-            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${describePackageOmissions(checked.omissions)}`;
+            message = `${checked.presets.length} of ${checked.originalPresetCount} preset(s) can become mod files. This check created no files.${describePackageOmissions(checked.omissions)}${describePackageExperimental(checked.experimental)}`;
           } else {
             const built = response as PackageBuild;
             result = { kind: "packageBuild", result: built };
-            message = `Verified local ${built.modName ? `${built.modName} ` : ""}mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}`;
+            message = `Verified local ${built.modName ? `${built.modName} ` : ""}mod files for ${built.presetCount} of ${built.originalPresetCount} preset(s): ${built.package} · Manifest: ${built.manifest}. Not installed or game-tested.${describePackageOmissions(built.omissions)}${describePackageExperimental(built.experimental)}`;
           }
           break;
         }

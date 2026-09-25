@@ -30,6 +30,8 @@ type Handle = {
 };
 type Hooks = {
   layer: () => Layer | undefined;
+  /** Optional: every layer, back to front, so a context hit can name makeup the selection does not own. */
+  layers?: () => readonly Layer[];
   selected: () => number;
   select: (i: number) => void;
   selectedField: () => string | undefined;
@@ -438,16 +440,29 @@ export function createSurfaceEditor(
     if (!uv || Math.hypot(uv.u - best.uv.u, uv.v - best.uv.v) > 0.012) return;
     return best;
   }
+  /** Visible character geometry (plate, skin, eyes, hair and other details) under the pointer. */
+  function characterAt(x: number, y: number) {
+    setRay(x, y);
+    head.computeBoundingSphere();
+    if (ray.intersectObjects([plate, head, viewer.eyes], false).length) return true;
+    const shown = (object: THREE.Object3D | null): boolean => !object || object === scene || object.visible && shown(object.parent);
+    const inGroup = (object: THREE.Object3D | null): boolean => !!object && (object === group || inGroup(object.parent));
+    return ray.intersectObjects(scene.children, true).some(entry =>
+      (entry.object as THREE.Mesh).isMesh && shown(entry.object) && !inGroup(entry.object));
+  }
+  /**
+   * Context-menu classification, most specific first: a visible control of the selected layer
+   * (surface controls on), then painted makeup (the selected layer, then the frontmost other
+   * visible layer), then bare character geometry (`head`). No geometry at all is no hit (background).
+   */
   function hitAt(clientX: number, clientY: number): ViewportHit | undefined {
     if (drag || shapeDrag || wheel) return;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientY < rect.top ||
       clientX >= rect.left + rect.width || clientY >= rect.top + rect.height) return;
     const layer = hooks.layer();
-    if (!enabled || !layer?.enabled) return;
-    update();
-    const handle = handleAt(clientX, clientY);
-    if (handle) {
+    const handle = enabled && layer?.enabled ? (update(), handleAt(clientX, clientY)) : undefined;
+    if (layer && handle) {
       const hit = handle.kind === "point" ? { kind: "point" as const, layerId: layer.id, index: handle.index }
         : handle.kind === "tangent" ? { kind: "tangent" as const, layerId: layer.id,
           index: handle.index, side: handle.side === "in" ? "incoming" as const : "outgoing" as const }
@@ -455,8 +470,15 @@ export function createSurfaceEditor(
       return { hit, mirror: handle.mirror,
         affordance: handle.kind === "origin" ? "warp-origin" : handle.kind === "field" ? "warp-vector" : handle.kind };
     }
-    const uv = hit(clientX, clientY), shape = uv && shapeHit(layer, uv);
-    return shape ? { hit: { kind: "shape", layerId: layer.id }, mirror: shape.mirror, affordance: "shape" } : undefined;
+    const uv = hit(clientX, clientY);
+    if (uv) {
+      const others = [...hooks.layers?.() ?? []].reverse().filter(item => item.id !== layer?.id);
+      for (const candidate of [...layer ? [layer] : [], ...others]) {
+        const shape = shapeHit(candidate, uv);
+        if (shape) return { hit: { kind: "shape", layerId: candidate.id }, mirror: shape.mirror, affordance: "shape" };
+      }
+    }
+    return characterAt(clientX, clientY) ? { hit: { kind: "head" }, affordance: "empty" } : undefined;
   }
   function validDrag() {
     if (!drag || !enabled || hooks.layer() !== drag.layer || !drag.layer.enabled)
