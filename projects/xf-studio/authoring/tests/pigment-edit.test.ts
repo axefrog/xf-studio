@@ -30,9 +30,9 @@ test("explicit smooth upgrade and pigment edits preserve old draft/history throu
 test("new layers are smooth, duplication preserves the selected mode, invalid commands are atomic", () => {
   const recipe = initialRecipe(), layer = recipe.layers[0];
   layer.strength = { mode: "legacy-nearest" };
-  const added = editLayers(recipe, layer.id, { kind: "add" });
+  const added = editLayers(recipe, layer.id, { kind: "add", newId: "added-layer" });
   expect(added.recipe.layers[added.active].strength.mode).toBe("smooth-boundary");
-  const copied = editLayers(recipe, layer.id, { kind: "duplicate", id: layer.id });
+  const copied = editLayers(recipe, layer.id, { kind: "duplicate", id: layer.id, newId: "copied-layer" });
   expect(copied.recipe.layers[copied.active].strength.mode).toBe("legacy-nearest");
   const before = JSON.stringify(layer);
   expect(() => editPigment(layer, { kind: "strength-blend", value: .002 })).toThrow();

@@ -183,7 +183,8 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   } else if (action.kind === "field.add") {
     const i = layer.fields.length, n = layer.points.length;
     // The registered apply always receives the new ID from its host (deterministic replay).
-    const field: WarpField = { id: action.fieldId ?? crypto.randomUUID(),
+    if (!action.fieldId) throw Error("A new warp field needs its ID from the host.");
+    const field: WarpField = { id: action.fieldId,
       u: clamp(layer.points.reduce((sum, point) => sum + point.u, 0) / n + .008 * i),
       v: clamp(layer.points.reduce((sum, point) => sum + point.v, 0) / n), du: 0, dv: 0, radius: .03 };
     changed.fields = [...layer.fields, field]; next.fieldSelection[layer.id] = field.id;
@@ -269,25 +270,18 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   return { state: next, choices: nextChoices, effect: { kind: effect, layerIndex: index }, changed: changedState };
 }
 
-/** Existing gesture adapters may still mutate the source state; reads always reflect the latest committed recipe. */
+/**
+ * Publishes eye makeup's recipe results to the live document: the registered apply's results
+ * (`commit`) and gesture frames (`publishGesture`), with the per-layer memory they use. It applies
+ * nothing itself: every edit is dispatched through `app.dispatch`, form controls and gestures (CORE-44).
+ */
 export class RecipeActions {
   private listeners = new Set<(effect: RecipeActionEffect) => void>();
   constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
     private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
     private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"]) => void) {}
   snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
-  capability(action: RecipeAction) { return recipeActionCapability(this.read(), action); }
   subscribe(listener: (effect: RecipeActionEffect) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  dispatch(action: RecipeAction, record = false) {
-    const before = this.read(), result = applyRecipeAction(before, action, this.choices,
-      remembers(action.kind) ? this.presetId() : "draft");
-    if (!result.changed) return false;
-    if (record && result.effect.kind !== "selection") this.history.checkpoint(before.recipe);
-    if (remembers(action.kind)) Object.assign(this.choices, result.choices);
-    this.write(result.state, result.effect);
-    for (const listener of this.listeners) listener(result.effect);
-    return true;
-  }
   /**
    * The current preset's per-layer memory (inactive Glitter models, Colour-shift settings),
    * keyed by layer ID: the editor state eye makeup's pure actions read. Not cloned; read-only.
@@ -298,9 +292,9 @@ export class RecipeActions {
     return result;
   }
   /**
-   * Publish a result computed by eye makeup's pure apply, exactly as `dispatch` publishes its own:
-   * one checkpoint when `record` and the result is more than a selection, the per-layer memory
-   * written back for actions that use it, then the state and its effect.
+   * Publish a result computed by eye makeup's pure apply: one checkpoint when `record` and the result
+   * is more than a selection, the per-layer memory written back for actions that use it, then the
+   * state and its effect.
    */
   commit(action: RecipeAction, next: RecipeActionState, effect: RecipeActionEffect,
     choices: Readonly<Record<string, LayerChoices>>, record: boolean) {

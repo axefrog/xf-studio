@@ -69,12 +69,14 @@ export class LookHistory {
     if (!data || data.schema !== LOOK_HISTORY_1 || !Array.isArray(data.entries) || !data.chunks || typeof data.chunks !== "object")
       throw Error("This look's Undo history is damaged.");
     const kept = data.entries.slice(-limit);
-    // Addresses are recomputed from the content, so stored addresses never have to be trusted.
-    const addresses = new Map<ChunkId, string>();
-    const text = (id: ChunkId) => {
+    // Addresses are recomputed from the content, so stored addresses never have to be trusted. Each
+    // distinct stored chunk is serialized and hashed once; later references only retain it (CORE-40).
+    const local = new Map<ChunkId, ChunkId>();
+    const ref = (id: ChunkId) => {
+      let found = local.get(id);
+      if (found !== undefined) { history.store.retain(found); return found; }
       if (!Object.hasOwn(data.chunks, id)) throw Error("This look's Undo history is damaged.");
-      let found = addresses.get(id);
-      if (found === undefined) addresses.set(id, found = JSON.stringify(data.chunks[id]));
+      local.set(id, found = history.store.put(JSON.stringify(data.chunks[id])));
       return found;
     };
     history.entries = kept.map(entry => {
@@ -82,7 +84,7 @@ export class LookHistory {
         throw Error("This look's Undo history is damaged.");
       const before: Refs = {};
       for (const [feature, ids] of Object.entries(entry.before))
-        before[feature] = ids === null ? null : (Array.isArray(ids) ? ids : []).map(id => history.store.put(text(id)));
+        before[feature] = ids === null ? null : (Array.isArray(ids) ? ids : []).map(ref);
       return { id: newId(), scope: entry.scope, before };
     });
     history.trimmedBefore = data.trimmed === true || data.entries.length > limit;
@@ -98,12 +100,18 @@ export class LookHistory {
 
   /**
    * Record `features` as they are now (before a change). Returns the new step's ID, or undefined when
-   * the top step already holds exactly this content (nothing to undo to).
+   * the top step already holds exactly this content (nothing to undo to). The top step then reverts
+   * the coming change, so a `label` names it (CORE-42): a gesture that moved a point and back, then an
+   * opacity edit, is undone as "Opacity".
    */
   checkpoint(read: LookReader, features: readonly string[], options: { scope?: HistoryScope; label?: HistoryLabel } = {}):
     HistoryEntryId | undefined {
     const before = this.encode(read, features);
-    if (this.sameAsTop(before)) { this.releaseRefs(before); return undefined; }
+    if (this.sameAsTop(before)) {
+      this.releaseRefs(before);
+      if (options.label) this.entries.at(-1)!.label = { ...options.label };
+      return undefined;
+    }
     return this.push({ id: newId(), scope: options.scope ?? (features.length > 1 ? "look" : "part"),
       label: copyLabel(options.label), at: Date.now(), before });
   }

@@ -163,7 +163,8 @@ export const GESTURE_DESCRIPTORS = {
 /**
  * File workflows (`StudioFileOperations`). Each runs asynchronously through a device
  * port; `device` names the browser mechanism it needs, `savesFirst` marks exports that
- * write a SQLite revision before downloading, and `recovery` marks draft switches that
+ * write a SQLite revision before downloading (whenever the library takes the collection; one
+ * it refuses is exported unsaved, CORE-38), and `recovery` marks draft switches that
  * the collection recovery queue can undo. None records a recipe Undo entry.
  */
 export type FileDescriptor = { scope: readonly ActionScope[];

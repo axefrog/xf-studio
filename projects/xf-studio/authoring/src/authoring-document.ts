@@ -125,6 +125,10 @@ export class AuthoringDocument {
     const removed = this.history.discard(entry); if (removed) this.notify("history"); return removed;
   }
   historyLabel() { return this.history.topLabel(); }
+  /** The recipe the top step restores, leaving the history as it is (a cancelled transaction without its own step). */
+  topRecipe(): Recipe | undefined {
+    return this.history.canUndo ? this.recipeOf(this.history.stepParts(this.history.depth - 1)) : undefined;
+  }
   /** Take the latest checkpoint off without Redo (a cancelled transaction); returns the recipe it restores. */
   undoRecipe() {
     if (!this.history.canUndo) return undefined;
@@ -157,8 +161,9 @@ export class AuthoringDocument {
    * Where a gesture or form-control transaction records (the platform's `HistoryTransaction`): this
    * look's history, with the recipe's JSON as the content fingerprint. `revert` restores and publishes.
    */
-  transactionHost(revert: () => void): TransactionHost<HistoryEntryId> {
-    return { checkpoint: () => this.checkpoint(), relabel: (step, label) => this.relabelCheckpoint(step, label),
+  transactionHost(revert: (step: HistoryEntryId | undefined) => void): TransactionHost<HistoryEntryId> {
+    return { checkpoint: () => this.checkpoint(), top: () => this.history.topId,
+      relabel: (step, label) => this.relabelCheckpoint(step, label),
       discard: step => this.discardCheckpoint(step), revert, content: () => JSON.stringify(this.state.recipe) };
   }
   /** Kept Undo entries oldest first, without recipes. */

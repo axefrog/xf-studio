@@ -7,7 +7,7 @@ import { editLayers } from "../src/layer-stack";
 import { PresentationStatusSource, emptyPresentationStatus } from "../src/presentation-status";
 import { initialRecipe, type Recipe } from "../src/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
+import { encodeWorkspaceForStorage, fitWorkspace, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/workspace-persistence";
 import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
 import { historyRecipes, looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
@@ -83,7 +83,8 @@ test("save status is published only when it changes", () => {
 function eightLayerRecipe(): Recipe {
   let recipe = initialRecipe();
   while (recipe.layers.length < 8)
-    recipe = editLayers(recipe, recipe.layers[0].id, { kind: "duplicate", id: recipe.layers.at(-1)!.id }).recipe;
+    recipe = editLayers(recipe, recipe.layers[0].id, { kind: "duplicate", id: recipe.layers.at(-1)!.id,
+      newId: `layer-${recipe.layers.length + 1}` }).recipe;
   return recipe;
 }
 function variant(recipe: Recipe, i: number): Recipe {
@@ -145,16 +146,27 @@ test("a realistic workspace fits the storage budget with the standard policy and
   expect(collections.previous!.removed).toEqual([]);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
 
-test("an oversized workspace trims further and says so instead of silently failing", () => {
+test("an oversized workspace is stored in the look-level form, then trims further and says so instead of silently failing", () => {
   jest.useFakeTimers();
   const state = realisticWorkspace(16), storage = memoryStorage();
+  expect(fitWorkspace(state, STUDIO_DOCUMENTS, Infinity).size).toBeGreaterThan(WORKSPACE_STORAGE_BUDGET);
+  // Its whole-part form is over budget; the look-level form keeps every step (CORE-39), so nothing is lost.
   const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
   writer.activate(); writer.flush();
   expect(storage.writes()).toBe(1);
   expect(writer.storedSize()).toBeLessThanOrEqual(WORKSPACE_STORAGE_BUDGET);
-  expect(writer.snapshot()).toEqual({ kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull });
+  expect(writer.snapshot()).toEqual({ kind: "saved", message: SAVE_MESSAGES.saved });
   const restored = parseWorkspace(JSON.parse(storage.stored.get(key)!), STUDIO_DOCUMENTS);
   expect(restored.collections!.collection.presets).toHaveLength(16);
+  expect(historyRecipes(restored.history)).toHaveLength(RECIPE_HISTORY_LIMIT);
+  // Under a budget that holds only part of that, older steps go and the status says so.
+  const tight = memoryStorage();
+  const trimming = new WorkspacePersistence({ storage: tight, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS,
+    budget: Math.floor(writer.storedSize() * 0.6) });
+  trimming.activate(); trimming.flush();
+  expect(trimming.snapshot()).toEqual({ kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull });
+  expect(trimming.storedSize()).toBeLessThanOrEqual(Math.floor(writer.storedSize() * 0.6));
+  expect(parseWorkspace(JSON.parse(tight.stored.get(key)!), STUDIO_DOCUMENTS).collections!.collection.presets).toHaveLength(16);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
 
 test("a storage quota refusal falls back to smaller forms, then reports that autosave stopped", () => {

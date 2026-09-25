@@ -200,37 +200,44 @@ export function readCollectionWorkspaceV1(value: unknown, model: DocumentModel, 
  * build that knows `xfs/workspace-2` reads what this one writes whenever the content allows. The
  * result shares structure with `workspace`; serialize it at once.
  */
-export function writeCollectionWorkspace(workspace: CollectionWorkspace, model: DocumentModel) {
+export function writeCollectionWorkspace(workspace: CollectionWorkspace, model: DocumentModel,
+  /** `lookLevel`: every Undo history with steps in the look-level form (see `PartRegistry.writeMemory`). */
+  options: { lookLevel?: boolean } = {}) {
   const parts = model.parts;
   const draft = (value: CollectionDraft) => ({
     collection: { schema: COLLECTION_2, id: value.collection.id, name: value.collection.name,
       presets: value.collection.presets.map(look => parts.minimalLook(look, false)) },
     ...(value.revision !== undefined ? { revision: value.revision } : {}),
     ...(value.selected !== undefined ? { selected: value.selected } : {}),
-    memory: Object.fromEntries(Object.entries(value.memory).map(([id, memory]) => [id, parts.writeMemory(memory)])),
+    memory: Object.fromEntries(Object.entries(value.memory).map(([id, memory]) => [id, parts.writeMemory(memory, options)])),
     removed: value.removed.map(entry => ({ preset: parts.minimalLook(entry.preset, false), index: entry.index,
-      memory: parts.writeMemory(entry.memory) })) });
+      memory: parts.writeMemory(entry.memory, options) })) });
   return { ...draft(workspace), ...(workspace.previous ? { previous: draft(workspace.previous) } : {}),
     ...(workspace.older ? { older: workspace.older.map(draft) } : {}) };
 }
 
 /** Removed presets kept for Restore; removing another beyond this drops the oldest. */
 export const REMOVED_PRESET_LIMIT = 20;
-export type PresetCommand = { kind: "add" } | { kind: "copy" | "remove"; id: string } |
+/** `newId` is the new look's ID for `add` and `copy`; the session fills it from its host's ID source. */
+export type PresetCommand = { kind: "add"; newId?: string } | { kind: "copy"; id: string; newId?: string } | { kind: "remove"; id: string } |
   { kind: "rename"; id: string; name: string } | { kind: "move"; id: string; to: number } | { kind: "restore" };
 /**
  * Pure collection operations: stable identities, explicit order and recoverable removal. `value`
  * is an in-memory workspace (already parsed), so it is copied, and only what an edit can change is
  * validated again: the collection's identities, names and looks, never the Undo histories (CORE-35).
+ * A new look's ID comes with the command (`newId`); this never invents one (CORE-44).
  */
 export function editPresets(value: CollectionWorkspace, command: PresetCommand, model: DocumentModel): CollectionWorkspace {
   const state = copyWorkspace(value), presets = state.collection.presets;
   const index = "id" in command ? presets.findIndex(p => p.id === command.id) : -1;
   if ("id" in command && index < 0) throw Error("That preset no longer exists.");
   if (command.kind === "add" || command.kind === "copy") {
+    const id = command.newId;
+    if (!id) throw Error("A new preset needs its ID from the host.");
+    if (presets.some(p => p.id === id) || state.removed.some(entry => entry.preset.id === id)) throw Error("That preset ID is already in use.");
     // A copy carries every part of the look; its editor memory starts fresh.
-    const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id: crypto.randomUUID(),
-      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(crypto.randomUUID(), `Preset ${presets.length + 1}`, model);
+    const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id,
+      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, `Preset ${presets.length + 1}`, model);
     presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
     state.selected = preset.id; state.memory[preset.id] = withLiveMemory(undefined, emptyMemory(), model);
   } else if (command.kind === "remove") {

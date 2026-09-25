@@ -16,7 +16,8 @@ export class AuthoringGestures {
   private active?: { source: GestureSource; layer: Layer; transaction: HistoryTransaction<HistoryEntryId> };
   /** `actions.applyGesture` applies one frame through the feature's registered gestures (the eye-makeup port). */
   constructor(private document: AuthoringDocument, private actions: { applyGesture(edit: GestureEdit): boolean },
-    private restoreUndo: () => void,
+    /** Restores a cancelled gesture's start: `step` is its own checkpoint, undefined when the top step held the start. */
+    private restoreUndo: (step: HistoryEntryId | undefined) => void,
     /** The Undo step's name from a frame: the trusted core passes the registered gestures' `label`. */
     private label: (edit: GestureEdit) => HistoryLabel = gestureHistoryLabel) {}
   begin(source: GestureSource, layer: Layer | undefined) {

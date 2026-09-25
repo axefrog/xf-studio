@@ -1,5 +1,5 @@
 import type { DocumentModel } from "./collection-workspace";
-import { fitWorkspace, WORKSPACE_STORAGE_BUDGET } from "./workspace-budget";
+import { fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./workspace-budget";
 import type { WorkspaceState } from "./workspace-state";
 
 /**
@@ -33,6 +33,8 @@ export class WorkspacePersistence {
   /** The exact text last written; an unchanged workspace is never rewritten. */
   private written?: string;
   private lastSize = 0;
+  /** The plan the last write fitted: the next budget search starts there (CORE-41). */
+  private lastPlan?: WorkspacePlan;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
     restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
     /** The document model the stored form is written with (injected by the composition root). */
@@ -63,7 +65,7 @@ export class WorkspacePersistence {
     // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
     let quota = false, budget = this.options.budget ?? WORKSPACE_STORAGE_BUDGET;
     for (let attempt = 0; attempt < 12; attempt++) {
-      const fitted = fitWorkspace(state, this.options.model, budget);
+      const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
       if (fitted.encoded === this.written) return;
       try {
@@ -75,7 +77,7 @@ export class WorkspacePersistence {
         budget = Math.min(budget, Math.floor(fitted.size * 0.75));
         continue;
       }
-      this.written = fitted.encoded; this.lastSize = fitted.size;
+      this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
       this.publish(fitted.trimmed || fitted.overBudget
         ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
         : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }

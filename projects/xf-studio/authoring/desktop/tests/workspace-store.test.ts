@@ -1,10 +1,12 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DesktopWorkspaceStore } from "../workspace-store";
-import { parseWorkspace, serializeWorkspace } from "../../src/workspace-state";
-import { smallWorkspaceV1 } from "../../tests/fixtures/workspace-v1-fixtures";
+import { fitWorkspace } from "../../src/workspace-budget";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, storesLookLevelHistory } from "../../src/workspace-state";
+import { historyRecipes } from "../../tests/fixtures/looks";
+import { largeWorkspaceV1, smallWorkspaceV1 } from "../../tests/fixtures/workspace-v1-fixtures";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-workspace-store-"));
@@ -58,4 +60,37 @@ test("the .bak is refreshed whenever an older build wrote a newer version-1 file
   upgrade();
   expect(readFileSync(backup, "utf8")).toBe(JSON.stringify(second));
   expect(JSON.parse(readFileSync(file, "utf8")).schema).toBe("xfs/workspace-2");
+});
+
+test("a look-level workspace is written back in that form, and each text is parsed at most once per save (CORE-39, CORE-41)", () => {
+  const dir = resolve(root, "look-level"), store = new DesktopWorkspaceStore(dir, STUDIO_DOCUMENTS), file = resolve(dir, store.fileName(false));
+  const text = JSON.stringify(largeWorkspaceV1(16, 80));
+  const state = loadWorkspace({ getItem: key => key === "xfas.workspace.v1" ? text : null }, false, STUDIO_DOCUMENTS).state;
+  const whole = fitWorkspace(state, STUDIO_DOCUMENTS, Infinity);
+  // The renderer's budget chose the look-level form: the host keeps it instead of rewriting whole parts.
+  const fitted = fitWorkspace(state, STUDIO_DOCUMENTS, whole.size - 1);
+  expect(fitted.plan.lookLevel).toBe(true);
+  store.save(false, whole.encoded);
+  expect(readFileSync(file, "utf8")).toBe(whole.encoded);
+  const parse = spyOn(JSON, "parse");
+  try {
+    store.save(false, fitted.encoded);
+    // The previous file is the text this store wrote, so only the new text is parsed.
+    expect(parse.mock.calls.filter(([value]) => value === whole.encoded)).toHaveLength(0);
+    expect(parse.mock.calls.filter(([value]) => value === fitted.encoded)).toHaveLength(1);
+  } finally { parse.mockRestore(); }
+  const stored = readFileSync(file, "utf8");
+  expect(storesLookLevelHistory(JSON.parse(stored))).toBe(true);
+  expect(stored.length).toBeLessThan(whole.size / 2);
+  const histories = (encoded: string) => { const collections = parseWorkspace(JSON.parse(encoded), STUDIO_DOCUMENTS).collections!;
+    return collections.collection.presets.map(preset => historyRecipes(STUDIO_DOCUMENTS.parts.lookHistory(collections.memory[preset.id]))); };
+  expect(histories(stored)).toEqual(histories(whole.encoded));
+  // A file this store has not seen is parsed once before it is replaced.
+  const other = new DesktopWorkspaceStore(dir, STUDIO_DOCUMENTS), again = spyOn(JSON, "parse");
+  try {
+    other.save(false, whole.encoded);
+    expect(again.mock.calls.filter(([value]) => value === stored)).toHaveLength(1);
+    expect(again.mock.calls.filter(([value]) => value === whole.encoded)).toHaveLength(1);
+  } finally { again.mockRestore(); }
+  expect(readFileSync(file, "utf8")).toBe(whole.encoded);
 });

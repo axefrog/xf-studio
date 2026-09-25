@@ -4,6 +4,7 @@ import { eyeMakeupPort, type EyeMakeupGestures, type EyeMakeupSpec } from "./aut
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
+import type { HistoryEntryId } from "./editor-actions";
 import { gestureHistoryLabel } from "./history-labels";
 import { AuthoringPresentation } from "./authoring-presentation";
 import type { DocumentModel } from "./collection-workspace";
@@ -50,7 +51,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   const history = new AuthoringHistory(document, previous => ports.resetStack(previous));
   const undo = () => history.undo();
   // Cancelling a gesture or form transaction restores its checkpoint without creating Redo.
-  const revert = () => history.revert();
+  const revert = (step: HistoryEntryId | undefined) => history.revertTransaction(step);
   // Eye makeup's registered behaviour runs over this port; stack edits reset the preview's layer resources.
   const eyeMakeup = eyeMakeupPort(document, recipe, ports.resetStack, ports.newId);
   // Gesture frames run the module's registered gestures and publish through the port (CORE-31).

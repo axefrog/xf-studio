@@ -371,11 +371,13 @@ export class PartRegistry implements HistoryParts {
    * feature's whole parts in the oldest part schema that holds every entry (`partSchema`, `history`),
    * which every build since workspace-2 reads; otherwise as `xfs/look-history-1` under `LOOK_MEMORY`,
    * with each registered feature's memory naming that schema so an older build opens the workspace
-   * read-only instead of losing the history.
+   * read-only instead of losing the history. `lookLevel` asks for the look-level form for any history
+   * with steps: the storage budget uses it when whole parts do not fit (CORE-39), since a step of one
+   * layer then costs one layer chunk instead of the whole part.
    */
-  writeMemory(memory: LookMemory): Record<string, StoredPartMemory> {
+  writeMemory(memory: LookMemory, options: { lookLevel?: boolean } = {}): Record<string, StoredPartMemory> {
     const history = this.lookHistory(memory), stored: Record<string, StoredPartMemory> = {};
-    const bodies = lookHistoryBodies(history, this);
+    const bodies = options.lookLevel && history.entries.length ? undefined : lookHistoryBodies(history, this);
     // Whole parts hold the history only for a registered feature (no reader accepts steps of any other).
     const single = bodies && (bodies.feature === undefined || this.byId.has(bodies.feature)) ? bodies : undefined;
     const registered = Object.keys(memory).filter(feature => feature !== LOOK_MEMORY && this.byId.has(feature));

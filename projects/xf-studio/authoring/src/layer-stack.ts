@@ -11,7 +11,10 @@ export type LayerCommand =
   | { kind: "rename"; id: string; name: string }
   | { kind: "move"; id: string; to: number };
 
-/** Pure authoring operation. Array order is bottom to top; identities never follow indices. */
+/**
+ * Pure authoring operation. Array order is bottom to top; identities never follow indices. A new
+ * layer's ID comes from the host (`newId`); this never invents one (CORE-33, CORE-44).
+ */
 export function editLayers(value: Recipe, activeId: string | undefined, command: LayerCommand) {
   const recipe = parseRecipe(value), layers = recipe.layers;
   const index = "id" in command ? layers.findIndex(l => l.id === command.id) : -1;
@@ -19,7 +22,8 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   if (command.kind === "add" || command.kind === "duplicate") {
     if (layers.length >= MAX_LAYERS) throw Error(`This preview currently supports up to ${MAX_LAYERS} layers.`);
     const layer = structuredClone(command.kind === "duplicate" ? layers[index] : newLayerTemplate());
-    layer.id = command.newId ?? crypto.randomUUID();
+    if (!command.newId) throw Error("A new layer needs its ID from the host.");
+    layer.id = command.newId;
     if (layers.some(existing => existing.id === layer.id)) throw Error("That layer ID is already in use.");
     layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : `Layer ${layers.length + 1}`;
     if (command.kind === "add") layer.enabled = true;

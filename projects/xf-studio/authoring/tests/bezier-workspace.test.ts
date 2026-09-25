@@ -28,7 +28,7 @@ test("old v4 shapes stay unchanged; edited handles and legacy Undo coexist throu
   expect(raster(historyRecipes(restored.history).at(-1)!.layers[0], 256)).toEqual(oldPixels);
   expect(restored.recipe.layers[0].points[2].handles!.mode).toBe("corner");
   expect(JSON.stringify(old)).toBe(oldText);
-  const duplicate = editLayers(restored.recipe, layer.id, { kind: "duplicate", id: layer.id });
+  const duplicate = editLayers(restored.recipe, layer.id, { kind: "duplicate", id: layer.id, newId: "duplicate-layer" });
   duplicate.recipe.layers[duplicate.active].points[2].handles!.out.u += .01;
   expect(restored.recipe.layers[0]).toEqual(layer);
 });

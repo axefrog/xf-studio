@@ -2,13 +2,26 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
-const imports = (text: string) => [...text.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map(match => match[1]);
+/**
+ * Every module specifier a source names: `import … from` and `export … from`, bare `import "…"`,
+ * dynamic `import("…")` and inline type references `import("…").T` (CORE-43). Comments and strings
+ * are not stripped, so keep such text out of prose.
+ */
+const IMPORT_FORMS = /\bfrom\s+["']([^"']+)["']|\bimport\s+["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+const imports = (text: string) => [...text.matchAll(IMPORT_FORMS)].map(match => match[1] ?? match[2] ?? match[3]);
 /**
  * Browser globals that DOM-free code must not read: the window and its storage, the navigator,
  * network access, `globalThis` (a way around the others) and the document. Comments and strings
  * are not stripped, so keep these words out of such modules' prose.
  */
 const BROWSER_GLOBALS = /\b(?:window|localStorage|sessionStorage|navigator|globalThis)\b|(?<![.\w])fetch\s*\(|(?<!\.)\bdocument\.(?:getElementById|querySelector|createElement|body|addEventListener)/;
+
+test("the import scan sees static, bare, dynamic and inline type imports (CORE-43)", () => {
+  expect(imports([`import { a } from "./a";`, `export { b } from './b';`, `import "./c";`, `const d = await import("./d");`,
+    `type E = import("./e").E;`, `let f: typeof import('node:fs');`, `import type { G } from "./g";`].join("\n")))
+    .toEqual(["./a", "./b", "./c", "./d", "./e", "node:fs", "./g"]);
+  expect(imports(`const later = importer("./x"); reimport ("./y");`)).toEqual([]);
+});
 
 test("the browser-globals check catches every global it names (CORE-37)", () => {
   for (const code of ["window.x", "localStorage.getItem('k')", "sessionStorage.setItem('k', 'v')", "navigator.userAgent",

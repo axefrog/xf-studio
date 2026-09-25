@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
-import { collectionDraft, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
+import { collectionDraft, editPresets, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
 import { applyLayerAction, layerCapability, RecipeHistory } from "../src/editor-actions";
 import { applyRecipeAction, RecipeActions, recipeActionCapability, type RecipeActionState } from "../src/recipe-actions";
+import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { PreviewActions, type PreviewPort } from "../src/preview-actions";
 import { ViewportAdapter, type ViewportPort } from "../src/viewport-adapter";
 import { freshWorkspace } from "../src/workspace-state";
@@ -11,7 +12,7 @@ import { initialRecipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import type { GestureEdit } from "../src/recipe-actions";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 test("collection commands keep UI views isolated and notify only after valid transitions", () => {
   const preset = { id: crypto.randomUUID(), name: "First", revision: 1, recipe: initialRecipe() };
@@ -62,10 +63,37 @@ test("layer commands preserve source recipes and history restores a complete edi
   expect(history.undo()!.layers[0].name).toBe(source.layers[0].name);
 });
 
+test("preset add and copy take their IDs from the host: the pure operation is deterministic (CORE-44)", () => {
+  const preset = { id: "00000000-0000-4000-8000-000000000001", name: "First", revision: 1, recipe: initialRecipe() };
+  const collection = { schema: "xfas/collection-1" as const, id: "00000000-0000-4000-8000-000000000002", name: "Collection", presets: [preset] };
+  const draft = collectionDraft(collection, STUDIO_DOCUMENTS);
+  expect(() => editPresets(draft, { kind: "add" }, STUDIO_DOCUMENTS)).toThrow("ID from the host");
+  expect(() => editPresets(draft, { kind: "copy", id: preset.id }, STUDIO_DOCUMENTS)).toThrow("ID from the host");
+  expect(() => editPresets(draft, { kind: "add", newId: preset.id }, STUDIO_DOCUMENTS)).toThrow("already in use");
+  for (const command of [{ kind: "add", newId: "00000000-0000-4000-8000-000000000003" },
+    { kind: "copy", id: preset.id, newId: "00000000-0000-4000-8000-000000000004" }] as const) {
+    const first = editPresets(draft, command, STUDIO_DOCUMENTS), second = editPresets(draft, command, STUDIO_DOCUMENTS);
+    expect(first).toEqual(second);
+    expect(first.selected).toBe(command.newId);
+  }
+  // The session fills the ID from its host's source; capability refuses one already in use.
+  let n = 10, editor: EditorSnapshot = { recipe: preset.recipe, ...emptyMemory() };
+  const actions = new CollectionActions(STUDIO_DOCUMENTS, draft, () => editor, value => editor = value,
+    () => `00000000-0000-4000-8000-0000000000${n++}`);
+  actions.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+  actions.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset.id } });
+  expect(actions.summary().presets.map(look => look.id)).toEqual([preset.id, "00000000-0000-4000-8000-000000000011",
+    "00000000-0000-4000-8000-000000000010"]);
+  expect(actions.capability({ kind: "preset.edit", command: { kind: "add", newId: preset.id } }))
+    .toEqual({ available: false, reason: "That preset ID is already in use." });
+});
+
 test("recipe actions validate point, field, pigment, softness and material edits atomically", () => {
   const recipe = initialRecipe(), layerId = recipe.layers[0].id;
   const start: RecipeActionState = { recipe, active: 0, selected: 0, fieldSelection: {} };
-  const added = applyRecipeAction(start, { kind: "field.add", layerId });
+  // The new warp's ID comes from the host; the pure apply never invents one (CORE-44).
+  expect(() => applyRecipeAction(start, { kind: "field.add", layerId })).toThrow("ID from the host");
+  const added = applyRecipeAction(start, { kind: "field.add", layerId, fieldId: "warp-2" });
   expect(added.state.recipe.layers[1]).toBe(start.recipe.layers[1]); // Pending renders for other layers keep their identity.
   const otherEdited = applyRecipeAction(added.state, { kind: "layer.setOpacity",
     layerId: recipe.layers[1].id, opacity: .6 });
@@ -95,30 +123,31 @@ test("recipe actions validate point, field, pigment, softness and material edits
   expect(point.effect.kind).toBe("immediate");
 });
 
-test("recipe controller records discrete changes once and keeps inactive Glitter choices local", () => {
+test("recipe edits through app.dispatch record discrete changes once and keep inactive Glitter choices local", () => {
   const original = initialRecipe(), layerId = original.layers[0].id;
-  let state: RecipeActionState = { recipe: original, active: 0, selected: 0, fieldSelection: {} };
-  const choices: GlitterChoices = {}, history = new RecipeHistory(), effects: string[] = [];
-  const actions = new RecipeActions(() => state, (next, effect) => { state = next; effects.push(effect.kind); },
-    history, choices, () => "preset-one");
-  const unsubscribe = actions.subscribe(effect => effects.push(`notify:${effect.kind}`));
-  expect(actions.dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }, true)).toBe(true);
-  expect(history.canUndo).toBe(true);
-  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }, true)).toBe(true);
-  expect(glitterModel(state.recipe.layers[0].flakes)).toBe("fine");
-  expect(actions.dispatch({ kind: "glitter.setDirect", layerId, key: "strength", value: 2.1 }, true)).toBe(true);
-  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "classic" }, true)).toBe(true);
-  expect(glitterModel(state.recipe.layers[0].flakes)).toBe("classic");
+  const workspace = freshWorkspace(original), choices: GlitterChoices = workspace.glitterChoices, effects: string[] = [];
+  const { app, document, recipe } = createTrustedAuthoringCore(workspace,
+    { resetStack: () => {}, selectedCollection: () => "preset-one" }, STUDIO_COMPOSITION);
+  const unsubscribe = recipe.subscribe(effect => effects.push(effect.kind));
+  const dispatch = (action: Parameters<typeof app.dispatch>[0]) => app.dispatch(action);
+  expect(dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }).ok).toBe(true);
+  expect(document.canUndo).toBe(true);
+  expect(dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }).ok).toBe(true);
+  expect(glitterModel(document.recipe.layers[0].flakes)).toBe("fine");
+  expect(dispatch({ kind: "glitter.setDirect", layerId, key: "strength", value: 2.1 }).ok).toBe(true);
+  expect(dispatch({ kind: "glitter.selectModel", layerId, model: "classic" }).ok).toBe(true);
+  expect(glitterModel(document.recipe.layers[0].flakes)).toBe("classic");
   expect(choices[`preset-one/${layerId}`].fine).toBeDefined();
-  expect(actions.dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }, true)).toBe(true);
-  expect(state.recipe.layers[0].flakes).toMatchObject({ strength: 2.1 });
-  expect(() => actions.dispatch({ kind: "glitter.setIrregular", layerId, key: "count", value: 100 })).toThrow("irregular");
-  const detached = actions.snapshot() as unknown as RecipeActionState;
+  expect(dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }).ok).toBe(true);
+  expect(document.recipe.layers[0].flakes).toMatchObject({ strength: 2.1 });
+  expect(dispatch({ kind: "glitter.setIrregular", layerId, key: "count", value: 100 })).toMatchObject({ ok: false });
+  const detached = recipe.snapshot() as unknown as RecipeActionState;
   detached.recipe.layers[0].color = "#000000";
-  expect(state.recipe.layers[0].color).toBe(original.layers[0].color);
-  expect(history.undo()!.layers[0].finish).toBe("glitter");
-  expect(effects).toEqual(["immediate", "notify:immediate", "immediate", "notify:immediate",
-    "scheduled", "notify:scheduled", "immediate", "notify:immediate", "immediate", "notify:immediate"]);
+  expect(document.recipe.layers[0].color).toBe(original.layers[0].color);
+  expect(document.undoDepth).toBe(5);
+  for (let i = 0; i < 4; i++) app.dispatch({ kind: "recipe.undo" });
+  expect(document.recipe.layers[0].finish).toBe("glitter");
+  expect(effects).toEqual(["immediate", "immediate", "scheduled", "immediate", "immediate"]);
   unsubscribe();
 });
 

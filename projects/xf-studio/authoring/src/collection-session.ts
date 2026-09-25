@@ -19,7 +19,9 @@ export type EditorSnapshot = EditorMemory & { recipe: Recipe };
 export class CollectionSession {
   state: CollectionWorkspace;
   constructor(private model: DocumentModel, state: CollectionWorkspace, private read: () => EditorSnapshot,
-    private show: (editor: EditorSnapshot) => void) {
+    private show: (editor: EditorSnapshot) => void,
+    /** The host's ID source for new looks (`editPresets` never invents one). */
+    private newId: () => string = () => crypto.randomUUID()) {
     this.state = copyWorkspace(state);
   }
   /** Write the live editor into `state`'s selected look (the draft itself, or a copy of it). */
@@ -52,7 +54,8 @@ export class CollectionSession {
   }
   edit(command: PresetCommand) {
     this.stash(); const previous = this.state.selected;
-    this.state = editPresets(this.state, command, this.model);
+    const concrete = (command.kind === "add" || command.kind === "copy") && !command.newId ? { ...command, newId: this.newId() } : command;
+    this.state = editPresets(this.state, concrete, this.model);
     if (previous !== this.state.selected || command.kind === "restore") this.display();
   }
   open(collection: LookCollection | unknown, revision?: number) {
