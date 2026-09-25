@@ -28,7 +28,8 @@ export function plateVertexIds(): number[] {
   return [...new Set(faces.flatMap(face => [indices[face * 3]!, indices[face * 3 + 1]!, indices[face * 3 + 2]!]))].sort((a, b) => a - b);
 }
 
-export const SOURCE_BYTES = { mesh: Buffer.from("synthetic head mesh"), morph: Buffer.from("synthetic head morph"), eye: Buffer.from("synthetic eye mesh") };
+export const SOURCE_BYTES = { mesh: Buffer.from("synthetic head mesh"), morph: Buffer.from("synthetic head morph"), eye: Buffer.from("synthetic eye mesh"),
+  eyeMorph: Buffer.from("synthetic eye morph") };
 
 export function fixturePlateRecipe(overrides: Partial<{ meshSha256: string }> = {}): EyePlateRecipe {
   const faces = PLATE_FACES.flatMap(([first, last]) => Array.from({ length: last - first + 1 }, (_, i) => first + i));
@@ -83,11 +84,15 @@ export function headGlb(): Uint8Array {
   });
 }
 
+const EYE_QUAD = (z: number) => Float32Array.from([-0.03, 1.66, z, -0.01, 1.66, z, -0.03, 1.68, z, 0.01, 1.66, z, 0.03, 1.66, z, 0.01, 1.68, z]);
+/** The eye shape `h011` lifts every eyeball vertex by 2 mm in the fixture's eye morph export. */
+export const EYE_MORPH_LIFT = 0.002;
+
 /** An eye mesh export: a decoy chunk plus the eyeball chunk, skinned at its bind pose. */
 export function eyeGlb(options: { offsetBind?: boolean } = {}): Uint8Array {
   const writer = new GlbWriter();
   const quad = (z: number) => {
-    const positions = Float32Array.from([-0.03, 1.66, z, -0.01, 1.66, z, -0.03, 1.68, z, 0.01, 1.66, z, 0.03, 1.66, z, 0.01, 1.68, z]);
+    const positions = EYE_QUAD(z);
     return { POSITION: writer.add(positions, "VEC3", { bounds: true }), NORMAL: writer.add(new Float32Array(18).map((_, i) => i % 3 === 2 ? -1 : 0), "VEC3"),
       TEXCOORD_0: writer.add(Float32Array.from([-1.5, 0, -1.2, 0, -1.5, 0.3, 1.2, 0, 1.5, 0, 1.2, 0.3]), "VEC2"),
       JOINTS_0: writer.add(new Uint16Array(24), "VEC4"), WEIGHTS_0: writer.add(new Float32Array(24).map((_, i) => i % 4 === 0 ? 1 : 0), "VEC4") };
@@ -102,6 +107,26 @@ export function eyeGlb(options: { offsetBind?: boolean } = {}): Uint8Array {
       { name: "submesh_01_LOD_1", mesh: 1, skin: 0 }],
     skins: [{ joints: [1], inverseBindMatrices: ibm }],
     meshes: [{ name: "submesh_00_LOD_1_doubled", primitives: [{ attributes: decoy, indices }] }, { name: "submesh_01_LOD_1", primitives: [{ attributes: eyeball, indices }] }],
+  });
+}
+
+/**
+ * The eye component's own morph target export: the same eyeball chunk (identical base vertices)
+ * with eye-region shape keys named `<target>_<region>` like WolvenKit writes them.
+ */
+export function eyeMorphGlb(options: { names?: string[]; shiftBase?: boolean } = {}): Uint8Array {
+  const writer = new GlbWriter();
+  const names = options.names ?? ["h011_eyes"];
+  const base = EYE_QUAD(0.01);
+  if (options.shiftBase) base[1] += 0.001;
+  const lift = new Float32Array(18).map((_, i) => i % 3 === 1 ? EYE_MORPH_LIFT : 0);
+  const attributes = { POSITION: writer.add(base, "VEC3", { bounds: true }) };
+  const indices = writer.add(Uint16Array.from([0, 1, 2, 3, 4, 5]), "SCALAR");
+  const targets = names.map(() => ({ POSITION: writer.add(lift, "VEC3", { bounds: true }), NORMAL: writer.add(new Float32Array(18), "VEC3") }));
+  return writer.toGlb({
+    asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: [0] }],
+    nodes: [{ name: "submesh_01_LOD_1", mesh: 0 }],
+    meshes: [{ name: "submesh_01_LOD_1", primitives: [{ attributes, indices, targets }], extras: { targetNames: names } }],
   });
 }
 
@@ -130,8 +155,8 @@ export function texturePng(size: number, kind: "colour" | "normal" | "roughness"
 
 export type FakeExport = { exporter: (cacheRoot: string) => GameAssetExporter; calls: { depotPaths: string[]; withMaterials: boolean }[] };
 /** A WolvenKit stand-in that writes the export tree the way `uncook` lays it out. */
-export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "eye-glb" | "material" | "textures";
-  beforeWrite?: (signal?: AbortSignal) => Promise<void>; mesh?: Buffer; eye?: () => Uint8Array; textureSize?: number } = {}): FakeExport {
+export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, options: { omit?: "head" | "eye-glb" | "eye-morph" | "material" | "textures";
+  beforeWrite?: (signal?: AbortSignal) => Promise<void>; mesh?: Buffer; eye?: () => Uint8Array; eyeMorph?: () => Uint8Array; textureSize?: number } = {}): FakeExport {
   const calls: FakeExport["calls"] = [];
   const run: UncookRun = async ({ depotPaths, outDir, withMaterials, signal }) => {
     calls.push({ depotPaths: [...depotPaths], withMaterials });
@@ -145,6 +170,10 @@ export function fakeUncook(plate: EyePlateRecipe, recipe: PreviewCoreRecipe, opt
       write(recipe.eye.meshDepotPath, SOURCE_BYTES.eye);
       write(plate.source.morphDepotPath + ".glb", headGlb());
       if (options.omit !== "eye-glb") write(recipe.eye.meshDepotPath.replace(/\.mesh$/, ".glb"), (options.eye ?? eyeGlb)());
+      if (options.omit !== "eye-morph") {
+        write(recipe.eye.morphDepotPath, SOURCE_BYTES.eyeMorph);
+        write(recipe.eye.morphDepotPath + ".glb", (options.eyeMorph ?? eyeMorphGlb)());
+      }
       const materials = materialExports();
       if (options.omit !== "material") {
         write(plate.source.meshDepotPath.replace(/\.mesh$/, ".Material.json"), JSON.stringify(materials.head));

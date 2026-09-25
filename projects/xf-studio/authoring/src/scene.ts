@@ -19,6 +19,14 @@ import { loadSavedBrowMaterial, sampleUnderlayAlbedo } from "./brow-material";
 import { loadSavedLashAppearance, type SavedLashAppearance } from "./lash-profile";
 import { retainedViewportAspect, visibleViewportSize } from "./viewport-attachment";
 import { loadCoreDetail, type LoadedCoreDetail } from "./core-detail-loader";
+import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "./face-morphs";
+
+/** A mesh's morph target names in influence order (GLTFLoader keys the dictionary by `extras.targetNames`). */
+function morphTargetNames(mesh: THREE.Mesh): string[] {
+  const names: string[] = [];
+  for (const [name, index] of Object.entries(mesh.morphTargetDictionary ?? {})) names[index] = name;
+  return names;
+}
 
 export async function createScene(
   host: HTMLElement,
@@ -544,6 +552,11 @@ export async function createScene(
       geometry.setAttribute("skinIndex",new THREE.Uint16BufferAttribute(indices,4));
       geometry.setAttribute("skinWeight",new THREE.Float32BufferAttribute(weights,4));
       const skinned = new THREE.SkinnedMesh(geometry,eyeMat);
+      // Keep the eye component's own facial morph targets (eye shape) on the rigidly attached copy.
+      if (eyes.morphTargetDictionary) {
+        skinned.morphTargetDictionary = { ...eyes.morphTargetDictionary };
+        skinned.morphTargetInfluences = [...(eyes.morphTargetInfluences ?? [])];
+      }
       skinned.name="eyes"; skinned.position.copy(eyes.position);skinned.quaternion.copy(eyes.quaternion);skinned.scale.copy(eyes.scale);
       skinned.frustumCulled=false;
       eyes.parent!.add(skinned); scene.add(...eyeBones); scene.updateMatrixWorld(true);
@@ -574,20 +587,33 @@ export async function createScene(
     }
     controls.update();
   }
-  const deforming = [
+  // Every mesh with facial morph targets follows the character-creator morph choices. The eye
+  // component carries its own `eyes` targets (a separate morph resource in the game), paired with
+  // the head's by (target, region); see face-morphs.ts.
+  const deforming: THREE.Mesh[] = [
     head,
     plate,
+    ...(eyes.morphTargetDictionary ? [eyes] : []),
     ...Object.values(details).flatMap((d) => d.meshes),
     ...[...piercingMeshes.values()].flat(),
   ];
-  function eyeShape(index: number) {
+  // The head is the authority for which eye shapes exist: its `eyes` targets in resource order.
+  const eyeShapeChoices: FaceMorphChoice[] = faceMorphChoices(morphTargetNames(head), "eyes");
+  const eyesFollowShape = followsFaceMorphChoices(morphTargetNames(eyes), eyeShapeChoices);
+  function applyFaceMorph(choice: FaceMorphChoice) {
     for (const m of deforming) {
-      if (!m.morphTargetDictionary || !m.morphTargetInfluences) continue;
-      for (const [name, i] of Object.entries(m.morphTargetDictionary))
-        if (name.endsWith("_eyes"))
-          m.morphTargetInfluences[i] =
-            name === `h${String(index * 10 + 1).padStart(3, "0")}_eyes` ? 1 : 0;
+      if (!m.morphTargetInfluences) continue;
+      for (const [i, weight] of faceMorphWeights(morphTargetNames(m), choice.region, choice.target)) m.morphTargetInfluences[i] = weight;
     }
+  }
+  function eyeShape(index: number) {
+    const choice = eyeShapeChoices[index];
+    if (!choice) throw Error("That eye shape is not in this head.");
+    applyFaceMorph(choice);
+  }
+  function eyeShapeOptions() {
+    return { choices: eyeShapeChoices.map(choice => ({ ...choice })), eyesFollow: eyesFollowShape,
+      eyeSource: core.record.geometry.morphs?.find(entry => entry.node === core.record.geometry.nodes.eyes)?.depotPath ?? null };
   }
   const piercingStyles = [...(piercingManifest?.styles ?? []), ...(prcManifest?.styles ?? [])];
   let piercingEnabled = true, piercingStyle = "", piercingDefinition = "";
@@ -642,6 +668,9 @@ export async function createScene(
         if (i !== undefined) mesh.morphTargetInfluences![i] = 1;
       }
     }
+    const savedEyes = group.morphs.find(m => m.region === "eyes");
+    // No saved `eyes` pair means the base shape (`None`); the save stores only chosen morphs.
+    const savedEyeShape = faceMorphChoiceIndex(eyeShapeChoices, savedEyes?.target ?? null);
     const matchedDetails = Object.entries(details)
       .filter(([, d]) =>
         group.appearances.some(
@@ -664,6 +693,7 @@ export async function createScene(
       eyeAppearance: eyeAppearance(),
       matchedHair,
       matchedPiercing: !!(piercingManifest && savedPiercing(piercingManifest, v)),
+      ...(savedEyeShape === undefined ? {} : { eyeShape: savedEyeShape }),
     };
   }
   let hairEnabled = true;
@@ -743,6 +773,7 @@ export async function createScene(
         m instanceof THREE.SkinnedMesh ? skinSets(m.geometry).length : 0,
     })),
     blinkBones: bones.length,
+    eyeShape: { choices: eyeShapeChoices.length, eyesFollow: eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     detailErrors,
     browMaterial: savedBrowMaterial ? "saved-double-diffuse" : "provisional",
     browBlend: savedBrowMaterial ? "gbuffer-sqrt" : "linear",
@@ -799,6 +830,7 @@ export async function createScene(
     },
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape,
+    eyeShapeOptions,
     applySavedV,
     eyeAppearance,
     setEyeOptics,

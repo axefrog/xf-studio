@@ -194,3 +194,24 @@ test("preview commands keep camera and lighting state readable without DOM and e
   expect(actions.snapshot().eyeShape).toBe(9);
   expect(calls.filter(call => call.startsWith("eye:"))).toEqual(["eye:12"]);
 });
+
+test("eye-shape choices come from the loaded head, and only those choices are accepted", () => {
+  const calls: number[] = [];
+  const choices = [null, "h011", "h021"].map((target, index) => ({ index, region: "eyes", target, number: String(index + 1).padStart(2, "0") }));
+  const port = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
+    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {},
+    setEyeShape: (index: number) => calls.push(index), setPiercings: () => {}, setPiercingPreview: () => {},
+    eyeShapeOptions: () => ({ choices, eyesFollow: true, eyeSource: "base\he_morphs.morphtarget" }) } satisfies PreviewPort;
+  const actions = new PreviewActions(freshWorkspace().preview, port);
+  expect(actions.eyeShapeOptions().choices.map(choice => choice.target)).toEqual([null, "h011", "h021"]);
+  expect(actions.capability({ kind: "preview.setEyeShape", index: 3 })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.setEyeShape", index: 2 }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setEyeShape", index: 2 });
+  actions.rememberEyeShape(9); // Not offered by this head: ignored.
+  expect(actions.snapshot().eyeShape).toBe(2);
+  expect(calls).toEqual([2]);
+  // A copy: presentation cannot edit the renderer's choice list.
+  actions.eyeShapeOptions().choices[0]!.target = "h999";
+  expect(actions.eyeShapeOptions().choices[0]!.target).toBeNull();
+});

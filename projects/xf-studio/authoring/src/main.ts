@@ -525,12 +525,15 @@ function setupPiercingControls() {
 }
 $("v-export").onclick = () => void runFile({ kind: "savedV.export" });
 const shape = $<HTMLSelectElement>("eye-shape");
-for (let i = 0; i <= 21; i++) {
-  const o = document.createElement("option");
-  o.value = String(i);
-  o.textContent = i ? `Eye shape ${String(i).padStart(2, "0")}` : "Base mesh";
-  o.selected = i === workspace.preview.eyeShape;
-  shape.append(o);
+/** Eye-shape choices come from the loaded head's own targets once the preview exists. */
+function fillEyeShapes(selected: number) {
+  shape.replaceChildren(...(previewActions?.eyeShapeOptions().choices ?? []).map(choice => {
+    const o = document.createElement("option");
+    o.value = String(choice.index);
+    o.textContent = `Eye shape ${choice.number}${choice.target ? ` (${choice.target})` : " (base)"}`;
+    o.selected = choice.index === selected;
+    return o;
+  }));
 }
 for (let i = 0; i < authoring.recipe.layers.length; i++) previewCoordinator.render(i);
 sync();
@@ -578,7 +581,7 @@ try {
   input("light-angle").value = String(initialPreview.lightAngle);
   input("fov").value = String(initialPreview.camera.fov);
   $("fov-value").textContent = `${input("fov").value}°`;
-  shape.value = String(initialPreview.eyeShape);
+  fillEyeShapes(initialPreview.eyeShape);
   setupMotionControls(motionActions);
   input("surface-controls").onchange = () =>
     previewActions?.dispatch({ kind: "preview.setSurfaceControls", enabled: input("surface-controls").checked });
