@@ -380,6 +380,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("lighting.preset", preview.preview?.lightingPreset === "creator" ? "Lighting: studio" : "Lighting: character creator (game)", "View",
       { kind: "preview.setLightingPreset", preset: preview.preview?.lightingPreset === "creator" ? "studio" : "creator" },
       { icon: "lighting", keywords: "creator mirror game lights lut grade compare calibration" }),
+    ...(preview.studioSetups?.setups ?? []).map(entry => act(`lighting.studio.${entry.id}`, `Studio lighting: ${entry.label}`, "View",
+      { kind: "preview.applyStudioSetup", setup: entry.id }, { icon: "lighting", keywords: `studio light setup ${entry.title}` })),
+    act("lighting.studio.reset", "Studio lighting: restore defaults", "View",
+      { kind: "preview.resetStudioLighting" }, { icon: "lighting", keywords: "studio light reset default exposure key ambient soft" }),
     act("camera.creatorFace", "Camera: character-creator face page", "View", { kind: "camera.creatorFraming", page: "face" }, { icon: "front", keywords: "creator 15 fov eyes brows lashes" }),
     act("camera.creatorHair", "Camera: character-creator hair page", "View", { kind: "camera.creatorFraming", page: "hair" }, { icon: "front", keywords: "creator 15 fov hair skin" }),
     ...([["isotropic", "lumens ÷ 4π"], ["cone", "spread over the cone"]] as const).map(([value, label]) =>

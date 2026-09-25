@@ -49,6 +49,10 @@
   "preview.resetCreatorLighting",
   "preview.setExposure",
   "preview.setKeyAngle",
+  "preview.setStudioLight",
+  "preview.setStudioNeutral",
+  "preview.applyStudioSetup",
+  "preview.resetStudioLighting",
   "preview.setEyeShape",
   "preview.setPiercingPreview",
   "preview.setPiercings",
@@ -1559,8 +1563,8 @@
      "type": "number",
      "required": true,
      "from": "input",
-     "min": 0.5,
-     "max": 2
+     "min": 0.125,
+     "max": 8
     }
    }
   },
@@ -1579,6 +1583,137 @@
      "max": 360
     }
    }
+  },
+  "preview.setStudioLight": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "environment",
+      "key",
+      "elevation",
+      "fill",
+      "rim"
+     ]
+    },
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "environment": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 3
+      }
+     },
+     "undo": "none"
+    },
+    "key": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    },
+    "elevation": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": -30,
+       "max": 80
+      }
+     },
+     "undo": "none"
+    },
+    "fill": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    },
+    "rim": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 4
+      }
+     },
+     "undo": "none"
+    }
+   }
+  },
+  "preview.setStudioNeutral": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "preview.applyStudioSetup": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "setup": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "soft",
+      "key",
+      "flat",
+      "rim",
+      "mirror"
+     ]
+    }
+   }
+  },
+  "preview.resetStudioLighting": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
   },
   "preview.setEyeShape": {
    "scope": [
@@ -2298,6 +2433,42 @@
   },
   {
    "id": "preview.setKeyAngle",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setStudioLight",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setStudioNeutral",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.applyStudioSetup",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.resetStudioLighting",
    "family": "action",
    "scope": [
     "viewport"

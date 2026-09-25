@@ -14,7 +14,7 @@ export function reference(panels: PanelInfo[]) {
     ["Warp", "field.add/select/remove/clear, field.setReach", "editor.selectedField()"],
     ["Head / UV map", "viewport.attach/rehost/resize/uvCommand, camera.front, preview.setSurfaceControls/setWire, motion.*", "viewport.snapshot(), previewReadiness, contextAt()"],
     ["Character", "preview.setEyeShape/setDetail/setHair/setPiercings/setPiercingPreview, files savedV.import/export", "previewState().savedV/preview/previewOptions/eyeShapeOptions, status.assets"],
-    ["Camera & light", "camera.setFov/endFovGesture/front, preview.setExposure/setKeyAngle/setNormals/setEyeOptics", "previewState().preview, status.assets.eyeOptics"],
+    ["Camera & light", "camera.setFov/endFovGesture/front, preview.setExposure/setKeyAngle/setStudioLight/setStudioNeutral/applyStudioSetup/resetStudioLighting/setNormals/setEyeOptics", "previewState().preview, previewState().studioSetups, status.assets.eyeOptics"],
     ["Motion", "motion.setIdle/setPaused/setContributions/setBlink/playBlink", "previewState().motion"],
     ["Preview quality", "quality.set, quality.rebuild", "previewState().quality, previewReadiness"],
     ["Library", "requests save/saveCopy/refresh/open, files collection.import/export/plan/recover, recipe.import/export, mask.export", "library.summary(), files.snapshot()"],

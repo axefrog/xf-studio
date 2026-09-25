@@ -11,6 +11,7 @@ import { encodeWorkspaceAt } from "../../src/workspace-budget";
 import { loadWorkspace, type WorkspaceState } from "../../src/workspace-state";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { historyRecipes } from "./looks";
+import { DEFAULT_STUDIO_LIGHTS, sameStudioLights } from "../../src/studio-lighting";
 
 /** Canonical JSON (object keys sorted): key order is not observable, so it is not compared. */
 export const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" &&
@@ -25,9 +26,12 @@ export function restore(stored: unknown) {
 /** Every observable fact of one restored workspace, as plain data. */
 export function observe(state: WorkspaceState) {
   // Undo histories are compared as the whole recipes each step restores (the look history keeps them as chunks).
+  // The studio rig came after these goldens: at its default it is the only rig the earlier code had, so it is not a difference.
+  const { studioLights, ...plainPreview } = state.preview;
+  const preview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? plainPreview : state.preview;
   const top = { recipe: state.recipe, active: state.active, selected: state.selected, history: historyRecipes(state.history),
     historyTrimmed: state.historyTrimmed ?? false, fieldSelection: state.fieldSelection, glitterChoices: state.glitterChoices,
-    uvView: state.uvView, preview: state.preview, library: state.library, uiPreferences: state.uiPreferences,
+    uvView: state.uvView, preview, library: state.library, uiPreferences: state.uiPreferences,
     previewSetup: state.previewSetup ?? null, savedV: state.savedV ?? null };
   if (!state.collections) return { top, collection: null };
   let shown: EditorSnapshot | undefined;
