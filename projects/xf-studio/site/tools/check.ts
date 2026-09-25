@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { buildGuide } from "../../authoring/tools/build-style-guide";
 import { basePath, loadConfig, repoRoot, siteRoot, styleGuideSource, type SiteConfig } from "./config";
+import { stripTags } from "./markdown";
 import { findPersonalData } from "./privacy";
 
 export type Issue = { file: string; message: string };
@@ -146,8 +147,13 @@ export async function checkSite(dir: string, options: CheckOptions = {}): Promis
     if (size > fileBudget) add(file, `${size} bytes exceeds the per-file budget of ${fileBudget}`);
     if ([".html", ".css", ".js", ".svg", ".xml", ".txt"].includes(extname(file))) {
       const text = readFileSync(join(dir, file), "utf8");
-      if (PRIVATE_PATH.test(text)) add(file, `contains a local machine path: ${PRIVATE_PATH.exec(text)![0]}`);
-      for (const found of findPersonalData(text)) add(file, `contains personal data (${found.name}): ${found.match}`);
+      // Markup splits text (the renderer puts <wbr> after path separators in code spans), so the text
+      // without tags is checked as well as the raw file, which keeps attributes such as href in view.
+      const views = file.endsWith(".html") || file.endsWith(".svg") || file.endsWith(".xml") ? [text, stripTags(text)] : [text];
+      const machinePath = views.map(view => PRIVATE_PATH.exec(view)?.[0]).find(Boolean);
+      if (machinePath) add(file, `contains a local machine path: ${machinePath}`);
+      const personal = new Map(views.flatMap(view => findPersonalData(view)).map(found => [found.name, found.match]));
+      for (const [name, match] of personal) add(file, `contains personal data (${name}): ${match}`);
       if (/file:\/\//i.test(text)) add(file, "contains a file:// URL");
       if (/\{\{\w+\}\}/.test(text)) add(file, "contains an unrendered {{placeholder}}");
       if (file.endsWith(".css") || file.endsWith(".js")) {

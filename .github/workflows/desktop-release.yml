@@ -20,6 +20,7 @@ on:
   pull_request:
     paths:
       - "projects/xf-studio/authoring/desktop/**"
+      - "tools/private-data.json"
       - "projects/xf-studio/CHANGELOG.md"
       - "projects/xf-studio/THIRD_PARTY_NOTICES.md"
       - "LICENSE"

@@ -125,7 +125,7 @@ function headFixture() {
   layer.fields = []; layer.symmetry = false;
   const original = structuredClone(layer);
   let frame = () => {};
-  const reports: { target?: PointerTarget }[] = [];
+  const reports: { target?: PointerTarget; gesture?: string }[] = [];
   const viewer = { renderer: { domElement: canvas }, scene, camera, plate, head, eyes, controls, cameraInput,
     onFrame: (fn: () => void) => { frame = fn; } };
   const editor = createSurfaceEditor(viewer as unknown as Parameters<typeof createSurfaceEditor>[0], {
@@ -134,7 +134,7 @@ function headFixture() {
     input: state => reports.push(state),
   });
   // In a browser, events on the canvas bubble to its document (where the controls follow moves and releases).
-  for (const type of ["pointerdown", "pointermove", "pointerup"])
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"])
     canvas.addEventListener(type, event => canvas.ownerDocument.dispatchEvent(Object.assign(new Event(type), (event as Event & { init: object }).init)));
   const at = (u: number, v: number) => {
     const world = new THREE.Vector3(u - .5, v - .5, 0).project(camera);
@@ -237,6 +237,131 @@ test("head: the maintainer's report — right-drag pans with no modifier, Ctrl o
     f.editor.dispose();
   } finally { if (previous) Object.defineProperty(globalThis, "window", previous); else Reflect.deleteProperty(globalThis, "window"); }
 });
+
+// ---------- Press sequences the conformance loop does not reach (UI-37) ----------
+function withHeadFixture(run: (f: ReturnType<typeof headFixture>) => void) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  try {
+    const f = headFixture();
+    run(f);
+    f.editor.dispose();
+  } finally { if (previous) Object.defineProperty(globalThis, "window", previous); else Reflect.deleteProperty(globalThis, "window"); }
+}
+const RESTING = { mouseButtons: { LEFT: null, MIDDLE: null, RIGHT: null }, touches: { ONE: null, TWO: null } };
+const slots = (f: ReturnType<typeof headFixture>) => ({ mouseButtons: f.controls.mouseButtons, touches: f.controls.touches });
+const moved = (point: { x: number; y: number }, dx: number, dy: number) => ({ x: point.x + dx, y: point.y + dy });
+const finger = (pointerId: number, isPrimary: boolean) => ({ pointerId, pointerType: "touch", isPrimary, button: 0 });
+/** The camera motion the table binds to one finger on empty space (with no modifier held). */
+const oneFingerOnEmpty = () => {
+  const effect = headCameraEffect("drag", "empty", "");
+  expect(effect === "camera-orbit" || effect === "camera-pan").toBe(true);
+  return { slot: orbitTouchAction("drag", effect), motion: EXPECTED[effect!] };
+};
+
+test("head: pointercancel ends a camera gesture and rests every slot, and the next press starts clean", () => withHeadFixture(f => {
+  const empty = f.at(...LOCATIONS.empty), one = oneFingerOnEmpty();
+  // A touch gesture the browser takes over (a system swipe, a scroll) ends in pointercancel, not pointerup.
+  f.prepare();
+  let before = f.state();
+  f.emit("pointerdown", empty, finger(1, true));
+  expect(f.controls.touches.ONE).toBe(one.slot);
+  f.emit("pointermove", moved(empty, 30, 40), { ...finger(1, true), button: -1 });
+  expect(f.motion(before)).toBe(one.motion);
+  f.emit("pointercancel", moved(empty, 30, 40), finger(1, true));
+  expect(slots(f)).toEqual(RESTING);
+  // The cancelled finger no longer moves the camera.
+  before = f.state();
+  f.emit("pointermove", moved(empty, 90, 10), { ...finger(1, true), button: -1 });
+  expect(f.motion(before)).toBe("nothing");
+
+  // A cancelled mouse press rests its slot too.
+  f.emit("pointerdown", empty, { pointerId: 2, pointerType: "mouse", isPrimary: true, button: 2 });
+  expect(f.controls.mouseButtons.RIGHT).not.toBeNull();
+  f.emit("pointercancel", empty, { pointerId: 2, pointerType: "mouse", isPrimary: true, button: 2 });
+  expect(slots(f)).toEqual(RESTING);
+
+  // A cancelled makeup edit gives the controls back and rests the slots.
+  const shape = f.at(...LOCATIONS.shape);
+  f.emit("pointerdown", shape, finger(3, true));
+  expect(f.reports.at(-1)?.gesture).toBeDefined();
+  expect(f.controls.enabled).toBe(false);
+  f.emit("pointercancel", shape, finger(3, true));
+  expect(f.reports.at(-1)?.gesture).toBeUndefined();
+  expect(f.controls.enabled).toBe(true);
+  expect(slots(f)).toEqual(RESTING);
+
+  // The next press does exactly its bound effect.
+  f.prepare();
+  before = f.state();
+  f.emit("pointerdown", empty, { pointerId: 4, pointerType: "mouse", isPrimary: true, button: 0 });
+  f.emit("pointermove", moved(empty, 30, 40), { pointerId: 4, pointerType: "mouse", button: -1 });
+  f.emit("pointerup", moved(empty, 30, 40), { pointerId: 4, pointerType: "mouse", button: 0 });
+  expect(f.motion(before)).toBe("orbit");
+  expect(slots(f)).toEqual(RESTING);
+}));
+
+test("head: when the first finger lifts before the second, the second carries on with the first finger's slot until it lifts", () => withHeadFixture(f => {
+  const empty = f.at(...LOCATIONS.empty), second = moved(empty, -200, 0), one = oneFingerOnEmpty();
+  const two = headCameraEffect("two-finger-drag", "empty", "");
+  expect(two).toBe("camera-zoom-pan");
+  f.prepare();
+  f.emit("pointerdown", empty, finger(1, true));
+  f.emit("pointerdown", second, finger(2, false));
+  expect(f.controls.touches).toEqual({ ONE: one.slot, TWO: orbitTouchAction("two-finger-drag", two) });
+  let before = f.state();
+  f.emit("pointermove", moved(second, -60, 30), { ...finger(2, false), button: -1 });
+  expect(f.motion(before)).toBe(EXPECTED[two!]);
+  // The first finger lifts: the controls restart a one-finger gesture for the second finger and read
+  // the ONE slot, so the slots must not rest while any finger is down.
+  f.emit("pointerup", empty, finger(1, true));
+  expect(f.controls.touches.ONE).toBe(one.slot);
+  before = f.state();
+  f.emit("pointermove", moved(second, -20, 80), { ...finger(2, false), button: -1 });
+  expect(f.motion(before)).toBe(one.motion);
+  // The last finger lifts: everything rests and nothing moves the camera any more.
+  f.emit("pointerup", moved(second, -20, 80), finger(2, false));
+  expect(slots(f)).toEqual(RESTING);
+  before = f.state();
+  f.emit("pointermove", moved(second, 40, 40), { ...finger(2, false), button: -1 });
+  expect(f.motion(before)).toBe("nothing");
+}));
+
+test("head: a second finger after a first touch the surface editor consumed never moves the camera", () => withHeadFixture(f => {
+  const shape = f.at(...LOCATIONS.shape), empty = f.at(...LOCATIONS.empty), one = oneFingerOnEmpty();
+  // Every modifier set whose one-finger press on makeup is not a camera effect: an edit (the editor
+  // takes the controls away) or a consumed no-op (the controls stay enabled and see only the second finger).
+  const consumed = MODIFIER_KEYS.filter(mods => !headCameraEffect("drag", "shape", mods));
+  expect(consumed).toContain("");
+  expect(consumed.some(mods => !pointerBinding("head", "drag", "shape", mods))).toBe(true);
+  for (const mods of consumed) {
+    const keys = flags(mods), editing = !!pointerBinding("head", "drag", "shape", mods);
+    f.prepare();
+    const before = f.state();
+    f.emit("pointerdown", shape, { ...finger(1, true), ...keys });
+    expect(f.reports.at(-1)?.gesture !== undefined, mods).toBe(editing);
+    expect(f.controls.touches.ONE, mods).toBeNull();
+    // A second finger joins. Its two-finger slot is set, but the controls never saw the first finger,
+    // so this is their first finger: it reads the ONE slot the consumed press left empty.
+    f.emit("pointerdown", empty, { ...finger(2, false), ...keys });
+    f.emit("pointermove", moved(empty, -60, 30), { ...finger(2, false), button: -1, ...keys });
+    f.emit("pointerup", moved(empty, -60, 30), { ...finger(2, false), ...keys });
+    expect(f.motion(before), mods).toBe("nothing");
+    // The first finger still owns its press, then ends it.
+    f.emit("pointermove", moved(shape, 10, 10), { ...finger(1, true), button: -1, ...keys });
+    f.emit("pointerup", moved(shape, 10, 10), { ...finger(1, true), ...keys });
+    expect(f.motion(before), mods).toBe("nothing");
+    expect(f.reports.at(-1)?.gesture, mods).toBeUndefined();
+    expect(f.controls.enabled, mods).toBe(true);
+    expect(slots(f), mods).toEqual(RESTING);
+    // Nothing is left half-tracked: the next single finger on empty space does its bound effect.
+    f.prepare();
+    const next = f.state();
+    f.emit("pointerdown", empty, finger(3, true));
+    f.emit("pointermove", moved(empty, 30, 40), { ...finger(3, true), button: -1 });
+    f.emit("pointerup", moved(empty, 30, 40), finger(3, true));
+    expect(f.motion(next), mods).toBe(one.motion);
+  }
+}));
 
 test("UV: every press, modifier set and target pans the view exactly when the table says so", () => {
   const previous = { document: globalThis.document, window: globalThis.window, ResizeObserver: globalThis.ResizeObserver };

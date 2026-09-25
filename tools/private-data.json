@@ -1,0 +1,147 @@
+{
+  "about": [
+    "Personal data that must not appear in the public repository, the public site or the packaged app:",
+    "user-profile paths and e-mail addresses. One pattern set and one set of test vectors, read by",
+    "tools/check_private_paths.py (repository), projects/xf-studio/site/tools/privacy.ts (site) and",
+    "projects/xf-studio/authoring/desktop/package-content-scan.ts (packaged app). The sources are written",
+    "in the regular-expression subset JavaScript and Python share: no named groups, no inline flags and",
+    "fixed-width look-behinds. Group 1 of a user path is the folder name; groups 1 and 2 of an address are",
+    "the local part and the domain. Every scanner must flag each vector in userPath and email and pass each",
+    "vector in clean."
+  ],
+  "userPaths": [
+    {
+      "id": "windows",
+      "about": "C:\\Users\\name in any case, slash direction, JSON or JavaScript escaping, or percent-encoding",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9_]))[A-Za-z](?::|%3[Aa]|\\\\u003[Aa])(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "flags": "i"
+    },
+    {
+      "id": "wsl",
+      "about": "/mnt/c/Users/name",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._-]))(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+mnt(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+[A-Za-z](?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+users(?:\\\\u005[Cc]|\\\\u002[Ff]|\\\\x5[Cc]|\\\\x2[Ff]|%5[Cc]|%2[Ff]|\\\\|/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "flags": "i"
+    },
+    {
+      "id": "posix",
+      "about": "macOS /Users/name and Linux /home/name (case-sensitive, as the systems are)",
+      "source": "(?:(?<=%[0-9A-Fa-f]{2})|(?<![A-Za-z0-9._:-]))(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(?:Users|home)(?:\\\\u002[Ff]|\\\\x2[Ff]|%2[Ff]|\\\\?/)+(<[^<>\\s]{1,40}>|%[A-Za-z_]{1,40}%|\\$\\{?[A-Za-z_]{1,40}\\}?|\\{[A-Za-z_]{1,40}\\}|[^\\\\/\"'`\\s<>:*?|,;()\\[\\]{}%&=]+)",
+      "flags": ""
+    }
+  ],
+  "placeholderUser": {
+    "about": "Whole folder names that belong to no one: placeholders, shared profiles and CI or sandbox accounts",
+    "source": "^(?:<[^<>]*>|%[A-Za-z_]+%|\\$\\{?[A-Za-z_]+\\}?|\\{[A-Za-z_]+\\}|public|default|all|shared|defaultapppool|wdagutilityaccount|runneradmin|runner|username|user|your|yourname|you|name|someone|example|me)$",
+    "flags": "i"
+  },
+  "email": {
+    "about": "An address: a local part, then a domain ending in an alphabetic top-level domain at a word boundary. A following call, index or dotted name (Python's matrix a@np.eye(4)) is code, not an address; a following full stop ends a sentence",
+    "source": "(?<![A-Za-z0-9._+-])([A-Za-z0-9][A-Za-z0-9._%+-]{0,63})@([A-Za-z0-9][A-Za-z0-9-]{0,62}(?:\\.[A-Za-z0-9-]{1,63})*\\.[A-Za-z]{2,24})\\b(?![(\\[]|\\.[A-Za-z0-9_])",
+    "flags": ""
+  },
+  "emailExemptions": {
+    "local": {
+      "about": "Role accounts that name no one, such as the git@ of an SSH remote",
+      "source": "^(?:git|noreply|no-reply|donotreply)$",
+      "flags": "i"
+    },
+    "domains": [
+      {
+        "about": "Domains reserved for documentation and tests (RFC 2606 and 6761)",
+        "source": "^(?:[A-Za-z0-9-]+\\.)*(?:example\\.(?:com|org|net)|example|test|invalid|localhost)$",
+        "flags": "i"
+      },
+      {
+        "about": "A version, as in pkg@1.0.0-beta.rc",
+        "source": "^[0-9]+\\.[0-9]+",
+        "flags": ""
+      },
+      {
+        "about": "A file or game resource name after one label, such as the ArchiveXL material reference ash_brown@long.mi or icon@2x.png. Only extensions that are not real top-level domains (so not .app, .mt or .md)",
+        "source": "^[A-Za-z0-9-]+\\.(?:mi|remt|mesh|ent|xbm|hp|xl|mlsetup|mlmask|mltemplate|morphtarget|inkcharcustomization|inkcc|anims|rig|archive|glb|dds|tga|png|jpe?g|gif|svg|webp|avif|ico|bmp|json|ya?ml|js|mjs|cjs|ts|css|html?|map|wasm)$",
+        "flags": "i"
+      }
+    ]
+  },
+  "vectors": {
+    "userPath": [
+      "const cache = \"C:\\Users\\jdoe\\AppData\\Local\\xf\";",
+      "const cache = \"C:\\\\Users\\\\jdoe\\\\AppData\\\\Local\\\\xf\";",
+      "const cache = \"c:/Users/jdoe/AppData\";",
+      "{\"root\":\"D:\\/Users\\/jdoe\\/game\"}",
+      "throw Error(\"at C:\\\\Users\\\\J.Doe-2\\\\src\\\\scene.ts:12\")",
+      "c:\\users\\jdoe\\Downloads",
+      "C:\\USERS\\JDOE\\Documents",
+      "/mnt/c/Users/jdoe/Games",
+      "/mnt/d/users/jdoe",
+      "file:///C:/Users/jdoe/x",
+      "C%3A%5CUsers%5Cjdoe%5CAppData",
+      "c%3a%2fusers%2fjdoe",
+      "\"C:\\u005cUsers\\u005cjdoe\\u005cAppData\"",
+      "\"C:\\\\u005cUsers\\\\u005cjdoe\"",
+      "/Users/jdoe/Library/Caches",
+      "at /Users/jdoe",
+      "/home/jdoe/.config",
+      "\"\\/home\\/jdoe\\/x\"",
+      "file:///Users/jdoe/x",
+      "C:\\Users\\user.jdoe\\AppData",
+      "C:\\Users\\name-jdoe\\AppData",
+      "C:\\Users\\publicjdoe\\x"
+    ],
+    "email": [
+      "const author = \"someone.real@gmail.com\";",
+      "mail jane.doe@company.co.uk",
+      "Contact jane.doe@gmail.com.",
+      "2077fan@gmail.com",
+      "jane@gmail.app",
+      "jane@company.mt",
+      "<jane_doe+xf@mail.example-host.org>",
+      "mailto:jdoe@163.com",
+      "jane@anthropic.com"
+    ],
+    "clean": [
+      "\"Your library is in C:\\Users\\<name>\\AppData\\Roaming\\XF Studio.\"",
+      "C:\\Users\\%USERNAME%\\Documents",
+      "C:\\Users\\Public\\Documents",
+      "C:/Users/Default/NTUSER.DAT",
+      "C:\\Users\\All Users\\x",
+      "C:\\Users\\${user}\\x",
+      "C:\\Users\\you\\Downloads",
+      "C:\\Users\\YourName\\Games",
+      "C:\\Users\\Your Name\\Games",
+      "C:\\Users\\WDAGUtilityAccount\\Desktop",
+      "/^[A-Z]:\\\\Users\\\\[^\\\\]+/i.test(path)",
+      "/\\/Users\\/[^/]+/",
+      "D:/Dev/cp2077-modding-hq",
+      "%USERPROFILE%\\Downloads",
+      "PATH_TO_GAME\\archive\\pc\\mod",
+      "/home/runner/work/xf-studio",
+      "/Users/Shared/x",
+      "/home/<user>/.config",
+      "/home/$USER/x",
+      "https://github.com/home/x",
+      "https://example.org/Users/jdoe",
+      "the /home/ folder and /Users/ on macOS",
+      "C:\\Program Files\\Users\\x",
+      "user@example.com",
+      "a@b.test",
+      "support@example.org",
+      "git@github.com:axefrog/xf-studio.git",
+      "Co-Authored-By: Claude <noreply@anthropic.com>",
+      "pkg@1.0.0-beta.rc",
+      "pkg@1.2.3",
+      "three@0.186.0",
+      "srcset='icon@2x.png'",
+      "ash_brown@long.mi",
+      "black_carbon@long",
+      "name@tpl",
+      "@context",
+      "@media (min-width: 4px)",
+      "import x from \"@types/bun\"",
+      "y = a@np.eye(4)",
+      "z = a@np.linalg.inv(m)",
+      "w = a@b.T[0]",
+      "noreply at example dot com"
+    ]
+  }
+}

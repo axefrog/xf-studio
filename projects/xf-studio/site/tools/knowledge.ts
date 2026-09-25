@@ -102,6 +102,9 @@ export function loadKnowledge(options: KnowledgeOptions): Knowledge {
   const dirPath = options.dir ?? "knowledge";
   const dir = join(options.repoRoot, dirPath);
   const readme = readFileSync(join(dir, "README.md"), "utf8");
+  // The index publishes the Topics table's summaries, so the whole README is held to the same rule as a page.
+  const readmePersonal = findPersonalData(readme);
+  if (readmePersonal.length) throw Error(`${dirPath}/README.md: contains personal data that must not be published: ${readmePersonal.map(p => `${p.name} “${p.match}”`).join(", ")}`);
   const { grades, rows } = parseKnowledgeIndex(readme);
   const files = new Set(readdirSync(dir).filter(name => name.endsWith(".md") && name !== "README.md"));
   const blob = `${options.repoUrl}/blob/${options.repoBranch}`;

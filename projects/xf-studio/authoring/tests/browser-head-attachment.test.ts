@@ -124,3 +124,25 @@ test("a scene that fails to load attaches nothing, and the next load starts clea
   expect(h.host.canvases).toBe(1);
   expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
 });
+
+test("releasing a head that a later load replaced leaves the current head loaded (UI-36)", async () => {
+  const h = harness({});
+  const first = await attachBrowserHead(h.ports);
+  // A later load replaces the first head (and releases its scene)…
+  const current = await h.viewport.loadHead([]);
+  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
+  expect(h.host.canvases).toBe(1);
+  // …so the first head's release must not unload the head that is now current.
+  first.dispose();
+  expect(h.viewport.scene()).toBe(current);
+  expect(h.host.canvases).toBe(1);
+  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
+  // The current head is still released by its own scene, once.
+  h.viewport.unloadHead(first.scene);
+  expect(h.viewport.scene()).toBe(current);
+  h.viewport.unloadHead(current);
+  h.viewport.unloadHead(current);
+  expect(h.viewport.scene()).toBeUndefined();
+  expect(h.host.canvases).toBe(0);
+  expect(h.log).toEqual(["surface:dispose", "scene:dispose", "scene:dispose"]);
+});

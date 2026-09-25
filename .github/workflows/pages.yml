@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "projects/xf-studio/site/**"
+      - "tools/private-data.json"
       - "knowledge/**"
       - "projects/xf-studio/authoring/public/style-guide.html"
       - "projects/xf-studio/authoring/public/studio.css"
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - "projects/xf-studio/site/**"
+      - "tools/private-data.json"
       - "knowledge/**"
       - "projects/xf-studio/authoring/public/style-guide.html"
       - "projects/xf-studio/authoring/public/studio.css"

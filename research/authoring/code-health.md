@@ -67,8 +67,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-28 | High | Verifier | Plate verification no longer compares the whole mesh render blob and morph blob against the input: tampered `bonePositions`, `renderLODs`, `version`, `numDiffs`, texture-diff data, morph bounding box, trailing mapping bytes and chunk `materialId` all still verify (`resource-checks.ts:251-253`, `plate-geometry.ts`) | Open (cleanup-verifier) |
 | PIPE-29 | Med | Verifier | Lift tolerances derive from the builder-chosen quantisation with no bound; the re-quantisation branch is untested (0 of the fixture's targets re-quantise; 24 of 105 on the real plate) | Open (cleanup-verifier) |
 | PREV-26 | Med | Character details | Detail request key ignores launch route, profile, mod set and WolvenKit identity; `ready` is kept for the host's lifetime, so a new hair mod or profile switch isn't picked up until restart (`character-detail-host.ts:173,199-201`) | Open (cleanup-verifier) |
-| REL-02 | Med | Packaging | Package content scan misses lower-case, WSL, percent-encoded, escaped and POSIX user paths; false positives on `git@` remotes (`package-content-scan.ts:18,22`) | Open (cleanup-hygiene) |
-| REL-03 | Med | Repo hygiene | `check_private_paths.py` misses an address before a full stop and digit-led local parts; placeholder names match as prefixes; exemptions are by file name anywhere and switch off every pattern; some file types unscanned | Open (cleanup-hygiene) |
+| REL-02 | Med | Packaging | Package content scan misses lower-case, WSL, percent-encoded, escaped and POSIX user paths; false positives on `git@` remotes (`package-content-scan.ts:18,22`) | **Fixed** (claude/cleanup-hygiene, 25 Sep) |
+| REL-03 | Med | Repo hygiene | `check_private_paths.py` misses an address before a full stop and digit-led local parts; placeholder names match as prefixes; exemptions are by file name anywhere and switch off every pattern; some file types unscanned | **Fixed** (claude/cleanup-hygiene, 25 Sep) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Partly fixed: record version 2 carries per-component chunks with template, scalars, colours, textures and profiles; character details load with cancellation, supersede and dispose (claude/render-resolver). The core head record is still the closed v1 shape |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -159,6 +159,24 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 None. (Reviewed at `ac251d8`.)
 
+## Fixed in claude/cleanup-hygiene
+
+- **One personal-data rule set (REL-02, REL-03, SITE-02).** `tools/private-data.json` holds the user-path patterns (Windows in any case, slash direction, JSON or JavaScript escaping, or percent-encoding; WSL `/mnt/<drive>/Users`; macOS `/Users`; Linux `/home`), the whole-folder-name placeholders, the address pattern and its exemptions, and one set of test vectors. It is written in the regular-expression subset Python and JavaScript share. `tools/check_private_paths.py`, `site/tools/privacy.ts` and `desktop/package-content-scan.ts` all read it, so the three scanners cannot drift, and each runs every vector in its own tests.
+- **REL-02:** the packaged-app scan now catches lower- and upper-case, WSL, percent-encoded, `\`-escaped, macOS and Linux home paths. It passes `git@github.com:…` remotes, `pkg@1.0.0-beta.rc` versions and file names such as `icon@2x.png`. A path two patterns see is reported once, and findings stay redacted. A scan of the authoring and desktop `node_modules` (1,668 text files) found no path false positives; the only findings were real maintainers' addresses in third-party files the package allowlist doesn't ship.
+- **REL-03:**
+  - Addresses end at a word boundary, so an address before a full stop is caught; local parts may start with a digit. Only a following call, index or dotted name marks code (`a@np.eye(4)`, `a@np.linalg.inv(m)`).
+  - The material-reference exemption covers only one label plus a game or file extension that isn't a real top-level domain (`ash_brown@long.mi`); `.app`, `.mt` and `.md` are addresses.
+  - Placeholders match whole folder names, so `user.jdoe` and `name-jdoe` are flagged.
+  - Exemptions are exact repository paths for specific kinds: the shared vectors, the two tests that plant personal data, and the checker's own media-folder self-test case. The repository scans clean with no licence or lockfile exemption.
+  - Every tracked file that reads as UTF-8 text is scanned whatever its extension, except known binary formats.
+  - `--self-test` runs the shared vectors plus the exemption and file-selection rules; `.github/workflows/docs.yml` runs it before the scan.
+- **SITE-01:** the knowledge generator checks the whole `knowledge/README.md`, whose Topics summaries the index publishes. The `dist/` check reads each HTML, SVG and XML file both as written and with tags removed, so a `<wbr>` after a separator no longer hides a path. Check findings are redacted. Tests: a summary with a user path in a code span fails the build, and the same code span rendered into a page fails the check.
+- **UI-36:** `unloadHead(scene)` releases only the head it is given, and only if it is still loaded (as `disconnectScene(scene)` does). `attachBrowserHead` registers that release once its load has returned. Test: releasing a head that a later load replaced leaves the current head loaded. Still latent: a stale `AttachedHead`'s other releases clear the application's service attachments whatever is attached now. `studio-startup.ts` always disposes the old head before attaching a new one, so this can't happen today.
+- **UI-37:** `tests/head-camera-input.test.ts` drives the real OrbitControls through three sequences, each checked against a deliberately broken adapter:
+  - pointercancel (touch, mouse and a cancelled makeup edit);
+  - the first finger lifting before the second: the second continues with the first finger's slot, and slots rest only when the last finger lifts;
+  - a first touch the surface editor consumed, followed by a second finger, for every modifier set whose one-finger press on makeup isn't a camera effect.
+
 ## Fixed in claude/release-prep
 
 - **PREV-20:** the head and everything wired to it are one object, `attachBrowserHead` (`src/browser-head-attachment.ts`), which registers a release for each connection as it is made (stage theme binding, application attachments, autosave and status subscriptions, the preview device's scene connection, the surface editor, the camera listener) and releases them newest first on any failure or on `dispose()`. The viewport device owns the scene's lifetime (`loadHead` releases an earlier head, `unloadHead` detaches the surface editor and disposes the scene), and `createScene` releases its renderer, canvas, stage and resize observer if anything fails after the renderer exists; the scene gained `dispose()`. `studio-startup.ts` keeps one `AttachedHead` and releases it before a retry. Tests: `tests/browser-head-attachment.test.ts` (a step failing after the scene loaded, then Try again attaching exactly once; a failed load; reloading over a loaded head).
@@ -174,10 +192,7 @@ None. (Reviewed at `ac251d8`.)
 - **PREV-28:** character detail `dispose()` leaks each skeleton's bone texture.
 - **PIPE-30:** diagnostic lifts/overrides are recorded only in intermediate files, not Check, the manifest or the result gate.
 - **PIPE-31:** the package result gate lost its lexical containment check; a path outside dist that reaches in through a junction is accepted.
-- **SITE-01:** knowledge index summaries skip the privacy check, and the dist check can't see paths split by `<wbr>`.
-- **SITE-02:** the site privacy check exempts real TLDs `.app`/`.mt` and misses WSL paths.
-- **UI-36:** head release unloads whichever head is current, not its own (latent).
-- **UI-37:** head-camera tests lack pointercancel, first-finger-lift and consumed-first-touch cases.
+- **SITE-01, SITE-02, UI-36, UI-37:** Fixed in claude/cleanup-hygiene (see below).
 - **PIPE-25 (extended):** each V switch opens the installation synchronously on the host.
 - **CI (release blocker):** the first Desktop release run failed on a 5.1 s exhaustive flake test under Bun's 5 s default. Tests taking about a second or more locally now carry explicit, commented timeouts (flake-field, glint oracle, mod-verifier resource failures, workspace storage budget, desktop Build deadline).
 
