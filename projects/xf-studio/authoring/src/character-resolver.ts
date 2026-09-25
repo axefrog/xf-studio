@@ -7,7 +7,7 @@
  * where a rule is unproven the output records an ambiguity instead of guessing silently.
  */
 import { CUSTOMIZATION_SCOPE, inScope } from "./archivexl-config";
-import { type AppearanceDescriptor, type CcoPart, type MergedCco, type MorphDescriptor,
+import { type AppearanceDescriptor, type CcoPart, type CcoResource, type MergedCco, type MorphDescriptor,
   mergeCustomizations, overrideKey, readCco } from "./cco-model";
 import { extensionOf, refFromHash, refFromPath, type DepotRef, refLabel } from "./depot-path";
 import { depotRef, depotText, materialParams, type JsonObject, type MaterialParamValue } from "./red-json";
@@ -126,14 +126,22 @@ export function inputFromSave(saved: { isMale: boolean; groups: Record<CcoPart, 
   return { bodyGender: saved.isMale ? "male" : "female", origin: "save", appearances, morphs };
 }
 
-/** Load the effective CCO: the installed base resource merged with every `.xl`-registered custom resource (R2–R4). */
-export async function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender): Promise<{ merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"] }> {
+/** The provenance label a custom resource's options and choices carry (`definedBy`, `providedBy`). */
+export const customLabel = (path: string, provenance: Provenance) => `${path} (${provenance.provider ?? "unknown"})`;
+
+/**
+ * Load the effective CCO: the installed base resource merged with every `.xl`-registered custom resource (R2–R4).
+ * `read` reads each resource (default `readCco`); a reader may attach extra fields to options and choices, which the
+ * merge carries along with them (the creator catalogue attaches presentation data this way).
+ */
+export async function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender,
+  read: (root: JsonObject, label: string) => CcoResource = readCco): Promise<{ merged: MergedCco; base: Provenance; customs: ResolvedCharacter["cco"]["customResources"]; gaps: ResolvedCharacter["gaps"] }> {
   const gaps: { code: string; subject: string; detail: string }[] = [];
   const path = ccoPath(bodyGender, graph.depot.plan.ep1Installed);
   const baseRef = refFromPath(path);
   const loaded = await graph.load(baseRef, "inkcharcustomization");
   if (!loaded) throw Error(`The installed ${bodyGender} character-creator resource was not found.`);
-  const base = readCco(loaded.root, "base game");
+  const base = read(loaded.root, "base game");
   const declared = graph.xl.customizations[bodyGender];
   const customs = await Promise.all(declared.map(async custom => {
     const resource = await graph.load(refFromPath(custom.path), "inkcharcustomization");
@@ -143,7 +151,7 @@ export async function loadMergedCco(graph: ResourceGraph, bodyGender: BodyGender
   const present = customs.filter(entry => entry.resource);
   const aliasesOf = (hash: string) => [...graph.additions.links].filter(([, target]) => target === hash).map(([alias]) => alias);
   const merged = mergeCustomizations(base, graph.xl.fixes.get(baseRef.hash),
-    present.map(({ custom, resource }) => readCco(resource!.root, `${custom.path} (${resource!.provenance.provider ?? "unknown"})`)), aliasesOf);
+    present.map(({ custom, resource }) => read(resource!.root, customLabel(custom.path, resource!.provenance))), aliasesOf);
   return { merged, base: loaded.provenance, gaps,
     customs: present.map(({ custom, resource }) => ({ path: custom.path, declaredBy: custom.declaredBy, provenance: resource!.provenance })) };
 }

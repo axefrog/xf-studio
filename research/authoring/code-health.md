@@ -218,6 +218,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - **Studio light rig** (claude/studio-lighting): `src/studio-lighting.ts` (settings, setups, validation as plain data) and `src/studio-light-rig.ts` (the Three key, fill and rim lights and room-light strength), wired through `browser-head-attachment.ts` and four `preview.*` actions. Review with the next rendering review; worth a look: the hook living in `browser-head-attachment.ts` until it moves to the preview ports.
+- **Creator catalogue and character context** (`claude/cc-controls`): `src/cc-catalogue.ts`, `src/cc-presentation.ts`, `src/cc-render-coverage.ts`, `src/game-text.ts`, `src/tweakdb-flats.ts` (pure), `src/cc-catalogue-host.ts` (host: texts extracted with WolvenKit, TweakDB and the game's language setting read from the game folder), `src/character-context.ts` (domain service and its not-yet-registered action family), `src/cc-preset.ts` (`xfs/cc-preset-1` codec), `tools/cc-catalogue.ts`. Touches shared code in two places: `loadMergedCco` takes an optional reader, and `readArchiveXlConfig` reads `localization.onscreens`. Review focus: the text extraction's batching and cache keys, catalogue size (130,000 choices on the reference installation) before it crosses to a browser, and the activation rule copied from R5 (`activeOptions`, checked against `descriptorsFromUiState` by a test).
 
 ## Fixed in claude/platform-step5
 
