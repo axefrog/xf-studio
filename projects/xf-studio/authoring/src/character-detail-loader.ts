@@ -42,6 +42,18 @@ export function chunkOfMesh(name: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * Release what a loaded detail object owns on the GPU: every mesh's geometry and every skinned mesh's
+ * skeleton (its bone texture). Materials and textures are shared per load and released by `dispose`.
+ */
+export function releaseDetailObject(root: THREE.Object3D): void {
+  root.removeFromParent();
+  root.traverse(object => {
+    if (object instanceof THREE.Mesh) object.geometry.dispose();
+    if (object instanceof THREE.SkinnedMesh) object.skeleton?.dispose();
+  });
+}
+
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
@@ -58,10 +70,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   let bytesUsed = 0, verticesUsed = 0;
   const textures: THREE.Texture[] = [], owned: THREE.Texture[] = [], materials: THREE.Material[] = [], roots: THREE.Object3D[] = [];
   const dispose = () => {
-    for (const root of roots) {
-      root.removeFromParent();
-      root.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
-    }
+    for (const root of roots) releaseDetailObject(root);
     for (const material of materials) material.dispose();
     for (const texture of [...textures, ...owned]) texture.dispose();
   };
@@ -156,6 +165,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           verticesUsed += object.geometry.getAttribute("position").count;
           meshes.push(object);
         });
+        // Never drawn, so no bone texture exists; a kept mesh may share their skeleton.
         for (const object of unwanted) {
           object.removeFromParent();
           if (object instanceof THREE.Mesh) object.geometry.dispose();
@@ -169,7 +179,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
         notes.push(`${component.slot} ${component.component}: ${(error as Error).message}`);
         const index = roots.findIndex(root => root.name === `detail_${component.slot}_${component.component}`);
-        if (index >= 0) { roots[index]!.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); }); roots.splice(index, 1); }
+        if (index >= 0) { releaseDetailObject(roots[index]!); roots.splice(index, 1); }
       }
     }
   } catch (error) { dispose(); throw error; }

@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharacterDetailHost, characterRequestKey } from "../src/character-detail-host";
-import { hairProfileStops, pngSize, prepareCharacterDetails, textureIsGamma } from "../src/character-detail-service";
+import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
+import { CharacterDetailError, hairProfileStops, pngSize, prepareCharacterDetails, textureIsGamma } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
 import { encodePng } from "../src/png";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
@@ -136,8 +136,9 @@ describe("host preparation", () => {
     const started: string[] = [];
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
-    const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => ({ gameRoot: route.gameRoot, launchRoute: "mo2",
-      mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: process.execPath }), exporter: () => fakeExporter(),
+    const settings: CharacterDetailSettings = { gameRoot: route.gameRoot, launchRoute: "mo2",
+      mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: process.execPath };
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => settings, exporter: () => fakeExporter(),
       prepare: async options => {
         started.push(options.request.source === "save" ? options.request.appearances[0]!.option : "default");
         if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
@@ -145,7 +146,7 @@ describe("host preparation", () => {
       } });
     const a = host.request(REQUEST_A);
     expect(a.phase).toBe("preparing");
-    expect(a.key).toBe(characterRequestKey(REQUEST_A));
+    expect(a.key).toBe(characterRequestKey(REQUEST_A, installationFingerprint(settings)));
     const b = host.request(REQUEST_B);
     release();
     await host.settled();
@@ -157,6 +158,71 @@ describe("host preparation", () => {
     expect(host.filePath("../secret.json")).toBeNull();
     expect(host.filePath("records/x.json")).toBeNull();
     expect(started).toEqual(["eyebrows_color1", "eyebrows_color2"]);
+  });
+
+  // PREV-26: the answer belongs to the installation it was prepared from.
+  test("a changed MO2 profile, mod list or WolvenKit prepares again instead of reusing the earlier answer", async () => {
+    const mo2 = join(root, "mo2-stale"), game = join(root, "game-stale");
+    mkdirSync(join(mo2, "profiles", "Default"), { recursive: true });
+    mkdirSync(join(mo2, "profiles", "WithNewHairMod"), { recursive: true });
+    mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
+    writeFileSync(join(mo2, "profiles", "Default", "modlist.txt"), "+Base\n");
+    writeFileSync(join(mo2, "profiles", "WithNewHairMod", "modlist.txt"), "+Hair\n+Base\n");
+    const settings: CharacterDetailSettings = { gameRoot: game, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Default",
+      manualModRoot: null, wolvenKitCli: process.execPath };
+    const calls: string[] = [];
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "host-stale"), settings: () => settings, exporter: () => fakeExporter(),
+      prepare: async options => { calls.push(options.route.mo2ProfileId ?? ""); return { record: {} as never, recordFile: `${"a".repeat(63)}${calls.length}.json` }; } });
+    const first = host.request(REQUEST_A);
+    await host.settled();
+    expect(host.state(first.key).phase).toBe("ready");
+    // The same V on the same installation is answered from the finished preparation.
+    expect(host.request(REQUEST_A)).toMatchObject({ key: first.key, phase: "ready" });
+    settings.mo2ProfileId = "WithNewHairMod";
+    const second = host.request(REQUEST_A);
+    expect(second.key).not.toBe(first.key);
+    expect(second.phase).toBe("preparing");
+    await host.settled();
+    expect(host.state(second.key)).toMatchObject({ phase: "ready", record: `${"a".repeat(63)}2.json` });
+    // A mod installed into the profile (its mod list changes) prepares again too.
+    writeFileSync(join(mo2, "profiles", "WithNewHairMod", "modlist.txt"), "+Brows\n+Hair\n+Base\n");
+    const third = host.request(REQUEST_A);
+    expect(third.key).not.toBe(second.key);
+    await host.settled();
+    expect(calls).toEqual(["Default", "WithNewHairMod", "WithNewHairMod"]);
+    // So does another launch route or WolvenKit.
+    expect(installationFingerprint({ ...settings, launchRoute: "direct" })).not.toBe(installationFingerprint(settings));
+    expect(installationFingerprint({ ...settings, wolvenKitCli: join(root, "other-wk.exe") })).not.toBe(installationFingerprint(settings));
+  });
+
+  // PREV-27: a quick V1 -> V2 -> V1 restarts V1 at once, and preparations never overlap on the shared cache.
+  test("switching back to a cancelled V restarts it, after the cancelled run has stopped", async () => {
+    const log: string[] = [];
+    let running = 0, overlap = 0;
+    const settings: CharacterDetailSettings = { gameRoot: route.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+      manualModRoot: null, wolvenKitCli: process.execPath };
+    const name = (request: typeof REQUEST_A) => request === REQUEST_A ? "V1" : "V2";
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "host-aba"), settings: () => settings, exporter: () => fakeExporter(),
+      // Like a WolvenKit export in progress: it notices the abort only a little later.
+      prepare: options => new Promise((resolve, reject) => {
+        const who = name(options.request as typeof REQUEST_A);
+        overlap = Math.max(overlap, ++running);
+        log.push(`start ${who}`);
+        const done = setTimeout(() => { running--; log.push(`finish ${who}`); resolve({ record: {} as never, recordFile: `${"b".repeat(64)}.json` }); }, 120);
+        options.signal?.addEventListener("abort", () => setTimeout(() => {
+          clearTimeout(done); running--; log.push(`cancelled ${who}`);
+          reject(new CharacterDetailError("character_cancelled", "cancelled"));
+        }, 40));
+      }) });
+    const v1 = host.request(REQUEST_A);
+    host.request(REQUEST_B);
+    const again = host.request(REQUEST_A);
+    expect(again).toMatchObject({ key: v1.key, phase: "preparing" });
+    await host.settled();
+    expect(host.state(v1.key).phase).toBe("ready");
+    // V2 was cancelled before it started; V1 ran again only once its cancelled run had stopped.
+    expect(log).toEqual(["start V1", "cancelled V1", "start V1", "finish V1"]);
+    expect(overlap).toBe(1);
   });
 
   test("without a game folder or WolvenKit the host says what's needed", () => {

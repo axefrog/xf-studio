@@ -87,25 +87,27 @@ function decodeSingleChunk(blob: Json, label: string): Decoded {
 
 export type PlateLiftReport = {
   liftsMm: number[]; chunks: number;
-  /** The head's position quantization still covers every lifted position (else it was widened). */
-  headQuantizationRetained: boolean;
+  /** The head's position quantization still covers every lifted position (a lift that leaves it is refused). */
+  headQuantizationRetained: true;
   /** Morph targets whose delta quantization had to widen to hold the lifted deltas. */
   requantizedTargets: number;
   /** Largest distance between an intended lifted position and its encoded value, in mm. */
   maxPositionErrorMm: number;
 };
 
+/**
+ * The head's position quantization, which the lifted plate must keep: the package verifier requires it
+ * unchanged, so a lift that leaves it is refused rather than re-quantizing every position.
+ */
 function quantization(header: Json, lifted: Float64Array[]) {
   const scale = AXES.map(axis => Number(header.quantizationScale[axis])), offset = AXES.map(axis => Number(header.quantizationOffset[axis]));
   const fits = lifted.every(p => p.every((value, i) => Math.abs((value - offset[i % 3]) / scale[i % 3]) <= 1));
-  if (fits) return { scale, offset, retained: true };
-  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-  for (const p of lifted) p.forEach((value, i) => { min[i % 3] = Math.min(min[i % 3], value); max[i % 3] = Math.max(max[i % 3], value); });
-  return { scale: max.map((hi, k) => Math.max((hi - min[k]) / 2, 1e-9)), offset: max.map((hi, k) => (hi + min[k]) / 2), retained: false };
+  if (!fits) throw Error("The lifted plate would leave the head's position range; lower the lift.");
+  return { scale, offset };
 }
 
 /** Render blob with one chunk per lift; every non-position byte is the source's. */
-function liftedBlob(source: Decoded, blob: Json, lifted: Float64Array[], q: { scale: number[]; offset: number[]; retained: boolean }) {
+function liftedBlob(source: Decoded, blob: Json, lifted: Float64Array[], q: { scale: number[]; offset: number[] }) {
   const { chunk, raw, strides, offsets, count, positionElement } = source;
   const streams = [...new Set(source.elements.map(e => e.stream))].sort((a, b) => a - b);
   const parts: Buffer[] = [];
@@ -145,10 +147,6 @@ function liftedBlob(source: Decoded, blob: Json, lifted: Float64Array[], q: { sc
   });
   if (Array.isArray(header.topology) && header.topology.length === 1)
     header.topology = lifted.map(() => structuredClone(header.topology[0]));
-  if (!q.retained) for (const [k, axis] of AXES.entries()) {
-    header.quantizationScale[axis] = q.scale[k];
-    header.quantizationOffset[axis] = q.offset[k];
-  }
   header.vertexBufferSize = vertexBufferSize;
   header.indexBufferOffset = indexBufferOffset;
   header.indexBufferSize = indexBytes * lifted.length;
@@ -230,6 +228,6 @@ export function liftPlate(meshDoc: Json, morphDoc: Json, liftsMm: readonly numbe
     targetStartsInVertexDiffs: starts, targetStartsInVertexDiffsMapping: mapStarts, numDiffs: diffCursor, numDiffsMapping: mapCursor,
     targetPositionDiffOffset: offsets, targetPositionDiffScale: scales });
   mesh.Data.RootChunk.renderResourceBlob = { ...mesh.Data.RootChunk.renderResourceBlob, Data: meshOut.blob };
-  return { mesh, morph, report: { liftsMm: [...liftsMm], chunks: lifts.length, headQuantizationRetained: q.retained,
+  return { mesh, morph, report: { liftsMm: [...liftsMm], chunks: lifts.length, headQuantizationRetained: true,
     requantizedTargets, maxPositionErrorMm: Math.round(meshOut.maxError * 1e9) / 1e6 } };
 }

@@ -2,6 +2,7 @@ import { parseExportDiagnostics } from "./export-diagnostics";
 import { canonicalFinish, finishLabel, type Finish } from "./finish";
 import { layerExport, planPresetExport, type ExportAdapterId } from "./finish-export";
 import { parseCollection, planCollection, type PresetCollection } from "./preset-collection";
+import type { PackagePresetIdentity } from "./package-action";
 
 export type PackageOmission =
   | { kind: "layer"; presetId: string; presetName: string; layerId: string; layerName: string;
@@ -26,6 +27,14 @@ export function describePackageExperimental(experimental: readonly PackageExperi
   const finishes = [...new Set(experimental.map(item => label(item.finish)))];
   return ` Experimental finishes included (${finishes.join(", ")}): built from the game's own decal materials but not yet confirmed in game.`;
 }
+
+/**
+ * Each packaged preset's identity as Check, the manifest and the result gate record it: stable IDs, the export
+ * route and, on a prepared test candidate, the preset's diagnostic knobs, so a diagnostic package is never
+ * mistaken for a production one.
+ */
+export const packagePresetIdentities = (plan: Pick<ReturnType<typeof planCollection>, "presets">): PackagePresetIdentity[] => plan.presets.map(p =>
+  ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route, ...(p.diagnostics ? { diagnostics: p.diagnostics } : {}) }));
 
 /** A package-specific copy. Never changes the authored collection or its stable identities. */
 export function preparePackageCollection(value: unknown) {

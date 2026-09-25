@@ -3,6 +3,7 @@ import { derivePlateDocuments } from "../src/eye-plate-cut";
 import { decodeDec4Normal, liftPlate, MAX_PLATE_LIFT_MM, PLATE_LIFT_MM } from "../src/plate-lift";
 import { parseCollection, planCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
+import { preflightPackageCollection } from "../src/package-preflight";
 import { HandleCounter, HIDDEN_CHUNK_ENTRY, rewritePlateMesh } from "../src/package-resources";
 import { SURFACE_OVERRIDE_RANGES } from "../src/export-diagnostics";
 import { VERIFIER_PLATE_LIFT_MM } from "../src/mod-verifier/plate-geometry";
@@ -58,6 +59,19 @@ test("the lift moves positions along the stored normals and keeps every other by
   expect(lifted.morph.Data.RootChunk.blob.Data.mappingBuffer.Bytes).toBe(morph.Data.RootChunk.blob.Data.mappingBuffer.Bytes);
 });
 
+test("a lift that would leave the head's position range is refused instead of re-quantizing the plate", () => {
+  const { mesh, morph } = plate(), source = blobOf(mesh), base = morph.Data.RootChunk.blob.Data.baseBlob.Data;
+  // Put vertex 0 at the edge of the range along its normal's largest axis, in mesh and morph base alike.
+  const n = normals(source)[0]!, axis = [0, 1, 2].reduce((best, a) => Math.abs(n[a]!) > Math.abs(n[best]!) ? a : best, 0);
+  const stride = source.header.renderChunkInfos[0].chunkVertices.vertexLayout.slotStrides.Elements[0];
+  for (const blob of [source, base]) {
+    const data = raw(blob); data.writeInt16LE(Math.sign(n[axis]!) * 32767, 0 * stride + axis * 2);
+    blob.renderBuffer.Bytes = data.toString("base64");
+  }
+  expect(() => liftPlate(mesh, morph, [0.4])).toThrow("would leave the head's position range");
+  expect(liftPlate(mesh, morph, [0]).report.headQuantizationRetained).toBe(true);
+});
+
 test("several lifts become one chunk each, with vanilla multi-chunk index offsets and per-chunk morph runs", () => {
   const { mesh, morph } = plate(), lifted = liftPlate(mesh, morph, [0, 0.2, 0.4]);
   const header = blobOf(lifted.mesh).header, source = blobOf(mesh).header.renderChunkInfos[0];
@@ -91,6 +105,12 @@ test("diagnostic lifts and surfaces plan one chunk per lift and one flat entry p
   expect("diagnostics" in parseCollection(collection(diagnostics))).toBe(false);
   expect(preparePackageCollection(collection(diagnostics)).packaged.diagnostics?.presets).toEqual({
     [uuid(1)]: { plateLiftMm: 0 }, [uuid(2)]: { plateLiftMm: 0.2, surface: { RoughnessMetalnessAlpha: 0 } } });
+  // Check records the lifts and each preset's knobs, so a diagnostic candidate is recognisable before and after Build.
+  const check = preflightPackageCollection(collection(diagnostics));
+  expect(check.plateLiftsMm).toEqual([0, 0.2, 0.4]);
+  expect(check.presets.map(p => p.diagnostics)).toEqual([{ plateLiftMm: 0 }, { plateLiftMm: 0.2, surface: { RoughnessMetalnessAlpha: 0 } }, undefined]);
+  expect("diagnostics" in check.presets[2]!).toBe(false);
+  expect(preflightPackageCollection(collection()).plateLiftsMm).toEqual([PLATE_LIFT_MM]);
   expect(() => planCollection(collection({ ...diagnostics, presets: { [uuid(1)]: { plateLiftMm: 2 } } }))).toThrow("between 0 and");
   expect(() => planCollection(collection({ ...diagnostics, presets: { [uuid(1)]: { surface: { DiffuseAlpha: 0 } } } }))).toThrow("not an accepted override");
   expect(() => planCollection(collection({ schema: "other", presets: {} }))).toThrow("xfs/export-diagnostics-1");

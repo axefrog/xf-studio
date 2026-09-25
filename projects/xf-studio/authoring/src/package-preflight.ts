@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { preparePackageCollection } from "./package-filter";
+import { packagePresetIdentities, preparePackageCollection } from "./package-filter";
 import { compilePreset } from "./preset-compiler";
 import type { PackageCheck } from "./package-action";
 
@@ -19,7 +19,8 @@ export function preflightPackageCollection(value: unknown): PackageCheck & { pac
     omissions,
     experimental,
     packagedCollectionSha256: createHash("sha256").update(packagedCollectionJson).digest("hex"),
-    presets: plan.presets.map(p => ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route })),
+    presets: packagePresetIdentities(plan),
+    plateLiftsMm: [...plan.plate.liftsMm],
     packagedCollectionJson,
   };
 }

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCollection } from "./preset-collection";
-import { preparePackageCollection } from "./package-filter";
+import { packagePresetIdentities, preparePackageCollection } from "./package-filter";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
@@ -162,8 +162,8 @@ export function createPackageHandler(tools: PackageTools | ((action: PackageActi
             checked.originalPresetCount !== collection.presets.length || checked.packagedCollectionSha256 !== packagedHash ||
             JSON.stringify(checked.omissions) !== JSON.stringify(omissions) ||
             JSON.stringify(checked.experimental ?? []) !== JSON.stringify(experimental) ||
-            JSON.stringify(checked.presets) !== JSON.stringify(plan.presets.map(p =>
-              ({ id: p.id, revision: p.revision, appearance: p.appearance, route: p.route }))))
+            JSON.stringify(checked.presets) !== JSON.stringify(packagePresetIdentities(plan)) ||
+            JSON.stringify(checked.plateLiftsMm) !== JSON.stringify(plan.plate.liftsMm))
           throw Error("Package preflight returned a different collection identity.");
         return json(checked);
       }

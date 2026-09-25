@@ -10,7 +10,7 @@ import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../s
 import { planCollection } from "../src/preset-collection";
 import { preparePackageCollection } from "../src/package-filter";
 import { FINISH_EXPORT } from "../src/finish-export";
-import { archiveXlDeclaration, HandleCounter, rewritePlateMesh } from "../src/package-resources";
+import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
 import { archiveKey } from "../src/mod-verifier/resource-inventory";
 import { componentId, VERIFIER_FINISHES } from "../src/mod-verifier/resource-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/mod-verifier/verify-build";
@@ -79,7 +79,7 @@ function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => vo
   const sourceMorph = cut.morph.Data.RootChunk;
   const lifted = liftPlate(doc(structuredClone(sourceMesh)), cut.morph, plan.plate.liftsMm);
   const mesh = rewritePlateMesh(lifted.mesh, plan, new HandleCounter()).Data.RootChunk;
-  const morph = { ...lifted.morph.Data.RootChunk, baseMesh: ref(plan.mesh) };
+  const morph = rewritePlateMorph(lifted.morph, plan).Data.RootChunk;
   const id = componentId(plan.component).toString();
   const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(plan.component), id, isEnabled: 1,
     meshAppearance: cname(plan.presets[0].appearance), morphResource: ref(plan.morph), localTransform: { Orientation: { i: 0, j: 0, k: 0, r: 1 } },
