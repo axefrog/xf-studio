@@ -49,14 +49,14 @@ const presets = [
     layer("Satin control", "regular", lid[0]), layer("Shimmer fine", "shimmer", lid[1], fine), layer("Shimmer coarse (glitter proxy)", "shimmer", lid[2], coarse),
     layer("Glossy control", "glossy", mirror(lid[0])), layer("Shimmer fine right", "shimmer", mirror(lid[1]), fine), layer("Matte control", "matte", mirror(lid[2])),
   ] },
-  ...[[.8, "Board 3 · colour shift"], [0, "Board 4 · colour shift, strength 0"]].map(([strength, name], i) => ({
+  ...[[.8, "Board 3 · colour shift"], [0, "Board 4 · shift control"]].map(([strength, name], i) => ({
     id: `7a6d3c10-1f01-4a51-9c3e-00000000000${3 + i}`, name: name as string, layers: [
       { ...layer("Duochrome lid", "iridescent", [.300, .211, .444, .248], {
         color: "#3a2350", optics: { ...GAME, shift: { color: "#3fd4c2", strength } } }), symmetry: true },
     ] })),
-  { id: "7a6d3c10-1f01-4a51-9c3e-000000000005", name: "Board 5 · sqrt-space blend steps", layers:
+  { id: "7a6d3c10-1f01-4a51-9c3e-000000000005", name: "Board 5 · blend steps", layers:
     [.25, .5, .75].map((opacity, i) => ({ ...layer(`Black ${opacity * 100}%`, "matte", under[i], { color: "#000000", opacity }), symmetry: true })) },
-  { id: "7a6d3c10-1f01-4a51-9c3e-000000000006", name: "Board 6 · metalness 0 to 0.3", layers: [
+  { id: "7a6d3c10-1f01-4a51-9c3e-000000000006", name: "Board 6 · metal ramp", layers: [
     layer("Satin base left", "regular", [.300, .211, .444, .248]),
     // Metallic (0.65) at 46.2 % over full Satin coverage: metalness = 0.65 × 0.462 × weight, 0 → 0.3 across u.
     layer("Metal ramp 0 to 0.3", "metallic", [.300, .211, .444, .248], { opacity: .462 }, [0, 1]),

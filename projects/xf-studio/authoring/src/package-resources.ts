@@ -131,9 +131,12 @@ export function appearanceResource(plan: CollectionPlan, handles: HandleCounter)
 
 /** The selector label comes from the Studio's mod-branding module through the plan; never a local copy. */
 export function assertBrandedPlan(plan: { selectorLabel?: unknown }): void {
-  if (typeof plan.selectorLabel !== "string" || !plan.selectorLabel.startsWith("XF "))
+  if (typeof plan.selectorLabel !== "string" || !/^XF(\s|$)/.test(plan.selectorLabel))
     throw Error("Export plan lacks an XF-branded selectorLabel; rebake with the current Studio.");
 }
+
+/** Head groups the selector joins; ArchiveXL merges each into the vanilla group of the same name. */
+export const SELECTOR_GROUPS = Object.freeze(["character_customization", "face"] as const);
 
 /** The one female head customization option: Off at index 0, then one definition per packaged preset. */
 export function customizationResource(plan: CollectionPlan, handles: HandleCounter): Json {
@@ -147,7 +150,9 @@ export function customizationResource(plan: CollectionPlan, handles: HandleCount
     resource: resourceRef(plan.app, true), definitions };
   return cr2wDocument({ $type: "gameuiCharacterCustomizationInfoResource", cookingPlatform: "PLATFORM_PC",
     headCustomizationOptions: [handles.handle(option)],
-    headGroups: [{ $type: "gameuiOptionsGroup", name: cname("character_customization"), options: [cname(plan.selector)] }] });
+    // Like vanilla eye makeup (`makeupEyes_NN`), the appearance option joins `character_customization` (the creator
+    // screen) and `face`, which the player entities' face controller reads in gameplay and photo mode.
+    headGroups: SELECTOR_GROUPS.map(group => ({ $type: "gameuiOptionsGroup", name: cname(group), options: [cname(plan.selector)] })) });
 }
 
 /**

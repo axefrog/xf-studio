@@ -288,7 +288,7 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   const option = cc.headCustomizationOptions[0].Data;
   ensure(option.$type === "gameuiAppearanceInfo" && option.enabled === 1 && option.hidden === 0, "Selector is not an enabled visible appearance option");
   // Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
-  ensure(typeof plan.selectorLabel === "string" && plan.selectorLabel.startsWith("XF "), "Plan lacks an XF-branded selector label");
+  ensure(typeof plan.selectorLabel === "string" && /^XF(\s|$)/.test(plan.selectorLabel), "Plan lacks an XF-branded selector label");
   ensure(option.localizedName === plan.selectorLabel, "Selector label differs from the plan");
   const names = [plan.namespace, plan.selector, plan.component, value(off.name), value(template.name),
     ...plan.presets.map(p => p.appearance), ...plan.presets.map(p => p.appAppearance)];
@@ -298,7 +298,12 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     "Selector name, slot or resource differs from the plan");
   ensure(option.definitions?.length === plan.presets.length + 1, "Selector must list Off plus every preset");
   ensure(value(option.definitions[0].name) === plan.offAppearance && option.defaultIndex === 0, "Selector default must be Off");
-  ensure(sameJson(cc.headGroups?.[0]?.options?.map(value), [plan.selector]), "Head group does not list exactly the selector");
+  // Restated independently of the builder: the creator screen reads `character_customization`; gameplay and
+  // photo mode read `face` (vanilla eye makeup sits in both). A selector missing from `face` shows only in the creator.
+  const groups = (cc.headGroups ?? []) as { name?: unknown; options?: unknown[] }[];
+  ensure(sameJson(groups.map(group => value(group.name)), ["character_customization", "face"]),
+    "Head groups must be exactly character_customization and face");
+  ensure(groups.every(group => sameJson(group.options?.map(value), [plan.selector])), "A head group does not list exactly the selector");
 
   const resolved: ResolvedPreset[] = [];
   plan.presets.forEach((preset, i) => {

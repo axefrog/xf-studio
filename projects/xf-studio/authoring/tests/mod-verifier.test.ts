@@ -112,7 +112,7 @@ function makeBuild(mutate?: Mutation): Fixture {
     localizedName: p.selectorLabel, enabled: 1, hidden: 0, defaultIndex: 0, resource: ref(p.app, true),
     definitions: [{ name: cname(p.offAppearance), index: 0, localizedName: "Common-Off" },
       ...p.presets.map(preset => ({ name: cname(preset.appAppearance), index: preset.index, localizedName: preset.name }))] } }],
-    headGroups: [{ options: [cname(p.selector)] }] };
+    headGroups: ["character_customization", "face"].map(group => ({ name: cname(group), options: [cname(p.selector)] })) };
   const xbm: Record<string, any> = {};
   for (const preset of p.presets) for (const channel of ["diffuse", "roughness", "metalness"] as const)
     xbm[preset.textures[channel]] = { width: SIZE, height: SIZE, setup: { hasMipchain: 1, isGamma: channel === "diffuse" ? 1 : 0,
@@ -248,6 +248,9 @@ test("texture failures: supplied chain, baked input, decode drift and orientatio
 
 test("resource failures: names, links, buffers, component id, morph count and XBM metadata", () => {
   expectFailure(/XF-branded selector label/, (_b, d) => { d.plan.selectorLabel = "Makeup"; d.cc.headCustomizationOptions[0].Data.localizedName = "Makeup"; });
+  // Only in `character_customization`, the selector shows in the creator but not in gameplay or photo mode (seen in game).
+  expectFailure(/Head groups must be exactly character_customization and face/, (_b, d) => { d.cc.headGroups.pop(); });
+  expectFailure(/does not list exactly the selector/, (_b, d) => { d.cc.headGroups[1].options = []; });
   expectFailure(/Morph targets differs/, (_b, d) => { d.morph.targets.pop(); });
   expectFailure(/Mesh boneNames differs/, (_b, d) => { d.mesh.boneNames = [cname("other")]; });
   expectFailure(/stable derived id/, (_b, d) => { d.app.appearances[1].Data.components[0].id = "12345"; });

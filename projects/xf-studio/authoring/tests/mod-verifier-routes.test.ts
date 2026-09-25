@@ -87,7 +87,7 @@ function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => vo
   const cc = { headCustomizationOptions: [{ Data: { $type: "gameuiAppearanceInfo", name: cname(plan.selector), uiSlot: cname(plan.selector),
     localizedName: plan.selectorLabel, enabled: 1, hidden: 0, defaultIndex: 0, resource: ref(plan.app, true),
     definitions: [{ name: cname(plan.offAppearance), index: 0 }, ...plan.presets.map(p => ({ name: cname(p.appAppearance), index: p.index, localizedName: p.name }))] } }],
-    headGroups: [{ options: [cname(plan.selector)] }] };
+    headGroups: ["character_customization", "face"].map(group => ({ name: cname(group), options: [cname(plan.selector)] })) };
   const setup: Record<string, [number, string]> = { diffuse: [1, "TCM_QualityColor"], gradient: [1, "TCM_QualityColor"], roughness: [0, "TCM_QualityR"],
     metalness: [0, "TCM_QualityR"], mask: [0, "TCM_QualityR"], normal: [0, "TCM_Normalmap"] };
   const xbm: Record<string, unknown> = {}, dds = new Map<string, Uint8Array>();

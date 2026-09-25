@@ -159,7 +159,7 @@ Groups do **not** define the UI; they tell each consumer which active options be
 | Group (head) | Contents | Consumer |
 |---|---|---|
 | `TPP`, `TPP_photomode` | head skin, eyes/eye colour, lashes, brows, teeth, facial tattoos, scars, pimples, morph regions, face rig | The third-person head (the head is an item in `AttachmentSlots.TppHead` [source: ArchiveXL `PuppetState/Handler.cpp:19`]); photo-mode puppet. Consumer wiring **[hypothesis]**. |
-| `face` | face cyberware, piercings, eye/lip/cheek makeup | `gameuiCharacterCustomizationFaceController {groupName: face}` on the player entities [resource]. CCXL makeup, including the legacy selectors in the reference save, lands here. |
+| `face` | face cyberware, piercings, eye/lip/cheek makeup | `gameuiCharacterCustomizationFaceController {groupName: face}` on the player entities [resource]. CCXL makeup, including the legacy selectors in the reference save, lands here. An XF Eye Artistry build whose option sat only in `character_customization` rendered in the creator but not in photo mode; vanilla `makeupEyes_NN` sits in both groups [runtime, 25 September: consistent with this consumer, not a trace of it]. |
 | `hairs`, `FPP_hairs` | hair style/colour; FPP shadow-only hair | `gameuiCharacterCustomizationHairstyleController {groupName: hairs}` |
 | `beards` (male only) | beard options | `gameuiCharacterCustomizationBeardController` |
 | `FPP`, `TPP_proxy`, `FPP_proxy` | FPP neck; low-detail head/neck proxies | FPP body; LOD/shadow proxies **[hypothesis]** |
@@ -418,7 +418,7 @@ From the legacy xf-omega eye-makeup generator (female only, reference only) and 
 ## Open questions
 
 1. How exactly does link propagation handle a follower whose choice count differs from the controller (e.g. `tpp_head_proxy` has 16 definitions against 12 tones; the corpo preset stores 0 for it)?
-2. Which consumer applies the `TPP`, `TPP_photomode`, `FPP`, proxy and `character_customization` groups? The CC controller components cover `hairs`, `face`, `beards`, `nails`, `genitals`/`breast` and feet; the head item and photo mode are unconfirmed.
+2. Which consumer applies the `TPP`, `TPP_photomode`, `FPP`, proxy and `character_customization` groups? The CC controller components cover `hairs`, `face`, `beards`, `nails`, `genitals`/`breast` and feet; the head item is unconfirmed. For photo mode, `character_customization` alone is not enough for a face-decal option (runtime, 25 September); whether `face` alone is enough is being tested.
 3. On load, does the game rebuild option state from the save's appearance lists (needed for the mirror to show the right selection), and what happens to entries whose hash or definition is missing?
 4. Does `entMorphTargetManagerComponent` silently skip components without a target, or does it fail? (Affects CCXL accessories lacking a region.)
 5. Is the link-wildcard branch in ArchiveXL's anonymous overlay intentionally tied to the slot suffix?

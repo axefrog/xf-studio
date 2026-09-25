@@ -15,7 +15,8 @@ const fixture = JSON.parse(readFileSync(resolve(hq, "experiments/005-preset-coll
 
 test("the eye-makeup export is branded XF Eye Artistry, distinct from the XF Studio app", () => {
   expect(EYE_MAKEUP_MOD.modName).toBe("XF Eye Artistry");
-  expect(EYE_MAKEUP_MOD.selectorLabel).toBe(EYE_MAKEUP_MOD.modName);
+  // The creator row shows label and preset name on one line, so the label is just the brand.
+  expect(EYE_MAKEUP_MOD.selectorLabel).toBe("XF");
   expect(EYE_MAKEUP_MOD.legacyModFolders).toEqual(["XF Studio"]);
   expect(Object.isFrozen(EYE_MAKEUP_MOD) && Object.isFrozen(EYE_MAKEUP_MOD.legacyModFolders)).toBe(true);
   expect(isEyeMakeupModFolder("xf eye artistry") && isEyeMakeupModFolder("XF STUDIO")).toBe(true);

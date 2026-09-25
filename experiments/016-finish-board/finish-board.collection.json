@@ -1186,7 +1186,7 @@
     },
     {
       "id": "7a6d3c10-1f01-4a51-9c3e-000000000004",
-      "name": "Board 4 · colour shift, strength 0",
+      "name": "Board 4 · shift control",
       "revision": 1,
       "recipe": {
         "schema": "xfs/recipe-11",
@@ -1289,7 +1289,7 @@
     },
     {
       "id": "7a6d3c10-1f01-4a51-9c3e-000000000005",
-      "name": "Board 5 · sqrt-space blend steps",
+      "name": "Board 5 · blend steps",
       "revision": 1,
       "recipe": {
         "schema": "xfs/recipe-11",
@@ -1555,7 +1555,7 @@
     },
     {
       "id": "7a6d3c10-1f01-4a51-9c3e-000000000006",
-      "name": "Board 6 · metalness 0 to 0.3",
+      "name": "Board 6 · metal ramp",
       "revision": 1,
       "recipe": {
         "schema": "xfs/recipe-11",

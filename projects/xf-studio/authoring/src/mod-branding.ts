@@ -4,8 +4,8 @@
  * XF Studio is the app. Each mod it produces carries its own XF-branded name
  * in game and in mod managers. The eye-makeup export is XF Eye Artistry: its
  * character-creator selector label, MO2 mod entry/folder and package naming all
- * come from this module. The export plan carries these values to the Python
- * resource builder and verifier, so neither side keeps its own copy.
+ * come from this module. The export plan carries these values to the resource
+ * builder and verifier, so neither side keeps its own copy.
  *
  * Internal resource identifiers (`xfs_` names, UUID-derived namespaces, schema
  * IDs and the `axefrog/appearance_studio` depot root) are not branding and are
@@ -16,8 +16,12 @@ const modName = "XF Eye Artistry";
 export const EYE_MAKEUP_MOD = Object.freeze({
   /** Mod-manager entry, MO2 mod folder and user-facing package name. */
   modName,
-  /** Character-creator selector label (the customization option's `localizedName`). */
-  selectorLabel: modName,
+  /**
+   * Character-creator selector label (the customization option's `localizedName`). Short on
+   * purpose: the creator row shows the label and the chosen preset name on one line, and a long
+   * label pushes preset names into it (seen in game). The mod name still says XF Eye Artistry.
+   */
+  selectorLabel: "XF",
   /**
    * Earlier MO2 folder names used by diagnostic installs of this same mod before
    * it had its own brand. Tools treat these as an existing XF Eye Artistry
