@@ -85,7 +85,6 @@ describe("missing WebView2 is installed with one consent click", () => {
       detect: () => (options.initially || (ran && options.installedAfter))
         ? { installed: true, version: "141.0.1.2", source: "HKCU" } : { installed: false, version: null, source: null },
       ask: async (prompt: { message: string; buttons: string[] }) => { calls.push(`ask:${prompt.buttons[0]}`); return choices.shift() ?? 1; },
-      notify: (title: string) => { calls.push(`notify:${title}`); },
       bootstrapperAvailable: () => options.bootstrapper !== false,
       runBootstrapper: async () => { ran = true; calls.push("run"); return 0; },
       openDownloadPage: () => { calls.push("download"); },
@@ -101,7 +100,7 @@ describe("missing WebView2 is installed with one consent click", () => {
   test("consent runs Microsoft's bootstrapper and continues when the runtime appears", async () => {
     const { calls, port: p } = port({ installedAfter: true, choose: [0] });
     expect(await ensureWebView2(p)).toMatchObject({ ready: true, installed: true, status: { version: "141.0.1.2" } });
-    expect(calls).toEqual(["ask:Install it now", "notify:Installing WebView2", "run"]);
+    expect(calls).toEqual(["ask:Install it now", "run"]);
   });
   test("declining quits without installing anything", async () => {
     const { calls, port: p } = port({ installedAfter: true, choose: [1] });
@@ -111,7 +110,7 @@ describe("missing WebView2 is installed with one consent click", () => {
   test("a failed install explains it and offers Microsoft's page", async () => {
     const { calls, port: p } = port({ installedAfter: false, choose: [0, 0] });
     expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "failed" });
-    expect(calls).toEqual(["ask:Install it now", "notify:Installing WebView2", "run", "ask:Open the Microsoft download page", "download"]);
+    expect(calls).toEqual(["ask:Install it now", "run", "ask:Open the Microsoft download page", "download"]);
   });
   test("prompts follow the wording policy", () => {
     for (const text of [WEBVIEW2_PROMPT, WEBVIEW2_FAILED]) expect(USER_FACING_JARGON.test(`${text.message} ${text.detail}`)).toBe(false);

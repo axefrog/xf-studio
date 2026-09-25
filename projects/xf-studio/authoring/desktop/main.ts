@@ -25,11 +25,11 @@ const runtime = await ensureWebView2({
   detect: () => detectWebView2(),
   ask: async options => (await Utils.showMessageBox({ ...options, title: "XF Studio", defaultId: 0,
     cancelId: options.buttons.length - 1 })).response,
-  notify: (title, body) => { try { Utils.showNotification({ title, body }); } catch { /* Optional. */ } },
   bootstrapperAvailable: () => existsSync(bootstrapper),
   runBootstrapper: async () => {
     try {
-      const child = Bun.spawn([bootstrapper, "/silent", "/install"], { stdio: ["ignore", "ignore", "ignore"], windowsHide: true });
+      // Not /silent: Microsoft's installer shows its own progress while it downloads.
+      const child = Bun.spawn([bootstrapper, "/install"], { stdio: ["ignore", "ignore", "ignore"] });
       const timer = setTimeout(() => child.kill(), 10 * 60_000);
       const code = await child.exited;
       clearTimeout(timer);

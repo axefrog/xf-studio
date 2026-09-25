@@ -48,7 +48,7 @@ copyFileSync(zip, resolve(input, basename(zip)));
 const digest = createHash("sha256").update(readFileSync(zip)).digest("hex");
 writeFileSync(resolve(input, "SHA256SUMS.txt"), `${digest}  ${basename(zip)}\n`);
 writeFileSync(resolve(input, "first-run.ps1"), readFileSync(resolve(import.meta.dir, "sandbox-first-run.ps1")));
-writeFileSync(resolve(input, "sandbox-drive.ts"), readFileSync(resolve(import.meta.dir, "sandbox-drive.ts")));
+writeFileSync(resolve(input, "sandbox-ui.ps1"), readFileSync(resolve(import.meta.dir, "sandbox-ui.ps1")));
 // The committed, asset-free fixture collection that Check runs on.
 copyFileSync(resolve(desktop, "../../../../experiments/005-preset-collection/editor-collection.json"), resolve(input, "fixture-collection.json"));
 // Networking stays off unless the trial installs Microsoft's WebView2 Runtime inside the sandbox.

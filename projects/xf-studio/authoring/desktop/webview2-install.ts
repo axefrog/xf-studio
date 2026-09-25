@@ -9,8 +9,7 @@ export type WebView2InstallPort = {
   detect(): WebView2Status;
   /** Returns the index of the chosen button. */
   ask(options: { type: "question" | "error"; message: string; detail: string; buttons: string[] }): Promise<number>;
-  notify(title: string, body: string): void;
-  /** Runs the bootstrapper silently and resolves with its exit code (or null if it could not start or timed out). */
+  /** Runs Microsoft's bootstrapper (it shows its own progress) and resolves with its exit code (or null if it could not start or timed out). */
   runBootstrapper(): Promise<number | null>;
   bootstrapperAvailable(): boolean;
   openDownloadPage(): void;
@@ -44,7 +43,6 @@ export async function ensureWebView2(port: WebView2InstallPort): Promise<WebView
     port.log("The user chose not to install WebView2 now.");
     return { ready: false, reason: "declined" };
   }
-  port.notify("Installing WebView2", "XF Studio will open when it's ready. This usually takes a minute or two.");
   const code = await port.runBootstrapper();
   const after = port.detect();
   port.log(`WebView2 bootstrapper finished with ${code === null ? "no exit code" : `exit ${code}`}; runtime ${after.installed ? after.version : "still missing"}.`);

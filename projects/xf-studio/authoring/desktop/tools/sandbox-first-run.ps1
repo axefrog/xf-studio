@@ -1,9 +1,10 @@
 # Runs inside Windows Sandbox (see sandbox-trial.ts), unattended. Records the environment,
 # checks the setup ZIP against its checksum, installs quietly, launches the installed app with
-# no preview assets and captures what happened: screenshots, the app's desktop.log, WebView2
-# presence, whether the loopback server answers, and the page state through a WebView2
-# remote-debugging port (safe here: the sandbox is disposable). Everything goes to the mapped
-# results folder; with -AutoClose the sandbox shuts itself down when done.
+# no preview assets and walks a first-time user's session through Windows UI Automation
+# (sandbox-ui.ps1): WebView2 consent if needed, welcome, UV editor, edit and Undo, library save,
+# fixture import and Check, About and Licences, close and relaunch, then uninstall. It records
+# WebView2 presence, the loopback server, the app's desktop.log and app-window screenshots in the
+# mapped results folder; with -AutoClose the sandbox shuts itself down when done.
 param([switch]$AutoClose)
 $ErrorActionPreference = "Continue"
 $in = Join-Path $env:USERPROFILE "Desktop\xfs-input"
@@ -38,12 +39,9 @@ function AppWindow {
   return $app
 }
 function Shot([string]$name) {
+  # Always the XF Studio window itself (in-page dialogs included), sized by AppWindow.
   $app = AppWindow
-  # A message box in front of the app is what the user sees, so capture the foreground window then.
-  $front = [XfsWin]::GetForegroundWindow()
-  $r = New-Object XfsWin+RECT; [void][XfsWin]::GetWindowRect($front, [ref]$r)
-  $dialog = $app -and $front -ne $app.MainWindowHandle -and ($r.Right - $r.Left) -lt 1000
-  if ($app -and -not $dialog) { ShotWindow $app.MainWindowHandle $name } else { ShotWindow $front $name }
+  if ($app) { [void]$shell.AppActivate($app.Id); Start-Sleep -Milliseconds 400; ShotWindow $app.MainWindowHandle $name }
 }
 function Pv([string]$key) { try { (Get-ItemProperty -Path $key -ErrorAction Stop).pv } catch { $null } }
 # Evaluate one expression in the first WebView2 page through the remote-debugging port.
@@ -154,28 +152,11 @@ if ($version) { $report.packagedVersion = Get-Content $version.FullName -Raw | C
 Save
 
 if ($launcher) {
-  $bunExe = Join-Path $launcher.DirectoryName "bun.exe"
-  $driver = Join-Path $in "sandbox-drive.ts"
   $fixture = Join-Path $in "fixture-collection.json"
+  . (Join-Path $in "sandbox-ui.ps1")
   function StopApp { Get-Process bun, launcher -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
-  # The launcher does not pass this process's environment through, so open the debugging port
-  # with WebView2's documented per-app policy for bun.exe (disposable sandbox only).
-  $policy = "HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
-  New-Item -Path $policy -Force | Out-Null
-  Set-ItemProperty -Path $policy -Name "bun.exe" -Value "--remote-debugging-port=9222"
-  [Environment]::SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--remote-debugging-port=9222", "User")
   function StartApp {
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
     Start-Process $launcher.FullName -WorkingDirectory $launcher.DirectoryName | Out-Null
-  }
-  # The driver runs with the installed app's own bun.exe; a separate copy avoids the app's process name.
-  $driverBun = Join-Path $env:TEMP "xfs-driver-bun.exe"
-  Copy-Item $bunExe $driverBun -Force
-  function Drive([string[]]$extra) {
-    $p = Start-Process $driverBun -ArgumentList (@("`"$driver`"", "`"$out`"", "`"$fixture`"") + $extra) -PassThru -WindowStyle Hidden `
-      -RedirectStandardError (Join-Path $out "driver-stderr$($extra -join '').txt")
-    if (-not $p.WaitForExit(300000)) { $p.Kill(); return "timed out" }
-    $p.WaitForExit(); return "exit $($p.ExitCode)"
   }
   function WaitAppWindow([int]$seconds) {
     $end = (Get-Date).AddSeconds($seconds)
@@ -185,7 +166,7 @@ if ($launcher) {
       Start-Sleep -Seconds 1
     }
   }
-  # The installer's Close starts the app itself; restart it so the debugging port applies.
+  # The installer's Close starts the app itself; restart it so the trial controls exactly one instance.
   Start-Sleep -Seconds 3; StopApp
   StartApp
   $window = WaitAppWindow 30
@@ -199,6 +180,8 @@ if ($launcher) {
     $shell.SendKeys("{ENTER}")
     $report.consentClicked = (Get-Date).ToString("o")
     Save
+    Start-Sleep -Seconds 20
+    ShotWindow ([IntPtr]::Zero) "00-webview2-installing"
     $end = (Get-Date).AddMinutes(10)
     while ((Get-Date) -lt $end -and -not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 3 }
     $report.webview2InstallSeconds = [int]((Get-Date) - [datetime]$report.consentClicked).TotalSeconds
@@ -211,21 +194,19 @@ if ($launcher) {
   if ($report.webview2After.processes -gt 0) {
     Start-Sleep -Seconds 5
     [void](AppWindow)
-    $report.debugPort = [ordered]@{
-      listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq 9222 } | ForEach-Object { "$($_.LocalAddress):$($_.LocalPort)" })
-      commandLines = @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object -First 2 | ForEach-Object { $_.CommandLine.Substring(0, [Math]::Min(400, $_.CommandLine.Length)) })
-      bunEnv = "$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" }
-    try { $report.debugPort.version = (Invoke-RestMethod "http://127.0.0.1:9222/json/version" -TimeoutSec 5).Browser } catch { $report.debugPort.error = $_.Exception.Message }
-    Save
-    $report.driveFirstRun = Drive @()
+    UiFirstRun
     ShotWindow ((AppWindow).MainWindowHandle) "09-app-window"
     # Close normally (the save handshake runs), then relaunch: no welcome, same collection.
     $app = AppWindow
-    if ($app) { [void]$app.CloseMainWindow(); $gone = $app.WaitForExit(20000); $report.closedCleanly = $gone }
+    if ($app) {
+      [void]$shell.AppActivate($app.Id); $shell.SendKeys("{ESC}"); Start-Sleep -Milliseconds 500   # close any open dialog first
+      [void]$app.CloseMainWindow(); $gone = $app.WaitForExit(20000); $report.closedCleanly = $gone
+      if (-not $gone) { ShotWindow $app.MainWindowHandle "close-blocked" }
+    }
     StopApp
     StartApp
     [void](WaitAppWindow 30); Start-Sleep -Seconds 6; [void](AppWindow)
-    $report.driveRelaunch = Drive @("--relaunch")
+    UiRelaunch
     $app = AppWindow
     if ($app) { [void]$app.CloseMainWindow(); [void]$app.WaitForExit(20000) }
   } else {
@@ -248,5 +229,5 @@ if ($launcher) {
 }
 $report.finished = (Get-Date).ToString("o")
 Save
-Write-Host "Finished. report.json, drive*.json, desktop.log and screenshots are in the results folder."
+Write-Host "Finished. report.json, desktop.log and screenshots are in the results folder."
 if ($AutoClose) { Start-Sleep -Seconds 3; Stop-Computer -Force }

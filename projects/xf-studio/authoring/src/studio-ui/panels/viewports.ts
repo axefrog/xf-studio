@@ -122,9 +122,13 @@ export function headPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const state = frame.viewport.head;
       loading.hidden = state.phase === "ready";
-      if (state.phase === "error") { loading.replaceChildren(icon("error"), h("p", { text: state.error ?? "The 3D preview could not load." }),
-        h("p", { class: "muted small", text: "You can keep working in the UV map." })); loading.dataset.tone = "error"; }
+      // A known reason already says what still works; only an unexplained failure needs the fallback line.
+      if (state.phase === "error") { loading.replaceChildren(icon("error"), ...(state.error ? [h("p", { text: state.error })] :
+        [h("p", { text: "The 3D preview could not load." }), h("p", { class: "muted small", text: "You can keep working in the UV map." })]));
+        loading.dataset.tone = "error"; }
       badge.update(frame); hints.update(frame);
+      // Head gestures and shortcuts mean nothing without a head; the pane explains why instead.
+      if (state.phase !== "ready") hints.strip.hidden = true;
       const preview = frame.preview.preview, motion = frame.preview.motion;
       setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
       const playing = !!motion?.idle && !motion.idlePaused;
