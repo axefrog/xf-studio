@@ -45,10 +45,11 @@ Builds are repeatable but **not byte-reproducible**, because Electrobun's archiv
 ### Cutting a release
 
 1. Set `version` in `desktop/package.json` and rename **Unreleased** in the changelog to that version, with a new empty **Unreleased** above it. Merge to `main`.
-2. Optionally run the workflow manually on `main` and try the artifact.
-3. Tag the merged commit (`git tag v0.1.0-alpha.1 <sha>`) and push the tag. CI creates the draft.
-4. Review the draft (body, assets, checksums, attestations), then **publish by hand**.
-5. Set `releaseStatus: "prerelease"` and `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }` in `site.config.json`, run `bun run verify` and `bun run qa`, and merge. The Pages workflow deploys it.
+2. On the development machine, run `XFS_REQUIRE_ORACLES=1 bun test` in `projects/xf-studio/authoring` with the Python oracle, game and resolver variables set ([authoring checks](../../projects/xf-studio/authoring/README.md#checks)). Public CI skips those tests; in this mode a missing prerequisite fails instead of skipping.
+3. Optionally run the workflow manually on `main` and try the artifact.
+4. Tag the merged commit (`git tag v0.1.0-alpha.1 <sha>`) and push the tag. CI creates the draft.
+5. Review the draft (body, assets, checksums, attestations), then **publish by hand**.
+6. Set `releaseStatus: "prerelease"` and `release: { "tag": "v0.1.0-alpha.1", "title": "XF Studio 0.1.0 alpha 1" }` in `site.config.json`, run `bun run verify` and `bun run qa`, and merge. The Pages workflow deploys it.
 
 A mistaken tag fails before any release exists. A bad draft is deleted by hand and the version bumped; published tags are never reused.
 

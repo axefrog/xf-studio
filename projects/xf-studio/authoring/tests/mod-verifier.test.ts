@@ -11,6 +11,7 @@ import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/mod-v
 import { componentId, sameJson } from "../src/mod-verifier/resource-checks";
 import { errorStats, expectedChain } from "../src/mod-verifier/texture-checks";
 import { verifyBuild, type UnbundleResult } from "../src/mod-verifier/verify-build";
+import { oracleTest } from "./optional-oracles";
 
 const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
 
@@ -267,9 +268,9 @@ const python = process.env.XFS_PYTHON || "python";
 const numpy = (() => {
   try { return Bun.spawnSync([python, "-c", "import numpy"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0; } catch { return false; }
 })();
-if (!numpy) console.warn("Skipping the NumPy statistics oracle: Python with NumPy is not available.");
+const numpyCase = oracleTest(numpy, "the NumPy statistics oracle needs Python with NumPy (set XFS_PYTHON).");
 
-test.skipIf(!numpy)("error statistics match NumPy's mean and default linear percentile", () => {
+numpyCase("error statistics match NumPy's mean and default linear percentile", () => {
   const dir = mkdtempSync(resolve(tmpdir(), "xfs-stats-"));
   try {
     const sizes = [1, 2, 7, 8, 20, 129, 1000, 54321];
