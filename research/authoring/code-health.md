@@ -217,7 +217,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- None.
+- **Studio light rig** (claude/studio-lighting): `src/studio-lighting.ts` (settings, setups, validation as plain data) and `src/studio-light-rig.ts` (the Three key, fill and rim lights and room-light strength), wired through `browser-head-attachment.ts` and four `preview.*` actions. Review with the next rendering review; worth a look: the hook living in `browser-head-attachment.ts` until it moves to the preview ports.
 
 ## Fixed in claude/platform-step5
 
