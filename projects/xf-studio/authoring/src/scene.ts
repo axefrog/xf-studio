@@ -32,10 +32,33 @@ function morphTargetNames(mesh: THREE.Mesh): string[] {
   return names;
 }
 
+/**
+ * Creates the 3D head scene in `host`. A failure at any point after the renderer exists releases
+ * what was made so far (WebGL context, canvas, stage and observers), so a retry starts clean; the
+ * returned scene's `dispose()` releases the same resources when the head is unloaded (PREV-20).
+ */
 export async function createScene(
   host: HTMLElement,
   canvases: HTMLCanvasElement[],
   stage: StageTheme = "dark",
+) {
+  const releases: (() => void)[] = [];
+  try { return await assembleScene(host, canvases, stage, releases); }
+  catch (error) { releaseAll(releases); throw error; }
+}
+
+/** Runs each release once, newest first; teardown is best effort. */
+function releaseAll(releases: (() => void)[]) {
+  for (const release of releases.splice(0).reverse()) {
+    try { release(); } catch { /* Best effort: the rest still run. */ }
+  }
+}
+
+async function assembleScene(
+  host: HTMLElement,
+  canvases: HTMLCanvasElement[],
+  stage: StageTheme,
+  releases: (() => void)[],
 ) {
   // Opaque canvas: the stage is drawn in the scene (viewport-backdrop.ts), and the drawing buffer
   // has no alpha channel, so fragments that write alpha below one (alpha-to-coverage hair, decals)
@@ -54,10 +77,13 @@ export async function createScene(
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
   host.prepend(renderer.domElement);
+  releases.push(() => { renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, stage);
+  releases.push(() => backdrop.dispose());
   const controls = new OrbitControls(camera, renderer.domElement);
+  releases.push(() => controls.dispose());
   controls.enableDamping = true;
   controls.minDistance = MIN_CAMERA_DISTANCE;
   controls.maxDistance = MAX_CAMERA_DISTANCE;
@@ -82,6 +108,7 @@ export async function createScene(
     room = new RoomEnvironment(),
     env = pmrem.fromScene(room, 0.04);
   scene.environment = env.texture;
+  releases.push(() => env.dispose());
   pmrem.dispose();
   room.dispose();
   const key = new THREE.DirectionalLight(0xfff2e9, 2.5);
@@ -93,13 +120,7 @@ export async function createScene(
   fill.target.position.set(0, 1.67, 0);
   scene.add(fill, fill.target);
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
-  let core: LoadedCoreDetail;
-  try { core = await loadCoreDetail(renderer); }
-  catch (error) {
-    // Release the WebGL context and canvas a failed first load would otherwise leak.
-    env.dispose(); backdrop.dispose(); controls.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
-    throw error;
-  }
+  const core: LoadedCoreDetail = await loadCoreDetail(renderer);
   const { gltf, meshes, head, plate } = core;
   let eyes = core.eyes;
   scene.add(gltf.scene);
@@ -742,6 +763,7 @@ export async function createScene(
   };
   const observer = new ResizeObserver(resize);
   observer.observe(host);
+  releases.push(() => observer.disconnect());
   resize();
   let animation = false,
     amount = 0;
@@ -810,6 +832,8 @@ export async function createScene(
   return {
     scene,
     camera,
+    /** Releases the renderer, its canvas, the stage and observers; the scene is unusable afterwards. */
+    dispose: () => releaseAll(releases),
     onFrame: (callback: () => void) => {
       frameListeners.add(callback);
       return () => frameListeners.delete(callback);

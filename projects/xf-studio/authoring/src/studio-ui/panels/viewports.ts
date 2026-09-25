@@ -108,7 +108,11 @@ export function headPanel(rt: StudioRuntime): PanelController {
     stateNote.hidden = tone === "progress" || /UV/.test(text);
     nextAction = step?.action as typeof nextAction;
     next.hidden = !step;
-    if (step) setText(next.querySelector("span")!, step.label);
+    if (step) {
+      setText(next.querySelector("span")!, step.label);
+      // The step's own capability: disabled with its reason while the last step is still running (UI-35).
+      applyCapability(next, port.previewSetup.capability(nextAction!));
+    }
   }
   return {
     spec: { id: "head", ...PANEL_META["head"], element,

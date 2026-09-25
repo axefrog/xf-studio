@@ -290,3 +290,137 @@ test("the jargon list catches the retired developer wording, and no view still s
       expect({ path, phrase, found: source.includes(phrase) }).toEqual({ path, phrase, found: false });
   }
 });
+
+// ---- PREV-21..24, UI-34 ----
+
+type Probe = { phase: string; message: string };
+function scriptedPoller() {
+  const pending: { request: string; resolve: (reply: { ok: boolean; data: unknown }) => void; reject: (error: Error) => void }[] = [];
+  const timers: { run: () => void; ms: number }[] = [];
+  const poller = new PolledHostState<Probe, string>({
+    transport: request => new Promise((resolve, reject) => pending.push({ request, resolve, reject })),
+    isState: (value): value is Probe => !!value && typeof (value as { phase?: unknown }).phase === "string",
+    working: value => value.phase === "working", refresh: "refresh", pollMs: 5,
+    messages: { invalid: "Invalid.", unreachable: "Unreachable." },
+    timers: { set: (run, ms) => { const timer = { run, ms }; timers.push(timer); return timer; },
+      clear: handle => { const i = timers.indexOf(handle as typeof timers[number]); if (i >= 0) timers.splice(i, 1); } } });
+  return { poller, pending, timers };
+}
+
+test("an older idle reply arriving after a newer working one is ignored, so polling continues (PREV-21)", async () => {
+  const { poller, pending, timers } = scriptedPoller();
+  const poll = poller.request("refresh"), prepare = poller.request("prepare");
+  expect(pending.map(item => item.request)).toEqual(["refresh", "prepare"]);
+  pending[1]!.resolve({ ok: true, data: { phase: "working", message: "Preparing." } });
+  expect(await prepare).toEqual({ ok: true });
+  pending[0]!.resolve({ ok: true, data: { phase: "idle", message: "Idle." } });
+  expect(await poll).toEqual({ ok: true });
+  expect(poller.snapshot()).toEqual({ phase: "working", message: "Preparing." });
+  expect(timers).toHaveLength(1);
+  // A stale failure doesn't count as lost contact either.
+  const late = poller.request("refresh"), newer = poller.request("prepare");
+  pending[3]!.resolve({ ok: true, data: { phase: "working", message: "Still preparing." } });
+  await newer;
+  pending[2]!.reject(Error("offline"));
+  expect(await late).toEqual({ ok: false, message: "Unreachable." });
+  expect(poller.connection()).toEqual({ failures: 0, retrying: false, message: null });
+  poller.dispose();
+});
+
+test("overlapping refreshes share one request until something newer is sent (PREV-21)", async () => {
+  const { poller, pending } = scriptedPoller();
+  const first = poller.request("refresh"), second = poller.request("refresh");
+  expect(pending).toHaveLength(1);
+  poller.request("prepare");
+  const third = poller.request("refresh");
+  expect(pending.map(item => item.request)).toEqual(["refresh", "prepare", "refresh"]);
+  for (const item of pending) item.resolve({ ok: true, data: { phase: "idle", message: "Idle." } });
+  expect(await first).toEqual({ ok: true });
+  expect(await second).toEqual({ ok: true });
+  expect(await third).toEqual({ ok: true });
+  // Once it has answered, the next refresh is a new request.
+  poller.request("refresh");
+  expect(pending).toHaveLength(4);
+  poller.dispose();
+});
+
+test("a poll in flight at dispose applies nothing and restarts no timer (PREV-22)", async () => {
+  const { poller, pending, timers } = scriptedPoller();
+  let notified = 0;
+  poller.subscribe(() => { notified++; });
+  const poll = poller.request("refresh");
+  poller.dispose();
+  pending[0]!.resolve({ ok: true, data: { phase: "working", message: "Preparing." } });
+  await poll;
+  expect(poller.snapshot()).toBeNull();
+  expect(timers).toHaveLength(0);
+  expect(notified).toBe(0);
+  expect(await poller.request("refresh")).toEqual({ ok: false, message: "Unreachable." });
+  expect(pending).toHaveLength(1);
+});
+
+test("nothing is looked for or prepared before the service starts (PREV-23)", async () => {
+  let looked = 0;
+  const h = harness({ preview: previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, message: "Choose your Cyberpunk 2077 game folder." }),
+    wolvenKit: wolvenKitState("available") });
+  const detection = h.setup["port"].detection;
+  const original = detection.dispatch;
+  detection.dispatch = async (...args) => { looked++; return original(...args); };
+  // Host states arriving before start (another view refreshing the shared ports) change nothing.
+  await h.preparation.dispatch({ kind: "preview.refresh" });
+  await h.setup["port"].wolvenKit.dispatch({ kind: "wolvenkit.refresh" });
+  h.host.wolvenKit = wolvenKitState("ready");
+  await h.setup["port"].wolvenKit.dispatch({ kind: "wolvenkit.refresh" });
+  await settle(20);
+  expect(looked).toBe(0);
+  expect(h.host.requests).toEqual(["refresh"]);
+  await h.setup.start();
+  await until(() => looked === 1);
+});
+
+test("a failed head waits for the next ready preview once the host moves on (PREV-24)", async () => {
+  let attempts = 0;
+  const h = harness({ preview: previewState({ phase: "ready", canPrepare: false }) });
+  h.host.head = async () => { attempts++; if (attempts === 1) throw Error("geometry nodes are missing"); };
+  await h.setup.start();
+  await until(() => h.setup.snapshot().head.phase === "failed");
+  await settle(10);
+  // The game folder changed: the host needs setup again, and the old failure no longer applies.
+  h.host.preview = previewState({ phase: "idle" });
+  await h.preparation.dispatch({ kind: "preview.refresh" });
+  expect(h.setup.snapshot().head.phase).not.toBe("failed");
+  expect(h.setup.capability({ kind: "previewSetup.retryHead" }).available).toBe(false);
+  h.ready();
+  await h.preparation.dispatch({ kind: "preview.refresh" });
+  await until(() => h.setup.snapshot().head.phase === "ready");
+  expect(attempts).toBe(2);
+});
+
+test("only a request to show the card counts as one; the card opening by itself doesn't (UI-34)", async () => {
+  const h = harness({ autostart: false });
+  await h.setup.start();
+  expect(h.setup.snapshot()).toMatchObject({ showRequests: 0, card: { open: true } });
+  await h.setup.dispatch({ kind: "previewSetup.dismiss" });
+  // Running work brings the card back without a show request.
+  await h.setup.dispatch({ kind: "previewSetup.prepare" });
+  expect(h.setup.snapshot()).toMatchObject({ showRequests: 0, card: { open: true } });
+  await h.setup.dispatch({ kind: "previewSetup.cancel" });
+  await h.setup.dispatch({ kind: "previewSetup.dismiss" });
+  expect(await h.setup.dispatch({ kind: "previewSetup.show" })).toEqual({ ok: true });
+  expect(h.setup.snapshot()).toMatchObject({ showRequests: 1, card: { open: true } });
+});
+
+test("the head pane's next step reports busy while the last step runs (UI-35)", async () => {
+  let release: () => void = () => {};
+  const h = harness({ autostart: false });
+  await h.setup.start();
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const original = h.preparation.dispatch.bind(h.preparation);
+  h.preparation.dispatch = async action => { if (action.kind === "preview.prepare") await gate; return original(action); };
+  const running = h.setup.dispatch({ kind: "previewSetup.prepare" });
+  expect(h.setup.capability({ kind: "previewSetup.refresh" })).toEqual({ available: false, reason: "XF Studio is still working on the last step." });
+  expect(h.setup.capability({ kind: "previewSetup.retryHead" }).available).toBe(false);
+  release();
+  await running;
+  expect(h.setup.capability({ kind: "previewSetup.refresh" }).available).toBe(true);
+});

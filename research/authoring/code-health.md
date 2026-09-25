@@ -29,7 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
-| `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixes in claude/release-prep |
+| `ecb4b33` | 2026-09-25 | Release-trigger review before `v0.1.0-alpha.1`: new 3D preview setup service, and release readiness (workflow, versions, changelog, notices, site, packaging, CI) | 0 High, 1 Medium (PREV-20), 8 Low. Release blockers: Desktop release workflow never run; changelog claims features not in the release. Fixed in claude/release-prep (PREV-20..24, UI-34/35, REL-01; PREV-25 partly; changelog and site corrected); the workflow's first run failed on a test timeout, fixed there, rerun pending |
 | `524a575` | 2026-09-25 | Pre-alpha review of presentation, startup, preview card and desktop host at `7e02636` (completes the `19bf84c` deep review after the legacy-shell removal); the core and pipeline cleanups merged since fix reviewed findings | 0 High, 7 Medium, 6 Low (UI-21..33); UI-05 fixed, UI-06 mostly fixed. Alpha blockers UI-19/20/21/22/23/24/25/27 assigned to claude/alpha-polish |
 | `19bf84c` | 2026-09-25 | Deep review (10 merges, ~7,000 lines): domain core, and pipeline/verifier/hosts incl. WolvenKit download (two parallel reviewers). Presentation deferred to after the legacy-shell removal merges | 1 High (CORE-16), 8 Medium, 13 Low. PREV-01/02/04/05/06, PIPE-02/16 and UI-07 confirmed fixed. Fixes run in claude/cleanup-pipeline2 and claude/cleanup-core2 |
 | `f3f7147` | 2026-09-25 | Focused review: game-asset export and derived 3D preview core | 1 High, 7 Medium, 8 Low (PREV-*). PREV-01/02/04/05/06 assigned to claude/wolvenkit-fetch. |
@@ -58,7 +58,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 | PIPE-25 | Med | Pipeline/hosts | Every Build runs the full head-source resolver (source discovery, archive indexes, `.xl` files, head-archive hash) synchronously on the host, even when the plate is cached; extends PIPE-20 | Partly fixed (claude/cleanup-pipeline2): unchanged plate inputs skip extraction and hashing and archive hashes are memoised (about 7 s to 2 s on the reference route); route resolution itself still runs synchronously on the host each Build |
 | RES-01 | Med | Resolver | When a creator switcher picks a non-default choice, the default choice's target stays active too (skin types 01 and 03 both active in test states); see [head CC render evidence](../character-customization/head-cc-render-evidence.md) | **Fixed** (claude/resolver-choices, 25 Sep): switcher targets take activation only from switchers, checked against all six vanilla UI presets |
 | RES-02 | Med | Resolver | A "None" choice (e.g. no scar) yields an empty entry and a missing-appearance warning instead of nothing | **Fixed** (claude/resolver-choices, 25 Sep): a definition named `None` emits no descriptor |
-| PREV-20 | Med | Presentation/startup | A head-load failure after the scene loads leaves head-bound wiring attached (theme binding, app attach, preview device, surface editor, controls listener) and `createScene` late errors leave an extra canvas; Try again then doubles them | Open (before alpha tag) |
+| PREV-20 | Med | Presentation/startup | A head-load failure after the scene loads leaves head-bound wiring attached (theme binding, app attach, preview device, surface editor, controls listener) and `createScene` late errors leave an extra canvas; Try again then doubles them | **Fixed** (claude/release-prep, 25 Sep) |
 | PREV-07 | Med | Preview export | Exporter not a shared host service; no single-flight or cross-process guard | Open |
 | PREV-08 | Med | Rendering (design) | Render record is a closed core-head shape; no cancellation/release; material templates unused | Open (platform step 7) |
 | PIPE-03 | Med | Pipeline | Localhost and desktop Build host services drifted (cancellation, deadlines, error codes, result gate) | Open |
@@ -142,18 +142,24 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **UI-28, UI-29, UI-30, UI-31, UI-32:** Fixed in claude/alpha-polish (see below).
 - **UI-33:** Partly fixed in claude/alpha-polish: one `PolledHostState` serves both polling ports. Open: `uv-editor` calls `getComputedStyle` on every draw.
 - **UI-04/UI-10/UI-11/UI-12 (extended):** `bootstrap.js` grew (Start fresh); Satin alias and glitter ID mapping remain in the UI and the shift slider hard-codes 0–1; `scene.ts` 925 lines, renders every frame, allocates per frame; no behavioural tests for the preview card or startup failure paths.
-- **PREV-21:** `host-state-poller.ts` applies host replies in arrival order with no sequencing; an older idle reply can stop polling while the host prepares.
-- **PREV-22:** a poll in flight at `dispose()` restarts the timer.
-- **PREV-23:** game detection and `maybeStart()` aren't gated on `started` (`preview-setup.ts:294,301-302`).
-- **PREV-24:** a failed head stays failed after the host leaves `ready` (e.g. game folder changed).
-- **PREV-25:** tests missing for the rendered card/dialog, startup head wiring, out-of-order replies, and several setup actions.
-- **UI-34:** the setup card steals focus whenever running work re-opens it, not only on a user request.
-- **UI-35:** the head pane's next-step button ignores its capability (busy state).
-- **REL-01:** the package inventory guard checks file names, not bundle contents: an absolute user path inside an allowed bundle would ship.
+- **PREV-21, PREV-22, PREV-23, PREV-24, UI-34, UI-35, REL-01:** Fixed in claude/release-prep (see below).
+- **PREV-25:** Partly fixed in claude/release-prep: startup head wiring, out-of-order and shared replies, dispose, start gating, failed-head reset and show requests are tested. Open: tests of the rendered card and consent dialog (the suite has no DOM).
 
 ## New subsystems since last review
 
 None. (The 3D preview setup service was reviewed at `ecb4b33`.)
+
+## Fixed in claude/release-prep
+
+- **PREV-20:** the head and everything wired to it are one object, `attachBrowserHead` (`src/browser-head-attachment.ts`), which registers a release for each connection as it is made (stage theme binding, application attachments, autosave and status subscriptions, the preview device's scene connection, the surface editor, the camera listener) and releases them newest first on any failure or on `dispose()`. The viewport device owns the scene's lifetime (`loadHead` releases an earlier head, `unloadHead` detaches the surface editor and disposes the scene), and `createScene` releases its renderer, canvas, stage and resize observer if anything fails after the renderer exists; the scene gained `dispose()`. `studio-startup.ts` keeps one `AttachedHead` and releases it before a retry. Tests: `tests/browser-head-attachment.test.ts` (a step failing after the scene loaded, then Try again attaching exactly once; a failed load; reloading over a loaded head).
+- **PREV-21:** `PolledHostState` numbers requests and applies a reply or failure only if nothing newer was applied; overlapping refreshes share one in-flight request while nothing newer was sent.
+- **PREV-22:** a `disposed` flag stops late replies from applying, publishing or scheduling.
+- **PREV-23:** game detection and automatic preparation (including the WolvenKit-ready restart) wait for `start()`.
+- **PREV-24:** a failed head returns to waiting once the host leaves `ready`, and loads when it is ready again.
+- **UI-34:** the setup service counts show requests (`showRequests`); the card takes focus only when that count changes, never when it opens by itself.
+- **UI-35:** the head pane's next-step button applies the setup action's capability (disabled with its reason while a step runs).
+- **REL-01:** `desktop/package-content-scan.ts` scans every packaged text member of the real archive in `verify-canary.ts` for absolute user-profile paths (`C:\Users\<name>` in any drive, slash direction or escaping) and email addresses, allowing placeholders, example domains and addresses in licence text, and redacts findings for the public log. Tested in `desktop/tests/package-content-scan.test.ts`; the three canary archives built locally on 25 September scan clean and a planted path is caught.
+- **CI (release blocker):** the first Desktop release run failed on a 5.1 s exhaustive flake test under Bun's 5 s default. Tests taking about a second or more locally now carry explicit, commented timeouts (flake-field, glint oracle, mod-verifier resource failures, workspace storage budget, desktop Build deadline).
 
 ## Fixed in claude/wolvenkit-fetch
 

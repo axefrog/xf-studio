@@ -10,11 +10,10 @@ import { NO_3D_PREVIEW_IN_ALPHA } from "./alpha-availability";
 import type { PreviewPreparationActions } from "./preview-preparation";
 import { PreviewSetupActions } from "./preview-setup";
 import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from "./wolvenkit-setup";
-import { bindStageTheme } from "./stage-theme-binding";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
-import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
+import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
 import { collectionTransport } from "./collection-transport";
@@ -26,7 +25,8 @@ import type { SavedAppearanceActions } from "./saved-appearance-actions";
 import type { StudioPresentationPort } from "./studio-presentation";
 import { mountStudio } from "./studio-ui/app";
 import { createTrustedAuthoringCore } from "./trusted-authoring-core";
-import { createTrustedPreviewServices } from "./trusted-preview-services";
+import type { MotionActions } from "./motion-actions";
+import type { PreviewActions } from "./preview-actions";
 import { createTrustedStudioBootstrap } from "./trusted-studio-bootstrap";
 import { UIPreferenceActions } from "./ui-preferences";
 
@@ -80,8 +80,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
   let savedAppearance: SavedAppearanceActions | undefined;
-  let previewActions: ReturnType<ReturnType<typeof createTrustedPreviewServices>["finish"]>["preview"] | undefined;
-  let motionActions: ReturnType<ReturnType<typeof createTrustedPreviewServices>["finish"]>["motion"] | undefined;
+  let previewActions: PreviewActions | undefined;
+  let motionActions: MotionActions | undefined;
+  /** The loaded head and its connections, released together. */
+  let head: AttachedHead | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
   let scene: Awaited<ReturnType<ReturnType<typeof createBrowserViewportDevice>["loadHead"]>> | undefined;
   let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
@@ -221,35 +223,29 @@ async function start(host: StudioHost, root: HTMLElement) {
   /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
     core.app.setPreviewUnavailable("");
+    // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
+    releaseHead(head);
+    const priorAssets = status.assets;
+    let attached: AttachedHead | undefined;
     try {
-      scene = await viewportDevice.loadHead(previewDevice.emptyCanvases());
-      // The stage backdrop follows the resolved UI theme through the renderer's typed input.
-      bindStageTheme(scene, preferences, matchMedia("(prefers-color-scheme: dark)"));
-      let surface: ReturnType<typeof viewportDevice.mountSurface> | undefined;
-      const services = createTrustedPreviewServices(workspace, createBrowserScenePreviewPorts(scene, {
-        setSurfaceControls: enabled => surface?.setEnabled(enabled),
-        hasSavedAppearance: () => !!workspace.savedV || !!savedAppearance?.hasSavedV(),
-      }));
-      savedAppearance = services.savedAppearance;
-      core.app.attach({ savedV: savedAppearance });
-      savedAppearance.subscribe(persist);
-      savedAppearance.subscribe(() => statusSource.changed());
-      previewDevice.connectScene(scene);
-      surface = viewportDevice.mountSurface({
-        layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-        selected: () => core.presentation.selected, ...fieldHooks,
-        begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
-        apply: proposal => core.app.applyGesture("surface", proposal),
-        cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-        message: text => adapterMessage("surface", text),
+      attached = await attachBrowserHead({
+        workspace, viewport: viewportDevice, preview: previewDevice, preferences,
+        // The stage backdrop follows the resolved UI theme through the renderer's typed input.
+        colourScheme: matchMedia("(prefers-color-scheme: dark)"),
+        attach: services => core.app.attach(services),
+        surface: {
+          layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
+          selected: () => core.presentation.selected, ...fieldHooks,
+          begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
+          apply: proposal => core.app.applyGesture("surface", proposal),
+          cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
+          message: text => adapterMessage("surface", text),
+        },
+        persist, changed: () => statusSource.changed(),
       });
-      ({ preview: previewActions, motion: motionActions } = services.finish());
-      core.app.attach({ preview: previewActions, motion: motionActions });
-      previewActions.subscribe(persist); motionActions.subscribe(persist);
-      previewActions.subscribe(() => statusSource.changed());
-      previewDevice.presentInitialLayers();
-      scene.controls.addEventListener("change", persist);
-      const evidence = scene.evidence;
+      head = attached;
+      ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
+      const evidence = attached.scene.evidence;
       status = { ...status, assets: { ...status.assets, loaded: true, detailErrors: [...evidence.detailErrors],
         browMaterial: evidence.browMaterial as "saved-double-diffuse" | "provisional",
         lashColor: evidence.lashColor as "saved-hair-profile" | "provisional",
@@ -262,15 +258,20 @@ async function start(host: StudioHost, root: HTMLElement) {
       statusSource.changed();
       host.onPreviewReady?.();
     } catch (error) {
-      // Release a partly loaded head so a retry starts clean; the setup service maps the failure to plain words.
-      if (scene) {
-        try { scene.renderer.setAnimationLoop(null); scene.renderer.dispose(); scene.renderer.forceContextLoss(); scene.renderer.domElement.remove(); }
-        catch { /* Best effort. */ }
-        scene = undefined;
-      }
+      // The setup service maps the failure to plain words; nothing of this attempt stays connected.
+      releaseHead(attached);
+      status = { ...status, assets: priorAssets };
+      statusSource.changed();
       console.error(error); session.flush();
       throw error;
     }
+  }
+
+  /** Release the loaded head (or a part-attached one) and forget its services. */
+  function releaseHead(attached: AttachedHead | undefined) {
+    if (head === attached) head = undefined;
+    attached?.dispose();
+    scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
   }
 }
 

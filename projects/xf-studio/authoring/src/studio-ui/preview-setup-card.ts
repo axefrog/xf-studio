@@ -69,7 +69,7 @@ export function previewSetupCard(rt: StudioRuntime) {
     applyCapability(control, port.previewSetup.capability(value.action as PreviewSetupAction));
     return value.action as PreviewSetupAction;
   }
-  let linkKey = "", consentLinkKey = "", wasOpen: boolean | undefined;
+  let linkKey = "", consentLinkKey = "", showRequests = port.previewSetup.snapshot().showRequests;
   function paintLinks(root: HTMLElement, items: ReadonlyDeep<{ label: string; link: WolvenKitLink }[]>, key: string) {
     const next = JSON.stringify(items);
     if (next === key) return key;
@@ -84,9 +84,12 @@ export function previewSetupCard(rt: StudioRuntime) {
     update(frame: Frame) {
       const setup = frame.previewSetup, card = setup.card;
       element.hidden = !card.open;
-      // Re-opening from the head pane moves focus into the card; the first automatic showing doesn't.
-      if (card.open && wasOpen === false) requestAnimationFrame(() => title.focus());
-      wasOpen = card.open;
+      // Only a person's request to show the card moves focus into it; the card opening by itself
+      // (first run, or running work bringing it back) never takes focus from what they are doing (UI-34).
+      if (setup.showRequests !== showRequests) {
+        showRequests = setup.showRequests;
+        if (card.open) requestAnimationFrame(() => title.focus());
+      }
       if (card.open) {
         setText(title, card.title);
         setText(body, card.body);

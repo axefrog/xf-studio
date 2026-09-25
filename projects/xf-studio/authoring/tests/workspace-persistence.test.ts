@@ -113,6 +113,10 @@ function realisticWorkspace(presets = 6): WorkspaceState {
   return { ...freshWorkspace(selected.recipe), history: current.editors[selected.id].history, collections };
 }
 
+// Tests that encode realistic multi-megabyte workspaces take about 1 s each locally; slower CI runners
+// (windows-2025 ran about 2.5 times slower) need more than bun's 5 s default.
+const HEAVY_WORKSPACE_TIMEOUT_MS = 30_000;
+
 test("a realistic workspace fits the storage budget with the standard policy and restores (CORE-02)", () => {
   const state = realisticWorkspace();
   expect(JSON.stringify(state.recipe).length).toBeGreaterThan(11_000);
@@ -136,7 +140,7 @@ test("a realistic workspace fits the storage budget with the standard policy and
   expect(Object.values(collections.previous!.editors).every(memory => memory.history.length === 0)).toBe(true);
   expect(collections.previous!.collection).toEqual(state.collections!.previous!.collection);
   expect(collections.previous!.removed).toEqual([]);
-});
+}, HEAVY_WORKSPACE_TIMEOUT_MS);
 
 test("an oversized workspace trims further and says so instead of silently failing", () => {
   jest.useFakeTimers();
@@ -148,7 +152,7 @@ test("an oversized workspace trims further and says so instead of silently faili
   expect(writer.snapshot()).toEqual({ kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull });
   const restored = parseWorkspace(JSON.parse(storage.stored.get(key)!));
   expect(restored.collections!.collection.presets).toHaveLength(16);
-});
+}, HEAVY_WORKSPACE_TIMEOUT_MS);
 
 test("a storage quota refusal falls back to smaller forms, then reports that autosave stopped", () => {
   const state = realisticWorkspace(), stored = new Map<string, string>();
@@ -166,7 +170,7 @@ test("a storage quota refusal falls back to smaller forms, then reports that aut
     capture: () => state });
   blocked.activate(); blocked.flush();
   expect(blocked.snapshot().kind).toBe("unavailable");
-});
+}, HEAVY_WORKSPACE_TIMEOUT_MS);
 
 // ---- CORE-10: damaged non-current entries ----
 
@@ -201,4 +205,4 @@ test("a damaged recovery draft or removed preset is dropped with a warning; the 
   const damaged = loadWorkspace(storage, true);
   expect(damaged.writable).toBe(false);
   expect(damaged.error).toContain("Workspace could not be restored");
-});
+}, HEAVY_WORKSPACE_TIMEOUT_MS);

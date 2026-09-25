@@ -65,6 +65,7 @@ describe("independent glint integration oracle",()=>{
     expect(stats.falseBrightPixels).toBe(1);
     expect(()=>errorMetrics(new Float32Array([1]),new Float32Array(2))).toThrow();
   });
+  // Runs the whole fixed 1K/2K oracle study (about 1.2 s locally); slower CI runners need more than the 5 s default.
   test("the full fixed study remains deterministic and shows nontrivial normal-filtering loss",()=>{
     const study=runGlintOracle();
     expect(study.oracleDiagnostics.sampleCount).toBe(245760);
@@ -82,5 +83,5 @@ describe("independent glint integration oracle",()=>{
     expect(covered1.halfVectors.frontal!.error.falseBrightPixels).toBeLessThan(10);
     expect(covered1.halfVectors.grazingX!.error.missedBrightPixels).toBeGreaterThan(0);
     expect(surface1.halfVectors.frontal!.intrinsicAveragingError.falseBrightPixels).toBeGreaterThan(200);
-  });
+  }, 30_000);
 });

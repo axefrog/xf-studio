@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 import { BUILD_TOOLS_SCHEMA, builderEntry } from "./build";
+import { contentIssues, describeContentIssues, SCANNED_TEXT } from "./package-content-scan";
 
 // A private packaging gate. The checked files are the actual installer/update
 // artifacts, not the source `static` tree that Electrobun consumes.
@@ -96,6 +97,12 @@ try { writeFileSync(resolve(scratch, WEBVIEW2_BOOTSTRAPPER), packagedBootstrappe
 finally { rmSync(scratch, { recursive: true, force: true }); }
 if (members.some(name => /(?:^|\/)(?:assets|preview-assets|data)(?:\/|$)|\.sqlite(?:-wal|-shm)?$|\.(?:glb|blend|sav)$/i.test(name)))
   throw Error("Canary bundle contains a private asset or data path.");
+// The allowlist says which files ship; this says what the text ones contain (REL-01): no absolute
+// user-profile path and no email address outside the licence and notices.
+const scanned = members.filter(name => !name.endsWith("/") && SCANNED_TEXT.test(name));
+if (!scanned.includes(views + "build/studio-startup.js")) throw Error("The content scan did not reach the Studio bundle.");
+const personal = scanned.flatMap(name => contentIssues(name, tarBytes(["-xOf", archive, name]).toString("utf8")));
+if (personal.length) throw Error(["Packaged text contains personal paths or addresses:", ...describeContentIssues(personal)].join("\n"));
 
 const packagedVersion = JSON.parse(tar(["-xOf", archive, `${bundle}/Resources/version.json`]));
 if (packagedVersion.identifier !== config.app.identifier || packagedVersion.version !== config.app.version ||
@@ -113,3 +120,4 @@ const digest = createHash("sha256").update(readFileSync(installer)).digest("hex"
 console.log(`Verified unsigned Windows setup: ${installer.slice(root.length + 1)}`);
 console.log(`${config.app.version} ${channel} build ${update.hash}; setup SHA-256 ${digest}`);
 console.log("Ten allowlisted Studio view files (licence and third-party notices included), current notices, Microsoft's signed WebView2 bootstrapper, and one hashed asset-free build tool; no private preview assets or update feed.");
+console.log(`Scanned ${scanned.length} packaged text files: no absolute user paths or email addresses.`);

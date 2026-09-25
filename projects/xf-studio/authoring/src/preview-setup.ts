@@ -63,6 +63,8 @@ export type PreviewSetupSnapshot = {
    * its own Game & tools section.
    */
   setupRequests: number;
+  /** Counts requests to show the card (from the head pane or a menu); the card takes focus only then. */
+  showRequests: number;
   autostart: boolean;
 };
 
@@ -112,6 +114,7 @@ export class PreviewSetupActions {
   private head: { phase: "waiting" | "loading" | "ready" | "failed"; code: HeadLoadFailureCode | null; failures: number } =
     { phase: "waiting", code: null, failures: 0 };
   private setupRequests = 0;
+  private showRequests = 0;
   private setupRevision: number | undefined;
   /** Nothing is requested or loaded until the composition root starts the service. */
   private started = false;
@@ -160,7 +163,7 @@ export class PreviewSetupActions {
       later: { label: "Not now", action: { kind: "previewSetup.consentClose" } },
     } : null;
     return structuredClone({ card, consent, head: this.headView(state, wolvenKit, view, card), setupRequests: this.setupRequests,
-      autostart: this.port.autostart.get() });
+      showRequests: this.showRequests, autostart: this.port.autostart.get() });
   }
 
   capability(action: PreviewSetupAction): PreviewSetupCapability {
@@ -208,7 +211,7 @@ export class PreviewSetupActions {
     if (!allowed.available) return { ok: false, message: allowed.reason! };
     const { preparation, wolvenKit, localSetup } = this.port;
     switch (action.kind) {
-      case "previewSetup.show": this.dismissed = false; this.notify(); return { ok: true };
+      case "previewSetup.show": this.dismissed = false; this.showRequests++; this.notify(); return { ok: true };
       case "previewSetup.dismiss": this.dismissed = true; this.consentOpen = false; this.notify(); return { ok: true };
       case "previewSetup.consent": this.consentOpen = true; this.notify(); return { ok: true };
       case "previewSetup.consentClose": this.consentOpen = false; this.notify(); return { ok: true };
@@ -276,6 +279,7 @@ export class PreviewSetupActions {
     return contact.failures ? { ok: false, message: contact.message ?? "XF Studio couldn't reach its 3D preview service." } : { ok: true };
   }
   private async maybeStart() {
+    if (!this.started) return;
     const state = this.port.preparation.snapshot();
     if (state && shouldAutoStart(state, this.attempted)) {
       this.attempted = true;
@@ -291,14 +295,18 @@ export class PreviewSetupActions {
   private preparationChanged() {
     const state = this.port.preparation.snapshot();
     if (state?.phase === "ready" && !this.announcedReady) { this.announcedReady = true; this.port.localSetup.requestRefresh(); }
-    if (this.looking(state) && this.detection === "idle") void this.detectGame();
+    // Nothing is looked for or started before the composition root starts the service (PREV-23).
+    if (this.started && this.looking(state) && this.detection === "idle") void this.detectGame();
+    // A head that failed to load waits for the next ready preview once the host moves on,
+    // for example after the game folder changed (PREV-24).
+    if (state && state.phase !== "ready" && this.head.phase === "failed") this.head = { phase: "waiting", code: null, failures: 0 };
     this.follow();
     this.notify();
   }
   private wolvenKitChanged() {
     const phase = this.port.wolvenKit.snapshot()?.phase ?? null;
     // Once WolvenKit is ready (downloaded, or .NET installed), the preview can start.
-    if (phase === "ready" && this.lastWolvenKit !== null && this.lastWolvenKit !== "ready")
+    if (this.started && phase === "ready" && this.lastWolvenKit !== null && this.lastWolvenKit !== "ready")
       void this.port.preparation.dispatch({ kind: "preview.refresh" }).then(() => this.maybeStart());
     // Build availability depends on WolvenKit too.
     if (phase !== this.lastWolvenKit && this.lastWolvenKit !== null) this.port.localSetup.requestRefresh();
