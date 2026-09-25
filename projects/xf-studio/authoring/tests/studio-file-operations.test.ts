@@ -4,6 +4,7 @@ import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { initialRecipe, type Recipe } from "../src/recipe";
 import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
+import { looks } from "./fixtures/looks";
 import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
 import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
 
@@ -17,7 +18,7 @@ function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "d
   let saved = 0, packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [{ id: collection.id, name: collection.name, count: 1, revision: 1, updatedAt: "now" }],
-    get: async () => ({ collection, revision: 1, updatedAt: "now" }),
+    get: async () => ({ collection: looks(collection), revision: 1, updatedAt: "now" }),
     save: async value => { saved++; return { collection: structuredClone(value), revision: 2, updatedAt: "now" }; },
     package: async (_action, value) => { packageInput = value; return { ready: true, collectionId: value.id,
       namespace: "xfs_test", modName: "XF Eye Artistry", selectorLabel: "XF Eye Artistry", originalPresetCount: 2, omissions: [

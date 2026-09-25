@@ -9,18 +9,20 @@ import { consequenceOf, type Consequence, type ConsequenceSubject } from "./acti
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
 import { REMOVED_PRESET_LIMIT } from "./collection-workspace";
 import { CollectionServiceError, type CollectionRequest, type CollectionService } from "./collection-service";
-import { layerCapability, type LayerAction } from "./editor-actions";
 import type { MotionActions } from "./motion-actions";
 import type { PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions } from "./preview-quality-actions";
-import type { Layer, Point, WarpField } from "./recipe";
-import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction, type RecipeActions } from "./recipe-actions";
+import type { Layer, Point, Recipe, WarpField } from "./recipe";
+import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./recipe-actions";
+import type { EyeMakeupPort } from "./authoring-eye-makeup";
 import type { SavedAppearanceActions, SavedAppearanceState } from "./saved-appearance-actions";
 import { actionRegistry, FILE_DESCRIPTORS, GESTURE_DESCRIPTORS, REQUEST_DESCRIPTORS,
   type ActionDescriptor, type ValueSchema } from "./studio-action-descriptors";
-import { coded, refusal, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability, type ReasonCode, type ValidationIssue } from "./platform/api";
+import { coded, refusal, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type Capability,
+  type FeatureActionSpec, type ReasonCode, type ValidationIssue } from "./platform/api";
 import type { Registry } from "./platform/core/registry";
-import { STUDIO_REGISTRY, type StudioOwnerActions, type StudioOwnerId } from "./compose/studio-registry";
+import { STUDIO_REGISTRY, type EyeMakeupAction, type EyeMakeupEditorState, type EyeMakeupEffect, type StudioOwnerActions,
+  type StudioOwnerId } from "./compose/studio-registry";
 import type { StudioFileAction } from "./studio-file-operations";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
@@ -50,8 +52,9 @@ export type StudioGestureProposal =
   | { kind: "path.replacePoints"; points: Point[] };
 
 type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerActions[O]> };
-type Services = { document: AuthoringDocument; recipe: RecipeActions;
-  layer: (action: LayerAction) => void; undo: () => boolean;
+type Services = { document: AuthoringDocument;
+  /** Eye makeup's live part and editor state, and where its pure action results are published. */
+  eyeMakeup: EyeMakeupPort; undo: () => boolean;
   /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
@@ -79,7 +82,7 @@ export class StudioApplication {
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
     this.subscribeSources();
   }
-  attach(next: Partial<Omit<Services, "document" | "recipe" | "layer" | "gestures" | "controls">>) {
+  attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
   }
@@ -129,10 +132,11 @@ export class StudioApplication {
       return missingTarget("That control point no longer exists.");
     if (target.kind === "field" && !recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
       return missingTarget("That warp control no longer exists.");
-    if (target.kind === "preset" && !s.collection?.view().draft?.collection.presets.some(preset => preset.id === target.id))
+    // Cheap reads: target checks never clone the draft (CORE-05).
+    if (target.kind === "preset" && !s.collection?.hasPreset(target.id))
       return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");
-    if (target.kind === "collection" && !s.collection?.view().draft) return missing("Collection is still loading.");
-    if ((target.kind === "collection" || target.kind === "preset") && s.collection?.view().busy)
+    if (target.kind === "collection" && !s.collection?.draftIdentity()) return missing("Collection is still loading.");
+    if ((target.kind === "collection" || target.kind === "preset") && s.collection?.isBusy())
       return { available: false, code: "busy", reason: "A collection request is in progress." };
     return { available: true };
   }
@@ -182,17 +186,17 @@ export class StudioApplication {
   }
   /** Bind an adapter's hit to this draft/geometry before offering existing commands. */
   contextFor(hit: StudioContextHit): StudioBoundContext {
-    const draft = this.services.collection?.view().draft;
-    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), collectionId: draft?.collection.id,
+    const draft = this.services.collection?.draftIdentity();
+    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), collectionId: draft?.collectionId,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,
       geometryRevision: this.services.document.geometryVersion.revision });
   }
   private boundContextCapability(context: StudioBoundContext): StudioCapability {
-    const draft = this.services.collection?.view().draft;
+    const draft = this.services.collection?.draftIdentity();
     if (context.collectionRevision !== this.collectionRevision)
       return missingTarget("The collection changed after this menu opened.");
-    if (context.collectionId !== draft?.collection.id)
+    if (context.collectionId !== draft?.collectionId)
       return missingTarget("The collection changed after this menu opened.");
     if (context.hit.kind !== "collection" && context.hit.kind !== "preset" &&
       context.selectedPresetId !== draft?.selected)
@@ -340,9 +344,16 @@ export class StudioApplication {
     return payload ?? domain;
   }
   private handler(owner: string) { return this.handlers[owner as StudioOwnerId] as ActionHandler<StudioAction>; }
+  /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
+  private eyeMakeupSpec(action: EyeMakeupAction) {
+    const route = this.routes.route(action.kind);
+    if (!route.ok || route.owner.owner !== "feature") throw Error(`${action.kind} is not a feature action.`);
+    return route.spec as FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction, string, EyeMakeupEffect>;
+  }
   /**
-   * Each owner's live behaviour over today's services. The eye-makeup handler routes inside
-   * its own closed action union; no kind falls through to another owner's service.
+   * Each owner's live behaviour. Eye makeup's is its module's pure capability and apply over
+   * the live document's part and editor state, published through the document port; the
+   * system families still bind their services. No kind falls through to another owner.
    */
   private bindHandlers(): Handlers {
     const app = this;
@@ -369,13 +380,11 @@ export class StudioApplication {
         },
       },
       "eye-makeup": {
-        capability: action => action.kind === "layer.edit" || action.kind === "layer.setEnabled"
-          ? layerCapability(app.services.document.recipe, action) : app.services.recipe.capability(action),
+        capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
         dispatch: action => {
-          const s = app.services;
-          if (action.kind === "layer.edit" || action.kind === "layer.setEnabled")
-            s.document.withHistoryLabel(historyLabel(action), () => s.layer(action));
-          else s.document.withHistoryLabel(historyLabel(action), () => s.recipe.dispatch(action, !selection(action.kind)));
+          const s = app.services, spec = app.eyeMakeupSpec(action);
+          s.document.withHistoryLabel(historyLabel(action), () =>
+            s.eyeMakeup.commit(action, spec.apply(s.eyeMakeup.state(), action), !selection(action.kind)));
           return undefined;
         },
       },

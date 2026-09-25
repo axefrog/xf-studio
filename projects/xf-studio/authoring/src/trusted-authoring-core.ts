@@ -1,5 +1,6 @@
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { AuthoringDocument } from "./authoring-document";
+import { eyeMakeupPort } from "./authoring-eye-makeup";
 import { AuthoringGeometry } from "./authoring-geometry";
 import { AuthoringGestures } from "./authoring-gestures";
 import { AuthoringHistory } from "./authoring-history";
@@ -35,7 +36,8 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // Form controls apply validated recipe actions; StudioApplication.controlEdit runs the
   // capability gate first and reports failures as typed results, so hosts wire nothing here.
   const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), revert);
-  const app = new StudioApplication({ document, recipe, layer: action => layers.dispatch(action),
-    undo, history, gestures, controls });
-  return { document, geometry, presentation, layers, recipe, gestures, controls, app, undo, history };
+  // Eye makeup's pure capability and apply run over this port; stack edits reset the preview's layer resources.
+  const eyeMakeup = eyeMakeupPort(document, recipe, ports.resetStack);
+  const app = new StudioApplication({ document, eyeMakeup, undo, history, gestures, controls });
+  return { document, geometry, presentation, layers, recipe, eyeMakeup, gestures, controls, app, undo, history };
 }

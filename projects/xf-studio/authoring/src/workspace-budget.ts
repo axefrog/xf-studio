@@ -1,5 +1,6 @@
-import { emptyRecipe, type CollectionDraft, type CollectionWorkspace, type EditorMemory } from "./collection-workspace";
-import type { WorkspaceState } from "./workspace-state";
+import type { CollectionDraft, CollectionWorkspace } from "./collection-workspace";
+import type { LookMemory, PartMemory } from "./platform/api";
+import { serializeWorkspace, type WorkspaceState } from "./workspace-state";
 
 /**
  * Size policy for the persisted browser workspace. Browsers give an origin roughly five
@@ -7,7 +8,7 @@ import type { WorkspaceState } from "./workspace-state";
  * workspace keys, so each key targets at most this many code units (`string.length`).
  */
 export const WORKSPACE_STORAGE_BUDGET = 2_000_000;
-/** Undo entries persisted for each preset that is not selected (the selected preset keeps its full history). */
+/** Undo entries persisted for each preset that is not selected (the selected preset keeps its full history), per feature. */
 export const PERSISTED_BACKGROUND_HISTORY = 5;
 
 /**
@@ -45,7 +46,7 @@ export const WORKSPACE_LEVELS = LEVELS.length;
  * Nothing here changes the live session; only what is written to storage.
  */
 export function encodeWorkspaceAt(state: WorkspaceState, level: number, budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
-  const encoded = JSON.stringify(compactWorkspace(state, LEVELS[Math.max(0, Math.min(level, LEVELS.length - 1))]));
+  const encoded = JSON.stringify(serializeWorkspace(compactWorkspace(state, LEVELS[Math.max(0, Math.min(level, LEVELS.length - 1))])));
   return { encoded, size: encoded.length, level, overBudget: encoded.length > budget };
 }
 
@@ -60,33 +61,37 @@ export function encodeWorkspaceForStorage(state: WorkspaceState, budget = WORKSP
 function compactWorkspace(state: WorkspaceState, level: Level): WorkspaceState {
   const collections = state.collections;
   if (!collections) return level.selected === Infinity ? state
-    : { ...state, ...trimHistory(state, level.selected) };
+    : { ...state, ...trimHistory({ history: state.history, ...(state.historyTrimmed ? { historyTrimmed: true as const } : {}) },
+      level.selected) as Pick<WorkspaceState, "history" | "historyTrimmed"> };
   const current = compactDraft(collections, level, true);
   const recovery = [collections.previous, ...(collections.older ?? [])]
     .filter((draft): draft is CollectionDraft => !!draft).slice(0, level.recovery).map(draft => compactDraft(draft, level, false));
   const compacted: CollectionWorkspace = { ...current,
     ...(recovery.length ? { previous: recovery[0], older: recovery.slice(1) } : {}) };
-  // parseWorkspace restores the editor from the collection's selected preset, so the
-  // top-level editor copy would only duplicate it.
-  return { ...state, recipe: emptyRecipe(), active: 0, selected: 0, history: [], historyTrimmed: undefined, fieldSelection: {},
-    collections: compacted };
+  // The stored form restores the editor from the collection's selected look, so it keeps no loose editor copy.
+  return { ...state, collections: compacted };
 }
 
 function compactDraft(draft: CollectionDraft, level: Level, current: boolean): CollectionDraft {
-  const editors: Record<string, EditorMemory> = {};
-  for (const [id, memory] of Object.entries(draft.editors)) {
+  const memory: Record<string, LookMemory> = {};
+  for (const [id, look] of Object.entries(draft.memory)) {
     const keep = !current ? 0 : id === draft.selected ? level.selected : level.background;
-    editors[id] = trim(memory, keep);
+    memory[id] = trimLook(look, keep);
   }
   return { collection: draft.collection, revision: draft.revision, selected: draft.selected,
     // Recovery drafts keep their presets but not their removed-preset lists.
-    editors, removed: (current && level.removed > 0 ? draft.removed.slice(-level.removed) : [])
-      .map(entry => ({ ...entry, editor: trim(entry.editor, 0) })) };
+    memory, removed: (current && level.removed > 0 ? draft.removed.slice(-level.removed) : [])
+      .map(entry => ({ ...entry, memory: trimLook(entry.memory, 0) })) };
 }
 
-function trim(memory: EditorMemory, keep: number): EditorMemory { return { ...memory, ...trimHistory(memory, keep) }; }
+/** Every feature's history of one look, trimmed alike. */
+function trimLook(look: LookMemory, keep: number): LookMemory {
+  return Object.fromEntries(Object.entries(look).map(([feature, memory]) =>
+    [feature, Array.isArray(memory.history) ? { ...memory, ...trimHistory(memory, keep) } : memory]));
+}
 /** Keep the latest `keep` Undo entries and record when older ones were dropped, so the UI can say so. */
-function trimHistory(memory: Pick<EditorMemory, "history" | "historyTrimmed">, keep: number): Pick<EditorMemory, "history" | "historyTrimmed"> {
+function trimHistory<T extends Pick<PartMemory, "history" | "historyTrimmed">>(memory: T, keep: number):
+  Pick<PartMemory, "history" | "historyTrimmed"> {
   const history = keep <= 0 ? [] : keep === Infinity ? memory.history : memory.history.slice(-keep);
-  return { history, ...(memory.historyTrimmed || history.length < memory.history.length ? { historyTrimmed: true } : {}) };
+  return { history, ...(memory.historyTrimmed || history.length < memory.history.length ? { historyTrimmed: true as const } : {}) };
 }

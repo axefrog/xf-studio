@@ -50,6 +50,8 @@ export class CollectionApplication implements CollectionViewPort {
   }
   subscribe(listener: () => void) { return this.files.subscribe(listener); }
   workspaceSnapshot() { return this.service.snapshot(); }
+  /** The selected preset's ID without copying the draft; undefined while loading or with no preset selected. */
+  selectedPresetId() { return this.service.selectedPreset().id; }
   persistence() { return this.service.persistence(); }
   currentLayerCount() { return this.document.recipe.layers.length; }
   capability(action: ViewAction) { return this.app.capability(action); }

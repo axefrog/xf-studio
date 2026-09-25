@@ -54,7 +54,7 @@ test("workspace writer debounces the latest snapshot and keeps verify storage is
   workspace.recipe.layers[0].color = "#123456";
   writer.request();
   await Bun.sleep(25);
-  expect(JSON.parse(storage.get(key)!).recipe.layers[0].color).toBe("#123456");
+  expect(JSON.parse(storage.get(key)!).look.parts["eye-makeup"].body.layers[0].color).toBe("#123456");
   expect(storage.has(workspaceKeys(false).workspace)).toBe(false);
   expect(writer.snapshot().kind).toBe("saved");
 });

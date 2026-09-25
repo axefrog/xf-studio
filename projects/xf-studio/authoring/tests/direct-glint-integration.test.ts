@@ -9,12 +9,13 @@ import {UnsupportedMaterialError,compileFlatPreset} from "../src/preset-compiler
 import {freshWorkspace,parseWorkspace} from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
 import {LookLibrary} from "../src/library-store";
+import { storedWorkspace } from "./fixtures/looks";
 
 test("direct-light model is explicit recipe-8 browser data and stays game-export gated",()=>{
   const recipe=initialRecipe();recipe.schema="xfs/recipe-8";
   recipe.layers[0]!.finish="glitter";recipe.layers[0]!.flakes=defaultDirectGlintFlakes();
   expect(parseRecipe(recipe).layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
-  expect(parseWorkspace(freshWorkspace(recipe)).recipe.layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
+  expect(parseWorkspace(storedWorkspace(freshWorkspace(recipe))).recipe.layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Direct study",
     presets:[{id:crypto.randomUUID(),name:"Purple glints",revision:1,recipe}]});
   expect(collection.presets[0]!.recipe.layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
@@ -37,7 +38,7 @@ test("clustered study is recipe-9 only and round-trips without changing the orig
   const recipe=structuredClone(old);recipe.schema="xfs/recipe-9";
   recipe.layers[0]!.flakes=defaultClusteredGlintFlakes();
   expect(parseRecipe(recipe)).toEqual(recipe);
-  expect(parseWorkspace(freshWorkspace(recipe)).recipe).toEqual(recipe);
+  expect(parseWorkspace(storedWorkspace(freshWorkspace(recipe))).recipe).toEqual(recipe);
   const db=new LookLibrary(":memory:");
   try{const saved=db.save({name:"Clustered study",recipe});expect(db.get(saved.id).recipe).toEqual(recipe);}
   finally{db.close();}
@@ -53,7 +54,7 @@ test("denser fine speckles opt into recipe-10 while old direct looks remain byte
   const recipe=structuredClone(old);recipe.schema="xfs/recipe-10";
   recipe.layers[0]!.flakes=defaultFineSpeckleFlakes();
   expect(parseRecipe(recipe)).toEqual(recipe);
-  expect(parseWorkspace(freshWorkspace(recipe)).recipe).toEqual(recipe);
+  expect(parseWorkspace(storedWorkspace(freshWorkspace(recipe))).recipe).toEqual(recipe);
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Fine study",
     presets:[{id:crypto.randomUUID(),name:"Speckles",revision:1,recipe}]});
   expect(collection.presets[0]!.recipe).toEqual(recipe);

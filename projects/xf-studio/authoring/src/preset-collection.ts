@@ -4,6 +4,8 @@ import { parseExportDiagnostics, surfaceKey, type ExportDiagnostics, type Preset
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { PLATE_LIFT_MM } from "./plate-lift";
 import { parseRecipe, type Recipe } from "./recipe";
+import { EYE_MAKEUP_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
+import { COLLECTION_2, type LookCollection } from "./platform/api";
 
 export type PresetCollection = {
   // File-format compatibility ID; product branding does not change existing inputs.
@@ -15,8 +17,18 @@ export type PresetCollection = {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const title = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= 120;
 
-/** Identity is independent of display names, revisions and collection order. */
+/**
+ * The eye-makeup package pipeline's view of a collection: `xfas/collection-1`, one recipe per
+ * preset. It reads `xfas/collection-1` as it always has, and `xfs/collection-2` through the
+ * look reader (`eyeMakeupCollection`), so exported files of either schema build the same.
+ * Identity is independent of display names, revisions and collection order.
+ */
 export function parseCollection(value: unknown, allowEmpty = false): PresetCollection {
+  if ((value as { schema?: unknown } | null)?.schema === COLLECTION_2) {
+    const view = eyeMakeupCollection(STUDIO_PARTS.readCollection(value, allowEmpty));
+    if (!allowEmpty && !view.presets.length) throw Error("This collection has no eye-makeup looks to build.");
+    return view;
+  }
   const input = value as PresetCollection;
   if (!input || input.schema !== "xfas/collection-1" || !uuid.test(input.id ?? "") || !title(input.name) || !Array.isArray(input.presets) || (!allowEmpty && !input.presets.length))
     throw Error("Expected a named XF Studio collection with a stable UUID and at least one preset.");
@@ -28,6 +40,19 @@ export function parseCollection(value: unknown, allowEmpty = false): PresetColle
     return { id:p.id,name:p.name,revision:p.revision,recipe:parseRecipe(p.recipe) };
   });
   return { schema:input.schema,id:input.id,name:input.name,presets };
+}
+
+/**
+ * The eye-makeup view of a look collection: each look that has an eye-makeup part, with that
+ * part as its recipe. A look without one is not eye makeup, so the eye-makeup mod has nothing
+ * of it to package. Each recipe is parsed from its part (a copy).
+ */
+export function eyeMakeupCollection(collection: LookCollection): PresetCollection {
+  return { schema: "xfas/collection-1", id: collection.id, name: collection.name,
+    presets: collection.presets.flatMap(look => {
+      const recipe = STUDIO_PARTS.part<Recipe>(look, EYE_MAKEUP_FEATURE);
+      return recipe ? [{ id: look.id, name: look.name, revision: look.revision, recipe }] : [];
+    }) };
 }
 
 /** Texture depot paths of one preset; the channels present depend on its export route. */

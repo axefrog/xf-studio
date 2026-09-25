@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace, WORKSPACE_1 } from "../src/workspace-state";
 
 const maxWorkspaceBytes = 16_000_000;
 
@@ -23,6 +23,11 @@ export class DesktopWorkspaceStore {
     parseWorkspace(JSON.parse(raw));
     return raw;
   }
+  /**
+   * Where the first save by a build that writes `xfs/workspace-2` keeps the `xfas/workspace-1`
+   * file it replaces, so an older XF Studio (0.1.0-alpha.1 reads only version 1) can be given it back.
+   */
+  backupName(verification: boolean) { return verification ? "verification-workspace.v1.bak" : "workspace.v1.bak"; }
   /** The file name a Start fresh keeps the unreadable workspace under. */
   fileName(verification: boolean) { return verification ? "verification-workspace.json" : "workspace.json"; }
   /**
@@ -41,11 +46,15 @@ export class DesktopWorkspaceStore {
     if (Buffer.byteLength(raw) > maxWorkspaceBytes) throw Error("Desktop workspace exceeds the size limit.");
     const parsed = parseWorkspace(JSON.parse(raw));
     // Refuse to replace an unreadable prior draft. The user can recover its file.
-    this.load(verification);
+    const previous = this.load(verification);
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     const path = this.path(verification), temporary = resolve(this.root, `.workspace-${randomUUID()}.tmp`);
+    // Downgrade protection: the first version-2 write keeps the version-1 file beside it, once.
+    const backup = resolve(this.root, this.backupName(verification));
+    if (previous !== null && !existsSync(backup) && (JSON.parse(previous) as { schema?: unknown }).schema === WORKSPACE_1)
+      copyFileSync(path, backup);
     try {
-      writeFileSync(temporary, JSON.stringify(parsed), { mode: 0o600, flag: "wx" });
+      writeFileSync(temporary, JSON.stringify(serializeWorkspace(parsed)), { mode: 0o600, flag: "wx" });
       const handle = openSync(temporary, "r+");
       try { fsyncSync(handle); } finally { closeSync(handle); }
       renameSync(temporary, path);

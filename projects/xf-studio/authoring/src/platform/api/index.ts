@@ -2,3 +2,4 @@
 export * from "./actions";
 export * from "./capability";
 export * from "./feature";
+export * from "./document";

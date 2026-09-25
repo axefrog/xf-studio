@@ -26,7 +26,10 @@ try {
   const editor = read("005-preset-collection/editor-collection.json");
   const saved = library.save({ collection: editor });
   const changed = structuredClone(saved.collection);
-  changed.presets[1].recipe.layers[0].opacity = 0.5;
+  // Written for the pre-migration store (presets held `recipe`); the migrated store holds looks with parts.
+  const recipeOf = (preset: unknown) => (preset as { recipe?: { layers: { opacity: number }[] } }).recipe ??
+    (preset as { parts: Record<string, { body: { layers: { opacity: number }[] } }> }).parts["eye-makeup"].body;
+  recipeOf(changed.presets[1]).layers[0].opacity = 0.5;
   changed.presets[2].name = "Renamed preset";
   const second = library.save({ collection: changed, revision: saved.revision });
   library.save({ collection: second.collection, revision: second.revision });

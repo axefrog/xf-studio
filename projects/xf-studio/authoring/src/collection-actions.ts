@@ -1,8 +1,9 @@
 import { CollectionSession, type EditorSnapshot } from "./collection-session";
 import { COLLECTION_RECOVERY_LIMIT } from "./collection-workspace";
 import type { CollectionWorkspace, PresetCommand } from "./collection-workspace";
-import type { PresetCollection } from "./preset-collection";
 import type { StoredCollection } from "./collection-store";
+import { LIVE_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
+import type { Look, LookCollection } from "./platform/api";
 import type { Recipe } from "./recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "./validation-issues";
 import { refusal, type ReasonCode } from "./platform/api";
@@ -11,7 +12,8 @@ export type CollectionAction =
   | { kind: "preset.edit"; command: PresetCommand }
   | { kind: "preset.select"; id: string }
   | { kind: "collection.rename"; name: string }
-  | { kind: "collection.open"; collection: PresetCollection; revision?: number }
+  /** A stored collection of either schema (`xfas/collection-1` or `xfs/collection-2`). */
+  | { kind: "collection.open"; collection: LookCollection | unknown; revision?: number }
   | { kind: "collection.undoOpen" }
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
   | { kind: "collection.saved"; result: StoredCollection; sourceId: string };
@@ -49,7 +51,7 @@ export class CollectionActions {
     const oldest = recovery.at(-1);
     return { id: s.collection.id, name: s.collection.name, revision: s.revision, selected: s.selected,
       presets: s.collection.presets.map(p => ({ id: p.id, name: p.name, revision: p.revision,
-        layers: p.recipe.layers.length })),
+        layers: Number(STUDIO_PARTS.summary(p, LIVE_FEATURE)?.layers ?? 0) })),
       removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,
@@ -58,12 +60,18 @@ export class CollectionActions {
         revision: oldest.revision } : undefined };
   }
   snapshot(): CollectionWorkspace { return this.session.snapshot(); }
-  /** Trusted, uncloned preset list for the service's own comparisons. Never hand it to a view. */
-  presetsForComparison(): readonly { readonly id: string; readonly name: string; readonly recipe: Recipe }[] {
+  /** Trusted, uncloned look list for the service's own comparisons. Never hand it to a view. */
+  presetsForComparison(): readonly Readonly<Look>[] {
     return this.session.state.collection.presets;
   }
   /** Selected preset ID without cloning; undefined when the collection has no selected preset. */
   selected(): string | undefined { return this.session.state.selected; }
+  /** Draft identity without cloning (CORE-05): the collection ID and the selected preset. */
+  identity(): { collectionId: string; selected?: string } {
+    return { collectionId: this.session.state.collection.id, selected: this.session.state.selected };
+  }
+  /** Whether the draft has this preset, without cloning (CORE-05). */
+  hasPreset(id: string): boolean { return this.session.state.collection.presets.some(preset => preset.id === id); }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

@@ -117,7 +117,7 @@ Portable recipes are versioned; older versions load and migrate in memory withou
 | `xfs/recipe-9` | Clustered fine Glitter (`uv-cell-direct-2`) |
 | `xfs/recipe-10` | Dense fine-speckle Glitter (`uv-cell-direct-3`) |
 
-Older Studio builds cannot read newer schemas. The portable collection identifier `xfas/collection-1` and existing browser workspace keys remain unchanged for compatibility.
+Older Studio builds cannot read newer schemas. Collections are looks with one part per feature (`xfs/collection-2` in memory; see the [feature-module platform](../../../research/authoring/feature-module-platform.md#step-2-status)). Exported collection files and library rows are written as `xfas/collection-1` whenever that format holds them exactly, so 0.1.0-alpha.1 still reads them; the workspace is `xfs/workspace-2` under the existing browser keys, and desktop keeps the replaced version-1 file as `workspace.v1.bak`.
 
 ## Preview assets
 

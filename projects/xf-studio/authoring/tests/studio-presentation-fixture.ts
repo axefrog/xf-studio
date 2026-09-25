@@ -4,7 +4,7 @@ import { AuthoringGestures } from "../src/authoring-gestures";
 import { CollectionApplication } from "../src/collection-application";
 import type { CollectionTransport } from "../src/collection-service";
 import { collectionDraft } from "../src/collection-workspace";
-import { applyLayerAction } from "../src/editor-actions";
+import { eyeMakeupPort } from "../src/authoring-eye-makeup";
 import { PreviewQualityActions } from "../src/preview-quality-actions";
 import type { PresetCollection } from "../src/preset-collection";
 import { RecipeActions } from "../src/recipe-actions";
@@ -31,11 +31,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const gestures = new AuthoringGestures(document, recipe, undo);
   const controls = new AuthoringControlEdits(document, action => recipe.dispatch(action), undo);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, recipe, gestures, controls, undo, quality,
-    layer: action => {
-      const next = applyLayerAction(document.recipe, document.recipe.layers[document.active]?.id, action);
-      document.checkpoint(); document.replaceRecipe(next.recipe, next.active);
-    } });
+  const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo, quality });
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: structuredClone(document.recipe) }] };

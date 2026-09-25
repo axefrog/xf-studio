@@ -8,7 +8,7 @@ import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/local-settings-store";
 import { createPackageHandler } from "../../src/package-server";
 import { collectionDraft } from "../../src/collection-workspace";
-import { freshWorkspace, loadWorkspace } from "../../src/workspace-state";
+import { freshWorkspace, loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -135,7 +135,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     await action("check"); await action("download");
     const retry = action("applyAndRestart");
     await Bun.sleep(10);
-    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(freshWorkspace()) },
+    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace())) },
       true)).status).toBe(204);
     expect((await post("/api/desktop/workspace/close-ack",
       { schema: "xfs/desktop-close-ack-1", nonce: requested[1], status: "saved" })).status).toBe(409);
@@ -146,7 +146,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     await Bun.sleep(10);
     const saved = await fetch(base + "/api/desktop/workspace", { method: "POST",
       headers: { ...headers, "X-XFS-Update-Flush": requested[2] },
-      body: JSON.stringify({ workspace: JSON.stringify(freshWorkspace()) }) });
+      body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(freshWorkspace())) }) });
     expect(saved.status).toBe(204);
     expect((await post("/api/desktop/workspace/close-ack",
       { schema: "xfs/desktop-close-ack-1", nonce: requested[2], status: "saved" })).status).toBe(204);
@@ -156,7 +156,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     const quitting: { response?: { allow: boolean } } = {};
     trial.beforeQuit(quitting);
     expect(quitting.response).toBeUndefined();
-    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(freshWorkspace()) })).status).toBe(204);
+    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace())) })).status).toBe(204);
     const stale: { response?: { allow: boolean } } = {};
     trial.beforeQuit(stale);
     expect(stale.response).toEqual({ allow: false });
@@ -204,11 +204,11 @@ test("desktop workspace survives a changed loopback port without mixing verifica
   const headers = { Cookie: firstCookie, Origin: firstOrigin, "Content-Type": "application/json" };
   try {
     expect((await fetch(endpoint, { method: "POST", headers: { Origin: firstOrigin, "Content-Type": "application/json" },
-      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(403);
+      body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(workspace)) }) })).status).toBe(403);
     expect((await fetch(endpoint, { method: "POST", headers: { ...headers, Origin: "https://attacker.example" },
-      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(403);
+      body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(workspace)) }) })).status).toBe(403);
     expect((await fetch(endpoint, { method: "POST", headers,
-      body: JSON.stringify({ workspace: JSON.stringify(workspace) }) })).status).toBe(204);
+      body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(workspace)) }) })).status).toBe(204);
     expect(await (await fetch(firstOrigin + "/api/desktop/workspace", { headers: { Cookie: firstCookie } })).json())
       .toMatchObject({ workspace: null });
     expect((await fetch(endpoint, { method: "POST", headers,
@@ -242,7 +242,7 @@ test("an unreadable desktop workspace is preserved and cannot be silently replac
     const endpoint = origin + "/api/desktop/workspace?verify=1";
     expect((await fetch(endpoint, { headers: { Cookie: cookie } })).status).toBe(409);
     expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: origin,
-      "Content-Type": "application/json" }, body: JSON.stringify({ workspace: JSON.stringify(freshWorkspace()) }) })).status)
+      "Content-Type": "application/json" }, body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(freshWorkspace())) }) })).status)
       .toBe(422);
     expect(readFileSync(file, "utf8")).toBe("damaged draft");
   } finally { desktop.stop(); }

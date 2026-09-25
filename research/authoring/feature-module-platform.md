@@ -1,6 +1,6 @@
 # XF Studio feature-module platform
 
-**Status:** accepted design, 25 September 2026; implementation per §8, with step 1 (registry and routing) built on 26 September. It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
+**Status:** accepted design, 25 September 2026; implementation per §8, with step 1 (registry and routing) and step 2 (the look/part document model) built on 26 September. It answers the [code-health](code-health.md) finding CORE-03 (High) and the related findings PIPE-12, CORE-08, CORE-09, CORE-02, UI-02, UI-05 and UI-11. The [architecture contract](architecture-contract.md) still governs. Code paths are relative to `projects/xf-studio/authoring/src/` unless a link says otherwise.
 
 **Why.** XF Studio is a platform. Eye makeup is its first feature module. Planned modules each get a dedicated effort:
 
@@ -150,10 +150,10 @@ No evaluator branches on `recipe.schema`, and each layer's `flakes` already name
 
 | Input | Reader | In memory | Writes |
 |---|---|---|---|
-| `eye-artistry/recipe-1`, `xfs/recipe-2`…`10` files | eye-makeup `lift` → unchanged `parseRecipe` → part-1 → part-2 | new preset with an eye-makeup part | nothing until the user saves |
-| `xfas/collection-1` (files, SQLite rows, drafts) | platform reader wraps each `preset.recipe` as an eye-makeup part envelope | `xfs/collection-2` | a new SQLite revision only on explicit save; old rows never rewritten |
+| `eye-artistry/recipe-1`, `xfs/recipe-2`…`11` files | eye-makeup `lift` → unchanged `parseRecipe` → part-1 (→ part-2 from step 3) | new preset with an eye-makeup part | nothing until the user saves |
+| `xfas/collection-1` (files, SQLite rows, drafts) | platform reader wraps each `preset.recipe` as an eye-makeup part envelope | `xfs/collection-2` | a new SQLite revision only on explicit save; old rows never rewritten. Rows and exported files use the **oldest schema that holds the content exactly** (see [step 2 decisions](#step-2-status)) |
 | SQLite v2 | unchanged tables; the JSON rows describe their own schema | — | no DDL change |
-| `xfas/workspace-1` (editor, histories, recovery drafts) | histories become eye-makeup part history; editor memory becomes eye-makeup editor state | `xfs/workspace-2` | same key; desktop keeps `workspace.v1.bak` |
+| `xfas/workspace-1` (editor, histories, recovery drafts) | histories become eye-makeup part history; editor memory becomes eye-makeup editor state; `glitterChoices` becomes eye makeup's feature memory | `xfs/workspace-2` | same key; desktop keeps `workspace.v1.bak` |
 
 Two defects must be avoided:
 
@@ -420,7 +420,7 @@ This is a cleanup track, so the High-findings merge pause does not block it.
 | # | Step | Gate | Effort | Closes |
 |---|---|---|---|---|
 | 1 | `platform/api` types, `Registry`, system families; the eye-makeup core module registers the existing tables moved as-is; `StudioApplication` derives kind sets and Undo policy from the registry, routes by owner with an exhaustive check, removes both fallbacks, returns structured codes. *Done 26 Sep (`claude/platform-step1`); see [step 1 status](#step-1-status).* | golden registry/descriptor snapshot equals the pre-change one; application tests unchanged | 3 | CORE-08, CORE-15, part of CORE-03 |
-| 2 | Look/part model, `collection-2` reader/writer, eye-makeup part-1 codec; `CollectionSession`/`CollectionService`/store on parts; canonical comparison in `save()` and baselines; `workspace-2` with per-feature editor memory | parity gates (§2); SQLite fixture; workspace-1 fixtures restore identical state | 5 | CORE-03 (data), CORE-05 |
+| 2 | Look/part model, `collection-2` reader/writer, eye-makeup part-1 codec; `CollectionSession`/`CollectionService`/store on parts; canonical comparison in `save()` and baselines; `workspace-2` with per-feature editor memory. *Done 26 Sep (`claude/platform-step2`); see [step 2 status](#step-2-status).* | parity gates (§2); SQLite fixture; workspace-1 fixtures restore identical state | 5 | CORE-03 (data), CORE-05 |
 | 3 | Part-2 with the per-layer model registry; `selectGlitterModel` stops touching the schema; minimal-schema recipe export | parity gates; every Glitter fixture renders identically | 2 | CORE-09 |
 | 4 | `LookHistory` (part and look entries, chunk store, Redo), generic gesture and control transactions, `fitWorkspace` budgets | existing Undo/Redo/gesture/control tests; size benchmark under budget; reload keeps ≥10 steps | 4 | CORE-02, part of CORE-11 |
 | 5 | Presentation `features()`/`feature(id)`; eye-makeup panels move to `features/eye-makeup/view`; layout, panel meta and activity sources from contributions; `recipe.undo` → `history.undo`; `git mv` of eye-makeup files into `features/eye-makeup` and `engines/layered-makeup` (import rewrites only) | studio-ui logic and boundary tests; style guide rebuilt; `?verify=1` with a saved dock layout restored | 5 | CORE-03 (routing), UI-10 |
@@ -464,13 +464,51 @@ Built on 26 September in `claude/platform-step1`. Behaviour, action IDs, seriali
 
 **Cost.** Measured on the same machine against the pre-change code: no change within noise. Routing costs the same or less; a six-action capability sweep dropped from 0.67 to 0.57 µs. Figures are in the [ledger](code-health.md).
 
-**Step 2 needs:**
+Step 2 built everything step 1 listed as its needs; see below.
 
-- `PartCodec`, `EditorCodec` and the `Look` envelope in `platform/api`.
-- The `xfs/collection-2` reader and writer, and the eye-makeup part-1 codec (a wrapper of `parseRecipe`).
-- `CollectionSession`, `CollectionService` and the store on parts, with canonical comparison in `save()` and in the baselines.
-- `workspace-2` with per-feature editor memory.
-- Replacing the eye-makeup handler's service calls with pure `capability`/`apply` over `FeatureState`, so the registry spec can carry them.
+### Step 2 status
+
+Built on 26 September in `claude/platform-step2`. Appearance, exported archive members and the presentation port are unchanged; the stored workspace and new collection revisions change format as described here.
+
+**What exists.**
+
+- `src/platform/api/document.ts`: `PartEnvelope`, `PartCodec` (with `lift`, `downgrade`, `summary`, `maxBytes` and the `legacy` collection-1 claim), `EditorCodec`, `MemoryCodec`, `Look`/`LookCollection` (`xfs/collection-2`), `PartMemory`/`LookMemory`, `FeatureState`/`FeatureResult` and `canonicalJson`. `actions.ts` adds `FeatureActionSpec` and `featureActionTable`; `FeatureModule` now carries `part`, `editor` and `memory`.
+- `src/platform/core/document.ts`: `PartRegistry`, the platform's document codec. It reads collection-1 and collection-2 (`readCollection`, `readPreset`, `readIdentity` for lists), writes collection-2 (`write`) or the minimal schema (`writeMinimal`, `writePresetMinimal`), compares canonically (`canonicalParts`) and reads and writes per-feature memory (`readMemory`, `readFeatureMemory`, `writeMemory`, `readFeatureWide`). Parts and memory of unregistered features are kept verbatim.
+- `src/features/eye-makeup/`: `part.ts` (`xfs/eye-makeup-part-1`, the recipe verbatim through `parseRecipe`; the editor codec for active layer, selected point and warp selection; the feature memory for remembered Glitter and Colour-shift settings) and `core.ts` (pure `eyeMakeupCapability` and `applyEyeMakeup` over `FeatureState<Recipe, EyeMakeupEditorState>`). The registry's specs carry them for all 29 actions.
+- `src/compose/studio-registry.ts`: `STUDIO_PARTS` (the part registry of the composed features) and `LIVE_FEATURE`, the feature the one live editor document edits until the look history (step 4).
+- Collections: `collection-workspace.ts` holds drafts of looks with memory by look and feature, reads workspace-1 drafts (`readCollectionWorkspaceV1`) and workspace-2 drafts (`parseCollectionWorkspace`) and writes the latter. `CollectionSession`, `CollectionActions`, `CollectionService` and the SQLite `CollectionLibrary` work on looks; the eye-makeup package pipeline takes `eyeMakeupCollection(looks)`, its collection-1 view, and `parseCollection` reads either schema.
+- Workspace: `workspace-state.ts` reads workspace-1 and workspace-2 and writes workspace-2 (`serializeWorkspace`); `workspace-budget.ts` trims every feature's history alike before serializing; the desktop store writes the serialized form and keeps the `.bak`.
+- `StudioApplication`'s eye-makeup handler runs the registered spec's `capability` and `apply` over `EyeMakeupPort` (`authoring-eye-makeup.ts`), which reads the live document without copying and publishes the result exactly as the recipe and layer services always have (one checkpoint, the state, the render effect).
+
+**Decisions** (open details in §2, settled here):
+
+- **In memory, a look's registered parts are `{ schema: current, body: parsed }`.** A parsed part must be plain data, so the in-memory look and its stored form have the same shape; `readPart` normalizes every read.
+- **Writers use the oldest schema that holds the content exactly.** A SQLite row or an exported collection file is `xfas/collection-1` when every look holds exactly eye makeup's part in a form part-1 holds (`downgrade`); otherwise `xfs/collection-2`. So a library and an exported file of eye-makeup looks stay readable by the released 0.1.0-alpha.1, which was checked by running that release's own readers on the new outputs: it reads the collection-1 export, lists and reads a library holding new rows and saves on top of them, refuses a collection-2 file without writing, and treats a workspace-2 as unreadable and protected. The collection-2 writer is exercised as soon as a look has a part the old format cannot hold (tests use an unregistered feature). The workspace always writes version 2: per-feature editor memory is its reason to exist.
+- **Glitter and Colour-shift memory is feature-wide.** Workspace-1's `glitterChoices` (keyed `<preset>/<layer>`) becomes `features["eye-makeup"].choices` verbatim, so settings of a preset that is not loaded come back if its collection is opened again. The pure action state gets the current look's entries keyed by layer (`EyeMakeupEditorState.choices`), and the port writes changed entries back under the preset. So `FeatureModule` has `editor` (per look: active layer, selection, warp selection) and optional `memory` (feature-wide), and the action state's `E` is built by the host from both.
+- **Stored workspace-2.** `look` holds the loose editor (parts and memory by feature) only when no collection draft exists, since the selected look restores the editor; `features` holds each feature's workspace memory; each draft stores `memory[preset][feature] = { editor, partSchema, history, historyTrimmed? }`, with removed presets and recovery drafts alike. History entries are part bodies of `partSchema`; the look history of step 4 replaces them. View state (UV view, camera, preferences, preview setup, saved V) is unchanged.
+- **The in-memory `WorkspaceState` keeps the live document's fields** (`recipe`, `active`, `selected`, `history`, `fieldSelection`, `glitterChoices`) as the one live eye-makeup document, which step 4 replaces; entries of unregistered features ride in `otherFeatures`. Only `serializeWorkspace` output is ever stored.
+- **Canonical comparison** is `canonicalJson(serialize(parse(part)))` (keys sorted), in the store's `save()` and in `CollectionService` baselines; the baseline also keeps the raw JSON so the common unchanged case costs one stringify.
+- **A newer part schema of a registered feature is refused on read** ("saved by a newer version of XF Studio"), so a workspace holding one stays protected and a library row holding one is never overwritten; collection lists read identity only (`readIdentity`) and still list it. Keeping such parts verbatim and read-only, like unregistered features, can come with the first real part-2.
+- **Sparse looks.** Stashing an empty recipe does not add an eye-makeup part to a look that had none; new presets still get one, as they always have.
+- **Layer actions keep their checkpoint rule** (always checkpoint, as `AuthoringLayerActions` did), so their results report `changed: true`; recipe actions report the existing `changed` test.
+- **CORE-05.** Target checks, context binding and request capability read the draft's identity (`hasPreset`, `draftIdentity`, `isBusy`, the summary) instead of cloning it, and the Glitter-model preset lookup reads the selected preset ID instead of snapshotting (which also stashed). The package request still takes a snapshot, because it must include unsaved edits.
+
+**Parity gates** (tests in `tests/look-model.test.ts`; goldens captured from the step-1 code at `eb11d7f` by the scripts in `tests/fixtures/`):
+
+- **Workspace-1:** four deterministic fixtures (every stored field, a loose editor, a large workspace of 6 × 12 layers with 80-step histories, 20 removed presets and four recovery drafts, and a damaged one) restore exactly the observable state the step-1 code restored: every preset's editor after switching, restored removed presets, recovery drafts, `historyTrimmed`, Glitter and shift memory, view state and warnings. The same holds after storing that state as workspace-2 at each of the four budget levels and restoring it.
+- **Recipes and collections:** every recipe schema (1–11) and every committed collection fixture reads to the same recipes through the old and the new path; masks are byte-identical at 512, 1K and 2K; compiled maps are byte-identical; `parseCollection`, `planCollection` and the package filter keep the step-1 digests for collection-1 input, and give them again from the minimal and the collection-2 forms (diagnostic knobs aside, which only experiment files carry).
+- **Real Build:** the four-preset fixture (Experiment 005's editor collection) built with WolvenKit 9.0.1 before the change and after it, from the file written by the new minimal writer and from its collection-2 form: all 16 unbundled archive members, all 12 DDS and the `.archive.xl` are byte-identical (the archive container's own hash varies from run to run, also between two post-change runs).
+- **SQLite:** a library written by the step-1 stores (a v1 look library upgraded to v2, then saves) lists and reads unchanged; its rows are never rewritten; saving an unchanged collection adds no preset version (the step-1 store had bumped every migrated preset here); a change adds exactly one; reopening compares canonically.
+- **Downgrade:** desktop keeps `workspace.v1.bak` (or `verification-workspace.v1.bak`) once, byte for byte, on the first version-2 save; a workspace from a newer build is never replaced; browser storage refuses to overwrite an unreadable or newer workspace, as before.
+
+**Cost** (same machine, large fixture with 16-layer looks; median): restoring workspace-1 83 → 88 ms, restoring the stored form 19 → 28 ms (parts are parsed and size-checked on read), encoding 2.5 ms either way, stored size 2,258,391 → 2,262,080 code units (+0.2%). `snapshot()` 90 ms either way. CORE-05 reads: `targetCapability(preset)` 240 ms → 1 µs, `contextQuery(preset)` 1.56 s → 6 µs, `requestCapability(package)` 90 ms → 5 µs. Six eye-makeup `capability()` calls 1.3 → 1.7 µs; `dispatch(layer.setOpacity)` 200 → 205 µs (noise).
+
+**Step 3 needs:**
+
+- `xfs/eye-makeup-part-2` with the per-layer model registry; `part.accepts` gains part-2, `current` moves to it, and `downgrade(part, part-1)` returns the recipe when every layer's model part-1 can hold, so the minimal writers keep producing collection-1 for the alpha.
+- `selectGlitterModel` and `applyRecipeAction` stop touching `recipe.schema`; the eye-makeup codec parses part-1 bodies into part-2.
+- The minimal recipe export for "Export recipe".
+- Decide whether a newer part schema of a registered feature is kept read-only instead of refused.
 
 **Parallelism.** Steps 1–4 are the format-changing core. Steps 5–6 and 7 can run in parallel after step 4. Step 8 needs only steps 1–2.
 

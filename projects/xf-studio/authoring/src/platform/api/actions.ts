@@ -17,10 +17,14 @@ export type ActionDescriptor<Scope extends string = string> = { scope: readonly 
   payload: PayloadSchema; variants?: Record<string, { payload: PayloadSchema; undo: UndoPolicy }>;
   effect: ActionEffect };
 
+import type { Capability } from "./capability";
+import type { FeatureResult, FeatureState } from "./document";
+
 /**
- * One registered action. Migration step 1 registers the existing descriptor (scope,
- * payload, variants, effect and Undo policy) as-is; history labels, limits/units and
- * consequence overrides join the spec in later steps (feature-module platform §8).
+ * One registered action. Migration step 1 registered the existing descriptor (scope,
+ * payload, variants, effect and Undo policy) as-is; a feature's actions add their pure
+ * capability and apply (step 2). History labels, limits/units and consequence overrides join
+ * the spec in later steps (feature-module platform §8).
  */
 // `A` names the action this spec describes; later steps type label, limits and apply with it.
 export type ActionSpec<A extends { kind: string } = { kind: string }, Scope extends string = string> = {
@@ -29,6 +33,19 @@ export type ActionSpec<A extends { kind: string } = { kind: string }, Scope exte
 /** Compile-time exhaustive: exactly one spec per kind of the owner's action union. */
 export type ActionTable<A extends { kind: string }, Scope extends string = string> =
   { readonly [K in A["kind"]]: ActionSpec<Extract<A, { kind: K }>, Scope> };
+
+/**
+ * A feature action: its descriptor plus a pure capability check and a pure apply over the
+ * feature's part and editor state (feature-module platform §1). Refusals carry their code.
+ */
+export type FeatureActionSpec<P, E, A extends { kind: string } = { kind: string }, Scope extends string = string, X = unknown> =
+  ActionSpec<A, Scope> & {
+    capability(state: FeatureState<P, E>, action: A): Capability;
+    /** Throws when the capability refuses; never mutates `state`. */
+    apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X>;
+  };
+export type FeatureActionTable<P, E, A extends { kind: string }, Scope extends string = string, X = unknown> =
+  { readonly [K in A["kind"]]: FeatureActionSpec<P, E, Extract<A, { kind: K }>, Scope, X> };
 
 /**
  * Build an owner's table from an existing descriptor record. `kinds` is a record over the
@@ -59,4 +76,21 @@ export function variantOf(action: { kind: string }): string | undefined {
 export function undoPolicyOf(descriptor: ActionDescriptor, action: { kind: string }): UndoPolicy {
   const variant = variantOf(action);
   return (variant !== undefined ? descriptor.variants?.[variant]?.undo : undefined) ?? descriptor.undo;
+}
+
+/**
+ * A feature's table: each kind's descriptor plus the module's pure capability and apply,
+ * which narrow the action by kind themselves. Same exhaustiveness as `actionTable`.
+ */
+export function featureActionTable<P, E, A extends { kind: string }, Scope extends string, X>(
+  descriptors: { readonly [K in A["kind"]]: ActionDescriptor<Scope> },
+  kinds: Readonly<Record<A["kind"], true>>,
+  behaviour: { capability(state: FeatureState<P, E>, action: A): Capability;
+    apply(state: FeatureState<P, E>, action: A): FeatureResult<P, E, X> }): FeatureActionTable<P, E, A, Scope, X> {
+  const base = actionTable<A, Scope>(descriptors, kinds) as Readonly<Record<string, ActionSpec<A, Scope>>>;
+  const table: Record<string, FeatureActionSpec<P, E, A, Scope, X>> = {};
+  for (const [kind, spec] of Object.entries(base)) table[kind] = Object.freeze({ descriptor: spec.descriptor,
+    capability: (state: FeatureState<P, E>, action: A) => behaviour.capability(state, action),
+    apply: (state: FeatureState<P, E>, action: A) => behaviour.apply(state, action) });
+  return Object.freeze(table) as unknown as FeatureActionTable<P, E, A, Scope, X>;
 }
