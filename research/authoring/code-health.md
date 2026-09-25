@@ -180,7 +180,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 ## New subsystems since last review
 
 - **Feature-module platform, step 3** (claude/platform-step3): `src/layer-models.ts`, part-2 codec. Reviewed only through the platform review of steps 1-2; review with the next deep review.
-- **Authored plate blend** (claude/plate-blend): `src/plate-blend.ts` (square-root blend of the makeup plate: shader patch, per-layer layers-below targets), wired through `makeup-stack.ts` and `scene.ts`. Review with the next rendering review.
+- **Authored plate blend and light** (claude/plate-blend, claude/plate-skin-light): `src/plate-blend.ts` (the export plan's layers composited in UV space into one target, and one plate that forms the blended G-buffer surface and lights it once with the skin light, lighting the skin under it a second time for the residual), wired through `makeup-stack.ts` (plan, composite, per-layer fallback) and `scene.ts` (skin light, normals). `tools/plate-light-look.ts` measures Board 1 in the app. Review with the next rendering review; worth a look: the doubled light evaluation in the plate's fragment program and the composite's undoing of the per-layer maps' mode-1 fade.
 
 ## Fixed in claude/cleanup-render2
 

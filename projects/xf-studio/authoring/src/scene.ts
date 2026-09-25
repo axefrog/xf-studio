@@ -306,12 +306,14 @@ async function assembleScene(
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   const { plates, materials, updateLayer } = makeup;
   makeup.setCanvases(canvases);
-  // The skin under the authored plate, for its square-root blend (plate-blend.ts): read on the drawn head, like the face decals'
-  // underlay, once per skin change and only when a layer first needs it. A plate not over the drawn head blends linearly.
+  // The skin under the authored plate, which the plate blends over and lights once with the skin's own light (plate-blend.ts): read on
+  // the drawn head, like the face decals' underlay, once per skin change and only when a layer first needs it. A plate not over the
+  // drawn head keeps a linear blend per layer; without a resolved skin the plate is lit with the standard light, as the face decals.
   let plateUnderlay: { evidence?: DecalSurfaceUnderlay["evidence"]; error?: string } = {};
   function refreshPlateUnderlay() {
     const item = resolvedSkin?.item, skinSurface: ResolvedSkinSurface | null = item?.skin
       ? { base: item.skin.base, roughness: item.skin.roughness, chunks: item.meshes } : null;
+    makeup.setSkinLight(item?.skin?.handle.parameters ?? null);
     plateUnderlay = {};
     makeup.setUnderlaySource(() => {
       try {
@@ -647,7 +649,7 @@ async function assembleScene(
         scene.updateMatrixWorld(true);
         for (const update of frameListeners) update();
       }
-      // The plate's layers-below targets, only after a layer or the skin changed (plate-blend.ts).
+      // The plate's composite, only after a layer or the skin changed (plate-blend.ts).
       makeup.prepareBlend(renderer);
       lighting.render(camera);
     },
@@ -702,7 +704,7 @@ async function assembleScene(
     needsOptics: makeup.needsOptics,
     needsAlbedo: makeup.needsAlbedo,
     makeupDiagnostics: makeup.diagnostics,
-    /** How the authored plate blends: square-root space per layer, the skin underlay's source and the layers-below targets. */
+    /** How the authored plate is drawn: the export plan's layers in one lit plate, its light, the skin underlay's source and the composite. */
     plateBlendEvidence: () => ({ ...makeup.blendDiagnostics(), source: plateUnderlay }),
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
@@ -783,6 +785,7 @@ async function assembleScene(
       normalsEnabled = v;
       skin.normalScale.set(v ? 0.35 : 0, v ? -0.35 : 0);
       resolvedSkin?.item.skin?.handle.setNormals(v);
+      makeup.setNormals(v);
       for (const item of characterDetails?.components ?? []) for (const decal of item.decals ?? []) decal.handle.setNormals(v);
     },
     setExposure: (v: number) => (renderer.toneMappingExposure = v),

@@ -5,10 +5,11 @@ import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./makeu
 import type { Layer } from "./recipe";
 import {installProceduralGlintStudy} from "./direct-glint";
 import {isDirectGlint} from "./direct-glint-settings";
-import {flatSurface,FRESNEL_SURFACE,layerExport} from "./finish-export";
+import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "./finish-export";
 import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "./route-mip-chains";
-import {createPlateBlendPrefix,installPlateBlend,plateBlendWindow,type BlendSlot,type PlateBlendHandle} from "./plate-blend";
+import {createPlateComposite,createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
+import type {SkinParameters} from "./skin-material";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 
@@ -23,17 +24,25 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
   const tints=new Map<THREE.Material,ReturnType<typeof installFresnelTint>>();
-  // The game's square-root colour blend of the exported plate (plate-blend.ts): each layer that the export can carry blends over
-  // the skin under the plate and the blended layers below it.
-  const blends=new Map<THREE.Material,{handle:PlateBlendHandle;wanted:boolean}>();
-  const prefix=createPlateBlendPrefix(plateBlendWindow(anchor.geometry.getAttribute("uv")?.array));
+  // The exported plate as the game draws it (plate-blend.ts): the layers the export carries merge into one composite, and one
+  // plate lights the blended surface once, with the skin's light. Each slot's own material stays the layer's source (and draws the
+  // layer itself when the export leaves it out, or when the skin under the plate is unknown).
+  const applied=new Map<THREE.Material,Layer>();
+  const composite=createPlateComposite(plateBlendWindow(anchor.geometry.getAttribute("uv")?.array));
   let underlay: PlateUnderlay | null = null, underlaySource: (() => PlateUnderlay | null) | null = null, underlayStale = false;
   let blendDirty = true;
+  let merged: { slots: number[]; route: string | null } = { slots: [], route: null };
   let layerIds: string[] = [];
   anchor.visible = false;
   const anchorMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
   anchor.material = anchorMaterial;
   extendSkin(anchor, anchorMaterial);
+  const plateLight = createPlateLightMaterial();
+  const plate = anchor.clone();
+  plate.name = "makeup_plate"; plate.material = plateLight.material; plate.skeleton = anchor.skeleton;
+  plate.morphTargetInfluences = anchor.morphTargetInfluences; plate.visible = false;
+  extendSkin(plate, plateLight.material, .00008);
+  anchor.parent!.add(plate);
   let wireframe = false;
   const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     !isDirectGlint(layer.flakes);
@@ -65,7 +74,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
   }
   function disposeSlot(i: number) {
     const material = materials[i];
-    clearFlakes(material); clearDirect(material); clearTint(material); blends.delete(material); prefix.release(material);
+    clearFlakes(material); clearDirect(material); clearTint(material); applied.delete(material);
     material.dispose(); textures[i].dispose(); plates[i].removeFromParent(); blendDirty = true;
   }
   function createSlot(canvas: HTMLCanvasElement, i: number) {
@@ -76,8 +85,6 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     mesh.morphTargetInfluences = anchor.morphTargetInfluences;
     mesh.renderOrder = 10 + i;
     extendSkin(mesh, material, .00008);
-    // Before any tint or glint patch, so the Colour-shifting tint (added earlier in the program) is part of the solved colour.
-    blends.set(material, { handle: installPlateBlend(material), wanted: false });
     anchor.parent!.add(mesh);
     mesh.visible = false;
     return { mesh, material, texture };
@@ -139,11 +146,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     const material = materials[i];
     if (!material) return;
     blendDirty = true;
-    const blend = blends.get(material)!;
-    // The export carries this layer (layerExport), so the game blends it in square-root space; preview-only models keep a linear blend.
-    blend.wanted = layer.enabled && layer.opacity > 0 && layerExport(layer).exportable;
-    blend.handle.setSquareRoot(blend.wanted && !!underlay);
-    if (!layer.enabled) { clearFlakes(material);clearDirect(material);clearTint(material); plates[i].visible = false; return; }
+    if (!layer.enabled) { clearFlakes(material);clearDirect(material);clearTint(material); plates[i].visible = false; applied.set(material, layer); return; }
     // The shader is cheap to configure, but must never run against a prior
     // layer/shape mask while the cancellable raster worker is still pending.
     if(layer.finish==="glitter" && isDirectGlint(layer.flakes) && !completeMask)return;
@@ -214,6 +217,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
     material.iridescenceThicknessRange = [400, 400];
     if (changed) material.needsUpdate = true;
     plates[i].visible = true; textures[i].needsUpdate = true;
+    // What the composite reads for this slot: the layer as now fully applied (an incomplete update above keeps the last one).
+    applied.set(material, layer);
   }
   /** Where the skin under the plate comes from; read lazily (once per head or skin change) the first time a layer needs it. */
   function setUnderlaySource(source: (() => PlateUnderlay | null) | null) {
@@ -227,34 +232,47 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
       geometry.setAttribute("xfsUnderRoughness", next.roughness);
       geometry.setAttribute("xfsUnderMetalness", next.metalness);
     } else for (const name of ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"]) geometry.deleteAttribute(name);
-    for (const { handle, wanted } of blends.values()) handle.setSquareRoot(wanted && !!next);
   }
   /**
-   * Before a frame: bring the blend up to date after a change (skin underlay, then the layers-below targets). Nothing runs when
-   * nothing changed, so an idle viewport costs nothing here.
+   * Before a frame: bring the plate up to date after a change (the export plan over the drawn layers, the skin underlay, then the
+   * composite). Nothing runs when nothing changed, so an idle viewport costs nothing here.
    */
   function prepareBlend(renderer: THREE.WebGLRenderer) {
     if (!blendDirty) return;
-    const wanted = materials.some((material, i) => plates[i].visible && blends.get(material)?.wanted);
-    if (!wanted) { for (const { handle } of blends.values()) handle.setBelow(null, prefix.window); blendDirty = false; return; }
-    if (underlayStale) {
+    blendDirty = false;
+    // The export's own plan over the layers as drawn: which it carries in its one decal, and by which route.
+    const shown = materials.map((material, i) => plates[i].visible ? applied.get(material) : undefined);
+    const plan = planPresetExport({ layers: shown.filter((layer): layer is Layer => !!layer) });
+    const carried = new Set(plan.included);
+    let slots = shown.flatMap((layer, i) => layer && carried.has(layer) ? [i] : []);
+    if (slots.length && underlayStale) {
       underlayStale = false;
       let next: PlateUnderlay | null = null;
       try { next = underlaySource?.() ?? null; } catch { next = null; }
       applyUnderlay(next);
     }
-    const slots: BlendSlot[] = materials.map((material, i) => {
-      const blend = blends.get(material)!;
-      return { material, handle: blend.handle, blended: plates[i].visible && blend.handle.squareRoot };
-    });
-    const maskSize = Math.max(1, ...slots.filter(slot => slot.blended).map(slot => (slot.material.map?.image as { width?: number } | undefined)?.width ?? 1));
-    prefix.update(renderer, slots, maskSize);
-    blendDirty = false;
+    // Without the skin under the plate every layer keeps its own plate and linear blend.
+    if (!underlay) slots = [];
+    const drawn = new Set(slots);
+    materials.forEach((material, i) => { material.visible = !drawn.has(i); });
+    merged = { slots, route: slots.length ? plan.route : null };
+    if (!slots.length) { plate.visible = false; plateLight.handle.setComposite(null, composite.window); composite.release(); return; }
+    const maskSize = Math.max(1, ...slots.map(i => (materials[i]!.map?.image as { width?: number } | undefined)?.width ?? 1));
+    plateLight.handle.setComposite(composite.update(renderer, slots.map(i => materials[i]!), maskSize, anisotropy), composite.window);
+    plateLight.handle.setFresnel(plan.route === "fresnel" ? plan.included[0]?.optics?.shift ?? null : null);
+    plate.renderOrder = 10 + slots[0]!;
+    plate.visible = true;
   }
+  /** Light the plate with the drawn skin's own light (its profile), or with Three's standard light when no resolved skin is drawn. */
+  function setSkinLight(parameters: Pick<SkinParameters, "lobes" | "wrap"> | null) { plateLight.handle.setSkinLight(parameters); }
   function blendDiagnostics() {
-    return { window: prefix.window, underlay: !!underlay, underlayStale, belowBytes: prefix.bytes(),
-      layers: materials.map(material => { const blend = blends.get(material); const below = blend?.handle.below;
-        return { squareRoot: !!blend?.handle.squareRoot, exportable: !!blend?.wanted, below: below ? { width: below.width, height: below.height } : null }; }) };
+    const target = composite.target;
+    return { window: composite.window, underlay: !!underlay, underlayStale, compositeBytes: composite.bytes(), halfFloat: composite.halfFloat,
+      plate: { drawn: plate.visible, route: merged.route, slots: [...merged.slots], renderOrder: plate.renderOrder,
+        skinLight: plateLight.handle.skinLight, fresnel: plateLight.handle.fresnel,
+        composite: plate.visible && target ? { width: target.width, height: target.height } : null },
+      layers: materials.map((material, i) => { const layer = applied.get(material);
+        return { merged: merged.slots.includes(i), exportable: !!layer && layerExport(layer).exportable, ownPlate: plates[i].visible && material.visible }; }) };
   }
   function diagnostics() {
     return materials.map((material, i) => {
@@ -275,7 +293,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number)
         }, 0) };
     });
   }
-  return { plates, materials, textures, setCanvases, reconcileLayerCanvases,
-    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, prepareBlend, blendDiagnostics,
-    setWire(value: boolean) { wireframe = value; for (const m of materials) m.wireframe = value; } };
+  return { plates, materials, textures, plate, setCanvases, reconcileLayerCanvases,
+    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics,
+    setNormals(value: boolean) { plateLight.handle.setNormals(value); },
+    setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
 }

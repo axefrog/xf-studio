@@ -2,11 +2,19 @@ import * as THREE from "three";
 import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "./finish-export";
 
 /**
+ * The tint the game adds to the decal colour before the G-buffer's square root (uniforms `xfsShiftColor`, `xfsShiftIntensity`,
+ * `xfsShiftExponent`; `normal` the shading normal, `vViewPosition` the view vector). The merged makeup plate (plate-blend.ts)
+ * adds the same term to the merged decal colour.
+ */
+export const FRESNEL_TINT_TERM = "xfsShiftColor * xfsShiftIntensity * clamp( pow( abs( 1.0 - dot( normal, normalize( vViewPosition ) ) ), xfsShiftExponent ), 0.0, 1.0 )";
+
+/**
  * Browser model of the game-matched Colour-shifting finish. It follows the compiled
  * `mesh_decal_gradientmap_recolor_blendable` post-G-buffer program: before lighting, the base
  * colour gains FresnelColor · intensity · saturate(|1 − N·V|^exponent), with N the shading normal
  * and V the direction to the camera. Metalness then splits that colour into diffuse and F0 as
- * usual. One additive colour only; it is not thin-film or multichrome.
+ * usual. One additive colour only; it is not thin-film or multichrome. Draws a layer on its own plate (a Colour-shifting layer
+ * the export leaves out of a mixed preset, or any layer when the skin under the plate is unknown).
  */
 export function installFresnelTint(material: THREE.MeshPhysicalMaterial) {
   if (THREE.REVISION !== "186") throw Error("Fresnel tint requires Three r186");
@@ -30,12 +38,10 @@ uniform vec3 xfsShiftColor;
 uniform float xfsShiftIntensity;
 uniform float xfsShiftExponent;
 `);
-    // After the shading normal is final and before the plate's square-root blend (plate-blend.ts), which runs just before the
-    // lighting: the game adds the tint to the decal colour before its square root, so the blend must see the tinted colour.
+    // After the shading normal is final and before the lighting.
     shader.fragmentShader = replace(shader.fragmentShader, "#include <emissivemap_fragment>", `
 // Game route: added to the base colour before the G-buffer (and so before metalness splits it).
-diffuseColor.rgb += xfsShiftColor * xfsShiftIntensity *
-  clamp( pow( abs( 1.0 - dot( normal, normalize( vViewPosition ) ) ), xfsShiftExponent ), 0.0, 1.0 );
+diffuseColor.rgb += ${FRESNEL_TINT_TERM};
 #include <emissivemap_fragment>
 `);
   };

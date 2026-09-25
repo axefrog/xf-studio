@@ -21,7 +21,9 @@ test("new makeup layers inherit morphs and extra bone weights; removal frees onl
   stack.setWire(true); stack.setCanvases([canvas(), canvas(), canvas(), canvas(), canvas()]);
   expect(stack.plates).toHaveLength(5);
   bones[1].position.x = 8; bones[1].updateMatrixWorld(true);
-  for (const plate of stack.plates) {
+  // The one lit plate (plate-blend.ts) deforms with them.
+  expect((stack.plate.material as THREE.Material & { wireframe: boolean }).wireframe).toBe(true);
+  for (const plate of [...stack.plates, stack.plate]) {
     expect(plate.geometry).toBe(geometry); expect(plate.skeleton).toBe(anchor.skeleton);
     expect(plate.morphTargetInfluences).toBe(anchor.morphTargetInfluences);
     expect(plate.getVertexPosition(0, new THREE.Vector3()).x).toBeCloseTo(6.5, 6);
@@ -35,7 +37,7 @@ test("new makeup layers inherit morphs and extra bone weights; removal frees onl
     resource.addEventListener("dispose", () => disposed++);
   stack.setCanvases([]);
   expect(disposed).toBe(4); expect(sharedDisposed).toBe(false);
-  expect(removed.parent).toBeNull(); expect(root.children).toEqual([anchor]);
+  expect(removed.parent).toBeNull(); expect(root.children).toEqual([anchor, stack.plate]);
   anchor.morphTargetInfluences![0] = .25;
   stack.setCanvases([canvas()]); stack.updateLayer(0, { ...layer, finish: "matte" });
   expect(stack.plates[0].getVertexPosition(0, new THREE.Vector3()).x).toBeCloseTo(5.5, 6);

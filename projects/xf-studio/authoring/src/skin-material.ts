@@ -298,6 +298,16 @@ const replaceChunk = (what: string) => (source: string, find: string, by: string
 };
 
 /**
+ * Three's `lights_fragment_maps` chunk with the image-based radiance taken through the skin's two lobes: what replaces
+ * `#include <lights_fragment_maps>` in a program lit with the skin light. Throws when this Three.js build lacks the call.
+ */
+export function skinLightMapsChunk(chunks: Record<string, string> = THREE.ShaderChunk as unknown as Record<string, string>, what = "skin"): string {
+  const iblChunk = chunks.lights_fragment_maps ?? "";
+  if (!iblChunk.includes(IBL_CALL)) throw Error(`The ${what} shader expects the image-based radiance call in this Three.js build.`);
+  return iblChunk.replace(IBL_CALL, "vec3 iblRadiance = xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness );");
+}
+
+/**
  * Light a `MeshStandardMaterial` fragment program with the skin light (uniforms `xfsLobes`, `xfsWrap`): the two profile
  * lobes, the wrapped Burley diffuse and the two-lobe image-based light. Decals over the skin use it too, because a
  * post-G-buffer decal never changes the pixel's lighting class: makeup on skin is still lit as skin
@@ -306,11 +316,9 @@ const replaceChunk = (what: string) => (source: string, find: string, by: string
 export function patchSkinLight(fragment: string, chunks: Record<string, string> = THREE.ShaderChunk as unknown as Record<string, string>,
   what = "skin"): string {
   const replace = replaceChunk(what);
-  const iblChunk = chunks.lights_fragment_maps ?? "";
-  if (!iblChunk.includes(IBL_CALL)) throw Error(`The ${what} shader expects the image-based radiance call in this Three.js build.`);
+  const maps = skinLightMapsChunk(chunks, what);
   fragment = replace(fragment, "#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>\n${LIGHT}`);
-  return replace(fragment, "#include <lights_fragment_maps>",
-    iblChunk.replace(IBL_CALL, "vec3 iblRadiance = xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness );"));
+  return replace(fragment, "#include <lights_fragment_maps>", maps);
 }
 
 /** Uniform values for the skin light from a skin's parameters. */

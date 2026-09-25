@@ -4,21 +4,23 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch, type Session } from "../tools/cdp";
 import { oracleDescribe } from "./optional-oracles";
+import type { PlateProbe } from "./webgl-probe-page";
 
 /**
  * Real-GPU checks in headless Chrome (tests/webgl-probe-page.ts): every renderer material variant compiles and draws in
  * WebGL 2 (PREV-56), and the studio display blends in linear light, so a face decal shows the colour of the game's
- * square-root-space blend in both lighting presets (PREV-50), and the authored makeup plate blends in square-root space too
- * (plate-blend.ts: experiment 016's Board 5 steps and a stacked pair against the export). Needs a local Chrome; public CI has none and skips, and
+ * square-root-space blend in both lighting presets (PREV-50), and the authored makeup plate blends in square-root space and is lit
+ * once, with the skin's light, as the G-buffer lights the blended surface (plate-blend.ts: experiment 016's Board 5 steps, a stacked
+ * pair against the export, and the lit plate against the blended surface drawn opaque). Needs a local Chrome; public CI has none and skips, and
  * XFS_REQUIRE_ORACLES=1 turns the skip into a failure.
  */
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[]; failure?: string;
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
-  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] };
-  plate?: { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
-    variants: boolean[] } };
+  opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; plate?: PlateProbe };
 const gap = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value - b[k]!)));
+/** Largest relative difference per channel. */
+const relative = (a: readonly number[], b: readonly number[]) => Math.max(...a.map((value, k) => Math.abs(value / b[k]! - 1)));
 
 oracleDescribe(existsSync(CHROME), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("renderer shaders on a real GPU", () => {
   const out = mkdtempSync(join(tmpdir(), "xfs-webgl-probe-"));
@@ -71,8 +73,29 @@ oracleDescribe(existsSync(CHROME), `headless Chrome is not installed at ${CHROME
     preview.forEach((value, k) => expect(Math.abs(value / target[k]! - 1)).toBeLessThanOrEqual(0.02));
     // The linear blend was measurably lighter.
     expect(Math.max(...linear.map((value, k) => value / target[k]! - 1))).toBeGreaterThan(0.05);
-    // Game-matched Shimmer and Colour-shifting layers compile and draw with the blend too.
-    expect(probe.plate!.variants).toEqual([true, true, true]);
+    expect(probe.errors).toEqual([]);
+  });
+
+  test("the plate is lit once, with the skin's light, as the G-buffer lights the blended surface: stacked, Glossy, Metallic either side of 0.1", () => {
+    const { once } = probe.plate!;
+    expect(once).toHaveLength(5);
+    for (const item of once) {
+      expect(item.skinLight).toBe(true);
+      expect(relative(item.preview, item.truth)).toBeLessThanOrEqual(0.015);
+    }
+    // The engine's SSS switch sits on the blended metalness.
+    expect(once[2]!.metalness).toBeLessThan(0.1);
+    expect(once[3]!.metalness).toBeGreaterThan(0.1);
+  });
+
+  test("for a surface as rough as the skin, the plate and the face decals' pass agree; for Glossy the plate matches the lit blend", () => {
+    const { parity, glossy } = probe.plate!;
+    expect(relative(parity.plate, parity.decal)).toBeLessThanOrEqual(0.015);
+    expect(relative(glossy.plate, glossy.truth)).toBeLessThanOrEqual(0.015);
+  });
+
+  test("every plate route compiles and draws, with and without the skin light", () => {
+    expect(probe.plate!.routes).toEqual(["faceted", "fresnel", "flat+1 own", "faceted", "fresnel", "flat+1 own"]);
     expect(probe.errors).toEqual([]);
   });
 
