@@ -1,5 +1,5 @@
 import {describe,test,expect} from "bun:test";
-import {coverage,curve,raster,initialRecipe,parseRecipe,warpFields,DEFAULT_SOFTNESS_BLEND, type Layer, type Point} from "../src/recipe";
+import {coverage,curve,raster,initialRecipe,parseRecipe,parseRecipeFile,warpFields,DEFAULT_SOFTNESS_BLEND, type Layer, type Point} from "../src/recipe";
 import {editSoftness} from "../src/softness-edit";
 import {bezierAt,splitBezierSegment} from "../src/bezier-path";
 import {insertPathPoint} from "../src/path-edit";
@@ -20,7 +20,7 @@ describe("versioned boundary edge softness",()=>{
       const old:any=structuredClone(reference);old.schema=version===1?"eye-artistry/recipe-1":`xfs/recipe-${version}`;
       for(const l of old.layers){delete l.softness;if(version<5)delete l.pathMode;if(version<4)delete l.strength;if(version<3){const{id:_,...field}=l.fields[0];l.field=field;delete l.fields;}}
       const before=JSON.stringify(old),loaded=parseRecipe(old);
-      expect(loaded.schema).toBe("xfs/recipe-7");expect(loaded.layers.every(l=>l.softness.mode==="uniform")).toBe(true);
+      expect(parseRecipeFile(old).schema).toBe("xfs/recipe-7");expect(loaded.layers.every(l=>l.softness.mode==="uniform")).toBe(true);
       expect(raster(loaded.layers[0],128)).toEqual(raster(reference.layers[0],128));
       expect(JSON.stringify(old)).toBe(before);
       const ambiguous=structuredClone(old);ambiguous.layers[0].softness={mode:"uniform"};expect(()=>parseRecipe(ambiguous)).toThrow();

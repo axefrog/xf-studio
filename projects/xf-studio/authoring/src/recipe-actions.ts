@@ -9,7 +9,6 @@ import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, 
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
-import { requiredRecipeSchema } from "./recipe-schema";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "./validation-issues";
 import { refusal, type ReasonCode } from "./platform/api";
@@ -70,7 +69,7 @@ type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
 export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
 
 /** Validate a gesture proposal before changing its live target, preserving point/field identity. */
-export function applyGestureEdit(action: GestureEdit, schema: Recipe["schema"] = "xfs/recipe-7"): boolean {
+export function applyGestureEdit(action: GestureEdit): boolean {
   const layer = action.expectedLayer;
   const proposal = structuredClone(action.kind === "shape.replace" ? action.next : layer);
   let pointIndex = -1, fieldIndex = -1;
@@ -83,7 +82,7 @@ export function applyGestureEdit(action: GestureEdit, schema: Recipe["schema"] =
     if (fieldIndex < 0 || layer.fields[fieldIndex] !== action.expectedField) return false;
     proposal.fields[fieldIndex] = { ...proposal.fields[fieldIndex], ...action.next };
   } else if (action.kind === "path.replacePoints") proposal.points = action.points;
-  const validated = parseRecipe({ schema, uv: "gltf-uv0-top-left", layers: [proposal] }).layers[0];
+  const validated = parseRecipe({ uv: "gltf-uv0-top-left", layers: [proposal] }).layers[0];
   if (JSON.stringify(validated) === JSON.stringify(layer)) return false;
   if (action.kind === "shape.replace") Object.assign(layer, validated);
   else if (action.kind === "point.replace") Object.assign(layer.points[pointIndex], validated.points[pointIndex]);
@@ -246,8 +245,8 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   }
   if (effect !== "selection") {
     const layers = next.recipe.layers.map((entry, i) => i === index ? changed : entry);
-    // One schema rule for every edit: the recipe moves up to what all its layers need, never down.
-    const validated = parseRecipe({ ...next.recipe, schema: requiredRecipeSchema({ schema: next.recipe.schema, layers }), layers });
+    // Every edit is validated as a whole recipe; each layer's models validate themselves (no recipe schema).
+    const validated = parseRecipe({ ...next.recipe, layers });
     // Deferred layer renders use object identity; keep untouched layers' live identities.
     next.recipe = { ...validated, layers: state.recipe.layers.map((entry, i) => i === index ? validated.layers[i] : entry) };
   }
@@ -304,7 +303,7 @@ export class RecipeActions {
     const state = this.read(), index = state.recipe.layers.findIndex(layer => layer.id === action.layerId);
     const layer = state.recipe.layers[index];
     if (!layer || layer !== action.expectedLayer) return false;
-    if (!applyGestureEdit(action, state.recipe.schema)) return false;
+    if (!applyGestureEdit(action)) return false;
     this.gestureChanged?.(index, action.kind);
     const effect: RecipeActionEffect = { kind: "scheduled", layerIndex: index };
     for (const listener of this.listeners) listener(effect);

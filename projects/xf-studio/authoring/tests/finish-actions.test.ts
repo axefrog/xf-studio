@@ -3,7 +3,10 @@ import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/finish-export";
 import { glitterModel, glitterModels, parseGlitterChoices } from "../src/glitter-model";
 import { historyLabel } from "../src/history-labels";
 import { initialRecipe, parseRecipe, type Recipe } from "../src/recipe";
-import { requiredRecipeSchema } from "../src/recipe-schema";
+import { recipeFile } from "../src/recipe-schema";
+
+/** The schema the recipe is written in: the in-memory recipe has none (part-2), so no action can change one. */
+const written = (recipe: Recipe) => { expect(recipe).not.toHaveProperty("schema"); return recipeFile(recipe)!.schema; };
 import { StudioApplication, type StudioAction } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "../src/workspace-state";
@@ -27,13 +30,13 @@ const shown = (recipe: Recipe) => { for (const layer of recipe.layers) layer.ena
 test("Glitter models can be chosen beside a game-matched Glossy layer without refusing or downgrading", () => {
   const f = fixture(shown(initialRecipe()));
   f.ok({ kind: "layer.setFinish", layerId: f.layer(0).id, finish: "glossy" });
-  expect(f.document.recipe.schema).toBe("xfs/recipe-11");
+  expect(written(f.document.recipe)).toBe("xfs/recipe-11");
   const optics = structuredClone(f.layer(0).optics);
   f.ok({ kind: "layer.setFinish", layerId: f.layer(1).id, finish: "glitter" });
   for (const model of ["fine", "clustered", "direct", "irregular", "classic", "fine"] as const) {
     f.ok({ kind: "glitter.selectModel", layerId: f.layer(1).id, model });
     expect(glitterModel(f.layer(1).flakes)).toBe(model);
-    expect(f.document.recipe.schema).toBe("xfs/recipe-11");
+    expect(written(f.document.recipe)).toBe("xfs/recipe-11");
     expect(f.layer(0).optics).toEqual(optics);
   }
 });
@@ -44,7 +47,7 @@ test("Direct Glitter beside Fine Glitter keeps the newer schema both layers need
   for (const index of [1, 2]) f.ok({ kind: "layer.setFinish", layerId: f.layer(index).id, finish: "glitter" });
   f.ok({ kind: "glitter.selectModel", layerId: f.layer(1).id, model: "fine" });
   f.ok({ kind: "glitter.selectModel", layerId: f.layer(2).id, model: "direct" });
-  expect(f.document.recipe.schema).toBe("xfs/recipe-11");
+  expect(written(f.document.recipe)).toBe("xfs/recipe-11");
   expect([glitterModel(f.layer(1).flakes), glitterModel(f.layer(2).flakes)]).toEqual(["fine", "direct"]);
   // Without game-matched optics the same pair needs recipe-10 (Fine), never Direct's recipe-8.
   const g = fixture(shown(initialRecipe()));
@@ -52,20 +55,23 @@ test("Direct Glitter beside Fine Glitter keeps the newer schema both layers need
   g.ok({ kind: "glitter.selectModel", layerId: g.layer(1).id, model: "fine" });
   g.ok({ kind: "glitter.selectModel", layerId: g.layer(2).id, model: "direct" });
   g.ok({ kind: "glitter.selectModel", layerId: g.layer(2).id, model: "clustered" });
-  expect(g.document.recipe.schema).toBe("xfs/recipe-10");
+  expect(written(g.document.recipe)).toBe("xfs/recipe-10");
   expect(parseRecipe(g.document.recipe)).toEqual(g.document.recipe);
 });
 
-test("removing or changing the last game-matched layer never moves the recipe back", () => {
+test("no edit pins a schema: removing or changing the last game-matched layer writes the oldest schema again", () => {
   const f = fixture(shown(initialRecipe()));
   f.ok({ kind: "layer.setFinish", layerId: f.layer(0).id, finish: "iridescent" });
+  expect(written(f.document.recipe)).toBe("xfs/recipe-11");
   f.ok({ kind: "layer.setFinish", layerId: f.layer(0).id, finish: "matte" });
-  expect(f.document.recipe.schema).toBe("xfs/recipe-11");
+  // The layer's model decides; nothing else in the recipe needs recipe-11 any more.
+  expect(written(f.document.recipe)).toBe("xfs/recipe-7");
   f.ok({ kind: "layer.setFinish", layerId: f.layer(1).id, finish: "glossy" });
+  expect(written(f.document.recipe)).toBe("xfs/recipe-11");
   f.ok({ kind: "layer.edit", command: { kind: "remove", id: f.layer(1).id } });
   expect(f.document.recipe.layers.some(layer => layer.optics)).toBe(false);
-  expect(f.document.recipe.schema).toBe("xfs/recipe-11");
-  expect(requiredRecipeSchema({ schema: "xfs/recipe-10", layers: [] })).toBe("xfs/recipe-10");
+  expect(written(f.document.recipe)).toBe("xfs/recipe-7");
+  expect(recipeFile({ uv: "gltf-uv0-top-left", layers: [] })!.schema).toBe("xfs/recipe-7");
 });
 
 test("every finish and Glitter model the application offers is also applied", () => {
@@ -107,10 +113,10 @@ test("re-selecting Glossy keeps an earlier-model layer; only Use game-matched mo
   const f = fixture(recipe), id = f.layer(0).id;
   f.ok({ kind: "layer.setFinish", layerId: id, finish: "glossy" });
   expect(f.layer(0).optics).toBeUndefined();
-  expect(f.document.recipe.schema).toBe("xfs/recipe-7");
+  expect(written(f.document.recipe)).toBe("xfs/recipe-7");
   f.ok({ kind: "layer.useGameOptics", layerId: id });
   expect(f.layer(0).optics).toEqual({ model: "game-matched-1" });
-  expect(f.document.recipe.schema).toBe("xfs/recipe-11");
+  expect(written(f.document.recipe)).toBe("xfs/recipe-11");
 });
 
 test("Colour-shift settings are remembered when switching away and back, like Glitter models", () => {

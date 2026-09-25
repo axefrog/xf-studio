@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import { parseCollection } from "./preset-collection";
-import { parseRecipe } from "./recipe";
 import { LibraryError } from "./library-store";
 import { STUDIO_PARTS } from "./compose/studio-registry";
 import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
@@ -28,7 +27,7 @@ export class CollectionLibrary {
         WHERE revision=(SELECT MAX(revision) FROM look_revisions WHERE look_id=r.look_id) ORDER BY created_at, look_id`).all() as
         { id: string; name: string; revision: number; recipe_json: string }[];
       const collection = parseCollection({ schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Makeup collection",
-        presets: looks.map(({ recipe_json, ...preset }) => ({ ...preset, recipe: parseRecipe(JSON.parse(recipe_json)) })) }, true);
+        presets: looks.map(({ recipe_json, ...preset }) => ({ ...preset, recipe: JSON.parse(recipe_json) })) }, true);
       this.db.exec(`CREATE TABLE collections (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
         CREATE TABLE collection_revisions (collection_id TEXT NOT NULL REFERENCES collections(id), revision INTEGER NOT NULL,
         collection_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(collection_id, revision));

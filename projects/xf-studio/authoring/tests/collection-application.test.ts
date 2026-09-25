@@ -12,6 +12,7 @@ import { RecipeActions } from "../src/recipe-actions";
 import { StudioApplication } from "../src/studio-application";
 import { StudioFileOperations } from "../src/studio-file-operations";
 import { freshWorkspace } from "../src/workspace-state";
+import { recipeFile } from "../src/recipe-schema";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
@@ -25,7 +26,7 @@ function fixture() {
   const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo });
   const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
-      recipe: structuredClone(document.recipe) }] };
+      recipe: recipeFile(structuredClone(document.recipe))! }] };
   const other: PresetCollection = structuredClone(collection); other.id = crypto.randomUUID(); other.name = "Other";
   let saves = 0, restored = 0, packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {

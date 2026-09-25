@@ -7,13 +7,14 @@ import type { PresetCollection } from "../src/preset-collection";
 import { looks } from "./fixtures/looks";
 import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
 import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
+import { recipeFile } from "../src/recipe-schema";
 
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
 });
 function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "damaged" | undefined) {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
-    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe }] };
+    id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe: recipeFile(recipe)! }] };
   let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
   let saved = 0, packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
@@ -29,13 +30,13 @@ function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "d
   const service = new CollectionService(collectionDraft(collection, 1), { selected: "", name: "" },
     () => editor, value => editor = value, transport);
   let nextFile: StudioPickedFile | undefined, layer = structuredClone(recipe.layers[0]);
-  const downloads: { name: string; type: string }[] = [];
+  const downloads: { name: string; type: string; blob: Blob }[] = [];
   let maskInput: typeof layer | undefined, imported: { recipe: Recipe; name: string } | undefined;
   let loadedBytes: Uint8Array | undefined;
   let bakeMask = async (_value: typeof layer) => new Blob(["png"], { type: "image/png" });
   const files = new StudioFileOperations({
     pick: async () => { const file = nextFile; nextFile = undefined; return file; },
-    download: (blob, name) => { downloads.push({ name, type: blob.type }); },
+    download: (blob, name) => { downloads.push({ name, type: blob.type, blob }); },
     bakeMask: async value => { maskInput = value; return bakeMask(value); },
   }, {
     recipe: () => editor.recipe, selectedLayer: () => layer,
@@ -61,9 +62,20 @@ test("recipe and mask workflows use typed file ports with the original names, li
   expect((await f.files.execute({ kind: "recipe.export" })).ok).toBe(true);
   expect(f.downloads[0]?.name).toBe("xfs.recipe.json");
   expect(f.downloads[0]?.type).toStartWith("application/json");
-  f.setFile(picked("wing.json", JSON.stringify(f.recipe)));
+  // Export writes the oldest recipe schema that holds the recipe, and import reads it back unchanged.
+  const exported = JSON.parse(await f.downloads[0]!.blob.text());
+  expect(exported).toEqual({ schema: "xfs/recipe-7", ...f.editor().recipe });
+  f.setFile(picked("wing.json", JSON.stringify(exported)));
   expect((await f.files.execute({ kind: "recipe.import" })).ok).toBe(true);
   expect(f.imported()?.name).toBe("wing");
+  expect(f.imported()?.recipe).toEqual(f.editor().recipe);
+  // Only recipe files import: a bare in-memory recipe or a collection is refused as before.
+  for (const text of [JSON.stringify(f.editor().recipe), JSON.stringify(f.collection)]) {
+    f.setFile(picked("other.json", text));
+    expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false });
+  }
+  f.setFile(picked("wing.json", JSON.stringify(exported)));
+  expect((await f.files.execute({ kind: "recipe.import" })).ok).toBe(true);
   f.setFile(picked("large.json", "{}", 1_000_001));
   expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "too_large" });
   expect(f.imported()?.name).toBe("wing");

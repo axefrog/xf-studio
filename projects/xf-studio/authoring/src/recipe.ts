@@ -1,10 +1,10 @@
 import { convertToBezier, tessellateBezier, interpolatedFeather, type Handles } from "./bezier-path";
 import { preparePigmentStrength, type PigmentStrength } from "./pigment-strength";
 import type { Finish, Flakes } from "./finish";
-import { hasGameOptics } from "./finish-export";
-import { validStudioIrregularSettings } from "./flake-field";
 import type {IrregularFlakes} from "./flake-field";
-import {isDirectGlint,type DirectGlintFlakes} from "./direct-glint-settings";
+import type {DirectGlintFlakes} from "./direct-glint-settings";
+import { LAYER_MODELS, RECIPE_FILE_SCHEMAS, schemaRank, type LayerModelRegistry, type RecipeFileSchema,
+  type RecipeSchema } from "./layer-models";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -24,7 +24,7 @@ export type Strength = { mode: "legacy-nearest" } | { mode: "smooth-boundary"; b
 export const DEFAULT_STRENGTH_BLEND = 0.0005;
 export const MIN_STRENGTH_BLEND = 0.000125;
 export const MAX_STRENGTH_BLEND = 0.02;
-/** Game-matched optical model (`xfs/recipe-11`): the preview follows the export route's
+/** Game-matched optical model (`game-matched-1`, first stored in `xfs/recipe-11`): the preview follows the export route's
  * engine arithmetic instead of the earlier browser study. Colour-shifting adds its
  * Fresnel shift colour and strength. Absent on layers that keep an older preview. */
 export type GameOptics = { model: "game-matched-1"; shift?: { color: string; strength: number } };
@@ -45,18 +45,27 @@ export type Layer = {
   strength: Strength;
   softness: Softness;
 };
+/**
+ * The in-memory recipe: eye makeup's part (`xfs/eye-makeup-part-2`). It has no recipe-level
+ * schema: each layer's optical models name themselves and are validated by the model registry
+ * (`layer-models.ts`), so choosing a model on one layer never changes the recipe as a whole.
+ */
 export type Recipe = {
-  schema: "xfs/recipe-6" | "xfs/recipe-7" | "xfs/recipe-8" | "xfs/recipe-9" | "xfs/recipe-10" | "xfs/recipe-11";
   uv: "gltf-uv0-top-left";
   layers: Layer[];
 };
+export type { RecipeSchema } from "./layer-models";
+/**
+ * A recipe file (`xfs/recipe-N`), and the body of `xfs/eye-makeup-part-1`: a recipe with the
+ * schema that gates its layer models. Writers use the oldest schema that holds it (`recipeFile`).
+ */
+export type RecipeFile = { schema: RecipeSchema } & Recipe;
 // Operational import/preview budget, separate from preset catalogue size.
 export const MAX_LAYERS = 32;
 export const MAX_FIELDS = 8;
 export const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 export function initialRecipe(): Recipe {
   return {
-    schema: "xfs/recipe-7",
     uv: "gltf-uv0-top-left",
     layers: Array.from({ length: 4 }, (_, i) => convertToBezier({
       id: `layer-${i + 1}`,
@@ -110,42 +119,62 @@ export function newLayerTemplate(): Layer {
   });
 }
 /** A recipe with no layers: the eye-makeup part of a new preset. */
-export const emptyRecipe = (): Recipe => ({ schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [] });
+export const emptyRecipe = (): Recipe => ({ uv: "gltf-uv0-top-left", layers: [] });
 /** First-run authored content. Historical initialRecipe remains a sample/test fixture. */
 export function starterRecipe(): Recipe {
   const layer = newLayerTemplate();
-  return { schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: [
+  return { uv: "gltf-uv0-top-left", layers: [
     { ...layer, id: "layer-1", name: "Eye makeup" },
   ] };
 }
 export const DEFAULT_SHIFT = { color: "#3fd4c2", strength: 0.6 } as const;
-function validGameOptics(value: unknown, finish: Finish, schema: string): value is GameOptics {
-  if (schema !== "xfs/recipe-11" || !value || typeof value !== "object" || Array.isArray(value)) return false;
-  const o = value as GameOptics, keys = Object.keys(o).sort().join();
-  if (o.model !== "game-matched-1" || !hasGameOptics(finish)) return false;
-  if (finish !== "iridescent") return keys === "model";
-  const s = o.shift as { color?: unknown; strength?: unknown } | undefined;
-  return keys === "model,shift" && !!s && typeof s === "object" && !Array.isArray(s) &&
-    Object.keys(s).sort().join() === "color,strength" && typeof s.color === "string" && /^#[0-9a-f]{6}$/i.test(s.color) &&
-    typeof s.strength === "number" && Number.isFinite(s.strength) && s.strength >= 0 && s.strength <= 1;
+export const RECIPE_FILE_MESSAGE = `Expected an XF Studio recipe with up to ${MAX_LAYERS} layers, or a legacy four-layer recipe.`;
+/**
+ * Read a recipe: a recipe file of any schema (`eye-artistry/recipe-1`, `xfs/recipe-2`…`11`), which
+ * migrates on read exactly as it always has, or an in-memory recipe (an `xfs/eye-makeup-part-2`
+ * body, which has no `schema`). Returns the in-memory recipe (a copy).
+ */
+export function parseRecipe(value: unknown, models: LayerModelRegistry = LAYER_MODELS): Recipe {
+  return withoutSchema(readRecipe(value, "any", models));
 }
+/**
+ * Read a recipe file only, keeping its schema as the in-memory recipe used to (older schemas
+ * become `xfs/recipe-7`; 8–11 stay). The collection-1 readers use it, so their output is unchanged.
+ */
+export function parseRecipeFile(value: unknown, models: LayerModelRegistry = LAYER_MODELS): RecipeFile {
+  return readRecipe(value, "file", models) as RecipeFile;
+}
+/** Read an `xfs/eye-makeup-part-2` body only: an in-memory recipe, with no `schema`. */
+export function parseRecipePart(value: unknown, models: LayerModelRegistry = LAYER_MODELS): Recipe {
+  return readRecipe(value, "part", models);
+}
+/** The in-memory form of a parsed recipe file: the same copy without its `schema`. */
+function withoutSchema(recipe: Recipe & { schema?: unknown }): Recipe {
+  if (!("schema" in recipe)) return recipe;
+  const { schema: _schema, ...rest } = recipe;
+  return rest;
+}
+
 // Bound imported work before it reaches raster loops; imports are atomic.
-export function parseRecipe(value: unknown): Recipe {
+function readRecipe(value: unknown, form: "any" | "file" | "part", models: LayerModelRegistry): Recipe & { schema?: RecipeSchema } {
   type ImportedLayer = Omit<Layer, "fields" | "strength" | "pathMode" | "softness"> & { field?: Field; fields?: WarpField[]; strength?: Strength; pathMode?: Layer["pathMode"]; softness?: Softness };
-  const r = value as { schema: string; uv: Recipe["uv"]; layers: ImportedLayer[] };
+  const r = value as { schema: RecipeFileSchema; uv: Recipe["uv"]; layers: ImportedLayer[] };
+  // A file names its schema; an in-memory recipe (part-2) has none and takes the newest structural forms.
+  const file = !!r && typeof r === "object" && "schema" in r;
   if (
     !r ||
-    !["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"].includes(r.schema) ||
+    (file ? form === "part" || !RECIPE_FILE_SCHEMAS.includes(r.schema) : form === "file") ||
     r.uv !== "gltf-uv0-top-left" ||
     !Array.isArray(r.layers) ||
     r.layers.length > MAX_LAYERS ||
     (r.schema === "eye-artistry/recipe-1" && r.layers.length !== 4)
   )
-    throw Error(
-      `Expected an XF Studio recipe with up to ${MAX_LAYERS} layers, or a legacy four-layer recipe.`,
-    );
+    throw Error(RECIPE_FILE_MESSAGE);
   const num = (x: unknown, a: number, b: number) =>
     typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;
+  // Structural forms by schema: a file uses its schema's; part-2 uses the newest (recipe-11's).
+  const rank = file ? schemaRank(r.schema) : RECIPE_FILE_SCHEMAS.length - 1;
+  const since = (schema: RecipeFileSchema) => rank >= schemaRank(schema);
   const ids = new Set<string>();
   const layers: Layer[] = [];
   for (const l of r.layers) {
@@ -170,21 +199,8 @@ export function parseRecipe(value: unknown): Recipe {
     )
       throw Error("Invalid layer settings.");
     ids.add(l.id);
-    if (l.flakes !== undefined) {
-      const f = l.flakes;
-      if (!f || typeof f !== "object" || Array.isArray(f)) throw Error("Invalid flake settings.");
-      if ("model" in f) {
-        const raster = (r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11") && validStudioIrregularSettings(f);
-        const direct = (r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11") && isDirectGlint(f) &&
-          (f.model === "uv-cell-direct-1" || (f.model === "uv-cell-direct-2" && r.schema !== "xfs/recipe-8") || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11");
-        if (l.finish !== "glitter" || !(raster || direct))
-          throw Error("Invalid experimental Glitter settings.");
-      } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) ||
-        !num(f.density, 0, 1) || !num(f.tilt, 0, 1) ||
-        !Number.isInteger(f.seed) || !num(f.seed, 0, 2147483647))
-        throw Error("Invalid flake settings.");
-    }
-    if (l.optics !== undefined && !validGameOptics(l.optics, l.finish, r.schema)) throw Error("Invalid game-matched finish settings.");
+    // Each optical block is validated by its own model; a file holds only the models its schema does.
+    models.check(l, file ? r.schema : undefined);
     if (
       !Array.isArray(l.points) ||
       l.points.length < 3 ||
@@ -194,7 +210,7 @@ export function parseRecipe(value: unknown): Recipe {
       )
     )
       throw Error("Invalid control points (3–24 required).");
-    const currentSoftness = r.schema === "xfs/recipe-6" || r.schema === "xfs/recipe-7" || r.schema === "xfs/recipe-8" || r.schema === "xfs/recipe-9" || r.schema === "xfs/recipe-10" || r.schema === "xfs/recipe-11";
+    const currentSoftness = since("xfs/recipe-6");
     if (!currentSoftness && ("softness" in l || l.points.some(p => "feather" in p)))
       throw Error("Ambiguous edge softness format.");
     let softness: Softness = {mode: "uniform"};
@@ -209,7 +225,7 @@ export function parseRecipe(value: unknown): Recipe {
       if (l.points.some(p => (s.mode === "boundary" || "feather" in p) && !num(p.feather, MIN_FEATHER, MAX_FEATHER)))
         throw Error("Point edge softness is outside the supported range.");
     }
-    const currentPath = r.schema === "xfs/recipe-5" || currentSoftness;
+    const currentPath = since("xfs/recipe-5");
     if (!currentPath && ("pathMode" in l || l.points.some(p => "handles" in p)))
       throw Error("Ambiguous path format.");
     const pathMode = currentPath ? l.pathMode : "catmull-rom";
@@ -234,7 +250,7 @@ export function parseRecipe(value: unknown): Recipe {
           throw Error("Aligned handles must point in opposite directions.");
       }
     }
-    const currentStrength = r.schema === "xfs/recipe-4" || currentPath;
+    const currentStrength = since("xfs/recipe-4");
     if (!currentStrength && "strength" in l) throw Error("Ambiguous pigment strength format.");
     let strength: Strength = { mode: "legacy-nearest" };
     if (currentStrength) {
@@ -246,7 +262,7 @@ export function parseRecipe(value: unknown): Recipe {
         throw Error("Invalid pigment strength settings.");
       strength = s;
     }
-    const current = r.schema === "xfs/recipe-3" || currentStrength;
+    const current = since("xfs/recipe-3");
     if (current ? "field" in l : "fields" in l)
       throw Error("Ambiguous vector field format.");
     const fields = current ? l.fields : [{ ...l.field, id: `${l.id.slice(0, 72)}-field-1` }];
@@ -272,7 +288,10 @@ export function parseRecipe(value: unknown): Recipe {
     const { field: _legacyField, fields: _fields, ...settings } = l;
     layers.push({ ...settings, fields: fields as WarpField[], strength, pathMode, softness });
   }
-  return structuredClone({ ...r, schema: r.schema === "xfs/recipe-11" ? "xfs/recipe-11" : r.schema === "xfs/recipe-10" ? "xfs/recipe-10" : r.schema === "xfs/recipe-9" ? "xfs/recipe-9" : r.schema === "xfs/recipe-8" ? "xfs/recipe-8" : "xfs/recipe-7", layers });
+  if (!file) return structuredClone({ ...(r as object), layers }) as Recipe;
+  // Recipe 8–11 keep their schema; older files hold nothing recipe-7 does not.
+  const schema: RecipeSchema = schemaRank(r.schema) >= schemaRank("xfs/recipe-8") ? r.schema as RecipeSchema : "xfs/recipe-7";
+  return structuredClone({ ...r, schema, layers });
 }
 export function curve(points: Point[], steps = 10): Point[] {
   if (points.length && points.every(p => p.handles)) return tessellateBezier(points).map(({segment: _segment, t: _t, ...p}) => p);

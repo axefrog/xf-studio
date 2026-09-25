@@ -1,7 +1,8 @@
 import { BUILD_NEEDS_SETUP } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
 import type { PackageBuild, PackageCheck } from "./package-action";
-import { parseRecipe, type Layer, type Recipe } from "./recipe";
+import { RECIPE_FILE_MESSAGE, type Layer, type Recipe } from "./recipe";
+import { portableRecipe, readPortableRecipe } from "./recipe-schema";
 import type { ReadonlyDeep } from "./read-only";
 import type { SavedAppearanceState } from "./saved-appearance-actions";
 import type { SavedV } from "./save-reader";
@@ -146,12 +147,14 @@ export class StudioFileOperations {
           const file = await this.port.pick("recipe");
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });
           if (file.size > 1_000_000) throw new FileOperationError("too_large", "Recipe is too large.");
-          const recipe = parseRecipe(JSON.parse(await file.text()));
+          const recipe = readPortableRecipe(JSON.parse(await file.text()));
+          if (!recipe) throw Error(RECIPE_FILE_MESSAGE);
           this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""));
           outcome = { ok: true, code: "imported", message: `Opened ${file.name}` }; break;
         }
         case "recipe.export":
-          this.port.download(new Blob([JSON.stringify(this.sources.recipe(), null, 2)],
+          // The oldest recipe schema that holds it, so older builds open it too.
+          this.port.download(new Blob([JSON.stringify(portableRecipe(this.sources.recipe() as Recipe), null, 2)],
             { type: "application/json" }), "xfs.recipe.json");
           outcome = { ok: true, code: "exported", message: "Recipe exported — editable shapes, colours and fields." }; break;
         case "mask.export": {

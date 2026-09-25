@@ -1,7 +1,7 @@
 /**
  * Eye makeup, feature module #1 (feature-module platform §1). It registers its part codec
- * (`xfs/eye-makeup-part-1`, the recipe), its editor-memory codecs and its action table: the
- * existing descriptors and Undo policies from `studio-action-descriptors.ts` with a pure
+ * (`xfs/eye-makeup-part-2`, the in-memory recipe; part-1 still reads), its editor-memory codecs
+ * and its action table: the existing descriptors and Undo policies from `studio-action-descriptors.ts` with a pure
  * capability and apply (migration step 2). The eye-makeup files stay where they are until
  * step 5 moves them here and into `engines/layered-makeup`; until then this module imports
  * them from `src/` (recorded in the design's step 1 status).
@@ -16,7 +16,7 @@ import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";
 export const EYE_MAKEUP_ID = featureId("eye-makeup");
 export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./core";
 export type { EyeMakeupEditor, EyeMakeupMemory } from "./part";
-export { EYE_MAKEUP_PART_1, RECIPE_SCHEMAS } from "./part";
+export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS, eyeMakeupPartCodec } from "./part";
 
 /** Registration order is the catalogue order the descriptor table has always had. */
 const KINDS: Record<EyeMakeupAction["kind"], true> = {

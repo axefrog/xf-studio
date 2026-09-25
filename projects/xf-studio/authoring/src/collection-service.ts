@@ -5,7 +5,7 @@ import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, parseCollection, planCollection, type PresetCollection } from "./preset-collection";
 import type { Recipe } from "./recipe";
 import { LIVE_FEATURE, STUDIO_PARTS } from "./compose/studio-registry";
-import type { Look, LookCollection } from "./platform/api";
+import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction, PackageBuild, PackageCheck } from "./package-action";
@@ -245,9 +245,9 @@ export class CollectionService {
             const stored = summaries.length ? await this.transport.get(summaries[0].id) : undefined;
             const draft = stored
               ? collectionDraft(stored.collection, stored.revision)
-              : collectionDraft({ schema: "xfas/collection-1", id: crypto.randomUUID(),
-                name: "My collection", presets: [{ id, name: this.legacy.name.trim() || "First look",
-                  revision: 1, recipe: current.recipe }] });
+              : collectionDraft({ schema: COLLECTION_2, id: crypto.randomUUID(), name: "My collection",
+                presets: [{ ...newLook(id, this.legacy.name.trim() || "First look"),
+                  parts: { [LIVE_FEATURE]: STUDIO_PARTS.envelope(LIVE_FEATURE, current.recipe) } }] });
             if (stored) {
               this.remember(stored.collection, stored.revision);
               const existing = draft.collection.presets.find(p => p.id === id);

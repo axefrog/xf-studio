@@ -19,7 +19,8 @@ import type { EditorSnapshot } from "../src/collection-session";
 import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
 import { EYE_MAKEUP_FEATURE, LIVE_FEATURE, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/direct-glint-settings";
-import { preparePackageCollection } from "../src/package-filter";
+import { packagePresetIdentities, preparePackageCollection } from "../src/package-filter";
+import { recipeFile } from "../src/recipe-schema";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { compilePreset } from "../src/preset-compiler";
@@ -34,6 +35,7 @@ import { freshWorkspace, loadWorkspace, parseWorkspace, serializeWorkspace } fro
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf, storedWorkspace } from "./fixtures/looks";
 import { digest, observeRoundTrips, restore } from "./fixtures/workspace-observable";
+import { contentDigest, recipeSchemaFixtures, withoutRecipeSchemas } from "./fixtures/part-2-parity";
 import { damagedWorkspaceV1, fixedId, glitterRecipe, largeWorkspaceV1, looseWorkspaceV1, opticsRecipe, recipe3,
   smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 
@@ -43,12 +45,15 @@ const EYE = "eye-makeup";
 // ---- Workspace-1: what the pre-migration code restored (tests/golden/workspace-v1-observable.json) ----
 
 test("workspace-1 fixtures restore exactly what the pre-migration code restored, and keep it through version-2 storage", () => {
-  const expected = golden("workspace-v1-observable.json");
+  // Step 2 matched `workspace-v1-observable.json` (captured from the step-1 code) exactly. Since part-2
+  // the in-memory recipe has no schema tag, so the comparison is with the same observation of the step-2
+  // code with recipe schema tags removed (`part-2-parity.json`): every other observable fact is equal.
+  const expected = golden("part-2-parity.json").workspace;
   for (const [name, fixture] of [["small", smallWorkspaceV1], ["loose", looseWorkspaceV1], ["large", largeWorkspaceV1],
     ["damaged", damagedWorkspaceV1]] as const) {
     const result = observeRoundTrips(fixture());
     // `first` is the restore from workspace-1; each level is that state stored as workspace-2 and restored again.
-    expect({ name, warning: result.warning, first: digest(result.first), levels: result.levels.map(digest) })
+    expect({ name, warning: result.warning, first: contentDigest(result.first), levels: result.levels.map(contentDigest) })
       .toEqual({ name, ...expected[name] });
   }
 }, 60_000);
@@ -68,13 +73,13 @@ test("workspace-2 stores editor memory per feature and restores the live workspa
   expect(collections.collection.schema).toBe(COLLECTION_2);
   const p1 = collections.memory[fixedId(1)][EYE] as { editor: unknown; partSchema: string; history: unknown[]; historyTrimmed?: true };
   expect(p1).toMatchObject({ editor: { active: 1, selected: 2, fieldSelection: { "a-shift": "a-shift-w2" } },
-    partSchema: "xfs/eye-makeup-part-1", historyTrimmed: true });
+    partSchema: "xfs/eye-makeup-part-2", historyTrimmed: true });
   expect(p1.history).toHaveLength(3);
   expect(collections.removed[0].memory[EYE]).toMatchObject({ historyTrimmed: true });
   // Lossless: the stored form restores the same live state, field for field.
   expect(parseWorkspace(JSON.parse(JSON.stringify(stored)))).toEqual(state);
   const loose = restore(looseWorkspaceV1()).state, looseStored = serializeWorkspace(loose);
-  expect(looseStored.look?.parts[EYE].schema).toBe("xfs/eye-makeup-part-1");
+  expect(looseStored.look?.parts[EYE].schema).toBe("xfs/eye-makeup-part-2");
   expect(looseStored.look?.memory[EYE]).toMatchObject({ historyTrimmed: true, editor: { active: 2, selected: 3 } });
   expect(parseWorkspace(storedWorkspace(loose))).toEqual(loose);
 });
@@ -123,27 +128,8 @@ test("a workspace from a newer build or damaged beyond the current draft stays p
 
 // ---- Parity gate 1: every fixture schema through the old and the new path ----
 
-/** One recipe per schema, as the build that wrote each schema stored it. */
-function schemaFixtures(): [string, unknown][] {
-  const legacy = readFixture("005-preset-collection/collection.json").presets[0].recipe;
-  const editor = readFixture("005-preset-collection/editor-collection.json").presets[0].recipe;
-  const v3 = recipe3("v3") as { layers: Record<string, unknown>[] };
-  const v4 = { ...v3, schema: "xfs/recipe-4", layers: v3.layers.map(layer => ({ ...layer, strength: { mode: "smooth-boundary", blend: 0.0005 } })) };
-  const current = initialRecipe();
-  const v5 = { ...current, schema: "xfs/recipe-5", layers: current.layers.map(({ softness: _s, ...layer }) =>
-    ({ ...layer, points: layer.points.map(({ feather: _f, ...point }) => point) })) };
-  const glitter = (schema: string, flakes: object) => ({ ...current, schema,
-    layers: current.layers.map((layer, i) => i === 1 ? { ...layer, finish: "glitter", flakes } : layer) });
-  return [["eye-artistry/recipe-1", legacy], ["xfs/recipe-2", editor], ["xfs/recipe-3", v3], ["xfs/recipe-4", v4],
-    ["xfs/recipe-5", v5], ["xfs/recipe-6", { ...current, schema: "xfs/recipe-6" }],
-    ["xfs/recipe-7", glitter("xfs/recipe-7", { model: "irregular-planar-1", count: 200000, radius: 0.00045, spread: 0.7, tilt: 0.35, seed: 7, color: "#d6b69e" })],
-    ["xfs/recipe-8", glitter("xfs/recipe-8", defaultDirectGlintFlakes())],
-    ["xfs/recipe-9", glitter("xfs/recipe-9", defaultClusteredGlintFlakes())],
-    ["xfs/recipe-10", glitterRecipe("ten")], ["xfs/recipe-11", opticsRecipe("eleven")]];
-}
-
 test("every recipe schema reads to the same recipe and byte-identical masks at 512, 1K and 2K through a look", () => {
-  const fixtures = schemaFixtures();
+  const fixtures = recipeSchemaFixtures();
   expect(fixtures.map(([schema, recipe]) => [schema, (recipe as { schema: string }).schema]))
     .toEqual(fixtures.map(([schema]) => [schema, schema]));
   for (const [schema, file] of fixtures) {
@@ -160,7 +146,7 @@ test("every recipe schema reads to the same recipe and byte-identical masks at 5
 }, 120_000);
 
 test("every collection fixture reads, plans and compiles identically through collection-1 and collection-2", () => {
-  const plans = golden("collection-plans.json").fixtures;
+  const plans = golden("collection-plans.json").fixtures, content = golden("part-2-parity.json").collections;
   for (const path of COLLECTION_FIXTURES) {
     const file = readFixture(path), old = parseCollection(file);
     const looks = STUDIO_PARTS.readCollection(file);
@@ -173,14 +159,20 @@ test("every collection fixture reads, plans and compiles identically through col
     expect({ path, parsed: digest(parseCollection(file)), plan: digest(planCollection(file)),
       packaged: digest(preparePackageCollection(file)) }).toEqual({ path, ...plans[path] });
     const diagnostic = "diagnostics" in file;
+    // Through a look, each recipe is written in the oldest schema that holds it (part-2 keeps no pinned
+    // schema): the same recipes apart from that tag, the same plan identities, the same packaged content.
     for (const [route, value] of [["minimal", minimal], ["collection-2", v2]] as const) {
       const read = parseCollection(value);
-      expect(read.presets.map(preset => preset.recipe), `${path} via ${route}`).toEqual(old.presets.map(preset => preset.recipe));
-      expect(digest(read)).toBe(plans[path].parsed);
+      expect(withoutRecipeSchemas(read.presets.map(preset => preset.recipe)), `${path} via ${route}`)
+        .toEqual(withoutRecipeSchemas(old.presets.map(preset => preset.recipe)));
+      for (const preset of read.presets) expect(preset.recipe.schema).toBe(recipeFile(preset.recipe)!.schema);
+      expect(contentDigest(read)).toBe(content[path][route].parsed);
       // Diagnostic export knobs exist only in prepared experiment files (collection-1); a look collection has none.
       if (!diagnostic) {
-        expect(digest(planCollection(value)), `${path} plan via ${route}`).toBe(plans[path].plan);
-        expect(digest(preparePackageCollection(value))).toBe(plans[path].packaged);
+        const plan = planCollection(value);
+        expect(contentDigest(plan), `${path} plan via ${route}`).toBe(content[path][route].plan);
+        expect(contentDigest(preparePackageCollection(value))).toBe(content[path][route].packaged);
+        expect(packagePresetIdentities(plan)).toEqual(packagePresetIdentities(planCollection(file)));
       }
     }
     // Compiled maps of every exportable preset, and its masks at 512, match the old path byte for byte.
@@ -229,9 +221,13 @@ test("a pre-migration SQLite library lists and reads unchanged, and old rows are
     // Every stored revision reads as looks whose eye-makeup view is the collection the old store returned.
     const revisions = legacy.rows.list.flatMap((item: { id: string; revision: number }) =>
       Array.from({ length: item.revision }, (_, i) => library.get(item.id, i + 1)));
+    // The eye-makeup view writes each recipe in the oldest schema that holds it; apart from that tag
+    // (a pinned schema is not kept since part-2), it is the collection the old store returned.
     expect(revisions.map(({ collection, revision }: { collection: LookCollection; revision: number }) =>
-      canonicalJson({ collection: eyeMakeupCollection(collection), revision })))
-      .toEqual(legacy.rows.gets.map((stored: unknown) => canonicalJson(stored)));
+      canonicalJson(withoutRecipeSchemas({ collection: eyeMakeupCollection(collection), revision }))))
+      .toEqual(legacy.rows.gets.map((stored: unknown) => canonicalJson(withoutRecipeSchemas(stored))));
+    for (const { collection } of revisions as { collection: LookCollection }[])
+      for (const preset of eyeMakeupCollection(collection).presets) expect(preset.recipe.schema).toBe(recipeFile(preset.recipe)!.schema);
     expect(legacy.dump()).toEqual(legacy.rows.rows);
   } finally { library.close(); legacy.cleanup(); }
 });

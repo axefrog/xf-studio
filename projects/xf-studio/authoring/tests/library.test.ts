@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LookLibrary, libraryRequest } from "../src/library-store";
-import { initialRecipe } from "../src/recipe";
+import { initialRecipe, parseRecipe, parseRecipeFile } from "../src/recipe";
 import { Database } from "bun:sqlite";
 
 test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {
@@ -17,7 +17,8 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
     const raw = new Database(path);
     raw.query("UPDATE look_revisions SET recipe_json=? WHERE look_id=?").run(legacy, original.id); raw.close();
     db = new LookLibrary(path);
-    expect(db.get(original.id).recipe.schema).toBe("xfs/recipe-7");
+    expect(parseRecipeFile(JSON.parse(legacy)).schema).toBe("xfs/recipe-7");
+    expect(db.get(original.id).recipe).toEqual(parseRecipe(JSON.parse(legacy)));
     const empty = { ...recipe, layers: [] };
     db.save({ name: "Empty", recipe: empty, revision: 1 }, original.id);
     const expanded = structuredClone(recipe);

@@ -11,12 +11,13 @@ import { createTrustedStudioBootstrap } from "../src/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
+import { recipeFile } from "../src/recipe-schema";
 
 function mountFixture() {
   const workspace = freshWorkspace();
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Fixture",
-    presets: [{ id: crypto.randomUUID(), name: "First", revision: 1, recipe: structuredClone(workspace.recipe) },
-      { id: crypto.randomUUID(), name: "Second", revision: 1, recipe: { ...structuredClone(workspace.recipe), layers: [] } }] };
+    presets: [{ id: crypto.randomUUID(), name: "First", revision: 1, recipe: recipeFile(structuredClone(workspace.recipe))! },
+      { id: crypto.randomUUID(), name: "Second", revision: 1, recipe: recipeFile({ ...structuredClone(workspace.recipe), layers: [] })! }] };
   workspace.collections = collectionDraft(source, 3);
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
@@ -91,7 +92,7 @@ test("finish descriptors mirror the package filter instead of a UI copy of eligi
     const matte = { ...structuredClone(base.layers[1]), finish: "matte" as const, enabled: true, opacity: .8 };
     const layers = finish.id === "iridescent" ? [layer] : [matte, layer];
     const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Gate",
-      presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1, recipe: { ...base, schema: "xfs/recipe-11", layers } }] };
+      presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1, recipe: { schema: "xfs/recipe-11", ...base, layers } }] };
     const omitted = preparePackageCollection(collection).omissions.some(item => item.kind === "layer" && item.layerId === layer.id);
     expect(omitted).toBe(finish.exportAdapter === "none");
     expect(finish.preview === "preview-study").toBe(omitted);

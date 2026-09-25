@@ -14,6 +14,7 @@ import { createStudioPresentation, type StudioPresentationPort } from "../src/st
 import { UIPreferenceActions } from "../src/ui-preferences";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
 import { freshWorkspace } from "../src/workspace-state";
+import { recipeFile } from "../src/recipe-schema";
 
 /**
  * A trusted presentation over real application services, without a browser. `hitAt` stands in
@@ -34,7 +35,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const app = new StudioApplication({ document, eyeMakeup: eyeMakeupPort(document, recipe), gestures, controls, undo, quality });
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
-      recipe: structuredClone(document.recipe) }] };
+      recipe: recipeFile(structuredClone(document.recipe))! }] };
   let packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },

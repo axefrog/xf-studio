@@ -1,38 +1,54 @@
 /**
  * Eye makeup's stored data (feature-module platform §2): the part codec, the per-look editor
- * memory and the feature-wide memory. Part 1 is the in-memory recipe verbatim, so it is the
- * lossless target of `parseRecipe`; reading migrates older recipe schemas exactly as before.
+ * memory and the feature-wide memory.
+ *
+ * - Part 2 (`xfs/eye-makeup-part-2`, current) is the in-memory recipe: no recipe-level schema;
+ *   each layer's optical models are validated by the model registry (`layer-models.ts`).
+ * - Part 1 (`xfs/eye-makeup-part-1`) is a recipe file body with its `xfs/recipe-N` schema. It
+ *   reads into part 2 without any appearance change, and `downgrade` writes it back in the
+ *   oldest recipe schema that holds every layer's models, so the minimal writers keep producing
+ *   `xfas/collection-1` (and `xfs/recipe-N`) that 0.1.0-alpha.1 reads whenever the content allows.
+ * - A bare recipe file of any schema lifts into a part-2 recipe, migrating exactly as before.
  */
 import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../platform/api";
 import { parseFieldSelection, type FieldSelection } from "../../field-selection";
 import { parseGlitterChoices, type GlitterChoices } from "../../glitter-model";
-import { emptyRecipe, parseRecipe, starterRecipe, type Recipe } from "../../recipe";
+import { LAYER_MODELS, type LayerModelRegistry } from "../../layer-models";
+import { emptyRecipe, parseRecipe, parseRecipePart, starterRecipe, type Recipe } from "../../recipe";
+import { EYE_MAKEUP_PART_2, readPortableRecipe, recipeFile, RECIPE_SCHEMAS } from "../../recipe-schema";
 
 export const EYE_MAKEUP_PART_1 = "xfs/eye-makeup-part-1";
-/** Every recipe schema `parseRecipe` reads; a bare file of one of these is an eye-makeup recipe. */
-export const RECIPE_SCHEMAS: readonly string[] = ["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4",
-  "xfs/recipe-5", "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"];
+export { EYE_MAKEUP_PART_2, RECIPE_SCHEMAS };
 
-export const eyeMakeupPart: PartCodec<Recipe> = Object.freeze({
-  current: EYE_MAKEUP_PART_1,
-  accepts: [EYE_MAKEUP_PART_1],
-  parse(envelope: PartEnvelope): Recipe {
-    if (envelope.schema !== EYE_MAKEUP_PART_1) throw Error(`Unsupported eye-makeup part schema ${envelope.schema}.`);
-    return parseRecipe(envelope.body);
-  },
-  serialize: (recipe: Recipe): PartEnvelope => ({ schema: EYE_MAKEUP_PART_1, body: recipe }),
-  lift(file: unknown): Recipe | undefined {
-    const schema = (file as { schema?: unknown } | null)?.schema;
-    return typeof schema === "string" && RECIPE_SCHEMAS.includes(schema) ? parseRecipe(file) : undefined;
-  },
-  downgrade: (recipe: Recipe, schema: string) => schema === EYE_MAKEUP_PART_1 ? { schema, body: recipe } : undefined,
-  empty: emptyRecipe,
-  starter: starterRecipe,
-  summary: (recipe: Recipe) => ({ layers: recipe.layers.length }),
-  // A recipe holds at most 32 layers of 24 points and 8 warp fields: far below this.
-  maxBytes: 2_000_000,
-  legacy: { presetField: "recipe", schema: EYE_MAKEUP_PART_1 },
-});
+/** Eye makeup's part codec over a layer-model registry (the build's own by default; tests pass others). */
+export function eyeMakeupPartCodec(models: LayerModelRegistry = LAYER_MODELS): PartCodec<Recipe> {
+  return Object.freeze({
+    current: EYE_MAKEUP_PART_2,
+    /** Oldest first: `downgrade` targets and the minimal writers try them in this order. */
+    accepts: [EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2],
+    parse(envelope: PartEnvelope): Recipe {
+      if (envelope.schema === EYE_MAKEUP_PART_2) return parseRecipePart(envelope.body, models);
+      if (envelope.schema !== EYE_MAKEUP_PART_1) throw Error(`Unsupported eye-makeup part schema ${envelope.schema}.`);
+      // A part-1 body is a recipe file: its schema gates its layer models, then goes. Like every recipe
+      // reader, it also takes a recipe without a schema (an in-memory one) as part-2.
+      return parseRecipe(envelope.body, models);
+    },
+    serialize: (recipe: Recipe): PartEnvelope => ({ schema: EYE_MAKEUP_PART_2, body: recipe }),
+    lift: (file: unknown): Recipe | undefined => readPortableRecipe(file, models),
+    downgrade(recipe: Recipe, schema: string): PartEnvelope | undefined {
+      if (schema === EYE_MAKEUP_PART_2) return { schema, body: recipe };
+      const body = schema === EYE_MAKEUP_PART_1 ? recipeFile(recipe, models) : undefined;
+      return body && { schema, body };
+    },
+    empty: emptyRecipe,
+    starter: starterRecipe,
+    summary: (recipe: Recipe) => ({ layers: recipe.layers.length }),
+    // A recipe holds at most 32 layers of 24 points and 8 warp fields: far below this.
+    maxBytes: 2_000_000,
+    legacy: { presetField: "recipe", schema: EYE_MAKEUP_PART_1 },
+  });
+}
+export const eyeMakeupPart: PartCodec<Recipe> = eyeMakeupPartCodec();
 
 /** Per-look editor memory: the active layer, its selected point and each layer's selected warp control. */
 export type EyeMakeupEditor = { active: number; selected: number; fieldSelection?: FieldSelection };

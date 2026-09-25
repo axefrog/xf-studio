@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { bezierAt, convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint, tessellateBezier, MAX_CURVE_POINTS, BEZIER_TOLERANCE } from "../src/bezier-path";
-import { curve, initialRecipe, parseRecipe, raster, type Layer, type Point } from "../src/recipe";
+import { curve, initialRecipe, parseRecipe, parseRecipeFile, raster, type Layer, type Point } from "../src/recipe";
 
 const legacy = (): Layer => {
   const l = initialRecipe().layers[0];
@@ -109,7 +109,7 @@ describe("explicit closed cubic paths", () => {
     delete v4.layers[0].pathMode; delete v4.layers[0].softness;
     v4.layers[0].points.forEach((p:any) => delete p.feather);
     const before = raster(l, 128), loaded = parseRecipe(v4);
-    expect(loaded.schema).toBe("xfs/recipe-7"); expect(loaded.layers[0].pathMode).toBe("catmull-rom");
+    expect(parseRecipeFile(v4).schema).toBe("xfs/recipe-7"); expect(loaded).not.toHaveProperty("schema"); expect(loaded.layers[0].pathMode).toBe("catmull-rom");
     expect(raster(loaded.layers[0], 128)).toEqual(before);
     const recipe = initialRecipe();
     expect(parseRecipe(JSON.parse(JSON.stringify(recipe)))).toEqual(recipe);

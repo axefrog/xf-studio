@@ -7,7 +7,10 @@
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../../src/direct-glint-settings";
 import { defaultFlakes } from "../../src/finish";
 import { defaultStudioIrregularFlakes } from "../../src/flake-field";
-import { initialRecipe, newLayerTemplate, type Layer, type Recipe } from "../../src/recipe";
+import { initialRecipe, newLayerTemplate, type Layer, type RecipeFile } from "../../src/recipe";
+
+/** The startup recipe as earlier builds stored it (recipe-7, schema first). */
+export const storedInitialRecipe = (): RecipeFile => ({ schema: "xfs/recipe-7", ...initialRecipe() });
 
 /** A fixed UUID from a small number (never random). */
 export const fixedId = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
@@ -21,7 +24,7 @@ function layer(id: string, name: string, patch: Partial<Layer>, variant = 0): La
 }
 
 /** Recipe 11: game-matched Glossy, Colour-shifting with its shift, classic Glitter and a Satin layer. */
-export function opticsRecipe(tag: string, variant = 0): Recipe {
+export function opticsRecipe(tag: string, variant = 0): RecipeFile {
   return { schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [
     layer(`${tag}-gloss`, "Gloss", { finish: "glossy", color: "#aa3355", optics: { model: "game-matched-1" } }, variant),
     layer(`${tag}-shift`, "Shift", { finish: "iridescent", color: "#335577",
@@ -32,7 +35,7 @@ export function opticsRecipe(tag: string, variant = 0): Recipe {
 }
 
 /** Recipe 10: fine, irregular and direct Glitter models side by side. */
-export function glitterRecipe(tag: string, variant = 0): Recipe {
+export function glitterRecipe(tag: string, variant = 0): RecipeFile {
   return { schema: "xfs/recipe-10", uv: "gltf-uv0-top-left", layers: [
     layer(`${tag}-fine`, "Fine", { finish: "glitter", flakes: defaultFineSpeckleFlakes() }, variant),
     layer(`${tag}-irr`, "Irregular", { finish: "glitter", flakes: defaultStudioIrregularFlakes() }, variant + 1),
@@ -42,7 +45,7 @@ export function glitterRecipe(tag: string, variant = 0): Recipe {
 }
 
 /** A many-layer recipe for the large workspace. */
-export function wideRecipe(tag: string, layers: number, variant: number): Recipe {
+export function wideRecipe(tag: string, layers: number, variant: number): RecipeFile {
   const finishes: Layer["finish"][] = ["matte", "regular", "metallic", "shimmer", "glitter"];
   return { schema: "xfs/recipe-7", uv: "gltf-uv0-top-left", layers: Array.from({ length: layers }, (_, i) =>
     layer(`${tag}-l${i}`, `Layer ${i + 1}`, { finish: finishes[i % finishes.length],
@@ -57,7 +60,7 @@ export function recipe3(tag: string): unknown {
     ...rest, id: `${tag}-${rest.id}`, points: rest.points.map(({ handles: _h, feather: _pf, ...point }) => point) })) };
 }
 
-const edited = (recipe: Recipe, step: number): Recipe => ({ ...recipe, layers: recipe.layers.map((entry, i) =>
+const edited = (recipe: RecipeFile, step: number): RecipeFile => ({ ...recipe, layers: recipe.layers.map((entry, i) =>
   i === step % recipe.layers.length ? { ...entry, opacity: Math.round((0.3 + (step % 7) * 0.1) * 100) / 100 } : entry) });
 
 const preview = { textureSize: 1024, camera: { position: [0, 1.7, 0.45], target: [0, 1.68, 0], fov: 30 }, eyeShape: 4,
@@ -73,7 +76,7 @@ export function smallWorkspaceV1() {
   return {
     schema: "xfas/workspace-1",
     // Earlier builds kept a top-level editor copy; with a collection draft it is ignored.
-    recipe: initialRecipe(), active: 2, selected: 1, history: [initialRecipe()], fieldSelection: {},
+    recipe: storedInitialRecipe(), active: 2, selected: 1, history: [storedInitialRecipe()], fieldSelection: {},
     uvView: { mode: "single", side: "high", u: 0.62, v: 0.24, span: 0.3, aspect: 1.6 },
     glitterChoices: {
       [`${p1}/a-glit`]: { irregular: { ...defaultStudioIrregularFlakes(), count: 200000 }, direct: defaultDirectGlintFlakes(),
@@ -163,7 +166,7 @@ export function largeWorkspaceV1(layers = 12, depth = 80) {
     for (const entry of preset.recipe.layers.filter(item => item.finish === "glitter"))
       choices[`${preset.id}/${entry.id}`] = { irregular: defaultStudioIrregularFlakes(), fine: defaultFineSpeckleFlakes(),
         shift: { color: "#123456", strength: 0.5 } };
-  return { schema: "xfas/workspace-1", recipe: initialRecipe(), active: 0, selected: 0, history: [], fieldSelection: {},
+  return { schema: "xfas/workspace-1", recipe: storedInitialRecipe(), active: 0, selected: 0, history: [], fieldSelection: {},
     uvView: { mode: "both", side: "low", u: 0.5, v: 0.25, span: 0.6 }, glitterChoices: choices, preview,
     library: { selected: "", name: "Large" }, uiPreferences: {},
     collections: { ...current, previous: recovery[0], older: recovery.slice(1) } };

@@ -3,6 +3,7 @@ import { preparePigmentStrength } from "../src/pigment-strength";
 import { coverage, curve, initialRecipe, parseRecipe, raster, warpFields,
   DEFAULT_STRENGTH_BLEND, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND,
   type Layer, type Point } from "../src/recipe";
+import { recipeFile } from "../src/recipe-schema";
 
 const points = (values: number[][]): Point[] => values.map(([u, v, weight]) => ({ u, v, weight }));
 const square = points([[.3,.3,0],[.7,.3,0],[.7,.7,1],[.3,.7,1]]);
@@ -144,7 +145,7 @@ describe("continuous pigment strength", () => {
 
   test("current recipe persists explicit semantics and rejects ambiguous legacy and invalid blend values", () => {
     const recipe=initialRecipe();
-    expect(recipe.schema).toBe("xfs/recipe-7");
+    expect(recipeFile(recipe)!.schema).toBe("xfs/recipe-7");
     expect(recipe.layers[0].strength).toEqual({mode:"smooth-boundary",blend:DEFAULT_STRENGTH_BLEND});
     recipe.layers[1].strength={mode:"legacy-nearest"};
     expect(parseRecipe(JSON.parse(JSON.stringify(recipe)))).toEqual(recipe);

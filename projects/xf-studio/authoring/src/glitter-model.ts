@@ -3,7 +3,6 @@ import {defaultStudioIrregularFlakes, validStudioIrregularSettings, type Irregul
 import {defaultDirectGlintFlakes, defaultClusteredGlintFlakes, defaultFineSpeckleFlakes,
   isDirectGlint, type DirectGlintFlakes} from "./direct-glint-settings";
 import type {Layer, Recipe} from "./recipe";
-import {requiredRecipeSchema} from "./recipe-schema";
 
 export type GlitterModel = "classic" | "irregular" | "direct" | "clustered" | "fine";
 export type GlitterSettings = Flakes | IrregularFlakes | DirectGlintFlakes;
@@ -63,7 +62,8 @@ function defaults(model: GlitterModel): GlitterSettings {
     model === "direct" ? defaultDirectGlintFlakes() : model === "clustered" ? defaultClusteredGlintFlakes() : defaultFineSpeckleFlakes();
 }
 
-/** The portable recipe stores only the selected model. Inactive choices are local editor memory. */
+/** The portable recipe stores only the selected model. Inactive choices are local editor memory.
+ * Only the layer changes: each layer's model names itself, so the recipe has no schema to move. */
 export function selectGlitterModel(recipe: Recipe, layerId: string, model: GlitterModel,
   choices: GlitterChoices, scope = "draft"): Recipe {
   const index = recipe.layers.findIndex(layer => layer.id === layerId);
@@ -76,5 +76,5 @@ export function selectGlitterModel(recipe: Recipe, layerId: string, model: Glitt
   const saved = remembered[model];
   const flakes = saved && validGlitterSettings(model, saved) ? structuredClone(saved) : defaults(model);
   const layers = recipe.layers.map((entry, i) => i === index ? {...entry, flakes} : entry);
-  return {...recipe, schema: requiredRecipeSchema({schema: recipe.schema, layers}), layers};
+  return {...recipe, layers};
 }
