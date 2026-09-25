@@ -3,7 +3,7 @@ import { parseCharacterRequest } from "./character-detail-request";
 
 /**
  * Host endpoint for the preview's resolved character details, shared by localhost and the desktop.
- * POST takes one character request (`xfs/character-request-1`) and returns the preparation state;
+ * POST takes one character request (`xfs/character-request-2`, or a v1 request) and returns the preparation state;
  * GET `?key=` polls it. The launch route and tools come from the host's own settings, never the
  * browser. Callers mount it behind their own session checks (the desktop adds a token cookie).
  * `serveCharacterAsset` answers `/assets/character/<content-addressed name>`.

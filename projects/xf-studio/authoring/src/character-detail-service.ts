@@ -1,5 +1,5 @@
 /**
- * Host application service: prepare the character render record (head skin, brows, lashes, hair and eyes) for one V from
+ * Host application service: prepare the character render record (head skin, face details, brows, lashes, hair, eyes and piercings) for one V from
  * the installation the launch route loads. It opens the route with the generic resolver (the same source
  * discovery, archive precedence and ArchiveXL rules Build uses), resolves the V's choices, plans the
  * drawable components (character-detail-plan.ts), exports each winning resource through the generic
@@ -8,23 +8,30 @@
  *
  * There is no mod-specific code: a CCXL hair, brow, lash or eye pack resolves exactly like vanilla, and so does a
  * complexion mod, whether it replaces textures or skin profiles at their vanilla paths (archive precedence) or
- * patches the head mesh's appearances through ArchiveXL (the resolver follows the patch's materials).
+ * patches the head mesh's appearances through ArchiveXL (the resolver follows the patch's materials), and so does a
+ * piercing framework that replaces a vanilla style's `.app` and fills its slots from item archives.
+ *
+ * Layered (`multilayered.mt`) chunks also get their layer stack: the winning `.mlsetup` and each layer's `.mltemplate` are read
+ * through the resolver (layered-setup.ts), their maps and microblends exported like any texture, and the `.mlmask` exported as one
+ * raw image per mask layer.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedComponent, type TemplateIdentities } from "./character-detail-plan";
+import { applyChoiceOverride, planCharacterDetails, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlannedChunk, type PlannedComponent,
+  type TemplateIdentities } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { loadMergedCco, resolveCharacter, type CharacterInput, type ResolvedParam } from "./character-resolver";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
+import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
 import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
-import { CHARACTER_DETAIL_SCHEMA, chunkOfMesh, type CharacterDetail, type DetailSlot, type DetailSlotState, type RenderChunkMaterial,
-  type RenderComponent, type RenderGradient, type RenderProfile, type RenderProfileStop, type RenderRgba, type RenderSkinProfile,
-  type RenderTexture } from "./render-detail";
+import { CHARACTER_DETAIL_SCHEMA, chunkOfMesh, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
+  type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderOverride, type RenderProfile, type RenderProfileStop, type RenderRgba,
+  type RenderSkinProfile, type RenderSourceRef, type RenderTexture } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
@@ -32,7 +39,7 @@ import type { Provenance, ResourceGraph } from "./resource-graph";
 export type CharacterDetailStep = "reading" | "resolving" | "exporting" | "writing";
 export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label: string }[] = [
   { step: "reading", label: "Reading your installed mods" },
-  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes and hair" },
+  { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair and piercings" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
   { step: "writing", label: "Getting them ready for the preview" },
 ];
@@ -57,8 +64,8 @@ export class CharacterDetailError extends Error {
   constructor(readonly code: "character_cancelled" | "character_tool_missing" | "character_unreadable" | "character_failed",
     message: string, readonly detail = "") { super(message); }
 }
-const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes and hair aren't shown. The head still works.";
-const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes and hair aren't shown yet. The head still works.";
+const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown. The head still works.";
+const TOOL_MISSING = "WolvenKit isn't ready, so your V's own skin, face details, eyes, brows, lashes, hair and piercings aren't shown yet. The head still works.";
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -255,6 +262,13 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
     const derived = descriptorsFromUiState(cco.merged.cco, {});
     input = { bodyGender: request.bodyGender, origin: "ui-state", appearances: derived.appearances, morphs: derived.morphs };
   } else input = inputFromCharacterRequest(request);
+  // A choice the viewer tries (a piercing style) replaces the V's own on its slot; one the creator doesn't offer is ignored.
+  let override: RenderOverride | undefined;
+  if (request.override) {
+    const appearances = applyChoiceOverride(input.appearances, cco.merged.cco, request.override);
+    if (appearances) { input = { ...input, appearances }; override = { ...request.override }; }
+    else log(`The tried ${request.override.slot} choice ${request.override.option} (${request.override.definition}) is not offered; showing the V's own.`);
+  }
   const resolved = await resolveCharacter(graph, input, cco);
   cancelled();
   const templates = resolved.appearances.flatMap(entry => entry.components.flatMap(component => component.materials
@@ -281,7 +295,7 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   const gameRoot = options.route.gameRoot;
   const toolFailures = new Set<string>();
   let toolLabel: string | undefined;
-  const exportGroup = async <T>(kind: "geometry" | "textures", group: ReturnType<typeof byArchive>[number]): Promise<Map<string, T>> => {
+  const exportGroup = async <T>(kind: "geometry" | "textures" | "masks", group: ReturnType<typeof byArchive>[number]): Promise<Map<string, T>> => {
     const session = options.exporter.open(archiveExportSource(group.archive.id, gameRoot), signal);
     toolLabel ??= session.tool.label;
     try { return await session[kind]([...group.paths]) as unknown as Map<string, T>; }
@@ -315,17 +329,6 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       const located = locate(graph, provenance.ref);
       if (located) textureAt.set(refLabel(provenance.ref).toLowerCase(), located);
     }
-  const textures = new Map<string, { png: string }>();
-  for (const group of byArchive([...textureAt.values()])) {
-    const exported = await exportGroup<{ png: string }>("textures", group);
-    for (const [path, value] of exported) textures.set(`${group.archive.id}|${path.toLowerCase()}`, value);
-    cancelled();
-  }
-  const gammaOf = new Map<string, boolean | null>();
-  await Promise.all([...textureAt.keys()].map(async key => {
-    const loaded = await graph.load(refFromPath(key), "xbm");
-    gammaOf.set(key, textureIsGamma(loaded?.root));
-  }));
   const profileOf = new Map<string, RenderProfile | null>();
   for (const component of plan.components) for (const material of component.materials)
     for (const provenance of Object.values(material.profiles)) {
@@ -356,11 +359,136 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       gradientOf.set(key, stops ? { depotPath: refLabel(provenance.ref), archive: loaded!.provenance.archive,
         sha256: hexSha(loaded!.provenance.extractedSha256), stops } : null);
     }
+  // Layered chunks: the winning setup and templates, then their maps, microblends and mask layers with the other textures.
+  const setupOf = new Map<string, { values: SetupValues; source: RenderSourceRef } | null>();
+  const templateOf = new Map<string, { values: TemplateValues; source: RenderSourceRef } | null>();
+  const readLayered = async (chunk: PlannedChunk) => {
+    if (!chunk.layered) return;
+    const key = refLabel(chunk.layered.setup.ref).toLowerCase();
+    if (!setupOf.has(key)) {
+      const loaded = await graph.load(chunk.layered.setup.ref, "mlsetup");
+      const values = loaded ? readSetup(loaded.root) : null;
+      setupOf.set(key, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
+    }
+    for (const layer of setupOf.get(key)?.values.layers ?? []) {
+      if (!layer.template) continue;
+      const templateKey = refLabel(layer.template).toLowerCase();
+      if (templateOf.has(templateKey)) continue;
+      const loaded = await graph.load(layer.template, "mltemplate");
+      const values = loaded ? readTemplate(loaded.root) : null;
+      templateOf.set(templateKey, values ? { values, source: { depotPath: refLabel(loaded!.ref), archive: loaded!.provenance.archive,
+        sha256: hexSha(loaded!.provenance.extractedSha256) } } : null);
+    }
+  };
+  for (const component of plan.components) for (const material of component.materials) await readLayered(material);
+  /** A layer the renderer blends in: a visible opacity (a layer at zero opacity changes nothing; knowledge/materials-and-shaders.md §4.6). */
+  const layerDraws = (opacity: number) => opacity > 0;
+  const layerTextures = (chunk: PlannedChunk) => {
+    const setup = chunk.layered ? setupOf.get(refLabel(chunk.layered.setup.ref).toLowerCase()) : null;
+    const out: DepotRef[] = [];
+    for (const layer of setup?.values.layers ?? []) {
+      if (!layerDraws(layer.opacity)) continue;
+      const template = layer.template ? templateOf.get(refLabel(layer.template).toLowerCase()) : null;
+      for (const ref of [template?.values.textures.color, template?.values.textures.normal, template?.values.textures.roughness,
+        template?.values.textures.metalness, layer.microblend]) if (ref?.path && /\.xbm$/i.test(ref.path)) out.push(ref);
+    }
+    return out;
+  };
+  for (const component of plan.components) for (const material of component.materials)
+    for (const ref of layerTextures(material)) {
+      const located = locate(graph, ref);
+      if (located) textureAt.set(refLabel(ref).toLowerCase(), located);
+    }
+  const maskAt = new Map<string, Located>();
+  for (const component of plan.components) for (const material of component.materials) {
+    const mask = material.layered?.mask;
+    if (!mask) continue;
+    const located = locate(graph, mask.ref);
+    if (located) maskAt.set(refLabel(mask.ref).toLowerCase(), located);
+  }
+  const textures = new Map<string, { png: string }>();
+  for (const group of byArchive([...textureAt.values()])) {
+    const exported = await exportGroup<{ png: string }>("textures", group);
+    for (const [path, value] of exported) textures.set(`${group.archive.id}|${path.toLowerCase()}`, value);
+    cancelled();
+  }
+  const masks = new Map<string, { layers: string[] }>();
+  for (const group of byArchive([...maskAt.values()])) {
+    const exported = await exportGroup<{ layers: string[] }>("masks", group);
+    for (const [path, value] of exported) masks.set(`${group.archive.id}|${path.toLowerCase()}`, value);
+    cancelled();
+  }
+  const gammaOf = new Map<string, boolean | null>();
+  await Promise.all([...textureAt.keys()].map(async key => {
+    const loaded = await graph.load(refFromPath(key), "xbm");
+    gammaOf.set(key, textureIsGamma(loaded?.root));
+  }));
   cancelled();
 
   progress("writing");
   const notes: string[] = [];
   const components: RenderComponent[] = [];
+  /** One exported texture as the record serves it: raw channels, the resource's own colour flag, and where it came from. */
+  const serveTexture = (ref: DepotRef, parameter: string, extractedSha256?: string | null): { texture: RenderTexture } | { why: string } => {
+    const key = refLabel(ref).toLowerCase(), at = textureAt.get(key);
+    const png = at ? textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
+    if (!at || !png) return { why: at ? "not exported" : "not in any mounted archive" };
+    const stored = store(options.storeRoot, png, "png"), size = pngSize(stored.bytes);
+    if (!size) return { why: "unreadable image" };
+    const gamma = gammaOf.get(key);
+    if (gamma === null || gamma === undefined) notes.push(`${refLabel(ref)}: colour flag unreadable; treated as linear.`);
+    return { texture: { file: stored.file, sha256: stored.sha256, depotPath: refLabel(ref), ...size, isGamma: !!gamma,
+      sources: [{ depotPath: at.depotPath, archive: at.archive.name, provider: at.archive.provider, parameter,
+        ...(hexSha(extractedSha256) ? { sha256: hexSha(extractedSha256)! } : {}) }] } };
+  };
+  /**
+   * A layered chunk's stack for the record: every setup layer with its template's values, and for each layer that draws, its maps,
+   * microblend and mask layer (raw greyscale, never colour-decoded). A map or mask that could not be read leaves that input out
+   * with a note (the adapter uses the neutral value); a setup that could not be read leaves the chunk undrawn.
+   */
+  const layeredStack = (chunk: PlannedChunk, owner: string): RenderLayered | null => {
+    if (!chunk.layered) return null;
+    const setup = setupOf.get(refLabel(chunk.layered.setup.ref).toLowerCase());
+    if (!setup || !setup.values.layers.length) return null;
+    const maskRef = chunk.layered.mask, maskAtArchive = maskRef ? maskAt.get(refLabel(maskRef.ref).toLowerCase()) : undefined;
+    const maskFiles = maskAtArchive ? masks.get(`${maskAtArchive.archive.id}|${maskAtArchive.depotPath.toLowerCase()}`)?.layers ?? [] : [];
+    if (maskRef && !maskFiles.length) notes.push(`${owner} chunk ${chunk.chunk}: its layer mask ${refLabel(maskRef.ref)} could not be read; drawn without it.`);
+    const missing = new Set<string>();
+    const layers = setup.values.layers.map((layer, index): RenderLayer => {
+      const template = layer.template ? templateOf.get(refLabel(layer.template).toLowerCase()) ?? null : null;
+      if (layer.template && !template) missing.add(refLabel(layer.template));
+      const values = layerOverrides(layer, template?.values ?? null);
+      const served: Partial<Record<LayerTextureRole, RenderTexture>> = {};
+      if (layerDraws(layer.opacity)) {
+        const maps = template?.values.textures;
+        for (const [role, ref] of [["color", maps?.color], ["normal", maps?.normal], ["roughness", maps?.roughness], ["metalness", maps?.metalness],
+          ["microblend", layer.microblend]] as [LayerTextureRole, DepotRef | null | undefined][]) {
+          if (!ref?.path || !/\.xbm$/i.test(ref.path)) continue;
+          const texture = serveTexture(ref, `layer ${index} ${role}`);
+          if ("texture" in texture) served[role] = texture.texture; else missing.add(refLabel(ref));
+        }
+        const maskFile = maskFiles[index];
+        if (maskFile && maskAtArchive) {
+          const stored = store(options.storeRoot, maskFile, "png"), size = pngSize(stored.bytes);
+          if (size) served.mask = { file: stored.file, sha256: stored.sha256, depotPath: refLabel(maskRef!.ref), ...size, isGamma: false,
+            sources: [{ depotPath: maskAtArchive.depotPath, archive: maskAtArchive.archive.name, provider: maskAtArchive.archive.provider,
+              parameter: `mask layer ${index}`, ...(hexSha(maskRef!.extractedSha256) ? { sha256: hexSha(maskRef!.extractedSha256)! } : {}) }] };
+        }
+      }
+      return { template: template?.source ?? (layer.template ? { depotPath: refLabel(layer.template), archive: null, sha256: null } : null),
+        opacity: layer.opacity, matTile: layer.matTile, tilingMultiplier: template?.values.tilingMultiplier ?? 1,
+        offsetU: layer.offsetU, offsetV: layer.offsetV, mbTile: layer.mbTile, microblendContrast: layer.microblendContrast,
+        microblendNormalStrength: layer.microblendNormalStrength, microblendOffsetU: layer.microblendOffsetU, microblendOffsetV: layer.microblendOffsetV,
+        colorScale: values.colorScale, normalStrength: values.normalStrength, roughLevelsIn: values.roughLevelsIn, roughLevelsOut: values.roughLevelsOut,
+        metalLevelsIn: values.metalLevelsIn, metalLevelsOut: values.metalLevelsOut,
+        colorMaskLevelsIn: template?.values.colorMaskLevelsIn ?? [0, 1], colorMaskLevelsOut: template?.values.colorMaskLevelsOut ?? [0, 1],
+        names: values.names, textures: served };
+    });
+    if (missing.size) notes.push(`${owner} chunk ${chunk.chunk}: ${[...missing].slice(0, 4).join(", ")}${missing.size > 4 ? ` and ${missing.size - 4} more` : ""} could not be read; those layer inputs use neutral values.`);
+    return { setup: setup.source, mask: maskRef ? { depotPath: refLabel(maskRef.ref), archive: maskAtArchive?.archive.name ?? null,
+      sha256: hexSha(maskRef.extractedSha256), layers: maskFiles.length } : null, ratio: setup.values.ratio, useNormal: setup.values.useNormal, layers };
+  };
   for (const component of plan.components) {
     const located = geometryAt.get(component);
     const exported = located ? geometry.get(`${located.archive.id}|${located.depotPath.toLowerCase()}`) : undefined;
@@ -373,16 +501,15 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       const chunkTextures: Record<string, RenderTexture> = {};
       const unread: { param: string; why?: string }[] = [];
       for (const [param, provenance] of Object.entries(material.textures)) {
-        const key = refLabel(provenance.ref).toLowerCase(), at = textureAt.get(key);
-        const png = at ? textures.get(`${at.archive.id}|${at.depotPath.toLowerCase()}`)?.png : undefined;
-        if (!at || !png) { unread.push({ param, why: at ? "not exported" : "not in any mounted archive" }); continue; }
-        const stored = store(options.storeRoot, png, "png"), size = pngSize(stored.bytes);
-        if (!size) { unread.push({ param, why: "unreadable image" }); continue; }
-        const gamma = gammaOf.get(key);
-        if (gamma === null || gamma === undefined) notes.push(`${refLabel(provenance.ref)}: colour flag unreadable; treated as linear.`);
-        chunkTextures[param] = { file: stored.file, sha256: stored.sha256, depotPath: refLabel(provenance.ref), ...size, isGamma: !!gamma,
-          sources: [{ depotPath: at.depotPath, archive: at.archive.name, provider: at.archive.provider, parameter: param,
-            ...(hexSha(provenance.extractedSha256) ? { sha256: hexSha(provenance.extractedSha256)! } : {}) }] };
+        const served = serveTexture(provenance.ref, param, provenance.extractedSha256);
+        if ("why" in served) { unread.push({ param, why: served.why }); continue; }
+        chunkTextures[param] = served.texture;
+      }
+      let layered: RenderLayered | undefined;
+      if (material.layered) {
+        const built = layeredStack(material, component.component);
+        // Without its stack the chunk is kept, and the layered adapter leaves it out with a limit code the presentation words.
+        if (built) layered = built; else notes.push(`${component.component} chunk ${material.chunk}: its layer setup ${refLabel(material.layered.setup.ref)} could not be read.`);
       }
       const chunkProfiles: Record<string, RenderProfile> = {};
       for (const [param, provenance] of Object.entries(material.profiles)) {
@@ -412,7 +539,8 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
       if (optional.length) notes.push(`${component.component} chunk ${material.chunk}: ${words(optional)} could not be read; drawn without ${optional.length > 1 ? "them" : "it"}.`);
       materials.push({ chunk: material.chunk, name: material.name, template: material.template, templateName: material.templateName,
         materialPriority: material.materialPriority, scalars: material.scalars,
-        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles, gradients: chunkGradients });
+        colours: material.colours, textures: chunkTextures, profiles: chunkProfiles, skinProfiles: chunkSkinProfiles, gradients: chunkGradients,
+        ...(layered ? { layered } : {}) });
     }
     // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws. A face detail made only of
     // decal templates the preview can't draw yet is kept, hidden, so the renderer reports it (limit `decal-template`).
@@ -443,10 +571,10 @@ export async function prepareCharacterDetails(options: PrepareCharacterOptions):
   if (summary.scanGaps.length) notes.push("Some installed mod files could not be read; the resolved details may differ from the game.");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
-    character: { source: request.source, bodyGender: request.bodyGender },
+    character: { source: request.source, bodyGender: request.bodyGender, ...(override ? { override } : {}) },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: [...new Set(notes)].slice(0, 32).map(note => note.slice(0, 500)), ...(toolLabel ? { tool: toolLabel } : {}) },
-    components, slots: [...slots.values()],
+    components, slots: [...slots.values()], choices: plan.choices,
   };
   const identity = sha256(canonical(body));
   const record: CharacterDetail = { ...body, identity };

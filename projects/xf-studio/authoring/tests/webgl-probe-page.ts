@@ -28,11 +28,16 @@ import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters }
 import { stageBackdropPixels } from "../src/stage-backdrop";
 import { createStudioEnvironment } from "../src/studio-environment";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
+import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, resolveSurface, type LayerAccumulator } from "../src/layered-material";
+import type { RenderLayer } from "../src/render-detail";
 
 type Probe = { ok: boolean; linear: boolean; renderer: string; errors: string[]; programs: string[];
   blends: { name: string; target: number[]; studio: number[]; creator: number[]; creatorTarget: number[]; direct: number[] }[];
   opaque: { studio: number[]; direct: number[] }; backdrop: { studio: number[]; direct: number[] }; failure?: string;
-  plate?: PlateProbe; display?: { path: string; creatorTarget: string }; environment?: string };
+  plate?: PlateProbe; display?: { path: string; creatorTarget: string }; environment?: string; layered?: LayeredProbe };
+/** The layered bake (section 5): the GPU's baked maps at one texel against the CPU reference of the same stack. */
+export type LayeredProbe = { state: string; error?: string; gpu: { colour: number[]; normal: number[]; surface: number[] };
+  cpu: { colour: number[]; normal: number[]; surface: number[] }; drawn: number[] };
 /** The authored plate's measurements (section 4). */
 export type PlateProbe = { steps: { coverage: number; sqrt: number[]; linear: number[] }[]; stack: { preview: number[]; target: number[]; linear: number[] };
   routes: string[]; once: { name: string; preview: number[]; truth: number[]; metalness: number; skinLight: boolean }[];
@@ -350,6 +355,60 @@ try {
     probe.plate = { steps, stack: { preview: previewPixel, target: targetPixel, linear: linearPixel }, routes, once,
       parity: { plate: parityPlate, decal: parityDecal }, glossy: { plate: glossyPlate, decal: glossyDecal, truth: glossyTruth } };
     target.dispose();
+  }
+  // 5. The layered bake (layered-material.ts): a three-layer stack of constant maps, baked on the GPU, read back, and compared with the
+  // CPU reference of the same arithmetic; then the lit material drawn once.
+  {
+    const byte = (value: number) => Math.round(value * 255);
+    const data = (rgba: number[]) => { const t = new THREE.DataTexture(new Uint8Array(rgba.map(byte)), 1, 1); t.needsUpdate = true; return t; };
+    const stackLayer = (overrides: Partial<RenderLayer>): RenderLayer => ({ template: null, opacity: 1, matTile: 1, tilingMultiplier: 1, offsetU: 0, offsetV: 0,
+      mbTile: 1, microblendContrast: 1, microblendNormalStrength: 0, microblendOffsetU: 0, microblendOffsetV: 0, colorScale: [1, 1, 1], normalStrength: 1,
+      roughLevelsIn: [1, 0], roughLevelsOut: [1, 0], metalLevelsIn: [1, 0], metalLevelsOut: [1, 0], colorMaskLevelsIn: [1, 0], colorMaskLevelsOut: [0, 0],
+      names: { colorScale: "", normalStrength: "", roughLevelsIn: "", roughLevelsOut: "", metalLevelsIn: "", metalLevelsOut: "" }, textures: {}, ...overrides });
+    // Byte-exact inputs (every value k/255), so the GPU samples exactly what the reference uses.
+    const q = (value: number) => byte(value) / 255;
+    const top = { colour: [q(0.8), q(0.2), q(0.1)], normal: [q(0.85), q(0.3)], rough: q(0.6), metal: q(0.3), micro: [q(0.75), q(0.5), q(1), q(0.8)], mask: q(0.5) };
+    const middle = { colour: [q(0.2), q(0.6), q(0.3)], normal: [q(0.5), q(0.9)], rough: q(0.2), metal: q(0.9), micro: [q(0.5), q(0.5), q(1), q(1)], mask: q(0.4) };
+    const bottom = { colour: [q(0.5), q(0.5), q(0.5)], normal: [q(0.4), q(0.5)], rough: q(0.9), metal: q(0.0), micro: [q(0.5), q(0.5), q(1), q(1)], mask: 1 };
+    const records = [
+      stackLayer({ colorScale: [0.9, 0.8, 0.7], roughLevelsIn: [1.342, -0.1578], roughLevelsOut: [0.2975, 0.2235], normalStrength: 0.5 }),
+      stackLayer({ opacity: 0.8, colorScale: [0.5, 1, 1], metalLevelsOut: [0.902, 0], colorMaskLevelsIn: [2, -0.5], colorMaskLevelsOut: [1, 0] }),
+      stackLayer({ opacity: 0.9, colorScale: [1, 0.5, 0.25], microblendContrast: 0.7, microblendNormalStrength: 0.6, normalStrength: 1.5 }),
+    ];
+    const inputs = [bottom, middle, top];
+    const maps = (entry: typeof top) => ({ color: data([...entry.colour, 1]), normal: data([...entry.normal, 1, 1]), roughness: data([entry.rough, entry.rough, entry.rough, 1]),
+      metalness: data([entry.metal, entry.metal, entry.metal, 1]), microblend: data(entry.micro), mask: data([entry.mask, entry.mask, entry.mask, 1]) });
+    const layers = [2, 1, 0].map(index => ({ parameters: layerBakeParameters(records[index]!, index), textures: maps(inputs[index]!) }));
+    const globalXy: [number, number] = [q(0.6) * 2 - 1, q(0.45) * 2 - 1];
+    const made = createLayeredMaterial({ layers, domain: { min: [0, 0], max: [1, 1] }, size: 8,
+      globals: { ratio: 1, normal: data([q(0.6), q(0.45), 1, 1]), normalIntensity: 0.5, normalUvScale: [1, 1], normalUvBias: [0, 0] } });
+    const baked = made.handle.bake(renderer);
+    // The CPU reference over the same samples (the maps are constant, so every texel is the same).
+    let acc: LayerAccumulator = EMPTY_ACCUMULATOR;
+    layers.forEach(({ parameters }, order) => {
+      const entry = inputs[parameters.index]!;
+      acc = accumulateLayer(acc, parameters, { colour: entry.colour as [number, number, number], normal: [entry.normal[0]! * 2 - 1, entry.normal[1]! * 2 - 1],
+        roughness: entry.rough, metalness: entry.metal, microblend: entry.micro as [number, number, number, number], mask: entry.mask }, order === layers.length - 1);
+    });
+    const cpu = resolveSurface(acc, globalNormal(globalXy, 0.5));
+    // Half-float maps read back as half floats.
+    const readTexel = (index: number) => {
+      const pixel = new Uint16Array(4);
+      renderer.readRenderTargetPixels(made.handle.target!, 3, 3, 1, 1, pixel, undefined, index);
+      return [...pixel].map(value => THREE.DataUtils.fromHalfFloat(value));
+    };
+    probe.layered = { state: made.handle.state, ...(made.handle.evidence().error ? { error: made.handle.evidence().error } : {}), drawn: made.handle.evidence().layers,
+      gpu: baked ? { colour: readTexel(0).slice(0, 3), normal: readTexel(1).slice(0, 3), surface: readTexel(2).slice(1, 3) } : { colour: [], normal: [], surface: [] },
+      cpu: { colour: cpu.colour, normal: cpu.normal.map(value => value * 0.5 + 0.5), surface: [cpu.roughness, cpu.metalness] } };
+    // The lit material compiles and draws (standard light, environment, key light).
+    const litScene = new THREE.Scene();
+    litScene.environment = scene.environment;
+    litScene.add(new THREE.DirectionalLight(0xffffff, 2));
+    litScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), made.material));
+    renderer.render(litScene, camera);
+    const litError = gl.getError();
+    if (litError !== gl.NO_ERROR) probe.errors.push(`layered: WebGL error ${litError}`);
+    made.material.dispose();
   }
   probe.ok = true;
 } catch (error) {

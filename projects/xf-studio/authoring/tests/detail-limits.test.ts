@@ -4,7 +4,7 @@ import { characterDetailLine, DETAIL_LIMIT_TEXT } from "../src/studio-ui/panels/
 
 test("renderer limit codes are worded only by the presentation, one plain sentence each (UI-38)", () => {
   expect(Object.keys(DETAIL_LIMIT_TEXT).sort()).toEqual([...DETAIL_LIMITS].sort());
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", progress: null, slots: [
+  const line = characterDetailLine({ phase: "ready", source: "save", message: "", progress: null, choices: [], override: null, slots: [
     { slot: "skin", state: "shown", label: "Pale", limits: ["head-shape", "skin-glow"] },
     { slot: "brows", state: "shown", label: "Style 3" },
     { slot: "lashes", state: "shown", label: "Default" },
@@ -27,7 +27,7 @@ test("renderer and device modules carry codes, not the sentences", () => {
 });
 
 test("face details: the slot reads as plain words, and a decal the preview can't draw is one sentence from its code", () => {
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", progress: null, slots: [
+  const line = characterDetailLine({ phase: "ready", source: "save", message: "", progress: null, choices: [], override: null, slots: [
     { slot: "skin", state: "shown", label: "senna, skin type 3" },
     { slot: "face", state: "shown", label: "cheeks (light brown), face cyberware", limits: ["decal-template"] },
   ] });

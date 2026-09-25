@@ -13,6 +13,10 @@
 // follows the skin tone, face cyberware whose second chunk is an emissive decal the preview doesn't draw yet, the skin type's
 // personal-link decal (skin type 3), and a CCXL-style makeup option on a slot of its own whose material derives from a copy of
 // `mesh_decal.mt` at the pack's own path (named `mesh_decal`, priority `EMP_Front`), added to the `face` group.
+// Piercings: an Off/style switcher on the piercing slot with two vanilla-style options on `multilayered.mt` (an `.mlsetup` of three layers,
+// one hidden, over two layer templates, and an `.mlmask`), each drawing chunks 0 and 2 of a three-chunk earring through its chunk mask;
+// and a jewellery "framework" archive that replaces style 12's `.app` at its vanilla path with inline slot components (two zero-chunk
+// placeholders and one slot an item archive fills with its own morph target over a linked mesh), keeping the vanilla part.
 // No private save, game file or real mod name is used.
 import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
@@ -67,7 +71,19 @@ export const P = {
   linkMorph: "base\\fixture\\hx_personal_link_morphs.morphtarget", linkMesh: "base\\fixture\\hx_personal_link.mesh",
   packLinerApp: "fixture_pack\\liner.app", packLinerMorph: "fixture_pack\\liner.morphtarget", packLinerMesh: "fixture_pack\\liner.mesh",
   packLinerD: "fixture_pack\\tex\\liner_d.xbm", packFrontMt: "fixture_pack\\materials\\mesh_decal_front.mt",
+  earringApp1: "base\\fixture\\piercings\\earring_01.app", earringApp12: "base\\fixture\\piercings\\earring_12.app",
+  earringMorph: "base\\fixture\\i1_earring_morphs.morphtarget", earringMesh: "base\\fixture\\i1_earring.mesh",
+  silverMi: "base\\fixture\\earrings\\earring_silver.mi", blackMi: "base\\fixture\\earrings\\earring_black.mi",
+  silverSetup: "base\\fixture\\earrings\\earring_silver.mlsetup", blackSetup: "base\\fixture\\earrings\\earring_black.mlsetup",
+  earringMask: "base\\fixture\\earrings\\earring_01.mlmask", metalTpl: "base\\surfaces\\fixture_metal.mltemplate",
+  paintTpl: "base\\surfaces\\fixture_paint.mltemplate", metalD: "base\\surfaces\\tex\\metal_d.xbm", metalN: "base\\surfaces\\tex\\metal_n.xbm",
+  metalR: "base\\surfaces\\tex\\metal_r.xbm", paintD: "base\\surfaces\\tex\\paint_d.xbm", microblend: "base\\surfaces\\microblends\\default.xbm",
+  slotMorph: (n: number) => `fixture_jewellery\\slots\\slot${n}.morphtarget`, slotMesh: "fixture_jewellery\\slots\\slot2_linked.mesh",
 } as const;
+/** Piercing definitions, as the vanilla creator names them. */
+export const PIERCING = { silver: "i0_000_pwa__earring__01_silver", black: "i0_000_pwa__earring__03_black" } as const;
+/** The earring's chunk mask: chunks 0 and 2 of three. */
+export const EARRING_MASK = "18446744073709551613";
 /** Face-detail definitions, as the vanilla creator names them. */
 export const FACE = { lipsRed: "hx_000_pwa__basehead__makeup_lips_05__06_red", cheeksRed: "hx_000_pwa__morphs_makeup_freckles_01__03_red",
   frecklesBrown: "hx_000_pwa__morphs_makeup_freckles_01__03_light_brown", tattooSenna: "hx_000_pwa__tattoo_02__03_ca_senna",
@@ -123,6 +139,33 @@ const lodMesh = (spec: Parameters<typeof mesh>[0], lods: number[]) => {
 
 const option = (name: string, resource: string | null, definitions: string[], uiSlot: string, enabled = 1, hidden = 0, link = "None") =>
   appearanceOption(name, resource, definitions, { uiSlot, enabled, hidden, link });
+/** A switcher whose choices pick between the options of a creator slot (the piercing style switcher). */
+const slotSwitcher = (name: string, uiSlot: string, choices: [string, string[]][]) => {
+  const option = switcherOption(name, choices) as { Data: Record<string, unknown> };
+  option.Data.uiSlots = [cn(uiSlot)];
+  return option;
+};
+const setupRef = (path: string) => ({ $type: "rRef:Multilayer_Setup", MultilayerSetup: rp(path) });
+const maskRef = (path: string) => ({ $type: "rRef:Multilayer_Mask", MultilayerMask: rp(path) });
+/** One `Multilayer_Layer` as WolvenKit serializes it. */
+const mlLayer = (template: string, opacity: number, names: { colour: string; roughOut?: string }, extra: Record<string, number> = {}) => ({
+  $type: "Multilayer_Layer", material: rp(template), colorScale: cn(names.colour), normalStrength: cn("null"), roughLevelsIn: cn("null"),
+  roughLevelsOut: cn(names.roughOut ?? "null"), metalLevelsIn: cn("null"), metalLevelsOut: cn("null"), overrides: cn("None"),
+  microblend: rp(P.microblend), matTile: extra.matTile ?? 1, mbTile: extra.mbTile ?? 1, microblendContrast: extra.microblendContrast ?? 1,
+  microblendNormalStrength: 0, microblendOffsetU: 0, microblendOffsetV: 0, offsetU: 0, offsetV: 0, opacity });
+const mlTemplate = (maps: { color: string; normal?: string; roughness?: string }, colours: [string, number[]][], tiling = 1) => cr2w({
+  $type: "Multilayer_LayerTemplate", colorTexture: rp(maps.color), normalTexture: rp(maps.normal ?? null), roughnessTexture: rp(maps.roughness ?? null),
+  metalnessTexture: rp(P.white), tilingMultiplier: tiling, colorMaskLevelsIn: { Elements: [1, 0] }, colorMaskLevelsOut: { Elements: [0, 0] },
+  defaultOverrides: { $type: "Multilayer_LayerOverrideSelection", colorScale: cn(colours[0]![0]), normalStrength: cn("null"), roughLevelsIn: cn("null"),
+    roughLevelsOut: cn("null"), metalLevelsIn: cn("null"), metalLevelsOut: cn("null") },
+  overrides: { $type: "Multilayer_LayerTemplateOverrides",
+    colorScale: colours.map(([n, v]) => ({ $type: "Multilayer_LayerTemplateOverridesColor", n: cn(n), v: { Elements: v } })),
+    normalStrength: [{ $type: "Multilayer_LayerTemplateOverridesNormalStrength", n: cn("null"), v: 0.15 }],
+    roughLevelsIn: [{ $type: "Multilayer_LayerTemplateOverridesLevels", n: cn("null"), v: { Elements: [1, 0] } }],
+    roughLevelsOut: [{ $type: "Multilayer_LayerTemplateOverridesLevels", n: cn("null"), v: { Elements: [1, 0] } },
+      { $type: "Multilayer_LayerTemplateOverridesLevels", n: cn("shiny"), v: { Elements: [0.3, 0.2] } }],
+    metalLevelsIn: [{ $type: "Multilayer_LayerTemplateOverridesLevels", n: cn("null"), v: { Elements: [1, 0] } }],
+    metalLevelsOut: [{ $type: "Multilayer_LayerTemplateOverridesLevels", n: cn("null"), v: { Elements: [1, 0] } }] } });
 const FACE_TARGETS: [string, string][] = [["h011", "eyes"], ["h012", "nose"]];
 /** The 2.31 `mesh_decal.mt` defaults the family reads (all three target alphas 0). */
 const MESH_DECAL_PARAMS = () => [tParam("DiffuseTexture", P.grey), cParam("DiffuseColor", 255, 255, 255), sParam("DiffuseAlpha", 0),
@@ -130,7 +173,7 @@ const MESH_DECAL_PARAMS = () => [tParam("DiffuseTexture", P.grey), cParam("Diffu
   tParam("NormalAlphaTex", P.white), sParam("UseNormalAlphaTex", 0), sParam("NormalsBlendingMode", 0), tParam("RoughnessTexture", P.white),
   tParam("MetalnessTexture", P.black), sParam("RoughnessMetalnessAlpha", 0)];
 
-export function detailFixture(options: { skinPatch?: boolean } = {}): { archives: FixtureArchive[]; installation: () => Installation } {
+export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolean } = {}): { archives: FixtureArchive[]; installation: () => Installation } {
   const base: FixtureArchive = { virtualPath: "archive/pc/content/basegame_fixture.archive", files: {
     [P.cco]: cco([
       switcherOption("skin_type", [["01", ["skin_type_01"]], ["03", ["skin_type_03"]]]),
@@ -149,8 +192,12 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
       option("makeupCheeks_01", P.frecklesApp, [FACE.frecklesBrown], "makeupCheeks_color", 0),
       option("facial_tattoo_02", P.tattooApp, ["hx_000_pwa__tattoo_02__01_ca_pale", FACE.tattooSenna], "facial_tattoo", 0, 1, "skin color"),
       option("cyberware_01", P.cyberApp, ["hx_000_pwa__cyberware_01__01_ca_pale", FACE.cyberSenna], "cyberware", 0, 1, "skin color"),
+      slotSwitcher("piercings", "piercings_color", [["Common-Off", ["piercings_00"]], ["01", ["piercings_01"]], ["12", ["piercings_12"]]]),
+      option("piercings_00", null, ["None"], "piercings_color", 0),
+      option("piercings_12", P.earringApp12, [PIERCING.silver, PIERCING.black], "piercings_color", 0, 0, "piercings color"),
+      option("piercings_01", P.earringApp1, [PIERCING.silver, PIERCING.black], "piercings_color", 0, 0, "piercings color"),
     ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02"],
-      face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01"], hairs: ["hair_color1"],
+      face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
         "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }),
     // Skin: the type's .app names the tone's mesh appearance on the one head morph component (plus a part the preview doesn't draw).
@@ -186,6 +233,27 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
       local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.cyberD), scalar("DiffuseAlpha", 1), tex("NormalTexture", P.cyberN), scalar("NormalAlpha", 0.425),
         scalar("NormalsBlendingMode", 1), scalar("RoughnessMetalnessAlpha", 1)]), instance(P.emissiveMt, [tex("DiffuseTexture", P.cyberD)])] }),
     [P.lipsD]: xbm(true), [P.cheeksD]: xbm(true), [P.frecklesD]: xbm(true), [P.tattooD]: xbm(true), [P.cyberD]: xbm(true), [P.cyberN]: xbm(false),
+    // Piercings: each style's colours are mesh appearances whose chunks derive from a multilayered instance (setup + mask).
+    [P.earringApp1]: app([PIERCING.silver, PIERCING.black].map(name => ({ name, components: [morphComponent("earring_01", P.earringMorph,
+      name === PIERCING.silver ? "silver" : "black", EARRING_MASK)] }))),
+    [P.earringApp12]: app([PIERCING.silver, PIERCING.black].map(name => ({ name, components: [morphComponent("earring_04", P.earringMorph,
+      name === PIERCING.silver ? "silver" : "black", "18446744073709551614")] }))),
+    [P.earringMorph]: morphtarget(P.earringMesh, 3, [["h015", "ear"]]),
+    [P.earringMesh]: mesh({ appearances: [{ name: "silver", chunkMaterials: ["silver__01", "silver__02", "silver__03"] },
+        { name: "black", chunkMaterials: ["black__01", "black__02", "black__03"] }],
+      entries: [...["silver__01", "silver__02", "silver__03"].map(name => ({ name, local: false, index: 0 })),
+        ...["black__01", "black__02", "black__03"].map(name => ({ name, local: false, index: 1 }))], external: [P.silverMi, P.blackMi] }),
+    [P.silverMi]: mi(P.layeredMt, [setupRef(P.silverSetup), maskRef(P.earringMask)]),
+    [P.blackMi]: mi(P.layeredMt, [setupRef(P.blackSetup), maskRef(P.earringMask)]),
+    // Silver: a metal base layer, a hidden layer (opacity 0) and a faint paint layer; black: the paint alone, tinted black, with a roughness override.
+    [P.silverSetup]: cr2w({ $type: "Multilayer_Setup", ratio: 1, useNormal: 1, layers: [mlLayer(P.metalTpl, 1, { colour: "silver" }, { matTile: 0.5 }),
+      mlLayer(P.metalTpl, 0, { colour: "silver" }), mlLayer(P.paintTpl, 0.07, { colour: "white" })] }),
+    [P.blackSetup]: cr2w({ $type: "Multilayer_Setup", ratio: 1, useNormal: 1, layers: [mlLayer(P.paintTpl, 1, { colour: "black", roughOut: "shiny" }),
+      mlLayer(P.paintTpl, 1, { colour: "no_such_colour" })] }),
+    [P.metalTpl]: mlTemplate({ color: P.metalD, normal: P.metalN, roughness: P.metalR }, [["silver", [0.97, 0.96, 0.92]], ["null", [0.5, 0.5, 0.5]]], 2),
+    [P.paintTpl]: mlTemplate({ color: P.paintD }, [["white", [1, 1, 1]], ["black", [0.02, 0.02, 0.02]]]),
+    [P.earringMask]: cr2w({ $type: "Multilayer_Mask" }),
+    [P.metalD]: xbm(true), [P.metalN]: xbm(false), [P.metalR]: xbm(false), [P.paintD]: xbm(true), [P.microblend]: xbm(false),
     [P.headMorph]: morphtarget(P.headMesh, 1, [["h011", "eyes"], ["h012", "nose"]]),
     [P.headMesh]: mesh({ appearances: [
         { name: "01_ca_pale", chunkMaterials: ["pale"] }, { name: "01_ca_pale_00_warm_ivory", chunkMaterials: ["ivory"] },
@@ -255,8 +323,10 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
         instance(P.hairMt, [tex("Strand_Alpha", P.strandA), tex("Strand_ID", P.strandId), tex("Strand_Gradient", P.strandG),
           hp("HairProfile", P.hp), scalar("ShadowStrength", 0.9), scalar("ShadowMin", -0.4)]),
         instance(P.capMt, [tex("MaskTexture", P.capMask), tex("GradientMap", P.grad), scalar("DiffuseAlpha", 1)])] }, [1, 1, 2]),
-    [P.shadowMesh]: mesh({ appearances: [{ name: "default", chunkMaterials: ["glass"] }], entries: [{ name: "glass", local: true, index: 0 }],
-      local: [instance(P.glassMt)], chunks: 1 }),
+    // A shadow proxy, like a CCXL hair's: a glass chunk and a layered chunk (which stays out: only piercings and eyes draw layered chunks).
+    [P.shadowMesh]: mesh({ appearances: [{ name: "default", chunkMaterials: ["glass", "shadow_layer"] }],
+      entries: [{ name: "glass", local: true, index: 0 }, { name: "shadow_layer", local: true, index: 1 }],
+      local: [instance(P.glassMt), instance(P.layeredMt, [setupRef(P.silverSetup), maskRef(P.earringMask)])], chunks: 2 }),
     [P.hairMt]: template([tParam("Strand_ID", P.grey), tParam("Strand_Gradient", P.grey), tParam("Strand_Alpha", P.grey),
       sParam("AlphaCutoff", 0.33), sParam("RoughnessScale", 1), hParam("HairProfile", P.hp)]),
     [P.decalMt]: template([tParam("DiffuseTexture", P.white), sParam("UseGradientMap", 0), sParam("GradientMapIntensity", 1),
@@ -301,7 +371,23 @@ export function detailFixture(options: { skinPatch?: boolean } = {}): { archives
           tex("SecondaryAlbedo", P.overlay), scalar("SecondaryAlbedoInfluence", 1), scalar("SecondaryAlbedoTintColorInfluence", 1)])] }),
       [P.overlay]: xbm(true),
     } };
-  const archives = options.skinPatch ? [base, bundle, mod, pack, framework] : [base, bundle, mod, pack];
+  // A jewellery framework: it replaces style 12's `.app` at its vanilla path (no ArchiveXL, no creator resource), keeping the vanilla part
+  // and adding three inline slot components whose placeholder morph targets have zero render chunks.
+  const jewellery: FixtureArchive = { virtualPath: "archive/pc/mod/fixture_jewellery_framework.archive", provider: "mo2-mod", providerName: "Fixture jewellery",
+    priority: 4, files: {
+      [P.earringApp12]: app([PIERCING.silver, PIERCING.black].map(name => { const look = name === PIERCING.silver ? "silver" : "black";
+        return { name, components: [morphComponent("earring_04", P.earringMorph, look, "18446744073709551613"),
+          ...[1, 2, 3].map(n => morphComponent(`slot${n}`, P.slotMorph(n), look))] }; })),
+      ...Object.fromEntries([1, 2, 3].map(n => [P.slotMorph(n), morphtarget(P.earringMesh, 0, [["h015", "ear"]])])),
+    } };
+  // An item archive that fills slot 2 at the framework's own path; it wins that path by sorting first (the default archive order), over a linked mesh with the same colour names.
+  const item: FixtureArchive = { virtualPath: "archive/pc/mod/fixture_jewellery_a_item.archive", provider: "mo2-mod", providerName: "Fixture item",
+    priority: 5, files: {
+      [P.slotMorph(2)]: morphtarget(P.slotMesh, 1, [["h012", "nose"]]),
+      [P.slotMesh]: mesh({ appearances: [{ name: "silver", chunkMaterials: ["silver__01"] }, { name: "black", chunkMaterials: ["black__01"] }],
+        entries: [{ name: "silver__01", local: false, index: 0 }, { name: "black__01", local: false, index: 1 }], external: [P.silverMi, P.blackMi] }),
+    } };
+  const archives = [...(options.skinPatch ? [base, bundle, mod, pack, framework] : [base, bundle, mod, pack]), ...(options.jewellery ? [jewellery, item] : [])];
   const xl: XlDocument[] = [
     // The eye app gets ArchiveXL's dynamic customization appearances; the fix copy of the eye morph drops its base texture.
     { id: "red4ext/plugins/ArchiveXL/Bundle/EyesFix.xl", document: { resource: { scope: { "player_customization.app": [P.eyeApp] },
@@ -331,7 +417,8 @@ export const REQUEST_A = saved([["TPP", "skin_type_01", P.skinApp1, TONES.pale],
   ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "gradient_blue"],
   ["hairs", "hair_color1", P.hairApp, "brown"], ["FPP_hairs", "hair_color_fpp_01", P.hairFppApp, "default"],
   ["character_customization", "eyebrows_color1", P.browApp1, "brown"], ["character_customization", "makeupLips_05", P.lipsApp, FACE.lipsRed],
-  ["face", "makeupLips_05", P.lipsApp, FACE.lipsRed], ["face", "makeupCheeks_05", P.cheeksApp, FACE.cheeksRed]]);
+  ["character_customization", "piercings_01", P.earringApp1, PIERCING.silver],
+  ["face", "makeupLips_05", P.lipsApp, FACE.lipsRed], ["face", "makeupCheeks_05", P.cheeksApp, FACE.cheeksRed], ["face", "piercings_01", P.earringApp1, PIERCING.silver]]);
 /**
  * V "B": skin type 3 in senna (with its personal-link decal), the mod's brow style, lashes, no hair at all, the eye pack's colour,
  * freckles, a tattoo and face cyberware in the senna tone, and the pack's own makeup option.
@@ -342,3 +429,6 @@ export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna]
   ["face", "cyberware_01", P.cyberApp, FACE.cyberSenna], ["face", "pack_liner", P.packLinerApp, FACE.packLiner]]);
 /** A save-shaped request for one eye colour alone (the other slots none). */
 export const eyeRequest = (definition: string) => saved([["TPP", "eyes_color", P.eyeApp, definition]]);
+/** A save-shaped request for one piercing choice alone (the other slots none). */
+export const piercingRequest = (option: "piercings_01" | "piercings_12", definition: string) =>
+  saved([["face", option, option === "piercings_01" ? P.earringApp1 : P.earringApp12, definition]]);

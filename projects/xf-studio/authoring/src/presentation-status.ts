@@ -10,11 +10,8 @@ import type { WorkspaceSaveStatus } from "./workspace-persistence";
 export type PreviewAssetStatus = {
   /** Head scene and its optional details have finished loading (or failed). */
   loaded: boolean;
-  /** Skin, face details, eyes, brows, lashes and hair resolved from the player's own installation for the shown V. */
+  /** Skin, face details, eyes, brows, lashes, hair and piercings resolved from the player's own installation for the shown V. */
   characterDetails?: CharacterDetailStatus;
-  piercingError?: string;
-  prcError?: string;
-  prcAvailable: boolean;
   eyeOptics?: { requested: boolean; active: boolean; reason: string; error?: string };
 };
 export type GlitterPreviewMeasurement = {
@@ -35,7 +32,7 @@ export type PresentationStatus = {
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },
-    assets: { loaded: false, prcAvailable: false }, glitter: [] };
+    assets: { loaded: false }, glitter: [] };
 }
 
 /** Observable detached status; the trusted composition root calls `changed()`. */

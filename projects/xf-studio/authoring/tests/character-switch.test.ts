@@ -6,7 +6,7 @@ import { CharacterDetailActions, followShownCharacter, type CharacterDetailPort,
 import { characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character-detail-request";
 import { prepareCharacterDetails } from "../src/character-detail-service";
 import { depotHash } from "../src/depot-path";
-import type { ExportedGeometry, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
+import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
 import { encodePng } from "../src/png";
 import type { CharacterDetail } from "../src/render-detail";
 import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved-appearance-actions";
@@ -28,7 +28,8 @@ function exporter(root: string): GameAssetExporter {
     return { tool: { key: "t", label: "Test" }, present: () => null, close() {},
       geometry: async paths => new Map(paths.map((p): [string, ExportedGeometry] => [p, { depotPath: p, hash: depotHash(p), raw: "", rawSha256: "",
         glb: file(p, "glb", `glb ${p}`), glbSha256: "", materials: null, materialsSha256: null, complete: true, cached: false }])),
-      textures: async paths => new Map(paths.map((p): [string, ExportedTexture] => [p, { depotPath: p, hash: depotHash(p), png: file(p, "png", png), pngSha256: "", cached: false }])) };
+      textures: async paths => new Map(paths.map((p): [string, ExportedTexture] => [p, { depotPath: p, hash: depotHash(p), png: file(p, "png", png), pngSha256: "", cached: false }])),
+      masks: async paths => new Map(paths.map((p): [string, ExportedMask] => [p, { depotPath: p, hash: depotHash(p), layers: [file(p, "png", png)], cached: false }])) };
   } };
 }
 
@@ -56,7 +57,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(characterRequestFromSave(A)).toMatchObject({ appearances: REQUEST_A.source === "save" ? REQUEST_A.appearances : [] });
 
     // The scene: what is drawn for the character right now.
-    const scene = { details: [] as string[], skin: "", morphs: [] as string[], eyes: "", piercing: false, face: [] as string[] };
+    const scene = { details: [] as string[], skin: "", morphs: [] as string[], eyes: "", face: [] as string[] };
     let holdB: (() => void) | null = null;
     const port: CharacterDetailPort = {
       async request(request, signal) {
@@ -89,10 +90,9 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     };
     const saved = new SavedAppearanceActions({ apply(v): SavedAppearanceResult {
       const tpp = v.groups.head.find(g => g.name === "TPP")!;
-      // The renderer resets every morph and saved piercing before applying the new V; the eyes come with the record.
+      // The renderer resets every morph before applying the new V; the eyes and piercings come with the record.
       scene.morphs = tpp.morphs.map(m => `${m.target}_${m.region}`);
-      scene.piercing = v.groups.head.some(g => g.appearances.some(a => a.name.startsWith("piercings_")));
-      return { applied: scene.morphs, appearanceReferences: tpp.appearances.length, matchedPiercing: scene.piercing };
+      return { applied: scene.morphs, appearanceReferences: tpp.appearances.length };
     } });
     const workspace = freshWorkspace();
     const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
@@ -107,7 +107,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     saved.dispatch({ kind: "savedV.restore", value: A });
     await settle();
     const shownA = [...scene.details];
-    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes"]);
+    expect(shownA.map(d => d.split(":")[0])).toEqual(["skin", "face", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
     const skinA = scene.skin, eyesA = scene.eyes, faceA = [...scene.face];
     // A's own lipstick colour and blush (two chunks), both at the vanilla priority.
     expect(faceA).toEqual([`${FACE.lipsRed}|106,40,40,255@EMP_Normal`, `${FACE.cheeksRed}|186,20,40,255@EMP_Normal;186,20,40,255@EMP_Normal`]);
@@ -154,7 +154,7 @@ test("switching A → B → A replaces the whole character, and the makeup draft
     expect(scene.skin).toBe(skinA);
     expect(scene.eyes).toBe(eyesA);
     expect(scene.face).toEqual(faceA);
-    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "lipstick (red), cheeks (red)", "brown", "brown", "brown", "gradient blue"]);
+    expect(details.snapshot().slots.map(s => s.label)).toEqual(["pale, skin type 1", "lipstick (red), cheeks (red)", "brown", "brown", "brown", "gradient blue", "style 01, silver"]);
 
     // A reload restores the last-loaded V: the workspace keeps it, and the shown character follows it.
     expect(characterRequestFor(saved.snapshot().savedV)).toEqual(characterRequestFromSave(A));
@@ -180,4 +180,32 @@ test("a failed preparation clears the previous V's details and says so in one li
   // Asking again for a V that failed tries again (the setup may have been fixed meanwhile).
   await details.setCharacter(REQUEST_B);
   expect(cleared).toBe(4);
+});
+
+test("trying a piercing style keeps the V on screen until its record swaps in; another V still clears first", async () => {
+  const events: string[] = [];
+  const port: CharacterDetailPort = {
+    request: async request => ({ key: JSON.stringify(request), phase: "ready", message: "", progress: null, record: `${"a".repeat(64)}.json` }),
+    poll: async () => { throw Error("unused"); },
+    show: async () => { events.push("show"); return { slots: [{ slot: "piercings", state: "shown", label: "style 12, gold" }],
+      choices: [{ slot: "piercings", options: [{ option: "piercings_12", index: 12, definitions: [{ name: "gold", index: 1 }] }] }],
+      override: details.override() }; },
+    clear: () => { events.push("clear"); }, wait: async () => {},
+  };
+  const details = new CharacterDetailActions(port);
+  await details.setCharacter(REQUEST_A);
+  expect(events).toEqual(["clear", "show"]);
+  // The tried style is resolved on the same V: no clear, the previous details stay until the new record is shown.
+  await details.setOverride({ slot: "piercings", option: "piercings_12", definition: "gold" });
+  expect(events).toEqual(["clear", "show", "show"]);
+  expect(details.snapshot()).toMatchObject({ phase: "ready", override: { option: "piercings_12" }, choices: [{ slot: "piercings" }] });
+  // The same request again is a no-op; a new V (with the tried style kept) clears first.
+  await details.setOverride({ slot: "piercings", option: "piercings_12", definition: "gold" });
+  expect(events.length).toBe(3);
+  await details.setCharacter(REQUEST_B);
+  expect(events.slice(3)).toEqual(["clear", "show"]);
+  // Back to the V's own piercings: again without clearing.
+  await details.setOverride(null);
+  expect(events.slice(5)).toEqual(["show"]);
+  details.dispose();
 });

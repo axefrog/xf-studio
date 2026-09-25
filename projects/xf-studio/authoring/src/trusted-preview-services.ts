@@ -17,13 +17,15 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   for (const detail of ["brows", "lashes"] as const) {
     if (ports.preview.availability?.(detail)) initial[detail] = false;
   }
-  // Keep a requested hair/piercing toggle while its optional assets are absent.
-  // A later saved-V import or local asset repair can then reveal that context.
+  // Keep a requested hair or piercing toggle, and a tried piercing style, while the V's details are still on their way: the styles on
+  // offer come with the V's record, and the host shows the V's own piercings for a style this installation doesn't offer.
   const options = ports.preview.piercingOptions?.() ?? [];
-  const chosen = options.find(option => option.id === initial.piercingStyle);
-  initial.piercingStyle = chosen?.id ?? "";
-  initial.piercingDefinition = chosen?.choices.some(choice => choice.definition === initial.piercingDefinition)
-    ? initial.piercingDefinition : chosen?.choices[0]?.definition ?? "";
+  if (options.length) {
+    const chosen = options.find(option => option.id === initial.piercingStyle);
+    initial.piercingStyle = chosen?.id ?? "";
+    initial.piercingDefinition = chosen?.choices.some(choice => choice.definition === initial.piercingDefinition)
+      ? initial.piercingDefinition : chosen?.choices[0]?.definition ?? "";
+  } else if (!initial.piercingStyle) initial.piercingDefinition = "";
 
   // A restored eye shape the loaded head does not offer falls back to its base shape.
   const eyeChoices = ports.preview.eyeShapeOptions?.().choices;
@@ -53,7 +55,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
       motion.restore();
       const preview = new PreviewActions(initial, ports.preview);
       ports.preview.setPiercingPreview(initial.piercingStyle, initial.piercingDefinition);
-      if (options.length) ports.preview.setPiercings(initial.piercings);
+      ports.preview.setPiercings(initial.piercings);
       if (initial.camera) preview.dispatch({ kind: "camera.restore", camera: initial.camera });
       return { preview, motion };
     },

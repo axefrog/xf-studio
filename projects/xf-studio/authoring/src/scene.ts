@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { extendSkin, restoreFirstWeights } from "./skin";
+import { extendSkin } from "./skin";
 import type { SavedV } from "./save-reader";
 import { createMakeupStack } from "./makeup-stack";
 import { IdleAnimation } from "./idle-animation";
@@ -10,7 +10,6 @@ import { previewClipPlanes } from "./camera-depth";
 import { frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "./camera-framing";
 import { createEyeMaterial, EYE_FLAT_ROUGHNESS, eyeParameters, IRIS_MASK_ENCODING } from "./eye-material";
 import type { ProfileEncoding } from "./hair-colour-model";
-import { chunkEnabled, parsePiercingManifest, piercingPartColor, savedPiercing, verifyPiercingBytes, type PiercingManifest } from "./piercing-preview";
 import type { AdapterContext } from "./character-material-adapters";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "./character-detail-loader";
 import type { DetailSlot } from "./render-detail";
@@ -159,7 +158,7 @@ async function assembleScene(
   extendSkin(head, skin);
   // The core eye is the fallback: the base game's eye texture through the same eyeball material as a resolved eye
   // (eye-material.ts: colour sampled V-flipped, as the game's program does). The shown V's own eyes come with the
-  // character record and replace it; a layered eye design the preview can't draw yet keeps it (limit `eye-design`).
+  // character record and replace it, a layered eye design included (drawn through the layered adapter).
   // The game's eye UV0 spans several tiles, so every eye texture repeats.
   eyeColor.wrapS = eyeColor.wrapT = THREE.RepeatWrapping;
   eyeColor.needsUpdate = true;
@@ -171,6 +170,9 @@ async function assembleScene(
   let eyeOpticsEnabled = false;
   /** The resolved eyeballs drawn now (empty while the core eye shows). */
   const resolvedEyeballs = () => drawnDetails().flatMap(item => item.eyes?.eyeballs ?? []);
+  /** A layered eye design's baked eyeball chunks (the multilayered eye has no refraction or eye light; it replaces the core eye too). */
+  const layeredEyes = () => drawnDetails().filter(item => item.component.slot === "eyes").flatMap(item => item.layered ?? [])
+    .filter(entry => entry.handle.state === "baked");
   function applyEyeOptics() {
     for (const { handle } of [{ handle: coreEye.handle }, ...resolvedEyeballs()]) handle.setSourceRoughness(eyeOpticsEnabled);
   }
@@ -181,9 +183,10 @@ async function assembleScene(
     const item = drawnDetails().find(entry => entry.component.slot === "eyes");
     const shown = eyeballs[0]?.handle ?? coreEye.handle;
     const templates = item ? [...new Set(item.component.materials.map(material => material.template))] : [];
+    const layered = layeredEyes();
     return {
-      source: eyeballs.length ? "resolved" as const : "core" as const,
-      reason: eyeballs.length ? "resolved" : item ? "eye-design-not-drawn" : "no-resolved-eye",
+      source: eyeballs.length ? "resolved" as const : layered.length ? "layered" as const : "core" as const,
+      reason: eyeballs.length ? "resolved" : layered.length ? "layered-design" : item ? "eye-design-not-drawn" : "no-resolved-eye",
       definition: item?.component.definition ?? null, templates, gradient: shown.gradient, irisMaskEncoding: IRIS_MASK_ENCODING,
       coreEyeVisible: eyes.visible, shells: item?.eyes?.shells.length ?? 0,
       optics: { requested: eyeOpticsEnabled, active: shown.sourceRoughness, error: undefined as string | undefined,
@@ -197,12 +200,12 @@ async function assembleScene(
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(albedo), coreRoughness: coreRoughnessReader(roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
-  // Resolved character details (skin, brows, lashes, hair): loaded later from the host's character record
+  // Resolved character details (skin, face details, brows, lashes, hair, eyes, piercings): loaded later from the host's character record
   // (character-detail-loader.ts) and swapped in whole; each V replaces the previous one completely.
-  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true };
+  const detailVisible: Record<DetailSlot, boolean> = { skin: true, face: true, brows: true, lashes: true, hair: true, eyes: true, piercings: true };
   // Keep context details above the entire editable makeup stack (orders 10–41); skin, hair and the eyeballs keep their own order.
   // Face decals sit below the stack (faceDecalRenderOrder).
-  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, face: FACE_DECAL_RENDER_ORDER, brows: 100, lashes: 101, hair: 0, eyes: 0 };
+  const DETAIL_RENDER_ORDER: Record<DetailSlot, number> = { skin: 0, face: FACE_DECAL_RENDER_ORDER, brows: 100, lashes: 101, hair: 0, eyes: 0, piercings: 0 };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = 99;
   let characterDetails: LoadedCharacterDetails | null = null;
@@ -223,81 +226,6 @@ async function assembleScene(
         return result.attribute;
       } } : {}) };
   }
-  let piercingManifest: PiercingManifest | undefined, piercingError = "";
-  let prcManifest: PiercingManifest | undefined, prcError = "";
-  const piercingMeshes = new Map<string, THREE.SkinnedMesh[]>();
-  async function loadPiercingResources(path: string, schema: PiercingManifest["schema"], budget: number) {
-    const piercingRoots: THREE.Group[] = [];
-    const loadedIds: string[] = [];
-    let pendingPiercingRoot: THREE.Group | undefined;
-    try {
-    const response = await fetch(path, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw Error("Local piercing assets are unavailable");
-    const candidate = parsePiercingManifest(await response.json());
-    if (candidate.schema !== schema) throw Error("Unexpected piercing resource schema");
-    if (candidate.styles.some(style => piercingManifest?.styles.some(existing => existing.id === style.id)))
-      throw Error("Duplicate piercing style across sources");
-    let totalBytes = 0, totalVertices = 0, totalBones = 0;
-    for (const asset of candidate.assets) {
-      if (piercingMeshes.has(asset.id)) throw Error("Duplicate piercing mesh across sources");
-      const response = await fetch(asset.url, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw Error(`Local piercing mesh unavailable (${response.status})`);
-      const length = Number(response.headers.get("Content-Length"));
-      if (Number.isFinite(length) && length > budget - totalBytes)
-        throw Error("Piercing meshes exceed their source budget");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      totalBytes += bytes.byteLength;
-      if (totalBytes > budget) throw Error("Piercing meshes exceed their source budget");
-      await verifyPiercingBytes(bytes, asset.sha256);
-      const original = restoreFirstWeights(bytes.buffer), loaded = await new GLTFLoader().parseAsync(bytes.buffer, asset.url.slice(0, asset.url.lastIndexOf("/") + 1));
-      pendingPiercingRoot = loaded.scene;
-      const parts: THREE.SkinnedMesh[] = [];
-      loaded.scene.traverse(o => {
-        if (o instanceof THREE.Bone) totalBones++;
-        if (!(o instanceof THREE.SkinnedMesh)) return;
-        const match = /^submesh_(\d+)_LOD_\d+$/.exec(o.name);
-        if (!match) throw Error(`Unexpected piercing chunk ${o.name}`);
-        const association = loaded.parser.associations.get(o);
-        const raw = original.get(loaded.parser.json.meshes[association?.meshes ?? -1]?.name);
-        if (!raw) throw Error(`Missing original piercing weights for ${o.name}`);
-        o.geometry.setAttribute("skinWeight", new THREE.BufferAttribute(raw, 4));
-        const mat = new THREE.MeshStandardMaterial({ color: 0xd6d5d3, metalness: .72, roughness: .3,
-          side: THREE.DoubleSide });
-        // The source geometry, morphs and chunk masks are exact; .mi/.mlsetup
-        // colours, coated/pearl variants and REDengine reflections remain approximate.
-        o.material = mat;
-        o.userData.piercingChunk = Number(match[1]);
-        o.visible = false; o.frustumCulled = false;
-        extendSkin(o, mat);
-        totalVertices += o.geometry.getAttribute("position").count;
-        parts.push(o); meshes.push(o);
-      });
-      if (!parts.length || totalVertices > 200_000 || totalBones > 300)
-        throw Error("Piercing geometry exceeds the preview budget");
-      scene.add(loaded.scene);
-      piercingRoots.push(loaded.scene);
-      pendingPiercingRoot = undefined;
-      piercingMeshes.set(asset.id, parts);
-      loadedIds.push(asset.id);
-    }
-    return { manifest: candidate, error: "" };
-  } catch (error) {
-    for (const root of [...piercingRoots, ...(pendingPiercingRoot ? [pendingPiercingRoot] : [])]) {
-      root.removeFromParent();
-      root.traverse(o => { if (o instanceof THREE.Mesh) {
-        o.geometry.dispose();
-        (o.material as THREE.Material).dispose();
-        const i = meshes.indexOf(o); if (i >= 0) meshes.splice(i, 1);
-      } });
-    }
-    for (const id of loadedIds) piercingMeshes.delete(id);
-    return { manifest: undefined, error: (error as Error).message };
-  }
-  }
-  ({ manifest: piercingManifest, error: piercingError } = await loadPiercingResources(
-    "/assets/piercings/manifest.json", "xfs/local-vanilla-piercings-2", 24 * 1024 * 1024));
-  ({ manifest: prcManifest, error: prcError } = await loadPiercingResources(
-    "/assets/prc/manifest.json", "xfs/local-prc-piercings-1", 4 * 1024 * 1024));
   const makeup = createMakeupStack(plate, renderer.capabilities.getMaxAnisotropy());
   // A restored WebGL context comes back with empty render targets: prefilter the environment again and redraw the composite.
   const restored = () => { environment.restore(); makeup.contextRestored(); };
@@ -438,7 +366,6 @@ async function assembleScene(
     head,
     plate,
     ...(eyes.morphTargetDictionary ? [eyes] : []),
-    ...[...piercingMeshes.values()].flat(),
   ];
   // Resolved details join and leave with each character record (a skin drawn on the core head adds no mesh).
   const drawnDetails = () => characterDetails?.components.filter(item => !(resolvedSkin?.placement.mode === "core-head" && resolvedSkin.item === item)) ?? [];
@@ -461,35 +388,8 @@ async function assembleScene(
     return { choices: eyeShapeChoices.map(choice => ({ ...choice })), eyesFollow: eyesFollowShape,
       eyeSource: core.record.geometry.morphs?.find(entry => entry.node === core.record.geometry.nodes.eyes)?.depotPath ?? null };
   }
-  const piercingStyles = [...(piercingManifest?.styles ?? []), ...(prcManifest?.styles ?? [])];
-  let piercingEnabled = true, piercingStyle = "", piercingDefinition = "";
-  let currentSave: SavedV | undefined;
-  function piercingSelection() {
-    if (piercingStyle) {
-      const style = piercingStyles.find(s => s.id === piercingStyle);
-      const choice = style?.choices.find(c => c.definition === piercingDefinition);
-      return style && choice ? { style, choice, fromSave: false } : undefined;
-    }
-    const saved = piercingManifest && savedPiercing(piercingManifest, currentSave);
-    return saved ? { ...saved, fromSave: true } : undefined;
-  }
-  function refreshPiercings() {
-    const selected = piercingEnabled ? piercingSelection() : undefined;
-    for (const parts of piercingMeshes.values()) for (const mesh of parts) mesh.visible = false;
-    if (!selected) return;
-    for (const part of selected.choice.parts) for (const mesh of piercingMeshes.get(part.mesh) ?? []) {
-      mesh.visible = chunkEnabled(part.mask, mesh.userData.piercingChunk);
-      (mesh.material as THREE.MeshStandardMaterial).color.set(
-        piercingPartColor(part, mesh.userData.piercingChunk, selected.choice.previewColor));
-    }
-  }
-  function setPiercings(enabled: boolean) { piercingEnabled = enabled; refreshPiercings(); }
-  function setPiercingPreview(style: string, definition: string) {
-    if (style && !piercingStyles.some(s => s.id === style && s.choices.some(c => c.definition === definition)))
-      throw Error("Unknown local piercing choice");
-    piercingStyle = style; piercingDefinition = style ? definition : "";
-    refreshPiercings();
-  }
+  /** Piercings are a visibility preference: the V's own (or a tried style) arrive with the character record and follow it. */
+  function setPiercings(enabled: boolean) { detailVisible.piercings = enabled; refreshDetailVisibility(); }
   function applySavedV(v: SavedV) {
     if (v.isMale)
       throw Error(
@@ -520,13 +420,10 @@ async function assembleScene(
     const savedEyes = group.morphs.find(m => m.region === "eyes");
     // No saved `eyes` pair means the base shape (`None`); the save stores only chosen morphs.
     const savedEyeShape = faceMorphChoiceIndex(eyeShapeChoices, savedEyes?.target ?? null);
-    // The saved eye colour arrives with the character record (setCharacterDetails), like the skin, brows, lashes and hair.
-    currentSave = v;
-    refreshPiercings();
+    // The saved eye colour and piercings arrive with the character record (setCharacterDetails), like the skin, brows, lashes and hair.
     return {
       applied: names,
       appearanceReferences: group.appearances.length,
-      matchedPiercing: !!(piercingManifest && savedPiercing(piercingManifest, v)),
       ...(savedEyeShape === undefined ? {} : { eyeShape: savedEyeShape }),
     };
   }
@@ -587,13 +484,30 @@ async function assembleScene(
       }
       scene.add(item.root);
     }
-    // The V's own eyeball replaces the core eye; without one (a layered design not drawn yet) the core eye stays.
-    eyes.visible = !resolvedEyeballs().length;
+    // Layered chunks (piercings, eye designs): each stack is baked once into surface maps with this renderer, then lit per frame.
+    const bakeLimits = bakeLayered();
+    // The V's own eyeball (a baked layered design's included) replaces the core eye.
+    eyes.visible = !resolvedEyeballs().length && !layeredEyes().length;
     applyEyeOptics();
     scene.updateMatrixWorld(true);
     idle?.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
-    return { limits: skinLimits() };
+    return { limits: [...skinLimits(), ...bakeLimits] };
+  }
+  /**
+   * Bake every layered stack of the shown V that is not baked yet (layered-material.ts). A failed bake leaves that chunk hidden and is
+   * reported with the slot's code: the eye design (the core eye then shows) or a layered part.
+   */
+  function bakeLayered(): { slot: DetailSlot; limit: DetailLimit }[] {
+    const limits: { slot: DetailSlot; limit: DetailLimit }[] = [];
+    for (const item of characterDetails?.components ?? []) for (const { mesh, handle } of item.layered ?? []) {
+      if (handle.state === "pending") handle.bake(renderer);
+      if (handle.state !== "failed") continue;
+      mesh.visible = false;
+      const limit: DetailLimit = item.component.slot === "eyes" ? "eye-design" : "layered-material";
+      if (!limits.some(entry => entry.slot === item.component.slot && entry.limit === limit)) limits.push({ slot: item.component.slot, limit });
+    }
+    return limits;
   }
   const ray = new THREE.Raycaster(),
     mouse = new THREE.Vector2();
@@ -668,7 +582,7 @@ async function assembleScene(
   invalidate();
   const evidence = coreSceneEvidence({ coreDetail, meshes, blinkBones: bones.length,
     eyeShape: { choices: eyeShapeChoices.length, eyesFollow: eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
-    profileEncoding, piercingError, prcError, piercingManifest, prcManifest, piercingMeshes, idle, idleError });
+    profileEncoding, idle, idleError });
   const api = {
     scene,
     camera,
@@ -718,12 +632,7 @@ async function assembleScene(
     detailContext,
     characterDetailsEvidence: () => characterDetailsEvidence({ details: characterDetails, skin: resolvedSkin, head, browUnderlay,
       eyes: { core: eyes, appearance: eyeAppearance() } }),
-    piercingManifest,
-    prcManifest,
-    piercingStyles,
-    piercingSelection,
     setPiercings,
-    setPiercingPreview,
     /** The idle rig; its own changes (seek, pause) request a frame through `onChange`. */
     idle,
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
@@ -801,7 +710,7 @@ async function assembleScene(
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["onFrame", "resize", "front", "updateLayer", "setLayerCanvases", "reconcileLayerCanvases",
-    "setLayerCanvas", "eyeShape", "applySavedV", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings", "setPiercingPreview",
+    "setLayerCanvas", "eyeShape", "applySavedV", "setEyeOptics", "setHair", "setCharacterDetails", "setPiercings",
     "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail", "setBlink", "animateBlink", "setWire",
     "setNormals", "setExposure", "setStage", "setLightAngle"], invalidate) };
 }

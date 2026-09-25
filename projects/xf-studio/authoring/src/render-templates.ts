@@ -12,7 +12,7 @@
  * not be read, the vanilla depot path is the fallback key. Nothing here names a mod or framework.
  */
 export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal" | "mesh-decal" | "eye" | "eye-shell"
-  | "layered-placeholder" | "decal-placeholder";
+  | "layered" | "decal-placeholder";
 /** Members of the post-G-buffer decal family that the face-detail path draws through one shared material (face-decal-material.ts). */
 export type DecalKind = "mesh-decal" | "double-diffuse" | "gradient-recolor";
 export type RenderTemplateInputs = {
@@ -38,6 +38,11 @@ export type RenderTemplateInputs = {
   /** A post-G-buffer decal the face-detail path draws with the shared decal material, and the textures that material reads. */
   readonly decal?: DecalKind;
   readonly decalTextures?: readonly string[];
+  /**
+   * A layered material: the host reads the chunk's `.mlsetup` (this `setup` parameter) with its layer templates and exports their
+   * textures, and the `.mlmask` (the `mask` parameter) as one raw image per mask layer, into the chunk's `layered` stack.
+   */
+  readonly layered?: { readonly setup: string; readonly mask: string };
   /**
    * Recorded so the renderer can say the chunk is not drawn yet, never drawn itself: a component is planned only
    * when it has at least one chunk that really draws (so a part made only of such chunks stays out, as before),
@@ -88,9 +93,10 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
     textures: ["Albedo", "Normal", "Roughness", "NormalBubble", "IrisMask"], required: ["Albedo", "IrisMask", "IrisColorGradient"] },
   // The eye's wetness shell: a forward pass that darkens the eye towards the lids and adds the tear line (§4).
   eye_shadow: { adapter: "eye-shell", path: "base\\materials\\eye_shadow.mt", textures: ["Mask"], profiles: [], skinProfiles: [], required: ["Mask"] },
-  // Layered (`.mlsetup`) materials: the graphic eye designs, many piercings and accessories. No adapter draws them yet.
-  multilayered: { adapter: "layered-placeholder", path: "engine\\materials\\multilayered.mt", textures: [], required: [], profiles: [], skinProfiles: [],
-    placeholder: true },
+  // Layered (`.mlsetup`) materials: earrings and piercings, the graphic eye designs and many accessories (knowledge/materials-and-shaders.md
+  // §4.6). The adapter bakes the layer stack once per material (layered-material.ts); `GlobalNormal` is the template's mesh-wide normal.
+  multilayered: { adapter: "layered", path: "engine\\materials\\multilayered.mt", textures: ["GlobalNormal"], required: [],
+    profiles: [], skinProfiles: [], layered: { setup: "MultilayerSetup", mask: "MultilayerMask" } },
   // The rest of the 2.31 decal family (names from the installed shader cache's compiled templates): recorded, not drawn yet.
   ...Object.fromEntries(["mesh_decal__blackbody", "mesh_decal_blendable", "mesh_decal_emissive", "mesh_decal_emissive_subsurface", "mesh_decal_gradient",
     "mesh_decal_gradientmap_recolor_2", "mesh_decal_gradientmap_recolor_blendable", "mesh_decal_gradientmap_recolor_emissive", "mesh_decal_morph",

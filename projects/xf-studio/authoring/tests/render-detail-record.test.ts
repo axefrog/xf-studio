@@ -40,29 +40,72 @@ const character = (): CharacterDetail => ({
         textures: { Albedo: texture(), IrisMask: texture() }, profiles: {}, skinProfiles: {}, gradients: { IrisColorGradient: { depotPath: "base\\eye_blue.gradient",
           archive: "basegame.archive", sha256: null, stops: [{ value: 0, color: [22, 22, 22, 255] }, { value: 0.79, color: [130, 192, 229, 255] }] } } },
       { chunk: 2, name: "wetness", template: "base\\materials\\eye_shadow.mt", templateName: "eye_shadow", materialPriority: "EMP_Front", scalars: { Intensity: 0.7 }, colours: { ShadowColor: [125, 58, 58, 255] },
-        textures: { Mask: texture() }, profiles: {}, skinProfiles: {}, gradients: {} }] }],
+        textures: { Mask: texture() }, profiles: {}, skinProfiles: {}, gradients: {} }] },
+    // A piercing part: one layered chunk with its `.mlsetup` stack (a drawn layer with its maps and mask layer, and a hidden layer).
+    { id: "piercings:piercings_09:earring_02:5", slot: "piercings", option: "piercings_09", definition: "i0_000_pwa__earring__03_black", component: "earring_02",
+    geometry: { ...resource(`${sha("a")}.glb`, "a"), depotPath: "base\\earring_02.morphtarget", depotHash: "5", morphTargets: true },
+    renderChunks: 13, chunks: [0, 12], materials: [0, 12].map(chunk => ({ chunk, name: "plastic_black__01", template: "engine\\materials\\multilayered.mt",
+      templateName: "multilayered", materialPriority: "EMP_Normal", scalars: { GlobalNormalIntensity: 1 }, colours: {}, textures: {}, profiles: {}, skinProfiles: {},
+      gradients: {}, layered: { setup: { depotPath: "base\\earring_black.mlsetup", archive: "basegame.archive", sha256: null },
+        mask: { depotPath: "base\\earring_02.mlmask", archive: "basegame.archive", sha256: null, layers: 6 }, ratio: 1, useNormal: true, layers: [
+          { template: { depotPath: "base\\plastic.mltemplate", archive: "basegame.archive", sha256: null }, opacity: 1, matTile: 0.5, tilingMultiplier: 1,
+            offsetU: 0, offsetV: 0, mbTile: 1, microblendContrast: 1, microblendNormalStrength: 0, microblendOffsetU: 0, microblendOffsetV: 0,
+            colorScale: [0.02, 0.02, 0.02], normalStrength: 0.15, roughLevelsIn: [1, 0], roughLevelsOut: [0.3, 0.2], metalLevelsIn: [1, 0], metalLevelsOut: [0, 0],
+            colorMaskLevelsIn: [1, 0], colorMaskLevelsOut: [0, 0], names: { colorScale: "000000_null", normalStrength: "null", roughLevelsIn: "null",
+              roughLevelsOut: "970fd0", metalLevelsIn: "null", metalLevelsOut: "null" }, textures: { color: texture(), normal: texture(), mask: texture() } },
+          { template: null, opacity: 0, matTile: 1, tilingMultiplier: 1, offsetU: 0, offsetV: 0, mbTile: 1, microblendContrast: 1, microblendNormalStrength: 0,
+            microblendOffsetU: 0, microblendOffsetV: 0, colorScale: [1, 1, 1], normalStrength: 0, roughLevelsIn: [1, 0], roughLevelsOut: [1, 0],
+            metalLevelsIn: [1, 0], metalLevelsOut: [1, 0], colorMaskLevelsIn: [0, 1], colorMaskLevelsOut: [0, 1], names: { colorScale: "None?",
+              normalStrength: "None?", roughLevelsIn: "None?", roughLevelsOut: "None?", metalLevelsIn: "None?", metalLevelsOut: "None?" }, textures: {} }] } })) }],
   slots: [{ slot: "skin", state: "shown", label: "senna, skin type 3" }, { slot: "face", state: "shown", label: "lipstick (red)" }, { slot: "brows", state: "none", label: "None" }, { slot: "lashes", state: "unavailable", label: "brown", message: "Your V's eyelashes aren't shown." },
-    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }],
+    { slot: "hair", state: "shown", label: "brown" }, { slot: "eyes", state: "shown", label: "gradient blue" }, { slot: "piercings", state: "shown", label: "style 09, black" }],
+  choices: [{ slot: "piercings", options: [{ option: "piercings_01", index: 1, definitions: [{ name: "i0_000_pwa__earring__01_silver", index: 0 }] },
+    { option: "piercings_09", index: 9, definitions: [{ name: "i0_000_pwa__earring__01_silver", index: 0 }, { name: "i0_000_pwa__earring__03_black", index: 2 }] }] }],
 });
 const core = () => ({ schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "k", origin: "game-files", provenance: { label: "l", notes: [] },
   geometry: { ...resource("head.glb"), nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" }, morphs: [] },
   textures: Object.fromEntries(["head.albedo", "head.normal", "head.roughness", "eyes.albedo"].map(slot => [slot, resource("head-color.png")])) });
 
 describe("render record versions", () => {
-  test("v4 carries the character record with its face details and each chunk's template identity; parsing is strict and lossless", () => {
+  test("v5 carries the character record with its piercings, layered stacks and creator choices; parsing is strict and lossless", () => {
     const record = character();
-    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-4");
-    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes"]);
+    expect(CHARACTER_DETAIL_SCHEMA).toBe("xfs/render-detail-5");
+    expect(DETAIL_SLOTS).toEqual(["skin", "face", "brows", "lashes", "hair", "eyes", "piercings"]);
     expect(parseCharacterDetail(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(parseRenderDetail(record)).toEqual(record);
+    // A tried choice the host applied travels with the record.
+    const tried = { ...record, character: { ...record.character, override: { slot: "piercings" as const, option: "piercings_01", definition: "i0_000_pwa__earring__01_silver" } } };
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(tried)))).toEqual(tried);
   });
 
-  test("v1 stays the core head, and a v4 reader accepts it under every version; v2 and v3 characters are refused plainly", () => {
+  test("a layered stack, the creator choices and a tried choice are parsed strictly", () => {
+    const bad = (mutate: (record: CharacterDetail) => void) => { const record = character(); mutate(record); return () => parseCharacterDetail(record); };
+    const layers = (r: CharacterDetail) => r.components[4]!.materials[0]!.layered!;
+    expect(bad(r => { layers(r).layers = []; })).toThrow("layers are invalid");
+    expect(bad(r => { layers(r).layers = Array.from({ length: 21 }, () => layers(r).layers[1]!); })).toThrow("layers are invalid");
+    expect(bad(r => { (layers(r).layers[0] as { colorScale: number[] }).colorScale = [1, 1]; })).toThrow("not RGB");
+    expect(bad(r => { (layers(r).layers[0] as { roughLevelsOut: number[] }).roughLevelsOut = [1]; })).toThrow("not a pair");
+    expect(bad(r => { (layers(r).layers[0]!.textures as Record<string, unknown>).albedo = layers(r).layers[0]!.textures.color; })).toThrow("unknown");
+    expect(bad(r => { (layers(r).layers[0]!.textures.mask as { isGamma?: boolean }).isGamma = undefined; })).toThrow("colour flag");
+    expect(bad(r => { (layers(r) as { useNormal: unknown }).useNormal = 1; })).toThrow("normal flag");
+    expect(bad(r => { (layers(r).layers[0]!.names as { colorScale: unknown }).colorScale = 5; })).toThrow("name");
+    expect(bad(r => { delete (r as { choices?: unknown }).choices; })).toThrow("choices are invalid");
+    expect(bad(r => { (r.choices[0] as { slot: string }).slot = "hair"; })).toThrow("choice slot");
+    expect(bad(r => { r.choices[0]!.options[1]!.option = "piercings_01"; })).toThrow("repeats");
+    expect(bad(r => { r.choices[0]!.options[0]!.definitions = []; })).toThrow("no definitions");
+    expect(bad(r => { (r.character as { override: unknown }).override = { slot: "hair", option: "a", definition: "b" }; })).toThrow("override");
+    expect(bad(r => { r.slots = r.slots.filter(slot => slot.slot !== "piercings"); })).toThrow("slot outcomes");
+  });
+
+  test("v1 stays the core head, and a v5 reader accepts it under every version; v2 to v4 characters are refused plainly", () => {
     expect(parseRenderDetail(core())).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: CHARACTER_DETAIL_SCHEMA })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-2" })).toMatchObject({ detail: "core-head" });
     expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-3" })).toMatchObject({ detail: "core-head" });
-    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-5" })).toThrow("unsupported record version");
+    expect(parseCoreDetail({ ...core(), schema: "xfs/render-detail-4" })).toMatchObject({ detail: "core-head" });
+    expect(() => parseRenderDetail({ ...core(), schema: "xfs/render-detail-6" })).toThrow("unsupported record version");
+    // A v4 character record (no piercings, no layered stacks) is prepared again, never read.
+    expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-4" })).toThrow("retired");
     // A v3 character record (no face details, no template identities) is prepared again, never read.
     expect(() => parseRenderDetail({ ...character(), schema: "xfs/render-detail-3" })).toThrow("retired");
     // A v2 character record (no eyes, no gradients) is prepared again, never read.
@@ -107,9 +150,9 @@ describe("render record versions", () => {
   });
 });
 
-// The skin, brows, lashes and hair rendering path must follow resolved data only: no mod names, no saved
-// appearance hashes or definitions, no per-mod manifests or developer-prepared asset paths. Piercings
-// still use their manifests (a documented follow-on), so their lines are the only exception in scene.ts and its evidence.
+// The skin, face details, brows, lashes, hair, eyes and piercings rendering path must follow resolved data only: no mod names, no
+// saved appearance hashes or definitions, no per-mod manifests or developer-prepared asset paths. Piercings resolve like the rest
+// (a framework that replaces a vanilla style works by archive precedence), so no piercing or framework name may appear either.
 // Complexion mods and texture frameworks work through archive precedence and ArchiveXL patches, so none of
 // their names, archives or donor paths may appear either, nor any particular skin type or tone.
 describe("rendering boundary", () => {
@@ -118,7 +161,8 @@ describe("rendering boundary", () => {
     "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
     "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface", "eye-material",
     "scene-evidence", "detail-limits", "resource-graph", "character-resolver", "face-decal-material", "decal-underlay", "head-skin-placement",
-    "plate-blend"];
+    "plate-blend", "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
+    "studio-ui/panels/preview"];
   const PER_MOD = new RegExp(String.raw`arkhe|icxrus|softnatural|mel_ccxl|meluminary|island_dancer|alliekat|preemhair|eagul|\bprc\b|kala|brown_ombre|ash_brown|10_brown|38_ash|05_brown|\/assets\/(?:brows|lashes|hair)\b|brows\.glb|lashes\.glb|local-hair-assets|lash-profile-preview|brow-preview-1|\b\d{17,20}\b|universalskintone|complexion|ks_uv|ks_donor|uv_framework|uv4\.xl|facialcustomizationfix|xbaebsae|warmsmooth|wa_head_overlay|wa_head_glow|4k\\\\common|_ca_pale|_ca_senna|_bl_espresso|_bl_dark|skin_type_0\d|basehead_d0\d|nutboy|brocreate|photoreal|unique_eyes|unique eyes|pit_eyes|forbidden_eyes|forbidden eyes|beautiful_iris|beautiful iris|beautiful_exotic|heterochrom|ccxl_eye|eye_\d\d_|\/assets\/eyes\b|local-eye-assets|eye-appearance|eye-optics|he_000_base|eye_mask\.xbm|eye_shadow_mask|gradient_(?:light_)?blue|gradient_brown|rebecca|cybereye|eye_blue|eye_red|eye_brown|` +
     // Face details: no option, definition, mesh, material or archive of a particular makeup, scar, tattoo, cyberware or
     // CCXL pack (the legacy XF selectors included). Creator slot names (`makeupLips_color`) are the game's slot rules.
@@ -138,15 +182,21 @@ describe("rendering boundary", () => {
       const lines = readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8").split("\n");
       // The all-chunks mask (every bit set) is a format constant, not a saved identity.
       const offending = lines.map((line, index) => ({ line, index })).filter(({ line }) => PER_MOD.test(line.replaceAll("18446744073709551615", "")) &&
-        !((name === "scene" || name === "scene-evidence") && /piercing|prc/i.test(line)) && !/^\s*(?:\/\/|\/?\*)/.test(line));
+        !/^\s*(?:\/\/|\/?\*)/.test(line));
       expect(offending.map(({ line, index }) => `${name}.ts:${index + 1}: ${line.trim()}`)).toEqual([]);
     }
   });
 
   test("the removed per-mod manifest modules stay removed and nothing imports the study fixture", () => {
     const files = readdirSync(new URL("../src/", import.meta.url));
-    // The hand-made single-eye manifest and its roughness helper went with rank 1 of the eye plan.
-    for (const gone of ["hair-preview.ts", "lash-profile.ts", "depot-resolution.ts", "eye-appearance.ts", "eye-optics.ts"]) expect(files).not.toContain(gone);
+    // The hand-made single-eye manifest and its roughness helper went with rank 1 of the eye plan; the piercing manifests, the
+    // framework aggregation and their intake tools went when piercings moved to the resolver.
+    for (const gone of ["hair-preview.ts", "lash-profile.ts", "depot-resolution.ts", "eye-appearance.ts", "eye-optics.ts", "piercing-preview.ts",
+      "piercing-palette.ts"]) expect(files).not.toContain(gone);
+    const tools = readdirSync(new URL("../tools/", import.meta.url));
+    for (const gone of ["intake_prc.ts", "intake_piercings.ts"]) expect(tools).not.toContain(gone);
+    for (const name of RENDERING_PATH) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8"))
+      .not.toMatch(/local-(?:prc|vanilla)-piercings|\/assets\/(?:prc|piercings)\b|aggregatePrcStyle|prc_active_bank|prcError|prcAvailable|matchedPiercing/);
     for (const name of RENDERING_PATH)
       for (const study of ["brow-study-fixture", "eye-study-fixture"]) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8")).not.toContain(study);
   });
