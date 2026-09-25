@@ -125,6 +125,7 @@ Whenever a third-party mod, repository, tool, guide, paper, discussion or creato
 | Bézier tangent projection and occlusion | [Projected tangent controls](research/authoring/projected-tangent-controls.md) |
 | Directional softness | [Directional softness contract](research/authoring/directional-softness-contract.md) |
 | Whole-shape and UV gestures | [Shape gesture contract](research/authoring/shape-gesture-contract.md) |
+| Pointer and keyboard bindings, viewport hints and cursors (Shift always means a shape gesture) | [Input bindings](research/authoring/input-bindings.md) |
 | Preview quality presets | [Preview quality contract](research/authoring/preview-quality-contract.md) |
 | Glitter models and export guard | [Direct glint checkpoint](research/materials/direct-glint-browser-checkpoint.md), [glitter implementation contract](research/materials/glitter-implementation-contract.md), [glitter backlog](research/backlog/glitter-material.md) |
 | Preview fidelity (eye/lip artifacts need shader/material/asset diagnosis, not an assumed SSS fix) | [Preview fidelity backlog](research/backlog/preview-fidelity.md) |

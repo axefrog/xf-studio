@@ -1,8 +1,10 @@
 # Whole-shape gestures — 23 September 2026
 
-The active layer's painted footprint can be dragged in UV or on the head. Existing point, tangent and warp handles retain priority for an ordinary drag. Shift-drag rotates about the selected contour point; Shift-wheel scales about that same point. The pivot stays selected even when the gesture starts on another handle. Surface controls must be enabled for on-head editing. Background drag still orbits the head; right-drag still pans the camera.
+The active layer's painted footprint can be dragged in UV or on the head. Existing point, tangent and warp handles retain priority for an ordinary drag. Shift-drag over makeup (the shape or any of its handles) rotates about the selected contour point; Shift-wheel over makeup scales about that same point. The pivot stays selected even when the gesture starts on another handle. Surface controls must be enabled for on-head editing. Background drag still orbits the head; right-drag and Ctrl-drag pan the camera; Alt-drag orbits even over makeup.
 
-UV wheel zooms around the pointer and right-drag pans the crop. These are view operations: they preserve the recipe, Undo history and camera, and survive reload. View limits are centre coordinates -1 to 2 and span 0.02 to 10 UV units; pointer anchoring is subject to those limits. Fit and the existing eye-view controls remain available.
+**Shift always means a shape gesture (B-17, option b).** Off makeup, Shift-drag and Shift-wheel are consumed and do nothing: they never pan or zoom the camera, including while Surface controls are off, and the UV map behaves the same way. Every input resolves through the [input binding catalogue](input-bindings.md), which also drives the viewport hints, tooltips and cursors.
+
+UV wheel zooms around the pointer, and right-drag or Ctrl-drag pans the crop. These are view operations: they preserve the recipe, Undo history and camera, and survive reload. View limits are centre coordinates -1 to 2 and span 0.02 to 10 UV units; pointer anchoring is subject to those limits. Fit and the existing eye-view controls remain available.
 
 ## Transform semantics and API
 
@@ -12,9 +14,9 @@ Transforms move all contour knots and warp origins together, rotate/scale relati
 
 Invalid input or any output outside current recipe bounds rejects the entire proposal. Controls freeze at the last valid pose instead of independently clamping and distorting it. A warp origin or width can therefore limit a move before the visible outline reaches an atlas edge. Paint picking evaluates the shared warped coverage, with a 1% coverage threshold; a virtually invisible layer may need a handle or the UV scale gesture. The stronger of overlapping mirrored instances wins, with the authored side winning ties.
 
-A drag uses its starting snapshot and adds one Undo entry when it actually changes. UV shape drags require four pixels of movement to avoid nudging during double-click insertion. Wheel events within 250 ms share one Undo entry. Escape cancels the active gesture; after a burst ends, use Undo. Cancellation never undoes edits in a replaced layer/preset. Pan cancellation restores the view without touching recipe history. The old immediate Shift-click point-relocation shortcut was removed because Shift now belongs to shape rotation.
+A drag uses its starting snapshot and adds one Undo entry when it actually changes. UV shape drags require four pixels of movement to avoid nudging during double-click insertion. Wheel events within 250 ms share one Undo entry. An open burst keeps scaling while Shift stays held, even after the shrinking shape leaves the pointer; a burst starts only over makeup. The head adapter reads the lazily synced detached layer back after each accepted proposal, so its own edit is never mistaken for a stale context. Escape cancels the active gesture; after a burst ends, use Undo. Cancellation never undoes edits in a replaced layer/preset. Pan cancellation restores the view without touching recipe history. The old immediate Shift-click point-relocation shortcut was removed because Shift now belongs to shape rotation.
 
-Shift-wheel shape scaling uses about 2% per conventional wheel notch (120 pixels, three lines or one page). Fractional trackpad deltas retain proportional steps; a single unusually large event is limited to about 5%. UV view zoom keeps its existing faster rate. Both editors use the same shape mapping and the selected-point pivot.
+Shift-wheel shape scaling uses about 2% per conventional wheel notch (120 pixels, three lines or one page). Chromium and WebView2 on Windows and Linux report Shift+wheel as horizontal scrolling, so `shiftWheelDelta()` takes the dominant axis. Fractional trackpad deltas retain proportional steps; a single unusually large event is limited to about 5%. UV view zoom keeps its existing faster rate. Both editors use the same shape mapping and the selected-point pivot.
 
 ## Surface lookup improvement
 

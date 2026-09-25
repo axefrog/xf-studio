@@ -1,5 +1,6 @@
 import type { StudioAction, StudioCapability, StudioTarget } from "../studio-application";
 import type { StudioBoundContext } from "../studio-context-targets";
+import { chordLabel, keyBindingById, shortcutLabel } from "../input-bindings";
 import type { IconName } from "./icons";
 import { openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "./menu";
 import type { StudioRuntime } from "./runtime";
@@ -25,7 +26,9 @@ export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
 const labels = CONTEXT_LABELS;
 /** Recovery wording for destructive menu entries, from the action's Undo policy. */
 export const undoHint = (undo: string, id: string) => id.endsWith(".remove") || id === "preset.remove"
-  ? undo === "recovery" ? "Restorable from the Presets panel" : "Undo with Ctrl+Z" : undefined;
+  ? undo === "recovery" ? "Restorable from the Presets panel" : `Undo with ${shortcutLabel("shell.undo")}` : undefined;
+/** Row reorder chords from the catalogue ("Alt+↑", "Alt+↓"). */
+const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").chords[index]);
 
 /** Menu items for an application-bound context. Every dispatch rechecks the binding. */
 export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor): MenuItem[] {
@@ -121,9 +124,9 @@ export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor
   const items: MenuItem[] = [{ kind: "heading", label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front` },
     ...contextItems(rt, query, anchor), { kind: "separator" },
     targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } }, "Bring forward", "arrowUp",
-      { shortcut: "Alt+↑" }),
+      { shortcut: reorderKey(0) }),
     targetAction(rt, target, { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } }, "Send backward", "arrowDown",
-      { shortcut: "Alt+↓" }),
+      { shortcut: reorderKey(1) }),
     targetAction(rt, target, { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry }, "Mirror across the face", "mirror",
       { checked: layer.symmetry }),
     { kind: "submenu", label: "Finish", icon: "finish", items: () => port.authoring.choicesFor(target, "layer.setFinish", "finish")
@@ -136,7 +139,7 @@ export function layerMenu(rt: StudioRuntime, layerId: string, anchor: MenuAnchor
           run: () => { rt.dispatch(choice.action); } };
       }) },
     targetAction(rt, target, { kind: "layer.edit", command: { kind: "reset", id: layerId } }, "Reset shape and settings", "reset",
-      { hint: "Keeps the name; Undo with Ctrl+Z" }),
+      { hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` }),
   ];
   openMenu(items, anchor, { label: `${layer.name} layer actions`, invoker });
 }
@@ -150,8 +153,8 @@ export function presetMenu(rt: StudioRuntime, presetId: string, anchor: MenuAnch
   const query = port.authoring.contextQuery({ kind: "preset", id: presetId });
   openMenu([{ kind: "heading", label: preset.name, detail: `${preset.layers} ${preset.layers === 1 ? "layer" : "layers"} · preset ${index + 1} of ${presets.length}` },
     ...contextItems(rt, query, anchor), { kind: "separator" },
-    targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index - 1 } }, "Move up", "arrowUp", { shortcut: "Alt+↑" }),
-    targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index + 1 } }, "Move down", "arrowDown", { shortcut: "Alt+↓" }),
+    targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index - 1 } }, "Move up", "arrowUp", { shortcut: reorderKey(0) }),
+    targetAction(rt, target, { kind: "preset.edit", command: { kind: "move", id: presetId, to: index + 1 } }, "Move down", "arrowDown", { shortcut: reorderKey(1) }),
   ], anchor, { label: `${preset.name} preset actions`, invoker });
 }
 

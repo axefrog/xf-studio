@@ -20,6 +20,9 @@ const valueAllowlist = new Map<string, string[]>([
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["uv-view", ["uvAspect"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
+  // The pure input binding catalogue: hint/cursor/label derivation and key matching.
+  ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
+    "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
 ]);
 
 test("studio-ui imports only types from the core plus a documented allowlist of pure helpers", () => {

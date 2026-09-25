@@ -134,9 +134,9 @@ export function shell() {
       drives: `${code("authoring.capability(action)")}, ${code("files.capability")}, ${code("authoring.requestCapability")}, ${code("viewport.uvCommandCapability")}.`,
       a11y: "Combobox + listbox with aria-activedescendant; disabled options expose their reason as text." }),
     pattern({ id: "s-sheet", title: "Reference sheet (dialog)", status: "implemented",
-      specimen: `<div class="sheet static-sheet"><div class="sheet-head"><h2>Keyboard shortcuts</h2>${btn("Close", { icon: "close", iconOnly: true, variant: "ghost" })}</div><dl class="shortcut-list wide"><dt><kbd>Ctrl+K</kbd></dt><dd>Command palette</dd><dt><kbd>F6</kbd></dt><dd>Move between regions</dd></dl></div>`,
-      what: "A modal dialog for reference content (keyboard shortcuts). Modal dialogs are reserved for reading or a single decision.",
-      when: "Press ? outside text fields, or Panels › Keyboard shortcuts.",
+      specimen: `<div class="sheet static-sheet"><div class="sheet-head"><h2>Keyboard &amp; mouse</h2>${btn("Close", { icon: "close", iconOnly: true, variant: "ghost" })}</div><section class="reference-section"><h3>Head viewport</h3><dl class="shortcut-list wide"><dt><kbd>Shift-drag</kbd></dt><dd>Rotate shape<span class="reference-where"> · over makeup</span></dd><dt><kbd>Wheel / Ctrl-wheel</kbd></dt><dd>Zoom view</dd></dl></section></div>`,
+      what: "A modal dialog for reference content. The Keyboard & mouse dialog lists every binding grouped by context (anywhere, head, UV map, during a gesture, panel tabs, rows), generated from the input binding catalogue, with the viewport-hints switch at the top. Modal dialogs are reserved for reading or a single decision.",
+      when: "Press ? outside text fields, View preferences or Panels › Keyboard & mouse, or the palette.",
       a11y: "Native <dialog> with showModal: focus is trapped, Escape closes and focus returns to the invoker." }),
   ]);
 }

@@ -2,9 +2,11 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type DockLayout = { format: string; version: number; state: JsonValue };
-export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; layout?: DockLayout };
+/** `inputHints`: contextual shortcut hints and target tooltips in the viewports (on by default). */
+export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
+  | { kind: "inputHints.set"; enabled: boolean }
   | { kind: "layout.set"; layout?: DockLayout };
 export type UIPreferenceCapability = { available: boolean; reason?: string };
 
@@ -14,7 +16,7 @@ const MAX_DEPTH = 32;
 const unsafeKeys = new Set(["__proto__", "constructor", "prototype"]);
 
 export function defaultUIPreferences(): UIPreferences {
-  return { schema: "xfs/ui-preferences-1", theme: "system" };
+  return { schema: "xfs/ui-preferences-1", theme: "system", inputHints: true };
 }
 
 /** The selected preference is independent of the current OS colour scheme. */
@@ -93,13 +95,14 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     const candidate = value as Record<string, unknown>;
     if (candidate.schema !== result.schema) return result;
     if (theme(candidate.theme)) result.theme = candidate.theme;
+    if (typeof candidate.inputHints === "boolean") result.inputHints = candidate.inputHints;
     const layout = parseDockLayout(candidate.layout);
     if (layout) result.layout = layout;
   } catch { /* A broken presentation preference must not discard authored work. */ }
   return result;
 }
 
-/** An in-process action boundary; neither action changes a recipe or SQLite revision. */
+/** An in-process action boundary; no action changes a recipe or SQLite revision. */
 export class UIPreferenceActions {
   private value: UIPreferences;
   private listeners = new Set<() => void>();
@@ -109,6 +112,8 @@ export class UIPreferenceActions {
   capability(action: UIPreferenceAction): UIPreferenceCapability {
     if (action.kind === "theme.set" && !theme(action.theme))
       return { available: false, reason: "Choose System, Light or Dark." };
+    if (action.kind === "inputHints.set" && typeof action.enabled !== "boolean")
+      return { available: false, reason: "Viewport hints are either shown or hidden." };
     if (action.kind === "layout.set" && action.layout !== undefined && !parseDockLayout(action.layout))
       return { available: false, reason: "The panel layout is not a supported bounded JSON document." };
     return { available: true };
@@ -117,6 +122,7 @@ export class UIPreferenceActions {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
     if (action.kind === "theme.set") this.value.theme = action.theme;
+    else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;
       if (layout) this.value.layout = layout;

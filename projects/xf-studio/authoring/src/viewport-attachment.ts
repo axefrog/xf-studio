@@ -2,6 +2,7 @@ import type { CameraState } from "./workspace-state";
 import type { UVSelectionVisibility, UVView } from "./uv-view";
 import type { StudioApplication } from "./studio-application";
 import type { StudioContextHit } from "./studio-context-targets";
+import { NO_MODIFIERS, type EditorInputState, type HeldModifiers } from "./input-bindings";
 
 export type ViewportHostKind = "head" | "uv";
 export type UVViewCommand = "both" | "single" | "other" | "fit";
@@ -16,6 +17,8 @@ export type ViewportAttachmentState = {
 };
 export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
   affordance: "point" | "tangent" | "warp-origin" | "warp-vector" | "shape" | "empty" };
+/** Read-only input context for hint strips and cursors: held modifiers plus each viewport's report. */
+export type ViewportInputSnapshot = Readonly<{ modifiers: HeldModifiers; head: EditorInputState; uv: EditorInputState }>;
 export type ViewportContextQuery = ReturnType<StudioApplication["contextQuery"]> &
   Pick<ViewportHit, "mirror" | "affordance"> & { source: ViewportHostKind };
 
@@ -43,7 +46,29 @@ export class ViewportAttachment<Slot> {
     head: { phase: "loading" }, uv: { phase: "loading" },
   };
   private listeners = new Set<() => void>();
+  private inputListeners = new Set<() => void>();
+  private inputState: ViewportInputSnapshot = { modifiers: NO_MODIFIERS, head: { editable: false }, uv: { editable: false } };
   constructor(private port: ViewportAttachmentPort<Slot>) {}
+  /**
+   * Input context is published on its own channel: hover and modifier changes repaint only the
+   * hint strips and cursors, never every panel. Reports are deduplicated here.
+   */
+  subscribeInput(listener: () => void) { this.inputListeners.add(listener); return () => { this.inputListeners.delete(listener); }; }
+  input(): ViewportInputSnapshot { return structuredClone(this.inputState); }
+  reportInput(kind: ViewportHostKind, state: EditorInputState) {
+    const next = { ...(state.target ? { target: state.target } : {}), ...(state.gesture ? { gesture: state.gesture } : {}), editable: state.editable };
+    if (JSON.stringify(next) === JSON.stringify(this.inputState[kind])) return;
+    this.inputState = { ...this.inputState, [kind]: next };
+    this.publishInput();
+  }
+  /** Held modifiers from key and pointer events; a lost window focus reports none. */
+  reportModifiers(modifiers: HeldModifiers) {
+    const next = { ctrl: !!modifiers.ctrl, alt: !!modifiers.alt, shift: !!modifiers.shift }, old = this.inputState.modifiers;
+    if (next.ctrl === old.ctrl && next.alt === old.alt && next.shift === old.shift) return;
+    this.inputState = { ...this.inputState, modifiers: next };
+    this.publishInput();
+  }
+  private publishInput() { for (const listener of this.inputListeners) listener(); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private publish() { for (const listener of this.listeners) listener(); }
   /** The device reports a view change (UV pan/zoom/mode) so readers of `snapshot()` can repaint. */

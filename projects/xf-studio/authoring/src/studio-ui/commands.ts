@@ -1,3 +1,5 @@
+import { bindingReference } from "../input-bindings";
+import { Toggle } from "./controls";
 import { h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 import type { Capability } from "./menu";
@@ -71,22 +73,25 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
   input.focus();
 }
 
-/** Static reference dialog for keyboard shortcuts. */
-export function openShortcuts() {
+/**
+ * Keyboard & mouse reference, generated from the input binding catalogue grouped by context,
+ * so it lists exactly what the handlers do. Optionally hosts the viewport-hints preference.
+ */
+export function openInputReference(options: { hints?: { enabled: boolean; set(enabled: boolean): void } } = {}) {
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  const rows: [string, string][] = [
-    ["Ctrl+K", "Command palette — every command, with reasons when unavailable"], ["Ctrl+Z", "Undo the last recipe change (outside text fields)"], ["Ctrl+Shift+Z / Ctrl+Y", "Redo the change you just undid"],
-    ["Ctrl+S", "Save the collection to the local library"], ["F6 / Shift+F6", "Move focus between the header, panel groups and status bar"],
-    ["← → Home End", "Switch tabs in a focused tab strip"], ["Alt+Shift+← →", "Reorder the focused tab"], ["Shift+F10", "Layout or context commands for the focused item"],
-    ["Delete", "Close the focused tab · remove the focused row"], ["↑ ↓", "Move between rows in Presets and Layers"], ["Alt+↑ ↓", "Reorder the focused row"],
-    ["F2", "Rename the focused row"], ["Ctrl+D", "Duplicate the focused row"], ["Esc", "Cancel a drag, gesture, menu or dialog"],
-    ["Ctrl while dragging a panel", "Float freely without snapping"], ["F (viewport focused)", "Front view · Fit shape"],
-    ["1 / 2 / O (UV focused)", "Both eyes · single eye · other eye"], ["?", "Show this list"],
-  ];
-  const dialog = h("dialog", { class: "sheet", "aria-labelledby": "shortcuts-title" },
-    h("div", { class: "sheet-head" }, h("h2", { id: "shortcuts-title", text: "Keyboard shortcuts" }),
+  const sections = bindingReference().map(section => h("section", { class: "reference-section", "aria-labelledby": `reference-${section.id}` },
+    h("h3", { id: `reference-${section.id}`, text: section.title }),
+    section.detail ? h("p", { class: "muted small", text: section.detail }) : null,
+    h("dl", { class: "shortcut-list wide" }, section.rows.flatMap(row => [h("dt", {}, h("kbd", { text: row.input })),
+      h("dd", {}, row.label, row.where ? h("span", { class: "reference-where", text: ` · ${row.where}` }) : null)]))));
+  const hints = options.hints ? new Toggle({ label: "Show input hints in the viewports", help: "A corner strip and target tooltips that follow the pointer and held keys.",
+    onChange: checked => options.hints!.set(checked) }) : undefined;
+  hints?.update(options.hints!.enabled);
+  const dialog = h("dialog", { class: "sheet reference-sheet", "aria-labelledby": "shortcuts-title" },
+    h("div", { class: "sheet-head" }, h("h2", { id: "shortcuts-title", text: "Keyboard & mouse" }),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
-    h("dl", { class: "shortcut-list wide" }, rows.flatMap(([key, value]) => [h("dt", {}, h("kbd", { text: key })), h("dd", { text: value })])));
+    hints ? h("div", { class: "reference-pref" }, hints.element) : null,
+    h("div", { class: "reference-body" }, sections));
   const close = () => { dialog.close(); dialog.remove(); invoker?.focus(); };
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
   dialog.addEventListener("click", event => { if (event.target === dialog) close(); });

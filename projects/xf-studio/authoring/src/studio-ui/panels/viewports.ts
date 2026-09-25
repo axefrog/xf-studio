@@ -1,4 +1,6 @@
 import { uvAspect } from "../../uv-view";
+import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, TARGET_LABELS } from "../../input-bindings";
+import { ViewportInputHints } from "../input-hints";
 import type { ViewportHostKind } from "../../viewport-attachment";
 import { Segmented, button, applyCapability } from "../controls";
 import { h, setAttr, setText, isTextInput } from "../dom";
@@ -9,8 +11,8 @@ import { contextItems } from "../target-menus";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 
-/** Right-drag pans both viewports; only a stationary right-click opens the menu. */
-function contextMenuGate(target: HTMLElement, open: (event: MouseEvent) => void) {
+/** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
+function contextMenuGate(kind: ViewportHostKind, target: HTMLElement, open: (event: MouseEvent) => void) {
   let down: { x: number; y: number } | undefined;
   target.addEventListener("pointerdown", event => { if (event.button === 2) down = { x: event.clientX, y: event.clientY }; }, true);
   target.addEventListener("contextmenu", event => {
@@ -18,23 +20,27 @@ function contextMenuGate(target: HTMLElement, open: (event: MouseEvent) => void)
     const moved = down ? Math.hypot(event.clientX - down.x, event.clientY - down.y) : 0;
     down = undefined;
     if (moved > 4) return;
-    open(event);
+    // Every target shares the right-click binding, so the empty target resolves it.
+    if (pointerBinding(kind, "right-click", "empty", modifierKey(modifiersOf(event)))?.effect === "context-menu") open(event);
   });
 }
+/** Accessible viewport description generated from its key bindings. */
+const keyDescription = (scope: "head" | "uv") => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
+  .map(binding => `${chordsLabel(binding)} ${binding.label.toLowerCase()}`).join(", ")}. ${shortcutLabel("shell.shortcuts")} lists every mouse and keyboard binding.`;
 
 function viewItems(rt: StudioRuntime, kind: ViewportHostKind): MenuItem[] {
   const port = rt.port;
   if (kind === "uv") {
     const view = port.viewport.snapshot().uv.view;
-    const command = (id: "both" | "single" | "other" | "fit", label: string, key: string): MenuItem => ({ kind: "action", label, shortcut: key,
+    const command = (id: "both" | "single" | "other" | "fit", label: string): MenuItem => ({ kind: "action", label, shortcut: shortcutLabel(`uv.${id}`),
       capability: port.viewport.uvCommandCapability(id), checked: id === "both" ? view?.mode === "both" : id === "single" ? view?.mode === "single" : undefined,
       run: () => { port.viewport.uvCommand(id); } });
-    return [{ kind: "heading", label: "UV view", detail: "View changes are not edits" }, command("both", "Both eyes", "1"),
-      command("single", "Single eye", "2"), command("other", "Other eye", "O"), command("fit", "Fit shape", "F")];
+    return [{ kind: "heading", label: "UV view", detail: "View changes are not edits" }, command("both", "Both eyes"),
+      command("single", "Single eye"), command("other", "Other eye"), command("fit", "Fit shape")];
   }
   const preview = port.authoring.previewState().preview;
   return [{ kind: "heading", label: "Head view", detail: "View changes are not edits" },
-    { kind: "action", label: "Front view", icon: "front", shortcut: "F", capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
+    { kind: "action", label: "Front view", icon: "front", shortcut: shortcutLabel("head.front"), capability: port.authoring.capability({ kind: "camera.front" }), run: () => { rt.dispatch({ kind: "camera.front" }); } },
     { kind: "action", label: "Surface controls", icon: "handles", checked: !!preview?.surface,
       capability: port.authoring.capability({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }),
       run: () => { rt.dispatch({ kind: "preview.setSurfaceControls", enabled: !preview?.surface }); } },
@@ -49,9 +55,8 @@ export function viewportMenu(rt: StudioRuntime, kind: ViewportHostKind, anchor: 
   const query = at ? port.viewport.contextAt(kind, at.x, at.y) : undefined;
   if (at && !query) items.push({ kind: "heading", label: kind === "head" ? "Background" : "Outside the editor", detail: kind === "head" ? "No editable control under the cursor" : undefined });
   else if (query) {
-    const hitLabel: Record<string, string> = { point: "Contour point", tangent: "Bézier handle", "warp-origin": "Warp position", "warp-vector": "Warp pull",
-      shape: "Shape", empty: "Empty UV space" };
-    items.push({ kind: "heading", label: hitLabel[query.affordance] ?? "Target", detail: query.mirror ? "Mirrored copy · edits the authored side" : undefined });
+    const labels = TARGET_LABELS[kind], hitLabel = query.affordance === "empty" ? TARGET_LABELS.uv.empty : labels[query.affordance];
+    items.push({ kind: "heading", label: hitLabel ?? "Target", detail: query.mirror ? "Mirrored copy · edits the authored side" : undefined });
     items.push(...contextItems(rt, query, anchor));
     if (query.affordance === "empty") items.push({ kind: "heading", label: "No shape here", detail: "Double-click near an outline to insert a point" });
   } else {
@@ -98,17 +103,18 @@ export function headPanel(rt: StudioRuntime): PanelController {
     if (!motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
     else rt.dispatch({ kind: "motion.setPaused", paused: !motion.idlePaused });
   });
-  const hint = h("div", { class: "viewport-hint" }, "Drag background: orbit · Right-drag: pan · Wheel: zoom · Drag makeup: move · Shift-drag: rotate · Esc: cancel");
-  const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": "Head preview. Shift+F10 for commands on the selected point; F for front view." },
-    slot, loading,
+  const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
+  const hints = new ViewportInputHints(rt, "head", slot, element);
+  element.append(slot, loading,
     h("div", { class: "viewport-top" }, context, h("div", { class: "viewport-tools" }, front, surface, wire, idle)),
-    h("div", { class: "viewport-bottom" }, hint, badge.element));
+    h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
   port.viewport.attach("head", slot);
-  contextMenuGate(slot, event => viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
+  contextMenuGate("head", slot, event => viewportMenu(rt, "head", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {
     if (event.target !== element || isTextInput(event.target)) return;
-    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") { event.preventDefault(); viewportMenu(rt, "head", element, undefined, element); }
-    else if (event.key.toLowerCase() === "f") { event.preventDefault(); rt.dispatch({ kind: "camera.front" }); }
+    const binding = keyBinding("head", event);
+    if (binding?.id === "head.menu") { event.preventDefault(); viewportMenu(rt, "head", element, undefined, element); }
+    else if (binding?.id === "head.front") { event.preventDefault(); rt.dispatch({ kind: "camera.front" }); }
   });
   return {
     spec: { id: "head", ...PANEL_META["head"], element,
@@ -118,7 +124,7 @@ export function headPanel(rt: StudioRuntime): PanelController {
       loading.hidden = state.phase === "ready";
       if (state.phase === "error") { loading.replaceChildren(icon("error"), h("p", { text: state.error ?? "The 3D preview could not load." }),
         h("p", { class: "muted small", text: "You can keep working in the UV map." })); loading.dataset.tone = "error"; }
-      badge.update(frame);
+      badge.update(frame); hints.update(frame);
       const preview = frame.preview.preview, motion = frame.preview.motion;
       setAttr(surface, "aria-pressed", String(!!preview?.surface)); setAttr(wire, "aria-pressed", String(!!preview?.wire));
       const playing = !!motion?.idle && !motion.idlePaused;
@@ -144,10 +150,11 @@ export function uvPanel(rt: StudioRuntime): PanelController {
     { value: "both", label: "Both eyes" }, { value: "single", label: "Single eye" }], onSelect: mode => { port.viewport.uvCommand(mode); } });
   const other = button({ label: "Other eye", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("other"); } });
   const fit = button({ label: "Fit shape", icon: "target", small: true, variant: "ghost", onClick: () => { port.viewport.uvCommand("fit"); } });
-  const hint = h("div", { class: "uv-hint" }, "Wheel: zoom · Right-drag: pan · Double-click outline: add point · Shift-drag: rotate · Shift-wheel: scale");
-  const element = h("div", { class: "viewport-panel uv", tabindex: "0",
-    "aria-label": "UV map editor. Keys: 1 both eyes, 2 single eye, O other eye, F fit shape, Shift+F10 commands for the selected point." },
-    h("div", { class: "uv-toolbar" }, modes.element, other, fit), slot, hint);
+  const warning = h("div", { class: "uv-hint", "data-tone": "warning", hidden: true },
+    `Selected point is outside this view · ${shortcutLabel("uv.fit")}: fit shape · ${shortcutLabel("uv.other")}: other eye`);
+  const element = h("div", { class: "viewport-panel uv", tabindex: "0", "aria-label": `UV map editor. ${keyDescription("uv")}` });
+  const hints = new ViewportInputHints(rt, "uv", slot, element);
+  element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), slot, warning, hints.strip, hints.tip);
   port.viewport.attach("uv", slot);
   let mode: string | undefined;
   const layout = () => {
@@ -159,15 +166,12 @@ export function uvPanel(rt: StudioRuntime): PanelController {
     host.style.width = `${Math.floor(w)}px`; host.style.height = `${Math.floor(hgt)}px`;
   };
   new ResizeObserver(layout).observe(slot);
-  contextMenuGate(slot, event => viewportMenu(rt, "uv", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
+  contextMenuGate("uv", slot, event => viewportMenu(rt, "uv", { x: event.clientX, y: event.clientY }, { x: event.clientX, y: event.clientY }, element));
   element.addEventListener("keydown", event => {
     if (event.target !== element) return;
-    const key = event.key.toLowerCase();
-    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") { event.preventDefault(); viewportMenu(rt, "uv", element, undefined, element); }
-    else if (key === "1") port.viewport.uvCommand("both");
-    else if (key === "2") port.viewport.uvCommand("single");
-    else if (key === "o") port.viewport.uvCommand("other");
-    else if (key === "f") port.viewport.uvCommand("fit");
+    const binding = keyBinding("uv", event);
+    if (binding?.id === "uv.menu") { event.preventDefault(); viewportMenu(rt, "uv", element, undefined, element); }
+    else if (binding?.action.kind === "view") port.viewport.uvCommand(binding.action.id.slice(3) as "both" | "single" | "other" | "fit");
   });
   return {
     spec: { id: "uv", ...PANEL_META["uv"], element,
@@ -179,10 +183,8 @@ export function uvPanel(rt: StudioRuntime): PanelController {
       applyCapability(other, port.viewport.uvCommandCapability("other"));
       applyCapability(fit, port.viewport.uvCommandCapability("fit"));
       const selection = frame.viewport.uv.selection;
-      const outside = selection?.point && !selection.point.visible;
-      setText(hint, outside ? "Selected point is outside this view · F: fit shape · O: other eye"
-        : "Wheel: zoom · Right-drag: pan · Double-click outline: add point · Shift-drag: rotate · Shift-wheel: scale");
-      hint.dataset.tone = outside ? "warning" : "";
+      warning.hidden = !(selection?.point && !selection.point.visible);
+      hints.update(frame);
     },
   };
 }
