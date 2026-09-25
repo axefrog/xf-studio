@@ -115,32 +115,63 @@ export const wolvenKitIdentityKey = (identity: WolvenKitIdentity | null) =>
 export type WolvenKitProbeResult = { ok: true; version: string } | { ok: false; code: "tool_missing" | "runtime_missing" | "unsupported" | "commands"; issue: string };
 const probeMemo = new Map<string, { result: WolvenKitProbeResult; until: number }>();
 
-/**
- * Run the CLI's `--version` and `--help` and check it is a verified version with the commands the
- * pipeline uses. Cached per file stamp; a failure is retried after a short interval.
- */
-export function probeWolvenKitCli(cli: string, now = Date.now()): WolvenKitProbeResult {
-  if (!isFile(cli)) return { ok: false, code: "tool_missing", issue: "WolvenKit CLI isn't available." };
-  const key = `${cli}|${stamp(cli)}`;
-  const cached = probeMemo.get(key);
-  if (cached && now < cached.until) return cached.result;
-  const run = (args: string[]) => spawnSync(cli, args, { encoding: "utf8", timeout: 15_000, windowsHide: true });
-  let result: WolvenKitProbeResult;
-  const version = run(["--version"]);
-  const versionText = `${version.stdout ?? ""}${version.stderr ?? ""}`;
-  const found = new RegExp(`\\b(${SUPPORTED_WOLVENKIT_VERSIONS.map(value => value.replace(/\./g, "\\.")).join("|")})\\b`).exec(versionText);
-  if (isRuntimeMissing(version.status, versionText))
-    result = { ok: false, code: "runtime_missing", issue: "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer." };
-  else if (version.error || version.status !== 0 || !found)
-    result = { ok: false, code: "unsupported", issue: `WolvenKit CLI must be a verified ${SUPPORTED_WOLVENKIT_VERSIONS.join(" or ")} installation.` };
-  else {
-    const help = run(["--help"]);
-    const commands = `${help.stdout ?? ""}${help.stderr ?? ""}`;
-    result = help.error || help.status !== 0 ||
-        !["import", "export", "convert", "pack", "extract", "uncook", "unbundle"].every(name => new RegExp(`\\b${name}\\b`, "i").test(commands))
-      ? { ok: false, code: "commands", issue: "WolvenKit CLI does not offer the commands XF Studio needs." }
-      : { ok: true, version: found[1]! };
-  }
+type ProbeOutput = { status: number | null; text: string; failed: boolean };
+/** Pure: judge the `--version` and `--help` outputs. */
+function judgeProbe(version: ProbeOutput, help: () => ProbeOutput | Promise<ProbeOutput>): WolvenKitProbeResult | Promise<WolvenKitProbeResult> {
+  const found = new RegExp(`\\b(${SUPPORTED_WOLVENKIT_VERSIONS.map(value => value.replace(/\./g, "\\.")).join("|")})\\b`).exec(version.text);
+  if (isRuntimeMissing(version.status, version.text))
+    return { ok: false, code: "runtime_missing", issue: "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer." };
+  if (version.failed || version.status !== 0 || !found)
+    return { ok: false, code: "unsupported", issue: `WolvenKit CLI must be a verified ${SUPPORTED_WOLVENKIT_VERSIONS.join(" or ")} installation.` };
+  const judge = (output: ProbeOutput): WolvenKitProbeResult => output.failed || output.status !== 0 ||
+      !["import", "export", "convert", "pack", "extract", "uncook", "unbundle"].every(name => new RegExp(`\\b${name}\\b`, "i").test(output.text))
+    ? { ok: false, code: "commands", issue: "WolvenKit CLI does not offer the commands XF Studio needs." }
+    : { ok: true, version: found[1]! };
+  const output = help();
+  return output instanceof Promise ? output.then(judge) : judge(output);
+}
+const remember = (key: string, result: WolvenKitProbeResult, now: number) => {
   probeMemo.set(key, { result, until: result.ok ? Infinity : now + 10_000 });
   return result;
+};
+
+/** The cached probe result for this exact file, or null when it has not been checked recently. */
+export function cachedWolvenKitProbeResult(cli: string, now = Date.now()): WolvenKitProbeResult | null {
+  if (!isFile(cli)) return { ok: false, code: "tool_missing", issue: "WolvenKit CLI isn't available." };
+  const cached = probeMemo.get(`${cli}|${stamp(cli)}`);
+  return cached && now < cached.until ? cached.result : null;
+}
+
+/**
+ * Run the CLI's `--version` and `--help` and check it is a verified version with the commands the
+ * pipeline uses. Cached per file stamp; a failure is retried after a short interval. Blocks; hosts
+ * answering requests use `probeWolvenKitCliAsync` instead.
+ */
+export function probeWolvenKitCli(cli: string, now = Date.now()): WolvenKitProbeResult {
+  const cached = cachedWolvenKitProbeResult(cli, now);
+  if (cached) return cached;
+  const run = (args: string[]): ProbeOutput => {
+    const result = spawnSync(cli, args, { encoding: "utf8", timeout: 15_000, windowsHide: true });
+    return { status: result.status, text: `${result.stdout ?? ""}${result.stderr ?? ""}`, failed: !!result.error };
+  };
+  return remember(`${cli}|${stamp(cli)}`, judgeProbe(run(["--version"]), () => run(["--help"])) as WolvenKitProbeResult, now);
+}
+
+const probesInFlight = new Map<string, Promise<WolvenKitProbeResult>>();
+/** The same checks without blocking the event loop; concurrent callers share one run per file. */
+export function probeWolvenKitCliAsync(cli: string): Promise<WolvenKitProbeResult> {
+  const cached = cachedWolvenKitProbeResult(cli);
+  if (cached) return Promise.resolve(cached);
+  const key = `${cli}|${stamp(cli)}`;
+  let pending = probesInFlight.get(key);
+  if (!pending) {
+    const run = async (args: string[]): Promise<ProbeOutput> => {
+      const result = await runProcessTree(cli, args, { timeoutMs: 15_000, keep: 16_000 });
+      return { status: result.exitCode, text: result.stdout + result.stderr, failed: !!result.error || !!result.stopped };
+    };
+    pending = (async () => remember(key, await judgeProbe(await run(["--version"]), () => run(["--help"])), Date.now()))()
+      .finally(() => probesInFlight.delete(key));
+    probesInFlight.set(key, pending);
+  }
+  return pending;
 }

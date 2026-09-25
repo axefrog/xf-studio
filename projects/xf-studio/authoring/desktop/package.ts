@@ -11,6 +11,8 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
 
 export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: LocalSettingsStore;
   deadlineMs?: number; shutdownSignal?: AbortSignal; wolvenKitProbe?: WolvenKitProbe;
+  /** Where Build failure details go (the desktop host log); never shown raw in the page. */
+  log?: (message: string) => void;
   /** XF Studio's own downloaded WolvenKit, used when the settings name none. */
   managedWolvenKit?: () => string | null };
 /** Browser requests contain only action and collection; all build paths are host owned. */
@@ -18,7 +20,7 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
   timeoutMs?: number, buildHost?: DesktopBuildHost, activity?: DesktopWorkActivity): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
-    return json({ error: "Expected a JSON package request." }, 403);
+    return json({ error: "Expected a JSON package request." }, 415);
   if (Number(request.headers.get("Content-Length")) > maxBytes)
     return json({ error: "Collection exceeds 16 MB." }, 413);
   let body: string;
@@ -46,7 +48,7 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
       const saved = buildHost.settings.load().settings;
       const settings = { ...saved, wolvenKitCli: saved.wolvenKitCli ?? buildHost.managedWolvenKit?.() ?? null };
       const result = await runDesktopBuild(input.collection, settings,
-        buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe);
+        buildHost.dataRoot, buildHost.toolsRoot, buildHost.deadlineMs, signal, buildHost.wolvenKitProbe, undefined, buildHost.log);
       if (result.kind === "success") return json(result.result);
       return json({ code: result.code, error: result.message }, result.code === "package_build_unavailable" ? 503 :
         result.code === "invalid_collection" ? 422 : result.code === "package_build_timeout" ? 504 :

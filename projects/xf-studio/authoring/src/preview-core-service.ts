@@ -38,8 +38,8 @@ export type PreviewCoreManifest = {
   recipeId: string; recipeRevision: number; plateRecipeId: string; plateRecipeRevision: number; recipeSha256: string;
   deriverVersion: number; cacheKey: string;
   source: { revisionId: string; label: string; headMeshDepotPath: string; headMorphDepotPath: string; eyeMeshDepotPath: string;
-    headMeshSha256: string; headMorphSha256: string; eyeMeshSha256: string;
-    headGlbSha256: string; eyeGlbSha256: string; headMaterialsSha256: string; eyeMaterialsSha256: string;
+    eyeMorphDepotPath: string; headMeshSha256: string; headMorphSha256: string; eyeMeshSha256: string; eyeMorphSha256: string;
+    headGlbSha256: string; eyeGlbSha256: string; eyeMorphGlbSha256: string; headMaterialsSha256: string; eyeMaterialsSha256: string;
     /** The program that decoded the game files, and its identity key (version and content hash). */
     tool: { label: string; key: string };
     textures: PreviewCoreTexture[] };
@@ -56,7 +56,7 @@ export type PreviewCoreStatus = {
 export type PreviewCoreResult = { directory: string; manifest: PreviewCoreManifest; reused: boolean };
 export type PreviewCoreStep = "reading" | "checking" | "assembling" | "maps" | "verifying";
 export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string }[] = [
-  { step: "reading", label: "Reading the head, eyes and skin textures from your game files" },
+  { step: "reading", label: "Reading the head, eyes, eye shapes and skin textures from your game files" },
   { step: "checking", label: "Checking the head against the supported game version" },
   { step: "assembling", label: "Building the 3D head, eye plate and eyes" },
   { step: "maps", label: "Converting the skin and eye textures" },
@@ -71,6 +71,7 @@ const LIMITS = [
   "Geometry and textures are the installed game's own data, decoded by WolvenKit; they are private to this computer and must not be redistributed.",
   "Skin, normal and roughness maps are approximations for the browser renderer, not the game's skin shader.",
   "The eye shows the vanilla eye base texture; the game's brown iris gradient, refraction and wetness are not reproduced.",
+  "The eyeballs follow the eye-shape choice through the eye's own morph targets; morph-specific joint binds are not applied, so the idle turns each eye about its unmorphed pivot.",
   "Brows, lashes, hair, piercings and the character-creator idle are not derived here.",
 ];
 const ARCHIVE_DIRECTORY = "archive/pc/content";
@@ -169,12 +170,13 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
   try {
     progress("reading");
     session = exporter.open(options.source ?? gameContentSource(gameRoot), signal);
-    const headMesh = plate.source.meshDepotPath, headMorph = plate.source.morphDepotPath, eyeMesh = recipe.eye.meshDepotPath;
-    const geometry = await session.geometry([headMorph, headMesh, eyeMesh]);
+    const headMesh = plate.source.meshDepotPath, headMorph = plate.source.morphDepotPath, eyeMesh = recipe.eye.meshDepotPath,
+      eyeMorph = recipe.eye.morphDepotPath;
+    const geometry = await session.geometry([headMorph, headMesh, eyeMesh, eyeMorph]);
     cancelled();
 
     progress("checking");
-    const notExported = [headMesh, headMorph, eyeMesh].filter(depot => !geometry.has(depot));
+    const notExported = [headMesh, headMorph, eyeMesh, eyeMorph].filter(depot => !geometry.has(depot));
     if (notExported.length) {
       // Only the game's own archive index can say a resource is absent; otherwise the tool produced nothing.
       const present = session.present(notExported);
@@ -186,13 +188,14 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     const hashes = { meshSha256: geometry.get(headMesh)!.rawSha256, morphSha256: geometry.get(headMorph)!.rawSha256 };
     const revision = supportedEyePlateSource(plate, hashes);
     if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
-    const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256;
+    const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256, eyeMorphSha256 = geometry.get(eyeMorph)!.rawSha256;
     const exported = (file: string | null, depot: string, what: string) => {
       if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Try again; if it keeps happening, check the WolvenKit CLI in Build setup.`, depot);
       return file!;
     };
     const headGlb = exported(geometry.get(headMorph)!.glb, headMorph, "head with its facial shapes");
     const eyeGlb = exported(geometry.get(eyeMesh)!.glb, eyeMesh, "eyes");
+    const eyeMorphGlb = exported(geometry.get(eyeMorph)!.glb, eyeMorph, "eyes with their eye shapes");
     const materialExport = (depot: string, what: string) => {
       const file = exported(geometry.get(depot)!.materials, depot, what);
       try { return parseMaterialExport(cache.readJson(file)); }
@@ -200,6 +203,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     };
     const materials = { head: materialExport(headMesh, "head materials"), eye: materialExport(eyeMesh, "eye materials") };
     const exportHashes = { headGlbSha256: geometry.get(headMorph)!.glbSha256!, eyeGlbSha256: geometry.get(eyeMesh)!.glbSha256!,
+      eyeMorphGlbSha256: geometry.get(eyeMorph)!.glbSha256!,
       headMaterialsSha256: geometry.get(headMesh)!.materialsSha256!, eyeMaterialsSha256: geometry.get(eyeMesh)!.materialsSha256! };
     const resolved = recipe.maps.map(map => {
       const choice = map.mesh === "head" ? recipe.head : recipe.eye;
@@ -215,7 +219,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       return { map, resolved: parameter, bytes, decodedSha256: sha256Hex(bytes) };
     });
     const textures = Object.fromEntries(sources.map(source => [source.map.file, source.decodedSha256]));
-    const key = previewCoreCacheKey(recipe, plate, { headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256,
+    const key = previewCoreCacheKey(recipe, plate, { headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, eyeMorphSha256,
       ...exportHashes, tool: session.tool.key, textures });
     const name = previewCoreCacheName(recipe, key);
     const cached = loadPreviewCoreEntry(cache, name, key, recipe, plate);
@@ -226,7 +230,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     const staging = join(work, "entry"), assets = join(staging, PREVIEW_CORE_ASSET_DIRECTORY);
     mkdirSync(assets, { recursive: true });
     let assembly;
-    try { assembly = assemblePreviewGlb(readFileSync(headGlb), readFileSync(eyeGlb), plate, recipe.eye.surfaceMesh); }
+    try { assembly = assemblePreviewGlb(readFileSync(headGlb), readFileSync(eyeGlb), plate, recipe.eye.surfaceMesh, readFileSync(eyeMorphGlb)); }
     catch (error) { return fail("preview_verification_failed", "The head exported from your game did not pass XF Studio's checks.", (error as Error).message); }
     writeFileSync(join(assets, "head.glb"), assembly.glb, { mode: 0o600 });
     cancelled();
@@ -264,7 +268,10 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       provenance: { label: `Your Cyberpunk 2077 files (${revision!.label})`, notes: LIMITS, tool: session.tool.label },
       geometry: { file: "head.glb", sha256: file("head.glb").sha256, nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" },
         sources: [{ depotPath: headMorph, sha256: hashes.morphSha256 }, { depotPath: headMesh, sha256: hashes.meshSha256 },
-          { depotPath: eyeMesh, sha256: eyeMeshSha256 }] },
+          { depotPath: eyeMesh, sha256: eyeMeshSha256 }, { depotPath: eyeMorph, sha256: eyeMorphSha256 }],
+        // Which morph resource supplied each mesh node's facial targets (paired by target and region).
+        morphs: [{ node: "head", depotPath: headMorph, sha256: hashes.morphSha256 }, { node: "makeup_plate", depotPath: headMorph, sha256: hashes.morphSha256 },
+          { node: "eyes", depotPath: eyeMorph, sha256: eyeMorphSha256 }] },
       textures: Object.fromEntries(recipe.maps.map(map => {
         const texture = records.find(entry => entry.file === map.file)!;
         return [map.slot, { file: map.file, sha256: file(map.file).sha256, sources: [{ depotPath: texture.depotPath, material: texture.material,
@@ -276,8 +283,8 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       schema: PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: recipe.id, recipeRevision: recipe.revision, plateRecipeId: plate.id,
       plateRecipeRevision: plate.revision, recipeSha256: previewCoreRecipeSha256(recipe, plate), deriverVersion: PREVIEW_CORE_DERIVER_VERSION, cacheKey: key,
       source: { revisionId: revision!.id, label: revision!.label, headMeshDepotPath: headMesh, headMorphDepotPath: headMorph, eyeMeshDepotPath: eyeMesh,
-        headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, ...exportHashes,
-        tool: { label: session.tool.label, key: session.tool.key }, textures: records },
+        eyeMorphDepotPath: eyeMorph, headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, eyeMorphSha256,
+        ...exportHashes, tool: { label: session.tool.label, key: session.tool.key }, textures: records },
       files: PREVIEW_CORE_FILES.map(file),
       geometry: report, limits: LIMITS,
     };

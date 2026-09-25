@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { depotPath, expectedPaths, inventoryFromFiles, pathHash } from "../src/archive-inventory";
 import { archiveInventory } from "../src/archive-inventory-fs";
+import { oracleTest } from "./optional-oracles";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");
 const plan = {
@@ -90,9 +91,9 @@ const oracle = (() => {
   try { return Bun.spawnSync([python, "-c", "import sys"], { cwd: study, stdout: "pipe", stderr: "pipe" }).exitCode === 0; }
   catch { return false; }
 })();
-if (!oracle) console.warn("Skipping the archive_inventory.py oracle comparison: Python is not available.");
+const oracleCase = oracleTest(oracle, "the archive_inventory.py oracle comparison needs Python (set XFS_PYTHON).");
 
-test.skipIf(!oracle)("inventory records are identical to the Python archive_inventory.py oracle", () => {
+oracleCase("inventory records are identical to the Python archive_inventory.py oracle", () => {
   const root = tree();
   try {
     const run = Bun.spawnSync([python, "-c",
@@ -103,7 +104,7 @@ test.skipIf(!oracle)("inventory records are identical to the Python archive_inve
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test.skipIf(!oracle)("path acceptance and hashes agree with the Python oracle", () => {
+oracleCase("path acceptance and hashes agree with the Python oracle", () => {
   const candidates = [...allPaths, "", "/a.xbm", "a\b.xbm", "A/b.xbm", "a/./b.xbm", "a/../b.xbm", "a//b.xbm", "a/b.xbm.",
     "a/-b.xbm", "a/b.png", "a/.xbm", "a/b.XBM", "123.xbm", "1/x.xbm", "a/b.c.app", "a/é.xbm", "a/b c.xbm", "_/_.mesh"];
   const run = Bun.spawnSync([python, "-c", `

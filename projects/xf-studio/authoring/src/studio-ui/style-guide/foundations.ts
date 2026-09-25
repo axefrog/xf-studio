@@ -98,7 +98,7 @@ export function shell() {
       specimen: `<header class="shell-header demo-header">
         <div class="brand"><span class="brand-mark">XF</span><span class="brand-name">Studio</span></div>
         <button type="button" class="category">${i("category")}<span>Eye makeup</span>${i("chevronDown")}</button>
-        <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Based on r3")}</nav>
+        <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Saved")}</nav>
         <span class="verify-flag">Verification workspace</span>
         <div class="header-actions">${btn("Undo", { icon: "undo", iconOnly: true, variant: "ghost" })}${btn("Save", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}<span class="divider"></span>${btn("Commands", { icon: "command", variant: "ghost" })}${btn("Panels", { icon: "layout", iconOnly: true, variant: "ghost" })}${btn("Theme", { icon: "monitor", iconOnly: true, variant: "ghost" })}</div></header>`,
       what: "Brand, the authoring-category switcher (the expansion zone), a breadcrumb of collection › preset with the library state chip, the verification flag when isolated, and global actions: Undo, Save to library, Package, command palette, panels/layout and theme.",
@@ -115,7 +115,7 @@ export function shell() {
       combine: "Selecting a category swaps the panel registry and default layouts (see the future-category composition); shared panels such as Library and Package stay.",
       avoid: "Listing unbuilt categories as clickable items, or turning preview-context toggles (brows, hair) into authoring entries." }),
     pattern({ id: "s-status", title: "Status bar", status: "implemented", wide: true,
-      specimen: `<footer class="status-bar demo-status"><span class="status-item">● Draft autosaved in this browser</span><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · revision 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">Preview 2K · updating</span></footer>`,
+      specimen: `<footer class="status-bar demo-status"><span class="status-item">● Draft autosaved</span><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · revision 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">Preview 2K · updating</span></footer>`,
       what: "Browser draft autosave state, the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
       when: "Always visible. It reports; it never hosts commands other than opening the activity log.",
       adapt: "Messages truncate with an ellipsis; the Activity panel keeps the full text.",

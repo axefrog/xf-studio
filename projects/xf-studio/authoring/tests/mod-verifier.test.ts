@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the compiler: it writes the fixture's supplied chains, which the
 // independent verifier must then reproduce from its own arithmetic.
 import { encodeFlatDds, flatMipChain } from "../src/flat-mip-chain";
@@ -10,7 +10,8 @@ import { readDdsChain } from "../src/mod-verifier/dds-reader";
 import { archiveKey, canonicalResourcePath, resourceRecords } from "../src/mod-verifier/resource-inventory";
 import { componentId, sameJson } from "../src/mod-verifier/resource-checks";
 import { errorStats, expectedChain } from "../src/mod-verifier/texture-checks";
-import { verifyBuild, type UnbundleResult } from "../src/mod-verifier/verify-build";
+import { verifyBuild, type ToolResult, type VerifierTools, type VerifyBuildOptions } from "../src/mod-verifier/verify-build";
+import { oracleTest } from "./optional-oracles";
 
 const verifierDir = resolve(import.meta.dir, "../src/mod-verifier");
 
@@ -28,6 +29,9 @@ test("the verifier imports nothing from the compiler or other Studio modules", (
 });
 
 // ---- Synthetic build fixture (all data invented; no game or private assets) ----
+// Archive members and plate inputs hold their WolvenKit JSON as text, so the fake `serialize`
+// derives each document from the very bytes the verifier hash-checked; the fake `export`
+// supplies each texture's decoded DDS. The builder's own conversions are never written.
 const SIZE = 16;
 const depot = "xfs/test/collection";
 const presets = ["a1", "b2"].map((id, i) => ({
@@ -46,6 +50,8 @@ const cname = (s: string) => ({ $type: "CName", $storage: "string", $value: s })
 const ref = (s: string, soft = false) => ({ DepotPath: { $type: "ResourcePath", $storage: "string", $value: s.replaceAll("/", "\\") }, Flags: soft ? "Soft" : "Default" });
 const doc = (root: unknown) => ({ Header: { WolvenKitVersion: "test" }, Data: { Version: 195, RootChunk: root } });
 const sha = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
+const declaration = (p: typeof plan) =>
+  `customizations:\r\n  female: ${p.customization.replaceAll("/", "\\")}\r\nresource:\r\n  scope:\r\n    player_customization.app:\r\n      - ${p.app.replaceAll("/", "\\")}\r\n`;
 
 function maps(seed: number) {
   const n = SIZE * SIZE, diffuse = new Uint8Array(n * 4), roughness = new Uint8Array(n), metalness = new Uint8Array(n);
@@ -66,8 +72,10 @@ function writeFile(path: string, data: string | Uint8Array) {
 }
 
 type Mutation = (build: string, data: { mesh: any; morph: any; app: any; cc: any; xbm: Record<string, any>; plan: typeof plan }) => void;
+/** A build directory plus the decoded DDS the fake export returns, by texture file name. */
+type Fixture = { build: string; dds: Map<string, Uint8Array>; plate: { mesh: string; morph: string } };
 
-function makeBuild(mutate?: Mutation) {
+function makeBuild(mutate?: Mutation): Fixture {
   const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-"));
   const p = structuredClone(plan);
   const blob = { renderResourceBlob: { HandleId: "1", Data: { vertices: [1, 2, 3] } }, boneNames: [cname("root")],
@@ -108,95 +116,134 @@ function makeBuild(mutate?: Mutation) {
       compression: channel === "diffuse" ? "TCM_QualityColor" : "TCM_QualityR" } };
   mutate?.(build, { mesh, morph, app, cc, xbm, plan: p });
 
+  const dds = new Map<string, Uint8Array>();
   const compiled = p.presets.map((preset, i) => {
     const m = maps(i), chain = flatMipChain(m.diffuse, m.roughness, m.metalness, SIZE);
     const records = (["diffuse", "roughness", "metalness"] as const).map(channel => {
       const file = `${preset.appearance}_${channel}.raw`;
       writeFile(join(build, "baked", file), m[channel]);
-      const dds = encodeFlatDds(chain[channel], SIZE, channel);
-      writeFile(join(build, "input", channel === "diffuse" ? "dds-colour" : "dds-scalar", `${preset.appearance}_${channel}.dds`), dds);
-      writeFile(join(build, "export-dds", `${preset.appearance}_${channel}.dds`), dds); // a lossless "decode"
+      const encoded = encodeFlatDds(chain[channel], SIZE, channel);
+      writeFile(join(build, "input", channel === "diffuse" ? "dds-colour" : "dds-scalar", `${preset.appearance}_${channel}.dds`), encoded);
+      dds.set(`${preset.appearance}_${channel}.dds`, encoded); // a lossless "decode"
       return { channel, file, bytes: m[channel].length, sha256: sha(m[channel]) };
     });
     return { id: preset.id, revision: 1, size: SIZE, maps: records };
   });
-  const name = (path: string) => path.slice(path.lastIndexOf("/") + 1) + ".json";
-  for (const [path, root] of [[p.mesh, mesh], [p.morph, morph], [p.app, app], [p.customization, cc], ...Object.entries(xbm)] as [string, unknown][])
-    writeFile(join(build, "roundtrip", name(path)), "\uFEFF" + JSON.stringify(doc(root)));
-  writeFile(join(build, "source-json/xfas_eye_plate.mesh.json"), JSON.stringify(doc(sourceMesh)));
-  writeFile(join(build, "source-json/xfas_eye_plate.morphtarget.json"), JSON.stringify(doc(sourceMorph)));
-  const resources = [p.mesh, p.morph, p.app, p.customization, ...p.presets.flatMap(x => Object.values(x.textures))];
-  const artifacts = resources.map(path => {
-    const data = `payload:${path}`;
+  const plate = { mesh: join(build, "plate", "xfs_eye_plate.mesh"), morph: join(build, "plate", "xfs_eye_plate.morphtarget") };
+  writeFile(plate.mesh, JSON.stringify(doc(sourceMesh)));
+  writeFile(plate.morph, JSON.stringify(doc(sourceMorph)));
+  const plateInputs = [plate.mesh, plate.morph].map(path => ({ path, sha256: sha(readFileSync(path)) }));
+  const members = [[p.mesh, mesh], [p.morph, morph], [p.app, app], [p.customization, cc], ...Object.entries(xbm)] as [string, unknown][];
+  const artifacts = members.map(([path, root]) => {
+    const data = JSON.stringify(doc(root));
     writeFile(join(build, "archive", path), data);
     return { path, bytes: data.length, sha256: sha(data), depotPathHash64: archiveKey(path) };
   }).sort((a, b) => (a.path < b.path ? -1 : 1));
   const archive = new TextEncoder().encode("synthetic archive");
   writeFile(join(build, "package/archive/pc/mod", `${p.namespace}.archive`), archive);
-  writeFile(join(build, "package/archive/pc/mod", `${p.namespace}.archive.xl`),
-    `customizations:\n  female: ${p.customization.replaceAll("/", "\\")}\nresource:\n  scope:\n    player_customization.app:\n      - ${p.app.replaceAll("/", "\\")}\n`);
-  writeFile(join(build, "build.json"), JSON.stringify({ plan: p, compiled, artifacts, archiveSha256: sha(archive), installed: false, gameRenderingVerified: false }));
-  return build;
+  writeFile(join(build, "package/archive/pc/mod", `${p.namespace}.archive.xl`), declaration(p));
+  writeFile(join(build, "build.json"), JSON.stringify({ plan: p, compiled, plateStem: "xfs_eye_plate", plateInputs, artifacts,
+    archiveSha256: sha(archive), installed: false, gameRenderingVerified: false }));
+  return { build, dds, plate };
 }
 
-const copyUnbundle = (build: string, tamper?: (output: string) => void) => (_archive: string, output: string): UnbundleResult => {
-  cpSync(join(build, "archive"), output, { recursive: true });
-  tamper?.(output);
-  return { exitCode: 0, stdout: "Unbundled 14/14 entries.", stderr: "" };
+type Hooks = {
+  tamper?: (unpacked: string) => void;
+  unbundle?: VerifierTools["unbundle"];
+  serialize?: VerifierTools["serialize"];
+  exportTextures?: VerifierTools["exportTextures"];
+  options?: Partial<VerifyBuildOptions>;
 };
-
-function run(build: string, options: { tamper?: (output: string) => void; unbundle?: (a: string, o: string) => UnbundleResult } = {}) {
-  return verifyBuild({ build, wolvenkit: "unused", unbundle: options.unbundle ?? copyUnbundle(build, options.tamper) });
+const ok = (stdout = "ok"): ToolResult => ({ exitCode: 0, stdout, stderr: "" });
+/** Fake WolvenKit: unbundle copies the generated tree, serialize parses member bytes, export returns fixture DDS. */
+function fakeTools(fixture: Fixture, hooks: Hooks, calls: string[]): VerifierTools {
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
+  return {
+    unbundle: hooks.unbundle ?? ((archive, output) => {
+      calls.push(`unbundle ${archive}`);
+      cpSync(join(fixture.build, "archive"), output, { recursive: true });
+      hooks.tamper?.(output);
+      return ok("Unbundled 10/10 entries.");
+    }),
+    serialize: hooks.serialize ?? ((input, output) => {
+      calls.push(`serialize ${input}`);
+      for (const file of files(input)) writeFileSync(join(output, basename(file) + ".json"), "\uFEFF" + readFileSync(file, "utf8"));
+      return ok();
+    }),
+    exportTextures: hooks.exportTextures ?? ((input, output) => {
+      calls.push(`export ${input}`);
+      for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), fixture.dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
+      return ok();
+    }),
+  };
 }
 
-function expectFailure(message: RegExp, mutate?: Mutation, after?: (build: string) => void, options?: Parameters<typeof run>[1]) {
-  const build = makeBuild(mutate);
-  try {
-    after?.(build);
-    expect(() => run(build, options)).toThrow(message);
-  } finally { rmSync(build, { recursive: true, force: true }); }
+function run(fixture: Fixture, hooks: Hooks = {}, calls: string[] = []) {
+  return verifyBuild({ build: fixture.build, wolvenkit: "unused", tools: fakeTools(fixture, hooks, calls), ...hooks.options });
 }
 
-test("a consistent synthetic build passes with the verify.py report shape", () => {
-  const build = makeBuild();
+function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks) {
+  const fixture = makeBuild(mutate);
   try {
-    const report = run(build);
+    after?.(fixture);
+    expect(() => run(fixture, hooks)).toThrow(message);
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+}
+
+test("a consistent synthetic build passes with the verify.py report shape plus self-sourced hashes", () => {
+  const fixture = makeBuild(), { build } = fixture;
+  try {
+    // Stale builder conversions must be ignored: the verifier converts the unbundled members itself.
+    writeFile(join(build, "roundtrip", "xfs_eye_plate.mesh.json"), "not json");
+    writeFile(join(build, "export-dds", "xfs_pa1_diffuse.dds"), "not dds");
+    writeFile(join(build, "source-json", "xfs_eye_plate.mesh.json"), "not json");
+    const calls: string[] = [];
+    const report = run(fixture, {}, calls);
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
       "unpackedFilesVerified", "preservedMorphs", "modelBuffersUnchanged", "resolvedDynamicPaths", "decodedPixelChecks",
-      "decodedMipChecks", "installed", "gameRenderingVerified", "limits"]);
+      "decodedMipChecks", "archiveXlSha256", "plateInputs", "installed", "gameRenderingVerified", "limits"]);
     expect(report).toMatchObject({ presetCount: 2, selectorOptionCount: 3, meshAppearances: 2, materialTemplates: 1, textureCount: 6,
-      unpackedFilesVerified: 10, installed: false, gameRenderingVerified: false });
+      unpackedFilesVerified: 10, preservedMorphs: 105, installed: false, gameRenderingVerified: false,
+      archiveXlSha256: sha(declaration(plan)),
+      plateInputs: { mesh: sha(readFileSync(fixture.plate.mesh)), morph: sha(readFileSync(fixture.plate.morph)) } });
     expect(report.resolvedDynamicPaths[1]).toEqual({ appearance: "xfs_cns__xfs_pb2", chunkMaterial: "xfs_pb2@preset", textures: presets[1].textures });
     expect(report.decodedPixelChecks[0].coverageError).toEqual({ mean: 0, p95: 0, max: 0 });
     expect(report.decodedMipChecks[0].levels).toHaveLength(5);
     expect(report.decodedMipChecks[0].levels[1].partialTexels).toBeGreaterThan(0);
-    expect(readFileSync(join(build, "logs/unpack-verify.log"), "utf8")).toContain("Unbundled");
-    expect(() => run(build)).toThrow("Unpack directory is not empty");
+    // Every conversion ran on the verifier's own copies inside its work directory.
+    const work = join(build, "verify");
+    expect(calls).toEqual([`unbundle ${join(work, "archive", "xfs_cns.archive")}`, `serialize ${join(work, "unpacked")}`,
+      `serialize ${join(work, "plate")}`, `export ${join(work, "unpacked", ...depot.split("/"), "textures")}`]);
+    expect(readFileSync(join(work, "logs", "unbundle.log"), "utf8")).toContain("Unbundled");
+    expect(() => run(fixture)).toThrow("work directory is not empty");
   } finally { rmSync(build, { recursive: true, force: true }); }
 });
 
 test("texture failures: supplied chain, baked input, decode drift and orientation", () => {
   const flipByte = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x40; writeFileSync(path, data); };
-  expectFailure(/Supplied roughness mip chain/, undefined, b => flipByte(join(b, "input/dds-scalar/xfs_pa1_roughness.dds"), 148 + 256 + 3));
-  expectFailure(/Baked diffuse map differs/, undefined, b => flipByte(join(b, "baked/xfs_pa1_diffuse.raw"), 10));
-  expectFailure(/Decoded .*error too large|Decoded base/, undefined, b => {
+  expectFailure(/Supplied roughness mip chain/, undefined, f => flipByte(join(f.build, "input/dds-scalar/xfs_pa1_roughness.dds"), 148 + 256 + 3));
+  expectFailure(/Baked diffuse map differs/, undefined, f => flipByte(join(f.build, "baked/xfs_pa1_diffuse.raw"), 10));
+  expectFailure(/Decoded .*error too large|Decoded base/, undefined, f => {
     // Decoded (exported) roughness far from the source everywhere.
-    const path = join(b, "export-dds/xfs_pa1_roughness.dds"), data = readFileSync(path);
+    const data = Uint8Array.from(f.dds.get("xfs_pa1_roughness.dds")!);
     for (let i = 148; i < 148 + SIZE * SIZE; i++) data[i] = 255 - data[i];
-    writeFileSync(path, data);
+    f.dds.set("xfs_pa1_roughness.dds", data);
   });
-  expectFailure(/orientation|error too large/, undefined, b => {
-    const path = join(b, "export-dds/xfs_pa1_diffuse.dds"), data = readFileSync(path), row = SIZE * 4;
+  expectFailure(/orientation|error too large/, undefined, f => {
+    const data = Buffer.from(f.dds.get("xfs_pa1_diffuse.dds")!), row = SIZE * 4;
     const base = Buffer.from(data.subarray(148, 148 + SIZE * row));
     for (let y = 0; y < SIZE; y++) base.copy(data, 148 + y * row, (SIZE - 1 - y) * row, (SIZE - y) * row);
-    writeFileSync(path, data);
+    f.dds.set("xfs_pa1_diffuse.dds", data);
   });
   expectFailure(/Unexpected DDS dimensions|size differs|Truncated|trailing/, undefined,
-    b => writeFileSync(join(b, "export-dds/xfs_pb2_metalness.dds"), readFileSync(join(b, "export-dds/xfs_pb2_metalness.dds")).subarray(0, 200)));
+    f => f.dds.set("xfs_pb2_metalness.dds", f.dds.get("xfs_pb2_metalness.dds")!.subarray(0, 200)));
+  expectFailure(/did not export/, undefined, undefined, { exportTextures: () => ok() });
+  expectFailure(/export-textures-0 failed/, undefined, undefined, { exportTextures: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
 });
 
-test("resource failures: names, links, buffers, component id and XBM metadata", () => {
+test("resource failures: names, links, buffers, component id, morph count and XBM metadata", () => {
   expectFailure(/XF-branded selector label/, (_b, d) => { d.plan.selectorLabel = "Makeup"; d.cc.headCustomizationOptions[0].Data.localizedName = "Makeup"; });
   expectFailure(/Morph targets differs/, (_b, d) => { d.morph.targets.pop(); });
   expectFailure(/Mesh boneNames differs/, (_b, d) => { d.mesh.boneNames = [cname("other")]; });
@@ -209,17 +256,55 @@ test("resource failures: names, links, buffers, component id and XBM metadata", 
   expectFailure(/unexpected compression/, (_b, d) => { d.xbm[presets[0].textures.roughness].setup.compression = "TCM_None"; });
   expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.at(-1).DiffuseColor.Alpha = 0; });
   expectFailure(/Only the seed appearance/, (_b, d) => { d.mesh.appearances[1].Data.chunkMaterials = [cname("x")]; });
+  // The expected morph count comes from the plate recipe, not a constant.
+  expectFailure(/Morph target count is 105, not the plate recipe's 104/, undefined, undefined, { options: { morphTargets: 104 } });
+  expectFailure(/did not serialize/, undefined, undefined, { serialize: () => ok() });
 });
 
-test("archive failures: inventory, archive hash, declaration and unpacked members", () => {
-  expectFailure(/differ from the plan/, undefined, b => writeFileSync(join(b, "archive", depot, "textures/xfs_extra.xbm"), "x"));
-  expectFailure(/inventory changed after pack/, undefined, b => writeFileSync(join(b, "archive", plan.app), "changed"));
-  expectFailure(/Packed archive differs/, undefined, b => writeFileSync(join(b, "package/archive/pc/mod/xfs_cns.archive"), "other"));
-  expectFailure(/ArchiveXL declaration/, undefined, b => writeFileSync(join(b, "package/archive/pc/mod/xfs_cns.archive.xl"), "customizations: {}\n"));
+test("archive failures: inventory, archive hash, structural declaration and unpacked members", () => {
+  const xl = (f: Fixture, text: string) => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive.xl"), text);
+  expectFailure(/differ from the plan/, undefined, f => writeFileSync(join(f.build, "archive", depot, "textures/xfs_extra.xbm"), "x"));
+  expectFailure(/inventory changed after pack/, undefined, f => writeFileSync(join(f.build, "archive", plan.app), "changed"));
+  expectFailure(/Packed archive differs/, undefined, f => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive"), "other"));
+  expectFailure(/exactly customizations and resource/, undefined, f => xl(f, "customizations: {}\n"));
+  expectFailure(/not valid YAML/, undefined, f => xl(f, "customizations: [\n"));
+  // A substring match would accept these; the structural check does not.
+  expectFailure(/exactly customizations and resource/, undefined, f => xl(f, declaration(plan) + "extra: 1\r\n"));
+  expectFailure(/only the female list/, undefined, f => xl(f, declaration(plan).replace("  female:", "  male: x\r\n  female:")));
+  expectFailure(/exactly the planned customization/, undefined, f => xl(f, declaration(plan).replace("female: ", "female: other\\")));
+  expectFailure(/exactly the planned app/, undefined, f => xl(f, declaration(plan) + "      - other\\x.app\r\n"));
   expectFailure(/differs from its generated payload/, undefined, undefined, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
   expectFailure(/Unpacked 11 files/, undefined, undefined, { tamper: out => writeFileSync(join(out, depot, "xfs_extra.app"), "x") });
-  expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 0, stdout: "[Error] boom", stderr: "" }) });
+  expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 0, stdout: "[ 0: Error ] boom", stderr: "" }) });
   expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
+  // An equivalent declaration in YAML's list form is accepted.
+  const fixture = makeBuild();
+  try {
+    xl(fixture, declaration(plan).replace(`female: ${plan.customization.replaceAll("/", "\\")}`, `female:\r\n    - ${plan.customization.replaceAll("/", "\\")}`));
+    expect(run(fixture).presetCount).toBe(2);
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+});
+
+test("plate provenance: inputs must match the build record and the host, and must not change during verification", () => {
+  expectFailure(/Plate mesh input differs from the build record/, undefined, f => writeFileSync(f.plate.mesh, JSON.stringify(doc({ changed: 1 }))));
+  expectFailure(/Plate morph input is missing/, undefined, f => rmSync(f.plate.morph));
+  const fixture = makeBuild();
+  try {
+    expect(() => run(fixture, { options: { plate: { ...fixture.plate, meshSha256: "0".repeat(64) } } }))
+      .toThrow("Plate mesh input differs from the plate the host prepared");
+    rmSync(join(fixture.build, "verify"), { recursive: true, force: true });
+    // A plate input rewritten after the verifier copied it is caught by the closing comparison.
+    let first = true;
+    const serialize: VerifierTools["serialize"] = (input, output) => {
+      if (first) { first = false; writeFileSync(fixture.plate.morph, "rewritten"); }
+      for (const name of readdirSync(input, { recursive: true }) as string[]) {
+        const file = join(input, name);
+        if (statSync(file).isFile()) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8"));
+      }
+      return ok();
+    };
+    expect(() => run(fixture, { serialize })).toThrow("Plate morph input changed during verification");
+  } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 });
 
 test("the verifier's own inventory refuses noncanonical paths and computes WolvenKit keys", () => {
@@ -267,9 +352,9 @@ const python = process.env.XFS_PYTHON || "python";
 const numpy = (() => {
   try { return Bun.spawnSync([python, "-c", "import numpy"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0; } catch { return false; }
 })();
-if (!numpy) console.warn("Skipping the NumPy statistics oracle: Python with NumPy is not available.");
+const numpyCase = oracleTest(numpy, "the NumPy statistics oracle needs Python with NumPy (set XFS_PYTHON).");
 
-test.skipIf(!numpy)("error statistics match NumPy's mean and default linear percentile", () => {
+numpyCase("error statistics match NumPy's mean and default linear percentile", () => {
   const dir = mkdtempSync(resolve(tmpdir(), "xfs-stats-"));
   try {
     const sizes = [1, 2, 7, 8, 20, 129, 1000, 54321];

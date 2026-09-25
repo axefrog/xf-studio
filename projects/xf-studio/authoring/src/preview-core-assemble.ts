@@ -1,5 +1,6 @@
 import { accessorFloats, GlbWriter, parseGlb, readAccessor, type AccessorArray, type Glb, type GltfJson } from "./glb";
 import { idListSha256, selectedFaceIds, type EyePlateRecipe } from "./eye-plate-recipe";
+import { parseMorphTargetName } from "./face-morphs";
 
 /**
  * Pure assembly of the preview's `head.glb` from WolvenKit's exports of the installed game:
@@ -8,7 +9,9 @@ import { idListSha256, selectedFaceIds, type EyePlateRecipe } from "./eye-plate-
  * - `makeup_plate`: the expanded eye plate, cut from the same head rows with the eye plate
  *   recipe's audited triangle selection, so preview and Build share one selection;
  * - `eyes`: the eyeball surface of the matching eye mesh as static bind-pose geometry, which
- *   the renderer attaches rigidly to the gaze joints like the historical preview eye.
+ *   the renderer attaches rigidly to the gaze joints like the historical preview eye, with the
+ *   facial morph targets of the eye component's own morph resource. The game pairs those with
+ *   the head's by `(target, region)`, so choosing an eye shape moves the eyeballs too.
  * Every vertex value is copied from WolvenKit's decoded game data; nothing is re-derived.
  * Tangents are omitted because the preview material derives them per pixel.
  */
@@ -26,7 +29,9 @@ type Primitive = { attributes: Attributes; indices: Uint32Array; targets: Map<st
 export type PreviewGlbReport = {
   head: { vertices: number; triangles: number; joints: number; morphTargets: number; influenceSets: number };
   plate: { vertices: number; triangles: number; morphTargets: number };
-  eyes: { vertices: number; triangles: number; uv0Min: [number, number]; uv0Max: [number, number] };
+  eyes: { vertices: number; triangles: number; uv0Min: [number, number]; uv0Max: [number, number];
+    /** Eye morph targets, each paired by `(target, region)` with a head target. */
+    morphTargets: number };
 };
 
 function only<T>(values: T[] | undefined, what: string): T {
@@ -144,7 +149,35 @@ function writePrimitive(writer: GlbWriter, primitive: Primitive, material: numbe
 
 export type PreviewAssembly = { glb: Uint8Array; report: PreviewGlbReport };
 
-export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, plateRecipe: EyePlateRecipe, eyeSurfaceMesh: string): PreviewAssembly {
+/**
+ * The eye component's morph targets for its surface chunk, from WolvenKit's export of the eye
+ * `.morphtarget`. Its base vertices must be exactly the eye mesh's (the morph resource's
+ * `baseMesh` is that mesh), and every target must pair with a head target by `(target, region)`.
+ */
+export function eyeMorphTargets(eyeMorphBytes: Uint8Array, eyeSurfaceMesh: string, eyes: Primitive, headTargetNames: readonly string[]) {
+  const morph = parseGlb(eyeMorphBytes);
+  const node = morph.json.nodes.find((entry: GltfJson) => entry.name === eyeSurfaceMesh && entry.mesh !== undefined);
+  if (!node) throw Error(`The exported eye morph target has no ${eyeSurfaceMesh} surface.`);
+  const mesh = morph.json.meshes[node.mesh];
+  const source = readPrimitive(morph, only(mesh.primitives, "eye morph primitive"), ["POSITION"]);
+  const names: string[] = mesh.extras?.targetNames ?? [];
+  if (!source.targets.length || names.length !== source.targets.length || new Set(names).size !== names.length)
+    throw Error("The exported eye morph target has no uniquely named morph targets.");
+  const base = eyes.attributes.get("POSITION")!.data, morphBase = source.attributes.get("POSITION")?.data;
+  if (!morphBase || morphBase.length !== base.length || morphBase.some((value, index) => value !== base[index]) ||
+      source.indices.length !== eyes.indices.length || source.indices.some((value, index) => value !== eyes.indices[index]))
+    throw Error("The eye morph target's base geometry is not the eye mesh.");
+  const head = new Set(headTargetNames);
+  for (const name of names) {
+    if (!parseMorphTargetName(name)) throw Error(`The eye morph target ${name} has no region.`);
+    if (!head.has(name)) throw Error(`The eye morph target ${name} has no matching head target.`);
+  }
+  for (const target of source.targets) if (!target.has("POSITION")) throw Error("An eye morph target has no position deltas.");
+  return { targets: source.targets, names };
+}
+
+export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, plateRecipe: EyePlateRecipe, eyeSurfaceMesh: string,
+  eyeMorphBytes: Uint8Array): PreviewAssembly {
   const head = parseGlb(headBytes), eye = parseGlb(eyeBytes);
   const headNodeIndex = head.json.nodes.findIndex((node: GltfJson) => node.mesh !== undefined);
   const headNode = head.json.nodes[headNodeIndex];
@@ -167,6 +200,8 @@ export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, 
     throw Error("The exported eye's rest pose differs from its bind pose, so it cannot be placed statically.");
   const eyes = readPrimitive(eye, only(eye.json.meshes[eyeNode.mesh].primitives, "eye primitive"), EYE_ATTRIBUTES, false);
   for (const name of ["POSITION", "NORMAL", "TEXCOORD_0"]) if (!eyes.attributes.has(name)) throw Error(`The exported eye has no ${name}.`);
+  const eyeMorphs = eyeMorphTargets(eyeMorphBytes, eyeSurfaceMesh, eyes, targetNames);
+  eyes.targets = eyeMorphs.targets;
 
   // Keep every node that does not carry a mesh (the armature and its joints), in source order.
   const keep = head.json.nodes.map((node: GltfJson, index: number) => node.mesh === undefined ? index : -1).filter((index: number) => index >= 0);
@@ -198,7 +233,8 @@ export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, 
     meshes: [
       { name: "head", primitives: [writePrimitive(writer, headSource, 0)], weights, extras: { targetNames } },
       { name: "makeup_plate", primitives: [writePrimitive(writer, plate, 1)], weights, extras: { targetNames } },
-      { name: "eyes", primitives: [writePrimitive(writer, eyes, 2)] },
+      { name: "eyes", primitives: [writePrimitive(writer, eyes, 2)], weights: Array(eyeMorphs.names.length).fill(0),
+        extras: { targetNames: eyeMorphs.names } },
     ],
   };
   const glb = writer.toGlb(json);
@@ -224,11 +260,16 @@ export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe: EyePlateRecipe)
   const jointCount = glb.json.skins[0].joints.length;
   const read = (meshNode: GltfJson, names: readonly string[], targets: boolean) =>
     readPrimitive(glb, only(glb.json.meshes[meshNode.mesh].primitives, "primitive"), names, targets);
-  const headMesh = read(headNode, HEAD_ATTRIBUTES, true), plateMesh = read(plateNode, HEAD_ATTRIBUTES, true), eyeMesh = read(eyesNode, EYE_ATTRIBUTES, false);
+  const headMesh = read(headNode, HEAD_ATTRIBUTES, true), plateMesh = read(plateNode, HEAD_ATTRIBUTES, true), eyeMesh = read(eyesNode, EYE_ATTRIBUTES, true);
   const names = glb.json.meshes[headNode.mesh].extras?.targetNames;
   if (!Array.isArray(names) || names.length !== headMesh.targets.length || names.length !== plateRecipe.selection.morphTargetCount ||
       JSON.stringify(glb.json.meshes[plateNode.mesh].extras?.targetNames) !== JSON.stringify(names) || plateMesh.targets.length !== names.length)
     throw Error("Preview GLB morph targets are incomplete.");
+  // The eyes follow the head's eye-shape choice: each eye target must name a head target.
+  const eyeNames = glb.json.meshes[eyesNode.mesh].extras?.targetNames;
+  if (!Array.isArray(eyeNames) || !eyeNames.length || eyeNames.length !== eyeMesh.targets.length || new Set(eyeNames).size !== eyeNames.length ||
+      eyeNames.some((name: string) => !parseMorphTargetName(name) || !names.includes(name)))
+    throw Error("Preview GLB eye morph targets do not pair with the head.");
   const check = (label: string, primitive: Primitive, skinned: boolean) => {
     const position = primitive.attributes.get("POSITION")!.data, vertices = position.length / 3;
     if (!finite(position) || !finite(primitive.attributes.get("NORMAL")!.data) || !finite(primitive.attributes.get("TEXCOORD_0")!.data))
@@ -277,6 +318,6 @@ export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe: EyePlateRecipe)
   return {
     head: { vertices: headInfo.vertices, triangles: headMesh.indices.length / 3, joints: jointCount, morphTargets: headMesh.targets.length, influenceSets: headInfo.sets },
     plate: { vertices: plateInfo.vertices, triangles: plateMesh.indices.length / 3, morphTargets: plateMesh.targets.length },
-    eyes: { vertices: eyeInfo.vertices, triangles: eyeMesh.indices.length / 3, uv0Min: uvMin, uv0Max: uvMax },
+    eyes: { vertices: eyeInfo.vertices, triangles: eyeMesh.indices.length / 3, uv0Min: uvMin, uv0Max: uvMax, morphTargets: eyeMesh.targets.length },
   };
 }

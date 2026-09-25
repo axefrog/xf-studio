@@ -12,7 +12,7 @@ import { uncookArguments } from "../src/game-asset-export-wolvenkit";
 import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
 import {
-  eyeGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
+  EYE_MORPH_LIFT, eyeGlb, eyeMorphGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
 } from "./preview-core-fixture";
 
 const roots: string[] = [];
@@ -92,10 +92,10 @@ test("GLB writer and reader round-trip dense and sparse accessors deterministica
 
 test("assembly builds head, plate and eyes from the exports with the plate recipe's rows", () => {
   const plate = fixturePlateRecipe();
-  const { glb, report } = assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1");
+  const { glb, report } = assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb());
   expect(report.head).toEqual({ vertices: HEAD_VERTICES, triangles: HEAD_TRIANGLES, joints: 2, morphTargets: 2, influenceSets: 2 });
   expect(report.plate).toEqual({ vertices: plateVertexIds().length, triangles: 6, morphTargets: 2 });
-  expect(report.eyes).toMatchObject({ vertices: 6, triangles: 2, uv0Min: [-1.5, 0], uv0Max: [1.5, 0.30000001192092896] });
+  expect(report.eyes).toMatchObject({ vertices: 6, triangles: 2, uv0Min: [-1.5, 0], uv0Max: [1.5, 0.30000001192092896], morphTargets: 1 });
   const out = parseGlb(glb);
   const names = out.json.nodes.filter((node: any) => node.mesh !== undefined).map((node: any) => [node.name, node.skin]);
   expect(names).toEqual([["head", 0], ["makeup_plate", 0], ["eyes", undefined]]);
@@ -107,8 +107,13 @@ test("assembly builds head, plate and eyes from the exports with the plate recip
   const headMorph = accessorFloats(readAccessor(out, head.targets[0].POSITION));
   const plateMorph = accessorFloats(readAccessor(out, out.json.meshes[1].primitives[0].targets[0].POSITION));
   plateVertexIds().forEach((row, index) => expect(plateMorph[index * 3 + 1]).toBe(headMorph[row * 3 + 1]!));
+  // The eyes carry the eye component's own shape keys, paired with the head's by name and region.
+  expect(out.json.meshes[2].extras.targetNames).toEqual(["h011_eyes"]);
+  expect(out.json.meshes[2].weights).toEqual([0]);
+  const eyeLift = accessorFloats(readAccessor(out, out.json.meshes[2].primitives[0].targets[0].POSITION));
+  for (let vertex = 0; vertex < 6; vertex++) expect(eyeLift[vertex * 3 + 1]).toBeCloseTo(EYE_MORPH_LIFT, 7);
   expect(out.json.skins[0].joints.map((joint: number) => out.json.nodes[joint].name)).toEqual(["Head", "l_eye_JNT"]);
-  expect(Buffer.compare(Buffer.from(glb), Buffer.from(assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1").glb))).toBe(0);
+  expect(Buffer.compare(Buffer.from(glb), Buffer.from(assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb()).glb))).toBe(0);
   expect(verifyPreviewGlb(glb, plate)).toEqual(report);
 });
 
@@ -119,11 +124,16 @@ test("assembly refuses a head whose triangles differ from the audited plate or a
   const indices = Uint32Array.from(readAccessor(head, head.json.meshes[0].primitives[0].indices).array);
   expect(plateSelection(indices, plate).vertexIds).toEqual(plateVertexIds());
   expect(() => plateSelection(indices, shifted)).toThrow("differ from the audited eye plate selection");
-  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), shifted, "submesh_01_LOD_1")).toThrow();
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), shifted, "submesh_01_LOD_1", eyeMorphGlb())).toThrow();
   expect(bindPoseDeviation(parseGlb(eyeGlb()), 0)).toBeLessThan(1e-6);
-  expect(() => assemblePreviewGlb(headGlb(), eyeGlb({ offsetBind: true }), plate, "submesh_01_LOD_1")).toThrow("bind pose");
-  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_09_LOD_1")).toThrow("no submesh_09_LOD_1");
-  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), { ...plate, selection: { ...plate.selection, morphTargetCount: 3 } }, "submesh_01_LOD_1")).toThrow("morph target count");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb({ offsetBind: true }), plate, "submesh_01_LOD_1", eyeMorphGlb())).toThrow("bind pose");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_09_LOD_1", eyeMorphGlb())).toThrow("no submesh_09_LOD_1");
+  // The eye morph must be based on the eye mesh itself, and each of its targets must pair with a head target.
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb({ shiftBase: true }))).toThrow("base geometry is not the eye mesh");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb({ names: ["h091_eyes"] }))).toThrow("no matching head target");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb({ names: ["eyeshape"] }))).toThrow("has no region");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), plate, "submesh_01_LOD_1", eyeMorphGlb({ names: [] }))).toThrow("no uniquely named");
+  expect(() => assemblePreviewGlb(headGlb(), eyeGlb(), { ...plate, selection: { ...plate.selection, morphTargetCount: 3 } }, "submesh_01_LOD_1", eyeMorphGlb())).toThrow("morph target count");
 });
 
 test("the WolvenKit call uncooks exactly the named depot paths, with the game path only when materials are needed", () => {
@@ -219,6 +229,10 @@ test("an unsupported or missing head is reported plainly and blocks until the ga
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "eye-glb" })) }))
     .rejects.toMatchObject({ code: "preview_tool_failed" });
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "eye-morph" })) }))
+    .rejects.toMatchObject({ code: "preview_source_missing" });
+  await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate,
+    exporter: fresh(fakeUncook(plate, recipe, { eyeMorph: () => eyeMorphGlb({ shiftBase: true }) })) })).rejects.toMatchObject({ code: "preview_verification_failed" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { omit: "material" })) }))
     .rejects.toMatchObject({ code: "preview_tool_failed" });
   await expect(ensurePreviewCore({ gameRoot: game, cacheRoot, recipe, plateRecipe: plate, exporter: fresh(fakeUncook(plate, recipe, { textureSize: 100 })) }))
@@ -319,7 +333,14 @@ test("the derived cache carries a render record that names, hashes and sources e
   expect(record).toMatchObject({ origin: "game-files", identity: result.manifest.cacheKey, geometry: { file: "head.glb" } });
   const hash = (name: string) => result.manifest.files.find(file => file.name === name)!.sha256;
   expect(record.geometry.sha256).toBe(hash("head.glb"));
-  expect(record.geometry.sources.map(source => source.depotPath)).toEqual([plate.source.morphDepotPath, plate.source.meshDepotPath, recipe.eye.meshDepotPath]);
+  expect(record.geometry.sources.map(source => source.depotPath)).toEqual([plate.source.morphDepotPath, plate.source.meshDepotPath,
+    recipe.eye.meshDepotPath, recipe.eye.morphDepotPath]);
+  // Each mesh node names the morph resource its facial targets came from: the eyes use their own.
+  expect(record.geometry.morphs?.map(entry => [entry.node, entry.depotPath])).toEqual([["head", plate.source.morphDepotPath],
+    ["makeup_plate", plate.source.morphDepotPath], ["eyes", recipe.eye.morphDepotPath]]);
+  expect(result.manifest.source.eyeMorphDepotPath).toBe(recipe.eye.morphDepotPath);
+  expect(parseCoreDetail({ ...record, geometry: { ...record.geometry, morphs: undefined } }).geometry.morphs).toBeUndefined();
+  expect(() => parseCoreDetail({ ...record, geometry: { ...record.geometry, morphs: [{ node: "eyes" }] } })).toThrow("morph 0 source");
   for (const slot of CORE_TEXTURE_SLOTS) expect(record.textures[slot].sha256).toBe(hash(record.textures[slot].file));
   expect(record.textures["head.roughness"].sources[0]).toMatchObject({ material: "01_ca_pale", parameter: "Roughness", adapter: "red-to-grey" });
   expect(parseCoreDetail(structuredClone(PREPARED_CORE_DETAIL)).origin).toBe("prepared");

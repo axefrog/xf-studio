@@ -24,6 +24,10 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   initial.piercingDefinition = chosen?.choices.some(choice => choice.definition === initial.piercingDefinition)
     ? initial.piercingDefinition : chosen?.choices[0]?.definition ?? "";
 
+  // A restored eye shape the loaded head does not offer falls back to its base shape.
+  const eyeChoices = ports.preview.eyeShapeOptions?.().choices;
+  if (eyeChoices && !eyeChoices.some(choice => choice.index === initial.eyeShape)) initial.eyeShape = 0;
+
   // These scene settings preceded surface-control construction in the original startup.
   ports.preview.setEyeOptics(initial.eyeOptics);
   ports.preview.setEyeShape(initial.eyeShape);

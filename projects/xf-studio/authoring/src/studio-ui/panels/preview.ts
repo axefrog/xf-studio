@@ -14,7 +14,6 @@ export function characterPanel(rt: StudioRuntime): PanelController {
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const summary = h("div", { class: "fact-list" });
   const eyeShape = new SelectField<string>({ label: "Eye shape", onChange: value => rt.dispatch({ kind: "preview.setEyeShape", index: Number(value) }) });
-  const eyeChoices = Array.from({ length: 22 }, (_, i) => ({ value: String(i), label: i ? `Eye shape ${String(i).padStart(2, "0")}` : "Base mesh" }));
   const eyeNote = note("");
   const brows = new Toggle({ label: "Eyebrows", onChange: enabled => rt.dispatch({ kind: "preview.setDetail", detail: "brows", enabled }) });
   const lashes = new Toggle({ label: "Eyelashes", onChange: enabled => rt.dispatch({ kind: "preview.setDetail", detail: "lashes", enabled }) });
@@ -56,10 +55,19 @@ export function characterPanel(rt: StudioRuntime): PanelController {
           fact(icon("info"), "Eyes", result.eyeAppearance.message),
         ]));
       }
-      eyeShape.update(eyeChoices, String(preview?.eyeShape ?? 9), !preview,
-        frame.viewport.head.error ?? "Preview is still loading.");
-      setText(eyeNote, saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
-        ? `Overriding the saved eye shape (${String(saved.suggestedEyeShape).padStart(2, "0")}) in this viewport only.` : "");
+      // Choices come from the loaded head's own eye-shape targets, numbered like the character creator.
+      const shapes = state.eyeShapeOptions?.choices ?? [];
+      const shapeLabel = (index: number) => {
+        const choice = shapes.find(entry => entry.index === index);
+        return choice ? `Eye shape ${choice.number}${choice.target ? ` (${choice.target})` : " (base)"}` : "";
+      };
+      eyeShape.update(shapes.map(choice => ({ value: String(choice.index), label: shapeLabel(choice.index) })), String(preview?.eyeShape ?? 9),
+        !preview || !shapes.length, frame.viewport.head.error ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
+      const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
+        ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
+      const fixedEyes = preview && shapes.length > 1 && state.eyeShapeOptions && !state.eyeShapeOptions.eyesFollow
+        ? "These developer-prepared eyes carry no eye-shape data, so they stay at the base shape while the eyelids move. The preview built from your game files moves both." : "";
+      setText(eyeNote, [overriding, fixedEyes].filter(Boolean).join(" "));
       eyeNote.hidden = !eyeNote.textContent;
       for (const [control, detail] of [[brows, "brows"], [lashes, "lashes"]] as const) {
         const enabled = !!preview?.[detail], allowed = enableReason(rt, { kind: "preview.setDetail", detail, enabled: true });
@@ -227,7 +235,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
 export function activityPanel(rt: StudioRuntime): PanelController {
   const list = h("ol", { class: "activity", "aria-label": "Recent activity, newest first" });
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
-  const clearHint = note("This log lives only in this browser tab. Results that matter — library revisions, package manifests — are stored by their own services.");
+  const clearHint = note("This log lasts only until XF Studio closes. Results that matter — library revisions, package manifests — are stored by their own services.");
   let count = -1;
   const element = h("div", { class: "panel-content" }, empty, list, clearHint);
   const draw = () => {

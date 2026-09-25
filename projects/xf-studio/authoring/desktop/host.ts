@@ -1,6 +1,6 @@
 export type DesktopCapabilities = Readonly<{
   schema: "xfs/desktop-capabilities-1";
-  host: "electrobun-spike";
+  host: "electrobun";
   renderer: "webview2";
   version: string;
   channel: "dev" | "canary" | "stable" | "unavailable";
@@ -47,7 +47,7 @@ export const desktopCapabilities = (previewAssets: DesktopCapabilities["previewA
   version: DesktopVersion, userDataPath: string, packageBuild = false, previewIntake = false,
   previewSource: DesktopCapabilities["previewSource"] = null): DesktopCapabilities => ({
   schema: "xfs/desktop-capabilities-1",
-  host: "electrobun-spike",
+  host: "electrobun",
   renderer: "webview2",
   ...version,
   userDataPath,

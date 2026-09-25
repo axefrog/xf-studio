@@ -111,6 +111,8 @@ export type SavedLashAppearance = {
   definition: string;
   color: THREE.Color;
   roughness: number;
+  /** Strand_ID value (0..1) the hair light hashes for its per-strand highlight shift. */
+  strandId: number;
   alphaCutoff: number;
   encoding: ProfileEncoding;
   profile: { depotPath: string; winner: string; basis: DepotResolution<HairProfileCandidate>["basis"]; note: string;
@@ -129,6 +131,7 @@ export function savedLashAppearance(manifest: StrandProfileManifest,
     color: new THREE.Color().setRGB(Math.min(1, albedo[0]), Math.min(1, albedo[1]), Math.min(1, albedo[2]), THREE.LinearSRGBColorSpace),
     // G-buffer roughness = saturate(RoughnessScale * ID + RoughnessBias); ShadowStrength only moves it for painted vertices.
     roughness: Math.min(1, Math.max(0, material.roughnessScale * manifest.strandId[0] / 255 + material.roughnessBias)),
+    strandId: manifest.strandId[0] / 255,
     alphaCutoff: material.alphaCutoff,
     encoding,
     profile: { depotPath: manifest.profile.depotPath, winner: resolution.winner.archive, basis: resolution.basis,

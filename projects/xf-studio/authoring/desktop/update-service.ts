@@ -46,7 +46,7 @@ export class DesktopUpdateService {
       trust.verifiedPrivateFeed && trust.signedRelease && trust.twoVersionTrialAccepted;
     this.phase = this.enabled ? "idle" : "unavailable";
     this.reason = this.enabled ? null :
-      "Automatic updates are off in this alpha. Download new versions from the XF Studio releases page on GitHub.";
+      "Automatic updates are off for now. Download new versions from the XF Studio releases page on GitHub.";
   }
 
   snapshot(): UpdateSnapshot {

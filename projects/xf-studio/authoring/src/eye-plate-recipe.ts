@@ -146,10 +146,14 @@ export function canonicalJson(value: unknown): string {
 export const eyePlateRecipeSha256 = (recipe: EyePlateRecipe) => sha256Hex(canonicalJson(recipe));
 
 export type EyePlateSourceHashes = { meshSha256: string; morphSha256: string };
-/** Cache identity: recipe content, exact source resources and the deriver's output contract. */
-export function eyePlateCacheKey(recipe: EyePlateRecipe, source: EyePlateSourceHashes): string {
+/**
+ * Cache identity: recipe content, exact source resources, the deriver's output contract and, when known, the
+ * head provenance (winning archives, providers and hashes of every resource and applied patch), so a plate cut
+ * from a mod's head is never reused for another source and its cached provenance stays exact.
+ */
+export function eyePlateCacheKey(recipe: EyePlateRecipe, source: EyePlateSourceHashes, head?: unknown): string {
   return sha256Hex(canonicalJson({ deriver: EYE_PLATE_DERIVER_VERSION, recipe: eyePlateRecipeSha256(recipe),
-    sourceMesh: source.meshSha256, sourceMorph: source.morphSha256 }));
+    sourceMesh: source.meshSha256, sourceMorph: source.morphSha256, ...(head === undefined ? {} : { head }) }));
 }
 export const eyePlateCacheName = (recipe: EyePlateRecipe, key: string) => `${recipe.id}-r${recipe.revision}-${key.slice(0, 16)}`;
 

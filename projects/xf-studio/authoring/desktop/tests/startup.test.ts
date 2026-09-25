@@ -1,4 +1,5 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_PROMPT } from "../webview2-install";
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -73,4 +74,98 @@ test("the host records when the WebView loads the page and the bootstrap reaches
     expect(app.renderer()).toMatchObject({ pageServed: true, bootstrapped: true });
     expect(reports).toEqual(["WebView requested the Studio page.", "Renderer bootstrap loaded the workspace."]);
   } finally { app.stop(); }
+});
+
+describe("missing WebView2 is installed with one consent click", () => {
+  const port = (options: { installedAfter: boolean; choose: number[]; bootstrapper?: boolean; initially?: boolean }) => {
+    const calls: string[] = [];
+    let ran = false;
+    const choices = [...options.choose];
+    return { calls, port: {
+      detect: () => (options.initially || (ran && options.installedAfter))
+        ? { installed: true, version: "141.0.1.2", source: "HKCU" } : { installed: false, version: null, source: null },
+      ask: async (prompt: { message: string; buttons: string[] }) => { calls.push(`ask:${prompt.buttons[0]}`); return choices.shift() ?? 1; },
+      bootstrapperAvailable: () => options.bootstrapper !== false,
+      runBootstrapper: async () => { ran = true; calls.push("run"); return 0; },
+      openDownloadPage: () => { calls.push("download"); },
+      log: () => {},
+    } };
+  };
+
+  test("an installed runtime asks nothing", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [], initially: true });
+    expect(await ensureWebView2(p)).toMatchObject({ ready: true, installed: false });
+    expect(calls).toEqual([]);
+  });
+  test("consent runs Microsoft's bootstrapper and continues when the runtime appears", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [0] });
+    expect(await ensureWebView2(p)).toMatchObject({ ready: true, installed: true, status: { version: "141.0.1.2" } });
+    expect(calls).toEqual(["ask:Install it now", "run"]);
+  });
+  test("declining quits without installing anything", async () => {
+    const { calls, port: p } = port({ installedAfter: true, choose: [1] });
+    expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "declined" });
+    expect(calls).toEqual(["ask:Install it now"]);
+  });
+  test("a failed install explains it and offers Microsoft's page", async () => {
+    const { calls, port: p } = port({ installedAfter: false, choose: [0, 0] });
+    expect(await ensureWebView2(p)).toEqual({ ready: false, reason: "failed" });
+    expect(calls).toEqual(["ask:Install it now", "run", "ask:Open the Microsoft download page", "download"]);
+  });
+  test("prompts follow the wording policy", () => {
+    for (const text of [WEBVIEW2_PROMPT, WEBVIEW2_FAILED]) expect(USER_FACING_JARGON.test(`${text.message} ${text.detail}`)).toBe(false);
+  });
+});
+
+describe("a damaged or newer workspace never bricks the app", () => {
+  test("GET reports it, the close handshake does not wait, Start fresh keeps the old file", async () => {
+    const staticRoot = resolve(root, "static-ws");
+    mkdirSync(staticRoot, { recursive: true });
+    writeFileSync(resolve(staticRoot, "index.html"), "<!doctype html><title>Studio</title>");
+    const data = resolve(root, "data-ws");
+    mkdirSync(data, { recursive: true });
+    writeFileSync(resolve(data, "workspace.json"), JSON.stringify({ schema: "xfas/workspace-99", from: "a newer XF Studio" }));
+    const app = createDesktopServer(staticRoot, data, { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" });
+    try {
+      const page = await fetch(app.url);
+      expect(page.headers.get("content-security-policy")).toContain("script-src 'self'");
+      const cookie = page.headers.get("set-cookie")!.split(";")[0];
+      const base = `http://127.0.0.1:${app.port}`;
+      const headers = { Cookie: cookie, Origin: base };
+      const load = await fetch(base + "/api/desktop/workspace", { headers });
+      expect(load.status).toBe(409);
+      expect(await load.json()).toMatchObject({ code: "workspace_unreadable", file: "workspace.json" });
+      expect(app.renderer().bootstrapped).toBe(false);
+      // Saves are still refused while the unreadable file is in place (nothing is overwritten).
+      expect((await fetch(base + "/api/desktop/workspace", { method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ workspace: "{}" }) })).status).toBe(422);
+      expect((await fetch(base + "/api/desktop/workspace/start-fresh", { method: "POST", headers: { ...headers, "Content-Type": "text/plain" },
+        body: "{}" })).status).toBe(415);
+      const fresh = await fetch(base + "/api/desktop/workspace/start-fresh", { method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" }, body: "{}" });
+      const { keptAs } = await fresh.json();
+      expect(keptAs).toMatch(/^workspace\.broken-.+\.json$/);
+      expect(readFileSync(resolve(data, keptAs), "utf8")).toContain("a newer XF Studio");
+      const reload = await fetch(base + "/api/desktop/workspace", { headers });
+      expect(await reload.json()).toEqual({ schema: "xfs/desktop-workspace-1", workspace: null });
+      expect(app.renderer().bootstrapped).toBe(true);
+    } finally { app.stop(); }
+  });
+
+  test("a failed save on close offers Close without saving", async () => {
+    let closed = 0, asked = 0;
+    const requested: string[] = [];
+    const gate = new DesktopWorkspaceClose({ requestFlush: nonce => { requested.push(nonce); }, close: () => { closed++; },
+      report: () => {}, rendererReady: () => true, confirmCloseWithoutSaving: async () => { asked++; return true; } });
+    const event: { response?: { allow: boolean } } = {};
+    gate.request(event);
+    expect(gate.acknowledge(requested[0], "failed")).toBe(true);
+    await Bun.sleep(0);
+    expect({ asked, closed }).toEqual({ asked: 1, closed: 1 });
+    const keep = new DesktopWorkspaceClose({ requestFlush: nonce => { requested.push(nonce); }, close: () => { closed++; },
+      report: () => {}, rendererReady: () => true, confirmCloseWithoutSaving: async () => false }, 5);
+    keep.request({});
+    await Bun.sleep(20);
+    expect(closed).toBe(1);
+  });
 });

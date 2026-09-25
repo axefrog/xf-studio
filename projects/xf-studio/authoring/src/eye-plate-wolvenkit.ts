@@ -30,8 +30,8 @@ export function depotPathRegex(paths: readonly string[]): string {
 export function createWolvenKitEyePlateTools(cli: string, timeoutMs = defaultTimeoutMs): EyePlateTools {
   const require = (path: string, message: string) => { if (!existsSync(path) || !statSync(path).isFile()) throw new ToolRunError("plate_tool_failed", message); };
   return {
-    async extract({ gameRoot, archiveDirectory, depotPaths, outDir, signal }) {
-      await runTool(cli, ["unbundle", resolve(gameRoot, archiveDirectory), "-o", outDir, "-r", depotPathRegex(depotPaths)], signal, timeoutMs);
+    async extract({ archive, depotPaths, outDir, signal }) {
+      await runTool(cli, ["unbundle", resolve(archive), "-o", outDir, "-r", depotPathRegex(depotPaths)], signal, timeoutMs);
     },
     async serialize({ file, outDir, signal }) {
       await runTool(cli, ["convert", "serialize", file, "-o", outDir], signal, timeoutMs);

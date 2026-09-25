@@ -1,6 +1,5 @@
 /**
- * Plain-language reasons for capabilities a community user cannot have in this
- * alpha, and the wording policy every user-facing capability reason follows.
+ * Plain-language reasons for capabilities a community user cannot have yet, and the wording policy every user-facing capability reason follows.
  * Evidence caveats (provenance, offline verification, runtime proof) belong in
  * docs and manifests, not in reasons shown beside a disabled control.
  */

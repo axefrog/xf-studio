@@ -8,7 +8,8 @@ import type { PackageAction, PackageBuild, PackageCheck } from "./package-action
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
 import { packageToolPaths } from "./local-settings-readiness";
 import { verifyPackageBuildResult } from "./package-result-verifier";
-import { EyePlateError, ensureEyePlate, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
+import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, type EyePlateManifest, type EyePlateTools } from "./eye-plate-service";
+import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
 import { runProcessTree } from "./process-tree";
 
@@ -24,9 +25,11 @@ const maxBytes = 16_000_000;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 /**
  * `plate` is empty unless the hidden `XFS_PACKAGE_PLATE` developer override names a plate directory;
- * otherwise Build derives the built-in eye plate into `plateCache` (host-owned, ignored storage).
+ * otherwise Build derives the built-in eye plate into `plateCache` (host-owned, ignored storage) from the
+ * head that `route` loads. `headOverride` is the `XFS_EYE_PLATE_HEAD=base-game` escape hatch.
  */
-export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string };
+export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
+  route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
   resolve(env.XFS_PACKAGE_PLATE_CACHE || resolve(app, "data", "eye-plate-cache"));
@@ -42,6 +45,9 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
     plateCache: localPlateCache(env),
     wolvenkit: configured.wolvenkit || "",
     gamepath: configured.gamepath || "",
+    route: { launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
+      manualModRoot: settings.manualModRoot },
+    headOverride: eyePlateHeadOverride(env),
   };
 }
 
@@ -56,7 +62,10 @@ async function localPlate(tools: PackageTools, plateTools: PlateToolsFactory): P
     return { args: ["--plate", tools.plate] };
   }
   try {
-    const plate = await ensureEyePlate({ gameRoot: tools.gamepath, cacheRoot: tools.plateCache, tools: plateTools(tools.wolvenkit) });
+    const route = tools.route ?? { launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null };
+    const plate = await ensureEyePlate({ gameRoot: tools.gamepath, cacheRoot: tools.plateCache, tools: plateTools(tools.wolvenkit),
+      headSource: createInstalledHeadSource({ gameRoot: tools.gamepath, wolvenKitCli: tools.wolvenkit, ...route },
+        join(tools.plateCache, "resolver")), headOverride: tools.headOverride });
     return { args: ["--plate", plate.directory, "--plate-manifest", plate.manifestFile], manifest: plate.manifest };
   } catch (error) {
     if (error instanceof EyePlateError && error.detail) console.error(`Eye plate preparation failed (${error.code}):`, error.detail.slice(-3000));

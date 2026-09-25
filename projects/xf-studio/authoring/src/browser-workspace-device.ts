@@ -42,11 +42,14 @@ export function createBrowserWorkspaceSession(options: {
   scrollTargets: EventSource[];
   toggleTargets: EventSource[];
   onStatus(status: WorkspaceSaveStatus): void;
+  /** Serialized size budget; the desktop host file allows more than browser storage. */
+  budget?: number;
 }) {
   const composer = new WorkspaceComposer(options.workspace, options.capture);
   const persistence = new WorkspacePersistence({ storage: options.storage,
     key: workspaceKeys(options.verification).workspace, writable: options.restored.writable,
-    restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture() });
+    restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture(),
+    budget: options.budget });
   persistence.subscribe(options.onStatus);
   for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();

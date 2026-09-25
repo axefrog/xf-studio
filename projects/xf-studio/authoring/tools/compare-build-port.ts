@@ -5,7 +5,7 @@
 //   bun tools/compare-build-port.ts mips [collection.json] [--size 1024]
 //   bun tools/compare-build-port.ts supplied <build-dir>   (TS chain vs the build's Python-written input DDS)
 //   bun tools/compare-build-port.ts inventory <build-dir>
-//   bun tools/compare-build-port.ts verify <build-dir> [--wolvenkit WolvenKit.CLI.exe]
+//   bun tools/compare-build-port.ts verify <build-dir> [--wolvenkit WolvenKit.CLI.exe] --gamepath <game>
 //   bun tools/compare-build-port.ts builds <python-build-dir> <typescript-build-dir>
 //
 // `verify` copies nothing: pass a private *copy* of a Python-built intermediate, because
@@ -189,17 +189,18 @@ for preset,record in zip(b['plan']['presets'],b['compiled']):
 print(json.dumps({'textures':checked,'inputPngEqualsRawAndExportPngEqualsDdsLevel0':same}))
 `, build));
   const { verifyBuild } = await import("../src/mod-verifier/verify-build");
-  const unpackDir = resolve(build, "unpacked-ts");
-  rmSync(unpackDir, { recursive: true, force: true });
+  const workDir = resolve(build, "verify-ts");
+  rmSync(workDir, { recursive: true, force: true });
   started = performance.now();
-  const tsReport = await verifyBuild({ build, wolvenkit, unpackDir });
+  const tsReport = await verifyBuild({ build, wolvenkit, gamepath: option(args, "--gamepath"), workDir });
   const tsSeconds = (performance.now() - started) / 1000;
   writeFileSync(resolve(build, "verification-ts.json"), JSON.stringify(tsReport, null, 2) + "\n");
   const differences: { path: string; python: Json; typescript: Json; relative?: number }[] = [];
   diffJson(pyReport, tsReport as unknown as Json, "$", differences);
-  // The only intentional structural difference is the unpack directory's build-relative location.
+  // The TypeScript report adds the checked declaration and plate input hashes; verify.py has neither.
+  const added = new Set(["$.archiveXlSha256", "$.plateInputs"]);
   const numeric = differences.filter(d => d.relative !== undefined);
-  const other = differences.filter(d => d.relative === undefined);
+  const other = differences.filter(d => d.relative === undefined && !added.has(d.path));
   const maxRelative = Math.max(0, ...numeric.map(d => d.relative!));
   console.log(JSON.stringify({ build, pngEquivalence, pythonSeconds, tsSeconds, fields: differences.length, numericDifferences: numeric.length,
     maxRelativeNumericDifference: maxRelative, nonNumericDifferences: other }, null, 2));
@@ -251,14 +252,15 @@ function compareBuilds(args: string[]) {
   if (py.plan.namespace !== ts.plan.namespace) throw Error("The builds are of different collections.");
   const ns: string = py.plan.namespace;
   const xl = (build: string) => readFileSync(resolve(build, "package", "archive", "pc", "mod", ns + ".archive.xl"));
-  // Unpacked members are what the game reads; each verifier unpacked the packed archive into <build>/unpacked.
+  // Unpacked members are what the game reads. verify.py unpacked into <build>/unpacked; the TypeScript
+  // verifier unbundles and exports into its own work directory, <build>/verify.
   const trees = [
-    compareTrees("unpacked archive members", resolve(pythonBuild, "unpacked"), resolve(tsBuild, "unpacked")),
+    compareTrees("unpacked archive members", resolve(pythonBuild, "unpacked"), resolve(tsBuild, "verify", "unpacked")),
     compareTrees("generated resources before pack", resolve(pythonBuild, "archive"), resolve(tsBuild, "archive")),
     compareTrees("baked raw maps", resolve(pythonBuild, "baked"), resolve(tsBuild, "baked")),
     compareTrees("DDS colour inputs", resolve(pythonBuild, "input", "dds-colour"), resolve(tsBuild, "input", "dds-colour")),
     compareTrees("DDS scalar inputs", resolve(pythonBuild, "input", "dds-scalar"), resolve(tsBuild, "input", "dds-scalar")),
-    compareTrees("decoded DDS export", resolve(pythonBuild, "export-dds"), resolve(tsBuild, "export-dds")),
+    compareTrees("decoded DDS export", resolve(pythonBuild, "export-dds"), resolve(tsBuild, "verify", "dds", "0")),
   ];
   const inputs = ["models-json", "app-json", "cc-json"].map(dir => compareJsonInputs(dir, resolve(pythonBuild, dir), resolve(tsBuild, dir)));
   const hashes = (inputs: { sha256: string }[]) => inputs.map(input => input.sha256);
@@ -269,7 +271,8 @@ function compareBuilds(args: string[]) {
   diffJson(JSON.parse(readFileSync(resolve(pythonBuild, "verification.json"), "utf8")),
     JSON.parse(readFileSync(resolve(tsBuild, "verification.json"), "utf8")), "$", differences);
   // The build path, and the packed hash (index timestamps), legitimately differ between two builds.
-  const reported = differences.filter(d => d.path !== "$.build" && d.path !== "$.archiveSha256");
+  const reported = differences.filter(d => d.path !== "$.build" && d.path !== "$.archiveSha256" &&
+    d.path !== "$.archiveXlSha256" && d.path !== "$.plateInputs");
   const numeric = reported.filter(d => d.relative !== undefined), nonNumeric = reported.filter(d => d.relative === undefined);
   const maxRelative = Math.max(0, ...numeric.map(d => d.relative!));
   const summary = { namespace: ns, presets: py.plan.presets.length, trees, inputs, records,

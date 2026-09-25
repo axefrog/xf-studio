@@ -125,6 +125,8 @@ try {
   await browser.colorScheme("light");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup-light.png"));
   if (browser.console.some(entry => entry.type === "exception")) throw Error("Desktop first run raised a browser exception.");
+  const csp = browser.console.filter(entry => /Content Security Policy/i.test(entry.text ?? ""));
+  if (csp.length) throw Error(`The page's CSP blocked something: ${JSON.stringify(csp.slice(0, 3))}`);
   await browser.close(); browser = undefined;
   const partialData = resolve(directory, "incomplete-data");
   mkdirSync(resolve(partialData, "preview-assets"), { recursive: true });

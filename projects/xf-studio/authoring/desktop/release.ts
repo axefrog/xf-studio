@@ -119,9 +119,10 @@ export function releaseNotes(section: ChangelogSection, version: ReleaseVersion,
     "3. The installer is not code-signed yet, so Windows SmartScreen may show **Windows protected your PC**. " +
       "Only if the checksum matched, choose **More info → Run anyway**. If Smart App Control is on, Windows blocks unsigned apps and offers no per-app override.",
     "4. XF Studio needs the Microsoft Edge WebView2 Runtime, which most Windows 10 and 11 PCs already have. " +
-      "If it's missing, the app tells you and opens Microsoft's download page.", "",
+      "If it's missing, XF Studio offers to install it for you with one click, using Microsoft's own installer.", "",
     "5. It installs for your Windows user only and includes no game or mod files. The UV editor, your library and Check work straight away. " +
-      "The 3D head preview isn't available in this alpha, and building the mod files still needs a developer setup.", "",
+      "The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio (it needs your game folder and WolvenKit CLI). " +
+      "Building the mod files needs the same two things.", "",
     "## Licence", "",
     `XF Studio is MIT-licensed ([LICENSE](https://github.com/${repository}/blob/${tag}/LICENSE)). ` +
       `The app includes third-party software; its notices are attached as \`${noticesAssetName}\` and shown under **About → Licences**.`, "",
@@ -153,11 +154,13 @@ export function stageRelease(input: StageInput): ReleaseAsset[] {
   copyFileSync(input.notices ?? noticesPath, resolve(input.outDir, noticesAssetName));
   const lockPath = input.dependencyLock ?? resolve(desktopRoot, ".hutch", "dependencies.lock");
   const toolchain = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, "utf8")).objects : null;
+  const bootstrapperPath = resolve(desktopRoot, "webview2", "bootstrapper.json");
+  const webView2Bootstrapper = existsSync(bootstrapperPath) ? JSON.parse(readFileSync(bootstrapperPath, "utf8")) : null;
   const info = {
     schema: "xfs/desktop-build-info-1", app: "XF Studio", identifier: update.identifier,
     version: version.version, tag: releaseTag(version), prerelease: isPrerelease(version),
     electrobunChannel, electrobunBuildHash: update.hash, commit: input.commit, repository,
-    signed: false, updater: "disabled", includesGameAssets: false, toolchain,
+    signed: false, updater: "disabled", includesGameAssets: false, toolchain, webView2Bootstrapper,
   };
   writeFileSync(resolve(input.outDir, "build-info.json"), JSON.stringify(info, null, 2) + "\n");
   const assets = [setupName, "build-info.json", noticesAssetName].map(name => {

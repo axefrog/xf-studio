@@ -8,12 +8,12 @@ import { createInstallDetectionHandler, hostFrameworkCheck } from "../src/instal
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, PREVIEW_INTAKE_MARKER, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
-import { desktopBuildIssue, desktopPlateCache, type WolvenKitProbe } from "./build";
+import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { createCoreAssetReadiness, desktopAssetIntakeRequest } from "./asset-intake";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
-import { DesktopWorkspaceStore, desktopWorkspaceRequest } from "./workspace-store";
+import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
@@ -36,6 +36,14 @@ export type DesktopHostOptions = {
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
   openExternal?: (url: string) => boolean;
 };
+
+/**
+ * The Studio page loads only its own scripts, styles, workers and data from this loopback
+ * origin. Inline style attributes are used by the UI; inline scripts are not.
+ */
+export const DESKTOP_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; " +
+  "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
@@ -70,13 +78,16 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     log: message => report(message), ...hostOptions.wolvenKit });
   const withWolvenKit = (settings: LocalSettings): LocalSettings =>
     ({ ...settings, wolvenKitCli: settings.wolvenKitCli ?? wolvenKit.managedExecutable() });
+  // Readiness requests never run external tools inline: cached answers, background checks.
+  const readinessProbes: [WolvenKitProbe, typeof probeBun] = wolvenKitProbe ? [wolvenKitProbe, probeBun] : [cachedWolvenKitProbe, cachedBunProbe];
   const buildReady = () => {
-    try { return desktopBuildIssue(withWolvenKit(settingsStore.load().settings), dataRoot, toolsRoot, wolvenKitProbe) === null; }
+    try { return desktopBuildIssue(withWolvenKit(settingsStore.load().settings), dataRoot, toolsRoot, ...readinessProbes) === null; }
     catch { return false; }
   };
+  // The settings view passes effective settings: its own path, or XF Studio's WolvenKit.
   const localSettings = createLocalSettingsHandler(settingsStore, {},
     settings => {
-      const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, wolvenKitProbe);
+      const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
       return { updater: false, installer: false, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
         wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
         eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
@@ -123,6 +134,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       const routedRequest = sameOriginWebView ? new Request(request, {
         headers: new Headers([...request.headers, ["Origin", origin]]),
       }) : request;
+      if (url.pathname.startsWith("/api/") && request.method === "POST" &&
+          request.headers.get("Content-Type")?.split(";")[0].trim() !== "application/json")
+        return new Response("Expected JSON", { status: 415 });
       if (url.pathname === "/api/desktop/capabilities") {
         const preview = await previewAssetState();
         return Response.json(desktopCapabilities(preview.state, version, dataRoot, buildReady(), previewIntake(), preview.source),
@@ -158,9 +172,18 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }
       if (url.pathname === "/api/desktop/assets/intake") return previewIntake() ?
         desktopAssetIntakeRequest(routedRequest, dataRoot) : new Response("Not found", { status: 404 });
+      if (url.pathname === "/api/desktop/workspace/start-fresh") {
+        const response = desktopWorkspaceStartFresh(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
+        return response;
+      }
       if (url.pathname === "/api/desktop/workspace") {
-        if (request.method === "GET" && !renderer.bootstrapped) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        // Only a successfully loaded workspace makes the close handshake wait for the page.
+        if (request.method === "GET" && !renderer.bootstrapped) {
+          if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
+          else report("The saved workspace is unreadable; the page offers Start fresh.");
+        }
         if (request.method === "POST" && response.status === 204)
           updateGuard?.noteWorkspaceWrite(request.headers.get("X-XFS-Update-Flush"));
         return response;
@@ -185,7 +208,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
-        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe,
+        undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: message => report(message),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
@@ -194,7 +217,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
-      if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop-spike" });
+      if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
       const asset = url.pathname.startsWith("/assets/");
       const root = asset ? assetRoot : staticRoot;
@@ -218,6 +241,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       return new Response(request.method === "HEAD" ? null : file, { headers: {
         "Content-Type": file.type, "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
         ...(firstVisit ? { "Set-Cookie": `xfs_session=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}),
+        ...(path.endsWith(".html") ? { "Content-Security-Policy": DESKTOP_CSP } : {}),
       } });
     },
   });

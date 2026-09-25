@@ -107,3 +107,14 @@ test("WolvenKit setup keeps its policy in the service and the network, archive a
   expect(source("wolvenkit-setup-host")).not.toMatch(/\bfetch\(/);
 });
 
+test("the eye plate reaches the launch route only through its head-source port", () => {
+  // The head-source policy is pure: resolver rules in, JSON documents in, no host access.
+  for (const dependency of imports(source("eye-plate-head-source")))
+    expect(dependency, `eye-plate-head-source imports ${dependency}`).not.toMatch(
+      /^(node:(?:fs|child_process|os|path)|\.\/(?:resolver-host|source-discovery|process-tree|eye-plate-wolvenkit|eye-plate-head-resolver))$/);
+  // The application service owns the policy; discovery, indexes and WolvenKit stay in adapters.
+  for (const dependency of imports(source("eye-plate-service")))
+    expect(dependency, `eye-plate-service imports ${dependency}`).not.toMatch(
+      /^(node:child_process|\.\/(?:resolver-host|source-discovery|process-tree|eye-plate-wolvenkit|eye-plate-head-resolver))$/);
+  expect(imports(source("eye-plate-head-resolver"))).toContain("./resolver-host");
+});

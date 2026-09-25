@@ -23,6 +23,20 @@ export class DesktopWorkspaceStore {
     parseWorkspace(JSON.parse(raw));
     return raw;
   }
+  /** The file name a Start fresh keeps the unreadable workspace under. */
+  fileName(verification: boolean) { return verification ? "verification-workspace.json" : "workspace.json"; }
+  /**
+   * Start fresh after an unreadable (damaged or newer-version) workspace: rename it aside,
+   * never delete it, so the user or a later version can still recover it.
+   */
+  setAside(verification: boolean, now = new Date()): string | null {
+    const path = this.path(verification);
+    if (!existsSync(path)) return null;
+    const stamp = now.toISOString().replace(/[:.]/g, "-");
+    const kept = `${verification ? "verification-workspace" : "workspace"}.broken-${stamp}.json`;
+    renameSync(path, resolve(this.root, kept));
+    return kept;
+  }
   save(verification: boolean, raw: string): void {
     if (Buffer.byteLength(raw) > maxWorkspaceBytes) throw Error("Desktop workspace exceeds the size limit.");
     const parsed = parseWorkspace(JSON.parse(raw));
@@ -43,7 +57,8 @@ export async function desktopWorkspaceRequest(request: Request, store: DesktopWo
   if (request.method === "GET") {
     try { return Response.json({ schema: "xfs/desktop-workspace-1", workspace: store.load(verification) },
       { headers: { "Cache-Control": "no-store" } }); }
-    catch { return Response.json({ error: "Saved desktop workspace is unreadable; its file was preserved." }, { status: 409 }); }
+    catch { return Response.json({ code: "workspace_unreadable", file: store.fileName(verification),
+      error: "Saved desktop workspace is unreadable; its file was preserved." }, { status: 409 }); }
   }
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
   if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
@@ -56,4 +71,13 @@ export async function desktopWorkspaceRequest(request: Request, store: DesktopWo
   } catch {
     return Response.json({ error: "Desktop workspace was not saved; the previous file was preserved." }, { status: 422 });
   }
+}
+
+/** POST only: set an unreadable workspace aside so the app can start with a fresh draft. */
+export function desktopWorkspaceStartFresh(request: Request, store: DesktopWorkspaceStore, verification: boolean): Response {
+  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  try { store.load(verification); return Response.json({ keptAs: null }); }
+  catch { /* Unreadable: set it aside below. */ }
+  try { return Response.json({ keptAs: store.setAside(verification) }); }
+  catch { return Response.json({ error: "The old workspace could not be set aside." }, { status: 500 }); }
 }
