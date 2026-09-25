@@ -4,7 +4,7 @@ Last reviewed **25 September 2026** by Claude (coordinator from 25 September; pr
 
 ## Summary
 
-XF Studio's eye-makeup editor works as a local prototype and can build verified private mod candidates. **Nothing has been seen in the game yet.** The first in-game smoke test is prepared and waiting for the maintainer to run it. The long-requested brow, lash and hair colour fidelity is traced offline but unfinished. Two research directives, the game shader/material system and the character-customisation file chain, were never properly started and now form the core of the R&D lab.
+XF Studio's eye-makeup editor works as a local prototype. Its Build derives the expanded eye plate from the player's own game and produces a verified **XF Eye Artistry** mod. **Nothing has been seen in the game yet.** A five-look test package is staged in MO2, and the maintainer will run the first in-game test after the desktop clean-machine trial. Brow, lash and hair colours in the preview now follow the game's decoded hair shader, pending in-game calibration. The first public alpha (MIT-licensed) is in release readiness. The R&D lab has Draft knowledge pages on materials/shaders, hair shading and the character-customisation file chain, plus tooling that decompiles game shaders into named HLSL.
 
 ## What works (verified in code and tests)
 
@@ -12,12 +12,12 @@ XF Studio's eye-makeup editor works as a local prototype and can build verified 
 |---|---|
 | **Editor** | Head and UV surface editing. Variable layer stacks and presets with rename, copy, reorder and recovery. Bézier/corner paths, directional softness, multiple warp fields, whole-shape transforms, UV zoom/pan, whole-gesture Undo, and a persistent `?verify=1` isolated workspace. New recipes are `xfs/recipe-7`. See the [editor invariants](../research/authoring/editor-invariants.md). |
 | **UI** | New dock/panel workspace (`studio-main.ts`), delivered 24 September and built by Claude under the previous coordinator. Its three audit defects are fixed. The maintainer's cursory review is positive; an in-depth review is pending. The legacy shell remains at `/legacy.html` until the new UI is accepted after that review. |
-| **Preview** | Deforming head and plate with the real default creator idle (pause and head/facial subsets), saved-V import (five facial morphs, eye shape), approximate saved brows, lashes and hair (MELUMINARY/AshBrown), vanilla and PRC piercings, preview quality presets and experimental finish looks. |
+| **Preview** | Deforming head and plate with the real default creator idle (pause and head/facial subsets), saved-V import (five facial morphs, eye shape), saved brows, lashes and hair shaded with the game's decoded hair-shader colour model and light (Karis-style lobes; profile colour space and light tuning still hypotheses), vanilla and PRC piercings, preview quality presets and experimental finish looks. |
 | **Library** | Local SQLite (`bun:sqlite`) with immutable collection and preset versions, and portable recipe and collection files. |
-| **Packaging** | Check reports unsupported details. Build produces an independently verified private candidate for **Matte, Satin and Metallic** and omits other finishes with reporting. See the [pipeline guide](../research/authoring/studio-to-mod-pipeline.md). |
-| **Desktop** | Electrobun trial: first-run setup, UV-only mode without assets, asset intake, Check/Build and workspace persistence across restarts are accepted in installed canaries. Unsigned, with the updater disabled and no public release. See the [desktop README](../projects/xf-studio/authoring/desktop/README.md). |
+| **Packaging** | Check reports unsupported details. Build produces an independently verified **XF Eye Artistry** candidate for **Matte, Satin and Metallic** and omits other finishes with reporting. The expanded eye plate is derived automatically from the installed 2.31 game (byte-exact to the game head) and cached. Build still needs Python until the TypeScript port's phase 2 lands (phase 1 modules are byte-identical). Game and MO2 installs are auto-detected, and MO2 precedence follows MO2's own rules. See the [pipeline guide](../research/authoring/studio-to-mod-pipeline.md). |
+| **Desktop** | Electrobun app with a tag-driven CI release pipeline (draft pre-releases, checksums, attestation), a hand-written changelog and a unified XF icon. Installed canaries work on the development machine. The first clean-machine (Windows Sandbox) run showed a **blank window**, which is being fixed before the first alpha. Unsigned alphas; updater disabled. See the [desktop README](../projects/xf-studio/authoring/desktop/README.md). |
 | **Site** | Public GitHub Pages site and style guide, **live** at https://axefrog.github.io/xf-studio/ and deployed from `main` by CI. It says there is no release or download yet. |
-| **Checks** | 448 Studio and desktop tests, both typechecks, site tests and site build/check all pass (25 September). |
+| **Checks** | 569 Studio tests (1 skipped without game env) and 46 desktop tests, both typechecks, site tests and site build/check, and the Markdown link check all pass (25 September). |
 
 ## Proven only offline or not at all
 
@@ -25,12 +25,12 @@ Offline verification is not in-game proof. None of the following has runtime evi
 
 - ArchiveXL registration of the single makeup selector, preset switching and clearing, finish appearance under game lighting, and save persistence.
 - Whether the expanded plate's remaining eyelid contacts are visible in game. Many offline correction candidates were rejected; see experiments [006](../experiments/006-plate-clearance/README.md) and [012](../experiments/012-native-plate-bootstrap/README.md).
-- Brow, lash and hair colour and shading parity, and which installed archive wins for the saved brown-lash profile.
+- Brow, lash and hair colour and shading parity (the preview model is decoded from compiled shaders, but light tuning and profile colour space are hypotheses), and which installed archive wins for the saved brown-lash profile.
 - Any Shimmer, Glitter, Glossy or Colour-shifting game material. Export of these stays guarded.
 
 ## Waiting on the maintainer
 
-1. **First in-game smoke test.** Selector, Off/Matte/Metallic/(Satin) switching, finish look, clearing and persistence, plus matched brow/lash captures for the colour work. Follow the [single-session card](../research/authoring/first-makeup-runtime-preflight-2026-09-25.md). It needs a recoverable test save, because the diagnostic MO2 profile doesn't isolate saves.
+1. **First in-game test** (after the desktop Sandbox trial). The five-look XF Eye Artistry package is staged in the test profile: selector, Off/Matte/Metallic/Satin switching, finish look, clearing and persistence, plus brow/lash/hair captures for colour calibration. See the [validation card](validation.md#prepared-single-session-test-card). It needs a new manual save, because the test profile doesn't isolate saves.
 2. **In-depth review of the new UI**, after which the legacy shell can be retired.
 
 ## Active direction
@@ -39,7 +39,7 @@ Product and R&D run in parallel, like a commercial team beside a research lab:
 
 - **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (later: save write-back and shareable CC presets); remaining finish adapters.
 - **R&D lab:** the game's material and shader system, and the character-customisation file chain (mining the legacy xf-omega code and the Modding Docs screenshots). Findings are distilled into the agent-facing [knowledge base](../knowledge/README.md).
-- **Desktop app and public site (standing request):** the Pages site is live at https://axefrog.github.io/xf-studio/. The desktop app needs signing, a release channel, a signed updater and a clean-machine first run before it can be published.
+- **Desktop app and public site (standing request):** the Pages site is live at https://axefrog.github.io/xf-studio/. First alpha `v0.1.0-alpha.1` blockers: the clean-machine blank window, a confusion-free pass (every unready feature visibly labelled), third-party notices, then the maintainer's go to publish. Signing (SignPath) comes after the first alpha.
 - **Paused pending in-game evidence:** plate clearance and native eye assembly.
 
 See the [ranked backlog](../research/backlog/README.md) for owners and details, and [AGENTS.md](../AGENTS.md) for the standing rules.
